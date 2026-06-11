@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -32,6 +33,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
+# Shared transport plumbing from the monorepo (pure-Rust deps only).
+# The `iroh` feature brings HttpBridge + the pairing-string parser —
+# dial-by-key host access with no VPN (TRANSPORT_MIGRATION.md Track M).
+commonwealth-transport = { path = "../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
 
 # Pin-time decision (see connection/keychain.rs): the crate that backs
 # iOS Keychain *and* Android Keystore under Tauri 2 mobile. Candidates:

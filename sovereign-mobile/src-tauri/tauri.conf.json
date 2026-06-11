@@ -23,8 +23,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/icon.png"],
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
     "iOS": {
       "minimumSystemVersion": "14.0"
     },
@@ -32,5 +36,16 @@
       "minSdkVersion": 24
     }
   },
-  "plugins": {}
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "sovereign"
+          ],
+          "appLink": false
+        }
+      ]
+    }
+  }
 }

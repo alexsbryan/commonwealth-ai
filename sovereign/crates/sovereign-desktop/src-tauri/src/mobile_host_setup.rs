@@ -29,12 +29,16 @@ use tracing::info;
 use crate::supervisor::{Supervisor, SupervisorConfig};
 
 /// Pairing card the Settings panel renders. `address` is already dialable (a
-/// wildcard bind is resolved to this node's tailnet IP).
+/// wildcard bind is resolved to this node's tailnet IP). `iroh_dial` is the
+/// no-VPN pairing code (`<endpoint-id-hex>@<relay-url>`) read live from the
+/// running server's `GET /status` — `None` while the server is starting, the
+/// relay isn't connected yet, or `[iroh]` is disabled; the panel re-polls.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MobilePairing {
     pub address: String,
     pub tenant: String,
     pub token: String,
+    pub iroh_dial: Option<String>,
 }
 
 /// Generate the remote-backed `sovereign-server` config and spawn a supervised
@@ -91,14 +95,45 @@ pub fn start() -> Result<JoinHandle<()>, String> {
     Ok(handle)
 }
 
-/// Pairing info for the Settings card.
-pub fn pairing() -> Result<MobilePairing, String> {
+/// Pairing info for the Settings card. The iroh pairing code comes
+/// from the live server (it's runtime state — endpoint identity +
+/// the relay it settled on — not config), so it is `None` whenever
+/// the server isn't up yet.
+pub async fn pairing() -> Result<MobilePairing, String> {
     let mh = MobileHostConfig::load_or_create()?;
+    let iroh_dial = if mh.iroh_enabled {
+        fetch_iroh_dial(port_of(&mh.bind).unwrap_or(8080)).await
+    } else {
+        None
+    };
     Ok(MobilePairing {
         address: mobile_host::dialable_address(&mh.bind),
         tenant: mh.tenant,
         token: mh.token,
+        iroh_dial,
     })
+}
+
+/// Best-effort read of `GET /status` → `iroh.dial` from the supervised
+/// server. One short-timeout attempt — the Settings panel polls while
+/// the value is null, so there's no point blocking the card here.
+async fn fetch_iroh_dial(port: u16) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let status: serde_json::Value = client
+        .get(format!("http://127.0.0.1:{port}/status"))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    status
+        .pointer("/iroh/dial")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn port_of(bind: &str) -> Option<u16> {

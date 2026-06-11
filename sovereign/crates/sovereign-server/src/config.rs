@@ -24,6 +24,27 @@ pub struct ServerConfig {
     pub knowledge_view: KnowledgeViewSection,
     #[serde(default)]
     pub retrieval: RetrievalSection,
+    #[serde(default)]
+    pub iroh: IrohSection,
+}
+
+/// Dial-by-key access for clients (Track M of
+/// `docs/specs/TRANSPORT_MIGRATION.md`). When enabled, the server
+/// binds an iroh endpoint (QUIC by Ed25519 key, hole-punching, relay
+/// fallback) and forwards accepted streams to the local HTTP
+/// listener — a phone can then reach this host with no VPN. Off by
+/// default; the tailnet path is unaffected either way.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct IrohSection {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Where the Ed25519 identity seed lives. Default: `node_key`
+    /// beside the store DB (`store.path`'s directory), so a sandboxed
+    /// host gets its own stable identity. Point this at the
+    /// Commonwealth daemon's `<data_dir>/node_key` to share the mesh
+    /// identity instead.
+    #[serde(default)]
+    pub key_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

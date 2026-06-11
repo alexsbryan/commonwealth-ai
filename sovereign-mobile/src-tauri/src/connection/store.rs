@@ -186,11 +186,39 @@ mod tests {
             EndpointKind::parse("tailnet").unwrap(),
             EndpointKind::Tailnet
         );
-        let err = EndpointKind::parse("iroh").unwrap_err();
+        assert_eq!(EndpointKind::parse("iroh").unwrap(), EndpointKind::Iroh);
+        let err = EndpointKind::parse("carrier-pigeon").unwrap_err();
         assert!(
             err.to_string().contains("endpoint_kind"),
             "error must name the field: {err}"
         );
+    }
+
+    /// An iroh-kind host row round-trips: the address column holds
+    /// the opaque pairing string, the kind tags how to dial it.
+    #[test]
+    fn iroh_kind_row_round_trips() {
+        use commonwealth_transport::iroh::{
+            format_dial_string, parse_dial_string, EndpointAddr, SecretKey,
+        };
+        let conn = fresh_db();
+        // A REAL key — arbitrary 32 bytes are not a valid Ed25519
+        // point and parse_dial_string rightly rejects them.
+        let pk = SecretKey::from_bytes(&[7u8; 32]).public();
+        let addr = EndpointAddr::new(pk)
+            .with_relay_url("https://relay.example.com/".parse().unwrap());
+        let pairing = format_dial_string(&addr).unwrap();
+
+        let mut h = host("iroh-host");
+        h.endpoint_kind = "iroh".into();
+        h.tailnet_address = pairing.clone();
+        insert(&conn, &h).unwrap();
+
+        let got = get_default(&conn).unwrap().unwrap();
+        assert_eq!(got.endpoint_kind, "iroh");
+        assert_eq!(got.tailnet_address, pairing);
+        // And the stored pairing string is dialable-shaped.
+        assert!(parse_dial_string(&got.tailnet_address).is_ok());
     }
 }
 

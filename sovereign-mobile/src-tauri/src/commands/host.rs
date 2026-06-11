@@ -22,16 +22,29 @@ pub async fn add_host_connection(
     tailnet_address: String,
     tenant_id: String,
     token: String,
+    // Optional so existing frontend invocations keep working:
+    // absent/None → 'tailnet'. For 'iroh', `tailnet_address` is the
+    // pairing string from the host's `GET /status` → `iroh.dial`
+    // (`<endpoint-id-hex>@<relay-url>`).
+    endpoint_kind: Option<String>,
 ) -> Result<HostConnection> {
+    let kind_str = endpoint_kind.unwrap_or_else(|| "tailnet".into());
+    // Validate the kind AND, for iroh, the pairing string — a typo
+    // should fail pairing loudly, not surface later as a host that
+    // never connects.
+    let kind = crate::connection::EndpointKind::parse(&kind_str)?;
+    if kind == crate::connection::EndpointKind::Iroh {
+        commonwealth_transport::iroh::parse_dial_string(&tailnet_address)
+            .map_err(crate::error::Error::Other)?;
+    }
+
     let id = Uuid::new_v4().to_string();
     let now = now_unix();
     let hc = HostConnection {
         id: id.clone(),
         display_name,
         tailnet_address,
-        // Pairing is tailnet-only today; a future transport's pairing
-        // flow writes its own kind.
-        endpoint_kind: "tailnet".into(),
+        endpoint_kind: kind.as_str().to_string(),
         is_default: false, // store::insert promotes the first one
         last_status: "off_tailnet".into(),
         created_at: now,
@@ -51,7 +64,7 @@ pub async fn add_host_connection(
     }
 
     // Start the connectivity monitor for this host.
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         ConnectivityMonitor::spawn(
             app,
             client,
@@ -85,6 +98,9 @@ pub async fn set_default_host(state: State<'_, AppState>, id: String) -> Result<
 /// (offline-readable) until overwritten by a future reconcile.
 #[tauri::command]
 pub async fn remove_host_connection(state: State<'_, AppState>, id: String) -> Result<()> {
+    // Tear down any live iroh bridge first (no-op for tailnet hosts)
+    // so the accept loop doesn't outlive the row.
+    state.bridges.drop_bridge(&id).await;
     state.credentials.delete_token(&id)?;
     let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
     conn.execute(
@@ -100,6 +116,18 @@ pub async fn remove_host_connection(state: State<'_, AppState>, id: String) -> R
 #[tauri::command]
 pub async fn get_connectivity(state: State<'_, AppState>) -> Result<String> {
     Ok(state.active_host()?.last_status)
+}
+
+/// Drain the deep link that opened (or re-focused) the app, if any.
+/// The pairing screen calls this on mount — covering the cold-launch
+/// case where the `pair-link` event fired before any listener existed.
+#[tauri::command]
+pub async fn take_pending_pair_link(state: State<'_, AppState>) -> Result<Option<String>> {
+    Ok(state
+        .pending_pair_link
+        .lock()
+        .map_err(|_| Error::Other("pair-link stash poisoned".into()))?
+        .take())
 }
 
 fn now_unix() -> i64 {

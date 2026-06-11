@@ -77,13 +77,71 @@
   // ── Mobile access (opt-in phone host) ─────────────────────────
   // Toggle serves the Sovereign mobile app from this machine. The host
   // (`sovereign-server`) delegates all inference to the running daemon, so it
-  // loads no second copy of the models. Pairing card = address + tenant + token.
-  let mobilePairing = $state<{ address: string; tenant: string; token: string } | null>(null);
+  // loads no second copy of the models. Pairing card = address + tenant +
+  // token, plus the no-VPN iroh pairing code once the server reports one.
+  let mobilePairing = $state<{
+    address: string;
+    tenant: string;
+    token: string;
+    iroh_dial: string | null;
+  } | null>(null);
   let mobileError = $state("");
+  let mobilePollTimer: ReturnType<typeof setTimeout> | null = null;
+  // QR of the pairing deep link: `sovereign://pair#<base64url(JSON)>`.
+  // The phone's camera shows "Open in Sovereign" and the app fills
+  // every pairing field. Deliberately NOT raw JSON — iOS Camera spots
+  // the https relay URL inside and offers Safari instead, losing the
+  // payload (observed 2026-06-10). The Copy button carries the plain
+  // JSON for the shared-clipboard path; the app accepts both forms.
+  let mobileQrUrl = $state<string | null>(null);
+  let mobileCopied = $state(false);
+
+  const pairingPayload = (p: NonNullable<typeof mobilePairing>) =>
+    JSON.stringify({
+      address: p.iroh_dial ?? p.address,
+      tenant: p.tenant,
+      token: p.token,
+    });
+
+  const pairingLink = (p: NonNullable<typeof mobilePairing>) =>
+    "sovereign://pair#" +
+    btoa(pairingPayload(p)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  $effect(() => {
+    const p = mobilePairing;
+    if (p?.iroh_dial) {
+      void import("qrcode").then((QRCode) =>
+        QRCode.toDataURL(pairingLink(p), { width: 220, margin: 1 }).then(
+          (url: string) => (mobileQrUrl = url),
+        ),
+      );
+    } else {
+      mobileQrUrl = null;
+    }
+  });
+
+  async function copyPairing() {
+    if (!mobilePairing) return;
+    await navigator.clipboard.writeText(pairingPayload(mobilePairing));
+    mobileCopied = true;
+    setTimeout(() => (mobileCopied = false), 1500);
+  }
 
   async function loadMobilePairing() {
     try {
       mobilePairing = await invoke("get_mobile_pairing");
+      // The iroh pairing code is runtime state (the server's endpoint
+      // identity + the relay it settled on) — null while the supervised
+      // server is still starting or hasn't reached a relay. Re-poll
+      // gently until it lands; the server's cold start can take ~20s.
+      if (mobilePairing && !mobilePairing.iroh_dial) {
+        if (mobilePollTimer) clearTimeout(mobilePollTimer);
+        mobilePollTimer = setTimeout(() => {
+          if (activeTab === "mobile" && config?.mobile_access_enabled) {
+            void loadMobilePairing();
+          }
+        }, 3000);
+      }
     } catch (e) {
       mobileError = String(e);
     }
@@ -105,9 +163,17 @@
     }
   }
 
-  // Load the pairing card when the Mobile tab opens with access already on.
+  // Load the pairing card when the Mobile tab opens with access already
+  // on — and RE-load when a cached fetch is missing the no-VPN code
+  // (the supervised server reports it only once it has reached its
+  // relay; leaving the tab kills the poll chain, so re-entry must
+  // restart it rather than trust the stale null).
   $effect(() => {
-    if (activeTab === "mobile" && config?.mobile_access_enabled && !mobilePairing) {
+    if (
+      activeTab === "mobile" &&
+      config?.mobile_access_enabled &&
+      (!mobilePairing || !mobilePairing.iroh_dial)
+    ) {
       void loadMobilePairing();
     }
   });
@@ -1539,7 +1605,7 @@
       {#if activeTab === "mobile" && config}
         <section class="doc-section">
           <h2 class="doc-h2">Mobile access</h2>
-          <p class="doc-intro">Serve the Sovereign mobile app from this machine. The app pairs over your Tailscale tailnet and reaches a lightweight host here that forwards every chat and search to your already-running models — it loads no second copy of them.</p>
+          <p class="doc-intro">Serve the Sovereign mobile app from this machine. The app pairs with a lightweight host here that forwards every chat and search to your already-running models — it loads no second copy of them. Pair with the no-VPN code (works from any network), or over your Tailscale tailnet.</p>
 
           <div class="cfg-entry cfg-entry--toggle">
             <label class="cfg-toggle-row">
@@ -1560,10 +1626,28 @@
           {#if config.mobile_access_enabled && mobilePairing}
             <div class="doc-divider"></div>
             <h3 class="doc-h3">Pair your phone</h3>
-            <p class="doc-body">In the app's “Connect to your host” screen, enter:</p>
+            <p class="doc-body">Fastest path: scan the QR with the phone camera (or hit Copy and use the shared clipboard), then paste into the app's address field — it fills everything. Or enter the values by hand:</p>
+            {#if mobileQrUrl}
+              <div style="display:flex; gap:1.1rem; align-items:center; margin:0.6rem 0;">
+                <img src={mobileQrUrl} alt="Pairing QR code" width="150" height="150"
+                     style="border-radius:8px; background:white; padding:6px;" />
+                <button class="connect-copy" onclick={copyPairing}
+                        style="padding:0.5rem 0.9rem; border-radius:6px; border:1px solid var(--border-mid, #444); background:transparent; color:inherit; cursor:pointer;">
+                  {mobileCopied ? "Copied ✓" : "Copy pairing code"}
+                </button>
+              </div>
+            {/if}
             <dl style="display:grid; gap:0.5rem; margin:0.6rem 0 0.4rem;">
               <div style="display:flex; gap:0.9rem; align-items:baseline;">
-                <dt style="min-width:5.5rem; opacity:0.66;">Address</dt>
+                <dt style="min-width:5.5rem; opacity:0.66;">No-VPN code</dt>
+                {#if mobilePairing.iroh_dial}
+                  <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all; word-break:break-all;" data-testid="settings-mobile-iroh-dial">{mobilePairing.iroh_dial}</dd>
+                {:else}
+                  <dd style="opacity:0.55;">preparing… (the host is starting or reaching its relay)</dd>
+                {/if}
+              </div>
+              <div style="display:flex; gap:0.9rem; align-items:baseline;">
+                <dt style="min-width:5.5rem; opacity:0.66;">Tailnet</dt>
                 <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all;">{mobilePairing.address}</dd>
               </div>
               <div style="display:flex; gap:0.9rem; align-items:baseline;">
@@ -1575,7 +1659,7 @@
                 <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all; word-break:break-all;">{mobilePairing.token}</dd>
               </div>
             </dl>
-            <p class="doc-body" style="opacity:0.66;">Both this machine and your phone must be on the same Tailscale tailnet.</p>
+            <p class="doc-body" style="opacity:0.66;">The no-VPN code works from any network (relay-assisted, end-to-end encrypted). The tailnet address requires both this machine and the phone on your Tailscale tailnet.</p>
           {/if}
           {#if mobileError}
             <p class="doc-body" style="color:var(--danger, #e5837a);">{mobileError}</p>

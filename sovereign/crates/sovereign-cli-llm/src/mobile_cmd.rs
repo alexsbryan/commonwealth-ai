@@ -128,7 +128,9 @@ async fn cmd_serve(args: &[String]) -> i32 {
         );
     }
 
-    print_pairing(&mh, resolve_tailnet_addr(&mh.bind));
+    // The no-VPN code is runtime state — the host hasn't bound yet at
+    // this point, so the card says how to fetch it once it's up.
+    print_pairing(&mh, resolve_tailnet_addr(&mh.bind), None);
     eprintln!("Starting mobile host: {} --config {}", binary.display(), config_path.display());
     eprintln!("(inference delegated to daemon :{} — no models loaded here)\n", setup.daemon.client_port);
 
@@ -195,21 +197,57 @@ async fn cmd_pair() -> i32 {
             return 1;
         }
     };
-    print_pairing(&mh, resolve_tailnet_addr(&mh.bind));
+    // Best-effort: the no-VPN code is runtime state on the running
+    // host (`GET /status` → iroh.dial); absent when the host is down,
+    // still reaching its relay, or `iroh_enabled = false`.
+    let iroh_dial = if mh.iroh_enabled {
+        fetch_iroh_dial(port_of(&mh.bind).unwrap_or(8080)).await
+    } else {
+        None
+    };
+    print_pairing(&mh, resolve_tailnet_addr(&mh.bind), iroh_dial);
     0
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 /// Print the card a user types into the app's pairing screen.
-fn print_pairing(mh: &MobileHostConfig, address: String) {
+fn print_pairing(mh: &MobileHostConfig, address: String, iroh_dial: Option<String>) {
     println!("\n  ┌─ Pair your phone ───────────────────────────────");
+    match &iroh_dial {
+        Some(dial) => println!("  │  No-VPN code       : {dial}"),
+        None if mh.iroh_enabled => {
+            println!("  │  No-VPN code       : (host not up yet — re-run `sovereign mobile pair` once it is)")
+        }
+        None => {}
+    }
     println!("  │  Address (tailnet) : {address}");
     println!("  │  Tenant            : {}", mh.tenant);
     println!("  │  Token             : {}", mh.token);
     println!("  └─────────────────────────────────────────────────");
-    println!("  Enter these in the Sovereign mobile app's \"Connect to your host\" screen.");
-    println!("  (Both phone + this node must be on the same Tailscale tailnet.)\n");
+    println!("  Enter ONE address in the Sovereign mobile app's \"Connect to your host\" screen.");
+    println!("  The no-VPN code works from any network; the tailnet address needs both");
+    println!("  phone + this node on the same Tailscale tailnet.\n");
+}
+
+/// Read `GET /status` → `iroh.dial` from the running mobile host.
+async fn fetch_iroh_dial(port: u16) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let status: serde_json::Value = client
+        .get(format!("http://127.0.0.1:{port}/status"))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    status
+        .pointer("/iroh/dial")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 /// Best-effort: turn the bind into something the phone can dial. Replaces a

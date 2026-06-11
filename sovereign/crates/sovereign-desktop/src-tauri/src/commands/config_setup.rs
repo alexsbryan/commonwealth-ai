@@ -23,10 +23,11 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<DesktopConfig
 }
 
 /// Pairing card for the Settings → Mobile access panel (address + tenant +
-/// token the phone enters). Reads/creates `~/.sovereign/mobile-host.toml`.
+/// token the phone enters, plus the no-VPN iroh pairing code once the
+/// supervised server reports one). Reads/creates `~/.sovereign/mobile-host.toml`.
 #[tauri::command]
 pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePairing, String> {
-    crate::mobile_host_setup::pairing()
+    crate::mobile_host_setup::pairing().await
 }
 
 /// Start or stop the supervised mobile host at runtime (the toggle's runtime

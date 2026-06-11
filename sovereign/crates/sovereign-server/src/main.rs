@@ -4,6 +4,7 @@ mod approval;
 mod auth;
 mod busy;
 mod config;
+mod iroh_access;
 mod narration;
 mod projection;
 mod routes;
@@ -710,6 +711,27 @@ async fn main() {
     );
     let tdd_state = routes_tdd::TddState(Arc::clone(&tdd_backend));
 
+    // Bind the HTTP listener BEFORE assembling the router: the iroh
+    // access path (and its `/status` surface) needs the bound port to
+    // forward into.
+    let bind_addr = &config.server.bind;
+    tracing::info!("Listening on {bind_addr}");
+
+    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to bind to {bind_addr}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let http_port = listener.local_addr().map(|a| a.port()).unwrap_or(8080);
+
+    // Dial-by-key access (Track M): off unless `[iroh] enabled`.
+    // Failure here never blocks the tailnet path.
+    let iroh_access: Arc<Option<iroh_access::IrohAccess>> =
+        Arc::new(iroh_access::IrohAccess::start(&config, http_port).await);
+    let iroh_for_status = Arc::clone(&iroh_access);
+
     let app = authed
         .merge(routes_mcp::mcp_router())
         // Unauthenticated liveness probe (added at the `app` level so it sits
@@ -717,6 +739,22 @@ async fn main() {
         // Mobile-access toggle, the CLI, or systemd — can poll `GET /health`
         // for a 200 to know the host is up, without holding a tenant token.
         .route("/health", get(|| async { "ok" }))
+        // Unauthenticated status + pairing surface. `iroh.dial` is the
+        // string a phone stores as its endpoint_kind='iroh' host
+        // address (public key material + relay URL — nothing secret;
+        // membership still requires a tenant token).
+        .route(
+            "/status",
+            get(move || {
+                let iroh = Arc::clone(&iroh_for_status);
+                async move {
+                    axum::Json(serde_json::json!({
+                        "status": "ok",
+                        "iroh": iroh.as_ref().as_ref().map(|a| a.status_json()),
+                    }))
+                }
+            }),
+        )
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(Extension(tdd_state))
@@ -729,18 +767,6 @@ async fn main() {
     if let Some(ref commonwealth_url) = config.commonwealth.url {
         startup::print_mesh_status(commonwealth_url).await;
     }
-
-    // Serve.
-    let bind_addr = &config.server.bind;
-    tracing::info!("Listening on {bind_addr}");
-
-    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Failed to bind to {bind_addr}: {e}");
-            std::process::exit(1);
-        }
-    };
 
     // Use `into_make_service_with_connect_info` so MCP handlers can
     // extract `ConnectInfo<SocketAddr>` to enforce localhost-only

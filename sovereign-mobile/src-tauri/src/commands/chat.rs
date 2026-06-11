@@ -24,7 +24,7 @@ pub async fn send_message_stream(
     conversation_id: String,
     message: String,
 ) -> Result<StreamStarted> {
-    let client = state.active_client()?;
+    let client = state.active_client().await?;
     let ws_url = client.ws_url(&conversation_id);
     let token = client.token().to_string();
     let db = state.db.clone();
