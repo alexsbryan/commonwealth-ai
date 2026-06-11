@@ -429,7 +429,7 @@ impl LocalCorpusConfig {
     /// Default config for a drag-dropped documents folder (PDFs + TXT).
     pub fn document_folder(path: PathBuf, display_name: String) -> Self {
         let canon = canonical_or_as_is(&path);
-        let id = format!("folder-{}", sha256_short(&canon));
+        let id = corpus_id_for("folder", &canon);
         Self {
             id,
             display_name,
@@ -473,7 +473,7 @@ impl LocalCorpusConfig {
         watched: WatchedFolderConfig,
     ) -> Self {
         let canon = canonical_or_as_is(&path);
-        let id = format!("watched-{}", sha256_short(&canon));
+        let id = corpus_id_for("watched", &canon);
         // Pull `with_ocr` off the watched config and project it onto
         // the LocalCorpusConfig.ocr_pdfs flag — single source of truth
         // for "should the OCR path run?", reused by both the initial
@@ -526,7 +526,7 @@ impl LocalCorpusConfig {
     /// subdirectory is appended automatically.
     pub fn obsidian_vault(path: PathBuf, snapshot_root: PathBuf) -> Self {
         let canon = canonical_or_as_is(&path);
-        let id = format!("obsidian-{}", sha256_short(&canon));
+        let id = corpus_id_for("obsidian", &canon);
         let display_name = canon
             .file_name()
             .and_then(|s| s.to_str())
@@ -586,6 +586,45 @@ fn canonical_or_as_is(p: &Path) -> PathBuf {
     // does fail, fall through to the raw path so tests can pass
     // synthetic paths through construction without hitting disk.
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Human-readable corpus id: `<kind>-<slug>-<hash>`, e.g.
+/// `obsidian-vault-959ee8a8f330` for a vault at `…/Obsidian Vault`.
+///
+/// The id is the citation handle and a structural key — it must stay
+/// deterministic from the path (re-registering the same folder mints
+/// the same id) and keep the `<kind>-` prefix some consumers key on
+/// (`stream_axes` stability classification). The slug exists purely
+/// for the humans who read these ids in bench commands, logs, and
+/// reports: pre-2026-06-11 ids were `<kind>-<hex>` and unguessable.
+/// Existing corpora keep their minted ids — `LocalCorpusManager::
+/// register` reuses the registered id for an already-known path.
+fn corpus_id_for(kind: &str, path: &Path) -> String {
+    let slug_src = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let mut slug = String::new();
+    for c in slug_src.chars().flat_map(|c| c.to_lowercase()) {
+        if slug.len() >= 24 {
+            break;
+        }
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    // "Obsidian Vault" under kind "obsidian" would mint
+    // `obsidian-obsidian-vault-…` — drop the repeated kind token.
+    let slug = slug.strip_prefix(&format!("{kind}-")).unwrap_or(slug);
+    let hash = sha256_short(path);
+    if slug.is_empty() {
+        format!("{kind}-{hash}")
+    } else {
+        format!("{kind}-{slug}-{hash}")
+    }
 }
 
 fn sha256_short(path: &Path) -> String {
@@ -928,6 +967,30 @@ mod tests {
         assert!(cfg.id.starts_with("obsidian-"));
         // Scanned-PDF detection is pointless for markdown vaults.
         assert!(!cfg.pre_scan.scanned_pdf_detection);
+    }
+
+    #[test]
+    fn corpus_ids_are_readable_deterministic_and_kind_deduped() {
+        // `<kind>-<slug>-<hash6>`: humans read these in bench commands
+        // and logs; the kind prefix survives for the stream-axes
+        // stability check; the hash keeps distinct paths distinct.
+        let id = corpus_id_for("obsidian", Path::new("/x/Obsidian Vault"));
+        assert!(
+            id.starts_with("obsidian-vault-"),
+            "kind token must dedupe out of the slug: {id}"
+        );
+        assert_eq!(id.len(), "obsidian-vault-".len() + 12, "{id}");
+
+        let watched = corpus_id_for("watched", Path::new("/x/Research Notes (2026)"));
+        assert!(watched.starts_with("watched-research-notes-2026-"), "{watched}");
+
+        // Deterministic: same path → same id; different path → different id.
+        assert_eq!(id, corpus_id_for("obsidian", Path::new("/x/Obsidian Vault")));
+        assert_ne!(id, corpus_id_for("obsidian", Path::new("/y/Obsidian Vault")));
+
+        // Unsluggable basenames fall back to the bare `<kind>-<hash>`.
+        let bare = corpus_id_for("watched", Path::new("/x/委員会"));
+        assert!(bare.starts_with("watched-"), "{bare}");
     }
 
     #[test]

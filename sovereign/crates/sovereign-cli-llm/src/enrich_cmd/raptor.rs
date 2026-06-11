@@ -96,7 +96,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         print_usage();
         return 0;
     }
-    let parsed = match parse_args(args) {
+    let mut parsed = match parse_args(args) {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("error: {msg}\n");
@@ -118,6 +118,20 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         });
     let indexes_dir = data_dir.join("indexes");
     let db_path = data_dir.join("sovereign.db");
+    // Accept a display name or unique fragment, not just the raw id —
+    // ids carry a hash suffix nobody should have to type.
+    match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus_id) {
+        Ok(id) => {
+            if id != parsed.corpus_id {
+                println!("Corpus '{}' resolved to '{id}'", parsed.corpus_id);
+            }
+            parsed.corpus_id = id;
+        }
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return 1;
+        }
+    }
     let index_path = indexes_dir.join(&parsed.corpus_id);
 
     if !index_path.exists() {

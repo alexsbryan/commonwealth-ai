@@ -187,7 +187,7 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
         help::print(&HELP);
         return 0;
     }
-    let parsed = match parse_args(args) {
+    let mut parsed = match parse_args(args) {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("error: {msg}");
@@ -196,6 +196,30 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // Resolve a friendly corpus argument (display name / unique
+    // fragment) to the real id — ids carry a hash suffix nobody
+    // should have to type. Failing here beats forwarding an unknown
+    // id to `enrich eval`, whose error doesn't list the candidates.
+    let indexes_dir = std::env::var("SOVEREIGN_DATA_DIR")
+        .map(PathBuf::from)
+        .ok()
+        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
+        .map(|d| d.join("indexes"));
+    if let Some(indexes_dir) = indexes_dir {
+        match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus) {
+            Ok(id) => {
+                if id != parsed.corpus {
+                    println!("Corpus '{}' resolved to '{id}'", parsed.corpus);
+                }
+                parsed.corpus = id;
+            }
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 2;
+            }
+        }
+    }
 
     // Pre-flight: golden must exist. `enrich eval` would surface
     // the same error with a less obvious provenance — better to fail
