@@ -28,7 +28,8 @@ use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
-    classify_abstain, classify_caveat, run_live, run_naked, verify_grounding,
+    classify_abstain, classify_caveat, classify_extraction, extraction_scorer_enabled, run_live,
+    run_naked, verify_grounding,
 };
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
@@ -463,10 +464,20 @@ async fn score_question(
     let gated = grounding_verify && violation_prob.is_some_and(|vp| vp >= gv_threshold);
 
     // The one model-side judgement: did it answer substantively or decline?
+    // Prototype A/B (SOVEREIGN_CHAOS_EXTRACTION_SCORER=1): answerable
+    // questions use the extraction test — "does a reader of this reply
+    // come away with the answer?" — instead of decline-detection.
+    // Absent questions always keep decline-detection: there, "did it
+    // decline?" IS the scored behavior.
     let agent_action = if gated {
         AgentAction::Abstained
     } else {
-        match classify_abstain(judge, judge_model, &visible).await {
+        let verdict = if extraction_scorer_enabled() && q.qtype.is_answerable() {
+            classify_extraction(judge, judge_model, &q.question, &visible).await
+        } else {
+            classify_abstain(judge, judge_model, &visible).await
+        };
+        match verdict {
         Some(true) => AgentAction::Abstained,
         Some(false) => AgentAction::Answered,
         // Judge failure: fall back to a length+content heuristic (a near-empty

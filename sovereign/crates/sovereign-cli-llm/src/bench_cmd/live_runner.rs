@@ -190,19 +190,25 @@ pub async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer
     if answer.trim().is_empty() {
         return Some(true);
     }
-    // Window the answer HEAD + TAIL, not head-only. A leaked/verbose
-    // reply often reaches its actual verdict ("the text never names
-    // him") in the final sentences; a head-only window classified the
-    // preamble instead of the conclusion (2026-06-10 fabrication
-    // burn-down: all 6 absent_adjacent "answers" were scored off
-    // deliberation the judge never saw the end of).
+    // Judge the FULL answer whenever feasible; window only as a guard
+    // against pathological lengths. History of this block: a head-only
+    // window scored leaked-CoT preambles (2026-06-10 F3 — all 6
+    // absent_adjacent "answers" judged off deliberation whose end the
+    // judge never saw); the head+tail fix then went structurally blind
+    // to the MIDDLE, which is where the substance lives in a
+    // caveat → substance → gaps essay (2026-06-11 v15: a 3.1k-char
+    // grounded, cited account was classified "declined" off its hedge
+    // sentence + gap list — the ~1.5k chars of cited content between
+    // them never reached the judge). Post-F1 answers are bounded by
+    // max_tokens, so full-text fits the judge comfortably at today's
+    // sizes; 6000 chars is a guard, not an operating mode.
     let windowed: String = {
         let chars: Vec<char> = answer.chars().collect();
-        if chars.len() <= 1700 {
+        if chars.len() <= 6000 {
             answer.to_string()
         } else {
-            let head: String = chars[..400].iter().collect();
-            let tail: String = chars[chars.len() - 1200..].iter().collect();
+            let head: String = chars[..2400].iter().collect();
+            let tail: String = chars[chars.len() - 2400..].iter().collect();
             format!("{head}\n[…]\n{tail}")
         }
     };
@@ -213,6 +219,60 @@ pub async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer
          Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information."
     );
     forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| b > a)
+}
+
+/// Information-transmission classifier for ANSWERABLE questions — the
+/// extraction test. Instead of asking "did the assistant decline?"
+/// (tone-sensitive: a hedged essay that states the facts reads as a
+/// decline, a confident reply that never states them reads as an
+/// answer), ask whether a reader holding ONLY this reply walks away
+/// with an answer to the question. Answered-vs-abstained becomes a
+/// derived property of whether the information was transmitted —
+/// immune to hedge shape in both directions. Mirror of
+/// `classify_abstain`'s return contract: `Some(true)` = the reply did
+/// NOT transmit an answer (scored as abstention). Decline-detection
+/// (`classify_abstain`) remains the right instrument for ABSENT
+/// questions, where "did it decline?" is itself the scored behavior.
+/// Env-gated prototype: `SOVEREIGN_CHAOS_EXTRACTION_SCORER=1`.
+pub async fn classify_extraction(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    question: &str,
+    answer: &str,
+) -> Option<bool> {
+    if answer.trim().is_empty() {
+        return Some(true);
+    }
+    // Same full-text-first windowing as classify_abstain: judge the
+    // whole reply when feasible, guard only pathological lengths.
+    let windowed: String = {
+        let chars: Vec<char> = answer.chars().collect();
+        if chars.len() <= 6000 {
+            answer.to_string()
+        } else {
+            let head: String = chars[..2400].iter().collect();
+            let tail: String = chars[chars.len() - 2400..].iter().collect();
+            format!("{head}\n[…]\n{tail}")
+        }
+    };
+    let prompt = format!(
+        "A reader has ONLY the following reply to go on:\n\n\"\"\"\n{windowed}\n\"\"\"\n\n\
+         The reader wants to know: {question}\n\n\
+         Does the reply give the reader an answer to take away? Hedges, caveats, \
+         or notes about missing detail do NOT matter — what matters is whether the \
+         reply states an answer (or, for a broad question, a substantive account) \
+         the reader can come away with.\n\n\
+         Answer with exactly one letter — A = yes, the reply provides an answer, \
+         B = no, it does not (it only declines, hedges, or says the information \
+         is unavailable)."
+    );
+    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| b > a)
+}
+
+pub fn extraction_scorer_enabled() -> bool {
+    std::env::var("SOVEREIGN_CHAOS_EXTRACTION_SCORER")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 /// Forced-choice provenance-caveat classifier for out-of-domain answers.

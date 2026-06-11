@@ -654,16 +654,32 @@ end the "live path mis-identified three times" illegibility. `role.rs` is
 `role=synthesizer tier=…`), and the chaos bench sources the Critic's gate model
 from `default_profile_for(Role::Critic)` (`--critic-model`, default primary).
 
-**Keystone result (chaos, 2026-06-09): the Critic-as-gate stays out of prod —
-empirically.** Running `verify_grounding` as an answer gate (`--grounding-verify`)
-is net-harmful on the Secret-Agent bank: competence 0.46 → 0.08 (it gates
-present-answerable questions — e.g. `present-wife` at violation_prob 0.806 —
-when retrieval misses the supporting passage and the model answers
-parametrically). The Critic **model tier is not the lever** (primary 0.083 ≈
-fast 0.125). So the role layer's verify-predicate discipline *worked*: it caught
-the Critic predicate failing its own phantom-error contract, justifying the
-deferral. (Note: effort-tier escalation default-ON *improves* chaos competence
-0.33 → 0.46 — a net win, not a regression.)
+**The production grounding gate (`runtime/grounding/`, shipped 2026-06-11) —
+and the keystone verdict it reversed.** The 2026-06-09 chaos result ruled
+Critic-as-gate out of prod empirically (competence 0.46 → 0.08: it gated
+present-answerable questions — `present-wife` at violation_prob 0.806 — when
+retrieval missed the supporting passage). What changed the verdict was not the
+judge but the **evidence universe**: the v12–v15 gate verifies claims against
+the *sealed corpus* (per-claim hybrid search via `ClaimSearcher`), not just the
+prompt snapshot, and feeds failed claims' corrective passages into the rewrite
+(replace, don't delete). Under that stack the gate is net-positive and PASSES
+the full bank (secret-agent 0.67/0.82/0.18 production-config, 2026-06-11;
+holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
+(short answers) / per-claim audit → rewrite → annotate (long-form) → grounded
+abstention**, fail-open on judge failure. Judge prompts are byte-pinned to the
+bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
+`grounding/config.rs` (`GateSurface` closed enum + per-surface
+`GroundingProfile` budgets + `grounding_gate_flags()` registry), `judge.rs`
+(claim extraction, forced-choice support, joint long-form judge), `search.rs`
+(`SealedEvidenceSearch` trait — claim-conditioned widening that can never
+widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
+`EvidenceContext`). Gated surfaces today: streaming/non-streaming
+KnowledgeQuery + streaming DeepQuery; rollout is per-surface env-gated
+(`SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
+override) — each new surface ships only with its own calibration bank
+(attached-doc, complex-task, simple-query and refinement re-gate are the
+planned extensions). (Note: effort-tier escalation default-ON *improves* chaos
+competence 0.33 → 0.46 — a net win, not a regression.)
 
 **Retrieval pipeline (`runtime/retrieval_pipeline.rs`).** The
 retrieval-injection orchestration — which grounding/boost/expansion steps run,

@@ -1134,18 +1134,25 @@ impl Runtime {
         // for short answers, per-claim audit→rewrite→annotate for
         // long-form). No hold needed here: nothing was sent yet.
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
-        let completion_text = if crate::runtime::grounding::grounding_gate_enabled()
-            && !plan.chunks.is_empty()
-        {
-            let gate_chunks: Vec<String> =
-                plan.chunks.iter().map(|c| c.content.clone()).collect();
+        let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
+        let completion_text = if gate_surface.enabled() && !plan.chunks.is_empty() {
+            // The turn's sealed evidence universe; claim search
+            // sealed to the conversation's corpora.
+            let gate_evidence = crate::runtime::grounding::EvidenceContext {
+                chunks: plan.chunks.iter().map(|c| c.content.clone()).collect(),
+                searcher: Some(std::sync::Arc::new(self.claim_searcher(
+                    context.conversation.enabled_corpora.as_deref(),
+                    &plan.chunks,
+                )) as _),
+                entity_anchored: plan.gate_entity_anchored,
+            };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,
                 message,
                 completion.text.clone(),
-                &gate_chunks,
-                plan.gate_entity_anchored,
+                &gate_evidence,
                 &plan.request,
+                &gate_surface.profile(),
             )
             .await;
             grounding_gate_meta = Some(outcome.meta);
