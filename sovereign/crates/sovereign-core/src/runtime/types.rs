@@ -80,6 +80,13 @@ pub struct MetaAtlasHitRecord {
 pub(crate) struct KnowledgeQueryPlan {
     pub(crate) request: CompletionRequest,
     pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    /// The question names entities from the corpus's own world (atlas
+    /// gazetteer match in the agentic loop). The grounding gate uses
+    /// this to close the general-knowledge exemption: outside
+    /// knowledge structurally cannot establish in-world facts, so a
+    /// GK-caveated assertion still gets claim-extracted and verified.
+    /// False on the parametric/empty paths and when the loop is off.
+    pub(crate) gate_entity_anchored: bool,
     /// Formatted chunk text used as evidence for the gap check.
     /// Empty string on the parametric path.
     pub(crate) doc_context: String,
