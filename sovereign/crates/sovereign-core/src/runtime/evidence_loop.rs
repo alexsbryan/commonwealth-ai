@@ -29,7 +29,15 @@
 //!    boosts); results are deduped against round 0 and appended. The
 //!    existing downstream PPR rerank orders the merged set.
 //!
-//! Hard bounds: one extra round, ≤3 formulated queries, ≤12 appended
+//! One structural stage runs alongside the model's own formulations,
+//! in code rather than in the model (structure-over-instruction):
+//! atlas event/relation atoms whose pronoun-resolved statements
+//! overlap the question's content words are injected directly as
+//! evidence (`atlas_atom_matches`). The loop also classifies the
+//! question as in-world (entity-anchored) or world-general, which
+//! drives the caller's choice of insufficiency note.
+//!
+//! Hard bounds: one extra round, ≤6 formulated queries, ≤12 appended
 //! chunks. Latency: +~2s (sufficiency) on every gated turn; the
 //! formulation + retrieval cost (~4–10s) is paid only on turns that
 //! are, by the sufficiency judge's own verdict, currently
@@ -80,9 +88,88 @@ fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// Person-type entity names from the atlas — the candidate pool for
-/// structural WHICH-question enumeration.
-fn atlas_person_names(corpus_id: &str) -> Vec<String> {
+/// Content words of the question: ≥4 chars, stop-filtered, lowercased,
+/// first 6 distinct. The lexical view of the question that drives
+/// atlas-atom matching.
+fn question_keywords(message: &str) -> Vec<String> {
+    const STOP: &[&str] = &[
+        "which", "who", "what", "does", "kind", "with", "near", "the", "end", "novel",
+        "their", "from", "into", "takes", "that", "this", "her", "his", "and", "when",
+        "where", "about", "according",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for w in message.split(|c: char| !c.is_alphanumeric()) {
+        if w.len() < 4 {
+            continue;
+        }
+        let lw = w.to_lowercase();
+        if STOP.contains(&lw.as_str()) || out.contains(&lw) {
+            continue;
+        }
+        out.push(lw);
+        if out.len() >= 6 {
+            break;
+        }
+    }
+    out
+}
+
+/// Does the question name an entity that lives inside the corpus's
+/// own world (per the atlas gazetteer)? Decides whether "general
+/// knowledge" is admissible for an unanswered question: the capital
+/// of Australia is a world fact a model may caveat-and-answer, but a
+/// character's unstated real name exists only inside the corpus —
+/// outside knowledge structurally cannot supply it, and a
+/// GK-caveated guess is a fabrication in honest clothing (measured
+/// 2026-06-11: "from general knowledge: The Professor's real name is
+/// Dr. Verloc" — pure confabulation wearing the caveat format, which
+/// also exempts it from the bench critic's claim extractor).
+fn question_is_entity_anchored(keywords: &[String], corpus_ids: &[String]) -> bool {
+    let entity_toks: HashSet<String> = corpus_ids
+        .iter()
+        .flat_map(|cid| atlas_entity_names(cid))
+        .flat_map(|n| {
+            n.split(|c: char| !c.is_alphanumeric())
+                .filter(|t| t.len() >= 4)
+                .map(str::to_lowercase)
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    keywords.iter().any(|k| entity_toks.contains(k))
+}
+
+/// Minimal suffix-stripping stem so "abandons"/"abandoned"/"abandon"
+/// compare equal. Deliberately crude — it only needs to make keyword
+/// overlap robust to inflection, not be linguistically right.
+fn stem(word: &str) -> &str {
+    for suf in ["ing", "ed", "es", "s"] {
+        if word.len() > suf.len() + 3 {
+            if let Some(stripped) = word.strip_suffix(suf) {
+                return stripped;
+            }
+        }
+    }
+    word
+}
+
+// REMOVED (v8b, 2026-06-11): structural per-candidate chunk
+// enumeration — one pipeline query per atlas person-entity for
+// WHICH-questions (v5c). The full-bank A/B showed it net-HURTS:
+// per-candidate chunks arrive in atlas order (the protagonist, with
+// the most text, always first), splice into the high-attention
+// region, and exhaust the append budget before the right candidate —
+// the synthesizer then crowns whichever wrong candidate dominates
+// (measured: Wurmt over Vladimir, Sir Ethelred as the Assistant
+// Commissioner, Michaelis as the bomb-maker, Verloc as the explosion
+// victim; distractor-evasion 1.00 → 0.00). Text volume tracks
+// character prominence, which for WHICH-questions is an anti-signal.
+// Atom matching below replaces it at the semantic layer, where the
+// right candidate's ACTION is what's indexed.
+
+/// All atom (description, passage_previews) pairs from a corpus's
+/// atlas file — the raw material for both the lexical and the
+/// semantic matchers below.
+fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
     let base = std::env::var("SOVEREIGN_DATA_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
@@ -94,47 +181,87 @@ fn atlas_person_names(corpus_id: &str) -> Vec<String> {
         .iter()
         .filter_map(|a| {
             let d = a.get("data")?;
-            if d.get("entity_type").and_then(|t| t.as_str()) != Some("person") {
+            let desc = d
+                .get("description")
+                .or_else(|| d.get("statement"))
+                .and_then(|s| s.as_str())?;
+            if desc.is_empty() {
                 return None;
             }
-            d.get("canonical_name").and_then(|n| n.as_str()).map(str::to_string)
+            let previews: Vec<String> = d
+                .get("evidence")
+                .and_then(|e| e.as_array())
+                .map(|evs| {
+                    evs.iter()
+                        .filter_map(|e| e.get("passage_preview").and_then(|p| p.as_str()))
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some((desc.to_string(), previews))
         })
         .collect()
 }
 
-/// Structural candidate enumeration for WHICH/WHO-shaped questions.
-/// Instruction-following proved unreliable here — the fast model bets
-/// on its prior (Verloc) instead of enumerating, no matter how the
-/// prompt insists (v5 probes). So enumeration is done IN CODE: one
-/// query per person entity, pairing the candidate name with the
-/// question's content words. Deterministic, prior-free — the same
-/// structure-over-instruction principle as the think-suppression and
-/// evidence-seal fixes.
-fn structural_candidate_queries(message: &str, corpus_ids: &[String]) -> Vec<String> {
-    let lower = message.to_lowercase();
-    if !(lower.starts_with("which") || lower.starts_with("who") || lower.contains(" which ") || lower.contains(" who "))
-    {
+
+
+
+/// Atlas atom records matching the question's content words. The
+/// enrichment pipeline already did the hard part at ingest time —
+/// event/relation atoms carry pronoun-resolved, single-sentence
+/// statements of who did what ("X abandons Y by jumping off the
+/// train…"), each with a supporting source passage. For a question
+/// whose answer is an action, the atom IS the evidence; no chunk-rank
+/// lottery required. Matching is plain stemmed keyword overlap in
+/// code over the (small) atom file — no model call, no embedding.
+/// Returns `(description, passage_previews, keyword_hits)` for atoms
+/// with ≥2 distinct keyword hits, best first, capped at 4.
+fn atlas_atom_matches(
+    corpus_id: &str,
+    keywords: &[String],
+) -> Vec<(String, Vec<String>, usize)> {
+    if keywords.len() < 2 {
         return Vec::new();
     }
-    const STOP: &[&str] = &[
-        "which", "who", "what", "does", "kind", "with", "near", "the", "end", "novel",
-        "their", "from", "into", "takes", "that", "this", "her", "his", "and",
-    ];
-    let keywords: Vec<&str> = message
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() >= 4 && !STOP.contains(&w.to_lowercase().as_str()))
-        .take(3)
+    // Keywords that are tokens of entity canonical names are weak
+    // evidence — the protagonists' names co-occur in half the atoms
+    // of a narrative corpus, so name-only overlap matches household
+    // scenery, not the asked-about action (measured on the v7a probe:
+    // "Winnie…Verloc" matched 3 dinner-table atoms for a murder
+    // question). Require at least one ACTION-word hit, and rank by
+    // action hits first.
+    let entity_toks: HashSet<String> = atlas_entity_names(corpus_id)
+        .iter()
+        .flat_map(|n| n.split(|c: char| !c.is_alphanumeric()))
+        .filter(|t| t.len() >= 4)
+        .map(str::to_lowercase)
         .collect();
-    let mut out = Vec::new();
-    for cid in corpus_ids {
-        for name in atlas_person_names(cid) {
-            if out.len() >= 16 {
-                return out;
+    let mut scored: Vec<(String, Vec<String>, usize, usize)> = Vec::new();
+    for (desc, previews) in atlas_atom_records(corpus_id) {
+        let dl = desc.to_lowercase();
+        let dwords: Vec<&str> = dl.split(|c: char| !c.is_alphanumeric()).collect();
+        let mut hits = 0usize;
+        let mut action_hits = 0usize;
+        for k in keywords {
+            let s = stem(k);
+            if dwords.iter().any(|w| stem(w) == s) {
+                hits += 1;
+                if !entity_toks.contains(k) {
+                    action_hits += 1;
+                }
             }
-            out.push(format!("{name} {}", keywords.join(" ")));
         }
+        if hits < 2 || action_hits < 1 {
+            continue;
+        }
+        scored.push((desc, previews, hits, action_hits));
     }
-    out
+    scored.sort_by(|a, b| (b.3, b.2).cmp(&(a.3, a.2)));
+    scored.truncate(3);
+    scored
+        .into_iter()
+        .map(|(d, p, h, _)| (d, p, h))
+        .collect()
 }
 
 /// Distinct corpus ids present in a chunk set — the implicit scope
@@ -189,6 +316,22 @@ impl Runtime {
     /// Returns the (possibly augmented) chunk set; on any judge or
     /// formulation failure it degrades to the input unchanged — the
     /// loop can only ADD evidence, never lose or reorder round 0.
+    /// Returns `(chunks, still_insufficient, entity_anchored)`.
+    ///
+    /// `still_insufficient` — the loop fired, did its round, and the
+    /// merged evidence STILL fails the sufficiency judge (or round 2
+    /// found nothing new). The caller surfaces this to the synthesis
+    /// prompt: a model that knows the targeted search came back empty
+    /// abstains; one that doesn't treats the near-miss pile as
+    /// license to answer. Measured 2026-06-11 full bank: the loop
+    /// converted 3 absent-question abstentions into confident
+    /// fabrications precisely because synthesis never learned that
+    /// round 2 failed.
+    ///
+    /// `entity_anchored` — the question names entities from the
+    /// corpus's own world (atlas gazetteer match), so "general
+    /// knowledge" structurally cannot answer it; see
+    /// `question_is_entity_anchored`.
     pub(crate) async fn agentic_evidence_round(
         &self,
         message: &str,
@@ -196,7 +339,7 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
         scope: Option<&str>,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool) {
         // Empty round 0 is the strongest possible insufficiency signal
         // — skip the judge and go straight to formulation.
         let insufficiency = if chunks.is_empty() {
@@ -209,7 +352,7 @@ impl Runtime {
                         target: "agentic_kq",
                         "sufficiency judge failed — keeping round-0 evidence unchanged"
                     );
-                    return chunks;
+                    return (chunks, false, false);
                 }
             }
         };
@@ -228,7 +371,56 @@ impl Runtime {
             insufficiency >= threshold
         ));
         if insufficiency < threshold {
-            return chunks;
+            return (chunks, false, false);
+        }
+
+        // Corpora the atom-matching stage may read atlases from, and
+        // the question's lexical view — both also feed the in-world
+        // (entity-anchored) verdict the caller uses to pick the right
+        // insufficiency note.
+        let lookup_ids: Vec<String> = match context.conversation.enabled_corpora.as_deref() {
+            Some(ids) if !ids.is_empty() => ids.to_vec(),
+            _ => merged_corpora(&chunks).into_iter().collect(),
+        };
+        let kw = question_keywords(message);
+        let entity_anchored = question_is_entity_anchored(&kw, &lookup_ids);
+        // Lexical-only matching, deliberately. A v10 probe tried a
+        // cosine-similarity fallback (floor 0.5) for synonymy gaps and
+        // it matched WRONG atoms at 0.52–0.59 — short-text embedding
+        // similarity is dominated by entity-name overlap, not answer
+        // relevance — and any nonzero match defeats the zero-atom skip
+        // below, re-arming the fabrication path it exists to close.
+        // Precision over recall here; the grounding gate downstream is
+        // the recall safety net.
+        let atom_matches: Vec<(String, Vec<(String, Vec<String>, usize)>)> = lookup_ids
+            .iter()
+            .map(|cid| (cid.clone(), atlas_atom_matches(cid, &kw)))
+            .collect();
+        let atom_count: usize = atom_matches.iter().map(|(_, m)| m.len()).sum();
+        dbg(&format!("entity_anchored={entity_anchored} atom_matches={atom_count}"));
+
+        // In-world question, and the semantic index has nothing for it:
+        // an entity-anchored question whose content words match NO atlas
+        // atom is, with high probability, asking for a fact the corpus
+        // never states (the atlas catalogued every event/relation at
+        // enrichment time). Round-2 chunk retrieval can only return
+        // near-miss passages about the named entity — and the measured
+        // effect of appending those (2026-06-11 full banks ×2) is
+        // flipping honest abstentions into confident fabrications: the
+        // near-miss pile reads as license to answer, and no prompt note
+        // (generic OR in-world-strengthened) stopped a 4B from guessing
+        // over it. So the append round is structurally SKIPPED — the
+        // fabrication fuel never reaches the prompt, round-0 stands as
+        // retrieved, and the caller's in-world note still tells the
+        // model the targeted search found nothing. Cheaper too: no
+        // formulation call, no per-query retrieval.
+        if entity_anchored && atom_count == 0 {
+            tracing::info!(
+                target: "agentic_kq",
+                "agentic_kq: in-world question with zero atlas-atom support — append round skipped"
+            );
+            dbg("in-world + zero atoms: append round skipped (anti-fabrication)");
+            return (chunks, true, true);
         }
 
         let queries = match self.formulate_evidence_queries(message, &chunks, context).await {
@@ -238,23 +430,11 @@ impl Runtime {
                     target: "agentic_kq",
                     "query formulation failed/empty — keeping round-0 evidence unchanged"
                 );
-                return chunks;
+                // The loop FIRED (round 0 judged insufficient) and
+                // produced nothing — synthesis should know.
+                return (chunks, true, entity_anchored);
             }
         };
-        // Structural enumeration augments (and outranks) the model's
-        // own formulations for WHICH-shaped questions.
-        let lookup_ids: Vec<String> = match context.conversation.enabled_corpora.as_deref() {
-            Some(ids) if !ids.is_empty() => ids.to_vec(),
-            _ => merged_corpora(&chunks).into_iter().collect(),
-        };
-        let mut queries = queries;
-        let structural = structural_candidate_queries(message, &lookup_ids);
-        if !structural.is_empty() {
-            dbg(&format!("structural_candidates={structural:?}"));
-            let mut all = structural;
-            all.extend(queries);
-            queries = all;
-        }
         tracing::info!(
             target: "agentic_kq",
             queries = ?queries,
@@ -291,7 +471,62 @@ impl Runtime {
         let mut merged = chunks;
         let mut appended_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
         let mut appended = 0usize;
-        for q in queries.iter().take(18) {
+
+        // Atlas atom matches first — they carry pronoun-resolved
+        // event/relation statements extracted at enrichment time, so
+        // when one matches the question's content words it is usually
+        // the single most decisive piece of evidence available (and
+        // costs nothing: an in-code keyword scan over a small file).
+        // NOTE: a v6 probe tried pooling per-candidate BM25 hits by
+        // raw score instead; cross-query FTS scores are dominated by
+        // each query's rarest term (IDF favours the rarest CANDIDATE,
+        // not the right one) — same composition trap `ScoredChunk`'s
+        // own docs warn about for cross-corpus scores. Don't revive it.
+        for (cid, matches) in &atom_matches {
+            for (desc, previews, hits) in matches {
+                if appended >= MAX_APPENDED_CHUNKS {
+                    break;
+                }
+                let title = merged
+                    .iter()
+                    .find(|c| &c.corpus_id == cid)
+                    .and_then(|c| c.title.clone());
+                let mut content = format!("Knowledge-atlas record for this corpus: {desc}");
+                if !previews.is_empty() {
+                    content.push_str(&format!(
+                        " [supporting passage: \"{}\"]",
+                        previews.join("\" / \"")
+                    ));
+                }
+                let chunk = corpus_engine::ScoredChunk {
+                    content,
+                    title,
+                    url: None,
+                    corpus_id: cid.clone(),
+                    score: 1.0,
+                    metadata: std::collections::HashMap::from([(
+                        "atlas_atom".to_string(),
+                        "true".to_string(),
+                    )]),
+                    chunk_id: None,
+                    source_doc_id: None,
+                    vector_distance: None,
+                };
+                if seen.insert(key(&chunk)) {
+                    dbg(&format!("atlas atom hits={hits} desc={desc:?}"));
+                    tracing::info!(
+                        target: "agentic_kq",
+                        corpus = %cid,
+                        keyword_hits = hits,
+                        "agentic_kq: atlas atom match injected"
+                    );
+                    appended_chunks.push(chunk);
+                    appended += 1;
+                }
+            }
+        }
+
+        for q in queries.iter().take(MAX_FORMULATED_QUERIES) {
             if appended >= MAX_APPENDED_CHUNKS {
                 break;
             }
@@ -346,15 +581,33 @@ impl Runtime {
         let tail = merged.split_off(keep_front);
         merged.extend(appended_chunks);
         merged.extend(tail);
+        // Post-loop verdict: did round 2 actually fix the gap? Re-run
+        // the same forced-choice judge over the merged front (which now
+        // contains the appended evidence). One extra ~1s call, paid
+        // only on fired turns; the verdict drives the caller's
+        // insufficiency note to the synthesis prompt.
+        let still_insufficient = if appended == 0 {
+            true
+        } else {
+            match self.judge_evidence_sufficiency(message, &merged).await {
+                Some(p) => p >= threshold,
+                None => false,
+            }
+        };
         tracing::info!(
             target: "agentic_kq",
             appended,
             total = merged.len(),
+            still_insufficient,
             "agentic_kq: evidence round complete"
         );
-        dbg(&format!("complete: appended={appended} total={}", merged.len()));
-        merged
+        dbg(&format!(
+            "complete: appended={appended} total={} still_insufficient={still_insufficient}",
+            merged.len()
+        ));
+        (merged, still_insufficient, entity_anchored)
     }
+
 
     /// Forced-choice logprob pass: P(evidence is INSUFFICIENT). Uses
     /// the `x_forced_choice` sentinel (one decoded token, distribution
