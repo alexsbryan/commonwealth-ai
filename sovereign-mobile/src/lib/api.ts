@@ -18,8 +18,18 @@ export const addHostConnection = (
   tailnetAddress: string,
   tenantId: string,
   token: string,
+  /** "tailnet" (default) or "iroh" — for iroh, tailnetAddress is the
+   *  pairing string from the host's GET /status → iroh.dial
+   *  (`<endpoint-id-hex>@<relay-url>`); no VPN needed. */
+  endpointKind?: string,
 ): Promise<HostConnection> =>
-  invoke("add_host_connection", { displayName, tailnetAddress, tenantId, token });
+  invoke("add_host_connection", {
+    displayName,
+    tailnetAddress,
+    tenantId,
+    token,
+    endpointKind: endpointKind ?? null,
+  });
 
 export const listHostConnections = (): Promise<HostConnection[]> =>
   invoke("list_host_connections");

@@ -31,7 +31,7 @@ fn attach_metadata(mut dto: ConversationDto) -> ConversationDto {
 
 #[tauri::command]
 pub async fn create_conversation(state: State<'_, AppState>) -> Result<String> {
-    let client = state.active_client()?;
+    let client = state.active_client().await?;
     client.create_conversation().await
 }
 
@@ -40,7 +40,7 @@ pub async fn list_conversations(state: State<'_, AppState>) -> Result<Vec<Conver
     let host = state.active_host()?;
 
     // Try the host; reconcile cache on success.
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         if let Ok(remote) = client.list_conversations().await {
             if let Ok(conn) = state.db.lock() {
                 for c in &remote {
@@ -62,7 +62,7 @@ pub async fn get_conversation(
 ) -> Result<Option<ConversationDto>> {
     let host = state.active_host()?;
 
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         if let Ok(remote) = client.get_conversation(&conversation_id).await {
             if let Ok(mut conn) = state.db.lock() {
                 let _ = cache::upsert_conversation(&conn, &host.id, &remote);
@@ -84,7 +84,7 @@ pub async fn get_conversation(
 
 #[tauri::command]
 pub async fn delete_conversation(state: State<'_, AppState>, conversation_id: String) -> Result<()> {
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         let _ = client.delete_conversation(&conversation_id).await;
     }
     let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;

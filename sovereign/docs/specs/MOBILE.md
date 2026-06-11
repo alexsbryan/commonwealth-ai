@@ -8,6 +8,13 @@ host node's `sovereign-server`, which runs routing/planning/retrieval/synthesis
 node-side, and the phone renders the streamed result. It reaches the host
 **only over the tailnet** and authenticates as a tenant. The phone is a
 **client, not a mesh peer** (no gossip, no shard serving, no `cwth-` key).
+(The host row is transport-tagged via `HOST_CONNECTION.endpoint_kind`:
+`'tailnet'`, or `'iroh'` — a dial-by-key pairing string from the host's
+`GET /status` → `iroh.dial`, tunneled through a localhost bridge with no
+VPN on the phone. The "only over the tailnet" guarantee generalises to
+"only to the paired host's address, per its kind" — still fail-closed,
+still one origin. Sequencing and device-side exit criteria:
+[`TRANSPORT_MIGRATION.md`](./TRANSPORT_MIGRATION.md), Track M.)
 
 A conversation is **two things** here: (1) live chat state in the host's
 StateStore, which the phone caches for display, and (2) once indexed, a

@@ -45,15 +45,22 @@ use commonwealth_core::ids::{NodeId, NodePubkey};
 
 use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 
-/// ALPN for Commonwealth HTTP-over-iroh tunnels. Version-suffixed so
+/// ALPN for mesh-internal HTTP-over-iroh tunnels. Version-suffixed so
 /// a future class-aware protocol can coexist during migration.
 pub const ALPN: &[u8] = b"cwth/http/0";
 
-// Re-exported so feature consumers (the sovereign-mesh spike test)
-// build endpoints without declaring their own iroh dependency —
-// keeps the version pin in exactly one place.
+/// ALPN for client-API traffic (Track M: phone → `sovereign-server`).
+/// Distinct from [`ALPN`] so one daemon can later accept both and
+/// route by protocol instead of by port.
+pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
+
+// Re-exported so feature consumers (sovereign-server, the mobile
+// core, the sovereign-mesh spike test) build endpoints without
+// declaring their own iroh dependency — keeps the version pin in
+// exactly one place.
+pub use iroh::endpoint::presets;
 pub use iroh::endpoint::Builder as EndpointBuilder;
-pub use iroh::{Endpoint, SecretKey};
+pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey};
 
 /// The rustls crypto provider for `EndpointBuilder::crypto_provider`.
 /// iroh's `Builder::empty()` deliberately sets no provider (only
@@ -63,16 +70,133 @@ pub fn ring_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
 }
 
+/// One client-side tunnel: a localhost `TcpListener` whose accepted
+/// connections each become an iroh bi-stream to a fixed peer. Point
+/// any plain-TCP client (reqwest, tungstenite) at
+/// `http://{local_addr()}` / `ws://{local_addr()}` and it transparently
+/// rides QUIC dialed by the peer's Ed25519 key. Dropping the bridge
+/// aborts the accept loop.
 #[derive(Debug)]
-struct BridgeHandle {
+pub struct HttpBridge {
     local_addr: SocketAddr,
     task: tokio::task::JoinHandle<()>,
 }
 
-impl Drop for BridgeHandle {
+impl Drop for HttpBridge {
     fn drop(&mut self) {
         self.task.abort();
     }
+}
+
+impl HttpBridge {
+    /// Bind the localhost listener and start tunneling to `target`
+    /// over `alpn`. Dialing is lazy (per accepted TCP connection) and
+    /// IS key verification — the QUIC handshake fails unless the
+    /// responder holds the private key for `target.id`.
+    pub async fn spawn(
+        endpoint: Endpoint,
+        target: EndpointAddr,
+        alpn: &'static [u8],
+    ) -> std::io::Result<Self> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let local_addr = listener.local_addr()?;
+        let peer_label = target.id.to_string();
+        let task = tokio::spawn(async move {
+            loop {
+                let Ok((tcp, _)) = listener.accept().await else {
+                    break;
+                };
+                let endpoint = endpoint.clone();
+                let target = target.clone();
+                let peer_label = peer_label.clone();
+                tokio::spawn(async move {
+                    let conn = match endpoint.connect(target, alpn).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "transport",
+                                peer = %peer_label,
+                                error = %e,
+                                "iroh bridge: dial failed"
+                            );
+                            return;
+                        }
+                    };
+                    let (send, recv) = match conn.open_bi().await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "transport",
+                                peer = %peer_label,
+                                error = %e,
+                                "iroh bridge: open_bi failed"
+                            );
+                            return;
+                        }
+                    };
+                    pump(tcp, send, recv).await;
+                });
+            }
+        });
+        Ok(Self { local_addr, task })
+    }
+
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+}
+
+/// Parse a pairing dial string: `<64-hex-endpoint-id>@<target>[,<target>...]`
+/// where each target is either a UDP `SocketAddr` (LAN-direct / tests)
+/// or a relay URL (`https://…`). This is the string a host's pairing
+/// surface displays and a client stores as its opaque transport
+/// address.
+pub fn parse_dial_string(s: &str) -> Result<EndpointAddr, String> {
+    let (id_hex, targets) = s
+        .split_once('@')
+        .ok_or_else(|| format!("dial string '{s}' missing '@' — expected <endpoint-id>@<relay-or-addr>[,...]"))?;
+    let id_bytes = hex::decode(id_hex.trim())
+        .map_err(|e| format!("endpoint id is not hex: {e}"))?;
+    let id_arr: [u8; 32] = id_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("endpoint id is {} bytes, expected 32", id_bytes.len()))?;
+    let id = PublicKey::from_bytes(&id_arr).map_err(|e| format!("invalid endpoint id: {e}"))?;
+
+    let mut ea = EndpointAddr::new(id);
+    let mut any_target = false;
+    for raw in targets.split(',') {
+        let t = raw.trim();
+        if t.is_empty() {
+            continue;
+        }
+        any_target = true;
+        if let Ok(sock) = t.parse::<SocketAddr>() {
+            ea = ea.with_ip_addr(sock);
+        } else {
+            let relay: RelayUrl = t
+                .parse()
+                .map_err(|e| format!("target '{t}' is neither a socket address nor a relay URL: {e}"))?;
+            ea = ea.with_relay_url(relay);
+        }
+    }
+    if !any_target {
+        return Err(format!("dial string '{s}' has no targets after '@'"));
+    }
+    Ok(ea)
+}
+
+/// Render an endpoint's current dial info as a pairing string
+/// ([`parse_dial_string`]'s inverse). Relay URLs first (stable),
+/// then direct addresses. `None` while the endpoint has no
+/// reachable address yet.
+pub fn format_dial_string(addr: &EndpointAddr) -> Option<String> {
+    let mut targets: Vec<String> = addr.relay_urls().map(|r| r.to_string()).collect();
+    targets.extend(addr.ip_addrs().map(|a| a.to_string()));
+    if targets.is_empty() {
+        return None;
+    }
+    Some(format!("{}@{}", hex::encode(addr.id.as_bytes()), targets.join(",")))
 }
 
 /// Client half: resolves a peer's `node_pubkey` to a localhost base
@@ -83,7 +207,7 @@ pub struct IrohTransport {
     /// Out-of-band dial hints: pubkey → iroh UDP socket addresses.
     /// Spike-only surface (see module docs).
     known_addrs: std::sync::Mutex<HashMap<[u8; 32], Vec<SocketAddr>>>,
-    bridges: tokio::sync::Mutex<HashMap<[u8; 32], Arc<BridgeHandle>>>,
+    bridges: tokio::sync::Mutex<HashMap<[u8; 32], Arc<HttpBridge>>>,
 }
 
 impl IrohTransport {
@@ -123,60 +247,14 @@ impl IrohTransport {
         let key = *pubkey.as_bytes();
         let mut bridges = self.bridges.lock().await;
         if let Some(b) = bridges.get(&key) {
-            return Some(b.local_addr);
+            return Some(b.local_addr());
         }
         let target = self.endpoint_addr_for(pubkey)?;
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.ok()?;
-        let local_addr = listener.local_addr().ok()?;
-        let endpoint = self.endpoint.clone();
-        let pubkey_hex = pubkey.to_string();
-        let task = tokio::spawn(async move {
-            loop {
-                let Ok((tcp, _)) = listener.accept().await else {
-                    break;
-                };
-                let endpoint = endpoint.clone();
-                let target = target.clone();
-                let pubkey_hex = pubkey_hex.clone();
-                tokio::spawn(async move {
-                    // Dialing IS key verification: the QUIC handshake
-                    // fails unless the responder holds the private
-                    // key for this exact pubkey.
-                    let conn = match endpoint.connect(target, ALPN).await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::warn!(
-                                target: "transport",
-                                peer = %pubkey_hex,
-                                error = %e,
-                                "iroh bridge: dial failed"
-                            );
-                            return;
-                        }
-                    };
-                    let (send, recv) = match conn.open_bi().await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            tracing::warn!(
-                                target: "transport",
-                                peer = %pubkey_hex,
-                                error = %e,
-                                "iroh bridge: open_bi failed"
-                            );
-                            return;
-                        }
-                    };
-                    pump(tcp, send, recv).await;
-                });
-            }
-        });
-        bridges.insert(
-            key,
-            Arc::new(BridgeHandle {
-                local_addr,
-                task,
-            }),
-        );
+        let bridge = HttpBridge::spawn(self.endpoint.clone(), target, ALPN)
+            .await
+            .ok()?;
+        let local_addr = bridge.local_addr();
+        bridges.insert(key, Arc::new(bridge));
         Some(local_addr)
     }
 }

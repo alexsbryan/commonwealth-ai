@@ -12,7 +12,7 @@ use crate::state::AppState;
 #[tauri::command]
 pub async fn list_corpora(state: State<'_, AppState>) -> Result<Vec<CorpusRefDto>> {
     let host = state.active_host()?;
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         if let Ok(refs) = client.list_corpora().await {
             if let Ok(mut conn) = state.db.lock() {
                 let _ = cache::replace_corpus_refs(&mut conn, &host.id, &refs);
@@ -66,7 +66,7 @@ pub async fn read_citation(
     corpus_id: String,
     chunk_id: String,
 ) -> Result<Option<ReadingWindowDto>> {
-    if let Ok(client) = state.active_client() {
+    if let Ok(client) = state.active_client().await {
         if let Ok(window) = client.read_chunk(&corpus_id, &chunk_id).await {
             if window.found {
                 return Ok(Some(window));

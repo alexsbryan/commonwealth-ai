@@ -179,6 +179,85 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
     );
 }
 
+/// Track M building blocks: the phone-side `HttpBridge` dialing a
+/// host-side `IrohAcceptor` on the client ALPN, with the dial info
+/// round-tripped through the pairing string format — i.e. the exact
+/// path `sovereign-mobile` ⇆ `sovereign-server` uses, minus the
+/// model bootstrap.
+#[tokio::test]
+async fn http_bridge_reaches_acceptor_via_pairing_string() {
+    use commonwealth_transport::iroh::{
+        format_dial_string, parse_dial_string, HttpBridge, CLIENT_ALPN,
+    };
+
+    // "Host": a plain axum router (stands in for sovereign-server's
+    // HTTP listener) + an acceptor on the client ALPN.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let http_addr = listener.local_addr().unwrap();
+    let router = axum::Router::new().route(
+        "/status",
+        axum::routing::get(|| async { axum::Json(serde_json::json!({"status": "ok"})) }),
+    );
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+
+    let host_ep = EndpointBuilder::empty()
+        .crypto_provider(commonwealth_transport::iroh::ring_crypto_provider())
+        .secret_key(SecretKey::from_bytes(&[7; 32]))
+        .alpns(vec![CLIENT_ALPN.to_vec()])
+        .bind()
+        .await
+        .expect("host endpoint");
+    let _acceptor =
+        commonwealth_transport::iroh::IrohAcceptor::spawn(host_ep.clone(), http_addr);
+
+    // Pairing string, exactly as the host's /status would render it
+    // (hermetic test: direct UDP sockets instead of a relay URL).
+    let mut addr = host_ep.addr();
+    addr.addrs.clear();
+    for s in dialable_sockets(&host_ep) {
+        addr = addr.with_ip_addr(s);
+    }
+    let dial = format_dial_string(&addr).expect("host has dialable sockets");
+
+    // "Phone": parse the pairing string, bridge, plain reqwest.
+    let phone_ep = EndpointBuilder::empty()
+        .crypto_provider(commonwealth_transport::iroh::ring_crypto_provider())
+        .secret_key(SecretKey::from_bytes(&[8; 32]))
+        .bind()
+        .await
+        .expect("phone endpoint");
+    let target = parse_dial_string(&dial).expect("pairing string parses");
+    let bridge = HttpBridge::spawn(phone_ep, target, CLIENT_ALPN)
+        .await
+        .expect("bridge spawns");
+
+    let resp = reqwest::Client::new()
+        .get(format!("http://{}/status", bridge.local_addr()))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("GET /status through the bridge");
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], "ok");
+}
+
+#[test]
+fn dial_string_parse_rejects_malformed() {
+    use commonwealth_transport::iroh::parse_dial_string;
+    // No '@'.
+    assert!(parse_dial_string("deadbeef").is_err());
+    // Bad hex / wrong length.
+    assert!(parse_dial_string("zz@127.0.0.1:1").is_err());
+    assert!(parse_dial_string("deadbeef@127.0.0.1:1").is_err());
+    // No targets.
+    assert!(parse_dial_string(&format!("{}@", "ab".repeat(32))).is_err());
+    // Garbage target.
+    assert!(parse_dial_string(&format!("{}@not a url", "ab".repeat(32))).is_err());
+}
+
 #[tokio::test]
 async fn peer_without_pubkey_is_not_dialable_on_iroh() {
     let client_ep = bind_iroh_endpoint(3).await;

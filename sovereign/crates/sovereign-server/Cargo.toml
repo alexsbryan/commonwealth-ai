@@ -13,6 +13,10 @@ sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 # crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
 # phase 7e.
 commonwealth-tdd = { workspace = true }
+# Dial-by-key client access (Track M) — pulls the iroh feature into
+# default builds of this binary; everything else stays runtime-gated
+# behind `[iroh] enabled`.
+commonwealth-transport = { workspace = true, features = ["iroh"] }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 # FeatureStore — backs the recipe-author Checkpoint/CapabilityRequest tools
@@ -23,6 +27,7 @@ dirs = "5"
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+hex = "0.4"
 uuid = { workspace = true }
 async-trait = { workspace = true }
 toml = { workspace = true }

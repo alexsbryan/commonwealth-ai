@@ -25,7 +25,7 @@ commonwealth-ai/
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet-only
+└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
 
 | Project              | Role                                          | Depends on                                            |
@@ -967,7 +967,17 @@ instance hangs off commonwealth-api's `AppState`
   listener). Spike proof:
   `sovereign-mesh/tests/iroh_transport_e2e.rs` (run with
   `--features iroh-experimental`) drives a real gossip round dialed
-  by pubkey. Never compiled by default gates.
+  by pubkey. Not used by any mesh traffic class yet.
+- **Track M (mobile) is implemented**: `sovereign-server`'s
+  `[iroh] enabled` block accepts dial-by-key clients on ALPN
+  `cwth/client/0` (`src/iroh_access.rs`; pairing string at
+  `GET /status` → `iroh.dial`), and `sovereign-mobile`'s
+  `endpoint_kind='iroh'` host rows tunnel HTTP+WS through a
+  localhost bridge (`src-tauri/src/iroh_bridge.rs`) — no VPN on the
+  phone. This pulls the iroh feature into sovereign-server's default
+  build (runtime-gated off); see
+  [`docs/specs/TRANSPORT_MIGRATION.md`](./docs/specs/TRANSPORT_MIGRATION.md)
+  for phase status and device-side exit criteria.
 - **Out of seam, by design**: the join handshake (pre-membership
   bootstrap), worker-pod `PinnedTransport` (separate trust model),
   loopback self-probes, and the raw-TCP `llama-server`/`rpc-server`
@@ -977,7 +987,10 @@ instance hangs off commonwealth-api's `AppState`
   by `TrafficClass`, not config: a small `RoutedTransport` mapping
   classes → transports slots into the same `Arc<dyn PeerTransport>`
   — gossip/membership first, blob/model transfer next, inference
-  streaming last, raw RPC tensor traffic remaining on IP.
+  streaming last, raw RPC tensor traffic remaining on IP. The full
+  phased plan (mobile first, then per-class mesh flips, relay
+  self-hosting, Tailscale-optional end state) is
+  [`docs/specs/TRANSPORT_MIGRATION.md`](./docs/specs/TRANSPORT_MIGRATION.md).
 
 ### Scheduling + orchestration
 
