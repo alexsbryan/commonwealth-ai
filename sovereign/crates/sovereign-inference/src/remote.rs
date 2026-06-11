@@ -191,6 +191,19 @@ impl RemoteApiProvider {
             });
         }
 
+        // Forward `think_budget` as the Commonwealth extension field the
+        // daemon's `resolve_think_budget` reads. Without this the
+        // runtime's `think_budget: Some(0)` (FastFocused synthesis, gap
+        // check, router — every "don't think, just answer" call) dies at
+        // the HTTP boundary and the engine-side thinking suppression in
+        // `format_prompt` never engages: the chat template pre-opens
+        // `<think>` and the model spends its whole `max_tokens` budget
+        // on CoT (2026-06-10 fabrication burn-down — chaos honesty 0.45,
+        // every fast-slot KQ answer was truncated raw deliberation).
+        if let Some(tb) = request.think_budget {
+            body["think_budget"] = serde_json::json!(tb);
+        }
+
         // Forward `structured_output` to the daemon as the OpenAI
         // `response_format: {type: "json_schema", json_schema: {...}}`
         // envelope. Without this, the schema is dropped at the HTTP

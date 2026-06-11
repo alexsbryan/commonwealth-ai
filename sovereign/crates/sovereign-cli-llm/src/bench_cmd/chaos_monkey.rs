@@ -39,7 +39,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--naked] [--grounding-verify]",
         ),
         HelpSection::Subcommands(&[(
             "run",
@@ -82,6 +82,12 @@ struct Args {
     base_url: String,
     manifest: Option<PathBuf>,
     out: PathBuf,
+    /// Sidecar JSONL with the FULL per-probe transcript — question, complete
+    /// visible answer, every retrieved chunk text, verdict. `answer_excerpt`
+    /// in the ResultRow is capped at 200 chars, which is too small to diagnose
+    /// WHERE a fabricated fact came from (a retrieved chunk vs thin air).
+    /// Defaults to `<out stem>.transcripts.jsonl` next to --out.
+    transcripts: PathBuf,
     limit: Option<usize>,
     /// True-baseline control: bypass the whole Runtime (router, retrieval,
     /// synthesis prompt) and send the bare question to the model. Measures the
@@ -117,6 +123,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut base_url = "http://localhost:9741".to_string();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
+    let mut transcripts: Option<PathBuf> = None;
     let mut limit = None;
     let mut naked = false;
     let mut grounding_verify = false;
@@ -139,6 +146,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--base-url" => base_url = val!("--base-url"),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
+            "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
             "--naked" => naked = true,
             "--grounding-verify" => grounding_verify = true,
@@ -158,6 +166,10 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         }
         i += 1;
     }
+    let transcripts = transcripts.unwrap_or_else(|| {
+        let stem = out.file_stem().and_then(|s| s.to_str()).unwrap_or("results");
+        out.with_file_name(format!("{stem}.transcripts.jsonl"))
+    });
     Ok(Args {
         bank: bank.ok_or("--bank is required")?,
         corpus,
@@ -166,6 +178,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         base_url,
         manifest,
         out,
+        transcripts,
         limit,
         naked,
         grounding_verify,
@@ -288,6 +301,22 @@ async fn run(rest: &[String]) -> i32 {
     };
     let naked_max: usize = globals.max_tokens.unwrap_or(2048);
 
+    // Full-transcript sidecar (glassbox): stream-written per probe so a
+    // crashed run still leaves partial diagnostics. Creation failure warns
+    // and degrades to excerpt-only rather than aborting the battery.
+    let mut transcript_file = {
+        if let Some(parent) = args.transcripts.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::File::create(&args.transcripts) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("[chaos] WARN: cannot write transcripts {:?}: {e}", args.transcripts);
+                None
+            }
+        }
+    };
+
     let take = args.limit.unwrap_or(bank.questions.len());
     let mut rows = Vec::new();
     for (qi, q) in bank.questions.iter().take(take).enumerate() {
@@ -321,7 +350,23 @@ async fn run(rest: &[String]) -> i32 {
             (None, None, Some(session)) => run_live(session, &corpus, &q.question).await,
             (None, None, None) => unreachable!("one of session/bridge is always built"),
         };
+        let answer_full = live.visible.clone();
+        let chunks_full = live.retrieved_chunk_texts.clone();
         let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify).await;
+        if let Some(f) = transcript_file.as_mut() {
+            use std::io::Write as _;
+            let rec = serde_json::json!({
+                "id": q.id,
+                "qtype": q.qtype.label(),
+                "question": q.question,
+                "expected_action": format!("{:?}", q.qtype.expected_action()),
+                "agent_action": format!("{:?}", row.agent_action),
+                "pass": row.is_pass(),
+                "answer": answer_full,
+                "retrieved_chunks": chunks_full,
+            });
+            let _ = writeln!(f, "{rec}");
+        }
         eprintln!(
             "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
             qi + 1,
@@ -342,6 +387,9 @@ async fn run(rest: &[String]) -> i32 {
     let verdict = report.verdict(&gates);
     print_summary(&report, &verdict, &gates);
     eprintln!("[out] wrote {} rows → {:?}", rows.len(), args.out);
+    if transcript_file.is_some() {
+        eprintln!("[out] wrote full transcripts → {:?}", args.transcripts);
+    }
     if verdict.overall_pass {
         0
     } else {
