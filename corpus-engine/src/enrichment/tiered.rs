@@ -173,6 +173,33 @@ impl ConvBucket {
         }
     }
 
+    /// Bucket classification for per-FILE units (vault notes,
+    /// watched-folder documents) instead of chat conversations.
+    ///
+    /// `classify`'s 8-chunk Tiny floor is tuned to chat exports,
+    /// where a sub-8-chunk conversation genuinely is small talk. A
+    /// vault note at the semantic chunker's ~2048 chars/chunk is a
+    /// COMPLETE argumentative essay at 3-7 chunks — bucketing it
+    /// Tiny replaces its RAPTOR summary with a title-only synthetic
+    /// node, which silently exempts the note from everything
+    /// downstream of `conv_raptor_nodes`: T3 signposts, vault
+    /// themes, and the typed-extension pass. Measured on the live
+    /// vault (2026-06-11): 23 of 46 notes — including 5 of the
+    /// obsidian golden's 10 sampled essays — were Tiny under
+    /// `classify`, which is why the typed axes scored near zero.
+    ///
+    /// Per-file Tiny is therefore only the truly degenerate case:
+    /// a 0-or-1-chunk file, where there is nothing to cluster.
+    pub fn classify_note(chunk_count: usize) -> Self {
+        match chunk_count {
+            0..=1 => ConvBucket::Tiny,
+            2..=30 => ConvBucket::Small,
+            31..=100 => ConvBucket::Medium,
+            101..=300 => ConvBucket::Large,
+            _ => ConvBucket::LongTail,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             ConvBucket::Tiny => "tiny",
@@ -443,7 +470,9 @@ pub async fn run_folder_tiered_enrichment(
 
     let mut doc_buckets: Vec<(String, ConvBucket)> = Vec::with_capacity(groups.len());
     for (doc_id, chunk_ids) in &groups {
-        let bucket = ConvBucket::classify(chunk_ids.len());
+        // Folder corpora are per-FILE units — a 3-chunk note is a
+        // complete essay, not small talk. See `classify_note`.
+        let bucket = ConvBucket::classify_note(chunk_ids.len());
         let entry = plan.per_bucket.entry(bucket).or_default();
         entry.conversations += 1;
         entry.chunks += chunk_ids.len();
@@ -583,6 +612,24 @@ mod tests {
         assert_eq!(ConvBucket::classify(300), ConvBucket::Large);
         assert_eq!(ConvBucket::classify(301), ConvBucket::LongTail);
         assert_eq!(ConvBucket::classify(510), ConvBucket::LongTail);
+    }
+
+    #[test]
+    fn note_bucket_boundaries_only_degenerate_files_are_tiny() {
+        // Per-file units: a 2-chunk note already carries a complete
+        // argument — only 0/1-chunk files take the synthetic-node path.
+        // Pinned because the conversation thresholds tiny-bucketed 23
+        // of 46 live-vault notes (5 of 10 golden essays) and silently
+        // exempted them from typed extraction (2026-06-11).
+        assert_eq!(ConvBucket::classify_note(0), ConvBucket::Tiny);
+        assert_eq!(ConvBucket::classify_note(1), ConvBucket::Tiny);
+        assert_eq!(ConvBucket::classify_note(2), ConvBucket::Small);
+        assert_eq!(ConvBucket::classify_note(7), ConvBucket::Small);
+        assert_eq!(ConvBucket::classify_note(30), ConvBucket::Small);
+        assert_eq!(ConvBucket::classify_note(31), ConvBucket::Medium);
+        // Upper buckets match `classify` exactly.
+        assert_eq!(ConvBucket::classify_note(101), ConvBucket::Large);
+        assert_eq!(ConvBucket::classify_note(301), ConvBucket::LongTail);
     }
 
     #[test]

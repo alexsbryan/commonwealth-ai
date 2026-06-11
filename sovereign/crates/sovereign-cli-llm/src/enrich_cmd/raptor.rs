@@ -146,6 +146,22 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // Vault / watched-folder corpora are per-FILE units: a 3-chunk
+    // note is a complete essay, so it takes `classify_note` (Tiny only
+    // at 0-1 chunks) — matching `run_folder_tiered_enrichment`.
+    // Document corpora (wiki/SEP retrofits) keep `classify`'s 8-chunk
+    // Tiny floor: lowering it there would silently multiply LLM spend
+    // across thousands of small articles on a retrofit re-run.
+    let per_file_units = index
+        .display()
+        .and_then(|d| d.category)
+        .map(|c| c == "vault" || c == "watched_folder")
+        .unwrap_or(false);
+    let classify_bucket: fn(usize) -> ConvBucket = if per_file_units {
+        ConvBucket::classify_note
+    } else {
+        ConvBucket::classify
+    };
     if groups.is_empty() {
         eprintln!(
             "error: corpus '{}' has no source documents to summarize",
@@ -230,7 +246,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         std::collections::BTreeMap::new();
     for (_, n) in &docs {
         *bucket_hist
-            .entry(ConvBucket::classify(*n).label())
+            .entry(classify_bucket(*n).label())
             .or_default() += 1;
     }
 
@@ -423,7 +439,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             skipped += 1;
             continue;
         }
-        let bucket = ConvBucket::classify(rows.len());
+        let bucket = classify_bucket(rows.len());
         let kept = rows.len();
         let (chunks, embeddings): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
 
@@ -499,7 +515,11 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     if built > 0 {
         println!("  avg per document: {:.1}s", elapsed.as_secs_f64() / built as f64);
     }
-    println!("\nThe atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive.");
+    if !per_file_units {
+        println!(
+            "\nThe atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive."
+        );
+    }
 
     // Post-build: (re)build the RAPTOR summary-node ANN index so query-time
     // grounding takes the fast LanceDB path (`raptor_summaries.lance`) instead
@@ -515,6 +535,27 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         )
         .await;
         println!("RAPTOR summary-node ANN index: {outcome}");
+    }
+
+    // Folder corpora: finish with the same finalize the daemon-side
+    // build runs — vault synthesis (vault_themes over the NEW node set)
+    // + the typed-extension pass into atlas/atoms.json. Without this
+    // the retrofit leaves vault_themes referencing the pre-retrofit
+    // nodes, and the typed pass's cross-leaf Pass B (opposition /
+    // concession) extracts from stale themes — measured 2026-06-11:
+    // both cross-leaf axes dropped to 0 against the obsidian golden
+    // until synthesis caught up. Document corpora (wiki/SEP) skip this:
+    // vault synthesis + typed atoms are folder-shaped concerns.
+    if per_file_units && (built > 0 || resumed > 0) {
+        println!("\nFolder corpus — running finalize (vault synthesis + typed extension)…");
+        match provider.finalize_corpus(&parsed.corpus_id).await {
+            Ok(()) => println!("  finalize complete (vault_themes + atlas/atoms.json refreshed)"),
+            Err(e) => eprintln!(
+                "  finalize failed (non-fatal — re-run `sovereign atlas typed-extension {}` \
+                 after fixing): {e}",
+                parsed.corpus_id
+            ),
+        }
     }
 
     // Total failure (nothing built) is a non-zero exit; partial

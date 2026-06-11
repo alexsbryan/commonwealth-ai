@@ -63,6 +63,15 @@ pub(super) fn leaf_is_extractable(node: &ConvRaptorNodeRow) -> bool {
 
 /// Pass A — typed extraction over one RAPTOR leaf summary.
 ///
+/// `member_excerpts` carries verbatim text from the leaf's member
+/// chunks (small leaves only; orchestrator-bounded). The leaf summary
+/// is a paraphrase — for a 3-chunk essay leaf it compresses out the
+/// essay's load-bearing binaries and concession phrasings, which is
+/// exactly what the obsidian golden checks for (measured 2026-06-11:
+/// opposition/concession axes at 0 with summaries+quote-spans alone;
+/// the golden's items live verbatim in member chunks). Empty slice =
+/// prior behavior.
+///
 /// Returns:
 /// - `Ok(Some((section, citation)))` — parsed extension carries at least
 ///   one atom; the [`SourceCitation`] is the primary-source handle the
@@ -76,12 +85,14 @@ pub(super) fn leaf_is_extractable(node: &ConvRaptorNodeRow) -> bool {
 pub(super) async fn pass_a_one_leaf(
     corpus_id: &str,
     leaf: &ConvRaptorNodeRow,
+    member_excerpts: &[String],
     inference: &Arc<dyn InferenceProvider>,
 ) -> Result<Option<(SectionExtraction, SourceCitation)>, String> {
     let primary_entities = parse_primary_entities(&leaf.primary_entities_json);
     let quote_spans = parse_quote_spans(&leaf.quote_spans_json);
     let quote_texts: Vec<String> = quote_spans.iter().map(|q| q.text.clone()).collect();
-    let user = build_pass_a_user_body(&leaf.summary, &primary_entities, &quote_texts);
+    let user =
+        build_pass_a_user_body(&leaf.summary, &primary_entities, &quote_texts, member_excerpts);
     let extension = call_argumentative(
         PHASE1_ARGUMENTATIVE_SYSTEM,
         &user,
@@ -187,6 +198,7 @@ fn build_pass_a_user_body(
     summary: &str,
     primary_entities: &[String],
     quote_spans: &[String],
+    member_excerpts: &[String],
 ) -> String {
     let mut body = String::new();
     body.push_str("# RAPTOR leaf — argumentative typed extension\n\n");
@@ -212,12 +224,31 @@ fn build_pass_a_user_body(
         .collect();
     body.push_str(&render_source_recovery_block(&trimmed));
     body.push_str("\n\n");
+
+    if !member_excerpts.is_empty() {
+        body.push_str(
+            "**Member chunk excerpts (verbatim source text — prefer THESE \
+             over the paraphrased summary when naming atoms; the source's \
+             own labels, named oppositions, and concession phrasings are \
+             what downstream matching resolves against):**\n\n",
+        );
+        for (i, excerpt) in member_excerpts.iter().enumerate() {
+            body.push_str(&format!("[excerpt {}]\n", i + 1));
+            body.push_str(excerpt.trim());
+            body.push_str("\n\n");
+        }
+    }
+
     body.push_str(
         "Return a single JSON object with the typed-extension collections per the \
          schema in the system message. Extract atoms ONLY when the source above \
          directly supports them — do not invent material the cluster does not \
-         contain. Omit any collection you cannot populate with real content from \
-         this cluster. No prose, no <think> block, no code-fence markers.",
+         contain. When a named position belongs to a NAMED person or school in \
+         the source (\"Hardin argues…\", \"Ostrom's view…\"), set that position's \
+         `proponent` to the name as the source writes it; leave `proponent` \
+         empty for the author's own voice. Omit any collection you cannot \
+         populate with real content from this cluster. No prose, no <think> \
+         block, no code-fence markers.",
     );
     body
 }
@@ -350,6 +381,7 @@ mod tests {
             "Spread pricing is a PBM mechanism that buys cheap, bills high.",
             &["spread pricing".into(), "PBM".into()],
             &[],
+            &[],
         );
         assert!(body.contains("Spread pricing"));
         assert!(body.contains("Primary entities"));
@@ -366,6 +398,7 @@ mod tests {
                 "The practice known as spread pricing lets PBMs charge payers more than they reimburse pharmacies.".into(),
                 "FTC documented $1.4B per year in spread pricing income across the top three PBMs.".into(),
             ],
+            &[],
         );
         assert!(body.contains("Verbatim source excerpts"));
         assert!(body.contains("spread pricing"));
@@ -376,10 +409,32 @@ mod tests {
     }
 
     #[test]
+    fn pass_a_user_body_carries_member_excerpts_with_verbatim_preference() {
+        // v2 source recovery: small leaves feed verbatim member-chunk
+        // text, and the prompt tells the model to prefer it over the
+        // paraphrased summary when NAMING atoms — the golden resolves
+        // on the source's own labels.
+        let body = build_pass_a_user_body(
+            "The essay contrasts two governance framings.",
+            &[],
+            &[],
+            &["Hardin says ruin is inevitable; there is a graveyard of analysts who called the top."
+                .into()],
+        );
+        assert!(body.contains("Member chunk excerpts"));
+        assert!(body.contains("graveyard of analysts"));
+        assert!(body.contains("prefer THESE"));
+
+        // Empty excerpts = v1 body shape, no stray heading.
+        let v1 = build_pass_a_user_body("summary", &[], &[], &[]);
+        assert!(!v1.contains("Member chunk excerpts"));
+    }
+
+    #[test]
     fn pass_a_user_body_truncates_overly_long_quotes() {
         use corpus_engine::enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP;
         let long = "a".repeat(SOURCE_RECOVERY_QUOTE_CHAR_CAP + 50);
-        let body = build_pass_a_user_body("summary text here is long enough", &[], &[long]);
+        let body = build_pass_a_user_body("summary text here is long enough", &[], &[long], &[]);
         // Body carries an ellipsis token confirming truncation engaged.
         assert!(body.contains('…'));
     }

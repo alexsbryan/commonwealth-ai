@@ -506,3 +506,49 @@ fn assert_atoms_use_content_hash_ids(atlas_dir: &Path) {
         );
     }
 }
+
+#[test]
+fn person_seeds_subsume_surnames_and_drop_noise() {
+    use sovereign_core::conv_tiered::ChunkEntityRow;
+    fn row(text: &str, label: &str, score: f64, chunk_id: u64) -> ChunkEntityRow {
+        ChunkEntityRow {
+            corpus_id: "c".into(),
+            chunk_id,
+            text: text.into(),
+            label: label.into(),
+            char_start: 0,
+            char_end: text.len() as i64,
+            score,
+            conv_uuid: Some("note.md".into()),
+            extracted_at: 0,
+        }
+    }
+    let rows = vec![
+        row("Elinor Ostrom", "Person", 0.9, 10),
+        row("Ostrom", "Person", 0.9, 11),
+        row("Ostrom", "Person", 0.9, 12),
+        row("Garrett Hardin", "Person", 0.9, 20),
+        // Noise that must NOT seed:
+        row("user", "Person", 0.9, 30),          // single token, no host
+        row("Margaret", "Person", 0.9, 31),      // single token, no host
+        row("2024-01-15", "Person", 0.9, 32),    // the wikilink/date trap
+        row("FTC", "Organization", 0.9, 33),     // wrong label
+        row("Weak Name", "Person", 0.3, 34),     // below score floor
+    ];
+    let seeds = super::build_person_seed_entities(&rows);
+    let names: Vec<&str> = seeds.iter().map(|e| e.canonical_name.as_str()).collect();
+    assert!(names.contains(&"Elinor Ostrom"), "names = {names:?}");
+    assert!(names.contains(&"Garrett Hardin"));
+    assert_eq!(seeds.len(), 2, "noise must be gated out: {names:?}");
+    let ostrom = seeds
+        .iter()
+        .find(|e| e.canonical_name == "Elinor Ostrom")
+        .unwrap();
+    assert!(
+        ostrom.aliases.iter().any(|a| a == "Ostrom"),
+        "surname must subsume as alias: {:?}",
+        ostrom.aliases
+    );
+    // Subsumed counts rank Ostrom (1+2 mentions) above Hardin (1).
+    assert_eq!(seeds[0].canonical_name, "Elinor Ostrom");
+}

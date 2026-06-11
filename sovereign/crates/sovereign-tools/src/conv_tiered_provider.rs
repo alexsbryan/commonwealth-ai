@@ -890,7 +890,11 @@ impl FolderTieredProvider {
                 continue;
             }
             let (chunks, embeddings): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
-            let bucket = ConvBucket::classify(chunks.len());
+            // Per-FILE units (this is the folder incremental path) —
+            // mirror `run_folder_tiered_enrichment`'s choice or an
+            // edited 3-chunk note silently downgrades from a real
+            // RAPTOR summary to a title-only synthetic node.
+            let bucket = ConvBucket::classify_note(chunks.len());
             if let Err(e) = self
                 .enrich_conversation(corpus_id, doc_id, chunks, embeddings, bucket)
                 .await
