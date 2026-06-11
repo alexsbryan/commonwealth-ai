@@ -2601,10 +2601,32 @@ pub fn resolve_type_extensions(
                 if trimmed.is_empty() || sk.content.trim().is_empty() {
                     continue;
                 }
-                let proponent_id = if sk.proponent.trim().is_empty() {
+                // Exact folded-name lookup first; then a UNIQUE-
+                // containment fallback so a surname proponent
+                // ("Hardin", "Ostrom" — the form essays actually use)
+                // resolves against the full-name Entity ("Garrett
+                // Hardin"). Ambiguous containment (two entities match)
+                // resolves to None rather than guessing; sub-4-char
+                // needles are skipped ("Li" would match half the
+                // index). 2026-06-11 obsidian loop iter 4.
+                let proponent_needle = fold(sk.proponent.trim());
+                let proponent_id = if proponent_needle.is_empty() {
                     None
                 } else {
-                    entity_name_to_id.get(&fold(sk.proponent.trim())).cloned()
+                    entity_name_to_id.get(&proponent_needle).cloned().or_else(|| {
+                        if proponent_needle.len() < 4 {
+                            return None;
+                        }
+                        let mut hits = existing_entities.iter().filter(|e| {
+                            let folded = fold(&e.canonical_name);
+                            folded.contains(&proponent_needle)
+                                || e.aliases.iter().any(|a| fold(a) == proponent_needle)
+                        });
+                        match (hits.next(), hits.next()) {
+                            (Some(only), None) => Some(only.id.clone()),
+                            _ => None,
+                        }
+                    })
                 };
                 if !sk.proponent.trim().is_empty() && proponent_id.is_none() {
                     out.failures.push(PhaseFailure {

@@ -972,6 +972,16 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         read_meta(index_dir).ok().and_then(|m| m.personal_scope)
     }
+
+    /// Read the stamped `[display]` block (mirrors `stream()` /
+    /// `personal_scope()`). Lets callers that open an index directly
+    /// (e.g. the RAPTOR retrofit CLI) branch on the corpus shape —
+    /// vault / watched_folder corpora are per-file units — without a
+    /// full `installed_indexes()` scan.
+    pub fn display(&self) -> Option<crate::recipe::DisplayMeta> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.display)
+    }
 }
 
 /// Backfill helper for indexes created before the `personal_scope`

@@ -440,10 +440,18 @@ means one thing.
   path. Used by attached docs, conversations, Obsidian / watched folders.
   `sovereign enrich raptor <corpus>` (sovereign-cli-llm) retrofits this
   tier-3 tree onto an already-installed corpus additively — writes
-  `conv_raptor_nodes` keyed by `source_doc_id`, never touches the
-  corpus's atom-graph atlas, reuses the existing leaf embeddings, and
-  carries `--strip-furniture` + doc-level resume (the SEP
-  whole-document-summarization retrofit, 2026-06-06). Query-time
+  `conv_raptor_nodes` keyed by `source_doc_id`, reuses the existing
+  leaf embeddings, and carries `--strip-furniture` + doc-level resume
+  (the SEP whole-document-summarization retrofit, 2026-06-06).
+  Bucketing is corpus-shape-aware (2026-06-11): vault/watched-folder
+  corpora classify per-FILE units via `ConvBucket::classify_note`
+  (Tiny only at 0-1 chunks — the conversation-tuned 8-chunk floor
+  tiny-bucketed half the live vault into title-only synthetic nodes),
+  while document corpora keep the conversation thresholds. For folder
+  corpora the retrofit also finishes with `finalize_corpus` (vault
+  synthesis + the typed-extension pass into `atlas/atoms.json` —
+  see TIERED_RETRIEVAL.md's typed-extension section); document
+  corpora never touch the atom-graph atlas. Query-time
   grounding (`apply_raptor_grounding`) reads those summary nodes via a
   derived per-corpus `raptor_summaries.lance` ANN index — built at the
   end of `enrich raptor` (or standalone via `enrich raptor-index

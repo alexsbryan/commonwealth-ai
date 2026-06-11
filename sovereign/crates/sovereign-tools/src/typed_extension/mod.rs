@@ -54,7 +54,26 @@ pub use manifest::{TypedExtensionManifest, MANIFEST_FILENAME, MANIFEST_SCHEMA_VE
 /// Identifies this orchestration in the manifest's `produced_by`
 /// field. Bumped when behaviour changes in a way that should force
 /// re-extraction across the whole vault even when input hashes match.
-pub const PRODUCED_BY: &str = "tiered_typed_extension_v1";
+/// v2 (2026-06-11): Pass A feeds verbatim member-chunk excerpts for
+/// small leaves — summaries alone compressed out the essays'
+/// load-bearing binaries/concessions (opposition + concession axes
+/// scored 0 against the obsidian golden on summary-only input).
+/// v3 (2026-06-11): GLiNER Person mentions seed Entity atoms ahead of
+/// resolution — proponents previously had NOTHING to resolve against
+/// (the pass passed `existing_entities = &[]`, so every position
+/// persisted `proponent_id: None` and the person axis scored 0).
+pub const PRODUCED_BY: &str = "tiered_typed_extension_v3";
+
+/// Pass A source recovery: only leaves with at most this many member
+/// chunks get verbatim excerpts (big leaves already aggregate too
+/// much text for excerpts to stay representative, and their summaries
+/// compress less per chunk).
+const PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS: usize = 6;
+
+/// Per-excerpt character budget. 6 excerpts × 700 chars ≈ 4.2KB
+/// prefill on top of the summary — bounded, and the fast slot's
+/// prefill is cheap relative to the decode.
+const PASS_A_EXCERPT_CHARS: usize = 700;
 
 /// Summary of what `run_typed_extension` did in one finalize_corpus
 /// call. Mostly diagnostic — the durable record is the
@@ -191,6 +210,24 @@ pub async fn run_typed_extension(
     );
 
     // ── Pass A — per-leaf ────────────────────────────────────────
+    // Source recovery for small leaves: the corpus index lives one
+    // level above the atlas dir; open it once (best-effort — on any
+    // failure Pass A degrades to summary+quote-span input, the v1
+    // behavior).
+    let index = corpus_engine::index::CorpusIndex::open(
+        atlas_dir.parent().unwrap_or(atlas_dir),
+    )
+    .await
+    .map_err(|e| {
+        tracing::warn!(
+            corpus = corpus_id,
+            error = %e,
+            "typed_extension: corpus index open failed; Pass A runs without member excerpts"
+        );
+        e
+    })
+    .ok();
+
     let mut sections: Vec<SectionExtraction> = Vec::with_capacity(leaves.len() + themes.len());
     let mut soft_failures: Vec<String> = Vec::new();
     let mut pass_a_calls: u32 = 0;
@@ -203,7 +240,11 @@ pub async fn run_typed_extension(
     let mut citations: HashMap<String, SourceCitation> = HashMap::new();
     for leaf in &leaves {
         pass_a_calls += 1;
-        match pass::pass_a_one_leaf(corpus_id, leaf, inference).await {
+        let member_excerpts = match index.as_ref() {
+            Some(ix) => member_excerpts_for_leaf(ix, leaf).await,
+            None => Vec::new(),
+        };
+        match pass::pass_a_one_leaf(corpus_id, leaf, &member_excerpts, inference).await {
             Ok(Some((section, citation))) => {
                 citations.insert(section.section_id.clone(), citation);
                 sections.push(section);
@@ -250,17 +291,53 @@ pub async fn run_typed_extension(
     }
 
     // ── Project + write ──────────────────────────────────────────
-    let resolved = resolve_type_extensions(
-        &sections,
-        &[], // no existing entities to merge against — fresh atlas
-        &[], // no existing positions
-        &[], // no existing claims
-        1,   // next_entity_idx
-        1,   // next_claim_idx
-        1,   // next_position_idx
-        1,   // next_opposition_idx
-        1,   // next_edge_idx
+    // Person Entity seeds from GLiNER `chunk_entities` (v3). Two
+    // axes depend on these: the bench's person axis reads Person
+    // entities straight off atoms.json, and position `proponent_id`
+    // resolution needs Entity atoms to resolve AGAINST — with the
+    // previous `existing_entities = &[]`, every proponent the model
+    // emitted ("Hardin", "Ostrom") died with an UnresolvedEntityName
+    // failure. Deterministic, zero LLM cost; noise-gated inside the
+    // builder (multi-token canonicals, digit guard, surname
+    // subsumption).
+    let mut person_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
+    for doc_id in &source_doc_ids {
+        match store.list_chunk_entities_for_conv(corpus_id, doc_id).await {
+            Ok(rows) => person_rows.extend(rows),
+            Err(e) => tracing::debug!(
+                corpus = corpus_id,
+                doc = %doc_id,
+                error = %e,
+                "typed_extension: chunk_entities fetch failed; person seeding degrades"
+            ),
+        }
+    }
+    let person_seeds = build_person_seed_entities(&person_rows);
+    tracing::info!(
+        corpus = corpus_id,
+        mentions = person_rows.len(),
+        seeds = person_seeds.len(),
+        "typed_extension: GLiNER person seeds built"
     );
+
+    let mut resolved = resolve_type_extensions(
+        &sections,
+        &person_seeds, // proponent / supports resolution targets
+        &[],           // no existing positions
+        &[],           // no existing claims
+        person_seeds.len() + 1, // next_entity_idx — seeds occupy 1..=N
+        1,             // next_claim_idx
+        1,             // next_position_idx
+        1,             // next_opposition_idx
+        1,             // next_edge_idx
+    );
+    // The seeds must also PERSIST (the resolver treats `existing_*`
+    // as already-on-disk, but this atlas is written from scratch).
+    // Prepending keeps them ahead of the remap walk so positions'
+    // `proponent_id` references rewrite coherently.
+    let mut all_entities = person_seeds;
+    all_entities.append(&mut resolved.new_entities);
+    resolved.new_entities = all_entities;
 
     // Rewrite sequential ids to content-hash ids so re-runs are
     // idempotent across machines and across re-extractions. Resolver
@@ -429,13 +506,20 @@ fn content_hash_remap(
         entities_out.push(entity);
     }
 
-    // Positions.
+    // Positions. Entities remapped first (above) so `proponent_id`
+    // — which references a (possibly GLiNER-seeded) Entity by its
+    // sequential id — rewrites to the entity's content-hash id here.
+    // Without this rewrite the persisted position points at an id
+    // that no longer exists and the eval renders proponent as "".
     let mut positions_out = Vec::with_capacity(new_positions.len());
     for mut position in new_positions {
         let new_id =
             AtomId::position_content_hash(&position.canonical_name, &position.stance, corpus_id);
         id_remap.insert(position.id.clone(), new_id.clone());
         position.id = new_id;
+        if let Some(prop) = position.proponent_id.take() {
+            position.proponent_id = Some(id_remap.get(&prop).cloned().unwrap_or(prop));
+        }
         positions_out.push(position);
     }
 
@@ -522,6 +606,151 @@ const PASS_B_QUOTE_CAP_PER_THEME: usize = 6;
 /// Pass B still runs on the theme summary alone in that case, just
 /// without the source-recovery handles AND without a `chunk:<id>`
 /// citation handle (atoms fall back to `theme:<theme_id>`).
+/// Build Person Entity seeds from GLiNER chunk-entity mentions.
+///
+/// Noise gates (GLiNER emits ~5 mentions per chunk, most of them
+/// generic role words):
+/// - `label == "Person"` and extractor score ≥ 0.5 only.
+/// - No digits in the name (the wikilink/date trap — `[[2024-01-15]]`
+///   must NEVER surface as a Person; see the vault-port invariant).
+/// - The canonical form must be MULTI-TOKEN ("Elinor Ostrom") —
+///   single-token mentions ("user", "Margaret", "CEO") only survive
+///   by SUBSUMPTION: a single-token name that appears as a whole
+///   word inside exactly one multi-token name folds into it as an
+///   alias ("Ostrom" → "Elinor Ostrom"), merging counts. Ambiguous
+///   or host-less single tokens are dropped.
+///
+/// Canonical = the most frequent multi-token surface form. Returns
+/// entities with sequential ids starting at 1 (caller offsets the
+/// resolver's `next_entity_idx` accordingly).
+fn build_person_seed_entities(
+    rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
+) -> Vec<Entity> {
+    use corpus_engine::enrichment::atlas::atoms::ChunkRef;
+    use corpus_engine::enrichment::pipeline::atlas::EntityType;
+
+    fn fold(s: &str) -> String {
+        s.trim().to_lowercase()
+    }
+
+    // folded form → (count, best surface form, first chunk_id)
+    let mut by_form: HashMap<String, (usize, String, u64)> = HashMap::new();
+    for r in rows {
+        if r.label != "Person" || r.score < 0.5 {
+            continue;
+        }
+        let text = r.text.trim();
+        if text.len() < 3 || text.chars().any(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let key = fold(text);
+        let entry = by_form
+            .entry(key)
+            .or_insert_with(|| (0, text.to_string(), r.chunk_id));
+        entry.0 += 1;
+    }
+
+    let multi: Vec<(String, usize, String, u64)> = by_form
+        .iter()
+        .filter(|(k, _)| k.split_whitespace().count() >= 2)
+        .map(|(k, (n, surface, chunk))| (k.clone(), *n, surface.clone(), *chunk))
+        .collect();
+
+    // Subsume single-token forms into a UNIQUE multi-token host.
+    let mut aliases: HashMap<String, Vec<String>> = HashMap::new(); // host key → alias surfaces
+    let mut extra_counts: HashMap<String, usize> = HashMap::new();
+    for (k, (n, surface, _)) in &by_form {
+        if k.split_whitespace().count() >= 2 {
+            continue;
+        }
+        let mut hosts = multi
+            .iter()
+            .filter(|(mk, ..)| mk.split_whitespace().any(|w| w == k));
+        match (hosts.next(), hosts.next()) {
+            (Some((host_key, ..)), None) => {
+                aliases.entry(host_key.clone()).or_default().push(surface.clone());
+                *extra_counts.entry(host_key.clone()).or_default() += n;
+            }
+            _ => {} // host-less or ambiguous single token → dropped
+        }
+    }
+
+    let mut out: Vec<Entity> = Vec::new();
+    let mut ordered = multi;
+    // Deterministic output order: by descending mention count, then name.
+    ordered.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    for (i, (key, count, surface, chunk_id)) in ordered.into_iter().enumerate() {
+        let total = count + extra_counts.get(&key).copied().unwrap_or(0);
+        out.push(Entity {
+            id: AtomId::entity(i + 1),
+            canonical_name: surface,
+            aliases: aliases.get(&key).cloned().unwrap_or_default(),
+            entity_type: EntityType::Person,
+            first_appearance: ChunkRef::new(format!("chunk:{chunk_id}"), None),
+            description: String::new(),
+            defining_quote: None,
+            // Mention-count-scaled, capped — a seed is corroborated
+            // NER signal, not an LLM-judged extraction.
+            salience: (0.3 + 0.05 * total as f64).min(0.8) as f32,
+            enrichment_depth: EnrichmentDepth::Structural,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: Default::default(),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        });
+    }
+    out
+}
+
+/// Verbatim member-chunk excerpts for a SMALL Pass A leaf. The leaf
+/// summary paraphrases; for an essay leaf of a few chunks the
+/// paraphrase compresses out the named binaries / concession
+/// phrasings the typed atoms must reproduce verbatim to resolve
+/// against the golden (measured 2026-06-11). Leaves with more than
+/// [`PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS`] members get none —
+/// excerpts of a 20-chunk leaf are no longer representative, and the
+/// summary compresses less per chunk there. Best-effort: any parse or
+/// fetch failure returns an empty vec (the v1 input shape).
+async fn member_excerpts_for_leaf(
+    index: &corpus_engine::index::CorpusIndex,
+    leaf: &ConvRaptorNodeRow,
+) -> Vec<String> {
+    let member_ids: Vec<u64> = leaf
+        .direct_member_chunk_ids_json
+        .as_deref()
+        .and_then(|j| serde_json::from_str(j).ok())
+        .unwrap_or_default();
+    if member_ids.is_empty() || member_ids.len() > PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS {
+        return Vec::new();
+    }
+    let mut chunks = match index.get_chunks(&member_ids).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!(
+                node = %leaf.node_id,
+                error = %e,
+                "typed_extension: member chunk fetch failed; no excerpts"
+            );
+            return Vec::new();
+        }
+    };
+    // get_chunks returns rows in storage order; keep document order.
+    chunks.sort_by_key(|c| c.id);
+    chunks
+        .into_iter()
+        .map(|c| {
+            let mut text: String = c.content.chars().take(PASS_A_EXCERPT_CHARS).collect();
+            if c.content.chars().count() > PASS_A_EXCERPT_CHARS {
+                text.push('…');
+            }
+            text
+        })
+        .filter(|t| !t.trim().is_empty())
+        .collect()
+}
+
 fn collect_member_quotes_for_theme(
     theme: &VaultThemeRow,
     leaves_by_doc: &HashMap<String, Vec<&ConvRaptorNodeRow>>,
