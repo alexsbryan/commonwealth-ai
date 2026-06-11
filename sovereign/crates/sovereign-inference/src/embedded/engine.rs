@@ -680,9 +680,6 @@ impl EmbeddedLlamaCpp {
         // `from_existing_model` so FastShort can serve recurrent
         // models too; deferred until there's a bench fixture that
         // covers this combo. Track at [[invariant_fast_short_recurrent_arch]].
-        let fast_short_disabled = std::env::var("SOVEREIGN_FAST_SHORT_DISABLE")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
         let fast_arch = read_gguf_arch(&fast.model);
         // FastShort's `from_existing_model` cannot propagate `n_rs_seq`,
         // so its ctx crashes (Decode Error -3) on any model whose decode
@@ -697,19 +694,19 @@ impl EmbeddedLlamaCpp {
         // model runs single-token, so FastShort is safe for it. Skip for
         // both unsafe cases — callers route to `fast` (n_seq_max=1),
         // forfeiting the speedup rather than crashing.
-        // [[invariant_fast_short_recurrent_arch]]
-        let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        let fast_short_unsafe = is_recurrent_arch(&fast_arch)
-            || (fast.model_id.to_lowercase().contains("mtp") && !mtp_disabled_at_load);
-        let (fast_short, fast_short_coalescer) = if fast_short_disabled {
+        // Decision matrix lives in `gates::fast_short_gate` (tested
+        // weight-free). [[invariant_fast_short_recurrent_arch]]
+        let gate = fast_short_gate(&fast_arch, &fast.model_id, |k| std::env::var(k).ok());
+        let (fast_short, fast_short_coalescer) = if gate == FastShortGate::Disabled {
             tracing::info!(
                 slot = "fast_short",
                 "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
             );
             (None, None)
-        } else if fast_short_unsafe {
+        } else if matches!(
+            gate,
+            FastShortGate::UnsafeRecurrent | FastShortGate::UnsafeMtp
+        ) {
             tracing::warn!(
                 slot = "fast_short",
                 arch = %fast_arch,

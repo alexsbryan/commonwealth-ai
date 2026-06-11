@@ -7,6 +7,7 @@
 mod embed_slot;
 mod engine;
 pub mod ffi_trace;
+mod gates;
 mod grammar;
 mod model_slot;
 mod prompt_helpers;
@@ -17,6 +18,7 @@ mod sampler;
 
 pub use embed_slot::*;
 pub use engine::*;
+pub(crate) use gates::*;
 pub use grammar::*;
 pub use model_slot::*;
 pub use prompt_helpers::*;
