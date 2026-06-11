@@ -961,7 +961,24 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         // own it, mesh is just parroting.
         let local_corpora_ids: std::collections::HashSet<String> =
             st.chunks.iter().map(|c| c.corpus_id.clone()).collect();
+        let mut mesh_sealed_out = 0usize;
         for hit in mesh_scored {
+            // Conversation corpus seal applies to mesh hits too. The
+            // local leg filters through `apply_corpus_allow_list`, but
+            // mesh hits historically folded in unfiltered — which let a
+            // peer's (or this node's own daemon's) wikipedia serve
+            // chunks into a conversation sealed to one corpus. Measured
+            // 2026-06-11: "1950 Liechtenstein weapons law referendum"
+            // chunks reached a sealed-to-one-novel conversation off the
+            // word "weapon". Exact-match only: mesh hits don't carry
+            // `parent_corpus_id`, so layer corpora of an allowed parent
+            // are not retained here — sealed errs restrictive.
+            if let Some(allow) = st.enabled_corpora {
+                if !allow.iter().any(|c| c == &hit.corpus_id) {
+                    mesh_sealed_out += 1;
+                    continue;
+                }
+            }
             if !local_corpora_ids.contains(&hit.corpus_id) {
                 if let Some(name) = &hit.peer_name {
                     st.peer_attribution
@@ -990,6 +1007,13 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                 // score-sort for them.
                 vector_distance: None,
             });
+        }
+        if mesh_sealed_out > 0 {
+            tracing::info!(
+                mesh_sealed_out,
+                label = %st.search_label,
+                "retrieval: conversation seal dropped mesh hits from non-enabled corpora"
+            );
         }
         StepOutcome::default()
     })

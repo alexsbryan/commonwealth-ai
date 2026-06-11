@@ -727,10 +727,15 @@ impl Runtime {
         // Contested-markers above are computed from round-0 chunks
         // only; acceptable for the prototype. Degrades to a no-op on
         // any judge or formulation failure. See runtime/evidence_loop.rs.
+        let mut agentic_still_insufficient = false;
+        let mut agentic_entity_anchored = false;
         if crate::runtime::evidence_loop::agentic_kq_enabled() {
-            chunks = self
+            let (merged, still_insufficient, entity_anchored) = self
                 .agentic_evidence_round(message, chunks, context, intent, scope)
                 .await;
+            chunks = merged;
+            agentic_still_insufficient = still_insufficient;
+            agentic_entity_anchored = entity_anchored;
         }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories)
@@ -773,7 +778,45 @@ impl Runtime {
         // corpora carry non-zero failed/skipped counts. Empty
         // string when there's nothing to disclose, so the prompt
         // overhead is zero in the common case.
-        let gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
+        let mut gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
+        if agentic_still_insufficient {
+            // The agentic loop fired, ran its targeted second retrieval
+            // pass, and the evidence STILL fails the sufficiency judge.
+            // Tell the synthesis model — a model that knows the search
+            // already came back empty abstains; one that doesn't treats
+            // the near-miss pile as license to answer (measured
+            // 2026-06-11: 3 absent-question abstentions became
+            // confident fabrications without this note).
+            //
+            // Two strengths. For in-world (entity-anchored) questions
+            // the "general knowledge" escape is closed outright:
+            // outside knowledge structurally cannot supply facts about
+            // the corpus's own world, and the measured failure mode is
+            // confabulation wearing the GK-caveat format ("from
+            // general knowledge: The Professor's real name is Dr.
+            // Verloc"). World-general questions keep the GK path —
+            // caveated parametric answers there (capital of Australia)
+            // are the desired behavior.
+            if agentic_entity_anchored {
+                gap_note.push_str(
+                    "\n\nEVIDENCE CHECK: a targeted second retrieval pass already \
+                     ran for this question and did not surface decisive evidence. \
+                     This question asks about the world inside your sources; \
+                     outside 'general knowledge' cannot supply facts about it. If \
+                     the passages do not directly state the asked-for fact, answer \
+                     that the sources do not state it — never substitute a guess \
+                     or an outside-knowledge claim.",
+                );
+            } else {
+                gap_note.push_str(
+                    "\n\nEVIDENCE CHECK: a targeted second retrieval pass already \
+                     ran for this question and did not surface decisive evidence. \
+                     If the passages do not directly state the asked-for fact, say \
+                     plainly that the available sources do not contain it — do not \
+                     bridge the gap with a confident guess.",
+                );
+            }
+        }
         let mut request = match route {
             SynthesisRoute::FastFocused => {
                 // Comparison-shape contrast — append the directive that
