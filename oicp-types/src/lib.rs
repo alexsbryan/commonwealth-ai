@@ -320,6 +320,15 @@ pub enum LatencyClass {
 /// Affinity is self-reported and therefore less reliable than
 /// structural facts (context / output capacity, hint match). The
 /// scheduler treats it as a tiebreaker, not a primary ranker.
+///
+/// **Reality note (so maintainers aren't surprised):** in this
+/// codebase the advertised affinity is a STATIC value derived from
+/// model-profile config at startup (`models.toml` proficiencies ÷ 4)
+/// — there is no feedback loop that re-advertises a different
+/// affinity after observing failures. The "observed health" the
+/// spec's §7 describes happens entirely SCORER-side, at request
+/// time, via [`effective_affinity`] inside
+/// [`score_with_adjustments`]; peers always see the original claim.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityClaim {
     /// The kind of work this claim covers.
@@ -829,10 +838,18 @@ pub const HINT_GENERAL_FALLBACK_SCORE: f32 = 0.5;
 /// apart (fast↔normal or normal↔extended). Latency mismatch is a
 /// soft deprioritization per §5 — a node advertising fast work can
 /// still serve normal work, just with a weaker fit.
+///
+/// The values 0.8 / 0.5 are NOT derived from spec §5 (which mandates
+/// only "soft deprioritization") — they are this reference
+/// implementation's choices, sized so one class of mismatch loses to
+/// any same-class claim within ~0.25 affinity, and two classes lose
+/// to anything plausible. Pinned by tests for scheduler interop;
+/// change them only with a routing A/B in hand.
 pub const LATENCY_ADJACENT_SCORE: f32 = 0.8;
 
 /// Latency-match score when claim and request classes are two apart
-/// (fast↔extended). The widest soft deprioritization.
+/// (fast↔extended). The widest soft deprioritization. Same
+/// non-normative-but-pinned status as [`LATENCY_ADJACENT_SCORE`].
 pub const LATENCY_TWO_CLASS_SCORE: f32 = 0.5;
 
 /// Score how well a claim's `hint` covers a request for `req_hint`.
@@ -1199,6 +1216,160 @@ pub fn throughput_factor_source(
         "benchmark_estimate"
     } else {
         "neutral"
+    }
+}
+
+// -----------------------------------------------------------------
+// v0.3 §6/§7 — the composed scorer (single source of truth)
+//
+// 2026-06-10 rationalization: the product below used to be
+// implemented three times (sovereign-mesh `adjust_for_observations`,
+// sovereign-inference `selector.rs` inline, and a dead commonwealth
+// scheduler copy) and had already diverged about the availability
+// term. It lives HERE, once, next to its factor helpers; consumers
+// log the returned [`ScoreBreakdown`] so every routing decision is
+// reconstructible from a single trace event.
+
+/// Score-floor below which score-ties are considered "the same".
+/// Floating-point noise in the claim scorer (division-by-max-level
+/// produces 1/3, 2/3, 1.0 type values) shouldn't cause spurious
+/// decisions where a 5.5 GB model beats a 16.5 GB model by a
+/// rounding blip.
+pub const SCORING_EPSILON: f32 = 1e-3;
+
+/// A scored model pick from a single manifest: the claim score
+/// (protocol-level) alongside the claim's self-reported affinity so
+/// operational adjustments can compute the observed-health
+/// multiplier, plus the tie-break inputs (`size_gb`, `model_id`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoredClaim {
+    pub score: f32,
+    pub size_gb: Option<f32>,
+    pub model_id: String,
+    /// Self-reported affinity of the claim this score came from.
+    pub claim_affinity: f32,
+}
+
+/// Compare two [`ScoredClaim`]s under the selection policy and
+/// return the winner:
+///
+/// 1. Strictly higher `score` wins.
+/// 2. Scores tied (within [`SCORING_EPSILON`]): smaller known
+///    `size_gb` wins.
+/// 3. Known size always beats unknown size on a score tie — an
+///    annotated manifest entry represents curated data we trust
+///    over a silent BYOM default.
+/// 4. Full tie: incumbent (`cur`) wins for stability. Callers use
+///    this to encode "local wins ties" and "earlier peer wins
+///    duplicate-score ties".
+pub fn pick_better(cur: ScoredClaim, new: ScoredClaim) -> ScoredClaim {
+    if new.score > cur.score + SCORING_EPSILON {
+        return new;
+    }
+    if cur.score > new.score + SCORING_EPSILON {
+        return cur;
+    }
+    match (cur.size_gb, new.size_gb) {
+        (Some(c), Some(n)) if n < c => new,
+        (None, Some(_)) => new,
+        _ => cur,
+    }
+}
+
+/// Rank each (model, claim) pair in `manifest` against the request
+/// and return the best [`ScoredClaim`] via v0.3 claim-based scoring.
+/// Returns `None` when no claim can serve the request. Tie-break per
+/// [`pick_better`]. Models advertising `status.available == false`
+/// are skipped — they exist in the manifest for inventory, not for
+/// routing. (Unification note, 2026-06-10: of the pre-SSOT copies,
+/// sovereign-inference filtered availability and sovereign-mesh
+/// didn't; the filter is the correct semantics and now applies to
+/// both.)
+pub fn best_claim_for_request(
+    manifest: &ProviderManifest,
+    req: &InferenceRequirements,
+) -> Option<ScoredClaim> {
+    let mut best: Option<ScoredClaim> = None;
+    for model in manifest.models.iter().filter(|m| m.status.available) {
+        for claim in &model.claims {
+            let Some(score) = score_claim_for_request(claim, req) else {
+                continue;
+            };
+            let cand = ScoredClaim {
+                score,
+                size_gb: model.size_gb,
+                model_id: model.id.clone(),
+                claim_affinity: claim.effective_affinity(),
+            };
+            best = Some(match best {
+                None => cand,
+                Some(cur) => pick_better(cur, cand),
+            });
+        }
+    }
+    best
+}
+
+/// Every factor of one composed scoring decision — the glassbox
+/// artifact. Consumers emit this whole struct in ONE tracing event
+/// per candidate, which is what makes "why did peer A beat peer B"
+/// answerable from logs alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoreBreakdown {
+    pub claim_score: f32,
+    /// `effective_affinity(claimed, obs) / claimed` — observed
+    /// failure rate eroding the self-reported affinity.
+    pub observation_mult: f32,
+    pub load_penalty: f32,
+    pub locality_bonus: f32,
+    pub cold_start_weight: f32,
+    pub throughput_factor: f32,
+    /// Why that throughput factor: "observed" | "benchmark_estimate"
+    /// | "neutral".
+    pub throughput_source: &'static str,
+    /// Gossiped `inference_availability`, clamped to `[0.2, 1.0]`;
+    /// `1.0` when the caller had no signal (`None`).
+    pub availability: f32,
+    /// The product of everything above — the routing score.
+    pub final_score: f32,
+}
+
+/// THE composed v0.3 operational scorer. `claim_score` comes from
+/// [`score_claim_for_request`] / [`best_claim_for_request`];
+/// `availability` is the gossiped `inference_availability` when the
+/// caller has one (peers), `None` otherwise (e.g. scoring the local
+/// node, whose business is already captured by `obs.in_flight`).
+pub fn score_with_adjustments(
+    claim_score: f32,
+    claim_affinity: f32,
+    obs: &NodeObservations,
+    locality: NodeLocality,
+    candidate_size_gb: f32,
+    baseline_benchmark: Option<&BenchmarkResult>,
+    availability: Option<f32>,
+) -> ScoreBreakdown {
+    let observation_mult = if claim_affinity > 0.0 {
+        effective_affinity(claim_affinity, obs) / claim_affinity
+    } else {
+        1.0
+    };
+    let load = load_penalty(obs);
+    let loc = locality_bonus(locality);
+    let cold = cold_start_weight(obs.samples);
+    let throughput = throughput_factor(obs, candidate_size_gb, baseline_benchmark);
+    let avail = availability.map(|a| a.clamp(0.2, 1.0)).unwrap_or(1.0);
+    let final_score =
+        claim_score * observation_mult * load * loc * cold * throughput * avail;
+    ScoreBreakdown {
+        claim_score,
+        observation_mult,
+        load_penalty: load,
+        locality_bonus: loc,
+        cold_start_weight: cold,
+        throughput_factor: throughput,
+        throughput_source: throughput_factor_source(obs, baseline_benchmark),
+        availability: avail,
+        final_score,
     }
 }
 
@@ -2127,5 +2298,219 @@ mod tests {
         assert!((a - 0.95).abs() < 1e-6);
         // general fallback: 0.5 × 1.0 × 0.85 = 0.425.
         assert!((b - 0.425).abs() < 1e-6);
+    }
+
+    // ── score_with_adjustments — the composed SSOT scorer ────────
+    //
+    // The first block pins the full product (mirrors the golden
+    // vector in sovereign-mesh's oicp_select tests, which pinned the
+    // pre-SSOT implementation). The scenario tests re-pin the nine
+    // behavioral scenarios from the deleted
+    // commonwealth-inference/tests/oicp_v03_observations.rs against
+    // the SSOT fn directly.
+
+    fn quiet_obs() -> NodeObservations {
+        NodeObservations {
+            samples: 100, // fully ramped, no cold-start penalty
+            ..Default::default()
+        }
+    }
+
+    fn score(obs: &NodeObservations, locality: NodeLocality, avail: Option<f32>) -> f32 {
+        score_with_adjustments(0.8, 0.9, obs, locality, 8.0, None, avail).final_score
+    }
+
+    #[test]
+    fn composed_product_all_factors_active_golden() {
+        let obs = NodeObservations {
+            in_flight: 10,
+            samples: 10,
+            recent_failure_rate: 0.1,
+            tg_tok_s_ewma: 10.0,
+            ..Default::default()
+        };
+        let b = score_with_adjustments(0.5, 0.95, &obs, NodeLocality::Near, 8.0, None, None);
+        assert!((b.observation_mult - 0.98).abs() < 1e-6);
+        assert!((b.load_penalty - 2.0 / 3.0).abs() < 1e-6);
+        assert!((b.locality_bonus - 1.05).abs() < 1e-6);
+        assert!((b.cold_start_weight - 0.85).abs() < 1e-6);
+        assert!((b.throughput_factor - 0.5).abs() < 1e-6);
+        assert_eq!(b.throughput_source, "observed");
+        assert!((b.availability - 1.0).abs() < 1e-6, "None ⇒ neutral 1.0");
+        let expected = 0.5_f32 * 0.98 * (2.0 / 3.0) * 1.05 * 0.85 * 0.5;
+        assert!((b.final_score - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn availability_none_is_bit_identical_to_pre_adoption_product() {
+        // The adoption contract: availability=None reproduces the old
+        // (term-free) formula exactly — same product, no epsilon.
+        let obs = NodeObservations {
+            in_flight: 3,
+            samples: 30,
+            recent_failure_rate: 0.05,
+            tg_tok_s_ewma: 18.0,
+            ..Default::default()
+        };
+        let without = score_with_adjustments(0.7, 0.85, &obs, NodeLocality::Far, 4.0, None, None);
+        let manual = 0.7
+            * (effective_affinity(0.85, &obs) / 0.85)
+            * load_penalty(&obs)
+            * locality_bonus(NodeLocality::Far)
+            * cold_start_weight(obs.samples)
+            * throughput_factor(&obs, 4.0, None);
+        assert_eq!(without.final_score.to_bits(), manual.to_bits());
+    }
+
+    #[test]
+    fn availability_clamps_floor_and_ceiling() {
+        let obs = quiet_obs();
+        let floor = score_with_adjustments(0.8, 0.9, &obs, NodeLocality::Far, 8.0, None, Some(0.0));
+        assert!((floor.availability - 0.2).abs() < 1e-6, "floor 0.2 keeps a busy peer routable");
+        let ceil = score_with_adjustments(0.8, 0.9, &obs, NodeLocality::Far, 8.0, None, Some(2.0));
+        assert!((ceil.availability - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn busy_peer_loses_to_idle_equal_peer_via_availability() {
+        // The decided behavior change (2026-06-10): the gossiped
+        // availability signal now affects routing. Equal peers,
+        // availability 0.2 vs 1.0 — idle wins.
+        let obs = quiet_obs();
+        let busy = score(&obs, NodeLocality::Far, Some(0.2));
+        let idle = score(&obs, NodeLocality::Far, Some(1.0));
+        assert!(idle > busy * 4.9, "0.2 vs 1.0 is a 5× score gap");
+    }
+
+    // ── re-pinned oicp_v03_observations scenarios ────────────────
+
+    #[test]
+    fn thundering_herd_shifts_traffic_to_idle_peer() {
+        let mut herd = quiet_obs();
+        herd.in_flight = 20; // load_penalty 0.5
+        let idle = quiet_obs();
+        assert!(score(&idle, NodeLocality::Far, None) > score(&herd, NodeLocality::Far, None));
+    }
+
+    #[test]
+    fn low_load_keeps_traffic_on_specialist() {
+        // A specialist (higher claim score) under LIGHT load still
+        // beats an idle generalist: 2 in-flight ⇒ penalty ~0.91.
+        let mut light = quiet_obs();
+        light.in_flight = 2;
+        let specialist =
+            score_with_adjustments(1.0, 1.0, &light, NodeLocality::Far, 8.0, None, None);
+        let generalist =
+            score_with_adjustments(0.5, 0.85, &quiet_obs(), NodeLocality::Far, 8.0, None, None);
+        assert!(specialist.final_score > generalist.final_score);
+    }
+
+    #[test]
+    fn failing_node_loses_to_reliable_peer() {
+        let mut flaky = quiet_obs();
+        flaky.recent_failure_rate = 0.5; // past ramp ⇒ halves affinity
+        assert!(score(&quiet_obs(), NodeLocality::Far, None) > score(&flaky, NodeLocality::Far, None));
+    }
+
+    #[test]
+    fn cold_start_deprioritizes_new_peer_vs_proven_peer() {
+        let newcomer = NodeObservations::default(); // samples 0 ⇒ 0.7×
+        assert!(score(&quiet_obs(), NodeLocality::Far, None) > score(&newcomer, NodeLocality::Far, None));
+    }
+
+    #[test]
+    fn cold_start_fully_ramped_after_threshold_samples() {
+        let mut ramped = NodeObservations::default();
+        ramped.samples = COLD_START_SAMPLES;
+        let b = score_with_adjustments(0.8, 0.9, &ramped, NodeLocality::Far, 8.0, None, None);
+        assert!((b.cold_start_weight - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn local_node_wins_over_remote_with_higher_affinity() {
+        // Locality 1.15 vs 1.0 outweighs a modest claim-score edge:
+        // 0.78·1.15 > 0.8·1.0.
+        let local = score_with_adjustments(0.78, 0.9, &quiet_obs(), NodeLocality::Local, 8.0, None, None);
+        let remote = score_with_adjustments(0.8, 0.95, &quiet_obs(), NodeLocality::Far, 8.0, None, None);
+        assert!(local.final_score > remote.final_score);
+    }
+
+    #[test]
+    fn near_lan_peer_beats_far_internet_peer_at_equal_affinity() {
+        assert!(
+            score(&quiet_obs(), NodeLocality::Near, None)
+                > score(&quiet_obs(), NodeLocality::Far, None)
+        );
+    }
+
+    #[test]
+    fn slow_peer_loses_to_fast_peer_under_throughput_scoring() {
+        let mut slow = quiet_obs();
+        slow.tg_tok_s_ewma = 4.0; // 4/20 ⇒ clamps to floor 0.3
+        let mut fast = quiet_obs();
+        fast.tg_tok_s_ewma = 30.0; // ≥ reference ⇒ 1.0
+        assert!(score(&fast, NodeLocality::Far, None) > score(&slow, NodeLocality::Far, None));
+    }
+
+    #[test]
+    fn neutral_throughput_preserves_pre_throughput_routing_behavior() {
+        // No observed throughput and no benchmark ⇒ factor 1.0 and
+        // the decision reduces to the other factors.
+        let b = score_with_adjustments(0.8, 0.9, &quiet_obs(), NodeLocality::Far, 8.0, None, None);
+        assert!((b.throughput_factor - 1.0).abs() < 1e-6);
+        assert_eq!(b.throughput_source, "neutral");
+    }
+
+    // ── best_claim_for_request / pick_better ─────────────────────
+
+    #[test]
+    fn pick_better_smaller_size_wins_score_tie() {
+        let big = ScoredClaim { score: 0.8, size_gb: Some(16.0), model_id: "big".into(), claim_affinity: 0.8 };
+        let small = ScoredClaim { score: 0.8, size_gb: Some(5.0), model_id: "small".into(), claim_affinity: 0.8 };
+        assert_eq!(pick_better(big, small).model_id, "small");
+    }
+
+    fn manifest_model(id: &str, size_gb: f32, hint: CapabilityHint, affinity: f32) -> ProviderModel {
+        ProviderModel {
+            id: id.into(),
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb: Some(size_gb),
+            claims: vec![CapabilityClaim::new(hint, LatencyClass::Normal, 32_768, 4_000, affinity)],
+        }
+    }
+
+    #[test]
+    fn best_claim_for_request_picks_highest_scoring_model() {
+        let manifest = ProviderManifest {
+            oicp_version: OICP_VERSION.to_string(),
+            provider: None,
+            models: vec![
+                manifest_model("generalist", 16.0, CapabilityHint::general(), 0.85),
+                manifest_model("coder", 8.0, CapabilityHint::code(), 0.95),
+            ],
+            knowledge: None,
+            federation: None,
+        };
+        let req = InferenceRequirements {
+            oicp_version: OICP_VERSION.to_string(),
+            capability_hint: Some(CapabilityHint::code()),
+            latency_class: Some(LatencyClass::Normal),
+            context_tokens: Some(8_000),
+            max_output_tokens: Some(1_000),
+            privacy: None,
+            request_id: None,
+        };
+        let best = best_claim_for_request(&manifest, &req).unwrap();
+        // Specialist at exact-hint 0.95 beats generalist's 0.5-fallback path.
+        assert_eq!(best.model_id, "coder");
     }
 }

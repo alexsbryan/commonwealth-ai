@@ -8,9 +8,6 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_inference::plan::MeshPlan;
-use commonwealth_inference::scheduler::adaptive::{
-    InferenceScheduler, NodeProfile, SchedulerConfig,
-};
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 
@@ -186,61 +183,9 @@ impl SimulatedMesh {
         }
     }
 
-    // ── Adaptive scheduler helpers ─────────────────────────────────────
-
-    /// Build node profiles for the adaptive scheduler from the current mesh.
-    pub fn scheduler_profiles(&self) -> HashMap<NodeId, NodeProfile> {
-        self.nodes
-            .iter()
-            .map(|n| {
-                // Use system RAM as the memory metric (Apple Silicon unified memory).
-                let memory_gb = n.hardware.system_ram_gb;
-                // Collect model IDs from the node's registered models in the store.
-                let model_ids = n
-                    .state
-                    .inner
-                    .inference_store
-                    .list_models()
-                    .values()
-                    .map(|m| m.name.clone())
-                    .collect();
-                (
-                    n.node_id,
-                    NodeProfile {
-                        available_memory_gb: memory_gb,
-                        model_ids,
-                    },
-                )
-            })
-            .collect()
-    }
-
-    /// Create an InferenceScheduler configured for the leader node in this mesh.
-    pub fn make_scheduler(&self) -> InferenceScheduler {
-        let leader = self
-            .nodes
-            .iter()
-            .map(|n| n.node_id)
-            .min()
-            .expect("mesh has no nodes");
-        let mut scheduler = InferenceScheduler::new(leader, SchedulerConfig::default());
-        // Set online nodes so the scheduler knows it's the leader.
-        scheduler.online_nodes = self.node_ids();
-        scheduler
-    }
-
-    /// Create an InferenceScheduler with a custom config.
-    pub fn make_scheduler_with_config(&self, config: SchedulerConfig) -> InferenceScheduler {
-        let leader = self
-            .nodes
-            .iter()
-            .map(|n| n.node_id)
-            .min()
-            .expect("mesh has no nodes");
-        let mut scheduler = InferenceScheduler::new(leader, config);
-        scheduler.online_nodes = self.node_ids();
-        scheduler
-    }
+    // (The adaptive-scheduler helpers that lived here died with the
+    // dead-twin scheduler — 2026-06-10 rationalization; see
+    // commonwealth-inference/src/scheduler/mod.rs.)
 
     /// Write a MeshPlan to all nodes' stores (simulating gossip propagation).
     pub fn propagate_mesh_plan(&self, plan: &MeshPlan) {

@@ -211,6 +211,8 @@ impl PinnedWorkerEndpointSource {
                 system_ram_gb: p.capabilities.system_ram_gb,
                 benchmark: p.capabilities.benchmark.clone(),
                 current_in_flight: p.capabilities.current_in_flight,
+                // Pinned pods don't gossip availability — neutral.
+                inference_availability: None,
                 transport: Some(p.transport.clone()),
             })
             .collect()
@@ -423,6 +425,7 @@ mod tests {
             system_ram_gb: 32,
             benchmark: None,
             current_in_flight: None,
+            inference_availability: None,
             transport: None,
         }
     }

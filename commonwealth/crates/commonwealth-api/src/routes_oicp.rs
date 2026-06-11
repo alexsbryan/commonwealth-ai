@@ -12,34 +12,48 @@ use commonwealth_inference::oicp::{
 
 use crate::state::AppState;
 
-/// Synthesize a v0.3 `CapabilityClaim` for a model from its name and
-/// v0.2 capability profile. Two-step heuristic for PR-B (replaced by
-/// structured model config in PR-E):
+/// Models at or below this size also advertise a Fast-latency claim.
+/// ~12 GB covers a 9B Q8 / 14B Q4 — the sizes that actually deliver
+/// sub-second TTFT on the hardware this project targets; the 30B+
+/// primaries stay Normal-only. Mirrors the FastShort claim shape in
+/// `sovereign-mesh::oicp_synthesis` (2 048 ctx / 512 out, affinity
+/// +0.05) so hub-served and Sovereign-served manifests agree on what
+/// a fast claim looks like.
+const FAST_CLAIM_MAX_SIZE_BYTES: u64 = 12_000_000_000;
+
+/// Synthesize the v0.3 claims for a model from its name and v0.2
+/// capability profile:
 ///
-/// 1. **Hint:** code specialization detected by name suffix — models
-///    whose name contains "coder", "code-llama", or "codellama" claim
+/// 1. **Hint:** code specialization detected by name substring
+///    (coder / code-llama / codellama / deepseek-coder) claims
 ///    `code`; everything else claims `general`.
-/// 2. **Affinity:** derived from the v0.2 proficiency level of the
-///    capability most relevant to the hint (Code for `code`, max of
-///    {General, Analysis, Instruction} for `general`), mapped from
-///    `[0, 4]` onto `[0.0, 1.0]`.
-///
-/// `max_context` passes through verbatim; `max_output` gets a fixed
-/// 2048 tokens for `Normal` latency (refined when skills declare
-/// explicit output budgets in PR-D).
-fn synthesize_default_claim(
+/// 2. **Affinity:** the v0.2 proficiency most relevant to the hint
+///    (Code for `code`, max of {General, Analysis, Instruction} for
+///    `general`), mapped from `[0, 4]` onto `[0.0, 1.0]`. Static at
+///    synthesis time — see the reality note on `CapabilityClaim`.
+/// 3. **Claims:** one Normal claim (`max_context`/2 048 out) per
+///    model, plus a Fast claim for small models (PR-E gap closed
+///    2026-06-10: previously one hardcoded Normal claim, so a small
+///    model could never match a latency_class=Fast request without
+///    the 0.8 adjacency penalty).
+pub(crate) fn synthesize_default_claims(
     model_name: &str,
     profile: &CapabilityProfile,
     max_context: u32,
-) -> CapabilityClaim {
+    size_bytes: u64,
+) -> Vec<CapabilityClaim> {
     let lower = model_name.to_lowercase();
     let is_code_specialist = lower.contains("coder")
         || lower.contains("code-llama")
         || lower.contains("codellama")
         || lower.contains("deepseek-coder");
 
-    let (hint, relevant_capability) = if is_code_specialist {
-        (CapabilityHint::code(), Capability::Code)
+    let (hint, affinity) = if is_code_specialist {
+        let proficiency = profile.get(&Capability::Code).copied().unwrap_or(0);
+        (
+            CapabilityHint::code(),
+            (proficiency as f32 / 4.0).clamp(0.0, 1.0),
+        )
     } else {
         // For the general hint, affinity tracks the best of the
         // general-adjacent capabilities. Models with `General: 4`
@@ -54,19 +68,31 @@ fn synthesize_default_claim(
         .map(|c| profile.get(&c).copied().unwrap_or(0))
         .max()
         .unwrap_or(0);
-        // Return a sentinel; we'll compute affinity from `best`
-        // below rather than re-looking-up.
-        return CapabilityClaim::new(
+        (
             CapabilityHint::general(),
-            LatencyClass::Normal,
-            max_context,
-            2_048,
             (best as f32 / 4.0).clamp(0.0, 1.0),
-        );
+        )
     };
-    let proficiency = profile.get(&relevant_capability).copied().unwrap_or(0);
-    let affinity = (proficiency as f32 / 4.0).clamp(0.0, 1.0);
-    CapabilityClaim::new(hint, LatencyClass::Normal, max_context, 2_048, affinity)
+
+    let normal = CapabilityClaim::new(
+        hint.clone(),
+        LatencyClass::Normal,
+        max_context,
+        2_048,
+        affinity,
+    );
+    if size_bytes > 0 && size_bytes <= FAST_CLAIM_MAX_SIZE_BYTES {
+        let fast = CapabilityClaim::new(
+            hint,
+            LatencyClass::Fast,
+            2_048,
+            512,
+            (affinity + 0.05).clamp(0.0, 1.0),
+        );
+        vec![fast, normal]
+    } else {
+        vec![normal]
+    }
 }
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
@@ -123,7 +149,12 @@ pub async fn capabilities(
                 .get_llama_address(model.id)
                 .is_some();
 
-            let claim = synthesize_default_claim(&model.name, &model.oicp_capabilities, 32_768);
+            let claims = synthesize_default_claims(
+                &model.name,
+                &model.oicp_capabilities,
+                32_768,
+                model.size_bytes,
+            );
             ProviderModel {
                 id: model.name.clone(),
                 base_model: None,
@@ -140,13 +171,14 @@ pub async fn capabilities(
                     estimated_ttft_ms: shard_plan.map(|p| p.estimated_ttft_ms),
                     estimated_load_time_sec: None,
                 },
-                // Commonwealth's ModelInfo doesn't carry a size_gb
-                // today — it's sourced from runtime discovery, not
-                // a manifest. Leave unpopulated; the OICP tiebreaker
-                // treats unknown sizes as sorted-after any known
-                // size, so this path is safe under mesh routing.
-                size_gb: None,
-                claims: vec![claim],
+                // From `ModelInfo.size_bytes` (runtime discovery).
+                // Feeds the SSOT tie-break (smaller wins score ties)
+                // and the throughput size-ratio extrapolation. (The
+                // pre-2026-06-10 `None` here was an outdated claim
+                // that ModelInfo had no size — it always did.)
+                size_gb: (model.size_bytes > 0)
+                    .then(|| model.size_bytes as f32 / 1_000_000_000.0),
+                claims,
             }
         })
         .collect();
@@ -365,5 +397,75 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
+    }
+
+    // ── synthesize_default_claims (PR-E gap closed 2026-06-10) ───
+
+    fn profile_with(cap: Capability, level: u8) -> CapabilityProfile {
+        let mut p = CapabilityProfile::new();
+        p.insert(cap, level);
+        p
+    }
+
+    #[test]
+    fn small_model_advertises_fast_and_normal_claims() {
+        let claims = synthesize_default_claims(
+            "qwen3-9b",
+            &profile_with(Capability::General, 3),
+            32_768,
+            9_000_000_000, // 9 GB — under the fast cutoff
+        );
+        assert_eq!(claims.len(), 2);
+        let fast = &claims[0];
+        assert_eq!(fast.latency_class, LatencyClass::Fast);
+        assert_eq!(fast.max_context, 2_048);
+        assert_eq!(fast.max_output, 512);
+        // Fast claim carries the +0.05 affinity nudge (0.75 + 0.05).
+        assert!((fast.affinity - 0.80).abs() < 1e-6);
+        let normal = &claims[1];
+        assert_eq!(normal.latency_class, LatencyClass::Normal);
+        assert_eq!(normal.max_context, 32_768);
+        assert!((normal.affinity - 0.75).abs() < 1e-6);
+    }
+
+    #[test]
+    fn large_model_advertises_normal_only() {
+        let claims = synthesize_default_claims(
+            "qwopus-35b",
+            &profile_with(Capability::General, 4),
+            32_768,
+            34_000_000_000, // 34 GB — over the cutoff
+        );
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].latency_class, LatencyClass::Normal);
+    }
+
+    #[test]
+    fn unknown_size_is_conservative_normal_only() {
+        // size_bytes == 0 means discovery hasn't measured the file —
+        // don't advertise sub-second latency on a guess.
+        let claims = synthesize_default_claims(
+            "mystery-model",
+            &profile_with(Capability::General, 2),
+            32_768,
+            0,
+        );
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].latency_class, LatencyClass::Normal);
+    }
+
+    #[test]
+    fn code_specialist_keeps_code_hint_on_every_claim() {
+        let claims = synthesize_default_claims(
+            "deepseek-coder-7b",
+            &profile_with(Capability::Code, 4),
+            32_768,
+            7_000_000_000,
+        );
+        assert_eq!(claims.len(), 2);
+        for claim in &claims {
+            assert_eq!(claim.hint, CapabilityHint::code());
+        }
+        assert!((claims[1].affinity - 1.0).abs() < 1e-6);
     }
 }

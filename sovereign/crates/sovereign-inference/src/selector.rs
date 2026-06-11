@@ -5,8 +5,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use sovereign_core::oicp::{
-    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus, throughput_factor,
-    throughput_factor_source, BenchmarkResult, InferenceRequirements, NodeLocality,
+    self, score_with_adjustments, BenchmarkResult, InferenceRequirements, NodeLocality,
     NodeObservations, ProviderManifest, ShardingPrivacy,
 };
 use sovereign_core::types::CompletionRequest;
@@ -266,43 +265,37 @@ impl BackendSelector for CapabilityAwareSelector {
             };
 
             let obs = backend.observations.read().await.clone();
-            let observation_mult = if claim_affinity > 0.0 {
-                effective_affinity(claim_affinity, &obs) / claim_affinity
-            } else {
-                1.0
-            };
-
-            let load = load_penalty(&obs);
-            let locality = locality_bonus(backend.locality);
-            let cold_start = cold_start_weight(obs.samples);
-
             let benchmark_guard = backend.benchmark.read().await;
-            let bench_ref = benchmark_guard.as_ref();
-            let candidate_size = model_size_gb.unwrap_or(0.0);
-            let throughput = throughput_factor(&obs, candidate_size, bench_ref);
+            // The composed product is the oicp-types SSOT scorer —
+            // this loop used to carry its own inline copy (one of
+            // three; 2026-06-10 rationalization).
+            let breakdown = score_with_adjustments(
+                claim_score,
+                claim_affinity,
+                &obs,
+                backend.locality,
+                model_size_gb.unwrap_or(0.0),
+                benchmark_guard.as_ref(),
+                Some(backend.inference_availability),
+            );
+            drop(benchmark_guard);
             tracing::debug!(
                 backend = %backend.name,
                 idx,
-                factor = throughput,
-                source = throughput_factor_source(&obs, bench_ref),
-                obs_samples = obs.samples,
-                obs_tg_tok_s = obs.tg_tok_s_ewma,
-                candidate_size_gb = candidate_size,
-                "oicp_select: throughput_factor"
+                claim_score = breakdown.claim_score,
+                observation_mult = breakdown.observation_mult,
+                load_penalty = breakdown.load_penalty,
+                locality_bonus = breakdown.locality_bonus,
+                cold_start_weight = breakdown.cold_start_weight,
+                throughput_factor = breakdown.throughput_factor,
+                throughput_source = breakdown.throughput_source,
+                availability = breakdown.availability,
+                final_score = breakdown.final_score,
+                "inference-select: score breakdown"
             );
-            drop(benchmark_guard);
 
-            let availability = backend.inference_availability.clamp(0.20, 1.0);
-
-            let weighted = claim_score
-                * observation_mult
-                * load
-                * locality
-                * cold_start
-                * throughput
-                * availability;
-            if weighted > best_score {
-                best_score = weighted;
+            if breakdown.final_score > best_score {
+                best_score = breakdown.final_score;
                 best_idx = Some(idx);
             }
         }
@@ -328,21 +321,11 @@ fn best_score_for_manifest(
     manifest: &ProviderManifest,
     requirements: &InferenceRequirements,
 ) -> Option<(f32, f32, Option<f32>)> {
-    let mut best: Option<(f32, f32, Option<f32>)> = None;
-    for model in manifest.models.iter().filter(|m| m.status.available) {
-        for claim in &model.claims {
-            let Some(score) = oicp::score_claim_for_request(claim, requirements) else {
-                continue;
-            };
-            let claim_affinity = claim.effective_affinity();
-            let candidate = (score, claim_affinity, model.size_gb);
-            best = Some(match best {
-                Some((best_score, _, _)) if best_score >= score => best.unwrap(),
-                _ => candidate,
-            });
-        }
-    }
-    best
+    // SSOT manifest scorer (oicp-types). Micro-unification note: the
+    // SSOT applies the smaller-size tie-break on score ties, which
+    // this selector's pre-2026-06-10 inline copy did not.
+    oicp::best_claim_for_request(manifest, requirements)
+        .map(|c| (c.score, c.claim_affinity, c.size_gb))
 }
 
 // ─── Tests ────────────────────────────────────────────────────

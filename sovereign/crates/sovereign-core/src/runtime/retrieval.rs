@@ -3303,22 +3303,10 @@ impl Runtime {
             )
         };
 
-        // 7. Speed upgrade: if knowledge found for SimpleQuery, use Slow.
-        let speed = match intent {
-            Intent::SimpleQuery => {
-                if !all_chunks.is_empty() {
-                    Speed::Slow
-                } else {
-                    Speed::Fast
-                }
-            }
-            Intent::DeepQuery => Speed::Slow,
-            // Bounded contrast — Fast slot is enough; the constrained
-            // synthesis prompt does the structuring work the primary
-            // model would otherwise do.
-            Intent::ComparisonQuery => Speed::Fast,
-            _ => Speed::Medium,
-        };
+        // 7. Speed: the named intent→slot decision (one home for the
+        // ladder; see `evidence::speed_for_retrieval_intent`).
+        let speed =
+            crate::runtime::evidence::speed_for_retrieval_intent(&intent, !all_chunks.is_empty());
 
         // 8. Build chunk summaries for frontend source linking.
         // chunk_id and source_doc_id are emitted (when present) so the

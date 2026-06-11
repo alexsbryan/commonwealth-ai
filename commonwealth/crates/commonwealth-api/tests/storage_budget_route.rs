@@ -148,91 +148,141 @@ async fn budget_unset_returns_no_remaining() {
 // ── End-to-end: budget flows into scheduler decisions ─────────
 //
 // The contract this feature relies on is: when a node's published
-// `free_storage_gb` is `0`, the existing `assign_knowledge_shards`
-// scheduler refuses to assign work to it. That contract is what
-// makes "clamp `free_storage_gb` to budget remaining" sufficient
+// `free_storage_gb` is `0`, the LIVE collaborative-ingestion planner
+// (`plan_collaborative_ingestion` — the scheduler corpus_collaborate
+// actually drives) refuses to assign work to it. That contract is
+// what makes "clamp `free_storage_gb` to budget remaining" sufficient
 // to enforce the budget across the whole mesh, with no scheduler
-// changes at all.
+// changes at all. (Re-pinned 2026-06-10 against the live planner when
+// the dead `assign_knowledge_shards` scheduler was deleted.)
 //
 // The capabilities clamp is unit-tested in
-// `sovereign-mesh::capabilities::tests`; here we close the loop
-// by feeding the post-clamp value into the actual scheduler and
-// asserting the user-visible outcome — no shards land on the
-// over-budget node.
+// `sovereign-mesh::capabilities::tests`; here we close the loop by
+// feeding the post-clamp value into the actual planner and asserting
+// the user-visible outcome — no partition lands on the over-budget
+// node.
 
-use commonwealth_inference::scheduler::knowledge_assignment::{
-    assign_knowledge_shards, CorpusInfo, NodeWithCapacity,
-};
+use commonwealth_core::mesh::MemberRecord;
+use commonwealth_core::oicp::EmbedModelInfo;
+use commonwealth_inference::scheduler::knowledge_assignment::plan_collaborative_ingestion;
+use corpus_engine::{SourceFileRecord, SourceFileStatus};
 
-fn corpus(id: &str, chunks: u64, size_gb: f32) -> CorpusInfo {
-    CorpusInfo {
-        corpus_id: id.into(),
-        total_chunks: chunks,
-        size_gb,
-        mesh_sharing: true,
+fn embed() -> EmbedModelInfo {
+    use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+    EmbedModelInfo {
+        model_id: "qwen3-embedding-0.6b".into(),
+        dimensions: 1024,
+        pooling: PoolingStrategy::Mean,
+        normalization: NormalizationStrategy::Application,
     }
 }
 
+fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
+    use commonwealth_core::capabilities::{
+        AvailableResources, HardwareProfile, NodeCapabilities,
+    };
+    use commonwealth_core::mesh::NodeStatus;
+    MemberRecord {
+        node_pubkey: None,
+        node_id: NodeId::from_u128(id),
+        name: format!("node-{id}"),
+        invited_by: NodeId::from_u128(1),
+        joined_at: 100,
+        last_seen: 100,
+        status: NodeStatus::Online,
+        capabilities: NodeCapabilities {
+            hardware: HardwareProfile {
+                gpus: vec![],
+                system_ram_gb: 16,
+                cpu_cores: 8,
+                total_storage_gb: 500,
+                free_storage_gb,
+                network_bandwidth_mbps: None,
+            },
+            available: AvailableResources::default(),
+            active_processes: vec![],
+            hosted_corpora: vec![],
+            reported_at: 100,
+            inference_availability: 1.0,
+            inference_capable: false,
+            loaded_models: vec![],
+            embed_model: Some(embed()),
+            benchmark: None,
+            current_in_flight: None,
+        },
+        addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+    }
+}
+
+fn pending_files(n: usize) -> Vec<SourceFileRecord> {
+    (0..n)
+        .map(|i| SourceFileRecord {
+            file_index: i,
+            filename: format!("part-{i}.jsonl"),
+            size_bytes: 1_000_000,
+            status: SourceFileStatus::Pending,
+        })
+        .collect()
+}
+
 #[test]
-fn scheduler_skips_node_whose_free_storage_was_clamped_to_zero() {
-    // Two peers: Alice has plenty of disk (the clamped value the
-    // gossip layer would publish if her budget were generous); Bob
-    // has been clamped to 0 by the capabilities layer because his
-    // operator set a tight budget already saturated by existing
-    // corpora. The scheduler must put the new corpus on Alice and
-    // leave Bob alone.
-    let nodes = vec![
-        NodeWithCapacity {
-            node_id: NodeId::from_u128(1), // Alice
-            free_storage_gb: 200.0,
-        },
-        NodeWithCapacity {
-            node_id: NodeId::from_u128(2), // Bob — over budget
-            free_storage_gb: 0.0,
-        },
-    ];
-    let plan = assign_knowledge_shards(&[corpus("wiki", 1_000_000, 30.0)], &nodes, 1);
-    let alice = NodeId::from_u128(1);
-    let bob = NodeId::from_u128(2);
+fn planner_skips_node_whose_free_storage_was_clamped_to_zero() {
+    // Alice (local) has plenty of disk; Bob has been clamped to 0 by
+    // the capabilities layer because his operator's budget is already
+    // saturated. The planner must keep every file off Bob.
+    let alice = planner_member(1, 200);
+    let bob = planner_member(2, 0);
+    let handoff = plan_collaborative_ingestion(
+        "wiki",
+        "wikipedia-en",
+        &pending_files(10),
+        &alice,
+        std::slice::from_ref(&bob),
+        &embed(),
+    )
+    .expect("plan with one healthy node must succeed");
     assert!(
-        plan.assignments.iter().all(|a| a.node_id != bob),
-        "scheduler assigned work to a budget-clamped node: {:?}",
-        plan.assignments
+        handoff
+            .partitions
+            .iter()
+            .all(|p| p.node_id != bob.node_id),
+        "planner assigned work to a budget-clamped node: {:?}",
+        handoff.partitions
     );
     assert!(
-        plan.assignments.iter().any(|a| a.node_id == alice),
-        "scheduler should have placed the corpus on the node with headroom"
+        handoff
+            .partitions
+            .iter()
+            .any(|p| p.node_id == alice.node_id),
+        "planner should have placed the corpus on the node with headroom"
     );
 }
 
 #[test]
-fn scheduler_skips_only_clamped_nodes_when_others_have_room() {
-    // Three-node case: Alice and Carol both have headroom, Bob is
-    // clamped. The scheduler must use both Alice and Carol (not
-    // crash because two nodes < 3 nodes), and never Bob — even
-    // when the corpus would technically fit on the collective if
-    // Bob were available.
-    let nodes = vec![
-        NodeWithCapacity {
-            node_id: NodeId::from_u128(1),
-            free_storage_gb: 60.0,
-        },
-        NodeWithCapacity {
-            node_id: NodeId::from_u128(2),
-            free_storage_gb: 0.0, // budget-clamped
-        },
-        NodeWithCapacity {
-            node_id: NodeId::from_u128(3),
-            free_storage_gb: 80.0,
-        },
-    ];
-    let plan = assign_knowledge_shards(&[corpus("openalex", 5_000_000, 100.0)], &nodes, 1);
-    let bob = NodeId::from_u128(2);
-    for a in &plan.assignments {
+fn planner_skips_only_clamped_nodes_when_others_have_room() {
+    // Alice (local) and Carol both have headroom, Bob is clamped.
+    // The planner must use the healthy pair and never Bob.
+    let alice = planner_member(1, 60);
+    let bob = planner_member(2, 0); // budget-clamped
+    let carol = planner_member(3, 80);
+    let handoff = plan_collaborative_ingestion(
+        "openalex",
+        "openalex-works",
+        &pending_files(40),
+        &alice,
+        &[bob.clone(), carol.clone()],
+        &embed(),
+    )
+    .expect("plan with two healthy nodes must succeed");
+    for p in &handoff.partitions {
         assert_ne!(
-            a.node_id, bob,
-            "budget-clamped node received an assignment: {a:?}"
+            p.node_id, bob.node_id,
+            "budget-clamped node received a partition: {p:?}"
         );
     }
-    assert!(!plan.assignments.is_empty(), "expected some assignments");
+    assert!(
+        handoff.partitions.iter().any(|p| p.node_id == carol.node_id),
+        "healthy peer should participate: {:?}",
+        handoff.partitions
+    );
 }

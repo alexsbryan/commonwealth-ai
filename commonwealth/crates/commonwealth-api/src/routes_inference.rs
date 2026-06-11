@@ -12,7 +12,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_inference::oicp::{
-    self, CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ShardingPrivacy,
+    self, CapabilityClaim, InferenceRequirements, ShardingPrivacy,
 };
 use std::collections::HashSet;
 use std::time::Instant;
@@ -334,63 +334,78 @@ pub async fn chat_completions(
 /// Rank every loaded model's synthesized v0.3 claim against the
 /// request and return the `ModelId` with the highest score. Returns
 /// `None` when no claim passes the hard gate.
+///
+/// Deliberately claim-score-only (no operational adjustments): this
+/// picks among LOCAL models on one node for an already-admitted
+/// request — load/locality/cold-start/availability are peer-shaped
+/// signals that don't differentiate candidates sharing one host.
 fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
     let models = state.inner.inference_store.list_models();
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
     let mut best_model = None;
+    let mut best_name = String::new();
     let mut best_score = f32::NEG_INFINITY;
 
     for shard_plan in &plan.model_plans {
         let Some(model_info) = models.get(&shard_plan.model) else {
             continue;
         };
-        let claim = synthesize_claim_for_model_info(model_info);
-        if let Some(score) = oicp::score_claim_for_request(&claim, req) {
-            if score > best_score {
-                best_score = score;
-                best_model = Some(shard_plan.model);
+        for claim in synthesize_claims_for_model_info(model_info) {
+            let score = oicp::score_claim_for_request(&claim, req);
+            tracing::debug!(
+                model = %model_info.name,
+                hint = %claim.hint,
+                latency_class = ?claim.latency_class,
+                affinity = claim.affinity,
+                score = score.unwrap_or(f32::NEG_INFINITY),
+                gated = score.is_none(),
+                "route_with_oicp: scored candidate"
+            );
+            if let Some(score) = score {
+                if score > best_score {
+                    best_score = score;
+                    best_model = Some(shard_plan.model);
+                    best_name = model_info.name.clone();
+                }
             }
         }
     }
 
-    best_model
+    if let Some(model) = best_model {
+        tracing::info!(
+            model = %best_name,
+            score = best_score,
+            req_hint = %req.effective_hint(),
+            req_latency = ?req.effective_latency_class(),
+            "route_with_oicp: selected"
+        );
+        Some(model)
+    } else {
+        tracing::info!(
+            req_hint = %req.effective_hint(),
+            req_latency = ?req.effective_latency_class(),
+            "route_with_oicp: no claim passed the hard gate"
+        );
+        None
+    }
 }
 
-/// Synthesize a v0.3 [`CapabilityClaim`] for a loaded `ModelInfo`.
-/// Mirrors the synthesis in `routes_oicp::synthesize_default_claim`
-/// — name heuristic for code specialists + profile-derived affinity
-/// — so the scheduler and advertiser agree on each model's claim
-/// shape.
-fn synthesize_claim_for_model_info(
+/// Synthesize the v0.3 claims for a loaded `ModelInfo`. ONE
+/// synthesis — `routes_oicp::synthesize_default_claims` — feeds both
+/// the advertiser (the `/oicp/v1/capabilities` manifest) and this
+/// scheduler, so they cannot drift. (Pre-2026-06-10 this was a
+/// hand-maintained mirror, and single-claim: a small model could
+/// never match a latency_class=Fast request here.)
+fn synthesize_claims_for_model_info(
     model_info: &commonwealth_inference::ModelInfo,
-) -> CapabilityClaim {
-    let name_lower = model_info.name.to_lowercase();
-    let is_code_specialist = name_lower.contains("coder")
-        || name_lower.contains("code-llama")
-        || name_lower.contains("codellama")
-        || name_lower.contains("deepseek-coder");
-
-    let (hint, affinity) = if is_code_specialist {
-        let code = oicp::proficiency(&model_info.oicp_capabilities, oicp::Capability::Code);
-        (CapabilityHint::code(), (code as f32 / 4.0).clamp(0.0, 1.0))
-    } else {
-        let best = [
-            oicp::Capability::General,
-            oicp::Capability::Analysis,
-            oicp::Capability::Instruction,
-        ]
-        .into_iter()
-        .map(|c| oicp::proficiency(&model_info.oicp_capabilities, c))
-        .max()
-        .unwrap_or(0);
-        (
-            CapabilityHint::general(),
-            (best as f32 / 4.0).clamp(0.0, 1.0),
-        )
-    };
-
-    CapabilityClaim::new(hint, LatencyClass::Normal, 32_768, 2_048, affinity)
+) -> Vec<CapabilityClaim> {
+    crate::routes_oicp::synthesize_default_claims(
+        &model_info.name,
+        &model_info.oicp_capabilities,
+        32_768,
+        model_info.size_bytes,
+    )
 }
 
 fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
