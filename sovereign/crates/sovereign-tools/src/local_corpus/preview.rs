@@ -156,19 +156,27 @@ pub async fn build_preview(
 
     // ── Pass 1: collect per-note best chunk ──────────────────────
     //
-    // For each distinct note_title we remember the chunk with the
+    // For each distinct note (keyed by `source_doc_id`, the
+    // root-relative file path) we remember the chunk with the
     // highest confidence (across all its assignments — the "peak
     // passage"). If that peak chunk was HDBSCAN noise, we resolve
     // its *nearest* cluster from `noise_best_cluster` and use that
     // as the note's effective cluster. This is the fix for the
     // demo bug where noise notes stayed in the outlier panel
     // regardless of how low the user dragged `min_confidence`.
+    //
+    // Keying/`relative_path` on `source_doc_id` (2026-06-10 obsidian
+    // audit) replaced the humanised-title placeholder: the title is
+    // NOT a file path ("My Note" vs `notes/my_note.md`), so the tag
+    // write-back could never resolve the files it was supposed to
+    // tag. Title remains the display name.
     #[derive(Clone)]
     struct NoteBest {
         chunk_id: u64,
         effective_cluster: i32, // `-1` only when there are zero clusters at all
         confidence: f32,
         note_title: String,
+        relative_path: String,
         char_count: usize,
     }
     let effective_cluster_of = |chunk_id: u64, assigned: i32| -> i32 {
@@ -192,6 +200,14 @@ pub async fn build_preview(
             .title
             .clone()
             .unwrap_or_else(|| format!("chunk-{chunk_id}"));
+        // Note identity = the file. `source_doc_id` is the
+        // root-relative path stamped at ingest/delta; falling back to
+        // the title only covers pre-fix indexes (where the writeback
+        // already could not resolve nested or renamed-display notes).
+        let relative_path = chunk
+            .source_doc_id
+            .clone()
+            .unwrap_or_else(|| note_title.clone());
         let confidence = result
             .chunk_confidences
             .get(chunk_id)
@@ -201,12 +217,13 @@ pub async fn build_preview(
         let effective = effective_cluster_of(*chunk_id, *cluster_id);
 
         let entry = best_by_note
-            .entry(note_title.clone())
+            .entry(relative_path.clone())
             .or_insert_with(|| NoteBest {
                 chunk_id: *chunk_id,
                 effective_cluster: effective,
                 confidence,
                 note_title: note_title.clone(),
+                relative_path: relative_path.clone(),
                 char_count,
             });
         if confidence > entry.confidence {
@@ -225,7 +242,7 @@ pub async fn build_preview(
     let mut outliers: Vec<OutlierNote> = Vec::new();
 
     for note in best_by_note.values() {
-        let relative_path = note.note_title.clone(); // M4b: real source_path
+        let relative_path = note.relative_path.clone();
         if note.char_count < MIN_CHARS_TO_CLUSTER {
             outliers.push(OutlierNote {
                 chunk_id: note.chunk_id,

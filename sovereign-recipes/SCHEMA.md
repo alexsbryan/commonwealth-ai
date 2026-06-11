@@ -67,6 +67,7 @@ Retrieval-time behaviour hints for a corpus. Unlike [`DisplayMeta`] (pure UI), t
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `dedup_by_source` | `bool` | no | type default | When true, apply per-article source dedup to this corpus's retrieval: after fusion, keep each source article's single best chunk, then return the top-K *distinct* articles. Captures the canonical-source lift for corpora with narrow authoritative sources (SEP: +6 sources, 76%→85% on the eval bank, validated 2026-06-04) without the operator-only `SOVEREIGN_RERANK_DEDUP_ONLY` env var. Leave false for topical corpora (e.g. Wikipedia), where strict one-chunk-per-article truncation *regresses* recall — there the per-article tiebreak needs a cross-encoder, not blind dedup. |
+| `personal_scope` | `bool` | no | type default | When true, this corpus counts as user-owned *personal* content (conversations, journals, watched folders / Obsidian vaults). Personal-scope turns restrict retrieval to personal corpora; before this flag the runtime used a hardcoded corpus-id prefix list, which silently excluded watched-folder corpora (ids are `watched-<hash>`). Reference corpora (Wikipedia, SEP, …) leave this false. |
 
 ## `FilterModeConfig`
 

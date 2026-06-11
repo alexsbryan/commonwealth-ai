@@ -534,6 +534,7 @@ mod tests {
             id: 1,
             content: "User asked about oil price modeling.".into(),
             title: Some("Oil prices Q1".into()),
+            source_doc_id: None,
         };
         let prompt = ConversationalDomain.skeleton_extraction_prompt(&[&chunk]);
         assert!(prompt.contains("conversations between one person and an AI"));
@@ -546,6 +547,7 @@ mod tests {
             id: 1,
             content: "A brief exchange.".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = ConversationalDomain.skeleton_extraction_prompt(&[&chunk]);
         assert!(prompt.contains("[Conversation 1 — (untitled)]"));
@@ -557,6 +559,7 @@ mod tests {
             id: 1,
             content: "Discussion of architecture".into(),
             title: Some("Arch chat".into()),
+            source_doc_id: None,
         };
         let prompt = ConversationalDomain.cluster_labeling_prompt(&[&chunk]);
         assert!(prompt.contains("as a practice"));
@@ -569,11 +572,13 @@ mod tests {
             id: 1,
             content: "first thread content".into(),
             title: None,
+            source_doc_id: None,
         };
         let b = Chunk {
             id: 2,
             content: "second thread content".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = ConversationalDomain.fault_line_detection_prompt(
             &[&a],

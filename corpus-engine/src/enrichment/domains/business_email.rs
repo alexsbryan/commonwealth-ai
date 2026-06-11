@@ -391,6 +391,7 @@ mod tests {
             id: 1,
             title: Some("Re: hello".to_string()),
             content: "From: a@x.com\nTo: b@y.com\n\nbody".to_string(),
+            source_doc_id: None,
         };
         let prompt = d.entity_extraction_prompt(&[&chunk]).unwrap();
         // Header rule is load-bearing — keep this assertion strict so

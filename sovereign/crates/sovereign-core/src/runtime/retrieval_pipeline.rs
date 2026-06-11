@@ -682,10 +682,57 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
     })
 }
 
+// ─── Personal-scope retain decision (SSOT) ───────────────────────
+
+/// Legacy fallback for corpora whose `_corpus_meta.json` predates the
+/// `personal_scope` stamp. The stamped flag (`IndexInfo::personal_scope`,
+/// from recipe `[retrieval] personal_scope`) is the authoritative
+/// signal; this list only keeps pre-stamp conversations/journal corpora
+/// retained until their metadata is backfilled. Do NOT grow this list —
+/// stamp the corpus instead (the watched-folder manager does this at
+/// registration + resume).
+const PERSONAL_CORPUS_PREFIXES: &[&str] =
+    &["conversations-", "personal-", "journal-", "inner-work-"];
+
+/// The single retain predicate both personal-scope filter sites use.
+/// Pure so it unit-tests without an engine.
+fn is_personal_corpus(corpus_id: &str, stamped: &std::collections::HashSet<String>) -> bool {
+    stamped.contains(corpus_id)
+        || PERSONAL_CORPUS_PREFIXES
+            .iter()
+            .any(|p| corpus_id.starts_with(p))
+}
+
+/// Corpus ids whose index metadata declares `personal_scope = true`
+/// (watched folders / Obsidian vaults stamp this at registration;
+/// recipes via `[retrieval] personal_scope`). Engine-less runtimes and
+/// `installed_indexes()` failures degrade to the legacy prefix list —
+/// the pre-metadata behavior, never worse.
+async fn personal_corpus_ids(rt: &Runtime) -> std::collections::HashSet<String> {
+    let Some(engine) = rt.corpus_engine.as_ref() else {
+        return Default::default();
+    };
+    match engine.installed_indexes().await {
+        Ok(ix) => ix
+            .into_iter()
+            .filter(|i| i.personal_scope)
+            .map(|i| i.corpus_id)
+            .collect(),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "personal-scope filter: installed_indexes() failed — \
+                 falling back to legacy prefix list only"
+            );
+            Default::default()
+        }
+    }
+}
+
 // ─── KnowledgeQuery-specific steps ───────────────────────────────
 
 fn step_scope_personal_filter<'a, 'ctx>(
-    _rt: &'a Runtime,
+    rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
@@ -700,25 +747,24 @@ fn step_scope_personal_filter<'a, 'ctx>(
         // false`), so any mesh hit on a personal-scope turn is
         // off-scope noise — exactly what this filter exists to drop.
         // The in-head local filter (which feeds `local_hits`) already
-        // ran; prefix-retain is idempotent, so this step only removes
-        // mesh strays there.
-        // TODO: replace prefix match with a recipe-level
-        // `[corpus] scope = "personal"` annotation once schema lands.
+        // ran; the retain predicate is idempotent, so this step only
+        // removes mesh strays there.
+        // Retain decision = `is_personal_corpus` (metadata stamp with
+        // legacy prefix fallback) — the 2026-06-10 obsidian audit fix:
+        // the old prefix-only match silently dropped watched-folder
+        // corpora (`watched-<hash>` ids) from personal-scope turns.
         if st.scope == Some("personal") {
-            const PERSONAL_CORPUS_PREFIXES: &[&str] =
-                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let stamped = personal_corpus_ids(rt).await;
             let before = st.chunks.len();
-            st.chunks.retain(|c| {
-                PERSONAL_CORPUS_PREFIXES
-                    .iter()
-                    .any(|p| c.corpus_id.starts_with(p))
-            });
+            st.chunks
+                .retain(|c| is_personal_corpus(&c.corpus_id, &stamped));
             if before != st.chunks.len() {
                 tracing::info!(
                     kept = st.chunks.len(),
                     dropped = before - st.chunks.len(),
+                    stamped_personal = stamped.len(),
                     scope = "personal",
-                    "{}: scope-filtered retrieval to personal-corpus prefixes",
+                    "{}: scope-filtered retrieval to personal corpora",
                     st.label
                 );
             }
@@ -918,23 +964,20 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
 
         // Scope filter applies to LOCAL hits only (mesh hits are folded
-        // after it — historical behavior, preserved). Prefix match is
-        // the same TODO placeholder as the KQ step.
+        // after it — historical behavior, preserved). Retain decision =
+        // `is_personal_corpus`, the same SSOT predicate as the
+        // `scope_personal_filter` step.
         if matches!(st.scope, Some("personal")) {
-            const PERSONAL_CORPUS_PREFIXES: &[&str] =
-                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let stamped = personal_corpus_ids(rt).await;
             let before = local_scored.len();
-            local_scored.retain(|c| {
-                PERSONAL_CORPUS_PREFIXES
-                    .iter()
-                    .any(|p| c.corpus_id.starts_with(p))
-            });
+            local_scored.retain(|c| is_personal_corpus(&c.corpus_id, &stamped));
             tracing::info!(
                 kept = local_scored.len(),
                 dropped = before.saturating_sub(local_scored.len()),
+                stamped_personal = stamped.len(),
                 scope = ?st.scope,
                 label = %st.search_label,
-                "retrieval: scope-filtered local hits to personal-corpus prefixes"
+                "retrieval: scope-filtered local hits to personal corpora"
             );
         }
 
@@ -1294,6 +1337,29 @@ mod tests {
         assert!(!names.contains(&"atlas_grounding"));
         assert!(!names.contains(&"raptor_grounding_early"));
         assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 5);
+    }
+
+    /// The personal-scope retain predicate: metadata stamp first,
+    /// legacy prefix fallback second, everything else dropped. Pins
+    /// the 2026-06-10 fix — watched-folder corpora (`watched-<hash>`
+    /// ids, no recognizable prefix) are retained iff stamped.
+    #[test]
+    fn personal_scope_predicate_stamp_plus_prefix_fallback() {
+        let stamped: std::collections::HashSet<String> =
+            ["watched-959ee8a8f330".to_string()].into_iter().collect();
+
+        // Stamped watched-folder corpus: retained (THE fix).
+        assert!(is_personal_corpus("watched-959ee8a8f330", &stamped));
+        // Unstamped watched-folder corpus (metadata not backfilled
+        // yet, e.g. installed_indexes() failed): dropped — degraded
+        // mode equals pre-fix behavior, never worse.
+        assert!(!is_personal_corpus("watched-deadbeef0000", &stamped));
+        // Legacy prefix corpora retained without a stamp.
+        assert!(is_personal_corpus("conversations-anthropic", &stamped));
+        assert!(is_personal_corpus("journal-2026", &stamped));
+        // Reference corpora dropped regardless.
+        assert!(!is_personal_corpus("wikipedia", &stamped));
+        assert!(!is_personal_corpus("sep", &stamped));
     }
 
     /// Every step-level gate flag must appear in the registry — the

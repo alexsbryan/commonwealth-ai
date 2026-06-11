@@ -657,18 +657,24 @@ overlap_chars = {overlap_chars}
     // it, ingest writes chunks but never invokes the tiered surface
     // (legacy field-model engine wouldn't fit either — vault has no
     // matching pipeline since `obsidian_atlas` was retired).
-    let (display, enrichment) = match &config.source_type {
-        LocalCorpusSourceType::ObsidianVault { .. } => (
-            "[display]\ncategory = \"vault\"\nicon = \"book-open\"\n\n",
-            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n",
-        ),
-        LocalCorpusSourceType::WatchedFolder(_) => (
-            "[display]\ncategory = \"watched_folder\"\nicon = \"folder\"\n\n",
-            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n",
+    // Category/icon come from the `display_meta()` SSOT so the
+    // ingest-time stamp, the manager's init backfill, and
+    // `enable_enrichment`'s re-stamp can never disagree.
+    let display = match config.source_type.display_meta() {
+        Some(d) => format!(
+            "[display]\ncategory = \"{}\"\nicon = \"{}\"\n\n",
+            d.category.unwrap_or_default(),
+            d.icon.unwrap_or_default()
         ),
         // DocumentFolder is one-shot drag-drop ingest — no daemon-side
         // sweeper, no tiered enrichment. Stays uncategorised.
-        LocalCorpusSourceType::DocumentFolder => ("", ""),
+        None => String::new(),
+    };
+    let enrichment = match &config.source_type {
+        LocalCorpusSourceType::ObsidianVault { .. } | LocalCorpusSourceType::WatchedFolder(_) => {
+            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n"
+        }
+        LocalCorpusSourceType::DocumentFolder => "",
     };
 
     format!(
@@ -695,6 +701,9 @@ title_field = "title"
 fts = true
 vector = true
 
+[retrieval]
+personal_scope = true
+
 {display}{enrichment}"#,
         id = escape_toml(&config.id),
         display_name = escape_toml(&config.display_name),
@@ -720,6 +729,33 @@ impl LocalCorpusSourceType {
     /// manager's list when the daemon spawns reconciliation workers.
     pub fn is_watched(&self) -> bool {
         matches!(self, LocalCorpusSourceType::WatchedFolder(_))
+    }
+
+    /// Display metadata for this source type — the SSOT consumed by
+    /// `recipe_toml` (ingest-time `[display]` stamp), the manager's
+    /// init-time backfill, and `enable_enrichment`'s re-stamp. The
+    /// category is load-bearing beyond UI: `is_tiered_category`
+    /// (sovereign-core/conv_briefing) gates the tiered retrieval
+    /// surface — RAPTOR briefings + the entity-PPR rerank — on it, so
+    /// a corpus without a category is silently exempt from
+    /// entity-aware retrieval. `None` for `DocumentFolder` (one-shot
+    /// drag-drop ingest, deliberately uncategorised).
+    pub fn display_meta(&self) -> Option<corpus_engine::recipe::DisplayMeta> {
+        match self {
+            LocalCorpusSourceType::ObsidianVault { .. } => {
+                Some(corpus_engine::recipe::DisplayMeta {
+                    category: Some("vault".to_string()),
+                    icon: Some("book-open".to_string()),
+                })
+            }
+            LocalCorpusSourceType::WatchedFolder(_) => {
+                Some(corpus_engine::recipe::DisplayMeta {
+                    category: Some("watched_folder".to_string()),
+                    icon: Some("folder".to_string()),
+                })
+            }
+            LocalCorpusSourceType::DocumentFolder => None,
+        }
     }
 
     /// True for any source type the daemon's reconciliation worker
@@ -1060,6 +1096,49 @@ mod tests {
             corpus_engine::Recipe::from_toml(&toml).expect("watched-folder recipe TOML must parse");
         assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
         assert!(!recipe.corpus.mesh_sharing);
+        // 2026-06-10 obsidian audit: local corpora are the user's own
+        // files — the recipe must declare `[retrieval] personal_scope`
+        // so personal-scope retrieval retains them (the old prefix-only
+        // filter silently dropped `watched-<hash>` corpus ids).
+        assert!(recipe.retrieval.personal_scope);
+    }
+
+    #[test]
+    fn display_meta_ssot_agrees_with_recipe_toml() {
+        // The category gates the tiered retrieval surface
+        // (`is_tiered_category`); the recipe stamp at ingest and the
+        // manager's backfill/re-stamp must come from the same values.
+        let jsonl = PathBuf::from("/tmp/staged.jsonl");
+
+        let vault = LocalCorpusConfig::obsidian_vault(
+            PathBuf::from("/tmp/vault"),
+            PathBuf::from("/tmp/snapshots"),
+        );
+        let vault_recipe = corpus_engine::Recipe::from_toml(&recipe_toml(&vault, &jsonl))
+            .expect("vault recipe parses");
+        let vault_meta = vault.source_type.display_meta().expect("vault has display");
+        assert_eq!(
+            vault_recipe.display.as_ref().and_then(|d| d.category.clone()),
+            vault_meta.category
+        );
+        assert_eq!(vault_meta.category.as_deref(), Some("vault"));
+
+        let watched = LocalCorpusConfig::watched_folder(
+            PathBuf::from("/tmp/notes"),
+            "Research notes".into(),
+            WatchedFolderConfig::default(),
+        );
+        let watched_recipe = corpus_engine::Recipe::from_toml(&recipe_toml(&watched, &jsonl))
+            .expect("watched recipe parses");
+        let watched_meta = watched
+            .source_type
+            .display_meta()
+            .expect("watched folder has display");
+        assert_eq!(
+            watched_recipe.display.as_ref().and_then(|d| d.category.clone()),
+            watched_meta.category
+        );
+        assert_eq!(watched_meta.category.as_deref(), Some("watched_folder"));
     }
 
     #[test]

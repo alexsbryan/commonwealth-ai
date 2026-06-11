@@ -359,6 +359,7 @@ mod tests {
             id: 1,
             content: "We chose FTS5 over LanceDB for notes search".into(),
             title: Some("decision-fts5".into()),
+            source_doc_id: None,
         };
         let prompt = InstitutionalDomain.skeleton_extraction_prompt(&[&chunk]);
         assert!(prompt.contains("engineering decision"));
@@ -372,11 +373,13 @@ mod tests {
             id: 1,
             content: "corpus-engine stays DB-free".into(),
             title: None,
+            source_doc_id: None,
         };
         let b = Chunk {
             id: 2,
             content: "SqliteAcquirer pulls rusqlite into corpus-engine".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = InstitutionalDomain.fault_line_detection_prompt(
             &[&a],
@@ -396,6 +399,7 @@ mod tests {
             id: 1,
             content: "What's the lock protocol for Tier-2 concurrent writes?".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = InstitutionalDomain.open_question_prompt(&[&chunk]);
         assert!(prompt.contains("uncertainty notes"));

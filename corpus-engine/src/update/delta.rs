@@ -412,12 +412,21 @@ impl CorpusUpdater {
                 continue;
             }
             let content = fetch_content(doc_id).await?;
-            let raw_chunks = self.engine.chunk_document(&recipe, &content)?;
+            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
+            stamp_doc_identity(&mut raw_chunks, doc_id);
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
-            // Delete-last: insert new → delete old.
-            index.insert_chunks(&embedded).await?;
+            // Delete-first: the fresh chunks carry the SAME
+            // `source_doc_id` as the rows they replace (that is the
+            // point — doc identity must survive edits, or the NEXT
+            // update of this doc deletes nothing and duplicates
+            // accumulate, 2026-06-10 obsidian audit). The old
+            // insert-then-delete order would delete the new rows too.
+            // Resume safety holds: the progress log commits only after
+            // both ops, so a crash between delete and insert re-runs
+            // this doc from fetch on resume (delete is idempotent).
             index.delete_chunks_by_source_doc(doc_id).await?;
+            index.insert_chunks(&embedded).await?;
 
             log.updated_ids.push(doc_id.clone());
             self.engine.save_update_progress(corpus_id, log)?;
@@ -452,7 +461,8 @@ impl CorpusUpdater {
                 continue;
             }
             let content = fetch_content(doc_id).await?;
-            let raw_chunks = self.engine.chunk_document(&recipe, &content)?;
+            let mut raw_chunks = self.engine.chunk_document(&recipe, &content)?;
+            stamp_doc_identity(&mut raw_chunks, doc_id);
             let embedded = self.engine.embed_chunks(&raw_chunks).await?;
 
             index.insert_chunks(&embedded).await?;
@@ -477,11 +487,72 @@ impl CorpusUpdater {
     }
 }
 
+/// Stamp document identity onto delta-produced chunks.
+/// `CorpusEngine::chunk_document` is document-agnostic (it sees only
+/// the content string), so without this stamp every updated/added doc
+/// landed with `source_doc_id = NULL` and `title = NULL` — which
+/// (a) made the doc's NEXT update un-deletable (the
+/// `delete_chunks_by_source_doc` filter matches nothing → duplicate
+/// chunks accumulate per edit), (b) broke the vault preview's
+/// note rollup + tag write-back (keyed on title/doc id), and
+/// (c) silently dropped the chunks from the tiered retrieval surface
+/// (`tiered_group_key` requires `source_doc_id`). 2026-06-10 obsidian
+/// audit. The title is the doc id's file stem — display-grade only;
+/// an existing chunker-provided title is never overwritten.
+fn stamp_doc_identity(chunks: &mut [crate::index::InsertChunk], doc_id: &str) {
+    let title = std::path::Path::new(doc_id)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(doc_id)
+        .to_string();
+    for c in chunks.iter_mut() {
+        c.source_doc_id = Some(doc_id.to_string());
+        if c.title.is_none() {
+            c.title = Some(title.clone());
+        }
+    }
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stamp_doc_identity_sets_doc_id_and_stem_title() {
+        let mut chunks = vec![
+            crate::index::InsertChunk {
+                content: "body".into(),
+                title: None,
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: None,
+                source_file: None,
+                code: crate::index::InsertCodeMeta::default(),
+                unit_id: None,
+            },
+            crate::index::InsertChunk {
+                content: "body2".into(),
+                // A chunker-provided title must survive the stamp.
+                title: Some("Existing".into()),
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: None,
+                source_file: None,
+                code: crate::index::InsertCodeMeta::default(),
+                unit_id: None,
+            },
+        ];
+        stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md");
+        for c in &chunks {
+            assert_eq!(c.source_doc_id.as_deref(), Some("notes/daily/2026-06-10.md"));
+        }
+        assert_eq!(chunks[0].title.as_deref(), Some("2026-06-10"));
+        assert_eq!(chunks[1].title.as_deref(), Some("Existing"));
+    }
 
     fn make_manifest(corpus_id: &str, version: &str, entries: &[(&str, &str)]) -> VersionManifest {
         VersionManifest {

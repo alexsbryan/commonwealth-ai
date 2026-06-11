@@ -4157,6 +4157,7 @@ mod allow_list_tests {
             mesh_sharing: false,
             query_sharing: false,
             dedup_by_source: false,
+            personal_scope: false,
             is_shard: false,
             chunk_range: None,
             chunks_expected: None,

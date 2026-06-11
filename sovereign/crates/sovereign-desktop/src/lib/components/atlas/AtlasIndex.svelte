@@ -218,6 +218,11 @@
   // without a frontend round-trip.
   const CATEGORY_TITLE: Record<string, string> = {
     conversation: "Conversations",
+    // Local-corpus categories (stamped by the watched-folder manager's
+    // recipe + init backfill, 2026-06-10). User-owned content groups
+    // ahead of the reference shelves.
+    vault: "Vault",
+    watched_folder: "Watched folders",
     reference: "Reference",
     argument: "Argument",
     personal: "Personal",

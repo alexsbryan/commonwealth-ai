@@ -1,6 +1,18 @@
 # Spec: Typed-Extension LLM Pass over RAPTOR Cluster Summaries
 
-**Status:** In flight (design only).
+**Status:** SHIPPED (2026-05-24, same push as the vault tiered
+port — commit a0535d88). Implementation:
+`sovereign-tools/src/typed_extension/` (manifest + two-pass
+orchestrator + tests), wired into
+`FolderTieredProvider::finalize_corpus` after `run_vault_synthesis`;
+operator re-run surface `sovereign atlas typed-extension <corpus>`
+(`sovereign-cli-llm/src/atlas_cmd/typed_extension.rs`). The
+2026-06-07 obsidian bench baseline scores all five argumentative
+axes non-zero against its `atoms.json`. Spec retained per the
+lifecycle clause below for the rationale's forensic value.
+(Status banner added 2026-06-10 — the spec sat at "design only"
+for two weeks after the code shipped, and downstream docs kept
+promising the pass as future work.)
 **Targets:** v2 of the vault tiered port
 (`sovereign notes --query vault-tiered-port-2026-05-24`; plan at
 `~/.claude/plans/let-s-get-into-raptor-wise-bachman.md`).

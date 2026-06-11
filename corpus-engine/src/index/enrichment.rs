@@ -155,6 +155,10 @@ impl CorpusIndex {
                     } else {
                         Some(titles.value(i).to_string())
                     },
+                    // `all_chunks` doesn't select the source_doc_id
+                    // column; callers needing doc identity use
+                    // `get_chunks` / `chunks_by_source_doc_ids`.
+                    source_doc_id: None,
                 });
             }
         }

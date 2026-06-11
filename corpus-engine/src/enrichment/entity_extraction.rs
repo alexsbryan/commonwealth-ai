@@ -1782,6 +1782,7 @@ mod tests {
             id,
             content: content.into(),
             title: None,
+            source_doc_id: None,
         }
     }
 

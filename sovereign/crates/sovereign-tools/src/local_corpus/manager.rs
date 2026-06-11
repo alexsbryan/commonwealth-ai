@@ -295,6 +295,58 @@ impl LocalCorpusManager {
 
         let corpora = load_persisted_configs(&corpora_dir)?;
 
+        // Backfill index metadata onto corpora registered before the
+        // fields existed (2026-06-10 obsidian audit). Newly registered
+        // corpora get both stamps at ingest from the generated recipe;
+        // this covers the already-installed ones. Pure meta I/O —
+        // no-op once stamped, never clobbers an existing value.
+        //
+        // - `personal_scope=true`: every local corpus is the user's
+        //   own files, so the runtime's personal-scope retrieval
+        //   filter must retain it (the old prefix-only match silently
+        //   dropped `watched-<hash>` ids).
+        // - `display` (category/icon): `is_tiered_category` gates the
+        //   tiered retrieval surface (RAPTOR briefings + entity-PPR
+        //   rerank) on the category, so an unstamped vault was
+        //   silently exempt from entity-aware retrieval.
+        let index_root = data_dir.join("indexes");
+        for (corpus_id, cfg) in corpora.iter() {
+            let dir = index_root.join(corpus_id);
+            if !dir.join("_corpus_meta.json").exists() {
+                continue; // registered but never ingested
+            }
+            match corpus_engine::index::backfill_personal_scope(&dir, true) {
+                Ok(true) => tracing::info!(
+                    corpus = %corpus_id,
+                    "backfilled personal_scope=true onto local corpus meta"
+                ),
+                Ok(false) => {}
+                Err(e) => tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "personal_scope backfill failed — personal-scope \
+                     retrieval may drop this corpus"
+                ),
+            }
+            if let Some(display) = cfg.source_type.display_meta() {
+                let category = display.category.clone();
+                match corpus_engine::index::backfill_display(&dir, display) {
+                    Ok(true) => tracing::info!(
+                        corpus = %corpus_id,
+                        category = category.as_deref().unwrap_or(""),
+                        "backfilled display category onto local corpus meta"
+                    ),
+                    Ok(false) => {}
+                    Err(e) => tracing::warn!(
+                        corpus = %corpus_id,
+                        error = %e,
+                        "display backfill failed — corpus may miss the \
+                         tiered retrieval surface (entity-PPR, briefings)"
+                    ),
+                }
+            }
+        }
+
         Ok(Self {
             engine,
             store,
@@ -519,32 +571,42 @@ impl LocalCorpusManager {
             persist_config(&config_dir(&self.data_dir), entry)?;
         }
 
-        // Stamp display.category = "watched_folder" on the index's
+        // Stamp the source type's display metadata on the index's
         // _corpus_meta.json so the runtime retrieval gates
         // (`is_tiered_category` in conv_briefing) route this corpus
         // through the tiered (RAPTOR + chunk_entities + PPR) path.
+        // The category comes from the `display_meta()` SSOT — before
+        // 2026-06-10 this hardcoded "watched_folder", mislabeling
+        // Obsidian vaults (same tiered family, so PPR worked, but the
+        // briefing label and Atlas rail grouping read this string).
         // Best-effort: a stamp failure logs + continues — the build
         // still produces useful enrichment data and the user can
         // re-trigger the stamp later by re-enabling.
-        match self.engine.open_index_for_corpus(corpus_id).await {
-            Ok(index) => {
-                let display = corpus_engine::recipe::DisplayMeta {
-                    category: Some("watched_folder".to_string()),
-                    icon: None,
-                };
-                if let Err(e) = index.set_display(Some(display)) {
+        let source_display = {
+            let corpora = self.corpora.read().await;
+            corpora
+                .get(corpus_id)
+                .and_then(|c| c.source_type.display_meta())
+        };
+        if let Some(display) = source_display {
+            match self.engine.open_index_for_corpus(corpus_id).await {
+                Ok(index) => {
+                    let category = display.category.clone();
+                    if let Err(e) = index.set_display(Some(display)) {
+                        tracing::warn!(
+                            corpus_id = %corpus_id,
+                            category = category.as_deref().unwrap_or(""),
+                            "enable_enrichment: set_display failed: {e}"
+                        );
+                    }
+                }
+                Err(e) => {
                     tracing::warn!(
                         corpus_id = %corpus_id,
-                        "enable_enrichment: set_display(watched_folder) failed: {e}"
+                        "enable_enrichment: open_index_for_corpus failed; \
+                         display category not stamped: {e}"
                     );
                 }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    corpus_id = %corpus_id,
-                    "enable_enrichment: open_index_for_corpus failed; \
-                     display category not stamped: {e}"
-                );
             }
         }
 
@@ -1194,6 +1256,24 @@ impl LocalCorpusManager {
             .await
             .insert(id.to_string(), result.clone());
         Ok(result)
+    }
+
+    /// Seed the cluster-result cache directly, bypassing the
+    /// inference-backed `cluster()` pipeline. Test/bench seam (the
+    /// live-sync e2e exercises the real write-back path with a
+    /// hand-built cluster over real ingested chunk ids); also the
+    /// hook a future "restore persisted cluster result" feature
+    /// would use. Mirrors `set_auto_rebuild_debounce`'s pattern of
+    /// public test-visible knobs.
+    pub async fn seed_cluster_result(
+        &self,
+        id: &str,
+        result: super::clusterer::LabeledClusterResult,
+    ) {
+        self.cluster_results
+            .write()
+            .await
+            .insert(id.to_string(), result);
     }
 
     /// Build the UI-facing `VaultPreview` from the most recent

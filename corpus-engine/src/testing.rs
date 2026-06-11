@@ -1438,6 +1438,18 @@ type = "sentence"
         assert!(!r2.retrieval.dedup_by_source);
     }
 
+    #[test]
+    fn retrieval_personal_scope_parses_and_defaults() {
+        // Declared in the recipe → surfaced on `Recipe::retrieval`.
+        let r = parse_recipe("[retrieval]\npersonal_scope = true");
+        assert!(r.retrieval.personal_scope);
+
+        // Omitted entirely → false (reference corpora stay non-personal
+        // without declaring anything).
+        let r2 = parse_recipe("");
+        assert!(!r2.retrieval.personal_scope);
+    }
+
     #[tokio::test]
     async fn validate_flags_invalid_html_sections_regex() {
         let toml = r#"

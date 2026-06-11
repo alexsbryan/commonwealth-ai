@@ -50,3 +50,10 @@ domain = "conversational"
 [display]
 category = "conversation"
 icon = "chat-bubble"
+
+# Imported chats are the user's own words — retain them on
+# personal-scope turns (read off `IndexInfo::personal_scope` by the
+# runtime's scope filter; the legacy `conversations-` prefix fallback
+# also matches, but the stamp is the authoritative signal).
+[retrieval]
+personal_scope = true

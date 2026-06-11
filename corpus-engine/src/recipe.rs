@@ -285,6 +285,15 @@ pub struct RetrievalConfig {
     /// per-article tiebreak needs a cross-encoder, not blind dedup.
     #[serde(default)]
     pub dedup_by_source: bool,
+    /// When true, this corpus counts as user-owned *personal* content
+    /// (conversations, journals, watched folders / Obsidian vaults).
+    /// Personal-scope turns restrict retrieval to personal corpora;
+    /// before this flag the runtime used a hardcoded corpus-id prefix
+    /// list, which silently excluded watched-folder corpora (ids are
+    /// `watched-<hash>`). Reference corpora (Wikipedia, SEP, …) leave
+    /// this false.
+    #[serde(default)]
+    pub personal_scope: bool,
 }
 
 /// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from

@@ -287,6 +287,29 @@ Per-corpus measurements + known gaps live in NoteStore — query
 
 ---
 
+## Typed-extension pass (bench-side atoms over RAPTOR summaries)
+
+At the tail of every tiered corpus build,
+`FolderTieredProvider::finalize_corpus` runs (1) `run_vault_synthesis`
+→ `vault_themes`, then (2) `run_typed_extension`
+(`sovereign-tools/src/typed_extension/`) → a golden-compatible
+`atoms.json` under the corpus's `atlas/` dir. Two LLM passes: Pass A
+per RAPTOR leaf extracts mechanism / named_position / evidence;
+Pass B per vault theme extracts opposition / concession (cross-leaf
+shapes). Idempotent via the `atoms.meta.json` manifest sidecar — an
+unchanged corpus re-run makes zero LLM calls. Operator re-run surface
+(prompt iteration without a rebuild):
+`sovereign atlas typed-extension <corpus>`.
+
+This is a **bench-side** artifact: no chat-path surface (briefing,
+rerank) reads these atoms; `sovereign bench obsidian
+--corpus <vault-corpus>` scores them against
+`sovereign/bench/obsidian/golden.toml`. Rationale + atom shapes:
+[`specs/TYPED_EXTENSION_PASS.md`](./specs/TYPED_EXTENSION_PASS.md)
+(shipped 2026-05-24).
+
+---
+
 ## Reading order for new contributors
 
 1. **This document.**
