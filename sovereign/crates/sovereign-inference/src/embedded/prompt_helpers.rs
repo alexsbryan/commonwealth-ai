@@ -162,10 +162,68 @@ pub(crate) fn format_prompt(
     // template the inner dispatch handles ends at the generation
     // marker, so the append point is consistent.
     let rendered = format_prompt_inner(model, model_id, request, quirks)?;
+    // Thinking suppression must be enforced BEFORE the assistant
+    // prefix lands: the prefix commits the model's first ANSWER
+    // token, so a pre-opened think block has to be closed ahead of
+    // it or the prefix ends up inside the model's CoT.
+    let suppress = request.think_budget == Some(0);
+    let think_family = matches!(quirks.thinking, ThinkingControl::SystemPromptToken { .. });
+    let rendered = enforce_think_suppression(rendered, suppress, think_family);
     Ok(append_assistant_prefix(
         rendered,
         request.assistant_prefix.as_deref(),
     ))
+}
+
+/// Deterministically suppress the thinking phase when the caller set
+/// `think_budget == Some(0)`.
+///
+/// The `/no_think` soft token spliced into the system message is
+/// advisory — newer Qwen-family checkpoints ignore it, and their chat
+/// templates PRE-OPEN a `<think>\n` block at the generation marker:
+/// unconditionally (Qwopus3.5-4B-v3), or whenever `enable_thinking`
+/// is undefined (Qwen3.6) — which the llama-cpp-4 binding can no
+/// longer define. The model then thinks from token 0 with the open
+/// tag hidden in the prompt: the stream carries untagged CoT no strip
+/// pass can fold, and a small `max_tokens` cap truncates the reply
+/// mid-deliberation (2026-06-10 chaos-monkey burn-down: every
+/// fast-slot KnowledgeQuery answer was raw CoT cut at 600 tokens).
+///
+/// Closing the block in the PROMPT is the official disable shape —
+/// Qwen3.6's own template emits `<think>\n\n</think>\n\n` when
+/// `enable_thinking` is defined-and-false — and works regardless of
+/// soft-token support:
+/// - prompt ends with a pre-opened `<think>` → close it;
+/// - prompt already ends with `</think>` → the template handled the
+///   disable natively, pass through;
+/// - otherwise → append the full closed empty block.
+/// The pre-open branch is SHAPE-driven, not family-driven, on
+/// purpose: the daemon constructs chat slots with
+/// `ModelFamily::Unknown` (`daemon_cmd/build/inference.rs` resolves
+/// only the embed family), so `quirks.thinking` cannot be the gate —
+/// it would leave suppression dead on every production slot. A
+/// rendered prompt ending in `<think>` can only have come from a
+/// thinking-style chat template, which is all the evidence needed to
+/// close the block. The append-a-closed-block branch (no pre-open)
+/// does keep the family gate: emitting literal think tags at a
+/// non-think model (Gemma, Llama3) would be noise it was never
+/// trained on.
+fn enforce_think_suppression(
+    prompt: String,
+    suppress: bool,
+    family_is_think_capable: bool,
+) -> String {
+    if !suppress {
+        return prompt;
+    }
+    let trimmed = prompt.trim_end();
+    if trimmed.ends_with("<think>") {
+        format!("{prompt}\n</think>\n\n")
+    } else if family_is_think_capable && !trimmed.ends_with("</think>") {
+        format!("{prompt}<think>\n\n</think>\n\n")
+    } else {
+        prompt
+    }
 }
 
 /// Append a non-empty `assistant_prefix` to the rendered prompt.
@@ -642,6 +700,64 @@ where
     match env_get("SOVEREIGN_JUMP_FWD_T2_DISABLE") {
         Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
         None => true,
+    }
+}
+
+#[cfg(test)]
+mod think_suppression_tests {
+    use super::enforce_think_suppression;
+
+    /// Qwopus3.5-4B-v3 shape: template pre-opens `<think>\n`
+    /// unconditionally at the generation marker. Suppression must
+    /// close it, producing the official Qwen3.6 disable shape —
+    /// and must do so even with family Unknown (the daemon builds
+    /// chat slots without family resolution), because the pre-open
+    /// itself proves the template is a thinking template.
+    #[test]
+    fn closes_template_preopened_think_block_even_for_unknown_family() {
+        let prompt = "<|im_start|>assistant\n<think>\n".to_string();
+        let out = enforce_think_suppression(prompt, true, false);
+        assert!(
+            out.ends_with("<think>\n\n</think>\n\n"),
+            "pre-opened block must be closed: {out:?}"
+        );
+    }
+
+    /// No pre-open + known think-capable family (Qwen3-OG shape):
+    /// append the full closed empty block — same thing llama.cpp's
+    /// `enable_thinking=false` does.
+    #[test]
+    fn appends_closed_block_when_not_preopened() {
+        let prompt = "<|im_start|>assistant\n".to_string();
+        let out = enforce_think_suppression(prompt, true, true);
+        assert!(out.ends_with("<|im_start|>assistant\n<think>\n\n</think>\n\n"));
+    }
+
+    /// No pre-open + family unknown/non-think: leave the prompt
+    /// alone — literal think tags are noise to Gemma/Llama-style
+    /// models that were never trained on them.
+    #[test]
+    fn no_append_for_non_think_family_without_preopen() {
+        let prompt = "<start_of_turn>model\n".to_string();
+        let out = enforce_think_suppression(prompt.clone(), true, false);
+        assert_eq!(out, prompt);
+    }
+
+    /// Template already emitted the disable shape (enable_thinking
+    /// defined-and-false via minijinja): pass through unchanged.
+    #[test]
+    fn passes_through_already_closed_block() {
+        let prompt = "<|im_start|>assistant\n<think>\n\n</think>\n\n".to_string();
+        let out = enforce_think_suppression(prompt.clone(), true, true);
+        assert_eq!(out, prompt);
+    }
+
+    /// Thinking allowed (suppress=false): never touch the prompt.
+    #[test]
+    fn no_op_when_thinking_allowed() {
+        let prompt = "<|im_start|>assistant\n<think>\n".to_string();
+        let out = enforce_think_suppression(prompt.clone(), false, true);
+        assert_eq!(out, prompt);
     }
 }
 

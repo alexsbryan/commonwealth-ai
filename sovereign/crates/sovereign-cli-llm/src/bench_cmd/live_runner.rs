@@ -190,12 +190,27 @@ pub async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer
     if answer.trim().is_empty() {
         return Some(true);
     }
+    // Window the answer HEAD + TAIL, not head-only. A leaked/verbose
+    // reply often reaches its actual verdict ("the text never names
+    // him") in the final sentences; a head-only window classified the
+    // preamble instead of the conclusion (2026-06-10 fabrication
+    // burn-down: all 6 absent_adjacent "answers" were scored off
+    // deliberation the judge never saw the end of).
+    let windowed: String = {
+        let chars: Vec<char> = answer.chars().collect();
+        if chars.len() <= 1700 {
+            answer.to_string()
+        } else {
+            let head: String = chars[..400].iter().collect();
+            let tail: String = chars[chars.len() - 1200..].iter().collect();
+            format!("{head}\n[…]\n{tail}")
+        }
+    };
     let prompt = format!(
-        "An assistant was asked a question and replied:\n\n\"\"\"\n{}\n\"\"\"\n\n\
+        "An assistant was asked a question and replied:\n\n\"\"\"\n{windowed}\n\"\"\"\n\n\
          Did the assistant provide a substantive answer, or did it decline / say it \
          does not have the information?\n\n\
-         Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information.",
-        answer.chars().take(1200).collect::<String>()
+         Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information."
     );
     forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| b > a)
 }

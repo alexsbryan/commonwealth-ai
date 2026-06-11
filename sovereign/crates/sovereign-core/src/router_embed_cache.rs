@@ -73,6 +73,10 @@ pub struct BootEmbedCache {
     /// lookup misses and nothing is written.
     path: Option<PathBuf>,
     entries: HashMap<String, Vec<f32>>,
+    /// Keys read or written this boot — the live exemplar set.
+    /// Flush persists only these, pruning entries whose texts were
+    /// removed from the exemplar files by a later release.
+    touched: std::collections::HashSet<String>,
     probe: Vec<f32>,
     hits: usize,
     misses: usize,
@@ -151,6 +155,7 @@ impl BootEmbedCache {
                     Self {
                         path,
                         entries: f.entries,
+                        touched: std::collections::HashSet::new(),
                         probe,
                         hits: 0,
                         misses: 0,
@@ -180,6 +185,7 @@ impl BootEmbedCache {
         Self {
             path,
             entries: HashMap::new(),
+            touched: std::collections::HashSet::new(),
             probe,
             hits: 0,
             misses: 0,
@@ -214,12 +220,14 @@ impl BootEmbedCache {
         let k = key(method, text);
         if let Some(e) = self.entries.get(&k) {
             self.hits += 1;
+            self.touched.insert(k);
             return Ok(e.clone());
         }
         let e = embed().await?;
         self.misses += 1;
         if self.path.is_some() {
-            self.entries.insert(k, e.clone());
+            self.entries.insert(k.clone(), e.clone());
+            self.touched.insert(k);
             self.dirty = true;
         }
         Ok(e)
@@ -228,6 +236,10 @@ impl BootEmbedCache {
     /// Persist (atomic temp + rename) when anything was added. Logs
     /// the hit/miss split either way — the glassbox view of whether
     /// this boot paid for embeds or read them back.
+    ///
+    /// Writes carry only entries this boot actually used, so texts
+    /// removed from an exemplar file in a later release don't accrete
+    /// in the cache forever — the next rewrite drops them.
     pub fn flush(&mut self) {
         tracing::info!(
             target: "router.bootstrap",
@@ -242,7 +254,12 @@ impl BootEmbedCache {
         let file = CacheFile {
             schema_version: SCHEMA_VERSION,
             probe: self.probe.clone(),
-            entries: self.entries.clone(),
+            entries: self
+                .entries
+                .iter()
+                .filter(|(k, _)| self.touched.contains(*k))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
         };
         let write = || -> std::io::Result<()> {
             if let Some(dir) = p.parent() {
@@ -287,6 +304,31 @@ mod tests {
         assert!((cosine(&a, &a) - 1.0).abs() < 1e-6);
         assert!(cosine(&a, &[0.0, 1.0]).abs() < 1e-6);
         assert_eq!(cosine(&a, &[1.0]), 0.0, "dims mismatch must reject");
+    }
+
+    #[test]
+    fn flush_prunes_entries_not_touched_this_boot() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("cache.json");
+        let live = key("q", "kept exemplar");
+        let dead = key("q", "exemplar removed in a later release");
+        let mut entries = HashMap::new();
+        entries.insert(live.clone(), vec![1.0f32]);
+        entries.insert(dead, vec![2.0f32]);
+        let mut cache = BootEmbedCache {
+            path: Some(path.clone()),
+            entries,
+            touched: std::iter::once(live.clone()).collect(),
+            probe: vec![1.0],
+            hits: 1,
+            misses: 0,
+            dirty: true,
+        };
+        cache.flush();
+        let back: CacheFile =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(back.entries.len(), 1, "untouched entry must be pruned");
+        assert!(back.entries.contains_key(&live));
     }
 
     #[test]
