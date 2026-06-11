@@ -1238,14 +1238,11 @@ impl ModelSlot {
         // request shape.
         //
         // Disable via SOVEREIGN_MTP_DISABLE=1 for A/B measurement.
-        let mtp_disabled = std::env::var("SOVEREIGN_MTP_DISABLE")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        if !mtp_disabled
-            && slot_ctx.is_speculative()
-            && request.tools.as_ref().is_none_or(|t| t.is_empty())
-            && forced_choice_candidates(request).is_none()
-        {
+        // Predicate extracted to `gates::mtp_dispatch_eligible` so the
+        // tools-never-enter-MTP invariant is pinned by tests.
+        if mtp_dispatch_eligible(request, slot_ctx.is_speculative(), |k| {
+            std::env::var(k).ok()
+        }) {
             // Try MTP. On prefill-decode failure, quarantine MTP for
             // this slot's lifetime and fall through to single-token
             // decode. The fallback is self-healing without bench-side
@@ -1388,21 +1385,23 @@ impl ModelSlot {
         //    Qwen3.5-2B failed `Decode Error -1: n_tokens == 0` on
         //    every lcp>0 prefill (batch_n_tokens=444 — the batch was
         //    never empty; the -1 is the recurrent-state rejection).
-        let model_says_recurrent = model.is_recurrent() || model.is_hybrid();
-        let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
-        let quirks_say_recurrent = slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
-        let speculative_active = slot_ctx.is_speculative();
-        let prefix_cache_safe = !speculative_active
-            && !model_says_recurrent
-            && !arch_says_recurrent
-            && !quirks_say_recurrent;
+        // Decision matrix extracted to `gates::prefix_cache_gate` so
+        // the ladder above is pinned by weight-free tests.
+        let gate = prefix_cache_gate(
+            model.is_recurrent(),
+            model.is_hybrid(),
+            &slot_ctx.arch,
+            quirks.has_recurrent_layers,
+            slot_ctx.is_speculative(),
+        );
+        let prefix_cache_safe = gate.safe;
         tracing::debug!(
             model = %model_id,
             arch = %slot_ctx.arch,
-            model_says_recurrent,
-            arch_says_recurrent,
-            quirks_say_recurrent,
-            mtp_session = speculative_active,
+            model_says_recurrent = gate.model_says_recurrent,
+            arch_says_recurrent = gate.arch_says_recurrent,
+            quirks_say_recurrent = gate.quirks_say_recurrent,
+            mtp_session = gate.speculative_active,
             prefix_cache_safe,
             "prefix_cache: gate decision"
         );
@@ -1455,21 +1454,16 @@ impl ModelSlot {
         // 2026-05-17 SEP-pipeline tuning. See SlotContext.cached_tokens
         // for the workload justification.
         let cached_len_at_entry = cached_tokens.len();
-        let raw_lcp = cached_tokens
-            .iter()
-            .zip(tokens.iter())
-            // Reserve the last position for fresh decode — the model
-            // needs at least one token of new context to produce
-            // logits. If the new prompt is *identical* to the cached
-            // one, force a 1-token re-prefill so the sampler still
-            // has a fresh logit distribution to draw from.
-            .take(tokens.len().saturating_sub(1))
-            .take_while(|(a, b)| a == b)
-            .count();
-        // Apply the capability gate (see prefix_cache_safe rationale
-        // at top of generate_sync). Hybrid recurrent models force
-        // full prefill; pure-attention slots use the raw LCP.
-        let lcp = if prefix_cache_safe { raw_lcp } else { 0 };
+        // LCP arithmetic lives in `gates::compute_lcp` (tested
+        // weight-free): the reserve-last-token rule — identical
+        // prompts re-prefill exactly 1 token so the sampler gets a
+        // fresh logit distribution — and the capability gate (see
+        // prefix_cache_safe rationale at top of generate_sync;
+        // hybrid recurrent models force full prefill).
+        let PrefixLcp {
+            raw: raw_lcp,
+            effective: lcp,
+        } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
         // Clear cached_tokens before any cache mutation — restored on
         // success path below. If we crash between here and the
         // post-decode update, next call sees cached_tokens=[] and
