@@ -396,7 +396,16 @@ impl Runtime {
                 model_id: None,
                 enable_thinking: None,
                 sampling_mode: None,
-                assistant_prefix: None,
+                // This path is DEFINITIONALLY parametric — zero chunks
+                // retrieved — so the provenance caveat is committed
+                // structurally, not requested via the prompt above
+                // (instruction compliance measured ~60% on the fast
+                // slot; this was the holdout bank's whole honesty gap,
+                // 0.64 vs a 0.91 counterfactual). The KQ stream spawn
+                // emits the prefix as visible text.
+                assistant_prefix: Some(
+                    crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string(),
+                ),
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -733,13 +742,15 @@ impl Runtime {
         // any judge or formulation failure. See runtime/evidence_loop.rs.
         let mut agentic_still_insufficient = false;
         let mut agentic_entity_anchored = false;
+        let mut agentic_corpus_anchored = true;
         if crate::runtime::evidence_loop::agentic_kq_enabled() {
-            let (merged, still_insufficient, entity_anchored) = self
+            let (merged, still_insufficient, entity_anchored, corpus_anchored) = self
                 .agentic_evidence_round(message, chunks, context, intent, scope)
                 .await;
             chunks = merged;
             agentic_still_insufficient = still_insufficient;
             agentic_entity_anchored = entity_anchored;
+            agentic_corpus_anchored = corpus_anchored;
         }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories)
@@ -911,6 +922,25 @@ impl Runtime {
                 }
             }
         };
+
+        // Structural general-knowledge caveat. When the agentic loop
+        // judged the evidence insufficient after its second retrieval
+        // round AND the question shares no vocabulary with any enabled
+        // corpus's atlas (topically foreign — "capital of Canada"
+        // against a novel), whatever the model answers is parametric
+        // memory and must say so. The caveat is COMMITTED via
+        // assistant_prefix — instruction-based caveats measured ~60%
+        // compliance on the 4B (3/5 OOD omissions on the 2026-06-11
+        // holdout run = honesty 0.64 vs 0.91). The streaming layer
+        // emits the same prefix as visible text.
+        if agentic_still_insufficient && !agentic_corpus_anchored {
+            request.assistant_prefix =
+                Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string());
+            tracing::info!(
+                target: "agentic_kq",
+                "agentic_kq: foreign-topic insufficiency — GK caveat prefix committed"
+            );
+        }
 
         // Phase-1 prompt-budget guard: assembled input + response
         // reservation must fit the window — the engine's "Prompt too

@@ -951,6 +951,21 @@ impl Runtime {
                 let mut observed_finish: Option<crate::types::FinishReason> = None;
                 let mut observed_completion_tokens: Option<u32> = None;
 
+                // A request-carried assistant_prefix is part of the
+                // ANSWER (the model decodes as its continuation) but
+                // not part of the completion stream — emit it visibly
+                // first or the user/judges never see the committed
+                // text. Today the only initial-request setter on this
+                // path is the structural GK caveat (knowledge_query's
+                // foreign-topic insufficiency); the retry paths below
+                // set their prefix on retry_req and emit it manually.
+                if let Some(pfx) = request.assistant_prefix.clone() {
+                    full_text.push_str(&pfx);
+                    if tx.send(Ok(pfx)).await.is_err() {
+                        return;
+                    }
+                }
+
                 // Refusal-retry (mirror of the DeepQuery spawn): hold the head;
                 // if it opens with the model's own refusal signal AND evidence
                 // was retrieved, discard and re-synthesize once with the

@@ -1,0 +1,32 @@
+# Chaos-Monkey HELD-OUT corpus — contamination-free generalization test.
+#
+# "The Saltgrass Ledger": an ORIGINAL novella written 2026-06-11 specifically
+# for this bench. Its facts exist in no model's training data by construction,
+# so (a) competence cannot come from pretraining, only retrieval+grounding,
+# and (b) any fabrication is provably a fabrication (it cannot be accidentally
+# correct). Same install shape as chaos-secret-agent.
+
+[corpus]
+id = "chaos-saltgrass"
+name = "The Saltgrass Ledger (original holdout)"
+description = "Original mystery novella, written for the chaos-monkey held-out generalization bench. Zero training-data contamination by construction."
+license = "Original work, repo-internal"
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+[acquire]
+type = "local_file"
+path = "/Users/user/.sovereign/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
