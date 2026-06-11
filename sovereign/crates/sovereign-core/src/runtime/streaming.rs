@@ -855,6 +855,7 @@ impl Runtime {
             let KnowledgeQueryPlan {
                 request,
                 chunks,
+                gate_entity_anchored,
                 doc_context,
                 shape,
                 route,
@@ -903,6 +904,29 @@ impl Runtime {
                 serde_json::Value::Array(Vec::new())
             });
             let route_for_log = route;
+
+            // Production grounding gate (hold → gate → retry → abstain;
+            // see runtime/grounding.rs). FastFocused-only: that route's
+            // short answers are where the measured fabrications live,
+            // and holding a ≤600-token stream for one verification pass
+            // (+2–4s) is inside the latency budget; PrimarySynthesis
+            // long-form is out of the critic's single-claim scope
+            // anyway. Zero-chunk turns skip — the structural GK caveat
+            // owns that path.
+            let gate_on = crate::runtime::grounding::grounding_gate_enabled()
+                && matches!(route, crate::runtime::evidence::SynthesisRoute::FastFocused)
+                && documents_found > 0;
+            let gate_chunks: Vec<String> = if gate_on {
+                chunks.iter().map(|c| c.content.clone()).collect()
+            } else {
+                Vec::new()
+            };
+            let gate_question: String = message.to_string();
+            if crate::runtime::grounding::grounding_gate_enabled() {
+                crate::runtime::grounding::dbg(&format!(
+                    "gate_on={gate_on} route={route:?} docs={documents_found}"
+                ));
+            }
 
             // Narration: synthesis-start chip. Bridges the silent
             // gap between retrieval-complete and the first streamed
@@ -961,7 +985,8 @@ impl Runtime {
                 // set their prefix on retry_req and emit it manually.
                 if let Some(pfx) = request.assistant_prefix.clone() {
                     full_text.push_str(&pfx);
-                    if tx.send(Ok(pfx)).await.is_err() {
+                    // In gate mode nothing is sent until the verdict.
+                    if !gate_on && tx.send(Ok(pfx)).await.is_err() {
                         return;
                     }
                 }
@@ -1000,7 +1025,15 @@ impl Runtime {
                         use crate::types::StreamFrame;
                         match frame {
                             StreamFrame::Token(chunk) => {
-                                if head_flushed {
+                                if gate_on {
+                                    // Hold mode: accumulate everything;
+                                    // the gate block after 'synth owns
+                                    // the release (or the retry, or the
+                                    // abstention). Refusal-retry is
+                                    // skipped here — a refusal extracts
+                                    // as NO_CLAIM and releases ungated.
+                                    full_text.push_str(&chunk);
+                                } else if head_flushed {
                                     full_text.push_str(&chunk);
                                     if tx.send(Ok(chunk)).await.is_err() {
                                         return;
@@ -1093,7 +1126,9 @@ impl Runtime {
 
                     // Stream ended while still buffering the head (a short
                     // answer below the threshold): decide on what we have.
-                    if !head_flushed {
+                    // Gate mode never flushes here — release happens after
+                    // the verdict below.
+                    if !head_flushed && !gate_on {
                         if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
                             retried = true;
                             tracing::info!(
@@ -1131,13 +1166,136 @@ impl Runtime {
                     break 'synth;
                 }
 
+                // Production grounding gate: hold → gate → retry →
+                // abstain (runtime/grounding.rs). Runs on the HELD
+                // answer before anything reaches the user. Fail-open
+                // on judge failure — the gate is a quality lever, not
+                // an availability risk.
+                let mut grounding_gate_meta: Option<serde_json::Value> = None;
+                if gate_on
+                    && !matches!(
+                        observed_finish,
+                        Some(crate::types::FinishReason::Cancelled)
+                    )
+                {
+                    use crate::runtime::grounding::{
+                        grounded_abstention, grounding_gate_threshold, retry_system_note,
+                        verify_grounding,
+                    };
+                    let tau = grounding_gate_threshold();
+                    let mut action = "released";
+                    let mut retried_gate = false;
+                    let mut final_vp: Option<f64> = None;
+                    match verify_grounding(
+                        &inference,
+                        &gate_question,
+                        &full_text,
+                        &gate_chunks,
+                        gate_entity_anchored,
+                    )
+                    .await
+                    {
+                        Some(v) => {
+                            final_vp = Some(v.violation_prob);
+                            if v.violation_prob >= tau {
+                                if let Some(claim) = v.claim.clone() {
+                                    // Minimal best-of-N: one retry that
+                                    // knows exactly which assertion
+                                    // failed verification.
+                                    retried_gate = true;
+                                    let mut retry_req = request.clone();
+                                    let base_sys =
+                                        retry_req.system_message.clone().unwrap_or_default();
+                                    retry_req.system_message =
+                                        Some(format!("{base_sys}{}", retry_system_note(&claim)));
+                                    retry_req.assistant_prefix = None;
+                                    match inference.complete(&retry_req).await {
+                                        Ok(resp) => {
+                                            let second = resp.text;
+                                            match verify_grounding(
+                                                &inference,
+                                                &gate_question,
+                                                &second,
+                                                &gate_chunks,
+                                                gate_entity_anchored,
+                                            )
+                                            .await
+                                            {
+                                                Some(v2) if v2.violation_prob < tau => {
+                                                    final_vp = Some(v2.violation_prob);
+                                                    full_text = second;
+                                                    action = "retry_released";
+                                                }
+                                                Some(v2) => {
+                                                    final_vp = Some(v2.violation_prob);
+                                                    full_text = grounded_abstention(
+                                                        &claim,
+                                                        gate_chunks.len().min(12),
+                                                    );
+                                                    action = "abstained";
+                                                }
+                                                None => {
+                                                    // Second verdict unavailable —
+                                                    // fail open on the RETRY (it was
+                                                    // written under the grounding
+                                                    // constraint; strictly safer
+                                                    // than draft 1).
+                                                    full_text = second;
+                                                    action = "retry_released_unverified";
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            // Draft 1 is KNOWN-failed; with no
+                                            // retry available, abstention is the
+                                            // only honest release.
+                                            tracing::warn!(
+                                                target: "grounding_gate",
+                                                error = %e,
+                                                "gated retry synthesis failed — releasing abstention"
+                                            );
+                                            full_text = grounded_abstention(
+                                                &claim,
+                                                gate_chunks.len().min(12),
+                                            );
+                                            action = "abstained_retry_error";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            action = "judge_failed_open";
+                        }
+                    }
+                    tracing::info!(
+                        target: "grounding_gate",
+                        action,
+                        retried = retried_gate,
+                        vp = ?final_vp,
+                        tau,
+                        "grounding gate verdict"
+                    );
+                    crate::runtime::grounding::dbg(&format!(
+                        "verdict action={action} retried={retried_gate} vp={final_vp:?} tau={tau}"
+                    ));
+                    grounding_gate_meta = Some(serde_json::json!({
+                        "action": action,
+                        "retried": retried_gate,
+                        "violation_prob": final_vp,
+                        "threshold": tau,
+                    }));
+                }
+
                 // Post-synthesis guardrail: demote any quoted span that
                 // isn't verbatim-present in the evidence shown to the
                 // model before it's persisted, so the stored record (and
                 // any reload of this bubble) can't present a composite /
                 // fabricated quotation as verbatim. The live token stream
                 // already went out unmodified — this hardens the durable
-                // copy; the refinement path (collaboration.rs) re-verifies
+                // copy; in gate mode the verified rewrite IS what gets
+                // released to the user (held streams send post-rewrite).
+                // The refinement path (collaboration.rs) re-verifies
                 // any gap-check rewrite. Empty doc_context (parametric
                 // path) is a no-op.
                 let full_text = {
@@ -1154,6 +1312,14 @@ impl Runtime {
                     }
                     v.rewritten
                 };
+
+                // Gate mode held every token — release the final
+                // (gated, quote-verified) text as one frame now.
+                if gate_on && !cancel_for_stream.is_cancelled() {
+                    if tx.send(Ok(full_text.clone())).await.is_err() {
+                        return;
+                    }
+                }
 
                 // Persist final assistant message with full KQ metadata
                 // so the UI citation expander and provenance header
@@ -1221,6 +1387,12 @@ impl Runtime {
                     "result_quality": result_quality,
                     "provenance": provenance,
                     "retrieved_chunks": retrieved_chunks,
+                    // Glassbox for the production grounding gate:
+                    // null when the gate is off / out of scope;
+                    // otherwise {action, retried, violation_prob,
+                    // threshold} so the UI can render verified /
+                    // regenerated / abstained provenance.
+                    "grounding_gate": grounding_gate_meta,
                     // Glassbox for the prompt-budget guard: non-null
                     // when assembly exceeded the context window and
                     // the prompt was trimmed (runtime::prompt_budget).

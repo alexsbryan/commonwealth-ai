@@ -370,8 +370,9 @@ impl Runtime {
                  You searched these installed knowledge sources: {corpora}\n\
                  The search returned no relevant results.\n\n\
                  Answer the question from your general knowledge. \
-                 Note briefly that no corpus results were found, but do not refuse \
-                 to answer or dwell on the absence of sources. \
+                 Do not refuse to answer or dwell on the absence of sources \
+                 (the reply is already prefixed with the provenance caveat — \
+                 do not repeat it). \
                  If you are confident about the topic, answer directly and substantively. \
                  If you are genuinely uncertain, say so and suggest web search or \
                  installing an additional corpus."
@@ -414,6 +415,7 @@ impl Runtime {
             return KnowledgeQueryPlan {
                 request,
                 chunks: Vec::new(),
+                gate_entity_anchored: false,
                 doc_context: String::new(),
                 shape: compute_evidence_shape(&[], message),
                 route: SynthesisRoute::FastFocused,
@@ -1059,6 +1061,7 @@ impl Runtime {
         KnowledgeQueryPlan {
             request,
             chunks,
+            gate_entity_anchored: agentic_entity_anchored,
             doc_context,
             shape,
             route,
