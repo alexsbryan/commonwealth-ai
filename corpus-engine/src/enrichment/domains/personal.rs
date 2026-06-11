@@ -409,6 +409,7 @@ mod tests {
             id: 1,
             content: "I've been thinking about what good work looks like.".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PersonalDomain.skeleton_extraction_prompt(&[&chunk]);
         assert!(prompt.contains("memories from one person"));
@@ -422,6 +423,7 @@ mod tests {
             id: 1,
             content: "I keep coming back to this question about autonomy.".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PersonalDomain.cluster_labeling_prompt(&[&chunk]);
         assert!(prompt.contains("theme"));
@@ -434,11 +436,13 @@ mod tests {
             id: 1,
             content: "I value simplicity in everything I build.".into(),
             title: None,
+            source_doc_id: None,
         };
         let chunk_b = Chunk {
             id: 2,
             content: "I'm excited to architect this complex system.".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PersonalDomain.fault_line_detection_prompt(
             &[&chunk_a],
@@ -457,6 +461,7 @@ mod tests {
             id: 1,
             content: "What kind of life do I actually want?".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PersonalDomain.open_question_prompt(&[&chunk]);
         assert!(prompt.contains("stable answer"));

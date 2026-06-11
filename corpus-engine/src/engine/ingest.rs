@@ -703,6 +703,19 @@ impl CorpusEngine {
             );
         }
 
+        // Stamp `[retrieval] personal_scope` the same way. Non-fatal —
+        // the runtime's personal-scope filter falls back to its legacy
+        // corpus-id prefix list for unstamped corpora.
+        if let Err(e) = index.set_personal_scope(recipe.retrieval.personal_scope) {
+            tracing::warn!(
+                corpus = %recipe.corpus.id,
+                path = %index_path.display(),
+                error = %e,
+                "ingest_inner: failed to stamp [retrieval] personal_scope — \
+                 personal-scope retrieval falls back to prefix matching"
+            );
+        }
+
         // Stamp the mutable-merge policy from the recipe so future
         // merges of this index against peer partitions take the
         // chosen reconciliation rule. None preserves classic

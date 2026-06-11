@@ -204,6 +204,8 @@ impl CorpusIndex {
             // Stamped post-create from the recipe via `set_dedup_by_source`
             // (mirrors `set_display`); `None` here = baseline at creation.
             dedup_by_source: None,
+            // Stamped post-create via `set_personal_scope` (same shape).
+            personal_scope: None,
             license: license.to_string(),
             created_at: now,
             last_updated: now,

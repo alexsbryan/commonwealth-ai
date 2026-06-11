@@ -279,6 +279,199 @@ async fn vault_adding_a_new_note_is_detected_as_added() {
     }
 }
 
+/// The full write-back round trip through the WORKER path —
+/// previously only the `Ok(None)` no-cluster branch was exercised
+/// (2026-06-10 obsidian audit, gap 6). A hand-built cluster over the
+/// REAL ingested chunk ids stands in for the inference-backed
+/// `cluster()` (seeded via `seed_cluster_result`), so this pins:
+///
+///   - chunks carry root-relative `source_doc_id`s (nested note incl.)
+///   - sweep → `refresh_writeback_if_clustered` → tags land in BOTH
+///     notes' frontmatter + an index note under `_sovereign-index/`
+///   - the post-write mtime patch: the very next sweep is `NoChanges`
+///     (no writeback ↔ walker feedback loop)
+///   - doc identity SURVIVES delta updates: repeated edits of the
+///     nested note never accumulate duplicate chunks (pre-fix, the
+///     delta path stamped `source_doc_id = NULL`, so every second
+///     edit duplicated the note's chunks)
+///   - rollback restores the pre-tag bytes
+#[tokio::test]
+async fn vault_writeback_round_trip_via_worker() {
+    use std::collections::HashMap;
+    use sovereign_tools::local_corpus::clusterer::{LabeledCluster, LabeledClusterResult};
+
+    let fx = boot().await;
+    let snapshots = fx._tmp.path().join("vault-snapshots");
+    // Bodies must clear the preview's 80-char TooShort floor.
+    let alpha_body = "# Alpha\n\nInstitutional economics of common-pool resources: Ostrom's \
+                      design principles and the governance of shared irrigation systems.\n";
+    let beta_body = "# Beta\n\nMarket design and auction theory applied to spectrum \
+                     allocation; stability and incentive compatibility in matching markets.\n";
+    write_note(&fx.vault.join("alpha.md"), alpha_body);
+    // Nested on purpose: pins the relative-path doc ids (pre-fix the
+    // basename was the id, so nested notes were never delta-deletable).
+    write_note(&fx.vault.join("notes/beta.md"), beta_body);
+
+    let id = register_vault(&fx, snapshots).await;
+    fx.manager.ingest(&id, None, None).await.expect("ingest");
+    fx.worker.run_once(&id).await.expect("warm-up sweep");
+
+    // Ingested chunks must be keyed by root-relative path.
+    let index = fx
+        ._engine
+        .open_index_for_corpus(&id)
+        .await
+        .expect("open index");
+    let rows = index
+        .chunks_by_source_doc_ids(&["alpha.md".to_string(), "notes/beta.md".to_string()])
+        .await
+        .expect("chunks by doc id");
+    let alpha_ids: Vec<u64> = rows
+        .iter()
+        .filter(|r| r.source_doc_id.as_deref() == Some("alpha.md"))
+        .map(|r| r.id)
+        .collect();
+    let beta_ids: Vec<u64> = rows
+        .iter()
+        .filter(|r| r.source_doc_id.as_deref() == Some("notes/beta.md"))
+        .map(|r| r.id)
+        .collect();
+    assert!(
+        !alpha_ids.is_empty() && !beta_ids.is_empty(),
+        "both notes must index under their root-relative doc ids; rows = {:?}",
+        rows.iter().map(|r| (r.id, r.source_doc_id.clone())).collect::<Vec<_>>()
+    );
+
+    // Hand-built single-cluster result over the real chunk ids.
+    let mut chunk_assignments: HashMap<u64, i32> = HashMap::new();
+    let mut chunk_confidences: HashMap<u64, f32> = HashMap::new();
+    for cid in alpha_ids.iter().chain(beta_ids.iter()) {
+        chunk_assignments.insert(*cid, 0);
+        chunk_confidences.insert(*cid, 0.9); // clears min_confidence 0.4
+    }
+    fx.manager
+        .seed_cluster_result(
+            &id,
+            LabeledClusterResult {
+                clusters: vec![LabeledCluster {
+                    id: 0,
+                    tag_path: "research/commons".to_string(),
+                    display_name: "Commons research".to_string(),
+                    description: "Economics notes".to_string(),
+                    note_count: 2,
+                    centroid_chunk_ids: vec![alpha_ids[0]],
+                }],
+                chunk_assignments,
+                chunk_confidences,
+                noise_best_cluster: HashMap::new(),
+                noise_chunks: Vec::new(),
+                open_questions: Vec::new(),
+            },
+        )
+        .await;
+
+    // The writeback refresh only runs on sweeps that APPLY a diff, so
+    // trigger one with a note that is NOT in the cluster (an edit to a
+    // clustered note would invalidate the seeded chunk ids in the same
+    // sweep that consumes them).
+    write_note(&fx.vault.join("gamma.md"), "# Gamma\n\nScratch.\n");
+    let outcome = fx.worker.run_once(&id).await.expect("writeback sweep");
+    assert!(
+        matches!(outcome, WorkerOutcome::Applied(_)),
+        "expected Applied, got {outcome:?}"
+    );
+
+    // Tags landed in both notes — including the NESTED one.
+    let alpha_after = std::fs::read_to_string(fx.vault.join("alpha.md")).unwrap();
+    let beta_after = std::fs::read_to_string(fx.vault.join("notes/beta.md")).unwrap();
+    assert!(
+        alpha_after.contains("sovereign/research/commons"),
+        "alpha.md frontmatter must carry the cluster tag; got:\n{alpha_after}"
+    );
+    assert!(
+        beta_after.contains("sovereign/research/commons"),
+        "nested notes/beta.md must carry the cluster tag; got:\n{beta_after}"
+    );
+    let index_dir = fx.vault.join("_sovereign-index");
+    assert!(
+        index_dir.exists() && index_dir.read_dir().unwrap().next().is_some(),
+        "Map-of-Content index note must exist under _sovereign-index/"
+    );
+
+    let state_dir = fx.manager.index_dir_root().join(&id);
+    let state = WatchedFolderState::load(&state_dir)
+        .expect("state load")
+        .expect("state");
+    assert!(
+        state.last_writeback_unix.is_some(),
+        "worker must record the writeback timestamp"
+    );
+
+    // The post-write mtime patch must absorb the writeback's own
+    // frontmatter edits: an immediate further sweep sees no changes.
+    let after_writeback = fx.worker.run_once(&id).await.expect("post-writeback sweep");
+    assert_eq!(
+        after_writeback,
+        WorkerOutcome::NoChanges,
+        "writeback mtime bumps must not re-detect as user edits"
+    );
+
+    // Doc identity must survive repeated delta updates — pre-fix, the
+    // first edit NULLed the doc id and the second duplicated chunks.
+    let beta_chunks_before = beta_ids.len();
+    for i in 0..2 {
+        // The walker's fast path keys on (mtime, size) with 1s mtime
+        // granularity — pad each edit differently so the size always
+        // changes even when both edits land within the same second.
+        let pad = "x".repeat((i + 1) * 16);
+        write_note(
+            &fx.vault.join("notes/beta.md"),
+            &format!("{beta_body}\nEdit number {i}: {pad}\n"),
+        );
+        let o = fx.worker.run_once(&id).await.expect("edit sweep");
+        match o {
+            WorkerOutcome::Applied(s) => assert_eq!(s.modified, 1, "edit {i}: {s:?}"),
+            other => panic!("edit {i}: expected Applied, got {other:?}"),
+        }
+    }
+    let beta_rows_after = index
+        .chunks_by_source_doc_ids(&["notes/beta.md".to_string()])
+        .await
+        .expect("beta rows after edits");
+    assert_eq!(
+        beta_rows_after.len(),
+        beta_chunks_before,
+        "duplicate chunks must not accumulate across edits; rows = {:?}",
+        beta_rows_after
+            .iter()
+            .map(|r| (r.id, r.source_doc_id.clone()))
+            .collect::<Vec<_>>()
+    );
+    for r in &beta_rows_after {
+        assert_eq!(
+            r.source_doc_id.as_deref(),
+            Some("notes/beta.md"),
+            "delta-produced chunks must keep the doc id"
+        );
+        assert!(r.title.is_some(), "delta-produced chunks must keep a title");
+    }
+
+    // Rollback restores the pre-tag bytes from the snapshot.
+    let snaps = fx.manager.list_snapshots(&id).await.expect("snapshots");
+    assert!(!snaps.is_empty(), "writeback must have taken a snapshot");
+    let rb = fx
+        .manager
+        .rollback(&id, std::path::Path::new(&snaps[0].snapshot_path))
+        .await
+        .expect("rollback");
+    assert!(rb.files_restored >= 1, "rollback restored files: {rb:?}");
+    let alpha_restored = std::fs::read_to_string(fx.vault.join("alpha.md")).unwrap();
+    assert!(
+        !alpha_restored.contains("sovereign/research/commons"),
+        "rollback must remove the sovereign tags; got:\n{alpha_restored}"
+    );
+}
+
 #[tokio::test]
 async fn vault_deleting_a_note_records_a_tombstone_under_guard() {
     // Five notes so a single deletion is 20% — under the 25%

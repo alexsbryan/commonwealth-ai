@@ -22,12 +22,44 @@ The legacy `obsidian_atlas` pipeline was retired when live vault
 chat moved to the tiered RAPTOR + GLiNER surface (see
 `sovereign/docs/TIERED_RETRIEVAL.md` + `PROGRESSIVE_ENRICHMENT.md`).
 The tiered pipeline emits per-note RAPTOR trees and `chunk_entities`
-mentions instead of Phase-1 typed atoms; the 5 argumentative axes
-(`mechanism`, `named_position`, `evidence`, `opposition`,
-`concession`) drop to ~0 against the tiered output. v2 will add a
-typed-extension pass over RAPTOR summaries that restores these axes.
+mentions instead of Phase-1 typed atoms — at the port the 5
+argumentative axes (`mechanism`, `named_position`, `evidence`,
+`opposition`, `concession`) briefly dropped to ~0 against the tiered
+output.
 
-**For bench scoring today**, pin the corpus to `literary_atlas`:
+**Shipped (v2, 2026-05-24, same push as the port):** the
+typed-extension pass (`docs/specs/TYPED_EXTENSION_PASS.md`) runs at
+the tail of every tiered build (`FolderTieredProvider::
+finalize_corpus`) and writes a golden-compatible `atoms.json` —
+Pass A extracts mechanism/named_position/evidence per RAPTOR leaf,
+Pass B extracts opposition/concession per vault theme. (This
+paragraph replaced a stale "v2 will add…" note on 2026-06-10 — the
+pass had been shipped for two weeks while the README still promised
+it.)
+
+**First live-surface scoring (2026-06-11,
+`--corpus watched-959ee8a8f330`, extraction of 2026-05-24, zero
+prompt iterations) vs the literary_atlas-pinned 2026-06-07 baseline
+(`baselines/golden/latest.json`):** mechanism 2/6 vs 4/6,
+named_position 0/4 vs 3/4, evidence 1/5 vs 3/5, opposition 1/4 vs
+2/4, concession 1/3 vs 2/3 — the pass restores the axes from 0 but
+trails literary on every one; the headroom is prompt iteration
+(`sovereign atlas typed-extension <corpus>` re-runs without a
+rebuild). Caveat when reading the live run's *aggregate*: the
+typed-extension `atoms.json` carries only its five kinds, so the
+person/event/concept/question axes score 0 against it — that tier-2
+signal lives in the SQLite sidecars (`chunk_entities`,
+`conv_raptor_nodes`), which this golden's atoms reader doesn't see.
+Compare per-axis, not aggregate, across the two surfaces.
+
+**Score the live tiered surface** (what vault chat actually uses):
+```bash
+sovereign bench obsidian --corpus obsidian-<hash> --report /tmp/r.json
+# re-run extraction after a prompt iteration, no rebuild needed:
+sovereign atlas typed-extension obsidian-<hash>
+```
+
+**Or pin the legacy `literary_atlas` comparison surface**:
 ```bash
 sovereign enrich init obsidian-vault --source "$VAULT" --pipeline literary_atlas --force
 sovereign enrich build obsidian-vault

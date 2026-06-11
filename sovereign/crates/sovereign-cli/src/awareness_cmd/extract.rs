@@ -262,6 +262,7 @@ fn build_personal_chunks(memories: &[sovereign_core::types::Memory]) -> Vec<Stor
             id: (i + 1) as u64,
             content: m.content.clone(),
             title: None,
+            source_doc_id: None,
         })
         .collect()
 }
@@ -287,6 +288,7 @@ fn build_conversational_chunks(
                 id: (i + 1) as u64,
                 content: body,
                 title: c.title.clone(),
+                source_doc_id: None,
             }
         })
         .collect()

@@ -19,16 +19,28 @@
 //!
 //!     export SOVEREIGN_OBSIDIAN_VAULT="/Users/user/Documents/Obsidian Vault"
 //!
-//!     # one-time, per major content shift in the vault.
-//!     # `obsidian_atlas` was retired when vault corpora moved to the
-//!     # tiered RAPTOR + GLiNER surface. The bench still scores Phase-1
-//!     # `atoms.json`, which only `literary_atlas` produces today, so the
-//!     # bench-scoring path stays on literary_atlas while live vault chat
-//!     # uses the tiered pipeline. v2 will restore tiered-side typed atoms.
-//!     sovereign enrich init obsidian-vault \
-//!         --source "$SOVEREIGN_OBSIDIAN_VAULT" \
-//!         --pipeline literary_atlas --force
-//!     sovereign enrich build obsidian-vault
+//!     # Two scoring surfaces produce a golden-compatible `atoms.json`:
+//!     #
+//!     # (a) LIVE tiered surface (what vault chat actually uses).
+//!     #     `FolderTieredProvider::finalize_corpus` runs the
+//!     #     typed-extension pass over RAPTOR summaries at the tail of
+//!     #     every tiered build (spec: docs/specs/TYPED_EXTENSION_PASS.md,
+//!     #     shipped 2026-05-24 with the vault tiered port). Score the
+//!     #     registered vault corpus directly:
+//!     #
+//!     #         sovereign bench obsidian --corpus obsidian-<hash> \
+//!     #             --report /tmp/obsidian-bench.json
+//!     #
+//!     #     (re-run extraction after a prompt iteration without a
+//!     #      rebuild: `sovereign atlas typed-extension obsidian-<hash>`)
+//!     #
+//!     # (b) literary_atlas pin (legacy comparison surface) — one-time,
+//!     #     per major content shift in the vault:
+//!     #
+//!     #         sovereign enrich init obsidian-vault \
+//!     #             --source "$SOVEREIGN_OBSIDIAN_VAULT" \
+//!     #             --pipeline literary_atlas --force
+//!     #         sovereign enrich build obsidian-vault
 //!
 //!     # every prompt-tuning iteration
 //!     sovereign bench obsidian --report /tmp/obsidian-bench.json

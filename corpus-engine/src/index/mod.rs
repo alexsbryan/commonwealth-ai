@@ -116,6 +116,11 @@ pub struct StoredChunk {
     pub id: u64,
     pub content: String,
     pub title: Option<String>,
+    /// Source-document id this chunk belongs to (the root-relative
+    /// file path for local/watched corpora). The vault preview keys
+    /// its note rollup on this — the humanised `title` is
+    /// display-grade and not a valid file path.
+    pub source_doc_id: Option<String>,
 }
 
 /// A chunk with its raw metadata JSON string, used by the structural
@@ -283,6 +288,11 @@ struct IndexMeta {
     /// `set_dedup_by_source` (mirrors `set_display` / `set_mutable_merge`).
     #[serde(default)]
     dedup_by_source: Option<bool>,
+    /// Recipe `[retrieval] personal_scope`. `None` = legacy index
+    /// predating the field → resolves to `false`. Stamped post-create by
+    /// `set_personal_scope` (mirrors `set_dedup_by_source`).
+    #[serde(default)]
+    personal_scope: Option<bool>,
     license: String,
     created_at: u64,
     last_updated: u64,
@@ -769,6 +779,8 @@ impl CorpusIndex {
         // off `IndexInfo` without re-resolving the recipe. `None` (legacy
         // index) → false (baseline retrieval).
         let dedup_by_source = meta.dedup_by_source.unwrap_or(false);
+        // Same resolution shape for `personal_scope`: legacy → false.
+        let personal_scope = meta.personal_scope.unwrap_or(false);
         // `source_path` is only set by the code-ingest pipeline
         // (`CorpusIndex::set_source_path`, called from `sovereign
         // code index`) — every other ingest path leaves it `None`.
@@ -798,6 +810,7 @@ impl CorpusIndex {
             mesh_sharing: meta.mesh_sharing,
             query_sharing,
             dedup_by_source,
+            personal_scope,
             is_shard: meta.is_shard,
             chunk_range,
             parent_corpus_id: meta.parent_corpus_id,
@@ -938,6 +951,65 @@ impl CorpusIndex {
         meta.dedup_by_source = Some(dedup_by_source);
         write_meta(index_dir, &meta)
     }
+
+    /// Stamp the `[retrieval] personal_scope` flag from the recipe onto
+    /// this index's `_corpus_meta.json` (mirrors `set_dedup_by_source`).
+    /// Read back by `installed_indexes()` into
+    /// `IndexInfo::personal_scope`, which the runtime's personal-scope
+    /// retrieval filter consults. Also called by the watched-folder
+    /// manager to backfill corpora created before the field existed.
+    pub fn set_personal_scope(&self, personal_scope: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.personal_scope = Some(personal_scope);
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the stamped `personal_scope` value. `None` = never stamped
+    /// (legacy index). Lets the backfill path distinguish "explicitly
+    /// false" from "predates the field" without rewriting meta.
+    pub fn personal_scope(&self) -> Option<bool> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.personal_scope)
+    }
+}
+
+/// Backfill helper for indexes created before the `personal_scope`
+/// meta field existed: stamp `index_dir`'s `_corpus_meta.json` IFF the
+/// field was never written. Pure meta I/O — no LanceDB open — so the
+/// watched-folder manager can run it across every registered corpus at
+/// daemon boot for pennies. Returns `true` when a stamp was written,
+/// `false` when the meta already carried an explicit value.
+pub fn backfill_personal_scope(index_dir: &Path, personal_scope: bool) -> Result<bool> {
+    let mut meta = read_meta(index_dir)?;
+    if meta.personal_scope.is_some() {
+        return Ok(false);
+    }
+    meta.personal_scope = Some(personal_scope);
+    write_meta(index_dir, &meta)?;
+    Ok(true)
+}
+
+/// Backfill helper for indexes created before their recipe emitted a
+/// `[display]` block: stamp `index_dir`'s `_corpus_meta.json` IFF no
+/// display metadata was ever written. Never clobbers an existing
+/// stamp — ingest-time `[display]` and any explicit `set_display`
+/// stay authoritative. The display category is load-bearing beyond
+/// UI: `is_tiered_category` gates the tiered retrieval surface
+/// (RAPTOR briefings + entity-PPR rerank) on it, so a missing stamp
+/// silently exempts a corpus from entity-aware retrieval. Returns
+/// `true` when a stamp was written.
+pub fn backfill_display(index_dir: &Path, display: crate::recipe::DisplayMeta) -> Result<bool> {
+    let mut meta = read_meta(index_dir)?;
+    if meta.display.is_some() {
+        return Ok(false);
+    }
+    meta.display = Some(display);
+    write_meta(index_dir, &meta)?;
+    Ok(true)
+}
+
+impl CorpusIndex {
 
     /// Return the `mutable_merge` policy stamped on this index, if
     /// any. Used by `merge_shards` to decide which dedupe branch to

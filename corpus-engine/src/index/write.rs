@@ -613,6 +613,7 @@ impl CorpusIndex {
                 "id".to_string(),
                 "content".to_string(),
                 "title".to_string(),
+                "source_doc_id".to_string(),
             ]))
             .only_if(filter)
             .execute()
@@ -636,6 +637,10 @@ impl CorpusIndex {
                 .column_by_name("title")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
                 .ok_or_else(|| Error::Serialization("missing title column".into()))?;
+            let doc_ids = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| Error::Serialization("missing source_doc_id column".into()))?;
 
             for i in 0..batch.num_rows() {
                 out.push(StoredChunk {
@@ -645,6 +650,11 @@ impl CorpusIndex {
                         None
                     } else {
                         Some(titles.value(i).to_string())
+                    },
+                    source_doc_id: if doc_ids.is_null(i) {
+                        None
+                    } else {
+                        Some(doc_ids.value(i).to_string())
                     },
                 });
             }

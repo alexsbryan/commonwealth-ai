@@ -289,6 +289,7 @@ mod tests {
             id: 1,
             content: "Free will is the ability to act otherwise.".into(),
             title: Some("Free Will".into()),
+            source_doc_id: None,
         };
         let prompt = PhilosophyDomain.skeleton_extraction_prompt(&[&chunk]);
         assert!(!prompt.is_empty());
@@ -302,6 +303,7 @@ mod tests {
             id: 1,
             content: "Compatibilists hold that free will is consistent with determinism.".into(),
             title: Some("Compatibilism".into()),
+            source_doc_id: None,
         };
         let prompt = PhilosophyDomain.skeleton_extraction_prompt(&[&chunk]);
         // Must include key instructions
@@ -319,16 +321,19 @@ mod tests {
                 id: 1,
                 content: "First passage about free will.".into(),
                 title: Some("Free Will".into()),
+                source_doc_id: None,
             },
             Chunk {
                 id: 2,
                 content: "Second passage about determinism.".into(),
                 title: Some("Determinism".into()),
+                source_doc_id: None,
             },
             Chunk {
                 id: 3,
                 content: "Third passage about moral responsibility.".into(),
                 title: None,
+                source_doc_id: None,
             },
         ];
         let refs: Vec<&Chunk> = chunks.iter().collect();
@@ -344,6 +349,7 @@ mod tests {
             id: 1,
             content: "Frankfurt cases show that moral responsibility does not require alternative possibilities.".into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PhilosophyDomain.cluster_labeling_prompt(&[&chunk]);
         assert!(prompt.contains("semantically similar"));
@@ -361,6 +367,7 @@ mod tests {
             id: 1,
             content: "Compatibilism argues that free will is consistent with determinism.".into(),
             title: None,
+            source_doc_id: None,
         };
         let chunk_b = Chunk {
             id: 2,
@@ -368,6 +375,7 @@ mod tests {
                 "Hard incompatibilism denies free will under both determinism and indeterminism."
                     .into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PhilosophyDomain.fault_line_detection_prompt(
             &[&chunk_a],
@@ -389,6 +397,7 @@ mod tests {
             content: "It remains unclear whether manipulation arguments undermine compatibilism."
                 .into(),
             title: None,
+            source_doc_id: None,
         };
         let prompt = PhilosophyDomain.open_question_prompt(&[&chunk]);
         assert!(prompt.contains("unresolved inquiry"));

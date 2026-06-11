@@ -13,7 +13,7 @@
 //! Output format: one JSON object per line, shape
 //!
 //! ```json
-//! {"id":"<source_id>","title":"<humanised name>","content":"<text>",
+//! {"id":"<root-relative path>","title":"<humanised name>","content":"<text>",
 //!  "source_path":"<relative path>"}
 //! ```
 //!
@@ -88,7 +88,14 @@ pub fn stage_blocking(
                     .unwrap_or(&meta.path)
                     .to_string_lossy()
                     .into_owned();
-                let source_id = source_id_for(&meta.path);
+                // The doc id IS the root-relative path — the same key the
+                // watched-folder walker/tombstones use, so sweep-time
+                // `delete_chunks_by_source_doc(relative_path)` matches the
+                // rows initial ingest wrote. Before 2026-06-10 this was the
+                // file BASENAME, so nested notes (`sub/alpha.md`) could
+                // never be delta-deleted, and same-named notes in
+                // different folders collided into one doc id.
+                let source_id = relative.clone();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,
@@ -652,16 +659,6 @@ pub(crate) fn strip_frontmatter(raw: &str) -> &str {
     raw
 }
 
-fn source_id_for(path: &Path) -> String {
-    // Use the file basename as a human-readable ID. The engine does
-    // not require IDs to be globally unique across corpora (they're
-    // scoped to this corpus), only stable across re-runs.
-    path.file_name()
-        .and_then(|n| n.to_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "unknown".into())
-}
-
 /// Default staging directory rooted under the Sovereign data dir.
 /// Kept here so callers don't have to reach into `LocalCorpusManager`
 /// internals to know the layout.
@@ -747,7 +744,14 @@ pub async fn append_ocr_to_staging(
                     .unwrap_or(&meta.path)
                     .to_string_lossy()
                     .into_owned();
-                let source_id = source_id_for(&meta.path);
+                // The doc id IS the root-relative path — the same key the
+                // watched-folder walker/tombstones use, so sweep-time
+                // `delete_chunks_by_source_doc(relative_path)` matches the
+                // rows initial ingest wrote. Before 2026-06-10 this was the
+                // file BASENAME, so nested notes (`sub/alpha.md`) could
+                // never be delta-deleted, and same-named notes in
+                // different folders collided into one doc id.
+                let source_id = relative.clone();
                 let line = StagedLine {
                     id: &source_id,
                     title: &meta.display_name,

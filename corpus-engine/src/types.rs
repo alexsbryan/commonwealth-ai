@@ -308,6 +308,14 @@ pub struct IndexInfo {
     /// for legacy indexes whose `_corpus_meta.json` predates the field.
     #[serde(default)]
     pub dedup_by_source: bool,
+    /// Resolved `personal_scope` flag (recipe `[retrieval]
+    /// personal_scope`). When true this corpus counts as user-owned
+    /// personal content: personal-scope turns retain it in retrieval
+    /// instead of dropping it with the reference corpora. Falls back
+    /// to `false` for legacy indexes whose `_corpus_meta.json`
+    /// predates the field.
+    #[serde(default)]
+    pub personal_scope: bool,
     pub is_shard: bool,
     pub chunk_range: Option<ChunkRange>,
 
