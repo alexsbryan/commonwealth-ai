@@ -552,3 +552,23 @@ fn person_seeds_subsume_surnames_and_drop_noise() {
     // Subsumed counts rank Ostrom (1+2 mentions) above Hardin (1).
     assert_eq!(seeds[0].canonical_name, "Elinor Ostrom");
 }
+
+#[test]
+fn figure_sentences_pick_digit_bearing_text_and_respect_caps() {
+    let text = "The first plain sentence has no numbers in it at all. \
+                The agency documented $224.8 million in spread income that year. \
+                Another plain sentence follows without figures. \
+                Margins reached 58% in the most recent quarter. \
+                A third figure: 12,000 units shipped in 2019. \
+                Yet another numeric line: 7 of 9 axes regressed.";
+    let got = super::figure_sentences_from(text, 3);
+    assert_eq!(got.len(), 3, "per-call cap must hold: {got:?}");
+    assert!(got[0].contains("$224.8 million"));
+    assert!(got[1].contains("58%"));
+    // Plain sentences never surface.
+    assert!(got.iter().all(|s| s.chars().any(|c| c.is_ascii_digit())));
+
+    // Sub-20-char and digit-free inputs yield nothing.
+    assert!(super::figure_sentences_from("No digits here at all, ever.", 5).is_empty());
+    assert!(super::figure_sentences_from("a 1.", 5).is_empty());
+}

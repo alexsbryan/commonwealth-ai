@@ -102,6 +102,23 @@ pub async fn run(args: &[String]) -> i32 {
         ADVERTISED_CONTEXT,
     ));
 
+    // --force: drop the idempotency manifest so the pass re-extracts
+    // even when RAPTOR/theme hashes are unchanged. The operator use
+    // cases are prompt iteration and RUN-VARIANCE estimation (same
+    // code + same inputs, fresh sampling) — extraction is stochastic
+    // and ±1 axis moves on the bench are inside single-run noise.
+    if parsed.force {
+        let manifest = atlas_dir.join(sovereign_tools::typed_extension::MANIFEST_FILENAME);
+        match std::fs::remove_file(&manifest) {
+            Ok(()) => eprintln!("--force: removed {}", manifest.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                eprintln!("error: --force could not remove {}: {e}", manifest.display());
+                return 1;
+            }
+        }
+    }
+
     let started = std::time::Instant::now();
     let report = match run_typed_extension(&parsed.corpus_id, &store, &inference, &atlas_dir).await
     {
@@ -170,16 +187,19 @@ struct Args {
     corpus_id: String,
     endpoint: String,
     help: bool,
+    force: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut corpus_id: Option<String> = None;
     let mut endpoint = DEFAULT_ENDPOINT.to_string();
     let mut help = false;
+    let mut force = false;
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
         match a.as_str() {
             "--help" | "-h" => help = true,
+            "--force" => force = true,
             "--endpoint" => match iter.next() {
                 Some(v) => endpoint = v.clone(),
                 None => return Err("--endpoint requires a URL".into()),
@@ -199,6 +219,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         corpus_id: corpus_id.unwrap_or_default(),
         endpoint,
         help,
+        force,
     })
 }
 
@@ -212,6 +233,8 @@ fn print_help() {
          \n\
          <corpus>          Corpus id (must already be installed in the indexes dir).\n\
          --endpoint <url>  Daemon OpenAI-shape endpoint. Default: {DEFAULT_ENDPOINT}\n\
+         --force           Drop the idempotency manifest first — re-extract with\n\
+                           unchanged inputs (prompt iteration / run-variance checks).\n\
          \n\
          Idempotent: re-running with no upstream changes prints SkippedManifestMatch\n\
          and makes zero LLM calls. Triggers Slow-slot decode on the daemon (per spec\n\

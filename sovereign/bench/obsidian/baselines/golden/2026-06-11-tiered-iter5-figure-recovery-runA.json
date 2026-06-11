@@ -1,0 +1,277 @@
+{
+  "corpus_id": "watched-959ee8a8f330",
+  "golden_path": "sovereign/bench/obsidian/golden.toml",
+  "positions": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "field_skeleton.json not present — skipping positions scoring"
+    ]
+  },
+  "person_atoms": {
+    "expected": 4,
+    "matched": 4,
+    "forbidden_total": 3,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "4 hit(s) matched on name only — golden's description_keywords_any didn't appear in the extracted description"
+    ]
+  },
+  "concept_atoms": {
+    "expected": 12,
+    "matched": 4,
+    "forbidden_total": 3,
+    "forbidden_hit": 0,
+    "misses": [
+      "tragedy of the commons",
+      "common-pool resource",
+      "land value tax",
+      "pharmacy benefit manager",
+      "spread pricing",
+      "four generators",
+      "high-bandwidth memory",
+      "beyond GDP"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "3 hit(s) matched on name only — golden's description_keywords_any didn't appear in the extracted description"
+    ]
+  },
+  "work_atoms": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "event_atoms": {
+    "expected": 3,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "Ostrom Nobel",
+      "CVS Caremark merger",
+      "Pruitt-Igoe"
+    ],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "state_atoms": null,
+  "relation_atoms": null,
+  "question_atoms": {
+    "expected": 2,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "capture",
+      "oversupply"
+    ],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "claim_atoms": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "discourse_act_distribution": null,
+  "fault_lines": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "edges.json contains 0 Tension edges (any of 0 edges total) — Phase 6 may not have run"
+    ]
+  },
+  "open_questions": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "gaps.json not present — skipping open-question scoring"
+    ]
+  },
+  "configurations": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "axis_scores": {
+    "concession": {
+      "expected": 3,
+      "matched": 1,
+      "forbidden_total": 0,
+      "forbidden_hit": 0,
+      "misses": [
+        "commons fail",
+        "PBMs do provide"
+      ],
+      "forbidden_hits": [],
+      "notes": [
+        "concession addresses_contains_any check deferred to Stage 4 (Concedes edge walk); claim \"The base rate for being wrong about cycle timing is high giv\" matched on content"
+      ]
+    },
+    "evidence": {
+      "expected": 5,
+      "matched": 3,
+      "forbidden_total": 0,
+      "forbidden_hit": 0,
+      "misses": [
+        "Ohio $224.8M",
+        "Pruitt-Igoe"
+      ],
+      "forbidden_hits": [],
+      "notes": [
+        "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"68% specialty drug dispensing (2024): The FTC's 2024 finding\" matched on label",
+        "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"Tribunal de las Aguas: The Water Court in Valencia, meeting \" matched on label",
+        "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"Micron 58% net margin: Memory-maker Micron's most recent qua\" matched on label"
+      ]
+    },
+    "mechanism": {
+      "expected": 6,
+      "matched": 5,
+      "forbidden_total": 0,
+      "forbidden_hit": 0,
+      "misses": [
+        "land value tax"
+      ],
+      "forbidden_hits": [],
+      "notes": [
+        "mechanism name match for \"DIR fees\" but description keywords did not hit",
+        "mechanism name match for \"DIR fees\" but domain keywords did not hit in description",
+        "mechanism name match for \"custom-silicon substitution\" but domain keywords did not hit in description",
+        "mechanism name match for \"salary cap\" but domain keywords did not hit in description",
+        "mechanism name match for \"Rule 10b-18 safe harbor\" but description keywords did not hit",
+        "mechanism name match for \"Rule 10b-18 safe harbor\" but domain keywords did not hit in description"
+      ]
+    },
+    "named_position": {
+      "expected": 4,
+      "matched": 3,
+      "forbidden_total": 1,
+      "forbidden_hit": 0,
+      "misses": [
+        "capture thesis"
+      ],
+      "forbidden_hits": [],
+      "notes": [
+        "position name match for \"tragedy of the commons\" but content keywords did not hit",
+        "position name match for \"tragedy of the commons\" but proponent \"\" not in expected list"
+      ]
+    },
+    "opposition": {
+      "expected": 4,
+      "matched": 2,
+      "forbidden_total": 0,
+      "forbidden_hit": 0,
+      "misses": [
+        "towers in a park vs short blocks",
+        "competitive balance vs dynasty"
+      ],
+      "forbidden_hits": [],
+      "notes": [
+        "opposition \"markets\" vs \"governments\" matched but axis \"solution to collective action problems\" not in expected list"
+      ]
+    }
+  },
+  "mechanism_atoms": {
+    "expected": 6,
+    "matched": 5,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "land value tax"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "mechanism name match for \"DIR fees\" but description keywords did not hit",
+      "mechanism name match for \"DIR fees\" but domain keywords did not hit in description",
+      "mechanism name match for \"custom-silicon substitution\" but domain keywords did not hit in description",
+      "mechanism name match for \"salary cap\" but domain keywords did not hit in description",
+      "mechanism name match for \"Rule 10b-18 safe harbor\" but description keywords did not hit",
+      "mechanism name match for \"Rule 10b-18 safe harbor\" but domain keywords did not hit in description"
+    ]
+  },
+  "named_position_atoms": {
+    "expected": 4,
+    "matched": 3,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [
+      "capture thesis"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "position name match for \"tragedy of the commons\" but content keywords did not hit",
+      "position name match for \"tragedy of the commons\" but proponent \"\" not in expected list"
+    ]
+  },
+  "evidence_atoms": {
+    "expected": 5,
+    "matched": 3,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "Ohio $224.8M",
+      "Pruitt-Igoe"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"68% specialty drug dispensing (2024): The FTC's 2024 finding\" matched on label",
+      "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"Tribunal de las Aguas: The Water Court in Valencia, meeting \" matched on label",
+      "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim \"Micron 58% net margin: Memory-maker Micron's most recent qua\" matched on label"
+    ]
+  },
+  "opposition_atoms": {
+    "expected": 4,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "towers in a park vs short blocks",
+      "competitive balance vs dynasty"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "opposition \"markets\" vs \"governments\" matched but axis \"solution to collective action problems\" not in expected list"
+    ]
+  },
+  "concession_atoms": {
+    "expected": 3,
+    "matched": 1,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "commons fail",
+      "PBMs do provide"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "concession addresses_contains_any check deferred to Stage 4 (Concedes edge walk); claim \"The base rate for being wrong about cycle timing is high giv\" matched on content"
+    ]
+  }
+}

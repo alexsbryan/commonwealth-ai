@@ -62,7 +62,10 @@ pub use manifest::{TypedExtensionManifest, MANIFEST_FILENAME, MANIFEST_SCHEMA_VE
 /// resolution — proponents previously had NOTHING to resolve against
 /// (the pass passed `existing_entities = &[]`, so every position
 /// persisted `proponent_id: None` and the person axis scored 0).
-pub const PRODUCED_BY: &str = "tiered_typed_extension_v3";
+/// v4 (2026-06-11): figure-bearing sentences recovered from beyond
+/// the excerpt windows feed Pass A — quantitative evidence sits
+/// mid-chunk and was paraphrased out of evidence labels.
+pub const PRODUCED_BY: &str = "tiered_typed_extension_v4";
 
 /// Pass A source recovery: only leaves with at most this many member
 /// chunks get verbatim excerpts (big leaves already aggregate too
@@ -74,6 +77,13 @@ const PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS: usize = 6;
 /// prefill on top of the summary — bounded, and the fast slot's
 /// prefill is cheap relative to the decode.
 const PASS_A_EXCERPT_CHARS: usize = 700;
+
+/// Figure-sentence recovery (v4) bounds: per-chunk and per-leaf caps
+/// plus a per-sentence char budget. Generic digit-bearing-sentence
+/// detection — not tuned to any golden's values.
+const PASS_A_FIGURE_SENTENCES_PER_CHUNK: usize = 3;
+const PASS_A_MAX_FIGURE_SENTENCES: usize = 8;
+const PASS_A_FIGURE_SENTENCE_CHARS: usize = 240;
 
 /// Summary of what `run_typed_extension` did in one finalize_corpus
 /// call. Mostly diagnostic — the durable record is the
@@ -240,11 +250,19 @@ pub async fn run_typed_extension(
     let mut citations: HashMap<String, SourceCitation> = HashMap::new();
     for leaf in &leaves {
         pass_a_calls += 1;
-        let member_excerpts = match index.as_ref() {
-            Some(ix) => member_excerpts_for_leaf(ix, leaf).await,
-            None => Vec::new(),
+        let (member_excerpts, figure_sentences) = match index.as_ref() {
+            Some(ix) => member_source_for_leaf(ix, leaf).await,
+            None => (Vec::new(), Vec::new()),
         };
-        match pass::pass_a_one_leaf(corpus_id, leaf, &member_excerpts, inference).await {
+        match pass::pass_a_one_leaf(
+            corpus_id,
+            leaf,
+            &member_excerpts,
+            &figure_sentences,
+            inference,
+        )
+        .await
+        {
             Ok(Some((section, citation))) => {
                 citations.insert(section.section_id.clone(), citation);
                 sections.push(section);
@@ -704,26 +722,37 @@ fn build_person_seed_entities(
     out
 }
 
-/// Verbatim member-chunk excerpts for a SMALL Pass A leaf. The leaf
-/// summary paraphrases; for an essay leaf of a few chunks the
-/// paraphrase compresses out the named binaries / concession
+/// Verbatim member-chunk source recovery for a SMALL Pass A leaf:
+/// `(excerpts, figure_sentences)`.
+///
+/// The leaf summary paraphrases; for an essay leaf of a few chunks
+/// the paraphrase compresses out the named binaries / concession
 /// phrasings the typed atoms must reproduce verbatim to resolve
-/// against the golden (measured 2026-06-11). Leaves with more than
+/// downstream (measured 2026-06-11). Leaves with more than
 /// [`PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS`] members get none —
 /// excerpts of a 20-chunk leaf are no longer representative, and the
-/// summary compresses less per chunk there. Best-effort: any parse or
-/// fetch failure returns an empty vec (the v1 input shape).
-async fn member_excerpts_for_leaf(
+/// summary compresses less per chunk there.
+///
+/// `figure_sentences` (v4) are digit-bearing sentences drawn from the
+/// FULL chunk text BEYOND each excerpt window — quantitative evidence
+/// (figures, dollar amounts, percentages) tends to sit mid-chunk,
+/// past the positional excerpt cut, and an evidence atom whose label
+/// paraphrases away the figure loses its identity. The detector is
+/// generic (any digit-bearing sentence), deliberately NOT tuned to
+/// any bench golden's particular values (overfitting audit,
+/// 2026-06-11). Best-effort: any parse or fetch failure returns
+/// empty vecs (the v1 input shape).
+async fn member_source_for_leaf(
     index: &corpus_engine::index::CorpusIndex,
     leaf: &ConvRaptorNodeRow,
-) -> Vec<String> {
+) -> (Vec<String>, Vec<String>) {
     let member_ids: Vec<u64> = leaf
         .direct_member_chunk_ids_json
         .as_deref()
         .and_then(|j| serde_json::from_str(j).ok())
         .unwrap_or_default();
     if member_ids.is_empty() || member_ids.len() > PASS_A_MAX_MEMBER_CHUNKS_FOR_EXCERPTS {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
     let mut chunks = match index.get_chunks(&member_ids).await {
         Ok(c) => c,
@@ -733,22 +762,63 @@ async fn member_excerpts_for_leaf(
                 error = %e,
                 "typed_extension: member chunk fetch failed; no excerpts"
             );
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
     };
     // get_chunks returns rows in storage order; keep document order.
     chunks.sort_by_key(|c| c.id);
-    chunks
-        .into_iter()
-        .map(|c| {
-            let mut text: String = c.content.chars().take(PASS_A_EXCERPT_CHARS).collect();
-            if c.content.chars().count() > PASS_A_EXCERPT_CHARS {
-                text.push('…');
+
+    let mut excerpts = Vec::new();
+    let mut figures = Vec::new();
+    for c in &chunks {
+        let excerpt: String = c.content.chars().take(PASS_A_EXCERPT_CHARS).collect();
+        let tail: String = c.content.chars().skip(PASS_A_EXCERPT_CHARS).collect();
+        figures.extend(figure_sentences_from(&tail, PASS_A_FIGURE_SENTENCES_PER_CHUNK));
+        let mut text = excerpt;
+        if !tail.is_empty() {
+            text.push('…');
+        }
+        if !text.trim().is_empty() {
+            excerpts.push(text);
+        }
+    }
+    figures.truncate(PASS_A_MAX_FIGURE_SENTENCES);
+    (excerpts, figures)
+}
+
+/// Digit-bearing sentences from `text`, up to `cap`, each truncated
+/// to [`PASS_A_FIGURE_SENTENCE_CHARS`]. Sentence boundary = `.`/`!`/`?`
+/// followed by whitespace (or end of text) — a bare `.` split would
+/// sever decimal figures ("$224.8") mid-number, mangling exactly the
+/// values this recovery exists to carry. Naive beyond that — good
+/// enough for recall; the LLM re-reads the sentence anyway.
+fn figure_sentences_from(text: &str, cap: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() && out.len() < cap {
+        let b = bytes[i];
+        let at_boundary = matches!(b, b'.' | b'!' | b'?')
+            && (i + 1 >= bytes.len() || bytes[i + 1].is_ascii_whitespace());
+        if at_boundary || i + 1 == bytes.len() {
+            let end = (i + 1).min(bytes.len());
+            if let Some(raw) = text.get(start..end) {
+                let s = raw.trim();
+                if s.len() >= 20 && s.chars().any(|c| c.is_ascii_digit()) {
+                    let mut sentence: String =
+                        s.chars().take(PASS_A_FIGURE_SENTENCE_CHARS).collect();
+                    if s.chars().count() > PASS_A_FIGURE_SENTENCE_CHARS {
+                        sentence.push('…');
+                    }
+                    out.push(sentence);
+                }
             }
-            text
-        })
-        .filter(|t| !t.trim().is_empty())
-        .collect()
+            start = end;
+        }
+        i += 1;
+    }
+    out
 }
 
 fn collect_member_quotes_for_theme(

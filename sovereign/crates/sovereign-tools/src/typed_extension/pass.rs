@@ -86,13 +86,19 @@ pub(super) async fn pass_a_one_leaf(
     corpus_id: &str,
     leaf: &ConvRaptorNodeRow,
     member_excerpts: &[String],
+    figure_sentences: &[String],
     inference: &Arc<dyn InferenceProvider>,
 ) -> Result<Option<(SectionExtraction, SourceCitation)>, String> {
     let primary_entities = parse_primary_entities(&leaf.primary_entities_json);
     let quote_spans = parse_quote_spans(&leaf.quote_spans_json);
     let quote_texts: Vec<String> = quote_spans.iter().map(|q| q.text.clone()).collect();
-    let user =
-        build_pass_a_user_body(&leaf.summary, &primary_entities, &quote_texts, member_excerpts);
+    let user = build_pass_a_user_body(
+        &leaf.summary,
+        &primary_entities,
+        &quote_texts,
+        member_excerpts,
+        figure_sentences,
+    );
     let extension = call_argumentative(
         PHASE1_ARGUMENTATIVE_SYSTEM,
         &user,
@@ -199,6 +205,7 @@ fn build_pass_a_user_body(
     primary_entities: &[String],
     quote_spans: &[String],
     member_excerpts: &[String],
+    figure_sentences: &[String],
 ) -> String {
     let mut body = String::new();
     body.push_str("# RAPTOR leaf — argumentative typed extension\n\n");
@@ -239,16 +246,38 @@ fn build_pass_a_user_body(
         }
     }
 
+    if !figure_sentences.is_empty() {
+        body.push_str(
+            "**Figure-bearing source sentences (verbatim; from beyond the \
+             excerpt windows above). Quantitative evidence lives here — when \
+             one of these supports an `evidence_invocations` atom, the label \
+             must carry the exact figure and proper names as written:**\n\n",
+        );
+        for sentence in figure_sentences {
+            body.push_str("- ");
+            body.push_str(sentence.trim());
+            body.push('\n');
+        }
+        body.push('\n');
+    }
+
     body.push_str(
+        // Example names below are deliberately NOT entities from any
+        // bench golden — using golden probe names here would teach
+        // the model to pattern-match toward the bench (overfitting
+        // audit, 2026-06-11).
         "Return a single JSON object with the typed-extension collections per the \
          schema in the system message. Extract atoms ONLY when the source above \
          directly supports them — do not invent material the cluster does not \
          contain. When a named position belongs to a NAMED person or school in \
-         the source (\"Hardin argues…\", \"Ostrom's view…\"), set that position's \
-         `proponent` to the name as the source writes it; leave `proponent` \
-         empty for the author's own voice. Omit any collection you cannot \
-         populate with real content from this cluster. No prose, no <think> \
-         block, no code-fence markers.",
+         the source (\"Keynes argues…\", \"the Chicago school's view…\"), set \
+         that position's `proponent` to the name as the source writes it; \
+         leave `proponent` empty for the author's own voice. When the source \
+         cites figures, named case studies, or historical examples, carry the \
+         EXACT values and proper names into `evidence_invocations` labels — \
+         a figure paraphrased loses its identity. Omit any collection you \
+         cannot populate with real content from this cluster. No prose, no \
+         <think> block, no code-fence markers.",
     );
     body
 }
@@ -382,6 +411,7 @@ mod tests {
             &["spread pricing".into(), "PBM".into()],
             &[],
             &[],
+            &[],
         );
         assert!(body.contains("Spread pricing"));
         assert!(body.contains("Primary entities"));
@@ -398,6 +428,7 @@ mod tests {
                 "The practice known as spread pricing lets PBMs charge payers more than they reimburse pharmacies.".into(),
                 "FTC documented $1.4B per year in spread pricing income across the top three PBMs.".into(),
             ],
+            &[],
             &[],
         );
         assert!(body.contains("Verbatim source excerpts"));
@@ -420,13 +451,14 @@ mod tests {
             &[],
             &["Hardin says ruin is inevitable; there is a graveyard of analysts who called the top."
                 .into()],
+            &[],
         );
         assert!(body.contains("Member chunk excerpts"));
         assert!(body.contains("graveyard of analysts"));
         assert!(body.contains("prefer THESE"));
 
         // Empty excerpts = v1 body shape, no stray heading.
-        let v1 = build_pass_a_user_body("summary", &[], &[], &[]);
+        let v1 = build_pass_a_user_body("summary", &[], &[], &[], &[]);
         assert!(!v1.contains("Member chunk excerpts"));
     }
 
@@ -434,7 +466,8 @@ mod tests {
     fn pass_a_user_body_truncates_overly_long_quotes() {
         use corpus_engine::enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP;
         let long = "a".repeat(SOURCE_RECOVERY_QUOTE_CHAR_CAP + 50);
-        let body = build_pass_a_user_body("summary text here is long enough", &[], &[long], &[]);
+        let body =
+            build_pass_a_user_body("summary text here is long enough", &[], &[long], &[], &[]);
         // Body carries an ellipsis token confirming truncation engaged.
         assert!(body.contains('…'));
     }
