@@ -163,14 +163,24 @@ impl<'a> LlamaContextExt<'a> for cpp::context::LlamaContext<'a> {
 /// observed 2026-05-19 with `gemma-4-E4B-it-Q6_K`: the model generated
 /// 14k tokens of role-play and tripped the inference deadline.
 pub fn chat_template(model: &cpp::model::LlamaModel) -> Option<String> {
+    chat_template_with(|buf_size| model.get_chat_template(buf_size))
+}
+
+/// The retry policy behind [`chat_template`], generic over the lookup
+/// so the BuffSizeError-retry contract is pinned by weight-free tests
+/// (the Gemma-4 P0: a silent lookup failure fell through to plain-text
+/// concat and the model role-played for 14k tokens).
+pub(crate) fn chat_template_with(
+    mut get: impl FnMut(usize) -> Result<String, cpp::ChatTemplateError>,
+) -> Option<String> {
     use cpp::ChatTemplateError;
     const INITIAL_BUF: usize = 8 * 1024;
     const MAX_BUF: usize = 256 * 1024;
-    match model.get_chat_template(INITIAL_BUF) {
+    match get(INITIAL_BUF) {
         Ok(t) => Some(t),
         Err(ChatTemplateError::BuffSizeError(needed)) => {
             let retry = needed.min(MAX_BUF);
-            match model.get_chat_template(retry) {
+            match get(retry) {
                 Ok(t) => Some(t),
                 Err(e) => {
                     tracing::warn!(
@@ -189,6 +199,77 @@ pub fn chat_template(model: &cpp::model::LlamaModel) -> Option<String> {
             tracing::warn!(error = %e, "chat_template lookup failed");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod chat_template_tests {
+    use super::chat_template_with;
+    use super::cpp::ChatTemplateError;
+
+    #[test]
+    fn first_try_success_does_not_retry() {
+        let mut calls = 0;
+        let t = chat_template_with(|buf| {
+            calls += 1;
+            assert_eq!(buf, 8 * 1024, "initial buffer is 8 KiB");
+            Ok("template".to_string())
+        });
+        assert_eq!(t.as_deref(), Some("template"));
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn buff_size_error_retries_with_requested_size() {
+        // The Gemma-4 P0: tool-call template ~12 KiB crosses the 8 KiB
+        // initial buffer; pre-fix the lookup silently returned None and
+        // the daemon fell through to plain-text concat.
+        let mut sizes = Vec::new();
+        let t = chat_template_with(|buf| {
+            sizes.push(buf);
+            if buf < 12 * 1024 {
+                Err(ChatTemplateError::BuffSizeError(12 * 1024))
+            } else {
+                Ok("gemma tool template".to_string())
+            }
+        });
+        assert_eq!(t.as_deref(), Some("gemma tool template"));
+        assert_eq!(sizes, vec![8 * 1024, 12 * 1024]);
+    }
+
+    #[test]
+    fn retry_size_is_capped_at_256_kib() {
+        let mut sizes = Vec::new();
+        let _ = chat_template_with(|buf| {
+            sizes.push(buf);
+            Err(ChatTemplateError::BuffSizeError(usize::MAX))
+        });
+        assert_eq!(sizes, vec![8 * 1024, 256 * 1024], "cap, then give up");
+    }
+
+    #[test]
+    fn missing_template_is_none_without_retry() {
+        // gguf genuinely lacks tokenizer.chat_template — None is the
+        // honest answer, not an error to retry.
+        let mut calls = 0;
+        let t = chat_template_with(|_| {
+            calls += 1;
+            Err(ChatTemplateError::MissingTemplate(-1))
+        });
+        assert!(t.is_none());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn retry_failure_falls_back_to_none() {
+        let t = chat_template_with(|buf| {
+            if buf == 8 * 1024 {
+                Err(ChatTemplateError::BuffSizeError(16 * 1024))
+            } else {
+                Err(ChatTemplateError::MissingTemplate(-1))
+            }
+        });
+        assert!(t.is_none(), "retry failure → plain-text concat fallback");
     }
 }
 
