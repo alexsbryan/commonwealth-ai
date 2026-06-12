@@ -673,12 +673,20 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 (claim extraction, forced-choice support, joint long-form judge), `search.rs`
 (`SealedEvidenceSearch` trait — claim-conditioned widening that can never
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
-`EvidenceContext`). Gated surfaces today: streaming/non-streaming
-KnowledgeQuery + streaming DeepQuery; rollout is per-surface env-gated
-(`SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
-override) — each new surface ships only with its own calibration bank
-(attached-doc, complex-task, simple-query and refinement re-gate are the
-planned extensions). (Note: effort-tier escalation default-ON *improves* chaos
+`EvidenceContext`). Gated surfaces today (all env-gated;
+`SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
+override): streaming/non-streaming KnowledgeQuery + streaming DeepQuery
+(dual-bank validated), attached-doc (dual-bank validated: Conrad dev bank +
+Meridian holdout under `bench/attached_doc/`; `AttachedAssetSearcher` seals
+claim search to the asset), complex-task (narration gated per-claim against
+the step transcript, verbatim derivation appendix untouched; calibration bank
+pending), simple-query (non-witness, retrieval-matched turns only). The
+refinement overwrite path re-gates verify-only (`RefinementGuard`): a
+gate-released answer is never overwritten by text that fails the same gate.
+Corpus-deictic questions ("the story", "this document") close the GK-caveat
+exemption like entity anchoring does. Metalingual answers are structurally
+grounded instead of gated: decode-committed term-absent caveat / source
+attribution + the quote guardrail (calibration bank pending). (Note: effort-tier escalation default-ON *improves* chaos
 competence 0.33 → 0.46 — a net win, not a regression.)
 
 **Retrieval pipeline (`runtime/retrieval_pipeline.rs`).** The

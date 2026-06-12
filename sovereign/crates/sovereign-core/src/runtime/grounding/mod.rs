@@ -51,9 +51,9 @@ pub use config::grounding_gate_flags;
 #[allow(unused_imports)]
 pub(crate) use judge::{verify_grounding, GateVerdict};
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
-// type re-export is for call sites that name it (Phase 2+).
+// type re-exports are for call sites that name them.
 #[allow(unused_imports)]
-pub(crate) use search::{ClaimSearcher, SealedEvidenceSearch};
+pub(crate) use search::{AttachedAssetSearcher, ClaimSearcher, SealedEvidenceSearch};
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -101,14 +101,35 @@ pub(crate) fn grounded_abstention(claim: &str, chunks_checked: usize) -> String 
 /// System-message suffix for the single gated retry. Quotes the failed
 /// claim back — the second draft knows exactly which assertion failed
 /// verification and must either ground it or drop it.
-pub(crate) fn retry_system_note(claim: &str) -> String {
-    format!(
+pub(crate) fn retry_system_note(claim: &str, corrective: &[String]) -> String {
+    const RETRY_EVIDENCE_PER_CLAIM: usize = 2;
+    const RETRY_EVIDENCE_CHARS: usize = 700;
+    let mut note = format!(
         "\n\nGROUNDING CHECK FAILED on your previous draft. It asserted: \"{claim}\" — \
-         no retrieved passage supports that assertion. Write a new answer using ONLY \
-         what the passages state. If the passages do not contain the asked-for fact, \
-         say plainly that the sources do not state it. Do not repeat the unsupported \
-         assertion."
-    )
+         no retrieved passage supports that assertion."
+    );
+    if corrective.is_empty() {
+        note.push_str(
+            " Write a new answer using ONLY what the passages state. If the passages \
+             do not contain the asked-for fact, say plainly that the sources do not \
+             state it. Do not repeat the unsupported assertion.",
+        );
+    } else {
+        // Parity with the long-form rewrite (measured v13c–v15): a
+        // retry told only WHICH assertion failed, with no passages
+        // stating the truth, can only delete and disclaim.
+        note.push_str("\n  What the sources actually say on this point:");
+        for p in corrective.iter().take(RETRY_EVIDENCE_PER_CLAIM) {
+            let trimmed: String = p.chars().take(RETRY_EVIDENCE_CHARS).collect();
+            note.push_str(&format!("\n  | {}", trimmed.replace('\n', "\n  | ")));
+        }
+        note.push_str(
+            "\nWrite a new answer using ONLY what the passages state — if the \
+             passages above contain the asked-for fact, state it (with citations); \
+             do not repeat the unsupported assertion.",
+        );
+    }
+    note
 }
 
 /// Final outcome of a full gate ladder over one draft answer.
@@ -144,7 +165,16 @@ pub(crate) async fn gate_answer(
     let mut action = "released";
     let mut retried = false;
     let mut final_vp: Option<f64> = None;
-    match verify_grounding(inference, question, &text, chunks, entity_anchored).await {
+    match verify_grounding(
+        inference,
+        question,
+        &text,
+        chunks,
+        entity_anchored,
+        evidence.searcher.as_ref(),
+    )
+    .await
+    {
         Some(v) => {
             final_vp = Some(v.violation_prob);
             if v.violation_prob >= tau {
@@ -171,8 +201,10 @@ pub(crate) async fn gate_answer(
                     retried = true;
                     let mut retry_req = base_request.clone();
                     let base_sys = retry_req.system_message.clone().unwrap_or_default();
-                    retry_req.system_message =
-                        Some(format!("{base_sys}{}", retry_system_note(&claim)));
+                    retry_req.system_message = Some(format!(
+                        "{base_sys}{}",
+                        retry_system_note(&claim, &v.claim_evidence)
+                    ));
                     retry_req.assistant_prefix = None;
                     match inference.complete(&retry_req).await {
                         Ok(resp) => {
@@ -183,6 +215,7 @@ pub(crate) async fn gate_answer(
                                 &second,
                                 chunks,
                                 entity_anchored,
+                                evidence.searcher.as_ref(),
                             )
                             .await
                             {
@@ -510,6 +543,130 @@ async fn gate_longform(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::error::{Error, Result};
+    use crate::types::{Depth, ProviderCapabilities};
+    use crate::types::CompletionResponse;
+    use futures::Stream;
+    use std::pin::Pin;
+
+    /// Prompt-routing mock for the gate's judge calls: claim
+    /// extraction returns a fixed claim; every forced-choice support
+    /// check returns `support` (as a logprob A/B distribution).
+    struct GateMock {
+        support: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for GateMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            let text = if request
+                .structured_output
+                .as_ref()
+                .map(|s| s.to_string().contains("x_forced_choice"))
+                .unwrap_or(false)
+            {
+                if self.support {
+                    r#"{"A": 0.98, "B": 0.02}"#.to_string()
+                } else {
+                    r#"{"A": 0.02, "B": 0.98}"#.to_string()
+                }
+            } else if request.prompt.contains("single central factual claim") {
+                "The shop is located on Crescent Lane.".to_string()
+            } else {
+                "unexpected synthesis call".to_string()
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "gate-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("GateMock: no streaming".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    fn refinement_evidence() -> EvidenceContext {
+        EvidenceContext {
+            chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
+            searcher: None,
+            entity_anchored: false,
+        }
+    }
+
+    /// The Phase-6 invariant's gate half: verify-only (retry: false)
+    /// on an unsupported claim must return `abstained_no_retry` — the
+    /// caller (collaboration refinement) keeps the verified original.
+    #[tokio::test]
+    async fn verify_only_failure_is_abstained_no_retry() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: false });
+        let profile = GateSurface::Refinement.profile();
+        assert!(!profile.retry);
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Crescent Lane.".to_string(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("abstained_no_retry")
+        );
+        assert!(outcome.text.starts_with("Your sources don't establish"));
+    }
+
+    /// Supported claims release unchanged under verify-only.
+    #[tokio::test]
+    async fn verify_only_supported_claim_releases() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        let draft = "The shop is on Harbour Row.".to_string();
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            draft.clone(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released")
+        );
+        assert_eq!(outcome.text, draft);
+    }
 
     fn fc(claim: &str, evidence: &[&str]) -> FailedClaim {
         FailedClaim {

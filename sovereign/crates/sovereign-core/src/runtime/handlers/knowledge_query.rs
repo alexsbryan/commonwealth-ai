@@ -1061,7 +1061,13 @@ impl Runtime {
         KnowledgeQueryPlan {
             request,
             chunks,
-            gate_entity_anchored: agentic_entity_anchored,
+            // Deictic questions ("the story", "this document") are
+            // in-world without naming an entity — they close the GK
+            // exemption the same way entity anchoring does (gate flag
+            // only; the agentic loop's own in-world verdict is a
+            // separately-measured behavior and is not widened here).
+            gate_entity_anchored: agentic_entity_anchored
+                || crate::runtime::evidence_loop::question_is_corpus_deictic(message),
             doc_context,
             shape,
             route,

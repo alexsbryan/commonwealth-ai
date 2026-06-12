@@ -749,7 +749,9 @@ impl Runtime {
             // Test/CLI entrypoint: no live session_id available
             // here. The streaming-spawn path passes its own
             // routing_events + session_id so the user actually
-            // sees the gap-check chips.
+            // sees the gap-check chips — and its own
+            // RefinementGuard when the turn was gate-released.
+            None,
             None,
             None,
         )

@@ -178,6 +178,41 @@ impl Runtime {
             completion.text.clone()
         };
 
+        // Production grounding gate (GateSurface::SimpleQuery,
+        // env-gated default-off): fires only when retrieval actually
+        // matched (kc.chunks non-empty) and the witness/relational
+        // path is NOT active — witness moves are about memories and
+        // dialectic, not corpus facts, and are explicitly out of gate
+        // scope. Claim search is sealed to the conversation's corpora.
+        let gate_surface = crate::runtime::grounding::GateSurface::SimpleQuery;
+        let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let response_text = if gate_surface.enabled() && !want_witness_path && !kc.chunks.is_empty()
+        {
+            let gate_evidence = crate::runtime::grounding::EvidenceContext {
+                chunks: kc.chunks.iter().map(|c| c.content.clone()).collect(),
+                searcher: Some(std::sync::Arc::new(self.claim_searcher(
+                    context.conversation.enabled_corpora.as_deref(),
+                    &kc.chunks,
+                )) as _),
+                entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(
+                    message,
+                ),
+            };
+            let outcome = crate::runtime::grounding::gate_answer(
+                &self.inference,
+                message,
+                response_text.clone(),
+                &gate_evidence,
+                &request,
+                &gate_surface.profile(),
+            )
+            .await;
+            grounding_gate_meta = Some(outcome.meta);
+            outcome.text
+        } else {
+            response_text
+        };
+
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
         // No-ops when disabled. Evidence is the same formatted-chunks text
         // that was injected into the synthesis prompt (or empty if no
@@ -239,14 +274,20 @@ impl Runtime {
             role: Role::Assistant,
             content: final_content,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "model": completion.model_id,
-                "tokens": completion.tokens_used,
-                "latency_ms": completion.latency_ms,
-                "provenance": provenance,
-                "retrieved_chunks": kc.retrieved_chunks,
-                "recalled_memories": recalled_memories_metadata,
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "model": completion.model_id,
+                    "tokens": completion.tokens_used,
+                    "latency_ms": completion.latency_ms,
+                    "provenance": provenance,
+                    "retrieved_chunks": kc.retrieved_chunks,
+                    "recalled_memories": recalled_memories_metadata,
+                });
+                if let Some(g) = grounding_gate_meta {
+                    m["grounding_gate"] = g;
+                }
+                m
+            }),
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;

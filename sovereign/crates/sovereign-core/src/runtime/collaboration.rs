@@ -342,6 +342,16 @@ pub(crate) async fn run_collaboration(
 /// emit `message-refined`. Called both from `handle_message_stream`'s
 /// spawn (which has owned `Arc`s but no live `&self`) and from the
 /// corresponding method on `Runtime`.
+/// Re-gate capability for the refinement overwrite path. Carried by
+/// callers whose original answer was released by the grounding gate:
+/// the structural invariant is that a verified answer can NEVER be
+/// overwritten by text that fails the same gate. `None` = today's
+/// behavior, byte-identical.
+pub(crate) struct RefinementGuard {
+    pub inference: std::sync::Arc<dyn InferenceProvider>,
+    pub evidence: crate::runtime::grounding::EvidenceContext,
+}
+
 pub(crate) async fn run_post_stream_refinement(
     inference: &dyn InferenceProvider,
     approval: &dyn ApprovalChannel,
@@ -359,6 +369,7 @@ pub(crate) async fn run_post_stream_refinement(
     // / test callers pass `None`.
     routing_events: Option<Arc<dyn RoutingEventSink>>,
     session_id: Option<String>,
+    grounding_guard: Option<RefinementGuard>,
 ) -> Option<String> {
     let outcome = run_collaboration(
         inference,
@@ -400,6 +411,44 @@ pub(crate) async fn run_post_stream_refinement(
                 }
                 v.rewritten
             };
+            // Refinement re-gate (GateSurface::Refinement, verify-only
+            // — the refinement itself was the rewrite). On failure:
+            // KEEP the verified original, but still emit
+            // `message-refined` with the original content — the UI's
+            // `refining` flag must clear either way.
+            if let Some(guard) = &grounding_guard {
+                let profile =
+                    crate::runtime::grounding::GateSurface::Refinement.profile();
+                let outcome = crate::runtime::grounding::gate_answer(
+                    &guard.inference,
+                    question,
+                    refined.clone(),
+                    &guard.evidence,
+                    &crate::types::CompletionRequest::default(),
+                    &profile,
+                )
+                .await;
+                let action = outcome
+                    .meta
+                    .get("action")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("released");
+                if matches!(action, "abstained_no_retry" | "annotated_no_retry") {
+                    tracing::warn!(
+                        target: "grounding_gate",
+                        message_id = %message_id,
+                        action,
+                        "refinement_rejected: refined text failed the grounding \
+                         gate — keeping the verified original"
+                    );
+                    approval.emit_message_refined(MessageRefinedPayload {
+                        conversation_id: conversation_id.to_string(),
+                        message_id: message_id.to_string(),
+                        new_content: original_content.to_string(),
+                    });
+                    return None;
+                }
+            }
             let updated = Message {
                 id: message_id.to_string(),
                 conversation_id: conversation_id.to_string(),

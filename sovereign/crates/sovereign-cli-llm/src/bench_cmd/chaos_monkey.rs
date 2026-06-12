@@ -119,6 +119,14 @@ struct Args {
     /// judge still runs against the daemon in both modes.
     bridge: bool,
     bridge_url: String,
+    /// Attached-document surface: ingest this file as a DocumentAsset
+    /// (or reuse one via --attached-asset) and dispatch every question
+    /// through a minted DocumentSession → `handle_attached_doc_turn`.
+    /// Judging evidence = the asset's full chunk set (truth-vs-document;
+    /// `provenance_trap` questions are not meaningful on this lane).
+    /// Direct transport only.
+    attached: Option<PathBuf>,
+    attached_asset: Option<String>,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -143,6 +151,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut gv_shadow = false;
     let mut bridge = false;
     let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
+    let mut attached: Option<PathBuf> = None;
+    let mut attached_asset: Option<String> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -177,6 +187,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
                 };
             }
             "--bridge-url" => bridge_url = val!("--bridge-url"),
+            "--attached" => attached = Some(PathBuf::from(val!("--attached"))),
+            "--attached-asset" => attached_asset = Some(val!("--attached-asset")),
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -191,6 +203,16 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
              Critic's violation_prob without gating)"
                 .into(),
         );
+    }
+    if (attached.is_some() || attached_asset.is_some()) && (naked || bridge) {
+        return Err(
+            "--attached / --attached-asset is the attached-document surface lane — direct \
+             transport only (mutually exclusive with --naked and --transport desktop-bridge)"
+                .into(),
+        );
+    }
+    if attached.is_some() && attached_asset.is_some() {
+        return Err("--attached and --attached-asset are mutually exclusive".into());
     }
     Ok(Args {
         bank: bank.ok_or("--bank is required")?,
@@ -207,6 +229,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         gv_shadow,
         bridge,
         bridge_url,
+        attached,
+        attached_asset,
     })
 }
 
@@ -288,6 +312,55 @@ async fn run(rest: &[String]) -> i32 {
             }
         }
     };
+    // Attached-document lane: resolve (or ingest) the asset once; every
+    // question dispatches through a minted DocumentSession against it.
+    // Judging evidence = the asset's full chunk set (truth-vs-document).
+    let attached_setup: Option<(
+        sovereign_core::types::DocumentAsset,
+        Vec<sovereign_core::types::DocumentChunk>,
+    )> =
+        if args.attached.is_some() || args.attached_asset.is_some() {
+            let session = session
+                .as_ref()
+                .expect("attached lane is direct-transport only (validated in parse_args)");
+            let asset = if let Some(id) = &args.attached_asset {
+                match session.store.get_document_asset(id).await {
+                    Ok(Some(a)) => a,
+                    _ => {
+                        eprintln!("error: --attached-asset {id}: asset not found");
+                        return 1;
+                    }
+                }
+            } else {
+                let path = args.attached.as_ref().unwrap();
+                let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+                    std::sync::Arc::clone(&session.inference),
+                    std::sync::Arc::clone(&session.store),
+                );
+                match manager.ingest(path.as_path(), |_| {}).await {
+                    Ok(a) => a,
+                    Err(e) => {
+                        eprintln!("error: attached ingest failed: {e}");
+                        return 1;
+                    }
+                }
+            };
+            let doc_chunks = session
+                .store
+                .get_chunks_by_source(&asset.source_key())
+                .await
+                .unwrap_or_default();
+            eprintln!(
+                "[chaos] transport=attached-doc asset=\"{}\" id={} ({} chunks) — reuse with --attached-asset {}",
+                asset.title,
+                asset.id,
+                doc_chunks.len(),
+                asset.id
+            );
+            Some((asset, doc_chunks))
+        } else {
+            None
+        };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
     let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
         &v1,
@@ -349,7 +422,12 @@ async fn run(rest: &[String]) -> i32 {
             .unwrap_or_else(|| "primary".to_string());
         // Answer source per transport; everything downstream (judges,
         // critic gate, deterministic checks, scorer) is shared verbatim.
-        let live = match (naked_provider.as_deref(), &bridge_client, &session) {
+        let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session)
+        {
+            crate::bench_cmd::live_runner::run_attached(session, asset, &q.question, doc_chunks)
+                .await
+        } else {
+            match (naked_provider.as_deref(), &bridge_client, &session) {
             (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
             (None, Some(client), _) => {
                 match super::desktop_bridge::run_bridge_live(
@@ -372,6 +450,7 @@ async fn run(rest: &[String]) -> i32 {
             }
             (None, None, Some(session)) => run_live(session, &corpus, &q.question).await,
             (None, None, None) => unreachable!("one of session/bridge is always built"),
+            }
         };
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
@@ -464,15 +543,19 @@ async fn score_question(
     let gated = grounding_verify && violation_prob.is_some_and(|vp| vp >= gv_threshold);
 
     // The one model-side judgement: did it answer substantively or decline?
-    // Prototype A/B (SOVEREIGN_CHAOS_EXTRACTION_SCORER=1): answerable
-    // questions use the extraction test — "does a reader of this reply
-    // come away with the answer?" — instead of decline-detection.
-    // Absent questions always keep decline-detection: there, "did it
-    // decline?" IS the scored behavior.
+    // Prototype A/B (SOVEREIGN_CHAOS_EXTRACTION_SCORER=1): the extraction
+    // test — "does a reader of this reply come away with an answer?" —
+    // instead of decline-detection, on EVERY question. Both failure
+    // directions of decline-detection are now measured: a disclaimer-led
+    // essay that states the facts reads as a decline (v14, present
+    // questions), and a rich cited "the document does not name her" reads
+    // as an answer (attached-doc lane 2026-06-11, absent questions). The
+    // extraction framing scores both by reader takeaway — the quantity
+    // the red lines are actually about.
     let agent_action = if gated {
         AgentAction::Abstained
     } else {
-        let verdict = if extraction_scorer_enabled() && q.qtype.is_answerable() {
+        let verdict = if extraction_scorer_enabled() {
             classify_extraction(judge, judge_model, &q.question, &visible).await
         } else {
             classify_abstain(judge, judge_model, &visible).await

@@ -208,6 +208,35 @@ impl Runtime {
              cover the term, say so explicitly — do not substitute generic \
              knowledge. Source attribution is the whole point of this answer."
         );
+        // Structural honesty + attribution (contract principle 4 —
+        // structure over instruction, the GK-caveat lesson): the
+        // opening is decode-COMMITTED via assistant_prefix, not
+        // requested in the prompt. Two shapes:
+        //   - the question quotes term(s) and NONE appears in the
+        //     retrieved material → commit the term-absent caveat (the
+        //     prompt's "say so explicitly" was instruction-only,
+        //     ~60% compliance class);
+        //   - otherwise → commit the source-anchored opening so the
+        //     answer is structurally about the located source.
+        // assistant_prefix is decode-commit only — prepended to the
+        // returned text below, same contract as GK_CAVEAT_PREFIX.
+        let asked_terms = quoted_terms(message);
+        let any_term_present = asked_terms.iter().any(|t| {
+            let tl = t.to_lowercase();
+            chunks.iter().any(|c| c.content.to_lowercase().contains(&tl))
+        });
+        let committed_prefix: String = if !asked_terms.is_empty() && !any_term_present {
+            format!(
+                "The term {} does not appear in the material I retrieved from {locator_phrase}. ",
+                asked_terms
+                    .iter()
+                    .map(|t| format!("\"{t}\""))
+                    .collect::<Vec<_>>()
+                    .join(" / ")
+            )
+        } else {
+            format!("In {locator_phrase}: ")
+        };
         let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
         let request = CompletionRequest {
             prompt,
@@ -225,7 +254,7 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
-            assistant_prefix: None,
+            assistant_prefix: Some(committed_prefix.clone()),
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
@@ -233,6 +262,20 @@ impl Runtime {
         };
 
         let completion = self.inference.complete(&request).await?;
+        // Prefix is decode-commit only; quote guardrail runs on the
+        // full released text against exactly the evidence the model
+        // saw (graceful no-op when knowledge_block is empty).
+        let full_text = format!("{committed_prefix}{}", completion.text);
+        let verified = crate::quote_verification::verify_answer_against_evidence(
+            &full_text,
+            &knowledge_block,
+        );
+        if verified.demoted_count > 0 {
+            tracing::warn!(
+                demoted = verified.demoted_count,
+                "metalingual: quote guardrail demoted unverified quotations"
+            );
+        }
         let sources: Vec<String> = chunks
             .iter()
             .filter_map(|c| c.title.clone())
@@ -243,7 +286,7 @@ impl Runtime {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: _conversation_id.to_string(),
             role: Role::Assistant,
-            content: completion.text,
+            content: verified.rewritten,
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "intent": "MetalingualQuery",
@@ -258,5 +301,56 @@ impl Runtime {
             task: None,
             metrics: None,
         })
+    }
+}
+
+/// Terms the question explicitly quotes ('x', "x", `x`) — the things a
+/// metalingual question is ABOUT. Pure; drives the structural
+/// term-absent caveat above.
+fn quoted_terms(message: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    for quote in ['\'', '"', '`'] {
+        let mut parts = message.split(quote);
+        // Odd-indexed segments are inside quotes — but only when the
+        // CLOSING quote exists (an unpaired apostrophe in "What's"
+        // must not turn the rest of the sentence into a term).
+        parts.next();
+        while let Some(inside) = parts.next() {
+            if parts.next().is_none() {
+                break; // unpaired — not a quoted term
+            }
+            let t = inside.trim();
+            if t.len() >= 2 && t.len() <= 60 && !t.contains('\n') {
+                terms.push(t.to_string());
+            }
+        }
+    }
+    terms
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quoted_terms;
+
+    #[test]
+    fn quoted_terms_extracts_each_quote_style() {
+        assert_eq!(
+            quoted_terms("How is 'sovereignty' used in this codebase?"),
+            vec!["sovereignty"]
+        );
+        assert_eq!(
+            quoted_terms("What does `EmbedFn` mean here?"),
+            vec!["EmbedFn"]
+        );
+        assert_eq!(
+            quoted_terms("Define \"mesh seal\" as the docs use it"),
+            vec!["mesh seal"]
+        );
+    }
+
+    #[test]
+    fn quoted_terms_ignores_unquoted_and_degenerate() {
+        assert!(quoted_terms("How is sovereignty used here?").is_empty());
+        assert!(quoted_terms("What's a y?").is_empty()); // apostrophe noise stays out
     }
 }
