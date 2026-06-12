@@ -12,7 +12,7 @@ use bytes::Bytes;
 use serde::Deserialize;
 
 use commonwealth_app::manifest::MeshAppManifest;
-use commonwealth_state::StoreEntry;
+use commonwealth_state::{is_gossip_excluded, StoreEntry};
 
 use crate::state::AppState;
 
@@ -38,6 +38,24 @@ pub async fn recv_app_state(
 ) -> impl IntoResponse {
     let mut merged = 0usize;
     for raw in body.entries {
+        // Receiver-side privacy guard (defense in depth). The gossip
+        // SENDER already filters local-only namespaces via
+        // `all_entries_for_gossip`, but a buggy or hostile peer can
+        // POST anything to this route — mTLS proves the caller is in
+        // the mesh, not that it runs honest code. A local-only app_id
+        // arriving from the wire can only be a bug or an attack, so we
+        // refuse to merge it: the privacy guarantee must hold on BOTH
+        // ends, never trusting the sender to have filtered. See
+        // `GOSSIP_EXCLUDED_APP_IDS`.
+        if is_gossip_excluded(&raw.app_id) {
+            tracing::warn!(
+                app_id = %raw.app_id,
+                "rejected gossiped entry in a local-only namespace — a peer \
+                 sent a private app_id it should never have shipped (bug or \
+                 attack); not merging"
+            );
+            continue;
+        }
         let value_bytes = match base64_decode(&raw.value_b64) {
             Ok(b) => b,
             Err(_) => continue,

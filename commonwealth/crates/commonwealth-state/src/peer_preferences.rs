@@ -352,4 +352,51 @@ mod tests {
         assert!(is_gossip_excluded("activity-private"));
         assert!(!is_gossip_excluded("contributions"));
     }
+
+    /// **Completeness guard — constant ↔ list agreement, both ways.**
+    /// The exclusion list holds string literals; the namespaces have
+    /// named constants elsewhere. These can drift independently (rename
+    /// the constant, forget the literal — or vice versa). Pin both
+    /// directions against the actual constants so the privacy posture
+    /// can't silently rot:
+    /// - every PRIVATE constant must BE excluded (else it starts
+    ///   gossiping — the leak), and
+    /// - every PUBLIC constant must NOT be excluded (else replication
+    ///   silently stops — the inverse break, e.g. the contribution
+    ///   ledger going dark mesh-wide).
+    ///
+    /// A new local-only namespace added without a matching
+    /// `GOSSIP_EXCLUDED_APP_IDS` entry won't be caught here unless it
+    /// also exposes a constant — so the rule for reviewers stands:
+    /// a private namespace ships its `app_id` as a constant AND a line
+    /// in this test. The string-only members (`work-atlas-private`,
+    /// `notes-private`) are pinned by their own tests above and, for
+    /// work-atlas, by `Privacy::app_id()`'s in-crate agreement test.
+    #[test]
+    fn gossip_exclusion_list_agrees_with_named_constants() {
+        use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID, PROCESSED_SHARDS_APP_ID};
+
+        // Private — must be excluded.
+        assert!(
+            is_gossip_excluded(ACTIVITY_APP_ID),
+            "ACTIVITY_APP_ID ({ACTIVITY_APP_ID}) is local-only and must be \
+             in GOSSIP_EXCLUDED_APP_IDS"
+        );
+        assert!(
+            is_gossip_excluded(PEER_PREFERENCES_APP_ID),
+            "PEER_PREFERENCES_APP_ID ({PEER_PREFERENCES_APP_ID}) is local-only"
+        );
+
+        // Public — must NOT be excluded (over-exclusion silently kills
+        // replication of work you DID share with peers).
+        assert!(
+            !is_gossip_excluded(CONTRIBUTIONS_APP_ID),
+            "CONTRIBUTIONS_APP_ID ({CONTRIBUTIONS_APP_ID}) must gossip — it is \
+             the peer-facing counterpart to activity-private"
+        );
+        assert!(
+            !is_gossip_excluded(PROCESSED_SHARDS_APP_ID),
+            "PROCESSED_SHARDS_APP_ID ({PROCESSED_SHARDS_APP_ID}) must gossip"
+        );
+    }
 }
