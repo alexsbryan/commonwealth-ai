@@ -326,6 +326,103 @@ mod tests {
         assert_eq!(e.timestamp, 200);
     }
 
+    /// **LWW tie-break determinism (clock-skew vector).** Consumer
+    /// hardware clocks skew, so two nodes can stamp the same key with
+    /// the *same* second. `upsert_if_newer` accepts only `ts > existing`
+    /// (a later write at an equal timestamp is rejected), so locally
+    /// the INCUMBENT wins a tie — deterministic, no last-arrival thrash.
+    ///
+    /// KNOWN LIMITATION pinned here on purpose: this makes ties
+    /// *node-local* deterministic but NOT cross-node convergent. If A
+    /// holds X@100 and B holds Y@100 for the same key (equal stamp,
+    /// different origins), each rejects the other's value on merge and
+    /// they stay diverged — origin is not a tiebreaker. Acceptable
+    /// today because every gossiped namespace keys by origin/content
+    /// (so two nodes don't co-write one key at one second); if a future
+    /// shared-key namespace appears, add a deterministic tiebreaker
+    /// (e.g. higher origin NodeId wins) rather than relying on this.
+    #[test]
+    fn merge_entry_equal_timestamp_keeps_incumbent() {
+        let store = MeshStore::in_memory().unwrap();
+        let first = StoreEntry {
+            app_id: "a".into(),
+            key: "k".into(),
+            value: Bytes::from("incumbent"),
+            timestamp: 100,
+            origin: node(1),
+        };
+        assert!(store.merge_entry(first).unwrap());
+
+        // Same timestamp, different value+origin — must be rejected,
+        // deterministically, regardless of arrival order.
+        let tie = StoreEntry {
+            app_id: "a".into(),
+            key: "k".into(),
+            value: Bytes::from("challenger"),
+            timestamp: 100,
+            origin: node(2),
+        };
+        assert!(
+            !store.merge_entry(tie).unwrap(),
+            "equal-timestamp write must not displace the incumbent"
+        );
+        assert_eq!(store.get("a", "k").unwrap().unwrap().value.as_ref(), b"incumbent");
+    }
+
+    /// **Wire-layer privacy: private namespaces never leave the node.**
+    /// `all_entries_for_gossip` is the ONLY enumeration the gossip
+    /// sender (`sovereign-mesh::gossip` Step 4) ships to peers, so it is
+    /// the load-bearing chokepoint. Replicate node A → node B exactly
+    /// as the sender does and assert no excluded namespace crosses,
+    /// while the public namespace does. Mirrors the work-atlas
+    /// `cross_node` tests at the layer where the namespace constants
+    /// live (`peer_preferences`, `activity-private`).
+    #[test]
+    fn private_namespaces_never_enter_the_gossip_set() {
+        use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID};
+
+        let a = MeshStore::in_memory().unwrap();
+        a.set(crate::peer_preferences::PEER_PREFERENCES_APP_ID, "peer", Bytes::from("affinity"), node(1)).unwrap();
+        a.set(ACTIVITY_APP_ID, "usage", Bytes::from("tokens=42"), node(1)).unwrap();
+        a.set("work-atlas-private", "session", Bytes::from("scope"), node(1)).unwrap();
+        a.set("notes-private", "n1", Bytes::from("secret note"), node(1)).unwrap();
+        a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1)).unwrap();
+
+        // The sender ships exactly this set.
+        let gossiped = a.all_entries_for_gossip().unwrap();
+        for e in &gossiped {
+            assert!(
+                !crate::peer_preferences::is_gossip_excluded(&e.app_id),
+                "excluded namespace '{}' entered the gossip set",
+                e.app_id
+            );
+        }
+        assert_eq!(gossiped.len(), 1, "only the public contributions entry gossips");
+        assert_eq!(gossiped[0].app_id, CONTRIBUTIONS_APP_ID);
+
+        // Replicate into B as the sender→receiver path does.
+        let b = MeshStore::in_memory().unwrap();
+        for e in gossiped {
+            b.merge_entry(e).unwrap();
+        }
+
+        // B learned the public entry and NONE of the private ones.
+        assert!(b.get(CONTRIBUTIONS_APP_ID, "ev1").unwrap().is_some());
+        for (app, key) in [
+            (crate::peer_preferences::PEER_PREFERENCES_APP_ID, "peer"),
+            (ACTIVITY_APP_ID, "usage"),
+            ("work-atlas-private", "session"),
+            ("notes-private", "n1"),
+        ] {
+            assert!(
+                b.get(app, key).unwrap().is_none(),
+                "private entry {app}/{key} leaked to peer B"
+            );
+        }
+        // And A still has everything locally — excluded ≠ deleted.
+        assert!(a.get(ACTIVITY_APP_ID, "usage").unwrap().is_some());
+    }
+
     #[test]
     fn delete_removes_entry() {
         let store = MeshStore::in_memory().unwrap();
