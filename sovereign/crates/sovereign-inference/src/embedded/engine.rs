@@ -681,43 +681,48 @@ impl EmbeddedLlamaCpp {
         // models too; deferred until there's a bench fixture that
         // covers this combo. Track at [[invariant_fast_short_recurrent_arch]].
         let fast_arch = read_gguf_arch(&fast.model);
-        // FastShort's `from_existing_model` cannot propagate `n_rs_seq`,
-        // so its ctx crashes (Decode Error -3) on any model whose decode
-        // path provisions recurrent-state seq slots: a genuinely
-        // recurrent arch, OR an MTP model (the speculative draft/verify
-        // needs n_rs_seq — same gate as `is_mtp_model` at slot load,
-        // which is `mtp_by_name || mtp_by_arch`). The prior check only
-        // covered the recurrent-arch half, so an MTP-by-NAME model whose
-        // arch isn't classified recurrent (e.g. Qwopus*-MTP on a qwen3
-        // arch) slipped through and crashed every continuous-batched
-        // call. Detect MTP by name here too; a `SOVEREIGN_MTP_DISABLE`d
-        // model runs single-token, so FastShort is safe for it. Skip for
-        // both unsafe cases — callers route to `fast` (n_seq_max=1),
-        // forfeiting the speedup rather than crashing.
-        // Decision matrix lives in `gates::fast_short_gate` (tested
-        // weight-free). [[invariant_fast_short_recurrent_arch]]
-        let gate = fast_short_gate(&fast_arch, &fast.model_id, |k| std::env::var(k).ok());
+        // FastShort construction gate — decision matrix + history in
+        // `gates::fast_short_gate` (tested weight-free). NARROWED
+        // 2026-06-11: the qwen-MoE and MTP-by-name vetoes were removed
+        // after the repro campaign burst-cleared both (see the gate's
+        // doc for the evidence and the bite-back protocol); only
+        // never-cleared recurrent families (mamba/rwkv/deltanet/ssm)
+        // remain vetoed. If batched decodes start failing with
+        // `Decode Error -3` — possibly only on long runs the repro's
+        // max_tokens=8 bursts didn't exercise —
+        // SOVEREIGN_FAST_SHORT_DISABLE=1 is the immediate mitigation.
+        // [[invariant_fast_short_recurrent_arch]]
+        let gate = fast_short_gate(&fast_arch, |k| std::env::var(k).ok());
         let (fast_short, fast_short_coalescer) = if gate == FastShortGate::Disabled {
             tracing::info!(
                 slot = "fast_short",
                 "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
             );
             (None, None)
-        } else if matches!(
-            gate,
-            FastShortGate::UnsafeRecurrent | FastShortGate::UnsafeMtp
-        ) {
+        } else if gate == FastShortGate::UnsafeRecurrent {
             tracing::warn!(
                 slot = "fast_short",
                 arch = %fast_arch,
                 model_id = %fast.model_id,
-                "skipped — fast slot model is MTP or recurrent; FastShort \
-                 ctx would crash on first decode (Decode Error -3: n_rs_seq \
-                 not propagated through from_existing_model). All callers \
-                 route to `fast`."
+                "skipped — fast slot arch is an uncleared recurrent family \
+                 (mamba/rwkv/deltanet/ssm); the FastShort burst repro has \
+                 never run against it. All callers route to `fast`. To \
+                 clear it: ./scripts/gate-repros.sh --fastshort <gguf> \
+                 (see gates::fast_short_gate doc)."
             );
             (None, None)
         } else {
+            if gate == FastShortGate::ForcedSafe {
+                tracing::warn!(
+                    slot = "fast_short",
+                    arch = %fast_arch,
+                    model_id = %fast.model_id,
+                    "SOVEREIGN_FAST_SHORT_FORCE overrode an unsafe verdict — \
+                     DIAGNOSTIC ONLY; expect Decode Error -3 on the first \
+                     continuous-batched call unless upstream fixed n_rs_seq \
+                     propagation"
+                );
+            }
             match ModelSlot::from_existing_model(
                 &backend,
                 Arc::clone(&fast.model),

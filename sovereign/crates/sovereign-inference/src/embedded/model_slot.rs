@@ -1393,8 +1393,18 @@ impl ModelSlot {
             &slot_ctx.arch,
             quirks.has_recurrent_layers,
             slot_ctx.is_speculative(),
+            |k| std::env::var(k).ok(),
         );
         let prefix_cache_safe = gate.safe;
+        if gate.forced {
+            tracing::warn!(
+                model = %model_id,
+                arch = %slot_ctx.arch,
+                "prefix_cache: SOVEREIGN_PREFIX_CACHE_FORCE overrode the \
+                 recurrent/hybrid veto — DIAGNOSTIC ONLY; expect decode \
+                 errors on partial keep unless upstream fixed the hazard"
+            );
+        }
         tracing::debug!(
             model = %model_id,
             arch = %slot_ctx.arch,
@@ -1402,6 +1412,7 @@ impl ModelSlot {
             arch_says_recurrent = gate.arch_says_recurrent,
             quirks_say_recurrent = gate.quirks_say_recurrent,
             mtp_session = gate.speculative_active,
+            forced = gate.forced,
             prefix_cache_safe,
             "prefix_cache: gate decision"
         );
@@ -1595,20 +1606,14 @@ impl ModelSlot {
         // past the close `}` was wasted on a grammar mask cycling
         // through whitespace / preferred-but-masked tokens.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        // Brace-balance stop (shape B) only fires when grammar is
-        // actively constraining output to the tool envelope shape —
-        // i.e., `request.structured_output` is set. Without that
-        // gate, the tracker counts literal `{...}` in prose (LaTeX,
-        // markdown, code fences) and stops generation mid-thought.
-        // Repro: Qwopus3.5-9B-Coder emitting "x_{r,c}" inside a
-        // markdown bullet → false-positive stop at n_generated=87,
-        // observed 2026-05-21. The marker stop (`</tool_call>`,
+        // Shape-B (balanced JSON envelope) stop — state machine and
+        // BOTH gates (grammar-locked, think-suspend) live in
+        // `gates::ToolStopTracker`; see its doc for the LaTeX
+        // `x_{r,c}` false-positive P0 (2026-05-21) the grammar-locked
+        // gate guards against. The marker stop (`</tool_call>`,
         // shape A) stays unconditional below.
-        let tools_grammar_locked = tools_present && request.structured_output.is_some();
-        let mut tc_json_depth = 0i32;
-        let mut tc_json_in_string = false;
-        let mut tc_json_escape_next = false;
-        let mut tc_json_ever_opened = false;
+        let mut tool_stop =
+            ToolStopTracker::new(tools_present, request.structured_output.is_some());
         // Optional per-token sampler-role trace, gated on
         // SOVEREIGN_TRACE_SAMPLER_ROLES. Used during gym
         // diagnostics (gym 003 path-typo, 2026-05-13) to confirm
@@ -1702,7 +1707,7 @@ impl ModelSlot {
                 )));
             }
 
-            let role = if tools_present && tc_json_in_string {
+            let role = if tools_present && tool_stop.in_json_string() {
                 SamplerRole::Content
             } else {
                 SamplerRole::Explore
@@ -1711,7 +1716,7 @@ impl ModelSlot {
                 SamplerRole::Content => role_content_n += 1,
                 SamplerRole::Explore => role_explore_n += 1,
             }
-            if tc_json_in_string {
+            if tool_stop.in_json_string() {
                 tokens_in_string_n += 1;
             }
             let token = sampler.sample(ctx, -1, role);
@@ -1726,23 +1731,14 @@ impl ModelSlot {
                 if role_trace_on && tools_present {
                     tracing::info!(
                         role = ?role,
-                        in_string = tc_json_in_string,
-                        depth = tc_json_depth,
+                        in_string = tool_stop.in_json_string(),
+                        depth = tool_stop.depth(),
                         piece = %piece.replace('\n', "\\n"),
                         "sampler_trace token"
                     );
                 }
                 // Update sliding tail for tag detection.
-                tail.push_str(&piece);
-                if tail.len() > 32 {
-                    // Walk back from len-32 to the nearest char boundary so we
-                    // never slice through a multi-byte UTF-8 sequence (Qwen3).
-                    let mut drain_to = tail.len() - 32;
-                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
-                        drain_to -= 1;
-                    }
-                    tail.drain(..drain_to);
-                }
+                push_sliding_tail(&mut tail, &piece);
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
                     saw_open_tag = true;
@@ -1766,7 +1762,7 @@ impl ModelSlot {
                 // (shape B — bare JSON envelope) only fires when
                 // grammar is actively constraining output to the
                 // envelope schema; without that gate the tracker
-                // matches any `{...}` in prose. See `tools_grammar_locked`.
+                // matches any `{...}` in prose. See `ToolStopTracker`.
                 if tools_present {
                     if tail.contains("</tool_call>") {
                         tracing::info!(
@@ -1785,8 +1781,8 @@ impl ModelSlot {
                     // `</tool_call>`) leaks into the response content
                     // and the model can keep generating free-form prose
                     // until token cap. Distinct from the brace-balance
-                    // stop below (which is gated on `tools_grammar_locked`
-                    // i.e. legacy JsonConstraint) — both close the same
+                    // stop below (`ToolStopTracker`, gated on the
+                    // legacy JsonConstraint case) — both close the same
                     // class but llguidance is the authoritative signal
                     // when it's the active constraint.
                     if sampler.grammar_is_stopped() {
@@ -1798,39 +1794,14 @@ impl ModelSlot {
                         n_generated += 1;
                         break;
                     }
-                    if tools_grammar_locked && !in_think {
-                        for b in piece.bytes() {
-                            if tc_json_escape_next {
-                                tc_json_escape_next = false;
-                                continue;
-                            }
-                            if tc_json_in_string {
-                                match b {
-                                    b'\\' => tc_json_escape_next = true,
-                                    b'"' => tc_json_in_string = false,
-                                    _ => {}
-                                }
-                                continue;
-                            }
-                            match b {
-                                b'"' => tc_json_in_string = true,
-                                b'{' => {
-                                    tc_json_depth += 1;
-                                    tc_json_ever_opened = true;
-                                }
-                                b'}' => tc_json_depth -= 1,
-                                _ => {}
-                            }
-                        }
-                        if tc_json_ever_opened && tc_json_depth == 0 {
-                            tracing::info!(
-                                model = %model_id,
-                                n_generated,
-                                "inference: stopping on balanced JSON envelope"
-                            );
-                            n_generated += 1;
-                            break;
-                        }
+                    if tool_stop.observe(&piece, in_think) {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on balanced JSON envelope"
+                        );
+                        n_generated += 1;
+                        break;
                     }
                 }
             }
@@ -1906,8 +1877,8 @@ impl ModelSlot {
                         if role_trace_on && tools_present {
                             tracing::info!(
                                 role = ?SamplerRole::Explore,
-                                in_string = tc_json_in_string,
-                                depth = tc_json_depth,
+                                in_string = tool_stop.in_json_string(),
+                                depth = tool_stop.depth(),
                                 piece = %piece.replace('\n', "\\n"),
                                 "sampler_trace token (jump_fwd)"
                             );
@@ -1917,14 +1888,7 @@ impl ModelSlot {
                         // keep the tail in sync so a subsequent
                         // sampled token's tag detection sees the right
                         // context.
-                        tail.push_str(&piece);
-                        if tail.len() > 32 {
-                            let mut drain_to = tail.len() - 32;
-                            while drain_to > 0 && !tail.is_char_boundary(drain_to) {
-                                drain_to -= 1;
-                            }
-                            tail.drain(..drain_to);
-                        }
+                        push_sliding_tail(&mut tail, &piece);
                         // tail can't open <think> here (forced bytes
                         // are FSM-dictated JSON content, never the
                         // open tag); a stray close-tag would only
@@ -1940,8 +1904,8 @@ impl ModelSlot {
                         // on a forced byte, stop here so the loop's
                         // existing close detection still fires on the
                         // next iteration's check. Brace tracker is
-                        // gated on `tools_grammar_locked` per the
-                        // fn-scope note; marker stop stays unconditional.
+                        // grammar-lock-gated inside `ToolStopTracker`;
+                        // marker stop stays unconditional.
                         if tools_present {
                             if tail.contains("</tool_call>") {
                                 tracing::info!(
@@ -1955,41 +1919,18 @@ impl ModelSlot {
                                 forced_hit_break = true;
                                 break;
                             }
-                            if tools_grammar_locked {
-                                for b in piece.bytes() {
-                                    if tc_json_escape_next {
-                                        tc_json_escape_next = false;
-                                        continue;
-                                    }
-                                    if tc_json_in_string {
-                                        match b {
-                                            b'\\' => tc_json_escape_next = true,
-                                            b'"' => tc_json_in_string = false,
-                                            _ => {}
-                                        }
-                                        continue;
-                                    }
-                                    match b {
-                                        b'"' => tc_json_in_string = true,
-                                        b'{' => {
-                                            tc_json_depth += 1;
-                                            tc_json_ever_opened = true;
-                                        }
-                                        b'}' => tc_json_depth -= 1,
-                                        _ => {}
-                                    }
-                                }
-                                if tc_json_ever_opened && tc_json_depth == 0 {
-                                    tracing::info!(
-                                        model = %model_id,
-                                        n_generated,
-                                        "inference: stopping on balanced JSON envelope (jump_fwd)"
-                                    );
-                                    forced_run.push(ftok);
-                                    n_generated += 1;
-                                    forced_hit_break = true;
-                                    break;
-                                }
+                            // Outside <think> by construction here
+                            // (the walk is gated on `!in_think`).
+                            if tool_stop.observe(&piece, false) {
+                                tracing::info!(
+                                    model = %model_id,
+                                    n_generated,
+                                    "inference: stopping on balanced JSON envelope (jump_fwd)"
+                                );
+                                forced_run.push(ftok);
+                                n_generated += 1;
+                                forced_hit_break = true;
+                                break;
                             }
                         }
                     }
@@ -2133,7 +2074,7 @@ impl ModelSlot {
                 role_content_n,
                 role_explore_n,
                 tokens_in_string_n,
-                tc_json_ever_opened,
+                tc_json_ever_opened = tool_stop.ever_opened(),
                 "sampler_trace role summary"
             );
         }
@@ -3041,16 +2982,11 @@ impl ModelSlot {
         let mut saw_close_tag = false;
 
         // See generate_sync: stop on `</tool_call>` (marker) or
-        // balanced JSON envelope (grammar-locked) when tools were
-        // requested. Shape-B tracker gated on `structured_output` to
-        // avoid false-positive stops on prose `{...}` — see fn-scope
-        // note on the sync path.
+        // balanced JSON envelope when tools were requested. The
+        // shape-B state machine + gates live in `gates::ToolStopTracker`.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        let tools_grammar_locked = tools_present && request.structured_output.is_some();
-        let mut tc_json_depth = 0i32;
-        let mut tc_json_in_string = false;
-        let mut tc_json_escape_next = false;
-        let mut tc_json_ever_opened = false;
+        let mut tool_stop =
+            ToolStopTracker::new(tools_present, request.structured_output.is_some());
 
         while n_generated < max_tokens {
             if Instant::now() > deadline {
@@ -3096,7 +3032,7 @@ impl ModelSlot {
                 }
             }
 
-            let role = if tools_present && tc_json_in_string {
+            let role = if tools_present && tool_stop.in_json_string() {
                 SamplerRole::Content
             } else {
                 SamplerRole::Explore
@@ -3109,16 +3045,7 @@ impl ModelSlot {
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
-                tail.push_str(&piece);
-                if tail.len() > 32 {
-                    // Walk back from len-32 to the nearest char boundary so we
-                    // never slice through a multi-byte UTF-8 sequence (Qwen3).
-                    let mut drain_to = tail.len() - 32;
-                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
-                        drain_to -= 1;
-                    }
-                    tail.drain(..drain_to);
-                }
+                push_sliding_tail(&mut tail, &piece);
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
                     saw_open_tag = true;
@@ -3134,37 +3061,9 @@ impl ModelSlot {
 
                 // Tool-emission JSON-balance bookkeeping — done BEFORE
                 // the send so we don't need to re-borrow piece bytes
-                // after the move into the channel. Gated on
-                // `tools_grammar_locked` per the sync-path note.
-                let mut json_envelope_complete = false;
-                if tools_grammar_locked && !in_think {
-                    for b in piece.bytes() {
-                        if tc_json_escape_next {
-                            tc_json_escape_next = false;
-                            continue;
-                        }
-                        if tc_json_in_string {
-                            match b {
-                                b'\\' => tc_json_escape_next = true,
-                                b'"' => tc_json_in_string = false,
-                                _ => {}
-                            }
-                            continue;
-                        }
-                        match b {
-                            b'"' => tc_json_in_string = true,
-                            b'{' => {
-                                tc_json_depth += 1;
-                                tc_json_ever_opened = true;
-                            }
-                            b'}' => tc_json_depth -= 1,
-                            _ => {}
-                        }
-                    }
-                    if tc_json_ever_opened && tc_json_depth == 0 {
-                        json_envelope_complete = true;
-                    }
-                }
+                // after the move into the channel. Gates live inside
+                // `ToolStopTracker`.
+                let json_envelope_complete = tool_stop.observe(&piece, in_think);
 
                 if tx.blocking_send(Ok(piece)).is_err() {
                     tracing::warn!(
@@ -3314,16 +3213,11 @@ impl ModelSlot {
         let mut saw_close_tag = false;
 
         // See generate_sync: stop on `</tool_call>` (marker) or
-        // balanced JSON envelope (grammar-locked) when tools were
-        // requested. Shape-B tracker gated on `structured_output` to
-        // avoid false-positive stops on prose `{...}` — see fn-scope
-        // note on the sync path.
+        // balanced JSON envelope when tools were requested. The
+        // shape-B state machine + gates live in `gates::ToolStopTracker`.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        let tools_grammar_locked = tools_present && request.structured_output.is_some();
-        let mut tc_json_depth = 0i32;
-        let mut tc_json_in_string = false;
-        let mut tc_json_escape_next = false;
-        let mut tc_json_ever_opened = false;
+        let mut tool_stop =
+            ToolStopTracker::new(tools_present, request.structured_output.is_some());
 
         // Default to Length: if the loop exits via the `while`
         // condition we hit max_tokens. Each `break` path overwrites
@@ -3351,7 +3245,7 @@ impl ModelSlot {
                 break;
             }
 
-            let role = if tools_present && tc_json_in_string {
+            let role = if tools_present && tool_stop.in_json_string() {
                 SamplerRole::Content
             } else {
                 SamplerRole::Explore
@@ -3365,14 +3259,7 @@ impl ModelSlot {
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
-                tail.push_str(&piece);
-                if tail.len() > 32 {
-                    let mut drain_to = tail.len() - 32;
-                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
-                        drain_to -= 1;
-                    }
-                    tail.drain(..drain_to);
-                }
+                push_sliding_tail(&mut tail, &piece);
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
                     saw_open_tag = true;
@@ -3387,37 +3274,9 @@ impl ModelSlot {
                 }
 
                 // JSON-balance bookkeeping BEFORE the send so we don't
-                // need to re-borrow piece bytes after the move. Gated
-                // on `tools_grammar_locked` per the sync-path note.
-                let mut json_envelope_complete = false;
-                if tools_grammar_locked && !in_think {
-                    for b in piece.bytes() {
-                        if tc_json_escape_next {
-                            tc_json_escape_next = false;
-                            continue;
-                        }
-                        if tc_json_in_string {
-                            match b {
-                                b'\\' => tc_json_escape_next = true,
-                                b'"' => tc_json_in_string = false,
-                                _ => {}
-                            }
-                            continue;
-                        }
-                        match b {
-                            b'"' => tc_json_in_string = true,
-                            b'{' => {
-                                tc_json_depth += 1;
-                                tc_json_ever_opened = true;
-                            }
-                            b'}' => tc_json_depth -= 1,
-                            _ => {}
-                        }
-                    }
-                    if tc_json_ever_opened && tc_json_depth == 0 {
-                        json_envelope_complete = true;
-                    }
-                }
+                // need to re-borrow piece bytes after the move. Gates
+                // live inside `ToolStopTracker`.
+                let json_envelope_complete = tool_stop.observe(&piece, in_think);
 
                 if tx.blocking_send(StreamFrame::Token(piece)).is_err() {
                     tracing::warn!(
