@@ -28,6 +28,65 @@ impl SealedEvidenceSearch for ClaimSearcher {
     }
 }
 
+/// The attached-asset evidence universe: every embedded chunk of ONE
+/// attached document, cosine-ranked per claim. The seal is structural
+/// — the searcher is constructed from exactly the asset's chunks (the
+/// same set `fetch_quote_verification_surface` reads), so it cannot
+/// reach any other document or corpus.
+pub(crate) struct AttachedAssetSearcher {
+    inference: Arc<dyn InferenceProvider>,
+    /// `(content, embedding)` per embedded chunk. Chunks without a
+    /// stored embedding are dropped at construction (defensive —
+    /// ingest stores embeddings alongside content).
+    chunks: Vec<(String, Vec<f32>)>,
+}
+
+impl AttachedAssetSearcher {
+    pub(crate) fn new(
+        inference: Arc<dyn InferenceProvider>,
+        chunks: &[crate::types::DocumentChunk],
+    ) -> Self {
+        Self {
+            inference,
+            chunks: chunks
+                .iter()
+                .filter_map(|c| {
+                    c.embedding
+                        .as_ref()
+                        .map(|e| (c.content.clone(), e.clone()))
+                })
+                .collect(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl SealedEvidenceSearch for AttachedAssetSearcher {
+    async fn search(&self, claim: &str) -> Vec<String> {
+        if self.chunks.is_empty() {
+            return Vec::new();
+        }
+        // Same embed call the attached_doc_search tool uses for its
+        // query leg, so claim vectors live in the same space as the
+        // stored chunk embeddings.
+        let claim_emb = match self.inference.embed(claim).await {
+            Ok(e) if !e.is_empty() => e,
+            _ => return Vec::new(),
+        };
+        let mut scored: Vec<(f32, &String)> = self
+            .chunks
+            .iter()
+            .map(|(content, emb)| (crate::memory::cosine_similarity(&claim_emb, emb), content))
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored
+            .into_iter()
+            .take(CLAIM_SEARCH_K)
+            .map(|(_, content)| content.clone())
+            .collect()
+    }
+}
+
 /// Per-claim hits fed to the joint judge and (for failed claims) the
 /// rewrite. Small: one embed + one sealed hybrid search per claim.
 const CLAIM_SEARCH_K: usize = 4;

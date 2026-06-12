@@ -138,6 +138,37 @@ fn question_is_entity_anchored(keywords: &[String], corpus_ids: &[String]) -> bo
     keywords.iter().any(|k| entity_toks.contains(k))
 }
 
+/// Corpus-DEICTIC question: it refers to the corpus's own material by
+/// deixis ("the story", "this document") rather than by entity name,
+/// so the lexical gazetteer check misses it — yet outside knowledge
+/// structurally cannot answer it any more than it can an
+/// entity-anchored one. Closes the GK-caveat exemption for the gate:
+/// measured 2026-06-11 (saltgrass-p3b), "In what year is the story
+/// set?" drew a caveated retry fabrication ("by William Trevor,
+/// published 1952" — no such author) that the caveat exempted from
+/// claim extraction. World-general questions ("capital of Canada")
+/// contain none of these phrasings and keep the honest GK path.
+pub(crate) fn question_is_corpus_deictic(message: &str) -> bool {
+    const DEICTIC: &[&str] = &[
+        "the story",
+        "the novel",
+        "the book",
+        "the text",
+        "the document",
+        "this document",
+        "this book",
+        "the narrative",
+        "the plot",
+        "the attached",
+        "the report",
+        "your sources",
+        "the sources",
+        "the corpus",
+    ];
+    let q = message.to_lowercase();
+    DEICTIC.iter().any(|d| q.contains(d))
+}
+
 /// Broader companion to `question_is_entity_anchored`: does the
 /// question share ANY content word (stemmed) with the corpus's atlas —
 /// entity names or atom-description vocabulary? Drives the structural
@@ -873,6 +904,17 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
+    use super::question_is_corpus_deictic;
+
+    #[test]
+    fn corpus_deictic_catches_story_year_class() {
+        assert!(question_is_corpus_deictic("In what year is the story set?"));
+        assert!(question_is_corpus_deictic("What year is this document from?"));
+        assert!(question_is_corpus_deictic("Who wrote the novel?"));
+        assert!(!question_is_corpus_deictic("What is the capital of Canada?"));
+        assert!(!question_is_corpus_deictic("How do I reverse a linked list in Python?"));
+    }
+
     /// The env gate must default OFF — existing surfaces and benches
     /// change behaviour only by explicit opt-in.
     #[test]

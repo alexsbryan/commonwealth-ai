@@ -1535,6 +1535,16 @@ impl Runtime {
                     // back to the dispatch-frame locals).
                     let stale_summary_for_capture = summary.clone();
                     let turn_index_for_capture = turn_index_for_outcome;
+                    // Refinement re-gate: only armed when this turn's
+                    // answer was itself gate-released.
+                    let collab_guard = if gate_on {
+                        Some(crate::runtime::collaboration::RefinementGuard {
+                            inference: std::sync::Arc::clone(&collab_inference),
+                            evidence: gate_evidence,
+                        })
+                    } else {
+                        None
+                    };
                     tokio::spawn(async move {
                         tracing::info!(
                             conversation_id = %collab_cid,
@@ -1555,6 +1565,7 @@ impl Runtime {
                             Some(collab_metadata),
                             collab_events,
                             collab_sid,
+                            collab_guard,
                         )
                         .await;
                         if refined.is_some() {
@@ -2186,6 +2197,16 @@ impl Runtime {
                 .map(|v| v == "1")
                 .unwrap_or(false);
             if !skip_post_stream {
+                // Refinement re-gate: armed only when this turn's
+                // answer was itself gate-released.
+                let collab_guard = if deep_gate_on {
+                    Some(crate::runtime::collaboration::RefinementGuard {
+                        inference: std::sync::Arc::clone(&collab_inference),
+                        evidence: deep_gate_evidence,
+                    })
+                } else {
+                    None
+                };
                 tokio::spawn(async move {
                     run_post_stream_refinement(
                         collab_inference.as_ref(),
@@ -2200,6 +2221,7 @@ impl Runtime {
                         Some(collab_metadata),
                         collab_events,
                         collab_sid,
+                        collab_guard,
                     )
                     .await;
                 });

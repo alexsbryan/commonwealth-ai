@@ -10,6 +10,7 @@ use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
 use super::config::dbg;
+use super::search::SealedEvidenceSearch;
 
 /// Outcome of one gate pass, carried into message metadata so the
 /// desktop can render provenance ("verified" / "regenerated" /
@@ -19,6 +20,13 @@ pub(crate) struct GateVerdict {
     pub violation_prob: f64,
     /// The extracted claim the verdict is about (None = NO_CLAIM).
     pub claim: Option<String>,
+    /// Claim-conditioned passages the sealed search returned for this
+    /// claim (empty when no searcher / no hits). On a failed verdict
+    /// these are the retry's correction material — the second draft
+    /// gets the passages that state the truth, not just the news that
+    /// its claim failed.
+    #[serde(skip)]
+    pub claim_evidence: Vec<String>,
 }
 
 /// One forced-choice A/B logprob pass on the primary (Critic) tier. Returns
@@ -75,9 +83,10 @@ pub(crate) async fn verify_grounding(
     answer: &str,
     chunks: &[String],
     entity_anchored: bool,
+    searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
 ) -> Option<GateVerdict> {
     if answer.trim().is_empty() || chunks.is_empty() {
-        return Some(GateVerdict { violation_prob: 0.0, claim: None });
+        return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
     }
     if answer.chars().count() > 1_800 {
         tracing::info!(
@@ -85,7 +94,7 @@ pub(crate) async fn verify_grounding(
             chars = answer.chars().count(),
             "long-form answer — out of gate scope"
         );
-        return Some(GateVerdict { violation_prob: 0.0, claim: None });
+        return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
     }
     // The GK-attribution exemption is sound for world-general
     // questions (a caveated "capital of Australia" answer is the
@@ -133,7 +142,7 @@ pub(crate) async fn verify_grounding(
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
                 tracing::info!(target: "grounding_gate", "claim=NO_CLAIM → vp=0");
                 dbg("claim=NO_CLAIM → vp=0");
-                return Some(GateVerdict { violation_prob: 0.0, claim: None });
+                return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
             }
             dbg(&format!("claim={:?}", t.chars().take(90).collect::<String>()));
             t
@@ -145,9 +154,49 @@ pub(crate) async fn verify_grounding(
         }
     };
 
+    // Claim-conditioned widening (Phase 3): verify against the sealed
+    // evidence UNIVERSE, not just the prompt snapshot. Hits go first
+    // (most relevant to THIS claim) and the cap widens by their count,
+    // so they never displace a snapshot chunk the unwidened judge
+    // would have checked. Measured motivation: a TRUE claim the
+    // answer itself cited ("Brett Street") judged at max_support
+    // 0.000 against 2 monolithic tool-result strings (attached lane,
+    // 2026-06-11); the same shape as chat-lane distract-money-keeper
+    // (correct answer abstained at vp 0.95).
+    let extra: Vec<String> = match searcher {
+        Some(s) => {
+            let hits = s.search(&claim).await;
+            if !hits.is_empty() {
+                dbg(&format!(
+                    "claim_search hits={} for {:?}",
+                    hits.len(),
+                    claim.chars().take(60).collect::<String>()
+                ));
+            }
+            hits
+        }
+        None => Vec::new(),
+    };
+    // Rescue floor: a widened (claim-searched) hit may only raise
+    // max_support when its support is DECISIVE — a passage that
+    // states the claim (genuine rescues measure ~0.99; Brett Street
+    // 0.999), not one that merely mentions its words. Without the
+    // floor, each extra hit is another draw from the judge's noise
+    // distribution and max() drifts up: measured 2026-06-11, the
+    // fabricated "Professor's real name is Comrade Ossipon" rode a
+    // 0.144 co-occurrence score from vp 0.96 to 0.856 — under τ —
+    // and released. Prompt-snapshot chunks keep the old contract
+    // (any support counts): they were the model's actual evidence.
+    const CLAIM_RESCUE_FLOOR: f64 = 0.5;
+    let judged: Vec<(bool, &String)> = extra
+        .iter()
+        .map(|c| (true, c))
+        .chain(chunks.iter().map(|c| (false, c)))
+        .collect();
+    let cap = 12 + extra.len();
     let mut max_support: f64 = 0.0;
     let mut checked = 0usize;
-    for c in chunks.iter().take(12) {
+    for (is_extra, c) in judged.into_iter().take(cap) {
         let passage: String = c.chars().take(2_400).collect();
         let prompt = format!(
             "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
@@ -161,8 +210,13 @@ pub(crate) async fn verify_grounding(
         if let Some((a, b)) = forced_choice_ab(inference, &prompt).await {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
-            if support > max_support {
-                max_support = support;
+            let effective = if is_extra && support < CLAIM_RESCUE_FLOOR {
+                0.0
+            } else {
+                support
+            };
+            if effective > max_support {
+                max_support = effective;
             }
             checked += 1;
             if max_support >= 0.95 {
@@ -184,7 +238,7 @@ pub(crate) async fn verify_grounding(
         "grounding verdict"
     );
     dbg(&format!("chunks_checked={checked} max_support={max_support:.3} vp={vp:.3}"));
-    Some(GateVerdict { violation_prob: vp, claim: Some(claim) })
+    Some(GateVerdict { violation_prob: vp, claim: Some(claim), claim_evidence: extra })
 }
 
 

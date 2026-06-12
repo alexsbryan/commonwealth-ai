@@ -19,7 +19,9 @@ fn now() -> i64 {
 /// Cosine similarity between two equally-sized embedding vectors.
 /// Returns 0.0 when either norm is zero or lengths mismatch — the
 /// caller treats that as "no signal" and falls back to FTS.
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+/// (pub(crate): also used by the grounding gate's attached-asset
+/// claim search — third in-crate consumer of this shape.)
+pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }

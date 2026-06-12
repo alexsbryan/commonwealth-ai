@@ -1,0 +1,192 @@
+MERIDIAN FREIGHT SYSTEMS — INTERNAL POSTMORTEM
+Incident IR-2417: Tariff Engine Outage of March 4
+Status: FINAL — Blameless review
+Author of record: Priya Vellanki, Staff SRE (incident commander)
+
+------------------------------------------------------------------
+1. SUMMARY
+------------------------------------------------------------------
+
+On the night of March 4, the RateGrid tariff-calculation engine —
+the service behind Meridian's quoting API — suffered a complete
+outage lasting 50 minutes, from 03:41 UTC to 04:31 UTC. During the
+window, approximately 38,000 quote requests failed and 214
+enterprise tenants were affected. The proximate cause was a schema
+migration, M-0288, which added a NOT NULL column without a default
+to a table both written and read on every quote. This document
+reconstructs the timeline, analyses the response, and commits to
+remediations. Per Meridian's incident policy this review is
+blameless: the failure described here is a process failure, and no
+part of this document should be read as attributing fault to an
+individual.
+
+A note on scope: a financial impact assessment is owned by Finance
+and is out of scope here. This document quantifies impact in failed
+requests and affected tenants only.
+
+------------------------------------------------------------------
+2. BACKGROUND
+------------------------------------------------------------------
+
+RateGrid computes shipping tariffs from the tariff_rules table,
+which is consulted on the hot path of every quote. RateGrid serves
+reads from a pool of replicas and writes rule updates to the
+primary. The quoting API depends on RateGrid synchronously: when
+RateGrid errors, quoting errors.
+
+Two unrelated changes were in flight on the same night, and both
+will come up in the timeline. First, a CDN configuration change
+shipped at 03:10 UTC, adjusting cache TTLs for the static assets of
+the customer dashboard. Second, a Kubernetes node pool upgrade was
+in progress in the EU cluster. Both are described below because the
+responders reasonably suspected each in turn; neither contributed
+to the outage.
+
+For comparison later in this document we reference IR-2390, the
+February incident in which a rate-limit misconfiguration throttled
+the same quoting API. The mechanisms are unrelated; the comparison
+is about detection speed only.
+
+------------------------------------------------------------------
+3. TIMELINE (all times UTC, March 4)
+------------------------------------------------------------------
+
+03:10 — The CDN configuration change ships. (Foreshadowing: this
+change is innocent, but its timing makes it the first suspect.)
+
+03:38 — Migration M-0288 is applied to the RateGrid primary as part
+of the scheduled nightly deploy window. M-0288 adds the column
+fuel_surcharge_class to tariff_rules as NOT NULL — without a
+default value. The migration was authored by Dario Okonkwo-Reyes of
+the Platform team and reviewed by Mei-Ling Strand; it had passed CI
+and staging, where the write path is exercised against a database
+whose replicas are migrated in lockstep. In production, the
+replicas were still serving the old schema when the primary
+changed.
+
+03:41 — Outage begins. The ORM's INSERT and UPDATE statements
+against tariff_rules begin failing on the primary (the new NOT NULL
+column receives no value from the old code path), and the quoting
+API error rate goes to 100% within a minute. T0 for this incident
+is 03:41.
+
+03:44 — The quote-5xx-burst alert pages the on-call SRE. Detection
+time: three minutes. (In IR-2390, detection took eleven minutes;
+the burst alert added after that incident is what paged here.)
+
+03:46 — War room opens in #inc-2417. Priya Vellanki takes incident
+command. Tomás Aguirre-Whitfield takes communications lead.
+
+03:49 — Initial hypothesis: the 03:10 CDN configuration change. The
+timing made the CDN change the prime suspect, and ten minutes were
+spent confirming that its only possible effect was serving stale
+dashboard assets — it does not sit anywhere on the quoting path.
+
+03:52 — Tomás Aguirre-Whitfield posts the first status-page update,
+acknowledging elevated quoting errors.
+
+03:55 — The CDN change is formally exonerated in the war room. At
+roughly the same time a responder raises the Kubernetes node pool
+upgrade running in the EU cluster; it is set aside within minutes
+as coincidental and unrelated — the EU cluster does not serve
+RateGrid.
+
+03:56 — Database error logs identify the failing column:
+fuel_surcharge_class, introduced by M-0288 eighteen minutes
+earlier. Root cause is now understood.
+
+03:58 — First mitigation attempt: revert the migration with
+`migrate down` on M-0288. The revert acquires a table lock and
+deadlocks against the long-running nightly reconciliation job,
+which had been holding row locks on tariff_rules since before the
+deploy window. The revert sits blocked.
+
+04:11 — The revert attempt is abandoned. (Why the reconciliation
+job runs as long as it does is a separate question, deliberately
+not investigated here; for this incident it matters only that the
+revert path was unavailable.)
+
+04:19 — Second mitigation attempt, proposed and applied by Saskia
+Brandt-Oyelaran, the on-call DBA: instead of reverting, apply a
+column default of 'STANDARD' to fuel_surcharge_class on the
+primary. The old code path can now insert rows without naming the
+column. Write failures clear immediately.
+
+04:24 — Error rate at zero for five consecutive minutes; replicas
+confirmed healthy.
+
+04:31 — Full recovery declared. Customer-facing impact window:
+03:41–04:31, 50 minutes.
+
+------------------------------------------------------------------
+4. ROOT CAUSE ANALYSIS
+------------------------------------------------------------------
+
+The root cause is a schema migration applied to the primary while
+replicas and running application code still assumed the old schema.
+M-0288 added fuel_surcharge_class as NOT NULL with no default,
+which is only safe when every writer already populates the column.
+Staging did not catch it because staging migrates primary and
+replicas in lockstep and runs the new application build; production
+applied the migration during the deploy window while the previous
+build was still writing.
+
+Three layers had to fail together: review did not flag the NOT NULL
+addition as unsafe (there was no checklist item or tooling for it);
+CI had no lint for migration safety classes; and the deploy
+pipeline allowed a schema change to land ahead of the code that
+satisfies it. The blameless framing matters here: both the author
+and the reviewer followed the process as written. The process was
+wrong.
+
+What did NOT cause the outage, for the record: the CDN
+configuration change (stale dashboard assets at worst), the EU
+node pool upgrade (wrong cluster entirely), and anything related to
+IR-2390's rate-limit mechanism.
+
+------------------------------------------------------------------
+5. WHAT WENT WELL / WHAT WENT POORLY
+------------------------------------------------------------------
+
+Well: detection in three minutes via quote-5xx-burst — the alert
+added after IR-2390 paid for itself. Comms cadence was good: first
+status-page update eleven minutes after T0. The decisive
+mitigation — defaulting the column rather than fighting the
+deadlocked revert — was the right call and took twelve minutes from
+proposal to recovery.
+
+Poorly: ten minutes were lost to the CDN red herring (an honest
+read of the timing, but the quoting path dependency graph would
+have ruled it out in seconds had it been consultable). The revert
+attempt consumed thirteen minutes before being abandoned to the
+deadlock; revert-under-deadlock is a known failure shape and the
+runbook did not warn about the nightly reconciliation job's locks.
+
+------------------------------------------------------------------
+6. REMEDIATIONS
+------------------------------------------------------------------
+
+R1 (process, committed): adopt expand–contract migrations for all
+schema changes touching hot-path tables. Concretely, CI check
+MIG-LINT-4 now rejects any migration that adds a NOT NULL column
+without a default. M-0288 would have been rejected by this check.
+
+R2 (detection, committed): replicas gain a schema-drift canary — a
+probe that compares replica schema against primary on a one-minute
+interval and pages before application errors do.
+
+R3 (runbook, committed): the migration-revert runbook now lists the
+nightly reconciliation job's lock window and instructs responders
+to prefer forward-fixes (defaults, backfills) during it.
+
+------------------------------------------------------------------
+7. APPENDIX: PARTICIPANTS
+------------------------------------------------------------------
+
+Incident commander: Priya Vellanki (Staff SRE). Communications:
+Tomás Aguirre-Whitfield. Database mitigation: Saskia
+Brandt-Oyelaran (on-call DBA). Migration author: Dario
+Okonkwo-Reyes (Platform). Migration reviewer: Mei-Ling Strand.
+The war room ran in #inc-2417 throughout.
+
+END OF DOCUMENT IR-2417

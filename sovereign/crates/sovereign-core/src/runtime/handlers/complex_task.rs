@@ -179,9 +179,7 @@ impl Runtime {
         );
         let synthesis_system = self.build_primary_system_message(&synthesis_base, context);
 
-        let synthesis = self
-            .inference
-            .complete(&CompletionRequest {
+        let synthesis_request = CompletionRequest {
                 prompt: synthesis_prompt,
                 system_message: Some(synthesis_system),
                 preferred_speed: Speed::Slow,
@@ -202,8 +200,8 @@ impl Runtime {
                 url_allowlist: None,
                 evidence_id_allowlist: None,
                 lark_grammar: None,
-            })
-            .await?;
+        };
+        let synthesis = self.inference.complete(&synthesis_request).await?;
 
         // 6. Update task status.
         task.completed_steps = result
@@ -301,11 +299,45 @@ impl Runtime {
         // answer must trace to one; otherwise flag it (glassbox, via
         // `self_assessment` + a warning) rather than letting an unsourced
         // number pass silently. See `runtime::numeric_audit`.
+        // Production grounding gate (GateSurface::ComplexTask,
+        // env-gated default-off): the model's NARRATION is verified
+        // per-claim against the step transcript — the snapshot IS the
+        // sealed universe (searcher: None; tool outputs have no wider
+        // corpus to search). longform_chars=0 in the profile: synthesis
+        // claims assemble across step outputs, so every draft takes the
+        // per-claim joint-judge ladder, never single-claim max-support.
+        // The verbatim derivation appendix below is system-rendered and
+        // is appended AFTER gating — the gate never touches it. The
+        // numeric audit stays the deterministic complement and runs on
+        // the RELEASED text.
+        let gate_surface = crate::runtime::grounding::GateSurface::ComplexTask;
+        let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let gated_text: String = if gate_surface.enabled() && !step_summaries.is_empty() {
+            let gate_evidence = crate::runtime::grounding::EvidenceContext {
+                chunks: step_summaries.clone(),
+                searcher: None,
+                entity_anchored: false,
+            };
+            let outcome = crate::runtime::grounding::gate_answer(
+                &self.inference,
+                message,
+                synthesis.text.clone(),
+                &gate_evidence,
+                &synthesis_request,
+                &gate_surface.profile(),
+            )
+            .await;
+            grounding_gate_meta = Some(outcome.meta);
+            outcome.text
+        } else {
+            synthesis.text.clone()
+        };
+
         let numeric_audit_note: Option<String> = if cited_figures.is_empty() {
             None
         } else {
             let violations = crate::runtime::numeric_audit::uncited_numerics(
-                &synthesis.text,
+                &gated_text,
                 &cited_figures,
                 &raw_values,
             );
@@ -355,7 +387,7 @@ impl Runtime {
         // — keeps the gap check grounded in exactly what the model had.
         let evidence = step_summaries.join("\n\n");
         let mut final_content = self
-            .maybe_collaborate(conversation_id, message, &synthesis.text, &evidence)
+            .maybe_collaborate(conversation_id, message, &gated_text, &evidence)
             .await;
         // Append the tool's exact derivation VERBATIM. The model narrated
         // with compact figures it can copy faithfully; this block — rendered
@@ -380,14 +412,20 @@ impl Runtime {
             role: Role::Assistant,
             content: final_content,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "model": synthesis.model_id,
-                "tokens": synthesis.tokens_used,
-                "latency_ms": synthesis.latency_ms,
-                "task_id": task.id,
-                "steps_completed": task.completed_steps.len(),
-                "provenance": provenance,
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "model": synthesis.model_id,
+                    "tokens": synthesis.tokens_used,
+                    "latency_ms": synthesis.latency_ms,
+                    "task_id": task.id,
+                    "steps_completed": task.completed_steps.len(),
+                    "provenance": provenance,
+                });
+                if let Some(g) = grounding_gate_meta {
+                    m["grounding_gate"] = g;
+                }
+                m
+            }),
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;

@@ -151,6 +151,22 @@ impl Runtime {
             std::collections::BTreeSet::new();
         let mut total_chunks: usize = 0;
         let mut search_method_parts: Vec<String> = Vec::new();
+        // Passage-bearing tool results, verbatim — the prompt-snapshot
+        // evidence the grounding gate verifies the final answer
+        // against (the attached asset itself is the gate's sealed
+        // search universe; see `gate_attached_doc_answer`).
+        let mut retrieved_tool_results: Vec<String> = Vec::new();
+        // In-world question for the gate: it names an entity from the
+        // document's own briefing, so a general-knowledge attribution
+        // cannot exempt a claim about it (same contract as the KQ
+        // gazetteer verdict).
+        let gate_entity_anchored = {
+            let q = message.to_lowercase();
+            briefing_entity_names
+                .iter()
+                .any(|n| n.len() > 2 && q.contains(&n.to_lowercase()))
+                || crate::runtime::evidence_loop::question_is_corpus_deictic(message)
+        };
         // Distinct (lowercased, trimmed) query strings the model has
         // actually issued this turn. Used to enforce the
         // "explore-multiple-angles" rule structurally — the prompt asks
@@ -264,6 +280,25 @@ impl Runtime {
                             Ok(StepOutput::Text(t)) => {
                                 let chunks = t.matches("[Source").count();
                                 total_chunks += chunks;
+                                // Passage-bearing results only: search-
+                                // status texts ("no matches") are not
+                                // evidence and would dilute the gate's
+                                // judged set. Split PER PASSAGE on the
+                                // "[Source" labels — the gate's judges
+                                // truncate each evidence chunk (~2.4k
+                                // chars), so a monolithic multi-passage
+                                // result loses its tail (measured: a
+                                // TRUE cited claim judged max_support
+                                // 0.000 against 2 monolithic results).
+                                if chunks > 0 {
+                                    for seg in t.split("[Source") {
+                                        let seg = seg.trim();
+                                        if seg.len() > 80 {
+                                            retrieved_tool_results
+                                                .push(format!("[Source{seg}"));
+                                        }
+                                    }
+                                }
                                 if std::env::var("SOVEREIGN_DEBUG_BRIEFING").is_ok() {
                                     let preview: String = t.chars().take(500).collect();
                                     eprintln!(
@@ -429,8 +464,22 @@ impl Runtime {
                 continue;
             }
 
+            // Grounding gate first (may rewrite the answer), quote
+            // verification on the released text — same order as the
+            // streaming KQ path.
+            let (gated_text, grounding_gate_meta) = self
+                .gate_attached_doc_answer(
+                    conversation_id,
+                    &session_id,
+                    message,
+                    response_text.clone(),
+                    &retrieved_tool_results,
+                    &request,
+                    gate_entity_anchored,
+                )
+                .await;
             let verified = crate::quote_verification::verify_quotes(
-                &response_text,
+                &gated_text,
                 &verification_chunks,
                 &verification_verbatim_spans,
                 crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
@@ -451,6 +500,7 @@ impl Runtime {
                     total_chunks,
                     iterations,
                     &search_method_parts,
+                    grounding_gate_meta,
                 )
                 .await;
         }
@@ -501,8 +551,22 @@ impl Runtime {
                  If you think the answer is in there, try rephrasing the question using a character name, place, or specific phrase you recall from the text, and I'll search again.",
             );
         }
+        // Grounding gate first (skips itself when no passages were
+        // retrieved — the structural refusal above owns that case),
+        // quote verification on the released text.
+        let (gated_text, grounding_gate_meta) = self
+            .gate_attached_doc_answer(
+                conversation_id,
+                &session_id,
+                message,
+                final_text,
+                &retrieved_tool_results,
+                &final_request,
+                gate_entity_anchored,
+            )
+            .await;
         let verified = crate::quote_verification::verify_quotes(
-            &final_text,
+            &gated_text,
             &verification_chunks,
             &verification_verbatim_spans,
             crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
@@ -522,9 +586,94 @@ impl Runtime {
             total_chunks,
             iterations,
             &search_method_parts,
+            grounding_gate_meta,
         )
         .await
     }
+    /// Grounding gate for the attached-doc surface (GateSurface::
+    /// AttachedDoc, env-gated default-off). Evidence snapshot = the
+    /// turn's passage-bearing tool results; sealed search universe =
+    /// the attached asset's own chunks (`AttachedAssetSearcher` —
+    /// structurally cannot reach another document or corpus). Skips
+    /// when the gate is off or no passages were retrieved (the
+    /// zero-retrieval structural refusal upstream owns that path).
+    /// Returns the (possibly rewritten) text + gate metadata.
+    async fn gate_attached_doc_answer(
+        &self,
+        conversation_id: &str,
+        session_id: &str,
+        question: &str,
+        draft: String,
+        retrieved_tool_results: &[String],
+        base_request: &CompletionRequest,
+        entity_anchored: bool,
+    ) -> (String, Option<serde_json::Value>) {
+        let surface = crate::runtime::grounding::GateSurface::AttachedDoc;
+        if !surface.enabled() || retrieved_tool_results.is_empty() {
+            return (draft, None);
+        }
+        // Hold-phase chip: the gate withholds the answer during
+        // verification, which reads as a stall without this.
+        if let Some(event) = self.sessions.try_emit_narration(
+            session_id,
+            NarrationPhase::GroundingVerifyStart,
+            "Verifying the drafted answer against the attached document before showing it."
+                .to_string(),
+        ) {
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: session_id.to_string(),
+                    conversation_id: conversation_id.to_string(),
+                    event,
+                })
+                .await;
+        }
+        // Sealed universe = this asset's chunks. Resolution failure
+        // degrades to searcher: None (audit judges the snapshot
+        // alone — never worse than pre-gate behavior).
+        let searcher: Option<std::sync::Arc<dyn crate::runtime::grounding::SealedEvidenceSearch>> =
+            match self
+                .store
+                .get_document_session_by_conversation(conversation_id)
+                .await
+            {
+                Ok(Some(session)) => {
+                    match self.store.get_document_asset(&session.source).await {
+                        Ok(Some(asset)) => {
+                            let chunks = self
+                                .store
+                                .get_chunks_by_source(&asset.source_key())
+                                .await
+                                .unwrap_or_default();
+                            Some(std::sync::Arc::new(
+                                crate::runtime::grounding::AttachedAssetSearcher::new(
+                                    std::sync::Arc::clone(&self.inference),
+                                    &chunks,
+                                ),
+                            ) as _)
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+        let evidence = crate::runtime::grounding::EvidenceContext {
+            chunks: retrieved_tool_results.to_vec(),
+            searcher,
+            entity_anchored,
+        };
+        let outcome = crate::runtime::grounding::gate_answer(
+            &self.inference,
+            question,
+            draft,
+            &evidence,
+            base_request,
+            &surface.profile(),
+        )
+        .await;
+        (outcome.text, Some(outcome.meta))
+    }
+
     /// Build a "Document briefing" block for the system prompt: the
     /// document's title, type, overview, top-N ranked entities, and
     /// the first few structural moments. Falls back to a minimal
@@ -1171,6 +1320,7 @@ impl Runtime {
         total_chunks: usize,
         iterations: usize,
         search_method_parts: &[String],
+        grounding_gate_meta: Option<serde_json::Value>,
     ) -> Result<Response> {
         let search_method = if search_method_parts.is_empty() {
             Some(format!("AttachedDoc ({iterations} iterations, no tools)"))
@@ -1211,19 +1361,23 @@ impl Runtime {
             context_window: self.inference.effective_context_size(),
         };
 
+        let mut metadata = serde_json::json!({
+            "intent": "AttachedDoc",
+            "iterations": iterations,
+            "tools_invoked": tool_ids_invoked.iter().cloned().collect::<Vec<_>>(),
+            "retrieved_chunks_total": total_chunks,
+            "provenance": provenance,
+        });
+        if let Some(gate) = grounding_gate_meta {
+            metadata["grounding_gate"] = gate;
+        }
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
             content: text.to_string(),
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "intent": "AttachedDoc",
-                "iterations": iterations,
-                "tools_invoked": tool_ids_invoked.iter().cloned().collect::<Vec<_>>(),
-                "retrieved_chunks_total": total_chunks,
-                "provenance": provenance,
-            })),
+            metadata: Some(metadata),
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;
