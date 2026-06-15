@@ -175,14 +175,6 @@ impl LatencyProber {
 
         Ok(())
     }
-
-    /// Merge measurements from another node (received via gossip).
-    pub async fn merge_remote_measurements(&self, remote_matrix: &LatencyMatrix) {
-        // In a full implementation, we'd selectively merge entries from the
-        // remote matrix. For now, we only store measurements we made ourselves
-        // or that are shared via gossip.
-        let _ = remote_matrix; // Will be implemented with gossip integration.
-    }
 }
 
 fn now_secs() -> u64 {

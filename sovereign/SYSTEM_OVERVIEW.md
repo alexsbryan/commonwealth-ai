@@ -969,8 +969,12 @@ the plan healthy as nodes come and go.
   EWMA α=0.3. `LatencyMatrix` shared via gossip.
 - **Hardware detection** — `discovery/hardware.rs` tries
   `nvidia-smi`, then `rocm-smi`, then Metal.
-- **TLS** — `tls.rs` generates per-session certs with `rcgen`;
-  pinned on the internal API.
+- **TLS** — not wired on the LAN mesh today: the internal API
+  (:9742) is served plaintext. The unused per-session-cert /
+  `TrustStore` scaffolding (`discovery/tls.rs`) was removed
+  (2026-06-15) rather than left as a security façade. TLS *is* used
+  on the separate worker-pod path
+  (`sovereign-mesh/worker_daemon.rs`, `axum_server::bind_rustls`).
 - **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
   `ModelAndKnowledgeSharing`, `Full`.
 

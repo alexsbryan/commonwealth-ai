@@ -643,6 +643,13 @@ impl MeshInferenceProvider {
                 // Rolling-window failure rate: EMA toward 1.0 with
                 // alpha 0.1 — 10 consecutive failures settle near 0.65.
                 entry.recent_failure_rate = (entry.recent_failure_rate * 0.9 + 0.1).min(1.0);
+                tracing::warn!(
+                    target: "mesh.health",
+                    peer = name,
+                    failure_rate = entry.recent_failure_rate,
+                    in_flight = entry.in_flight,
+                    "peer dispatch failed — failure-rate EMA climbing; the scorer will deprioritize this peer"
+                );
                 return;
             }
         };
@@ -1944,6 +1951,11 @@ impl InferenceProvider for MeshInferenceProvider {
                 }
             }
         }
+        tracing::error!(
+            target: "mesh.health",
+            last_err = ?last_err,
+            "mesh-inference: route cascade exhausted — every candidate peer and the local fallback failed for this request"
+        );
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(
                 "mesh-inference: route cascade exhausted with no success".into(),
@@ -2057,6 +2069,11 @@ impl InferenceProvider for MeshInferenceProvider {
                 }
             }
         }
+        tracing::error!(
+            target: "mesh.health",
+            last_err = ?last_err,
+            "mesh-inference: typed route cascade exhausted — every candidate peer and the local fallback failed for this request"
+        );
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(
                 "mesh-inference: typed route cascade exhausted with no success".into(),

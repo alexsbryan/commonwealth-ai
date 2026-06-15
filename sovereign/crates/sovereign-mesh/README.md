@@ -175,8 +175,9 @@ a JSON object key).
   — future work.
 - **Plain HTTP on the join handshake.** The join_key is exposed on
   whatever network the handshake traverses (LAN, tailnet). Acceptable
-  trust model for v1 ("shared via trusted chat"). Gossip uses mutual
-  TLS post-handshake via the existing `TrustStore`.
+  trust model for v1 ("shared via trusted chat"). Gossip + the internal
+  API are plaintext today — the `TrustStore` / mutual-TLS scaffolding was
+  unwired dead code and has been removed; transport security is future work.
 - **Persistent mesh state across restarts.** `Mesh` lives in
   memory; quit the app and rejoin to rebuild.
 - **CLI `sovereign mesh join <url>`.** The command works but its
