@@ -20,14 +20,10 @@
 //!    controls lifecycle.
 
 use std::io::IsTerminal as _;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
-use corpus_engine_notes::{NotePropagationEvent, NoteStore};
-use sovereign_core::model_family::{
-    EmbedModelInfo, NormalizationStrategy, PoolingStrategy,
-};
+use corpus_engine::{CorpusEngine, LintResultStore, TestResultStore};
+use corpus_engine_notes::NoteStore;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -37,6 +33,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
 mod build;
+mod bootstrap;
 mod lifecycle;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
 // `install-service`'s double-start guard and doctor's supervision check.
@@ -47,11 +44,10 @@ mod worker;
 mod workspace;
 
 use lifecycle::{
-    daemon_pid_path, reload_daemon, restart_daemon, start_daemon, status_daemon,
+    reload_daemon, restart_daemon, start_daemon, status_daemon,
     stop_daemon, wait_for_shutdown,
 };
-use provider::LlamaCppFactory;
-use tool_registry::{build_merged_scip_graph, build_tool_registry};
+use tool_registry::build_tool_registry;
 use worker::run_worker_daemon;
 use workspace::resolve_workspace_dir;
 
@@ -459,216 +455,26 @@ async fn run_daemon(args: &[String]) -> i32 {
     // sovereign + commonwealth + corpus-engine in parallel. So one
     // env var lights up coverage for all three.
     let workspace_dir = resolve_workspace_dir();
-    // Shared liveness beacon: the coordinator loop stamps it, the
-    // status tools read it. Replaces the old one-shot `watcher_active`
-    // bool, which could not detect a watcher that died after starting.
-    // Mirrors to a sidecar file so the separate `sovereign` CLI process
-    // (which reads the same SQLite stores) sees the same liveness — the
-    // daemon's in-memory atomic alone is invisible cross-process.
-    let watcher_heartbeat =
-        corpus_engine::WatcherHeartbeat::with_sidecar(data_dir.join("watcher-heartbeat"));
-    let mut lint_watcher: Option<Arc<corpus_engine::LintWatcher>> = None;
-    let mut test_watcher: Option<Arc<corpus_engine::TestWatcher>> = None;
-    let mut watched_lint_scope: Option<String> = None;
-    let mut watched_test_scope: Option<String> = None;
-    // Held for the lifetime of `start_daemon`. This is the
-    // `WatcherSupervisor`'s monitor task: dropping it aborts the
-    // monitor, which in turn drops the live coordinator handle and
-    // shuts the watcher down. Underscored because we never read it back;
-    // the value is the side effect of holding the task alive.
-    let mut _watcher_monitor: Option<tokio::task::JoinHandle<()>> = None;
-
-    // ── Work atlas wiring (Phase 2) ────────────────────────────────────
-    // Single shared `Arc<MeshStore>`: handed into the EmbeddedDaemon
-    // via `set_mesh_store` so `AppState.inner.mesh_store` IS this
-    // instance, and also handed into the `WorkAtlasStore` so claims
-    // and observations land in the same store gossip publishes from.
-    // In-memory is intentional — matches the daemon's existing
-    // long-term-persistence-via-mesh.json design. The atlas-relevant
-    // records have TTLs measured in hours; restart cost is acceptable.
-    let work_atlas_mesh_store: Arc<commonwealth_state::MeshStore> = Arc::new(
-        commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore for work atlas"),
+    let bootstrap::WatcherAtlasSetup {
+        watcher_heartbeat,
+        lint_watcher,
+        test_watcher,
+        watched_lint_scope,
+        watched_test_scope,
+        watcher_monitor: _watcher_monitor,
+        work_atlas_mesh_store,
+        work_atlas_store,
+        work_atlas_broadcaster,
+        work_atlas_cfg,
+        work_atlas_repo_root,
+        work_atlas_repo_id,
+        work_atlas_branch,
+    } = bootstrap::setup_watchers_and_work_atlas(
+        &workspace_dir,
+        &data_dir,
+        Arc::clone(&lint_store),
+        Arc::clone(&test_store),
     );
-    // Node identity — same resolution order EmbeddedDaemon uses when
-    // it starts (file-on-disk → mesh.json → generate). Resolved early
-    // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
-    let work_atlas_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
-        Ok(Some(id)) => id,
-        _ => match sovereign_mesh::persist::load(&data_dir) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir),
-        },
-    };
-    let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&work_atlas_mesh_store),
-        work_atlas_node_id,
-    ));
-    // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which
-    // isn't reachable until `daemon.try_resume()`. The MCP tools and
-    // the AtlasObserver hold this handle now; we swap the real
-    // broadcaster in once `app_state` is available.
-    let work_atlas_broadcaster = Arc::new(sovereign_work_atlas::tools::DeferredBroadcaster::new());
-    let work_atlas_cfg = {
-        let path = dirs::home_dir()
-            .map(|h| h.join(".sovereign").join("work-atlas.toml"))
-            .unwrap_or_else(|| data_dir.join("work-atlas.toml"));
-        sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path).unwrap_or_else(|e| {
-            tracing::warn!(
-                error = %e,
-                path = %path.display(),
-                "work_atlas: config load failed, using defaults"
-            );
-            sovereign_work_atlas::WorkAtlasConfig::defaults()
-        })
-    };
-    // Resolved later if the workspace has an `origin` remote.
-    let mut work_atlas_observer: Option<Arc<sovereign_work_atlas::AtlasObserver>> = None;
-    let mut work_atlas_repo_root: Option<std::path::PathBuf> = None;
-    let mut work_atlas_repo_id: Option<String> = None;
-    let mut work_atlas_branch: Option<String> = None;
-
-    if let Some(ref ws) = workspace_dir {
-        let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&ws.join(".sovereign"));
-        // Single-permit semaphore shared by the lint + test watchers so
-        // their cargo subprocesses serialize instead of compounding
-        // memory pressure. Without this, both fire concurrent cargo
-        // check / cargo test invocations on every debounced edit
-        // flush, doubling RSS and inviting macOS to SIGTERM the daemon
-        // under pressure.
-        let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
-
-        if let Some(ref cfg) = sov_cfg.lint_runner {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    ws.join(p)
-                }
-            });
-            watched_lint_scope = Some(cfg.command.clone());
-            lint_watcher = Some(Arc::new(
-                corpus_engine::LintWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(120),
-                    Arc::clone(&lint_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            ));
-            tracing::info!(
-                command = %cfg.command,
-                workspace = %ws.display(),
-                "lint watcher configured (shared run slot)"
-            );
-        }
-        if let Some(ref cfg) = sov_cfg.test_runner {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    ws.join(p)
-                }
-            });
-            watched_test_scope = Some(cfg.command.clone());
-            test_watcher = Some(Arc::new(
-                corpus_engine::TestWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(300),
-                    Arc::clone(&test_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            ));
-            tracing::info!(
-                command = %cfg.command,
-                workspace = %ws.display(),
-                "test watcher configured (shared run slot)"
-            );
-        }
-
-        // Work-atlas observer (Phase 2). Requires the workspace to
-        // resolve a `repo_id` (SHA-256 of canonical origin URL). When
-        // the repo has no origin remote, the observer becomes a
-        // no-op rather than crashing the daemon — same posture as
-        // `declare_scope`, which errors on `repo_id_missing`.
-        match sovereign_work_atlas::resolve_repo_id(ws) {
-            Ok((repo_root, repo_id)) => {
-                let branch = sovereign_cli_shared::repo::current_branch(&repo_root);
-                let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
-                    Arc::clone(&work_atlas_store),
-                    work_atlas_cfg.clone(),
-                    Arc::clone(&work_atlas_broadcaster)
-                        as Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster>,
-                    repo_root.clone(),
-                    repo_id.clone(),
-                    branch.clone(),
-                ));
-                work_atlas_observer = Some(Arc::clone(&observer));
-                work_atlas_repo_root = Some(repo_root);
-                work_atlas_repo_id = Some(repo_id);
-                work_atlas_branch = branch;
-                eprintln!(
-                    "sovereign daemon: work-atlas observer wired on {}",
-                    ws.display()
-                );
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    workspace = %ws.display(),
-                    "work_atlas:repo_id_missing — atlas observer disabled (no origin remote)"
-                );
-            }
-        }
-
-        if lint_watcher.is_some() || test_watcher.is_some() || work_atlas_observer.is_some() {
-            let debounce_ms = sov_cfg
-                .lint_runner
-                .as_ref()
-                .and_then(|c| c.debounce_ms)
-                .or_else(|| sov_cfg.test_runner.as_ref().and_then(|c| c.debounce_ms))
-                .unwrap_or(800);
-
-            // Collect the registered watchers once; the supervisor holds
-            // them so it can rebuild the coordinator on restart without
-            // re-deriving anything.
-            let mut watchers: Vec<Arc<dyn corpus_engine::BackgroundWatcher>> = Vec::new();
-            if let Some(ref w) = lint_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
-            }
-            if let Some(ref w) = test_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
-            }
-            if let Some(ref obs) = work_atlas_observer {
-                watchers.push(Arc::clone(obs) as Arc<dyn corpus_engine::BackgroundWatcher>);
-            }
-
-            // The supervisor performs the initial start AND self-heals:
-            // if the coordinator loop dies or its heartbeat freezes, it
-            // rebuilds and restarts (bounded backoff). Holding the monitor
-            // task handle keeps the watcher alive for the daemon's life.
-            let supervisor = crate::watcher_supervisor::WatcherSupervisor::new(
-                watchers,
-                vec![ws.clone()],
-                debounce_ms,
-                Arc::clone(&watcher_heartbeat),
-            );
-            _watcher_monitor = supervisor.spawn();
-            if _watcher_monitor.is_some() {
-                eprintln!(
-                    "sovereign daemon: watcher supervisor live on {} (self-healing)",
-                    ws.display()
-                );
-            }
-        }
-    } else {
-        tracing::debug!(
-            "no workspace resolved (set SOVEREIGN_WORKSPACE_DIR or write \
-             ~/.sovereign/workspace) — lint/test watcher disabled"
-        );
-    }
 
     // ── CorpusEngine ──────────────────────────────────────────────
     // Single shared instance: powers both the `/mcp` tool registry
@@ -712,13 +518,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // ignore (2), which is exactly the bug we're fixing: the user's
     // daemon resumes with mesh.json's id while the engine had been
     // minting a mismatched fresh one.
-    let self_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
-        Ok(Some(id)) => id,
-        _ => match sovereign_mesh::persist::load(&data_dir) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir),
-        },
-    };
+    let self_node_id = bootstrap::resolve_self_node_id(&data_dir);
     // Stamp outbound NoteStore propagation events with this node
     // id. `content_hash` is the dedup primary key on the gossip
     // wire so `origin_node_id` rotation (toolbx rebuilds without
@@ -740,269 +540,18 @@ async fn run_daemon(args: &[String]) -> i32 {
     // The raw `Arc<GlinerExtractor>` is hoisted alongside the
     // trait-object wrapper so the NoteStore T2 path can install
     // it as a `GlinerFn` adapter without re-loading the model.
-    let mut gliner_raw: Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>> = None;
-    let chunk_entity_extractor: Option<
-        std::sync::Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
-    > = {
-        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
-            let store_path = data_dir.join("sovereign.db");
-            match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
-                Ok(store_for_extractor) => {
-                    match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
-                        Ok(ex) => {
-                            tracing::info!(
-                                model = model_id,
-                                "conv-tiered: GliNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
-                            );
-                            let ex_arc = Arc::new(ex);
-                            gliner_raw = Some(Arc::clone(&ex_arc));
-                            Some(std::sync::Arc::new(
-                                sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
-                                    Arc::new(store_for_extractor),
-                                    ex_arc,
-                                ),
-                            )
-                                as Arc<
-                                    dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
-                                >)
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                model = model_id,
-                                error = %e,
-                                "conv-tiered: GliNER load failed — tiered ingest will fall back to RAPTOR-only entities"
-                            );
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        store_path = %store_path.display(),
-                        error = %e,
-                        "conv-tiered: cannot open state store for entity extractor — skipping"
-                    );
-                    None
-                }
-            }
-        } else {
-            let root = sovereign_tools::gliner_ner::models_root().join(model_id);
-            tracing::info!(
-                model = model_id,
-                expected_path = %root.display(),
-                "conv-tiered: GliNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
-            );
-            None
-        }
-    };
+    let (gliner_raw, chunk_entity_extractor) =
+        bootstrap::load_gliner_extractor(&data_dir);
 
-    let engine: Arc<CorpusEngine> = {
-        let indexes_dir = data_dir.join("indexes");
-        let provider_for_embed = Arc::clone(&provider);
-        let embed: EmbedFn = Arc::new(move |text: &str| {
-            let p = Arc::clone(&provider_for_embed);
-            let text = text.to_string();
-            Box::pin(async move {
-                p.embed(&text)
-                    .await
-                    .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
-            })
-        });
-        let provider_for_batch = Arc::clone(&provider);
-        let batch_embed: corpus_engine::types::BatchEmbedFn =
-            Arc::new(move |texts: &[String]| {
-                let p = Arc::clone(&provider_for_batch);
-                let texts = texts.to_vec();
-                Box::pin(async move {
-                    p.embed_batch(&texts)
-                        .await
-                        .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
-                })
-            });
-
-        // Wire the SAME embed slot into the NoteStore so T1
-        // (semantic-blend retrieval) lights up. NoteStore has its
-        // own `Error` type — adapt at the boundary so
-        // `corpus-engine-notes` stays dep-free of `corpus-engine`
-        // per `ARCH §8.3` (one-way edge).
-        let provider_for_notes = Arc::clone(&provider);
-        let notes_embed: corpus_engine_notes::EmbedFn = Arc::new(move |text: &str| {
-            let p = Arc::clone(&provider_for_notes);
-            let text = text.to_string();
-            Box::pin(async move {
-                p.embed(&text).await.map_err(|e| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
-                        "notes embed: {e}"
-                    )))
-                })
-            })
-        });
-        if let Err(e) = notes_store.set_embed_fn(notes_embed) {
-            tracing::warn!(target = "notes", error = e, "notes: embed_fn already set");
-        } else {
-            tracing::info!(
-                target = "notes",
-                "notes: T1 embed_fn wired to local embed slot"
-            );
-        }
-
-        // T2: wire the same GLiNER session into the NoteStore so
-        // write_note extracts (entity, kind) pairs into
-        // `note_entities`. Skips if GLiNER isn't loaded — T2 then
-        // works on author-supplied symbols + files only (still a
-        // useful signal for read_notes_related).
-        if let Some(ref gliner) = gliner_raw {
-            let gliner_clone = Arc::clone(gliner);
-            let notes_gliner: corpus_engine_notes::GlinerFn = Arc::new(move |text: &str| {
-                let g = Arc::clone(&gliner_clone);
-                let text = text.to_string();
-                Box::pin(async move {
-                    // GlinerExtractor::extract is sync (Mutex-locked
-                    // ONNX session). Run on the blocking pool so we
-                    // don't park the async runtime for ~tens of ms.
-                    tokio::task::spawn_blocking(move || g.extract(&text))
-                        .await
-                        .map_err(|e| {
-                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
-                                "notes gliner: join error {e}"
-                            )))
-                        })?
-                        .map(|mentions| {
-                            mentions
-                                .into_iter()
-                                .map(|m| (m.text, m.label))
-                                .collect::<Vec<_>>()
-                        })
-                        .map_err(|e| {
-                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
-                                "notes gliner: {e}"
-                            )))
-                        })
-                })
-            });
-            if let Err(e) = notes_store.set_gliner_fn(notes_gliner) {
-                tracing::warn!(target = "notes", error = e, "notes: gliner_fn already set");
-            } else {
-                tracing::info!(
-                    target = "notes",
-                    "notes: T2 gliner_fn wired to loaded GLiNER session"
-                );
-            }
-        } else {
-            tracing::info!(
-                target = "notes",
-                "notes: GLiNER not loaded; T2 will use author-supplied symbols/files only"
-            );
-        }
-        // Derive the embed model identifier from the configured GGUF
-        // path so `_corpus_meta.json` records the actual model rather
-        // than failing the ingest pre-flight ("embedding model name not
-        // configured"). Matches the wiring in `state.rs:717-723` and
-        // every other call site (`main.rs:506`, `chat_cmd/bootstrap.rs`,
-        // `code_cmd.rs`, `project_cmd.rs`); the standalone daemon was
-        // the lone holdout, which is why the desktop's
-        // `/internal/corpus/install` POST hits this engine and bombs at
-        // the pre-flight before the first byte is downloaded.
-        let embed_model_name = config
-            .models
-            .embed
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown-embed-model")
-            .to_string();
-        // recipes_dir doubles as the registry's overrides_dir. Locally-
-        // published recipes from `sovereign recipe publish` land at
-        // `~/.sovereign/recipes/<id>/recipe.toml` and only resolve when
-        // the engine's overrides_dir points there. Earlier this passed
-        // `indexes_dir` for the recipes argument, which made every
-        // `corpus install` skip the local override and try the public
-        // registry URL — the wikipedia-catalog dev variant could never
-        // be installed because its data URL is not yet hosted.
-        let recipes_dir = data_dir.join("recipes");
-        // Recipe enrichment (`[enrichment] enabled = true, type = "atlas"`)
-        // requires an InferenceFn — without one, `engine.ingest` logs
-        // "no InferenceFn was provided to CorpusEngine — skipping" and
-        // silently degrades to chunks-only ingest. The embedded daemon
-        // was the lone holdout (every other call site —
-        // `sovereign-server/src/main.rs:224`,
-        // `sovereign-desktop/src-tauri/src/state.rs:1053`,
-        // `sovereign-cli/src/main.rs:865`,
-        // `chat_cmd/bootstrap.rs:242` — wires this); surface symptom
-        // was conversations-personal landing 180 embedded chunks with
-        // no atlas/atoms.json. Same provider already drives embed +
-        // batch_embed above.
-        let inference_fn =
-            sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
-        // Conv-tiered enrichment provider — spec
-        // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Opens the
-        // canonical state store at `~/.sovereign/sovereign.db` so the
-        // provider can write `conv_raptor_nodes` / `conv_skeletons` /
-        // `conv_motifs` rows during corp-anthropic ingest. Failing to
-        // open is non-fatal: the tiered runner falls back to its
-        // dispatch-plan-only mode when no provider is injected, which
-        // is still useful diagnostic output.
-        let tiered_provider: Option<
-            std::sync::Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
-        > = {
-            let db_path = data_dir.join("sovereign.db");
-            match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
-                Ok(store) => {
-                    let store_arc = Arc::new(store);
-                    // FolderTieredProvider is used for BOTH conv and
-                    // folder corpora. Its `enrich_conversation` accepts
-                    // an arbitrary `conv_uuid` (matches conv corpora's
-                    // chat-uuid grouping AND folder corpora's
-                    // source_doc_id grouping), and its
-                    // `finalize_corpus` override runs the vault-wide
-                    // synthesis pass — needed for vault_themes to
-                    // populate when ingest takes the folder-dispatch
-                    // path. Wiring ConvTieredProvider here meant
-                    // finalize_corpus resolved to the trait's no-op
-                    // default and the cross-note briefing block was
-                    // always empty.
-                    let indexes_root = data_dir.join("indexes");
-                    let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
-                        Arc::new(
-                            sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                                indexes_root: indexes_root.clone(),
-                            },
-                        );
-                    let prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                        store_arc,
-                        Arc::clone(&provider),
-                    )
-                    .with_index_dir_resolver(resolver);
-                    Some(std::sync::Arc::new(prov))
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        db_path = %db_path.display(),
-                        error = %e,
-                        "conv-tiered: cannot open state store — tiered enrichment will run dispatch-plan-only mode"
-                    );
-                    None
-                }
-            }
-        };
-        // GliNER per-chunk entity extractor hoisted to outer scope
-        // above so the engine and the folder driver can share the
-        // same Arc<dyn> handle. Clone here to reuse.
-        let chunk_entity_extractor_for_engine = chunk_entity_extractor.clone();
-
-        let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
-            .with_embedding_model(&embed_model_name)
-            .with_batch_embed_fn(batch_embed)
-            .with_inference_fn(inference_fn)
-            .with_self_node_id(self_node_id.to_string());
-        if let Some(provider) = tiered_provider {
-            engine_builder = engine_builder.with_tiered_provider(provider);
-        }
-        if let Some(extractor) = chunk_entity_extractor_for_engine {
-            engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
-        }
-        Arc::new(engine_builder)
-    };
+    let engine: Arc<CorpusEngine> = bootstrap::build_corpus_engine(
+        &data_dir,
+        Arc::clone(&provider),
+        Arc::clone(&notes_store),
+        &gliner_raw,
+        &config,
+        self_node_id,
+        &chunk_entity_extractor,
+    );
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
@@ -1015,47 +564,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Installed on the manager via `set_tiered_deps` after the
     // manager is constructed (~line 1593 below). Without these,
     // `enable_enrichment` falls back to the legacy subprocess.
-    let folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> = {
-        let db_path = data_dir.join("sovereign.db");
-        match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
-            Ok(store) => {
-                let store_arc = Arc::new(store);
-                let indexes_root = data_dir.join("indexes");
-                let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
-                    Arc::new(
-                        sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                            indexes_root: indexes_root.clone(),
-                        },
-                    );
-                let folder_prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                    store_arc,
-                    Arc::clone(&provider),
-                )
-                .with_index_dir_resolver(resolver);
-                let folder_prov_arc: Arc<
-                    dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
-                > = Arc::new(folder_prov);
-                tracing::info!(
-                    "watched_folder:tiered_deps_constructed — \
-                     FolderTieredProvider wired; folder enrichment routes \
-                     through in-process tiered driver"
-                );
-                Some(sovereign_tools::local_corpus::watched::enrich::TieredDeps {
-                    tiered_provider: folder_prov_arc,
-                    gliner_extractor: chunk_entity_extractor,
-                })
-            }
-            Err(e) => {
-                tracing::warn!(
-                    db_path = %db_path.display(),
-                    error = %e,
-                    "watched_folder:tiered_deps_unavailable — cannot open state store; \
-                     folder enrichment will fall back to the legacy subprocess"
-                );
-                None
-            }
-        }
-    };
+    let folder_tiered_deps = bootstrap::build_folder_tiered_deps(
+        &data_dir,
+        Arc::clone(&provider),
+        chunk_entity_extractor,
+    );
 
     // ── Tool registry (code intelligence + notes) ─────────────────
     // The embedded daemon serves /mcp for all locally-indexed corpora
@@ -1081,122 +594,8 @@ async fn run_daemon(args: &[String]) -> i32 {
     )
     .await;
 
-    // ── EmbeddedDaemon ────────────────────────────────────────────
-    // Wrap in Arc so the mesh HTTP router can clone it for axum
-    // handlers (see `install_mesh_http_router` — the router needs an
-    // owned `Arc<EmbeddedDaemon>` to drive `create/join/rotate/leave`
-    // from HTTP callers).
-    let daemon = Arc::new(sovereign_mesh::EmbeddedDaemon::new(data_dir.clone()));
-
-    // Wrap the raw `EmbeddedLlamaCpp` in `MeshInferenceProvider`
-    // before installing it as the daemon's serving provider.
-    //
-    // Without this wrapper the daemon's HTTP `/v1/chat/completions`
-    // path silently substitutes a local model whenever the request
-    // names a model that's only advertised by a peer (e.g. asking
-    // for `gemma-4-E4B-it-Q4_K_M` on a node that only loads
-    // `Qwen3.5-9B` and `35B-Q6` would answer with 35B-Q6 and stamp
-    // the response accordingly). The wrapper inspects
-    // `request.model_id` and either:
-    //   * serves locally when self_manifest advertises the id
-    //     (the local provider's slot picker handles Fast/Primary/
-    //     Code/extras matching by name), or
-    //   * forwards the request over HTTP to the peer whose manifest
-    //     advertises the id, or
-    //   * returns `ModelNotLoaded` if no node serves it — instead
-    //     of the previous silent substitution.
-    //
-    // Mirrors the desktop wiring in
-    // `sovereign-desktop/src-tauri/src/state.rs:649` so a request
-    // hitting either entrypoint follows the same routing rules.
-    // Keep a typed handle to the mesh provider so we can push the
-    // slot-alias map into it once `register_local_model_slots` has
-    // populated `AppState.slot_aliases`. The trait-object form is
-    // what the daemon needs; the typed form is what the alias
-    // installer needs.
-    // Compose the gossiped-mesh source with any pinned worker pod
-    // snapshots persisted on disk. `pod up` writes one snapshot per
-    // pod into `~/.sovereign/worker-pods/`; this loop loads them at
-    // daemon startup and registers each with the inference scheduler
-    // so subsequent `chat/completions` calls can route to them.
-    // Empty when no pods are configured (the common case) —
-    // pinned_source.peer_inference_endpoints() returns an empty Vec
-    // and the composite degrades to mesh-only.
-    // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
-    let pinned_source =
-        Arc::new(sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new());
-    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
-        let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
-        let now_unix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        // 2026-05-18: silently expired tokens caused a 6h SEP-on-Vast
-        // outage. Registering an already-expired snapshot means every
-        // routed inference call gets `token expired` from the pod and
-        // is retried via mesh fallback — wasteful and confusing. Skip
-        // expired snapshots loudly here so the operator sees the
-        // problem at daemon start, not after burning a night of GPU.
-        const NEAR_EXPIRY_WARN_SECS: u64 = 4 * 3600; // 4h
-        for snap in snapshots {
-            let expires_unix = snap.bootstrap_blob.expires_unix;
-            if expires_unix <= now_unix {
-                tracing::error!(
-                    vast_id = %snap.vast_id,
-                    expires_unix,
-                    expired_secs_ago = now_unix.saturating_sub(expires_unix),
-                    "daemon_cmd: pinned-pod snapshot token EXPIRED — \
-                     skipping (tear down with `sovereign pipeline pod down {id}` \
-                     or relaunch with `--ttl-hours <N>` to refresh)",
-                    id = snap.vast_id,
-                );
-                continue;
-            }
-            let remaining = expires_unix.saturating_sub(now_unix);
-            if remaining < NEAR_EXPIRY_WARN_SECS {
-                tracing::warn!(
-                    vast_id = %snap.vast_id,
-                    expires_unix,
-                    remaining_secs = remaining,
-                    "daemon_cmd: pinned-pod snapshot token near expiry \
-                     (<4h remaining) — plan a fresh `pipeline pod up` if \
-                     your run will outlast it"
-                );
-            }
-            match snap.to_pinned_pod() {
-                Ok(pod) => {
-                    tracing::info!(
-                        vast_id = %snap.vast_id,
-                        host = %snap.host,
-                        port = snap.port,
-                        node_id = %pod.node_id,
-                        expires_in_h = remaining as f64 / 3600.0,
-                        "daemon_cmd: registered pinned worker pod with inference scheduler"
-                    );
-                    pinned_source.register(pod).await;
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        vast_id = %snap.vast_id,
-                        error = %e,
-                        "daemon_cmd: pinned-pod snapshot rejected — skipping"
-                    );
-                }
-            }
-        }
-    }
-    let composite_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> = Arc::new(
-        sovereign_mesh::pinned_worker_source::CompositeEndpointSource::new(
-            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
-            Arc::clone(&pinned_source),
-        ),
-    );
-    let mesh_provider = Arc::new(
-        sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
-            Arc::clone(&provider),
-            composite_source,
-        ),
-    );
+    let (daemon, mesh_provider) =
+        bootstrap::build_mesh_providers(&data_dir, Arc::clone(&provider)).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
     daemon
         .set_inference_provider(Arc::clone(&routed_provider))
@@ -1211,138 +610,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
     sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
 
-    // Mesh RPC-worker auto-discovery. With `SOVEREIGN_RPC_DISCOVER` set, this
-    // host periodically scans peers' `/status` for advertised RPC workers and
-    // feeds them to the embedded engine's worker provider — so distributing a
-    // model across the cluster needs no manual `SOVEREIGN_RPC_WORKERS` list.
-    // (Applies on the next model load after discovery populates; an eagerly
-    // loaded model picks workers up on reload — see register_rpc_workers.)
-    if std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok() {
-        let snapshot = Arc::new(std::sync::RwLock::new(Vec::<String>::new()));
-        sovereign_inference::embedded::set_rpc_worker_provider({
-            let snap = Arc::clone(&snapshot);
-            move || snap.read().map(|v| v.clone()).unwrap_or_default()
-        });
-        // Worker eligibility gate — only distribute to PROVEN-STABLE workers, so a
-        // flapping worker can neither thrash the reload loop nor (by crashing
-        // mid-compute) GGML_ABORT the host. See `sovereign_mesh::worker_eligibility`.
-        let eligibility = std::sync::Arc::new(
-            sovereign_mesh::worker_eligibility::WorkerEligibility::default(),
-        );
-        sovereign_mesh::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));
-        let daemon_for_disco = Arc::clone(&daemon);
-        let engine_for_reload = engine_handle.clone();
-        tokio::spawn(async move {
-            // `last_loaded` = worker set the resident primary was loaded across;
-            // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
-            // to stop changing before paying a reload).
-            let mut last_loaded: Vec<String> = Vec::new();
-            let mut current: Vec<String> = Vec::new();
-            let mut stable_since = std::time::Instant::now();
-            const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
-            loop {
-                // Raw discovery → eligibility gate → only PROVEN-STABLE workers
-                // reach the provider + the reload decision. A flapping worker stays
-                // out of `workers`, so the set the debounce compares never
-                // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
-                let raw = daemon_for_disco.discover_rpc_workers().await;
-                let now = std::time::Instant::now();
-                eligibility.observe(&raw, now);
-                let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
-                if let Ok(mut w) = snapshot.write() {
-                    *w = workers.clone();
-                }
-                if workers != current {
-                    tracing::info!(
-                        eligible = workers.len(),
-                        discovered = raw.len(),
-                        workers = ?workers,
-                        "mesh RPC eligible-worker set changed"
-                    );
-                    current = workers.clone();
-                    stable_since = std::time::Instant::now();
-                }
-                // Reload when the worker set CHANGES (grow or shrink) vs what's
-                // loaded, once it's been stable briefly. A shrink prunes the dead
-                // worker's device on reload (live_device_list_if_pruning_needed).
-                let changed = current != last_loaded;
-                if changed && stable_since.elapsed() >= STABLE {
-                    match &engine_for_reload {
-                        Some(engine) => {
-                            tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
-                            match engine.reload_primary().await {
-                                Ok(()) => last_loaded = current.clone(),
-                                Err(e) => tracing::warn!(error = %e, "reload_primary failed; will retry next tick"),
-                            }
-                        }
-                        // No primary handle (provider build failed) — keep the
-                        // snapshot fresh so a later manual load still picks workers up.
-                        None => last_loaded = current.clone(),
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-            }
-        });
-    }
-    // Push slot aliases from AppState into the mesh provider once
-    // the daemon's setup phase has registered model slots. Without
-    // this, the mesh layer can't resolve `commonwealth/primary` →
-    // local GGUF in its Local-serving branch, and the deferred
-    // resolution path (routes_inference passes the alias through
-    // for mesh routing) never lands on a real slot. Done on a
-    // spawned task because `daemon.app_state()` only returns
-    // `Some` after `start()` transitions DaemonState to Running.
-    //
-    // Same spawned task also installs MIP's in-flight publisher Arc
-    // onto AppState — feeds the gossip-load-awareness path so peers
-    // see this node's true serving load instead of phantom-idle.
-    // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
-    {
-        let daemon_for_alias_push = Arc::clone(&daemon);
-        let mesh_for_alias_push = mesh_provider.clone();
-        tokio::spawn(async move {
-            // Poll briefly for the AppState to be available. The
-            // setup transition usually completes within a few
-            // hundred ms; cap at 30s so a stuck setup never hangs
-            // this spawn.
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-            let mut publisher_installed = false;
-            loop {
-                if let Some(state) = daemon_for_alias_push.app_state().await {
-                    if !publisher_installed {
-                        state
-                            .install_in_flight_publisher(mesh_for_alias_push.in_flight_publisher());
-                        publisher_installed = true;
-                        tracing::info!(
-                            "daemon_cmd: installed in-flight publisher on AppState \
-                             — gossip will now advertise this node's actual load"
-                        );
-                    }
-                    let snapshot = state.inner.slot_aliases.load();
-                    let map: std::collections::HashMap<String, String> = snapshot
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-                    if !map.is_empty() {
-                        tracing::info!(
-                            count = map.len(),
-                            "daemon_cmd: pushing slot aliases into mesh provider"
-                        );
-                        mesh_for_alias_push.set_slot_aliases(map);
-                        break;
-                    }
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    tracing::warn!(
-                        "daemon_cmd: slot-alias push timed out after 30s — \
-                         mesh layer will serve aliases as plain model ids"
-                    );
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
-        });
-    }
+    bootstrap::spawn_rpc_worker_discovery(Arc::clone(&daemon), engine_handle);
+
+
+    bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
+
     // Hand the engine to the mesh daemon so the auto_ingest loop and
     // /internal/corpus/* HTTP surface can both see in-progress
     // wikipedia/etc. ingests. See engine block above for the
@@ -1363,547 +635,60 @@ async fn run_daemon(args: &[String]) -> i32 {
         .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
         .await;
 
-    // ── NoteStore propagation wiring ─────────────────────────────
-    //
-    // Now that `mesh_store` is live, wire NoteStore's outbound
-    // sink to publish global non-private notes via app_id="notes"
-    // (and private notes via "notes-private", which is
-    // structurally gossip-excluded — see
-    // `commonwealth-state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`).
-    {
-        let mesh_for_sink = Arc::clone(&work_atlas_mesh_store);
-        let self_id_for_sink = self_node_id;
-        let sink: corpus_engine_notes::PropagationSinkFn =
-            Arc::new(move |ev: &NotePropagationEvent| {
-                let app_id = if ev.tombstone {
-                    // Tombstones ride the public namespace so peers
-                    // converge to the deleted state. Private notes
-                    // never propagate, so private tombstones don't
-                    // need to either.
-                    "notes"
-                } else {
-                    "notes"
-                };
-                match serde_json::to_vec(ev) {
-                    Ok(bytes) => {
-                        if let Err(e) = mesh_for_sink.set(
-                            app_id,
-                            &ev.content_hash,
-                            bytes.into(),
-                            self_id_for_sink,
-                        ) {
-                            tracing::warn!(
-                                target = "notes",
-                                error = %e,
-                                content_hash = %ev.content_hash,
-                                "notes: mesh propagation sink set() failed"
-                            );
-                        } else {
-                            tracing::debug!(
-                                target = "notes",
-                                content_hash = %ev.content_hash,
-                                tombstone = ev.tombstone,
-                                "notes: propagated"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            target = "notes",
-                            error = %e,
-                            "notes: failed to serialize propagation event"
-                        );
-                    }
-                }
-            });
-        if let Err(e) = notes_store.set_propagation_sink(sink) {
-            tracing::warn!(
-                target = "notes",
-                error = e,
-                "notes: propagation_sink already set"
-            );
-        } else {
-            tracing::info!(
-                target = "notes",
-                "notes: propagation_sink wired to MeshStore (app_id=notes)"
-            );
-        }
-    }
-
-    // One-shot tier-artifact backfill: pre-T1/T2 notes (anything
-    // written before `embed_fn`/`gliner_fn` were wired) get
-    // embeddings + entity rows on a background task so the
-    // existing notes corpus benefits from semantic recall +
-    // related-notes lookup immediately, not only when re-written.
-    // Runs once per daemon start. Best-effort: rows that error
-    // skip + pick up on the next start.
-    {
-        let notes_for_backfill = Arc::clone(&notes_store);
-        tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            let report = notes_for_backfill.backfill_tier_artifacts(0).await;
-            if report.embeddings_backfilled > 0 || report.entities_backfilled > 0 {
-                tracing::info!(
-                    target = "notes",
-                    embeddings = report.embeddings_backfilled,
-                    entities = report.entities_backfilled,
-                    embed_skipped = report.embed_skipped,
-                    entity_skipped = report.entity_skipped,
-                    "notes: tier-artifact backfill done"
-                );
-            }
-        });
-    }
-
-    // Ingest poller: bridge inbound MeshStore entries (merged from
-    // gossip) into `NoteStore::ingest_remote_notes`. MeshStore
-    // doesn't expose a merge-callback today — periodic scan is
-    // the path of least resistance. `ingest_remote_notes` is
-    // idempotent (content_hash dedup) so re-reads cost nothing.
-    //
-    // Cadence: 10s, matching the gossip push-pull cadence. Skips
-    // entries whose `origin` is `self_node_id` (those are notes
-    // WE published; reingesting via our own sink would be a no-op
-    // but wastes a JSON roundtrip).
-    {
-        let mesh_for_poller = Arc::clone(&work_atlas_mesh_store);
-        let notes_for_poller = Arc::clone(&notes_store);
-        let self_id_for_poller = self_node_id;
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                interval.tick().await;
-                let entries = match mesh_for_poller.scan("notes", "") {
-                    Ok(e) => e,
-                    Err(err) => {
-                        tracing::debug!(
-                            target = "notes",
-                            error = %err,
-                            "notes: ingest poller scan failed"
-                        );
-                        continue;
-                    }
-                };
-                let mut events: Vec<NotePropagationEvent> = Vec::new();
-                for entry in entries {
-                    if entry.origin == self_id_for_poller {
-                        continue;
-                    }
-                    match serde_json::from_slice::<NotePropagationEvent>(&entry.value) {
-                        Ok(ev) => events.push(ev),
-                        Err(e) => {
-                            tracing::warn!(
-                                target = "notes",
-                                key = %entry.key,
-                                error = %e,
-                                "notes: ingest poller could not decode entry; skipping"
-                            );
-                        }
-                    }
-                }
-                if events.is_empty() {
-                    continue;
-                }
-                match notes_for_poller.ingest_remote_notes(events).await {
-                    Ok(report) => {
-                        if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
-                            tracing::info!(
-                                target = "notes",
-                                inserted = report.inserted,
-                                tombstoned = report.tombstoned,
-                                forked = report.forked,
-                                deduplicated = report.deduplicated,
-                                rejected = report.rejected,
-                                "notes: ingest poller converged batch"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            target = "notes",
-                            error = %e,
-                            "notes: ingest_remote_notes failed"
-                        );
-                    }
-                }
-            }
-        });
-    }
-
-    // Lazy-stamp canonical fingerprints for any installed
-    // canonicals that don't yet carry one (legacy ingests pre-
-    // dating the canonical-sync surface). One BLAKE3 over the
-    // content_hash list per corpus; idempotent. Fired in the
-    // background so daemon startup doesn't block on it. See
-    // `corpus_engine::CorpusEngine::lazy_stamp_legacy_fingerprints`
-    // for the contract.
-    {
-        let engine_for_stamp = Arc::clone(&engine);
-        tokio::spawn(async move {
-            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
-        });
-    }
-
-    // Tier-2 enrichment resume: find any `<...>-tier2` workspace
-    // under `<data_dir>/enrichment/` whose checkpoint is incomplete
-    // and re-spawn `enrich extract --resume` for each. Picks up
-    // unfinished work after a daemon restart / host reboot. Safe
-    // to fire on every boot — already-complete workspaces no-op,
-    // and `--resume` skips chapters already in the checkpoint.
-    {
-        let enrich_dir = data_dir.join("enrichment");
-        let idx_dir = data_dir.join("indexes");
-        tokio::spawn(async move {
-            let cli_binary =
-                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
-            tracing::info!(
-                enrichment_dir = %enrich_dir.display(),
-                "tier-2 resume: scanning for unfinished workspaces"
-            );
-            let outcomes = sovereign_tools::atlas_postinstall::resume_inflight_tier2(
-                enrich_dir, idx_dir, cli_binary,
-            )
-            .await;
-            for o in outcomes {
-                use sovereign_tools::atlas_postinstall::Tier2LaunchOutcome;
-                match o {
-                    Tier2LaunchOutcome::Spawned {
-                        workspace_id,
-                        log_path,
-                        pid,
-                    } => tracing::info!(
-                        workspace = %workspace_id,
-                        log = %log_path.display(),
-                        pid,
-                        "tier-2 resume: re-spawned"
-                    ),
-                    Tier2LaunchOutcome::AlreadyComplete { .. } => {}
-                    // Resume scan never passes peer advice — this
-                    // arm is unreachable in practice but the
-                    // exhaustiveness check requires us to cover it.
-                    Tier2LaunchOutcome::DeferredToPeer { .. } => {}
-                    Tier2LaunchOutcome::InitFailed { reason }
-                    | Tier2LaunchOutcome::SpawnFailed { reason } => {
-                        tracing::warn!(reason, "tier-2 resume: re-spawn failed")
-                    }
-                }
-            }
-        });
-    }
-
-    // Publish this node's embed model fingerprint so peers can filter
-    // us in/out of collaborative ingestion.
-    //
-    // Without this wiring, `corpus_collaborate` returns 503
-    // "embed model not configured on this node — cannot plan
-    // collaboration" even though the embed slot is loaded and
-    // working. The desktop does the same publication in
-    // `sovereign-desktop/src-tauri/src/state.rs:885`; the CLI daemon
-    // just didn't mirror it.
-    //
-    // Probe the provider for the real output dimensions rather than
-    // trusting a hardcoded value — gets us the same ground truth the
-    // corpus-engine uses for its dimension-mismatch guard.
-    match provider.embed("probe").await {
-        Ok(probe_vec) => {
-            // `model_id` = bare filename stem (e.g.
-            // `qwen-embedding-0.6b`). Peers compare EmbedModelInfo
-            // for exact equality, so the string has to match what
-            // the desktop/other CLI daemons advertise for the same
-            // GGUF. File-stem is the stable shared handle.
-            let model_id = config
-                .models
-                .embed
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("embed")
-                .to_string();
-            // Resolve the embed family from the bundled manifest so
-            // pooling + normalisation match whatever the desktop
-            // path would advertise for the same GGUF. Without this,
-            // CLI daemons serving Qwen3-Embedding would have
-            // silently mismatched peers running the desktop build
-            // (Qwen3-Embedding is Last + Server, not Mean +
-            // Application) — collaborative ingestion would never
-            // plan across them.
-            //
-            // BYOM paths that don't match any manifest row fall
-            // through to `ModelFamily::Unknown` → Mean + Application
-            // (safe default for generic mean-pool BERT embedders).
-            // Reuse `resolved_embed_family` from provider construction
-            // (above) — same manifest lookup, same answer. Keeping a
-            // single source of truth prevents the slot loader and the
-            // mesh advertiser drifting apart on pooling defaults.
-            let embed_family = resolved_embed_family;
-            let embed_quirks = embed_family.default_quirks().embed;
-            let pooling = embed_quirks
-                .as_ref()
-                .map(|q| q.pooling)
-                .unwrap_or(PoolingStrategy::Mean);
-            let normalization = embed_quirks
-                .as_ref()
-                .map(|q| q.normalize)
-                .unwrap_or(NormalizationStrategy::Application);
-            let embed_info = EmbedModelInfo {
-                model_id: model_id.clone(),
-                dimensions: probe_vec.len(),
-                pooling,
-                normalization,
-            };
-            tracing::info!(
-                model_id = %embed_info.model_id,
-                dims = embed_info.dimensions,
-                family = ?embed_family,
-                pooling = ?pooling,
-                normalization = ?normalization,
-                "embed model info: advertising to mesh peers"
-            );
-            daemon.set_embed_model_info(embed_info).await;
-        }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "embed probe failed — peers will NOT route collaborative ingestion to this node"
-            );
-        }
-    }
-    let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
-    daemon
-        .set_mcp(Arc::new(tools), Arc::clone(&notes_store), session_id)
-        .await;
-
-    // Mount the mesh HTTP API so the desktop (when running in Attach
-    // mode) can drive `create/join/rotate/leave` against this daemon
-    // without starting its own colliding EmbeddedDaemon.
-    daemon
-        .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(Arc::clone(&daemon)))
-        .await;
-
-    // Admin HTTP surface — POST /v1/admin/reload. The factory below
-    // tells the reload handler how to rebuild an InferenceProvider
-    // when models.* changes on disk; without it, reload would error
-    // out on any model-path change.
-    daemon
-        .install_admin_http_router(sovereign_mesh::admin_http::admin_router(Arc::clone(
-            &daemon,
-        )))
-        .await;
-    // Reading-surface HTTP routes — `/internal/corpus/{c}/chunks/...`.
-    // Backs the desktop's glass-box reading UI when running against a
-    // standalone daemon (CLI-mode) instead of the in-process Tauri
-    // daemon. Loopback-only.
-    daemon
-        .install_reading_http_router(sovereign_mesh::reading_http::reading_router(Arc::clone(
-            &daemon,
-        )))
-        .await;
-    daemon
-        .set_provider_factory(Arc::new(LlamaCppFactory {
-            daemon: Arc::clone(&daemon),
-        }))
-        .await;
-    daemon.set_setup_config(config.clone()).await;
-
-    // ── Project freshness pipeline ────────────────────────────────
-    //
-    // The Reindexer owns per-project FS watchers, git-HEAD pollers,
-    // and the coalescing rebuild queue. Each registered project
-    // gets one `ProjectHandle`; the daemon shells out to this
-    // subsystem from HTTP (`/v1/projects/*`) rather than invoking
-    // exporters synchronously. Persisted projects (loaded from
-    // `~/.sovereign/projects.json`) are re-registered at startup
-    // so a daemon restart resumes watching everything without a
-    // user action.
-    let freshness_indexes_dir = data_dir.join("indexes");
-    let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle = {
-        // Reuse the merged ScipGraph we already build for the MCP
-        // tool registry so tool calls and the reindexer see the
-        // same object. `build_tool_registry` below creates its
-        // own copy; we wrap ours in an ArcSwap so the reindexer
-        // can hot-swap after every rebuild.
-        let initial = build_merged_scip_graph(&freshness_indexes_dir).await;
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(initial))
-    };
-    let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
-        freshness_indexes_dir.clone(),
-        Arc::clone(&merged_handle),
-    );
-    // Phase 7.1: configure the commit-message harvester so the
-    // reindexer's git-HEAD poll harvests non-noisy commits into
-    // `source='committed'` notes. Must run BEFORE any clone /
-    // share — Arc::get_mut returns None once this is shared.
-    sovereign_mesh::reindexer::Reindexer::with_commit_harvester(
-        &mut reindexer,
+    bootstrap::wire_note_propagation_sink(
         Arc::clone(&notes_store),
+        Arc::clone(&work_atlas_mesh_store),
+        self_node_id,
     );
-    daemon
-        .install_project_http_router(sovereign_mesh::project_http::project_router(Arc::clone(
-            &reindexer,
-        )))
-        .await;
 
-    // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
-    //
-    // Built read-only at this stage: the daemon holds a
-    // KnowledgeViewManager so an attached desktop can fetch
-    // assembled digest blocks via HTTP, but the enrichment loop
-    // (observer → debouncer → atlas writes) is NOT wired here.
-    // That requires the daemon to own a SQLite state store with an
-    // installed observer, which is the next architectural pass.
-    // Today's behaviour: the daemon serves whatever digest can be
-    // built from existing on-disk skeletons. If no enrichment has
-    // been run, the digest is empty — the desktop's
-    // `MeshLandscapeDigestClient` treats that identically to
-    // KnowledgeView=off (empty splice, no prompt impact).
-    //
-    // `local_only_skill_ids` is empty here; the desktop's HTTP
-    // client resolves `active_is_local_only` against ITS own skill
-    // registry and passes the bool in the request. See
-    // `MeshLandscapeDigestClient::new` and
-    // `LandscapeDigestRequest.active_is_local_only`.
-    let knowledge_view_db_path = data_dir.join("sovereign.db");
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
-    let knowledge_view_manager = Arc::new(
-        sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&engine),
-            inference_fn,
-            knowledge_view_db_path,
-            Vec::new(),
-        )
-        .await,
+    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
+
+    bootstrap::spawn_notes_ingest_poller(
+        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&notes_store),
+        self_node_id,
     );
-    daemon
-        .install_knowledge_view_http_router(
-            sovereign_mesh::landscape_digest_http::landscape_digest_router(Arc::clone(
-                &knowledge_view_manager,
-            )),
-        )
-        .await;
 
-    // Resume any previously-registered projects so FS watchers
-    // come back up without the user running `project register`
-    // again. Missing / unreadable registry is non-fatal — the
-    // daemon runs happily with zero registered projects.
-    let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "could not load project registry; starting empty");
-        sovereign_mesh::projects::Registry::default()
-    });
-    for entry in registry.entries() {
-        reindexer.register(entry.clone()).await;
-        tracing::info!(corpus = %entry.corpus_id, "resumed registered project");
-    }
-    warn_orphaned_indexes(&freshness_indexes_dir, &registry);
+    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
+
+    bootstrap::spawn_tier2_enrichment_resume(&data_dir);
+
+    bootstrap::advertise_embed_model(
+        Arc::clone(&provider),
+        &config,
+        resolved_embed_family,
+        Arc::clone(&daemon),
+    )
+    .await;
+
+    bootstrap::install_http_and_mcp(
+        Arc::clone(&daemon),
+        tools,
+        Arc::clone(&notes_store),
+        &config,
+    )
+    .await;
+
     // Keep the reindexer alive for the lifetime of the daemon.
     // The variable binding is load-bearing — dropping the Arc
     // stops every supervised watcher.
-    let _reindexer_handle = reindexer;
+    let _reindexer_handle = bootstrap::start_freshness_pipeline(
+        &data_dir,
+        Arc::clone(&notes_store),
+        Arc::clone(&daemon),
+        Arc::clone(&engine),
+        Arc::clone(&provider),
+    )
+    .await;
 
-    // ── Watched-folder reconciliation scheduler ─────────────────
-    //
-    // Constructs the LocalCorpusManager + per-corpus registry,
-    // re-populates the registry from the persisted corpora list
-    // (auto-resume on daemon restart), then spawns the dispatcher
-    // loop. The scheduler walks each registered watched-folder
-    // corpus on its configured cadence (default 120 s, floored at
-    // 60 s) and applies the diff through CorpusUpdater.
-    //
-    // The local-corpus subsystem requires a StateStore but only
-    // touches it on `remove` (delete_corpus_state). The persistent
-    // source of truth for corpus metadata is `{data_dir}/local-corpora/*.json`,
-    // which the manager loads at construction. An in-memory store
-    // is therefore sufficient for the daemon — `remove`'s
-    // delete_corpus_state becomes a benign no-op against the empty
-    // in-memory map.
-    // Watched-folder reconciliation subsystem. The full wiring (build
-    // registry → resume corpora → install runtime singleton → mount
-    // HTTP routes → spawn scheduler) is factored into
-    // `sovereign_mesh::watched_folder_setup` so the desktop's
-    // embedded daemon can call the same path.
-    let _watched_subsystem = {
-        let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
-            Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-        // Critical: pass the same `recipes_dir` the `CorpusEngine`
-        // was constructed with (see the `let recipes_dir = …` block
-        // above where the engine is built). Otherwise the manager
-        // writes its generated recipe TOMLs into a directory the
-        // engine never reads from, and the first sweep's apply step
-        // errors `No registry entry for corpus '<id>'`.
-        let lc_recipes_dir = data_dir.join("recipes");
-        match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
-            Arc::clone(&engine),
-            lc_store,
-            None,
-            data_dir.clone(),
-            data_dir.join("vault-snapshots"),
-            lc_recipes_dir,
-        )
-        .await
-        {
-            Ok(manager) => {
-                // Folder-ingest v1 §3.3 — install enrichment
-                // defaults so the watched-folder driver can
-                // synthesise an EnrichConfig for "Enable
-                // enrichment" requests. Pull model ids from the
-                // daemon's resolved chat / embed slots; on a
-                // fresh setup with no models picked, fall back
-                // to empty strings so the driver returns a clear
-                // "defaults not installed" error to the UI.
-                fn id_from_path(p: &std::path::Path) -> String {
-                    p.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string()
-                }
-                let chat_model = id_from_path(&config.models.primary);
-                let embed_model = id_from_path(&config.models.embed);
-                if !chat_model.is_empty() && !embed_model.is_empty() {
-                    let base_url = format!("http://127.0.0.1:{}", config.daemon.client_port);
-                    manager
-                        .set_enrichment_defaults(
-                            sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
-                                chat_model,
-                                embed_model,
-                                base_url,
-                                cli_path: None,
-                            },
-                        )
-                        .await;
-                } else {
-                    tracing::info!(
-                        "watched_folder:enrichment_defaults_skipped — \
-                         chat_model or embed_model not configured; \
-                         per-folder enrichment will return an error \
-                         until models are picked"
-                    );
-                }
-                if let Some(deps) = folder_tiered_deps.clone() {
-                    manager.set_tiered_deps(deps).await;
-                    tracing::info!(
-                        "watched_folder:tiered_deps_installed — \
-                         enable_enrichment will route through the \
-                         in-process tiered driver"
-                    );
-                }
-                Some(
-                    sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
-                        Arc::clone(&daemon),
-                        Arc::clone(&engine),
-                        Arc::new(manager),
-                        config.watched_folders.max_concurrent_sweeps,
-                    )
-                    .await,
-                )
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "watched_folder:manager_init_failed — scheduler not spawned"
-                );
-                None
-            }
-        }
-    };
+    let _watched_subsystem = bootstrap::setup_watched_folders(
+        Arc::clone(&engine),
+        &data_dir,
+        &config,
+        folder_tiered_deps,
+        Arc::clone(&daemon),
+    )
+    .await;
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {
@@ -1939,123 +724,25 @@ async fn run_daemon(args: &[String]) -> i32 {
         "sovereign daemon is running"
     );
 
-    // ── Work atlas (Phase 2) finalisation ─────────────────────────────
-    //
-    // 1. Swap the real `MeshBroadcaster` into the `DeferredBroadcaster`
-    //    now that `daemon.app_state()` returns `Some`. After this,
-    //    work-atlas writes broadcast to peers within the round-trip
-    //    rather than waiting up to one full 10s gossip interval.
-    // 2. Spawn the TTL eviction loop so expired claims and idle
-    //    sessions are reaped on a 60s cadence.
-    {
-        let daemon_for_atlas = Arc::clone(&daemon);
-        let broadcaster_for_atlas = Arc::clone(&work_atlas_broadcaster);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-            loop {
-                if let Some(state) = daemon_for_atlas.app_state().await {
-                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
-                        Box::new(sovereign_mesh::MeshBroadcaster::new(state));
-                    broadcaster_for_atlas.set(real);
-                    tracing::info!("work_atlas: real broadcaster wired (peer fan-out active)");
-                    return;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    tracing::warn!(
-                        "work_atlas: broadcaster wire-up timed out — \
-                         claims/observations will only reach peers via the \
-                         10s gossip round (still functional, just slower)"
-                    );
-                    return;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
-        });
-    }
-    let _work_atlas_gc_handle = sovereign_work_atlas::gc::WorkAtlasGc::new(
+    let _work_atlas_gc_handle = bootstrap::finalize_work_atlas(
+        Arc::clone(&daemon),
+        Arc::clone(&work_atlas_broadcaster),
         Arc::clone(&work_atlas_store),
         work_atlas_cfg.clone(),
-    )
-    .spawn();
+    );
 
-    // ── Foreground back-pressure for lint/test watchers ─────────────
-    //
-    // The lint and test runners burst memory (workspace cargo check
-    // ≈ 2-4 GB peak; 22-crate `cargo test` higher) and historically
-    // ran without coordination with the chat slot. Combined with a
-    // 35B chat slot ≈ 30 GB resident, that crosses jetsam threshold
-    // on memory-tight boxes and SIGTERMs the daemon mid-request.
-    //
-    // Install `AppStateYieldHook` on each watcher so its subprocess
-    // runner waits until `should_yield()` returns false before
-    // spawning cargo. Late-bind: daemon_cmd builds the watchers
-    // earlier in this function (before EmbeddedDaemon exists);
-    // `daemon.app_state()` returns Some only after start_daemon
-    // completes. Poll with the same deadline pattern as the
-    // work-atlas broadcaster wire-up above.
-    if lint_watcher.is_some() || test_watcher.is_some() {
-        let daemon_for_hook = Arc::clone(&daemon);
-        let lint_for_hook = lint_watcher.clone();
-        let test_for_hook = test_watcher.clone();
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-            loop {
-                if let Some(hook) = daemon_for_hook.build_yield_hook().await {
-                    if let Some(w) = lint_for_hook.as_ref() {
-                        w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!("foreground-yield: hook installed on lint watcher");
-                    }
-                    if let Some(w) = test_for_hook.as_ref() {
-                        w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!("foreground-yield: hook installed on test watcher");
-                    }
-                    return;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    tracing::warn!(
-                        "foreground-yield: watcher hook wire-up timed out \
-                         — lint/test will not yield to chat (memory \
-                         contention possible)"
-                    );
-                    return;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
-        });
-    }
+    bootstrap::install_foreground_yield_hook(
+        Arc::clone(&daemon),
+        lint_watcher.clone(),
+        test_watcher.clone(),
+    );
 
     eprintln!(
         "sovereign daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port
     );
 
-    // ── Pidfile ───────────────────────────────────────────────────
-    //
-    // `sovereign daemon stop` keys off `~/.sovereign/daemon.pid` to
-    // know which process to SIGTERM. Previously only `daemon start`
-    // (the detached-child launcher) wrote that file, so any other
-    // launch path — `sovereign daemon run` from a shell, `cargo run
-    // -- daemon run`, systemd's `ExecStart` — left no pidfile and
-    // `stop` silently fell back to `systemctl/launchctl stop`, which
-    // is a no-op for daemons launched outside the service manager.
-    //
-    // Writing the pidfile here from `run_daemon` itself makes the
-    // file an accurate property of "a daemon is running" rather than
-    // "the daemon was launched via `start`". The bind has already
-    // succeeded above, so any pre-existing pidfile is stale and can
-    // be overwritten safely (the live owner of :9741 is us).
-    let pid_path = daemon_pid_path();
-    if let Some(parent) = pid_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let self_pid = std::process::id();
-    if let Err(e) = std::fs::write(&pid_path, format!("{self_pid}\n")) {
-        tracing::warn!(
-            path = %pid_path.display(),
-            error = %e,
-            "could not write daemon pidfile — `daemon stop` will need lsof/launchctl fallback"
-        );
-    }
+    let (pid_path, self_pid) = bootstrap::write_pidfile();
 
     // ── Block until SIGINT/SIGTERM, then drain, persist, and exit ──
     shutdown_daemon(daemon, &pid_path, self_pid).await
@@ -2149,8 +836,18 @@ async fn shutdown_daemon(
 /// are installed, tools return helpful "not indexed" messages rather
 /// than erroring, so a freshly-setup daemon is still useful for
 /// `write_note` / `read_notes`.
-#[allow(clippy::too_many_arguments)]
-
+/// macOS shutdown helper — see `run_daemon` for rationale. Calls
+/// `_exit(2)` to skip libc's `__cxa_finalize_ranges` chain so the
+/// ggml-metal device sweeper never gets a chance to assert on
+/// still-resident llama-context resources.
+#[cfg(target_os = "macos")]
+unsafe fn fast_exit_skip_destructors(code: i32) -> ! {
+    extern "C" {
+        #[link_name = "_exit"]
+        fn libc_exit_no_finalize(status: i32) -> !;
+    }
+    libc_exit_no_finalize(code)
+}
 
 fn home_dir_buf() -> std::path::PathBuf {
     std::env::var_os("HOME")
