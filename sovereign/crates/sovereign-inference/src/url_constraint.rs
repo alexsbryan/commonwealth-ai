@@ -192,9 +192,20 @@ impl UrlAllowlistConstraint {
         }
         let bytes = self.vocab_bytes[id].clone();
         // For commit, panicking on invalid would be too noisy — if the
-        // upstream chain produced a token we'd masked, log and ignore
-        // (the rest of the chain is fault-tolerant).
-        let _ = simulate_bytes(&self.nodes, &mut self.cursor, &bytes);
+        // upstream chain produced a token we'd masked, log and continue
+        // (the rest of the chain is fault-tolerant). The warn is the
+        // breadcrumb the old comment promised but never emitted: a desync
+        // means URL masking is no longer enforced for the rest of this
+        // generation — the cause when a fabricated URL slips the allowlist.
+        if !simulate_bytes(&self.nodes, &mut self.cursor, &bytes) {
+            tracing::warn!(
+                target: "constraint.health",
+                kind = "url_allowlist",
+                token = token.0,
+                "accept(): committed a token the URL mask would have clamped — \
+                 cursor desynced; allowlist no longer enforced for this generation"
+            );
+        }
     }
 
     /// Test-only accessor: are we currently in URL-emission mode?

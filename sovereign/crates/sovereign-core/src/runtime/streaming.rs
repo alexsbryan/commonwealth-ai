@@ -24,6 +24,257 @@ use crate::skills::SkillRegister;
 
 use super::*;
 
+/// Terminal state observed by [`run_synthesis_stream`]: the caller threads
+/// these into provenance + the post-stream gate. `model_id` may differ from
+/// the value passed in because the refusal-retry re-opens a fresh stream.
+struct SynthStreamOutcome {
+    model_id: String,
+    observed_finish: Option<crate::types::FinishReason>,
+    observed_completion_tokens: Option<u32>,
+}
+
+/// The `'synth:` streaming-forward loop shared by the KnowledgeQuery and
+/// DeepQuery streams. It was duplicated verbatim in both `tokio::spawn` arms
+/// of `handle_message_stream_with_classification`, differing only in the gate
+/// flag and the log tag — this is the single source of truth for both.
+///
+/// Behaviour:
+/// - **gate mode** (`gate_on`) holds every token in `full_text`; the gate
+///   block after the loop owns the release.
+/// - **non-gate** forwards tokens to `tx`, buffering the head so the one-shot
+///   refusal-retry can fire (re-synthesize once with the answer-prefill when
+///   the head opens with the model's own refusal AND evidence was retrieved).
+/// - cancellation (`biased`, so it wins over buffered tokens), terminal
+///   `Finish`, and mid-stream `Finish::Error` / `Error` frames are resolved.
+///
+/// Returns `None` when the spawned turn must abort — the caller should
+/// `return` immediately: `tx` was dropped (receiver gone) or the slot emitted
+/// `Finish::Error`/`Error` (the error frame is already forwarded). Otherwise
+/// returns the final model id + observed finish/usage.
+async fn run_synthesis_stream(
+    inference: &Arc<dyn InferenceProvider>,
+    mut s: Pin<Box<dyn Stream<Item = crate::types::StreamFrame> + Send>>,
+    mut model_id: String,
+    request: &CompletionRequest,
+    tx: &tokio::sync::mpsc::Sender<Result<String>>,
+    cancel_for_stream: &tokio_util::sync::CancellationToken,
+    full_text: &mut String,
+    had_retrieved_chunks: bool,
+    gate_on: bool,
+    log_tag: &'static str,
+) -> Option<SynthStreamOutcome> {
+    let mut observed_finish: Option<crate::types::FinishReason> = None;
+    let mut observed_completion_tokens: Option<u32> = None;
+    let mut head = String::new();
+    let mut head_flushed = false;
+    let mut retried = false;
+
+    'synth: loop {
+        loop {
+            // Cancellation races the next frame. `biased` so a pending
+            // cancel wins over buffered tokens — the user asked us to stop
+            // NOW. Dropping `s` (when the spawn unwinds past 'synth) closes
+            // the provider channel; the embedded engine breaks on the
+            // failed send.
+            let frame = tokio::select! {
+                biased;
+                _ = cancel_for_stream.cancelled() => {
+                    tracing::info!(
+                        chars_streamed = full_text.chars().count(),
+                        "{}: cancelled by session token — terminating with FinishReason::Cancelled",
+                        log_tag
+                    );
+                    observed_finish = Some(crate::types::FinishReason::Cancelled);
+                    break 'synth;
+                }
+                f = s.next() => match f {
+                    Some(fr) => fr,
+                    None => break,
+                },
+            };
+            use crate::types::StreamFrame;
+            match frame {
+                StreamFrame::Token(chunk) => {
+                    if gate_on {
+                        // Hold mode: accumulate everything; the gate block
+                        // after 'synth owns the release (or the retry, or
+                        // the abstention). Refusal-retry is skipped here —
+                        // a refusal extracts as NO_CLAIM and releases
+                        // ungated.
+                        full_text.push_str(&chunk);
+                    } else if head_flushed {
+                        full_text.push_str(&chunk);
+                        if tx.send(Ok(chunk)).await.is_err() {
+                            return None;
+                        }
+                    } else {
+                        head.push_str(&chunk);
+                        full_text.push_str(&chunk);
+                        if head.chars().count() >= REFUSAL_HEAD_CHARS {
+                            if !retried
+                                && had_retrieved_chunks
+                                && looks_like_refusal_opener(&head)
+                            {
+                                retried = true;
+                                tracing::info!(
+                                    target: "synth.refusal_retry",
+                                    head = %head.chars().take(80).collect::<String>(),
+                                    "{}: refusal opener detected with evidence present — retrying with answer prefill",
+                                    log_tag
+                                );
+                                full_text.clear();
+                                full_text.push_str(REFUSAL_RETRY_PREFIX);
+                                if tx
+                                    .send(Ok(REFUSAL_RETRY_PREFIX.to_string()))
+                                    .await
+                                    .is_err()
+                                {
+                                    return None;
+                                }
+                                head_flushed = true;
+                                let mut retry_req = request.clone();
+                                retry_req.assistant_prefix =
+                                    Some(REFUSAL_RETRY_PREFIX.to_string());
+                                retry_req.system_message =
+                                    Some(REFUSAL_RETRY_SYSTEM.to_string());
+                                match inference
+                                    .complete_stream_with_id_and_finish(&retry_req)
+                                    .await
+                                {
+                                    Ok((s2, mid2)) => {
+                                        s = s2;
+                                        model_id = mid2;
+                                        observed_finish = None;
+                                        observed_completion_tokens = None;
+                                        continue 'synth;
+                                    }
+                                    Err(e) => {
+                                        let _ = tx.send(Err(e)).await;
+                                        return None;
+                                    }
+                                }
+                            } else if tx
+                                .send(Ok(std::mem::take(&mut head)))
+                                .await
+                                .is_err()
+                            {
+                                return None;
+                            } else {
+                                head_flushed = true;
+                            }
+                        }
+                    }
+                }
+                StreamFrame::Finish { reason, usage } => {
+                    observed_completion_tokens =
+                        usage.as_ref().map(|u| u.completion_tokens);
+                    // FinishReason::Error means the slot bailed mid-stream
+                    // (context overflow, decode failure, tokenizer
+                    // rejection). Surface it so the post-stream path doesn't
+                    // save a 0-char message + fire a misleading
+                    // InformationRequest.
+                    if let crate::types::FinishReason::Error(ref msg) = reason {
+                        tracing::warn!(
+                            finish_reason = "error",
+                            error = %msg,
+                            chars_streamed = full_text.len(),
+                            "{}: slot terminated with Finish::Error — propagating as error frame",
+                            log_tag
+                        );
+                        let _ = tx
+                            .send(Err(crate::error::Error::Inference(msg.clone())))
+                            .await;
+                        return None;
+                    }
+                    observed_finish = Some(reason);
+                }
+                StreamFrame::Error(msg) => {
+                    let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
+                    return None;
+                }
+            }
+        }
+
+        // Stream ended while still buffering the head (a short answer below
+        // the threshold): decide on what we have. Gate mode never flushes
+        // here — release happens after the verdict below.
+        if !head_flushed && !gate_on {
+            if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
+                retried = true;
+                tracing::info!(
+                    target: "synth.refusal_retry",
+                    head = %head.chars().take(80).collect::<String>(),
+                    "{}: short refusal detected with evidence present — retrying with answer prefill",
+                    log_tag
+                );
+                full_text.clear();
+                full_text.push_str(REFUSAL_RETRY_PREFIX);
+                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
+                    return None;
+                }
+                head_flushed = true;
+                let mut retry_req = request.clone();
+                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
+                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
+                match inference.complete_stream_with_id_and_finish(&retry_req).await {
+                    Ok((s2, mid2)) => {
+                        s = s2;
+                        model_id = mid2;
+                        observed_finish = None;
+                        observed_completion_tokens = None;
+                        continue 'synth;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return None;
+                    }
+                }
+            } else {
+                let _ = tx.send(Ok(std::mem::take(&mut head))).await;
+                head_flushed = true;
+            }
+        }
+        break 'synth;
+    }
+
+    Some(SynthStreamOutcome {
+        model_id,
+        observed_finish,
+        observed_completion_tokens,
+    })
+}
+
+/// Run the production grounding gate on the HELD answer (shared by the
+/// KnowledgeQuery and DeepQuery spawns). Skipped for cancelled turns; on judge
+/// failure `gate_answer` itself fails open. Mutates `full_text` to the gated
+/// text and returns the glassbox meta when the gate ran, else `None`.
+async fn gate_held_answer(
+    inference: &Arc<dyn InferenceProvider>,
+    gate_on: bool,
+    observed_finish: &Option<crate::types::FinishReason>,
+    question: &str,
+    full_text: &mut String,
+    evidence: &crate::runtime::grounding::EvidenceContext,
+    request: &CompletionRequest,
+    profile: &crate::runtime::grounding::GroundingProfile,
+) -> Option<serde_json::Value> {
+    if gate_on && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
+        let outcome = crate::runtime::grounding::gate_answer(
+            inference,
+            question,
+            std::mem::take(full_text),
+            evidence,
+            request,
+            profile,
+        )
+        .await;
+        *full_text = outcome.text;
+        Some(outcome.meta)
+    } else {
+        None
+    }
+}
+
 impl Runtime {
     // NOTE (pre-existing, preserved verbatim by the 2026-06-10 move):
     // the doc block + instrument attribute below describe
@@ -168,6 +419,1269 @@ impl Runtime {
     ) -> Result<StreamHandle> {
         self.handle_message_stream_with_classification(message, conversation_id, None)
             .await
+    }
+
+    /// KnowledgeQuery / ComparisonQuery streaming turn. Lifted verbatim
+    /// from `handle_message_stream_with_classification` so the dispatcher
+    /// reads as a table of contents; behaviour unchanged.
+    #[allow(clippy::too_many_arguments)]
+    async fn stream_knowledge_query_turn(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: ConversationContext,
+        classification: RouterClassification,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
+        scope: Option<String>,
+        intent: Intent,
+        _session_id: String,
+        cancel_token: tokio_util::sync::CancellationToken,
+        tool_descriptors: Vec<ToolDescriptor>,
+    ) -> Result<StreamHandle> {
+        tracing::info!(
+            intent = ?intent,
+            "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
+        );
+
+        // RetrievalStart — fire immediately so the desktop chip
+        // appears before the corpus search begins. Bypasses
+        // `try_emit_narration` (which suppresses below 1.5s
+        // elapsed) because the user is staring at typing-dots
+        // and needs to see activity within 200ms. RetrievalComplete
+        // below remains gated by the suppression rules.
+        let retrieval_start_at = std::time::Instant::now();
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: _session_id.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::RetrievalStart,
+                    text: "Searching your knowledge…".to_string(),
+                    elapsed_ms: 0,
+                },
+            })
+            .await;
+
+        let plan = self
+            .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
+            .await;
+        tracing::debug!(
+            retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64,
+            chunks = plan.chunks.len(),
+            "runtime:retrieval_start_to_complete"
+        );
+
+        // PR5 — post-retrieval retrieval-miss diversion. Off-
+        // target evidence shape (dispersed across ≥3 sources,
+        // no source concentration, no title match) was
+        // historically the exact input that produced confident
+        // parametric fabrication. Suppress synthesis and emit a
+        // clarification card instead.
+        if plan.shape.is_off_target() {
+            tracing::info!(
+                session_id = %_session_id,
+                retrieval_count = plan.shape.count,
+                distinct_sources = plan.shape.distinct_sources,
+                title_match = plan.shape.title_match,
+                top_source_repeat = plan.shape.top_source_repeat_count,
+                top_source = %plan.shape.top_source_label,
+                top1_score = plan.shape.top1_score,
+                median_ratio = plan.shape.median_ratio,
+                "routing:retrieval_miss — diverting to Ask clarification"
+            );
+            return self
+                .handle_retrieval_miss_stream(
+                    message,
+                    conversation_id,
+                    &_session_id,
+                    &plan.shape,
+                    &tool_descriptors,
+                )
+                .await;
+        }
+
+        // Narration: report retrieval shape on long turns.
+        // Suppressed internally when total elapsed is below the
+        // `NARRATION_MIN_ELAPSED` window or the per-turn cap is
+        // hit. The session store guards both; this call is safe
+        // on short turns — it just returns `None`.
+        //
+        // Emit on every non-empty retrieval (not just on
+        // `top_source_repeat_count >= 2`). The user is staring at
+        // the typing-dots spinner and the most useful thing we
+        // can tell them after retrieval finishes is "we read N
+        // chunks across these sources." When the top source
+        // dominates we say so; otherwise we report the spread.
+        if !plan.chunks.is_empty() {
+            let txt = if plan.shape.top_source_repeat_count >= 2 {
+                format!(
+                    "Read {} chunks — {} from one source, so I'll keep the answer focused.",
+                    plan.chunks.len(),
+                    plan.shape.top_source_repeat_count,
+                )
+            } else {
+                format!(
+                    "Read {} chunks across {} sources — drafting the response.",
+                    plan.chunks.len(),
+                    plan.shape.distinct_sources.max(1),
+                )
+            };
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::RetrievalComplete {
+                    chunks_in: plan.chunks.len(),
+                    corpora: plan.source_map.keys().cloned().collect(),
+                },
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
+
+        // Everything the spawned task needs — no borrows of `self`.
+        let inference = Arc::clone(&self.inference);
+        let store = Arc::clone(&self.store);
+        let approval = Arc::clone(&self.approval);
+        let inference_config = self.inference_config.clone();
+        // Tool-Mastery Layer 3 — cloned so the nested
+        // post-stream gap-check spawn can write a
+        // `tool_decision` outcome note after refinement
+        // resolves. Soft-fail when no NoteStore is wired
+        // (test harnesses): `record_tool_outcome` no-ops.
+        let notes_for_outcome: Option<Arc<corpus_engine_notes::NoteStore>> =
+            self.note_store.clone();
+        // Cloned into the outer spawn so the post-stream gap-
+        // check can emit narration chips that reach the desktop
+        // UI alongside the INFORMATION REQUEST card. Without
+        // these the chip-then-card glassbox UX silently drops
+        // for the streaming path. See `run_collaboration` for
+        // how they're consumed.
+        let collab_routing_events: Option<Arc<dyn RoutingEventSink>> =
+            Some(Arc::clone(&self.routing_events));
+        let collab_session_id: Option<String> = Some(_session_id.clone());
+        let conversation_id_owned = conversation_id.to_string();
+        let message_id_owned = message_id.clone();
+        let question = message.to_string();
+
+        let KnowledgeQueryPlan {
+            request,
+            chunks,
+            gate_entity_anchored,
+            doc_context,
+            shape,
+            route,
+            gap_check_enabled,
+            search_ms,
+            retrieved_chunks,
+            source_map,
+            result_quality,
+            prompt_budget_note,
+            folder_meta,
+            meta_atlas_hits,
+        } = plan;
+        let documents_found = chunks.len();
+        // Answerable-context gate for the refusal-retry (KQ path), mirroring
+        // the DeepQuery spawn: only retry a refusal when evidence WAS
+        // retrieved — a genuine "no sources" stays an honest abstention.
+        let had_retrieved_chunks = documents_found > 0;
+        let top_source_label = shape.top_source_label.clone();
+        let coarse_intent_for_prov = coarse_intent.clone();
+        let self_assessment_for_prov = self_assessment.clone();
+        let routing_trigger_for_prov = classification.rationale.clone();
+
+        // PR3: compute next-step offers against the same
+        // retrieval the answer was built from. We do this on the
+        // main task (not the spawn) so we can capture the
+        // user's message by reference without cloning into the
+        // async move. The result is serialised into message
+        // metadata inside the spawn.
+        let had_dominant_source = shape.top_source_repeat_count >= 2;
+        let retrieval_missed = shape.is_off_target();
+        let top_source_title_owned = if shape.top_source_key.1.is_empty() {
+            None
+        } else {
+            Some(shape.top_source_key.1.clone())
+        };
+        let offers = build_next_step_offers(&OfferContext {
+            user_message: message,
+            top_source_title: top_source_title_owned.as_deref(),
+            had_dominant_source,
+            retrieved_chunks: &retrieved_chunks,
+            session_id: &_session_id,
+            retrieval_missed,
+        });
+        let offers_json = serde_json::to_value(&offers).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "next_steps: serialize failed");
+            serde_json::Value::Array(Vec::new())
+        });
+        let route_for_log = route;
+
+        // Production grounding gate (see runtime/grounding.rs).
+        // Short answers: hold → single-claim verify → retry →
+        // abstain. Long-form (PrimarySynthesis): hold → per-claim
+        // audit → rewrite → annotate. Zero-chunk turns skip — the
+        // structural GK caveat owns that path.
+        let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
+        let gate_on = gate_surface.enabled() && documents_found > 0;
+        // The turn's sealed evidence universe — built here because
+        // the spawned task holds no `&self`. Claim search is
+        // sealed to the conversation's corpora.
+        let gate_evidence = crate::runtime::grounding::EvidenceContext {
+            chunks: if gate_on {
+                chunks.iter().map(|c| c.content.clone()).collect()
+            } else {
+                Vec::new()
+            },
+            searcher: if gate_on {
+                Some(std::sync::Arc::new(self.claim_searcher(
+                    context.conversation.enabled_corpora.as_deref(),
+                    &chunks,
+                )) as _)
+            } else {
+                None
+            },
+            entity_anchored: gate_entity_anchored,
+        };
+        let gate_profile = gate_surface.profile();
+        let gate_question: String = message.to_string();
+        if crate::runtime::grounding::grounding_gate_enabled() {
+            crate::runtime::grounding::dbg(&format!(
+                "gate_on={gate_on} route={route:?} docs={documents_found}"
+            ));
+        }
+
+        // Hold-phase narration: the gate withholds every token
+        // until verification completes, which on a gated turn
+        // reads as a stall without this chip. Emitted on the main
+        // task (we still hold `&self`); try_emit_narration's
+        // elapsed/cap suppression applies as usual.
+        if gate_on {
+            let txt = "Drafting an answer, then verifying it against your \
+                       sources before showing it."
+                .to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::GroundingVerifyStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        // Narration: synthesis-start chip. Bridges the silent
+        // gap between retrieval-complete and the first streamed
+        // token — which on a cold primary slot can be 90+
+        // seconds (model load) plus another minute or two of
+        // CPU decode for a 35B Q6. Without this the user sees
+        // the same "Working on it…" placeholder for the entire
+        // wait. Emitted on the main task (we still hold `&self`)
+        // immediately before the spawn that calls
+        // `complete_stream_with_id`. The 1.5s narration gate
+        // suppresses this on short DeepQuery turns where
+        // synthesis is fast enough that no chip is needed.
+        {
+            let txt = "Generating a deep answer with the primary model — \
+                       first use after a restart can take a minute."
+                .to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::PrimarySynthesisStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        let cancel_for_stream = cancel_token.clone();
+        tokio::spawn(async move {
+            let started = std::time::Instant::now();
+
+            let (s, model_id) =
+                match inference.complete_stream_with_id_and_finish(&request).await {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+                };
+
+            let mut full_text = String::new();
+
+            // A request-carried assistant_prefix is part of the
+            // ANSWER (the model decodes as its continuation) but
+            // not part of the completion stream — emit it visibly
+            // first or the user/judges never see the committed
+            // text. Today the only initial-request setter on this
+            // path is the structural GK caveat (knowledge_query's
+            // foreign-topic insufficiency); the retry paths below
+            // set their prefix on retry_req and emit it manually.
+            if let Some(pfx) = request.assistant_prefix.clone() {
+                full_text.push_str(&pfx);
+                // In gate mode nothing is sent until the verdict.
+                if !gate_on && tx.send(Ok(pfx)).await.is_err() {
+                    return;
+                }
+            }
+
+            // Refusal-retry + token forwarding live in the shared
+            // `run_synthesis_stream` (mirrored by the DeepQuery spawn).
+            // `None` => the turn must abort (tx dropped or Finish::Error
+            // already forwarded).
+            let Some(synth) = run_synthesis_stream(
+                &inference,
+                s,
+                model_id,
+                &request,
+                &tx,
+                &cancel_for_stream,
+                &mut full_text,
+                had_retrieved_chunks,
+                gate_on,
+                "kq-stream",
+            )
+            .await
+            else {
+                return;
+            };
+            let model_id = synth.model_id;
+            let observed_finish = synth.observed_finish;
+            let observed_completion_tokens = synth.observed_completion_tokens;
+
+            // Production grounding gate: the full ladder lives in
+            // grounding::gate_answer (shared with the non-streaming
+            // path). Runs on the HELD answer before anything
+            // reaches the user; fail-open on judge failure.
+            let grounding_gate_meta = gate_held_answer(
+                &inference,
+                gate_on,
+                &observed_finish,
+                &gate_question,
+                &mut full_text,
+                &gate_evidence,
+                &request,
+                &gate_profile,
+            )
+            .await;
+
+            // Post-synthesis guardrail: demote any quoted span that
+            // isn't verbatim-present in the evidence shown to the
+            // model before it's persisted, so the stored record (and
+            // any reload of this bubble) can't present a composite /
+            // fabricated quotation as verbatim. The live token stream
+            // already went out unmodified — this hardens the durable
+            // copy; in gate mode the verified rewrite IS what gets
+            // released to the user (held streams send post-rewrite).
+            // The refinement path (collaboration.rs) re-verifies
+            // any gap-check rewrite. Empty doc_context (parametric
+            // path) is a no-op.
+            let full_text = {
+                let v = crate::quote_verification::verify_answer_against_evidence(
+                    &full_text,
+                    &doc_context,
+                );
+                if v.demoted_count > 0 {
+                    tracing::warn!(
+                        demoted = v.demoted_count,
+                        verified = v.verified_count,
+                        "kq-stream: post-synthesis guardrail demoted unverified quotations"
+                    );
+                }
+                v.rewritten
+            };
+
+            // Gate mode held every token — release the final
+            // (gated, quote-verified) text as one frame now.
+            if gate_on && !cancel_for_stream.is_cancelled() {
+                if tx.send(Ok(full_text.clone())).await.is_err() {
+                    return;
+                }
+            }
+
+            // Persist final assistant message with full KQ metadata
+            // so the UI citation expander and provenance header
+            // have everything they had on the non-streaming path.
+            let (sources_for_prov, coverage_for_prov) = build_provenance_components(
+                &source_map,
+                &std::collections::HashMap::new(),
+                &folder_meta,
+                // KnowledgeQueryPlan doesn't carry the
+                // display-category lookup; the chip-label rename
+                // for conversation corpora only fires on the
+                // DeepQuery path (see `prepare_knowledge_context`).
+                // Threading the lookup through the plan is a
+                // follow-up if we want the KQ streaming surface
+                // to render "Your conversations" as well.
+                None,
+            );
+            // Phase 5 — typed Finish frame from the provider is
+            // now the source of truth for length truncation, no
+            // more chars-per-token heuristic. Falls back to
+            // `Stop` when the provider closed the stream without
+            // a terminal frame (older test stubs); the trait
+            // `complete_stream_with_finish` default guarantees a
+            // terminal frame on every provider that ships today.
+            let finish_reason_typed =
+                observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+            let max_budget = inference_config.max_tokens;
+            // Provider-reported count when present; otherwise fall
+            // back to a chars-per-token estimate so the UI's
+            // "(N generated)" line stays useful even on providers
+            // that don't emit usage. The estimate is signposted
+            // — tracing makes the source legible to the operator
+            // post-hoc.
+            let completion_tokens_val = observed_completion_tokens
+                .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
+            if observed_completion_tokens.is_none() {
+                tracing::debug!(
+                    chars = full_text.chars().count(),
+                    est_completion_tokens = completion_tokens_val,
+                    "runtime: kq-stream - usage absent, completion_tokens estimated from chars"
+                );
+            }
+            let provenance = ResponseProvenance {
+                intent: "KnowledgeQuery".to_string(),
+                search_method: Some("CorpusEngine".to_string()),
+                sources: sources_for_prov,
+                inference_backend: model_id,
+                oicp_match: None,
+                total_latency_ms: started.elapsed().as_millis() as u64,
+                tokens_used: completion_tokens_val as usize,
+                coarse_intent: coarse_intent_for_prov,
+                self_assessment: self_assessment_for_prov,
+                routing_trigger: routing_trigger_for_prov,
+                coverage: coverage_for_prov,
+                finish_reason: Some(finish_reason_typed),
+                max_tokens_budget: Some(max_budget),
+                completion_tokens: Some(completion_tokens_val),
+                context_window: inference.effective_context_size(),
+            };
+            let metadata_json = serde_json::json!({
+                "streamed": true,
+                "intent": "knowledge_query",
+                "documents_found": documents_found,
+                "search_ms": search_ms,
+                "result_quality": result_quality,
+                "provenance": provenance,
+                "retrieved_chunks": retrieved_chunks,
+                // Glassbox for the production grounding gate:
+                // null when the gate is off / out of scope;
+                // otherwise {action, retried, violation_prob,
+                // threshold} so the UI can render verified /
+                // regenerated / abstained provenance.
+                "grounding_gate": grounding_gate_meta,
+                // Glassbox for the prompt-budget guard: non-null
+                // when assembly exceeded the context window and
+                // the prompt was trimmed (runtime::prompt_budget).
+                "prompt_budget": prompt_budget_note,
+                // Move 4 — canonical-entity-boost echo for the
+                // bench's fourth legibility lens. Empty when the
+                // registry was unset or matched no entities.
+                "meta_atlas_hits": meta_atlas_hits,
+                // PR3 — grounded follow-ups rendered as clickable
+                // NextStepButtons under the bubble. Empty array
+                // when retrieval produced nothing to ground an
+                // offer against; the UI hides the row.
+                "next_steps": offers_json,
+            });
+            let assistant_msg = Message {
+                id: message_id_owned.clone(),
+                conversation_id: conversation_id_owned.clone(),
+                role: Role::Assistant,
+                content: full_text.clone(),
+                created_at: now(),
+                metadata: Some(metadata_json.clone()),
+                version: now(),
+            };
+            if let Err(e) = store.save_message(&assistant_msg).await {
+                tracing::warn!(
+                    conversation_id = %conversation_id_owned,
+                    error = %e,
+                    "KnowledgeQuery stream: failed to save assistant message"
+                );
+            }
+
+            if gap_check_enabled {
+                // Per the humility principle (see
+                // `prepare_knowledge_query_plan` for the long
+                // form): always run the gap check on KQ paths.
+                // The retrieval-shape route (FastFocused vs
+                // PrimarySynthesis) decides synthesis style; it
+                // does NOT decide whether the answer is actually
+                // grounded. The gap check is the LLM-based
+                // judge of "did the model answer the question?"
+                // and has to fire regardless of how concentrated
+                // the retrieval looked. Top-source label is
+                // included in the log so a grep on
+                // `gap_check_scheduled` reconstructs which
+                // retrieval-shape paths reach the check.
+                tracing::debug!(
+                    route = ?route_for_log,
+                    top_source = %top_source_label,
+                    "KnowledgeQuery stream: scheduling post-stream gap check"
+                );
+                let collab_inference = Arc::clone(&inference);
+                let collab_store = Arc::clone(&store);
+                let collab_approval = Arc::clone(&approval);
+                let collab_config = inference_config.clone();
+                let collab_cid = conversation_id_owned.clone();
+                let collab_mid = message_id_owned.clone();
+                let collab_question = question.clone();
+                let collab_original = full_text.clone();
+                let collab_evidence = doc_context.clone();
+                let collab_metadata = metadata_json;
+                // Clone the routing-events sink + session id
+                // into the spawn so the gap-check chips ("now
+                // auditing the answer", "found something to
+                // ask about") reach the desktop UI alongside
+                // the in-flight INFORMATION REQUEST card.
+                let collab_events = collab_routing_events.clone();
+                let collab_sid = collab_session_id.clone();
+                let collab_sid_for_outcome = collab_sid.clone();
+                let collab_notes_for_outcome = notes_for_outcome.clone();
+                // Tool-Mastery Layer 3 — record what happened
+                // on this KQ turn so the next turn's dossier
+                // can read it. Outcome resolves from the
+                // post-stream refinement result (Stale =
+                // gap-check fired and rewrote the answer),
+                // plus the evidence-presence signal captured
+                // before the spawn (NoResults = retrieval was
+                // empty; Useful = chunks landed and the
+                // original answer stood). All writes are
+                // best-effort — see `dossier::record_tool_outcome`.
+                // Tool-Mastery Layer 3 — synchronous baseline
+                // write BEFORE the gap-check spawn fires. Writing
+                // here (not inside the spawn) guarantees the
+                // tool_decision lands even when the bench / CLI
+                // exits before the gap-check spawn completes —
+                // run_post_stream_refinement can take 10-30s and
+                // the next turn's dossier read would otherwise
+                // see nothing. The spawn below MAY overwrite with
+                // `Stale` when refinement actually rewrites the
+                // answer; the dossier reader returns
+                // most-recent-first so the later write supersedes
+                // when it lands in time.
+                // Decide outcome from three orthogonal signals so a
+                // turn whose retrieval LANDED but whose answer
+                // landed in "I don't know" territory still records
+                // `no-results` (the snapshot-freshness shape: the
+                // hybrid retriever happily returns 30+ historical
+                // Tour de France articles for a "2027 Tour" query
+                // even though none of them are about 2027). The
+                // answer-content check uses general English
+                // negation + absence patterns, not bank vocabulary,
+                // so it transfers across questions.
+                let answer_is_honest_negation = {
+                    let lower = full_text.to_lowercase();
+                    let has_negation = [
+                        "don't",
+                        "do not",
+                        "cannot",
+                        "can't",
+                        "doesn't have",
+                        "no information",
+                        "no data",
+                        "no record",
+                        "outside",
+                        "unable to",
+                    ]
+                    .iter()
+                    .any(|w| lower.contains(w));
+                    let has_scope_token = [
+                        "information",
+                        "data",
+                        "record",
+                        "snapshot",
+                        "knowledge base",
+                        "details",
+                        "results",
+                    ]
+                    .iter()
+                    .any(|w| lower.contains(w));
+                    has_negation && has_scope_token
+                };
+                let retrieval_missed = documents_found == 0
+                    || answer_is_honest_negation
+                    || (!shape.title_match
+                        && shape.query_token_coverage < EVIDENCE_MIN_TOKEN_COVERAGE);
+                let baseline_outcome = if retrieval_missed {
+                    crate::memory::ToolDecisionOutcome::NoResults
+                } else {
+                    crate::memory::ToolDecisionOutcome::Useful
+                };
+                let baseline_reasoning = if documents_found == 0 {
+                    "knowledge retrieval returned 0 chunks".to_string()
+                } else if answer_is_honest_negation {
+                    format!(
+                        "retrieval returned {documents_found} chunks but \
+                         the assistant's answer acknowledged a gap \
+                         (snapshot-freshness or scope mismatch)"
+                    )
+                } else if retrieval_missed {
+                    format!(
+                        "retrieval returned {documents_found} chunks but \
+                         title_match=false and query_token_coverage={:.2} \
+                         (corpus does not cover this topic)",
+                        shape.query_token_coverage
+                    )
+                } else {
+                    format!("synthesised over {documents_found} chunks")
+                };
+                // Tier 1 (result memory): populate summary +
+                // turn_index so the next turn's dossier can
+                // render addressable references. `evidence_ids`
+                // stays empty here because the legacy KQ path
+                // doesn't route through knowledge_lookup tool —
+                // when it does (follow-up PR), this site will
+                // also pass the per-call ev-Tn-NNNN handles.
+                let summary = if shape.top_source_label.is_empty() {
+                    None
+                } else {
+                    Some(shape.top_source_label.clone())
+                };
+                // Turn index: count of prior user messages
+                // (zero-based). The current in-flight user
+                // message is already pushed onto
+                // conversation.messages by the time we reach
+                // this site, so subtract 1.
+                let turn_index_for_outcome = context
+                    .conversation
+                    .messages
+                    .iter()
+                    .filter(|m| matches!(m.role, Role::User))
+                    .count()
+                    .saturating_sub(1);
+                let baseline_extras = crate::memory::ToolDecisionExtras {
+                    summary: summary.clone(),
+                    evidence_ids: Vec::new(),
+                    turn_index: turn_index_for_outcome,
+                };
+                crate::dossier::record_tool_outcome(
+                    notes_for_outcome.as_deref(),
+                    collab_sid_for_outcome.as_deref().unwrap_or(""),
+                    Some(&conversation_id_owned),
+                    "knowledge_lookup",
+                    baseline_outcome,
+                    &baseline_reasoning,
+                    baseline_extras,
+                )
+                .await;
+
+                let outcome_notes = collab_notes_for_outcome.clone();
+                let outcome_notes_present = outcome_notes.is_some();
+                // Capture Tier-1 extras for the stale-write
+                // path inside the spawn (closure can't reach
+                // back to the dispatch-frame locals).
+                let stale_summary_for_capture = summary.clone();
+                let turn_index_for_capture = turn_index_for_outcome;
+                // Refinement re-gate: only armed when this turn's
+                // answer was itself gate-released.
+                let collab_guard = if gate_on {
+                    Some(crate::runtime::collaboration::RefinementGuard {
+                        inference: std::sync::Arc::clone(&collab_inference),
+                        evidence: gate_evidence,
+                    })
+                } else {
+                    None
+                };
+                tokio::spawn(async move {
+                    tracing::info!(
+                        conversation_id = %collab_cid,
+                        has_notes = outcome_notes_present,
+                        documents_found,
+                        "dossier:streaming_kq_outcome_spawn_fired"
+                    );
+                    let refined = run_post_stream_refinement(
+                        collab_inference.as_ref(),
+                        collab_approval.as_ref(),
+                        collab_store.as_ref(),
+                        &collab_config,
+                        &collab_cid,
+                        &collab_mid,
+                        &collab_question,
+                        &collab_original,
+                        &collab_evidence,
+                        Some(collab_metadata),
+                        collab_events,
+                        collab_sid,
+                        collab_guard,
+                    )
+                    .await;
+                    if refined.is_some() {
+                        // Stale write supersedes the baseline
+                        // entry from above. Preserve summary +
+                        // turn_index so the dossier history
+                        // stays addressable; flag the outcome
+                        // change via the new reasoning.
+                        let stale_extras = crate::memory::ToolDecisionExtras {
+                            summary: stale_summary_for_capture.clone(),
+                            evidence_ids: Vec::new(),
+                            turn_index: turn_index_for_capture,
+                        };
+                        crate::dossier::record_tool_outcome(
+                            outcome_notes.as_deref(),
+                            collab_sid_for_outcome.as_deref().unwrap_or(""),
+                            Some(&collab_cid),
+                            "knowledge_lookup",
+                            crate::memory::ToolDecisionOutcome::Stale,
+                            "gap-check refined the post-stream answer",
+                            stale_extras,
+                        )
+                        .await;
+                    }
+                });
+            }
+
+            // Auto-title after first exchange — same post-stream
+            // hook the non-KQ streaming path uses. Non-blocking.
+            let title_inference = Arc::clone(&inference);
+            let title_store = Arc::clone(&store);
+            let title_cid = conversation_id_owned.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::title::try_auto_title(
+                    title_inference.as_ref(),
+                    title_store.as_ref(),
+                    &title_cid,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        conversation_id = %title_cid,
+                        error = %e,
+                        "auto-title: generation failed (KQ stream path)"
+                    );
+                }
+            });
+        });
+
+        let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+        return Ok(StreamHandle { message_id, stream });
+    }
+
+    /// DeepQuery / SimpleQuery streaming turn. Lifted verbatim from
+    /// `handle_message_stream_with_classification` so the dispatcher reads
+    /// as a table of contents; behaviour unchanged.
+    #[allow(clippy::too_many_arguments)]
+    async fn stream_deep_query_turn(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: ConversationContext,
+        classification: RouterClassification,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
+        scope: Option<String>,
+        intent: Intent,
+        _session_id: String,
+        cancel_token: tokio_util::sync::CancellationToken,
+    ) -> Result<StreamHandle> {
+        // RetrievalStart — DeepQuery streaming path. Skipped for
+        // SimpleQuery because that intent is a quick factual answer
+        // and the existing RetrievalComplete narration is also gated
+        // off for it (chunks typically empty). Fires immediately so
+        // the chip is on screen before `prepare_knowledge_context`
+        // returns.
+        if !matches!(intent, Intent::SimpleQuery) {
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::RetrievalStart,
+                        text: "Searching your knowledge…".to_string(),
+                        elapsed_ms: 0,
+                    },
+                })
+                .await;
+        }
+
+        // 4. Search knowledge + build prompt (shared with handle_simple).
+        let kc = self
+            .prepare_knowledge_context(message, &context, &intent, scope.as_deref())
+            .await;
+
+        // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
+        // the KnowledgeQuery/ComparisonQuery branch above, but keyed
+        // off `KnowledgeContext` (no `plan.shape` available here).
+        // Suppressed by the session store when total elapsed < 1.5s
+        // or the per-turn cap is hit, so this is safe on fast paths.
+        if !matches!(intent, Intent::SimpleQuery) && !kc.chunks.is_empty() {
+            let txt = format!(
+                "Read {} chunks across {} sources — drafting the response.",
+                kc.chunks.len(),
+                kc.sources.len().max(1),
+            );
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::RetrievalComplete {
+                    chunks_in: kc.chunks.len(),
+                    corpora: kc.sources.iter().map(|s| s.origin.clone()).collect(),
+                },
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        let oicp = if matches!(intent, Intent::SimpleQuery) {
+            None
+        } else {
+            self.build_oicp(&intent)
+        };
+
+        // Model ID is captured from `complete_stream_with_id` once
+        // the provider has committed to a routing decision — see
+        // the trait docs on that method. Using the pre-stream sync
+        // `model_id_for` here would miss peer attribution (the
+        // mesh wrapper can only report "I routed to peer X" after
+        // its async `select_peer` pass has run).
+        //
+        // Tier 2: populate evidence_id_allowlist from the
+        // conversation's prior tool_decision payloads so the
+        // sampler's EvidenceIdAllowlistConstraint can block
+        // fabrications of `[ev-Tn-NNNN]` ids the model hasn't
+        // actually been given. Soft-fails to None when no prior
+        // ids exist (Tier 1 prompt discipline is then the only
+        // safety net — same posture as today).
+        let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
+        let mut request = CompletionRequest {
+            prompt: kc.prompt,
+            system_message: Some(kc.system),
+            preferred_speed: kc.speed,
+            max_tokens: Some(self.inference_config.max_tokens),
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(self.inference_config.think_budget),
+            structured_output: None,
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist,
+            lark_grammar: None,
+        };
+        // Phase-1 prompt-budget guard: assembled input + response
+        // reservation must fit the context window, or the engine's
+        // "Prompt too long" rejection becomes a terminal user-facing
+        // error loop (note 2cd9227e). See `prompt_budget` for the
+        // degradation ladder; the note lands in message metadata.
+        let budget_note = match self.inference.effective_context_size() {
+            Some(ctx) => {
+                let (outcome, measured) = prompt_budget::enforce(
+                    &mut request,
+                    &|s| self.inference.count_tokens(s),
+                    ctx,
+                );
+                // Phase 2: the memo records pre-trim DEMAND so the
+                // compaction sensor and next-turn allocator see what
+                // assembly actually wanted.
+                self.record_assembly(conversation_id, measured);
+                match outcome {
+                    prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
+                    _ => None,
+                }
+            }
+            None => None,
+        };
+
+        let search_method = kc.search_method;
+        let sources = kc.sources;
+        let coverage = kc.coverage;
+        let retrieved_chunks = kc.retrieved_chunks;
+        // Answerable-context gate for the refusal-retry: only retry a refusal
+        // when evidence WAS retrieved (a genuine "no sources" must still be an
+        // honest abstention, never force-answered).
+        let had_retrieved_chunks = !retrieved_chunks.is_empty();
+
+        // Format the corpus evidence now so the post-stream epistemic-
+        // humility hook can feed it to the gap checker. Moved into the
+        // streaming spawn; not used before the synthesis completes.
+        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        let question = message.to_string();
+
+        let intent_label = format!("{intent:?}");
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        // Narration — synthesis-start chip on the DeepQuery /
+        // SimpleQuery streaming path. Bridges the silence between
+        // retrieval-complete and the first streamed token. With
+        // primary-slot prewarm in place this is typically a no-op
+        // wait, but it's still the right time to acknowledge the
+        // long phase to the user.
+        if matches!(request.preferred_speed, Speed::Slow) {
+            let txt = "Generating a deep answer with the primary model.".to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::PrimarySynthesisStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        // 5. Spawn streaming task.
+        let inference = Arc::clone(&self.inference);
+        let store = Arc::clone(&self.store);
+        let approval = Arc::clone(&self.approval);
+        let inference_config = self.inference_config.clone();
+        // Cloned into the spawn so the post-stream gap-check chips
+        // can reach the desktop UI. See the matching block in the
+        // KnowledgeQuery streaming branch above for the rationale.
+        let routing_events_for_spawn: Option<Arc<dyn RoutingEventSink>> =
+            Some(Arc::clone(&self.routing_events));
+        let session_id_for_spawn: Option<String> = Some(_session_id.clone());
+        let conversation_id_owned = conversation_id.to_string();
+        let message_id_owned = message_id.clone();
+        // Capture recalled memories on the relational/witness path so
+        // the desktop's inner-work surface can render echo dots in the
+        // gutter beside the just-committed paragraph. Gated to the
+        // relational register so non-relational turns don't leak
+        // memory contents into UI metadata they don't need. Thin
+        // shape — id + content + created_at is what the echo overlay
+        // displays; the rest of the Memory record stays internal.
+        let recalled_memories_for_metadata: Option<serde_json::Value> =
+            if context.turn_register() == SkillRegister::Relational && !context.memories.is_empty()
+            {
+                Some(serde_json::Value::Array(
+                    context
+                        .memories
+                        .iter()
+                        .map(|m| {
+                            serde_json::json!({
+                                "id": m.id,
+                                "content": m.content,
+                                "created_at": m.created_at,
+                            })
+                        })
+                        .collect(),
+                ))
+            } else {
+                None
+            };
+
+        // Production grounding gate, DeepQuery side: long-form answers
+        // take the per-claim audit → rewrite → annotate ladder in
+        // grounding::gate_answer (short deep answers fall through to
+        // the single-claim ladder). entity_anchored=false here — the
+        // agentic loop (and its atlas gazetteer verdict) is KQ-only
+        // today, and the long-form ladder doesn't consume it.
+        let deep_gate_surface = crate::runtime::grounding::GateSurface::DeepQuery;
+        let deep_gate_on = deep_gate_surface.enabled() && !kc.chunks.is_empty();
+        // The turn's sealed evidence universe (deep answers are
+        // usually long-form). Built pre-spawn; claim search sealed to
+        // the conversation's corpora. entity_anchored=false — the
+        // agentic loop (and its atlas gazetteer verdict) is KQ-only.
+        let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
+            chunks: if deep_gate_on {
+                kc.chunks.iter().map(|c| c.content.clone()).collect()
+            } else {
+                Vec::new()
+            },
+            searcher: if deep_gate_on {
+                Some(std::sync::Arc::new(self.claim_searcher(
+                    context.conversation.enabled_corpora.as_deref(),
+                    &kc.chunks,
+                )) as _)
+            } else {
+                None
+            },
+            entity_anchored: false,
+        };
+        let deep_gate_profile = deep_gate_surface.profile();
+        let deep_gate_question: String = message.to_string();
+        if deep_gate_on {
+            let txt = "Drafting an answer, then verifying it against your                        sources before showing it."
+                .to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::GroundingVerifyStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
+
+        let cancel_for_stream = cancel_token.clone();
+        tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let mut full_text = String::new();
+
+            let (s, model_id) =
+                match inference.complete_stream_with_id_and_finish(&request).await {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+                };
+
+            // Refusal-retry + token forwarding live in the shared
+            // `run_synthesis_stream` (mirrored by the KnowledgeQuery spawn).
+            // `None` => the turn must abort (tx dropped or Finish::Error
+            // already forwarded).
+            let Some(synth) = run_synthesis_stream(
+                &inference,
+                s,
+                model_id,
+                &request,
+                &tx,
+                &cancel_for_stream,
+                &mut full_text,
+                had_retrieved_chunks,
+                deep_gate_on,
+                "deep-stream",
+            )
+            .await
+            else {
+                return;
+            };
+            let model_id = synth.model_id;
+            let observed_finish = synth.observed_finish;
+            let observed_completion_tokens = synth.observed_completion_tokens;
+
+            // Production grounding gate (deep): held answer → shared
+            // ladder. Long-form deep answers take the per-claim audit.
+            let grounding_gate_meta = gate_held_answer(
+                &inference,
+                deep_gate_on,
+                &observed_finish,
+                &deep_gate_question,
+                &mut full_text,
+                &deep_gate_evidence,
+                &request,
+                &deep_gate_profile,
+            )
+            .await;
+
+            // Phase 5 — typed Finish frame from the provider is the
+            // source of truth for length truncation. Falls back to
+            // `Stop` when the provider closed without a terminal
+            // frame (older test stubs); the trait
+            // `complete_stream_with_finish` default guarantees a
+            // terminal frame on every provider that ships today.
+            let finish_reason_typed = observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+            let max_budget = inference_config.max_tokens;
+            let completion_tokens_val = observed_completion_tokens
+                .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
+            if observed_completion_tokens.is_none() {
+                tracing::debug!(
+                    chars = full_text.chars().count(),
+                    est_completion_tokens = completion_tokens_val,
+                    "runtime: deep-stream - usage absent, completion_tokens estimated from chars"
+                );
+            }
+            let provenance = ResponseProvenance {
+                intent: intent_label,
+                search_method,
+                sources,
+                inference_backend: model_id,
+                oicp_match: None,
+                total_latency_ms: started.elapsed().as_millis() as u64,
+                tokens_used: completion_tokens_val as usize,
+                coarse_intent,
+                self_assessment,
+                routing_trigger: classification.rationale.clone(),
+                coverage,
+                finish_reason: Some(finish_reason_typed),
+                max_tokens_budget: Some(max_budget),
+                completion_tokens: Some(completion_tokens_val),
+                context_window: inference.effective_context_size(),
+            };
+            let metadata_json = serde_json::json!({
+                "streamed": true,
+                "provenance": provenance,
+                "retrieved_chunks": retrieved_chunks,
+                // Phase 3b: present only on the relational/witness
+                // path; absent or null elsewhere. The desktop's
+                // inner-work surface renders these as gutter echo
+                // dots; chat ignores the field.
+                "recalled_memories": recalled_memories_for_metadata,
+                // Glassbox for the prompt-budget guard: non-null when
+                // assembly exceeded the context window and the prompt
+                // was trimmed to fit (see runtime::prompt_budget).
+                "prompt_budget": budget_note,
+                "grounding_gate": grounding_gate_meta,
+            });
+            // Post-synthesis guardrail (DeepQuery / reasoning stream):
+            // same contract as the KnowledgeQuery stream — demote any
+            // quoted span not verbatim-present in the evidence before
+            // it's persisted. Empty evidence (pure-reasoning, no
+            // retrieval) is a no-op. The refinement path
+            // (collaboration.rs) re-verifies any gap-check rewrite.
+            let full_text = {
+                let v = crate::quote_verification::verify_answer_against_evidence(
+                    &full_text,
+                    &evidence,
+                );
+                if v.demoted_count > 0 {
+                    tracing::warn!(
+                        demoted = v.demoted_count,
+                        verified = v.verified_count,
+                        "deep-stream: post-synthesis guardrail demoted unverified quotations"
+                    );
+                }
+                v.rewritten
+            };
+            // Gate mode held every token — release the final text now.
+            if deep_gate_on && !cancel_for_stream.is_cancelled() {
+                if tx.send(Ok(full_text.clone())).await.is_err() {
+                    return;
+                }
+            }
+            let assistant_msg = Message {
+                id: message_id_owned.clone(),
+                conversation_id: conversation_id_owned.clone(),
+                role: Role::Assistant,
+                content: full_text.clone(),
+                created_at: now(),
+                metadata: Some(metadata_json.clone()),
+                version: now(),
+            };
+            let _ = store.save_message(&assistant_msg).await;
+
+            // Epistemic-humility hook (post-stream): audit the streamed
+            // answer and, if the user provides additional content, rewrite
+            // the persisted message and emit a `message-refined` event so
+            // the UI can update the bubble in place. Runs concurrently
+            // with auto-title so neither blocks the other.
+            let collab_inference = Arc::clone(&inference);
+            let collab_store = Arc::clone(&store);
+            let collab_approval = Arc::clone(&approval);
+            let collab_config = inference_config.clone();
+            let collab_cid = conversation_id_owned.clone();
+            let collab_mid = message_id_owned.clone();
+            let collab_question = question.clone();
+            let collab_evidence = evidence.clone();
+            let collab_original = full_text.clone();
+            let collab_metadata = metadata_json;
+            // Routing-events sink + session id for gap-check
+            // narration chips. Same rationale as the KnowledgeQuery
+            // spawn above — without these the chip-then-card UX
+            // silently drops on the streaming path. The clones
+            // were already lifted above the outer spawn so this
+            // is a cheap inner re-clone.
+            let collab_events = routing_events_for_spawn.clone();
+            let collab_sid = session_id_for_spawn.clone();
+            // Post-stream tasks (epistemic-humility audit + auto-title)
+            // share the fast-slot inflight semaphore with user-facing
+            // requests. Under sequential load — eval bench, atlas
+            // pipeline, anyone calling the daemon back-to-back — the
+            // next request's routing classify queues behind these,
+            // adding 30–60s of latency per turn for ~zero observable
+            // benefit on the bench (the streamed answer is already
+            // delivered; the refinement is a server-side rewrite).
+            // Set `SOVEREIGN_SKIP_POST_STREAM=1` to disable both tasks.
+            // The right architectural fix is a priority queue or
+            // separate slot for background work; this env knob is the
+            // diagnostic + bench-iteration lever.
+            let skip_post_stream = std::env::var("SOVEREIGN_SKIP_POST_STREAM")
+                .map(|v| v == "1")
+                .unwrap_or(false);
+            if !skip_post_stream {
+                // Refinement re-gate: armed only when this turn's
+                // answer was itself gate-released.
+                let collab_guard = if deep_gate_on {
+                    Some(crate::runtime::collaboration::RefinementGuard {
+                        inference: std::sync::Arc::clone(&collab_inference),
+                        evidence: deep_gate_evidence,
+                    })
+                } else {
+                    None
+                };
+                tokio::spawn(async move {
+                    run_post_stream_refinement(
+                        collab_inference.as_ref(),
+                        collab_approval.as_ref(),
+                        collab_store.as_ref(),
+                        &collab_config,
+                        &collab_cid,
+                        &collab_mid,
+                        &collab_question,
+                        &collab_original,
+                        &collab_evidence,
+                        Some(collab_metadata),
+                        collab_events,
+                        collab_sid,
+                        collab_guard,
+                    )
+                    .await;
+                });
+
+                // Auto-title after first exchange. Non-blocking; the stream has
+                // already delivered the response to the user.
+                let title_inference = Arc::clone(&inference);
+                let title_store = Arc::clone(&store);
+                let title_cid = conversation_id_owned.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = crate::title::try_auto_title(
+                        title_inference.as_ref(),
+                        title_store.as_ref(),
+                        &title_cid,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            conversation_id = %title_cid,
+                            error = %e,
+                            "auto-title: generation failed (stream path)"
+                        );
+                    }
+                });
+            }
+        });
+
+        let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+
+        Ok(StreamHandle { message_id, stream })
     }
 
     /// Private inner entry point for [`handle_message_stream`] and
@@ -718,1541 +2232,37 @@ impl Runtime {
         // which made the desktop chat window sit inert for ~35s while
         // the full response was assembled server-side.
         if matches!(intent, Intent::KnowledgeQuery | Intent::ComparisonQuery) {
-            tracing::info!(
-                intent = ?intent,
-                "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
-            );
-
-            // RetrievalStart — fire immediately so the desktop chip
-            // appears before the corpus search begins. Bypasses
-            // `try_emit_narration` (which suppresses below 1.5s
-            // elapsed) because the user is staring at typing-dots
-            // and needs to see activity within 200ms. RetrievalComplete
-            // below remains gated by the suppression rules.
-            let retrieval_start_at = std::time::Instant::now();
-            self.routing_events
-                .emit_turn_narration(TurnNarration {
-                    session_id: _session_id.clone(),
-                    conversation_id: conversation_id.to_string(),
-                    event: NarrationEvent {
-                        phase: NarrationPhase::RetrievalStart,
-                        text: "Searching your knowledge…".to_string(),
-                        elapsed_ms: 0,
-                    },
-                })
-                .await;
-
-            let plan = self
-                .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
-                .await;
-            tracing::debug!(
-                retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64,
-                chunks = plan.chunks.len(),
-                "runtime:retrieval_start_to_complete"
-            );
-
-            // PR5 — post-retrieval retrieval-miss diversion. Off-
-            // target evidence shape (dispersed across ≥3 sources,
-            // no source concentration, no title match) was
-            // historically the exact input that produced confident
-            // parametric fabrication. Suppress synthesis and emit a
-            // clarification card instead.
-            if plan.shape.is_off_target() {
-                tracing::info!(
-                    session_id = %_session_id,
-                    retrieval_count = plan.shape.count,
-                    distinct_sources = plan.shape.distinct_sources,
-                    title_match = plan.shape.title_match,
-                    top_source_repeat = plan.shape.top_source_repeat_count,
-                    top_source = %plan.shape.top_source_label,
-                    top1_score = plan.shape.top1_score,
-                    median_ratio = plan.shape.median_ratio,
-                    "routing:retrieval_miss — diverting to Ask clarification"
-                );
-                return self
-                    .handle_retrieval_miss_stream(
-                        message,
-                        conversation_id,
-                        &_session_id,
-                        &plan.shape,
-                        &tool_descriptors,
-                    )
-                    .await;
-            }
-
-            // Narration: report retrieval shape on long turns.
-            // Suppressed internally when total elapsed is below the
-            // `NARRATION_MIN_ELAPSED` window or the per-turn cap is
-            // hit. The session store guards both; this call is safe
-            // on short turns — it just returns `None`.
-            //
-            // Emit on every non-empty retrieval (not just on
-            // `top_source_repeat_count >= 2`). The user is staring at
-            // the typing-dots spinner and the most useful thing we
-            // can tell them after retrieval finishes is "we read N
-            // chunks across these sources." When the top source
-            // dominates we say so; otherwise we report the spread.
-            if !plan.chunks.is_empty() {
-                let txt = if plan.shape.top_source_repeat_count >= 2 {
-                    format!(
-                        "Read {} chunks — {} from one source, so I'll keep the answer focused.",
-                        plan.chunks.len(),
-                        plan.shape.top_source_repeat_count,
-                    )
-                } else {
-                    format!(
-                        "Read {} chunks across {} sources — drafting the response.",
-                        plan.chunks.len(),
-                        plan.shape.distinct_sources.max(1),
-                    )
-                };
-                if let Some(event) = self.sessions.try_emit_narration(
-                    &_session_id,
-                    NarrationPhase::RetrievalComplete {
-                        chunks_in: plan.chunks.len(),
-                        corpora: plan.source_map.keys().cloned().collect(),
-                    },
-                    txt,
-                ) {
-                    self.routing_events
-                        .emit_turn_narration(TurnNarration {
-                            session_id: _session_id.clone(),
-                            conversation_id: conversation_id.to_string(),
-                            event,
-                        })
-                        .await;
-                }
-            }
-
-            let message_id = uuid::Uuid::new_v4().to_string();
-            let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
-
-            // Everything the spawned task needs — no borrows of `self`.
-            let inference = Arc::clone(&self.inference);
-            let store = Arc::clone(&self.store);
-            let approval = Arc::clone(&self.approval);
-            let inference_config = self.inference_config.clone();
-            // Tool-Mastery Layer 3 — cloned so the nested
-            // post-stream gap-check spawn can write a
-            // `tool_decision` outcome note after refinement
-            // resolves. Soft-fail when no NoteStore is wired
-            // (test harnesses): `record_tool_outcome` no-ops.
-            let notes_for_outcome: Option<Arc<corpus_engine_notes::NoteStore>> =
-                self.note_store.clone();
-            // Cloned into the outer spawn so the post-stream gap-
-            // check can emit narration chips that reach the desktop
-            // UI alongside the INFORMATION REQUEST card. Without
-            // these the chip-then-card glassbox UX silently drops
-            // for the streaming path. See `run_collaboration` for
-            // how they're consumed.
-            let collab_routing_events: Option<Arc<dyn RoutingEventSink>> =
-                Some(Arc::clone(&self.routing_events));
-            let collab_session_id: Option<String> = Some(_session_id.clone());
-            let conversation_id_owned = conversation_id.to_string();
-            let message_id_owned = message_id.clone();
-            let question = message.to_string();
-
-            let KnowledgeQueryPlan {
-                request,
-                chunks,
-                gate_entity_anchored,
-                doc_context,
-                shape,
-                route,
-                gap_check_enabled,
-                search_ms,
-                retrieved_chunks,
-                source_map,
-                result_quality,
-                prompt_budget_note,
-                folder_meta,
-                meta_atlas_hits,
-            } = plan;
-            let documents_found = chunks.len();
-            // Answerable-context gate for the refusal-retry (KQ path), mirroring
-            // the DeepQuery spawn: only retry a refusal when evidence WAS
-            // retrieved — a genuine "no sources" stays an honest abstention.
-            let had_retrieved_chunks = documents_found > 0;
-            let top_source_label = shape.top_source_label.clone();
-            let coarse_intent_for_prov = coarse_intent.clone();
-            let self_assessment_for_prov = self_assessment.clone();
-            let routing_trigger_for_prov = classification.rationale.clone();
-
-            // PR3: compute next-step offers against the same
-            // retrieval the answer was built from. We do this on the
-            // main task (not the spawn) so we can capture the
-            // user's message by reference without cloning into the
-            // async move. The result is serialised into message
-            // metadata inside the spawn.
-            let had_dominant_source = shape.top_source_repeat_count >= 2;
-            let retrieval_missed = shape.is_off_target();
-            let top_source_title_owned = if shape.top_source_key.1.is_empty() {
-                None
-            } else {
-                Some(shape.top_source_key.1.clone())
-            };
-            let offers = build_next_step_offers(&OfferContext {
-                user_message: message,
-                top_source_title: top_source_title_owned.as_deref(),
-                had_dominant_source,
-                retrieved_chunks: &retrieved_chunks,
-                session_id: &_session_id,
-                retrieval_missed,
-            });
-            let offers_json = serde_json::to_value(&offers).unwrap_or_else(|e| {
-                tracing::warn!(error = %e, "next_steps: serialize failed");
-                serde_json::Value::Array(Vec::new())
-            });
-            let route_for_log = route;
-
-            // Production grounding gate (see runtime/grounding.rs).
-            // Short answers: hold → single-claim verify → retry →
-            // abstain. Long-form (PrimarySynthesis): hold → per-claim
-            // audit → rewrite → annotate. Zero-chunk turns skip — the
-            // structural GK caveat owns that path.
-            let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
-            let gate_on = gate_surface.enabled() && documents_found > 0;
-            // The turn's sealed evidence universe — built here because
-            // the spawned task holds no `&self`. Claim search is
-            // sealed to the conversation's corpora.
-            let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: if gate_on {
-                    chunks.iter().map(|c| c.content.clone()).collect()
-                } else {
-                    Vec::new()
-                },
-                searcher: if gate_on {
-                    Some(std::sync::Arc::new(self.claim_searcher(
-                        context.conversation.enabled_corpora.as_deref(),
-                        &chunks,
-                    )) as _)
-                } else {
-                    None
-                },
-                entity_anchored: gate_entity_anchored,
-            };
-            let gate_profile = gate_surface.profile();
-            let gate_question: String = message.to_string();
-            if crate::runtime::grounding::grounding_gate_enabled() {
-                crate::runtime::grounding::dbg(&format!(
-                    "gate_on={gate_on} route={route:?} docs={documents_found}"
-                ));
-            }
-
-            // Hold-phase narration: the gate withholds every token
-            // until verification completes, which on a gated turn
-            // reads as a stall without this chip. Emitted on the main
-            // task (we still hold `&self`); try_emit_narration's
-            // elapsed/cap suppression applies as usual.
-            if gate_on {
-                let txt = "Drafting an answer, then verifying it against your \
-                           sources before showing it."
-                    .to_string();
-                if let Some(event) = self.sessions.try_emit_narration(
-                    &_session_id,
-                    NarrationPhase::GroundingVerifyStart,
-                    txt,
-                ) {
-                    self.routing_events
-                        .emit_turn_narration(TurnNarration {
-                            session_id: _session_id.clone(),
-                            conversation_id: conversation_id.to_string(),
-                            event,
-                        })
-                        .await;
-                }
-            }
-
-            // Narration: synthesis-start chip. Bridges the silent
-            // gap between retrieval-complete and the first streamed
-            // token — which on a cold primary slot can be 90+
-            // seconds (model load) plus another minute or two of
-            // CPU decode for a 35B Q6. Without this the user sees
-            // the same "Working on it…" placeholder for the entire
-            // wait. Emitted on the main task (we still hold `&self`)
-            // immediately before the spawn that calls
-            // `complete_stream_with_id`. The 1.5s narration gate
-            // suppresses this on short DeepQuery turns where
-            // synthesis is fast enough that no chip is needed.
-            {
-                let txt = "Generating a deep answer with the primary model — \
-                           first use after a restart can take a minute."
-                    .to_string();
-                if let Some(event) = self.sessions.try_emit_narration(
-                    &_session_id,
-                    NarrationPhase::PrimarySynthesisStart,
-                    txt,
-                ) {
-                    self.routing_events
-                        .emit_turn_narration(TurnNarration {
-                            session_id: _session_id.clone(),
-                            conversation_id: conversation_id.to_string(),
-                            event,
-                        })
-                        .await;
-                }
-            }
-
-            let cancel_for_stream = cancel_token.clone();
-            tokio::spawn(async move {
-                let started = std::time::Instant::now();
-
-                let (mut s, mut model_id) =
-                    match inference.complete_stream_with_id_and_finish(&request).await {
-                        Ok(pair) => pair,
-                        Err(e) => {
-                            let _ = tx.send(Err(e)).await;
-                            return;
-                        }
-                    };
-
-                let mut full_text = String::new();
-                let mut observed_finish: Option<crate::types::FinishReason> = None;
-                let mut observed_completion_tokens: Option<u32> = None;
-
-                // A request-carried assistant_prefix is part of the
-                // ANSWER (the model decodes as its continuation) but
-                // not part of the completion stream — emit it visibly
-                // first or the user/judges never see the committed
-                // text. Today the only initial-request setter on this
-                // path is the structural GK caveat (knowledge_query's
-                // foreign-topic insufficiency); the retry paths below
-                // set their prefix on retry_req and emit it manually.
-                if let Some(pfx) = request.assistant_prefix.clone() {
-                    full_text.push_str(&pfx);
-                    // In gate mode nothing is sent until the verdict.
-                    if !gate_on && tx.send(Ok(pfx)).await.is_err() {
-                        return;
-                    }
-                }
-
-                // Refusal-retry (mirror of the DeepQuery spawn): hold the head;
-                // if it opens with the model's own refusal signal AND evidence
-                // was retrieved, discard and re-synthesize once with the
-                // guardrail-stripping system + answer prefill. One retry max.
-                let mut head = String::new();
-                let mut head_flushed = false;
-                let mut retried = false;
-
-                'synth: loop {
-                    loop {
-                        // Cancellation races the next frame. `biased`
-                        // so a pending cancel wins over buffered
-                        // tokens — the user asked us to stop NOW.
-                        // Dropping `s` (when the spawn unwinds past
-                        // 'synth) closes the provider channel; the
-                        // embedded engine breaks on the failed send.
-                        let frame = tokio::select! {
-                            biased;
-                            _ = cancel_for_stream.cancelled() => {
-                                tracing::info!(
-                                    chars_streamed = full_text.chars().count(),
-                                    "kq-stream: cancelled by session token — terminating with FinishReason::Cancelled"
-                                );
-                                observed_finish = Some(crate::types::FinishReason::Cancelled);
-                                break 'synth;
-                            }
-                            f = s.next() => match f {
-                                Some(fr) => fr,
-                                None => break,
-                            },
-                        };
-                        use crate::types::StreamFrame;
-                        match frame {
-                            StreamFrame::Token(chunk) => {
-                                if gate_on {
-                                    // Hold mode: accumulate everything;
-                                    // the gate block after 'synth owns
-                                    // the release (or the retry, or the
-                                    // abstention). Refusal-retry is
-                                    // skipped here — a refusal extracts
-                                    // as NO_CLAIM and releases ungated.
-                                    full_text.push_str(&chunk);
-                                } else if head_flushed {
-                                    full_text.push_str(&chunk);
-                                    if tx.send(Ok(chunk)).await.is_err() {
-                                        return;
-                                    }
-                                } else {
-                                    head.push_str(&chunk);
-                                    full_text.push_str(&chunk);
-                                    if head.chars().count() >= REFUSAL_HEAD_CHARS {
-                                        if !retried
-                                            && had_retrieved_chunks
-                                            && looks_like_refusal_opener(&head)
-                                        {
-                                            retried = true;
-                                            tracing::info!(
-                                                target: "synth.refusal_retry",
-                                                head = %head.chars().take(80).collect::<String>(),
-                                                "kq-stream: refusal opener detected with evidence present — retrying with answer prefill"
-                                            );
-                                            full_text.clear();
-                                            full_text.push_str(REFUSAL_RETRY_PREFIX);
-                                            if tx
-                                                .send(Ok(REFUSAL_RETRY_PREFIX.to_string()))
-                                                .await
-                                                .is_err()
-                                            {
-                                                return;
-                                            }
-                                            head_flushed = true;
-                                            let mut retry_req = request.clone();
-                                            retry_req.assistant_prefix =
-                                                Some(REFUSAL_RETRY_PREFIX.to_string());
-                                            retry_req.system_message =
-                                                Some(REFUSAL_RETRY_SYSTEM.to_string());
-                                            match inference
-                                                .complete_stream_with_id_and_finish(&retry_req)
-                                                .await
-                                            {
-                                                Ok((s2, mid2)) => {
-                                                    s = s2;
-                                                    model_id = mid2;
-                                                    observed_finish = None;
-                                                    observed_completion_tokens = None;
-                                                    continue 'synth;
-                                                }
-                                                Err(e) => {
-                                                    let _ = tx.send(Err(e)).await;
-                                                    return;
-                                                }
-                                            }
-                                        } else if tx
-                                            .send(Ok(std::mem::take(&mut head)))
-                                            .await
-                                            .is_err()
-                                        {
-                                            return;
-                                        } else {
-                                            head_flushed = true;
-                                        }
-                                    }
-                                }
-                            }
-                            StreamFrame::Finish { reason, usage } => {
-                                observed_completion_tokens =
-                                    usage.as_ref().map(|u| u.completion_tokens);
-                                // FinishReason::Error means the slot bailed
-                                // mid-stream (context overflow, decode failure,
-                                // tokenizer rejection). Surface it so the
-                                // post-stream path doesn't save a 0-char message
-                                // + fire a misleading InformationRequest.
-                                if let crate::types::FinishReason::Error(ref msg) = reason {
-                                    tracing::warn!(
-                                        finish_reason = "error",
-                                        error = %msg,
-                                        chars_streamed = full_text.len(),
-                                        "kq-stream: slot terminated with Finish::Error — propagating as error frame"
-                                    );
-                                    let _ = tx
-                                        .send(Err(crate::error::Error::Inference(msg.clone())))
-                                        .await;
-                                    return;
-                                }
-                                observed_finish = Some(reason);
-                            }
-                            StreamFrame::Error(msg) => {
-                                let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
-                                return;
-                            }
-                        }
-                    }
-
-                    // Stream ended while still buffering the head (a short
-                    // answer below the threshold): decide on what we have.
-                    // Gate mode never flushes here — release happens after
-                    // the verdict below.
-                    if !head_flushed && !gate_on {
-                        if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
-                            retried = true;
-                            tracing::info!(
-                                target: "synth.refusal_retry",
-                                head = %head.chars().take(80).collect::<String>(),
-                                "kq-stream: short refusal detected with evidence present — retrying with answer prefill"
-                            );
-                            full_text.clear();
-                            full_text.push_str(REFUSAL_RETRY_PREFIX);
-                            if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                                return;
-                            }
-                            head_flushed = true;
-                            let mut retry_req = request.clone();
-                            retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                            retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                            match inference.complete_stream_with_id_and_finish(&retry_req).await {
-                                Ok((s2, mid2)) => {
-                                    s = s2;
-                                    model_id = mid2;
-                                    observed_finish = None;
-                                    observed_completion_tokens = None;
-                                    continue 'synth;
-                                }
-                                Err(e) => {
-                                    let _ = tx.send(Err(e)).await;
-                                    return;
-                                }
-                            }
-                        } else {
-                            let _ = tx.send(Ok(std::mem::take(&mut head))).await;
-                            head_flushed = true;
-                        }
-                    }
-                    break 'synth;
-                }
-
-                // Production grounding gate: the full ladder lives in
-                // grounding::gate_answer (shared with the non-streaming
-                // path). Runs on the HELD answer before anything
-                // reaches the user; fail-open on judge failure.
-                let mut grounding_gate_meta: Option<serde_json::Value> = None;
-                if gate_on
-                    && !matches!(
-                        observed_finish,
-                        Some(crate::types::FinishReason::Cancelled)
-                    )
-                {
-                    let outcome = crate::runtime::grounding::gate_answer(
-                        &inference,
-                        &gate_question,
-                        std::mem::take(&mut full_text),
-                        &gate_evidence,
-                        &request,
-                        &gate_profile,
-                    )
-                    .await;
-                    full_text = outcome.text;
-                    grounding_gate_meta = Some(outcome.meta);
-                }
-
-                // Post-synthesis guardrail: demote any quoted span that
-                // isn't verbatim-present in the evidence shown to the
-                // model before it's persisted, so the stored record (and
-                // any reload of this bubble) can't present a composite /
-                // fabricated quotation as verbatim. The live token stream
-                // already went out unmodified — this hardens the durable
-                // copy; in gate mode the verified rewrite IS what gets
-                // released to the user (held streams send post-rewrite).
-                // The refinement path (collaboration.rs) re-verifies
-                // any gap-check rewrite. Empty doc_context (parametric
-                // path) is a no-op.
-                let full_text = {
-                    let v = crate::quote_verification::verify_answer_against_evidence(
-                        &full_text,
-                        &doc_context,
-                    );
-                    if v.demoted_count > 0 {
-                        tracing::warn!(
-                            demoted = v.demoted_count,
-                            verified = v.verified_count,
-                            "kq-stream: post-synthesis guardrail demoted unverified quotations"
-                        );
-                    }
-                    v.rewritten
-                };
-
-                // Gate mode held every token — release the final
-                // (gated, quote-verified) text as one frame now.
-                if gate_on && !cancel_for_stream.is_cancelled() {
-                    if tx.send(Ok(full_text.clone())).await.is_err() {
-                        return;
-                    }
-                }
-
-                // Persist final assistant message with full KQ metadata
-                // so the UI citation expander and provenance header
-                // have everything they had on the non-streaming path.
-                let (sources_for_prov, coverage_for_prov) = build_provenance_components(
-                    &source_map,
-                    &std::collections::HashMap::new(),
-                    &folder_meta,
-                    // KnowledgeQueryPlan doesn't carry the
-                    // display-category lookup; the chip-label rename
-                    // for conversation corpora only fires on the
-                    // DeepQuery path (see `prepare_knowledge_context`).
-                    // Threading the lookup through the plan is a
-                    // follow-up if we want the KQ streaming surface
-                    // to render "Your conversations" as well.
-                    None,
-                );
-                // Phase 5 — typed Finish frame from the provider is
-                // now the source of truth for length truncation, no
-                // more chars-per-token heuristic. Falls back to
-                // `Stop` when the provider closed the stream without
-                // a terminal frame (older test stubs); the trait
-                // `complete_stream_with_finish` default guarantees a
-                // terminal frame on every provider that ships today.
-                let finish_reason_typed =
-                    observed_finish.unwrap_or(crate::types::FinishReason::Stop);
-                let max_budget = inference_config.max_tokens;
-                // Provider-reported count when present; otherwise fall
-                // back to a chars-per-token estimate so the UI's
-                // "(N generated)" line stays useful even on providers
-                // that don't emit usage. The estimate is signposted
-                // — tracing makes the source legible to the operator
-                // post-hoc.
-                let completion_tokens_val = observed_completion_tokens
-                    .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
-                if observed_completion_tokens.is_none() {
-                    tracing::debug!(
-                        chars = full_text.chars().count(),
-                        est_completion_tokens = completion_tokens_val,
-                        "runtime: kq-stream - usage absent, completion_tokens estimated from chars"
-                    );
-                }
-                let provenance = ResponseProvenance {
-                    intent: "KnowledgeQuery".to_string(),
-                    search_method: Some("CorpusEngine".to_string()),
-                    sources: sources_for_prov,
-                    inference_backend: model_id,
-                    oicp_match: None,
-                    total_latency_ms: started.elapsed().as_millis() as u64,
-                    tokens_used: completion_tokens_val as usize,
-                    coarse_intent: coarse_intent_for_prov,
-                    self_assessment: self_assessment_for_prov,
-                    routing_trigger: routing_trigger_for_prov,
-                    coverage: coverage_for_prov,
-                    finish_reason: Some(finish_reason_typed),
-                    max_tokens_budget: Some(max_budget),
-                    completion_tokens: Some(completion_tokens_val),
-                    context_window: inference.effective_context_size(),
-                };
-                let metadata_json = serde_json::json!({
-                    "streamed": true,
-                    "intent": "knowledge_query",
-                    "documents_found": documents_found,
-                    "search_ms": search_ms,
-                    "result_quality": result_quality,
-                    "provenance": provenance,
-                    "retrieved_chunks": retrieved_chunks,
-                    // Glassbox for the production grounding gate:
-                    // null when the gate is off / out of scope;
-                    // otherwise {action, retried, violation_prob,
-                    // threshold} so the UI can render verified /
-                    // regenerated / abstained provenance.
-                    "grounding_gate": grounding_gate_meta,
-                    // Glassbox for the prompt-budget guard: non-null
-                    // when assembly exceeded the context window and
-                    // the prompt was trimmed (runtime::prompt_budget).
-                    "prompt_budget": prompt_budget_note,
-                    // Move 4 — canonical-entity-boost echo for the
-                    // bench's fourth legibility lens. Empty when the
-                    // registry was unset or matched no entities.
-                    "meta_atlas_hits": meta_atlas_hits,
-                    // PR3 — grounded follow-ups rendered as clickable
-                    // NextStepButtons under the bubble. Empty array
-                    // when retrieval produced nothing to ground an
-                    // offer against; the UI hides the row.
-                    "next_steps": offers_json,
-                });
-                let assistant_msg = Message {
-                    id: message_id_owned.clone(),
-                    conversation_id: conversation_id_owned.clone(),
-                    role: Role::Assistant,
-                    content: full_text.clone(),
-                    created_at: now(),
-                    metadata: Some(metadata_json.clone()),
-                    version: now(),
-                };
-                if let Err(e) = store.save_message(&assistant_msg).await {
-                    tracing::warn!(
-                        conversation_id = %conversation_id_owned,
-                        error = %e,
-                        "KnowledgeQuery stream: failed to save assistant message"
-                    );
-                }
-
-                if gap_check_enabled {
-                    // Per the humility principle (see
-                    // `prepare_knowledge_query_plan` for the long
-                    // form): always run the gap check on KQ paths.
-                    // The retrieval-shape route (FastFocused vs
-                    // PrimarySynthesis) decides synthesis style; it
-                    // does NOT decide whether the answer is actually
-                    // grounded. The gap check is the LLM-based
-                    // judge of "did the model answer the question?"
-                    // and has to fire regardless of how concentrated
-                    // the retrieval looked. Top-source label is
-                    // included in the log so a grep on
-                    // `gap_check_scheduled` reconstructs which
-                    // retrieval-shape paths reach the check.
-                    tracing::debug!(
-                        route = ?route_for_log,
-                        top_source = %top_source_label,
-                        "KnowledgeQuery stream: scheduling post-stream gap check"
-                    );
-                    let collab_inference = Arc::clone(&inference);
-                    let collab_store = Arc::clone(&store);
-                    let collab_approval = Arc::clone(&approval);
-                    let collab_config = inference_config.clone();
-                    let collab_cid = conversation_id_owned.clone();
-                    let collab_mid = message_id_owned.clone();
-                    let collab_question = question.clone();
-                    let collab_original = full_text.clone();
-                    let collab_evidence = doc_context.clone();
-                    let collab_metadata = metadata_json;
-                    // Clone the routing-events sink + session id
-                    // into the spawn so the gap-check chips ("now
-                    // auditing the answer", "found something to
-                    // ask about") reach the desktop UI alongside
-                    // the in-flight INFORMATION REQUEST card.
-                    let collab_events = collab_routing_events.clone();
-                    let collab_sid = collab_session_id.clone();
-                    let collab_sid_for_outcome = collab_sid.clone();
-                    let collab_notes_for_outcome = notes_for_outcome.clone();
-                    // Tool-Mastery Layer 3 — record what happened
-                    // on this KQ turn so the next turn's dossier
-                    // can read it. Outcome resolves from the
-                    // post-stream refinement result (Stale =
-                    // gap-check fired and rewrote the answer),
-                    // plus the evidence-presence signal captured
-                    // before the spawn (NoResults = retrieval was
-                    // empty; Useful = chunks landed and the
-                    // original answer stood). All writes are
-                    // best-effort — see `dossier::record_tool_outcome`.
-                    // Tool-Mastery Layer 3 — synchronous baseline
-                    // write BEFORE the gap-check spawn fires. Writing
-                    // here (not inside the spawn) guarantees the
-                    // tool_decision lands even when the bench / CLI
-                    // exits before the gap-check spawn completes —
-                    // run_post_stream_refinement can take 10-30s and
-                    // the next turn's dossier read would otherwise
-                    // see nothing. The spawn below MAY overwrite with
-                    // `Stale` when refinement actually rewrites the
-                    // answer; the dossier reader returns
-                    // most-recent-first so the later write supersedes
-                    // when it lands in time.
-                    // Decide outcome from three orthogonal signals so a
-                    // turn whose retrieval LANDED but whose answer
-                    // landed in "I don't know" territory still records
-                    // `no-results` (the snapshot-freshness shape: the
-                    // hybrid retriever happily returns 30+ historical
-                    // Tour de France articles for a "2027 Tour" query
-                    // even though none of them are about 2027). The
-                    // answer-content check uses general English
-                    // negation + absence patterns, not bank vocabulary,
-                    // so it transfers across questions.
-                    let answer_is_honest_negation = {
-                        let lower = full_text.to_lowercase();
-                        let has_negation = [
-                            "don't",
-                            "do not",
-                            "cannot",
-                            "can't",
-                            "doesn't have",
-                            "no information",
-                            "no data",
-                            "no record",
-                            "outside",
-                            "unable to",
-                        ]
-                        .iter()
-                        .any(|w| lower.contains(w));
-                        let has_scope_token = [
-                            "information",
-                            "data",
-                            "record",
-                            "snapshot",
-                            "knowledge base",
-                            "details",
-                            "results",
-                        ]
-                        .iter()
-                        .any(|w| lower.contains(w));
-                        has_negation && has_scope_token
-                    };
-                    let retrieval_missed = documents_found == 0
-                        || answer_is_honest_negation
-                        || (!shape.title_match
-                            && shape.query_token_coverage < EVIDENCE_MIN_TOKEN_COVERAGE);
-                    let baseline_outcome = if retrieval_missed {
-                        crate::memory::ToolDecisionOutcome::NoResults
-                    } else {
-                        crate::memory::ToolDecisionOutcome::Useful
-                    };
-                    let baseline_reasoning = if documents_found == 0 {
-                        "knowledge retrieval returned 0 chunks".to_string()
-                    } else if answer_is_honest_negation {
-                        format!(
-                            "retrieval returned {documents_found} chunks but \
-                             the assistant's answer acknowledged a gap \
-                             (snapshot-freshness or scope mismatch)"
-                        )
-                    } else if retrieval_missed {
-                        format!(
-                            "retrieval returned {documents_found} chunks but \
-                             title_match=false and query_token_coverage={:.2} \
-                             (corpus does not cover this topic)",
-                            shape.query_token_coverage
-                        )
-                    } else {
-                        format!("synthesised over {documents_found} chunks")
-                    };
-                    // Tier 1 (result memory): populate summary +
-                    // turn_index so the next turn's dossier can
-                    // render addressable references. `evidence_ids`
-                    // stays empty here because the legacy KQ path
-                    // doesn't route through knowledge_lookup tool —
-                    // when it does (follow-up PR), this site will
-                    // also pass the per-call ev-Tn-NNNN handles.
-                    let summary = if shape.top_source_label.is_empty() {
-                        None
-                    } else {
-                        Some(shape.top_source_label.clone())
-                    };
-                    // Turn index: count of prior user messages
-                    // (zero-based). The current in-flight user
-                    // message is already pushed onto
-                    // conversation.messages by the time we reach
-                    // this site, so subtract 1.
-                    let turn_index_for_outcome = context
-                        .conversation
-                        .messages
-                        .iter()
-                        .filter(|m| matches!(m.role, Role::User))
-                        .count()
-                        .saturating_sub(1);
-                    let baseline_extras = crate::memory::ToolDecisionExtras {
-                        summary: summary.clone(),
-                        evidence_ids: Vec::new(),
-                        turn_index: turn_index_for_outcome,
-                    };
-                    crate::dossier::record_tool_outcome(
-                        notes_for_outcome.as_deref(),
-                        collab_sid_for_outcome.as_deref().unwrap_or(""),
-                        Some(&conversation_id_owned),
-                        "knowledge_lookup",
-                        baseline_outcome,
-                        &baseline_reasoning,
-                        baseline_extras,
-                    )
-                    .await;
-
-                    let outcome_notes = collab_notes_for_outcome.clone();
-                    let outcome_notes_present = outcome_notes.is_some();
-                    // Capture Tier-1 extras for the stale-write
-                    // path inside the spawn (closure can't reach
-                    // back to the dispatch-frame locals).
-                    let stale_summary_for_capture = summary.clone();
-                    let turn_index_for_capture = turn_index_for_outcome;
-                    // Refinement re-gate: only armed when this turn's
-                    // answer was itself gate-released.
-                    let collab_guard = if gate_on {
-                        Some(crate::runtime::collaboration::RefinementGuard {
-                            inference: std::sync::Arc::clone(&collab_inference),
-                            evidence: gate_evidence,
-                        })
-                    } else {
-                        None
-                    };
-                    tokio::spawn(async move {
-                        tracing::info!(
-                            conversation_id = %collab_cid,
-                            has_notes = outcome_notes_present,
-                            documents_found,
-                            "dossier:streaming_kq_outcome_spawn_fired"
-                        );
-                        let refined = run_post_stream_refinement(
-                            collab_inference.as_ref(),
-                            collab_approval.as_ref(),
-                            collab_store.as_ref(),
-                            &collab_config,
-                            &collab_cid,
-                            &collab_mid,
-                            &collab_question,
-                            &collab_original,
-                            &collab_evidence,
-                            Some(collab_metadata),
-                            collab_events,
-                            collab_sid,
-                            collab_guard,
-                        )
-                        .await;
-                        if refined.is_some() {
-                            // Stale write supersedes the baseline
-                            // entry from above. Preserve summary +
-                            // turn_index so the dossier history
-                            // stays addressable; flag the outcome
-                            // change via the new reasoning.
-                            let stale_extras = crate::memory::ToolDecisionExtras {
-                                summary: stale_summary_for_capture.clone(),
-                                evidence_ids: Vec::new(),
-                                turn_index: turn_index_for_capture,
-                            };
-                            crate::dossier::record_tool_outcome(
-                                outcome_notes.as_deref(),
-                                collab_sid_for_outcome.as_deref().unwrap_or(""),
-                                Some(&collab_cid),
-                                "knowledge_lookup",
-                                crate::memory::ToolDecisionOutcome::Stale,
-                                "gap-check refined the post-stream answer",
-                                stale_extras,
-                            )
-                            .await;
-                        }
-                    });
-                }
-
-                // Auto-title after first exchange — same post-stream
-                // hook the non-KQ streaming path uses. Non-blocking.
-                let title_inference = Arc::clone(&inference);
-                let title_store = Arc::clone(&store);
-                let title_cid = conversation_id_owned.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = crate::title::try_auto_title(
-                        title_inference.as_ref(),
-                        title_store.as_ref(),
-                        &title_cid,
-                    )
-                    .await
-                    {
-                        tracing::warn!(
-                            conversation_id = %title_cid,
-                            error = %e,
-                            "auto-title: generation failed (KQ stream path)"
-                        );
-                    }
-                });
-            });
-
-            let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-                Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
-            return Ok(StreamHandle { message_id, stream });
-        }
-
-        // RetrievalStart — DeepQuery streaming path. Skipped for
-        // SimpleQuery because that intent is a quick factual answer
-        // and the existing RetrievalComplete narration is also gated
-        // off for it (chunks typically empty). Fires immediately so
-        // the chip is on screen before `prepare_knowledge_context`
-        // returns.
-        if !matches!(intent, Intent::SimpleQuery) {
-            self.routing_events
-                .emit_turn_narration(TurnNarration {
-                    session_id: _session_id.clone(),
-                    conversation_id: conversation_id.to_string(),
-                    event: NarrationEvent {
-                        phase: NarrationPhase::RetrievalStart,
-                        text: "Searching your knowledge…".to_string(),
-                        elapsed_ms: 0,
-                    },
-                })
-                .await;
-        }
-
-        // 4. Search knowledge + build prompt (shared with handle_simple).
-        let kc = self
-            .prepare_knowledge_context(message, &context, &intent, scope.as_deref())
-            .await;
-
-        // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
-        // the KnowledgeQuery/ComparisonQuery branch above, but keyed
-        // off `KnowledgeContext` (no `plan.shape` available here).
-        // Suppressed by the session store when total elapsed < 1.5s
-        // or the per-turn cap is hit, so this is safe on fast paths.
-        if !matches!(intent, Intent::SimpleQuery) && !kc.chunks.is_empty() {
-            let txt = format!(
-                "Read {} chunks across {} sources — drafting the response.",
-                kc.chunks.len(),
-                kc.sources.len().max(1),
-            );
-            if let Some(event) = self.sessions.try_emit_narration(
-                &_session_id,
-                NarrationPhase::RetrievalComplete {
-                    chunks_in: kc.chunks.len(),
-                    corpora: kc.sources.iter().map(|s| s.origin.clone()).collect(),
-                },
-                txt,
-            ) {
-                self.routing_events
-                    .emit_turn_narration(TurnNarration {
-                        session_id: _session_id.clone(),
-                        conversation_id: conversation_id.to_string(),
-                        event,
-                    })
-                    .await;
-            }
-        }
-
-        let oicp = if matches!(intent, Intent::SimpleQuery) {
-            None
-        } else {
-            self.build_oicp(&intent)
-        };
-
-        // Model ID is captured from `complete_stream_with_id` once
-        // the provider has committed to a routing decision — see
-        // the trait docs on that method. Using the pre-stream sync
-        // `model_id_for` here would miss peer attribution (the
-        // mesh wrapper can only report "I routed to peer X" after
-        // its async `select_peer` pass has run).
-        //
-        // Tier 2: populate evidence_id_allowlist from the
-        // conversation's prior tool_decision payloads so the
-        // sampler's EvidenceIdAllowlistConstraint can block
-        // fabrications of `[ev-Tn-NNNN]` ids the model hasn't
-        // actually been given. Soft-fails to None when no prior
-        // ids exist (Tier 1 prompt discipline is then the only
-        // safety net — same posture as today).
-        let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
-        let mut request = CompletionRequest {
-            prompt: kc.prompt,
-            system_message: Some(kc.system),
-            preferred_speed: kc.speed,
-            max_tokens: Some(self.inference_config.max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
-            structured_output: None,
-            top_k: self.inference_config.top_k,
-            top_p: None,
-            oicp,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist,
-            lark_grammar: None,
-        };
-        // Phase-1 prompt-budget guard: assembled input + response
-        // reservation must fit the context window, or the engine's
-        // "Prompt too long" rejection becomes a terminal user-facing
-        // error loop (note 2cd9227e). See `prompt_budget` for the
-        // degradation ladder; the note lands in message metadata.
-        let budget_note = match self.inference.effective_context_size() {
-            Some(ctx) => {
-                let (outcome, measured) = prompt_budget::enforce(
-                    &mut request,
-                    &|s| self.inference.count_tokens(s),
-                    ctx,
-                );
-                // Phase 2: the memo records pre-trim DEMAND so the
-                // compaction sensor and next-turn allocator see what
-                // assembly actually wanted.
-                self.record_assembly(conversation_id, measured);
-                match outcome {
-                    prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
-                    _ => None,
-                }
-            }
-            None => None,
-        };
-
-        let search_method = kc.search_method;
-        let sources = kc.sources;
-        let coverage = kc.coverage;
-        let retrieved_chunks = kc.retrieved_chunks;
-        // Answerable-context gate for the refusal-retry: only retry a refusal
-        // when evidence WAS retrieved (a genuine "no sources" must still be an
-        // honest abstention, never force-answered).
-        let had_retrieved_chunks = !retrieved_chunks.is_empty();
-
-        // Format the corpus evidence now so the post-stream epistemic-
-        // humility hook can feed it to the gap checker. Moved into the
-        // streaming spawn; not used before the synthesis completes.
-        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
-        let question = message.to_string();
-
-        let intent_label = format!("{intent:?}");
-        let message_id = uuid::Uuid::new_v4().to_string();
-
-        // Narration — synthesis-start chip on the DeepQuery /
-        // SimpleQuery streaming path. Bridges the silence between
-        // retrieval-complete and the first streamed token. With
-        // primary-slot prewarm in place this is typically a no-op
-        // wait, but it's still the right time to acknowledge the
-        // long phase to the user.
-        if matches!(request.preferred_speed, Speed::Slow) {
-            let txt = "Generating a deep answer with the primary model.".to_string();
-            if let Some(event) = self.sessions.try_emit_narration(
-                &_session_id,
-                NarrationPhase::PrimarySynthesisStart,
-                txt,
-            ) {
-                self.routing_events
-                    .emit_turn_narration(TurnNarration {
-                        session_id: _session_id.clone(),
-                        conversation_id: conversation_id.to_string(),
-                        event,
-                    })
-                    .await;
-            }
-        }
-
-        // 5. Spawn streaming task.
-        let inference = Arc::clone(&self.inference);
-        let store = Arc::clone(&self.store);
-        let approval = Arc::clone(&self.approval);
-        let inference_config = self.inference_config.clone();
-        // Cloned into the spawn so the post-stream gap-check chips
-        // can reach the desktop UI. See the matching block in the
-        // KnowledgeQuery streaming branch above for the rationale.
-        let routing_events_for_spawn: Option<Arc<dyn RoutingEventSink>> =
-            Some(Arc::clone(&self.routing_events));
-        let session_id_for_spawn: Option<String> = Some(_session_id.clone());
-        let conversation_id_owned = conversation_id.to_string();
-        let message_id_owned = message_id.clone();
-        // Capture recalled memories on the relational/witness path so
-        // the desktop's inner-work surface can render echo dots in the
-        // gutter beside the just-committed paragraph. Gated to the
-        // relational register so non-relational turns don't leak
-        // memory contents into UI metadata they don't need. Thin
-        // shape — id + content + created_at is what the echo overlay
-        // displays; the rest of the Memory record stays internal.
-        let recalled_memories_for_metadata: Option<serde_json::Value> =
-            if context.turn_register() == SkillRegister::Relational && !context.memories.is_empty()
-            {
-                Some(serde_json::Value::Array(
-                    context
-                        .memories
-                        .iter()
-                        .map(|m| {
-                            serde_json::json!({
-                                "id": m.id,
-                                "content": m.content,
-                                "created_at": m.created_at,
-                            })
-                        })
-                        .collect(),
-                ))
-            } else {
-                None
-            };
-
-        // Production grounding gate, DeepQuery side: long-form answers
-        // take the per-claim audit → rewrite → annotate ladder in
-        // grounding::gate_answer (short deep answers fall through to
-        // the single-claim ladder). entity_anchored=false here — the
-        // agentic loop (and its atlas gazetteer verdict) is KQ-only
-        // today, and the long-form ladder doesn't consume it.
-        let deep_gate_surface = crate::runtime::grounding::GateSurface::DeepQuery;
-        let deep_gate_on = deep_gate_surface.enabled() && !kc.chunks.is_empty();
-        // The turn's sealed evidence universe (deep answers are
-        // usually long-form). Built pre-spawn; claim search sealed to
-        // the conversation's corpora. entity_anchored=false — the
-        // agentic loop (and its atlas gazetteer verdict) is KQ-only.
-        let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
-            chunks: if deep_gate_on {
-                kc.chunks.iter().map(|c| c.content.clone()).collect()
-            } else {
-                Vec::new()
-            },
-            searcher: if deep_gate_on {
-                Some(std::sync::Arc::new(self.claim_searcher(
-                    context.conversation.enabled_corpora.as_deref(),
-                    &kc.chunks,
-                )) as _)
-            } else {
-                None
-            },
-            entity_anchored: false,
-        };
-        let deep_gate_profile = deep_gate_surface.profile();
-        let deep_gate_question: String = message.to_string();
-        if deep_gate_on {
-            let txt = "Drafting an answer, then verifying it against your                        sources before showing it."
-                .to_string();
-            if let Some(event) = self.sessions.try_emit_narration(
-                &_session_id,
-                NarrationPhase::GroundingVerifyStart,
-                txt,
-            ) {
-                self.routing_events
-                    .emit_turn_narration(TurnNarration {
-                        session_id: _session_id.clone(),
-                        conversation_id: conversation_id.to_string(),
-                        event,
-                    })
-                    .await;
-            }
-        }
-
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
-
-        let cancel_for_stream = cancel_token.clone();
-        tokio::spawn(async move {
-            let started = std::time::Instant::now();
-            let mut full_text = String::new();
-
-            let (mut s, mut model_id) =
-                match inference.complete_stream_with_id_and_finish(&request).await {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return;
-                    }
-                };
-            let mut observed_finish: Option<crate::types::FinishReason> = None;
-            let mut observed_completion_tokens: Option<u32> = None;
-
-            // Refusal-retry: hold the head of the stream; if it opens with the
-            // model's OWN refusal signal AND evidence was retrieved, discard and
-            // re-synthesize ONCE with an answer-prefill that forces engagement
-            // past the refusal. One retry max (`retried`); the retry streams
-            // live (no second buffering). See `looks_like_refusal_opener`.
-            let mut head = String::new();
-            let mut head_flushed = false;
-            let mut retried = false;
-
-            'synth: loop {
-                loop {
-                    // Cancellation races the next frame — see the
-                    // matching note on the KQ loop above.
-                    let frame = tokio::select! {
-                        biased;
-                        _ = cancel_for_stream.cancelled() => {
-                            tracing::info!(
-                                chars_streamed = full_text.chars().count(),
-                                "deep-stream: cancelled by session token — terminating with FinishReason::Cancelled"
-                            );
-                            observed_finish = Some(crate::types::FinishReason::Cancelled);
-                            break 'synth;
-                        }
-                        f = s.next() => match f {
-                            Some(fr) => fr,
-                            None => break,
-                        },
-                    };
-                    use crate::types::StreamFrame;
-                    match frame {
-                        StreamFrame::Token(chunk) => {
-                            if deep_gate_on {
-                                // Hold mode — see the KQ spawn; the
-                                // gate block after 'synth owns release.
-                                full_text.push_str(&chunk);
-                            } else if head_flushed {
-                                full_text.push_str(&chunk);
-                                if tx.send(Ok(chunk)).await.is_err() {
-                                    return;
-                                }
-                            } else {
-                                head.push_str(&chunk);
-                                full_text.push_str(&chunk);
-                                if head.chars().count() >= REFUSAL_HEAD_CHARS {
-                                    if !retried
-                                        && had_retrieved_chunks
-                                        && looks_like_refusal_opener(&head)
-                                    {
-                                        retried = true;
-                                        tracing::info!(
-                                            target: "synth.refusal_retry",
-                                            head = %head.chars().take(80).collect::<String>(),
-                                            "deep-stream: refusal opener detected with evidence present — retrying with answer prefill"
-                                        );
-                                        full_text.clear();
-                                        full_text.push_str(REFUSAL_RETRY_PREFIX);
-                                        if tx
-                                            .send(Ok(REFUSAL_RETRY_PREFIX.to_string()))
-                                            .await
-                                            .is_err()
-                                        {
-                                            return;
-                                        }
-                                        head_flushed = true;
-                                        let mut retry_req = request.clone();
-                                        retry_req.assistant_prefix =
-                                            Some(REFUSAL_RETRY_PREFIX.to_string());
-                                        retry_req.system_message =
-                                            Some(REFUSAL_RETRY_SYSTEM.to_string());
-                                        match inference
-                                            .complete_stream_with_id_and_finish(&retry_req)
-                                            .await
-                                        {
-                                            Ok((s2, mid2)) => {
-                                                s = s2;
-                                                model_id = mid2;
-                                                observed_finish = None;
-                                                observed_completion_tokens = None;
-                                                continue 'synth;
-                                            }
-                                            Err(e) => {
-                                                let _ = tx.send(Err(e)).await;
-                                                return;
-                                            }
-                                        }
-                                    } else if tx
-                                        .send(Ok(std::mem::take(&mut head)))
-                                        .await
-                                        .is_err()
-                                    {
-                                        return;
-                                    } else {
-                                        head_flushed = true;
-                                    }
-                                }
-                            }
-                        }
-                        StreamFrame::Finish { reason, usage } => {
-                            observed_completion_tokens = usage.as_ref().map(|u| u.completion_tokens);
-                            // Finish::Error means the slot bailed mid-stream
-                            // (context overflow, decode failure, etc.). Forward
-                            // as an error frame so the desktop doesn't save a
-                            // 0-char message and trigger a misleading gap check.
-                            if let crate::types::FinishReason::Error(ref msg) = reason {
-                                tracing::warn!(
-                                    finish_reason = "error",
-                                    error = %msg,
-                                    chars_streamed = full_text.len(),
-                                    "deep-stream: slot terminated with Finish::Error — propagating as error frame"
-                                );
-                                let _ = tx
-                                    .send(Err(crate::error::Error::Inference(msg.clone())))
-                                    .await;
-                                return;
-                            }
-                            observed_finish = Some(reason);
-                        }
-                        StreamFrame::Error(msg) => {
-                            let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
-                            return;
-                        }
-                    }
-                }
-
-                // Stream ended while still buffering the head (a short answer
-                // below the threshold): decide on what we have. Gate
-                // mode never flushes here — release happens post-verdict.
-                if !head_flushed && !deep_gate_on {
-                    if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
-                        retried = true;
-                        tracing::info!(
-                            target: "synth.refusal_retry",
-                            head = %head.chars().take(80).collect::<String>(),
-                            "deep-stream: short refusal detected with evidence present — retrying with answer prefill"
-                        );
-                        full_text.clear();
-                        full_text.push_str(REFUSAL_RETRY_PREFIX);
-                        if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                            return;
-                        }
-                        head_flushed = true;
-                        let mut retry_req = request.clone();
-                        retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                        retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                        match inference.complete_stream_with_id_and_finish(&retry_req).await {
-                            Ok((s2, mid2)) => {
-                                s = s2;
-                                model_id = mid2;
-                                observed_finish = None;
-                                observed_completion_tokens = None;
-                                continue 'synth;
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(e)).await;
-                                return;
-                            }
-                        }
-                    } else {
-                        let _ = tx.send(Ok(std::mem::take(&mut head))).await;
-                        head_flushed = true;
-                    }
-                }
-                break 'synth;
-            }
-
-            // Production grounding gate (deep): held answer → shared
-            // ladder. Long-form deep answers take the per-claim audit.
-            let mut grounding_gate_meta: Option<serde_json::Value> = None;
-            if deep_gate_on
-                && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled))
-            {
-                let outcome = crate::runtime::grounding::gate_answer(
-                    &inference,
-                    &deep_gate_question,
-                    std::mem::take(&mut full_text),
-                    &deep_gate_evidence,
-                    &request,
-                    &deep_gate_profile,
+            return self
+                .stream_knowledge_query_turn(
+                    message,
+                    conversation_id,
+                    context,
+                    classification,
+                    coarse_intent,
+                    self_assessment,
+                    scope,
+                    intent,
+                    _session_id,
+                    cancel_token,
+                    tool_descriptors,
                 )
                 .await;
-                full_text = outcome.text;
-                grounding_gate_meta = Some(outcome.meta);
-            }
+        }
 
-            // Phase 5 — typed Finish frame from the provider is the
-            // source of truth for length truncation. Falls back to
-            // `Stop` when the provider closed without a terminal
-            // frame (older test stubs); the trait
-            // `complete_stream_with_finish` default guarantees a
-            // terminal frame on every provider that ships today.
-            let finish_reason_typed = observed_finish.unwrap_or(crate::types::FinishReason::Stop);
-            let max_budget = inference_config.max_tokens;
-            let completion_tokens_val = observed_completion_tokens
-                .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
-            if observed_completion_tokens.is_none() {
-                tracing::debug!(
-                    chars = full_text.chars().count(),
-                    est_completion_tokens = completion_tokens_val,
-                    "runtime: deep-stream - usage absent, completion_tokens estimated from chars"
-                );
-            }
-            let provenance = ResponseProvenance {
-                intent: intent_label,
-                search_method,
-                sources,
-                inference_backend: model_id,
-                oicp_match: None,
-                total_latency_ms: started.elapsed().as_millis() as u64,
-                tokens_used: completion_tokens_val as usize,
-                coarse_intent,
-                self_assessment,
-                routing_trigger: classification.rationale.clone(),
-                coverage,
-                finish_reason: Some(finish_reason_typed),
-                max_tokens_budget: Some(max_budget),
-                completion_tokens: Some(completion_tokens_val),
-                context_window: inference.effective_context_size(),
-            };
-            let metadata_json = serde_json::json!({
-                "streamed": true,
-                "provenance": provenance,
-                "retrieved_chunks": retrieved_chunks,
-                // Phase 3b: present only on the relational/witness
-                // path; absent or null elsewhere. The desktop's
-                // inner-work surface renders these as gutter echo
-                // dots; chat ignores the field.
-                "recalled_memories": recalled_memories_for_metadata,
-                // Glassbox for the prompt-budget guard: non-null when
-                // assembly exceeded the context window and the prompt
-                // was trimmed to fit (see runtime::prompt_budget).
-                "prompt_budget": budget_note,
-                "grounding_gate": grounding_gate_meta,
-            });
-            // Post-synthesis guardrail (DeepQuery / reasoning stream):
-            // same contract as the KnowledgeQuery stream — demote any
-            // quoted span not verbatim-present in the evidence before
-            // it's persisted. Empty evidence (pure-reasoning, no
-            // retrieval) is a no-op. The refinement path
-            // (collaboration.rs) re-verifies any gap-check rewrite.
-            let full_text = {
-                let v = crate::quote_verification::verify_answer_against_evidence(
-                    &full_text,
-                    &evidence,
-                );
-                if v.demoted_count > 0 {
-                    tracing::warn!(
-                        demoted = v.demoted_count,
-                        verified = v.verified_count,
-                        "deep-stream: post-synthesis guardrail demoted unverified quotations"
-                    );
-                }
-                v.rewritten
-            };
-            // Gate mode held every token — release the final text now.
-            if deep_gate_on && !cancel_for_stream.is_cancelled() {
-                if tx.send(Ok(full_text.clone())).await.is_err() {
-                    return;
-                }
-            }
-            let assistant_msg = Message {
-                id: message_id_owned.clone(),
-                conversation_id: conversation_id_owned.clone(),
-                role: Role::Assistant,
-                content: full_text.clone(),
-                created_at: now(),
-                metadata: Some(metadata_json.clone()),
-                version: now(),
-            };
-            let _ = store.save_message(&assistant_msg).await;
-
-            // Epistemic-humility hook (post-stream): audit the streamed
-            // answer and, if the user provides additional content, rewrite
-            // the persisted message and emit a `message-refined` event so
-            // the UI can update the bubble in place. Runs concurrently
-            // with auto-title so neither blocks the other.
-            let collab_inference = Arc::clone(&inference);
-            let collab_store = Arc::clone(&store);
-            let collab_approval = Arc::clone(&approval);
-            let collab_config = inference_config.clone();
-            let collab_cid = conversation_id_owned.clone();
-            let collab_mid = message_id_owned.clone();
-            let collab_question = question.clone();
-            let collab_evidence = evidence.clone();
-            let collab_original = full_text.clone();
-            let collab_metadata = metadata_json;
-            // Routing-events sink + session id for gap-check
-            // narration chips. Same rationale as the KnowledgeQuery
-            // spawn above — without these the chip-then-card UX
-            // silently drops on the streaming path. The clones
-            // were already lifted above the outer spawn so this
-            // is a cheap inner re-clone.
-            let collab_events = routing_events_for_spawn.clone();
-            let collab_sid = session_id_for_spawn.clone();
-            // Post-stream tasks (epistemic-humility audit + auto-title)
-            // share the fast-slot inflight semaphore with user-facing
-            // requests. Under sequential load — eval bench, atlas
-            // pipeline, anyone calling the daemon back-to-back — the
-            // next request's routing classify queues behind these,
-            // adding 30–60s of latency per turn for ~zero observable
-            // benefit on the bench (the streamed answer is already
-            // delivered; the refinement is a server-side rewrite).
-            // Set `SOVEREIGN_SKIP_POST_STREAM=1` to disable both tasks.
-            // The right architectural fix is a priority queue or
-            // separate slot for background work; this env knob is the
-            // diagnostic + bench-iteration lever.
-            let skip_post_stream = std::env::var("SOVEREIGN_SKIP_POST_STREAM")
-                .map(|v| v == "1")
-                .unwrap_or(false);
-            if !skip_post_stream {
-                // Refinement re-gate: armed only when this turn's
-                // answer was itself gate-released.
-                let collab_guard = if deep_gate_on {
-                    Some(crate::runtime::collaboration::RefinementGuard {
-                        inference: std::sync::Arc::clone(&collab_inference),
-                        evidence: deep_gate_evidence,
-                    })
-                } else {
-                    None
-                };
-                tokio::spawn(async move {
-                    run_post_stream_refinement(
-                        collab_inference.as_ref(),
-                        collab_approval.as_ref(),
-                        collab_store.as_ref(),
-                        &collab_config,
-                        &collab_cid,
-                        &collab_mid,
-                        &collab_question,
-                        &collab_original,
-                        &collab_evidence,
-                        Some(collab_metadata),
-                        collab_events,
-                        collab_sid,
-                        collab_guard,
-                    )
-                    .await;
-                });
-
-                // Auto-title after first exchange. Non-blocking; the stream has
-                // already delivered the response to the user.
-                let title_inference = Arc::clone(&inference);
-                let title_store = Arc::clone(&store);
-                let title_cid = conversation_id_owned.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = crate::title::try_auto_title(
-                        title_inference.as_ref(),
-                        title_store.as_ref(),
-                        &title_cid,
-                    )
-                    .await
-                    {
-                        tracing::warn!(
-                            conversation_id = %title_cid,
-                            error = %e,
-                            "auto-title: generation failed (stream path)"
-                        );
-                    }
-                });
-            }
-        });
-
-        let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
-
-        Ok(StreamHandle { message_id, stream })
+        // DeepQuery / SimpleQuery streaming path.
+        self.stream_deep_query_turn(
+            message,
+            conversation_id,
+            context,
+            classification,
+            coarse_intent,
+            self_assessment,
+            scope,
+            intent,
+            _session_id,
+            cancel_token,
+        )
+        .await
     }
 
 }
