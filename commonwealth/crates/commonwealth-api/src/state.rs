@@ -226,6 +226,15 @@ pub struct AppStateInner {
     /// Gossip stamps it into our own `MemberRecord` every round so
     /// in-place upgrades publish the key without a rejoin.
     pub self_node_pubkey: std::sync::RwLock<Option<commonwealth_core::ids::NodePubkey>>,
+    /// Bearer token required of non-loopback callers on the client API
+    /// (`:9741`). `None` (the default) means "no token configured" —
+    /// the [`crate::client_auth`] layer then admits ONLY loopback
+    /// callers and fails closed for any remote one. The embedded daemon
+    /// installs `Some(_)` via [`AppState::install_client_token`] at
+    /// startup when it binds a routable (non-loopback) address. Stored
+    /// in cleartext: the layer compares it byte-for-byte against the
+    /// incoming `Authorization: Bearer`. Set-once-read-many.
+    pub client_token: std::sync::RwLock<Option<Arc<str>>>,
     /// How this daemon reaches mesh peers — the PeerTransport seam.
     /// Every route handler that dials a peer resolves URLs through
     /// this instead of formatting `http://{ip}:{port}` inline, so a
@@ -529,6 +538,31 @@ impl AppState {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pubkey);
     }
 
+    /// Install the client-API bearer token. The embedded daemon calls
+    /// this at startup with the token from
+    /// `commonwealth_transport::identity::load_or_create_client_token`
+    /// ONLY when it binds a non-loopback address; loopback-only
+    /// deployments leave it `None` (no secret generated, all local
+    /// traffic admitted by [`crate::client_auth`]).
+    pub fn install_client_token(&self, token: Option<Arc<str>>) {
+        *self
+            .inner
+            .client_token
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = token;
+    }
+
+    /// Snapshot of the configured client-API bearer token (cheap RwLock
+    /// read + Arc clone). `None` ⇒ no token configured. Read per request
+    /// by the [`crate::client_auth`] layer.
+    pub fn client_token(&self) -> Option<Arc<str>> {
+        self.inner
+            .client_token
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     /// Snapshot of the active [`PeerTransport`]. Cheap (one RwLock
     /// read + Arc clone); call per dial, don't cache across awaits —
     /// the daemon may re-install at startup.
@@ -651,6 +685,7 @@ impl AppState {
                 slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 self_node_pubkey: std::sync::RwLock::new(None),
+                client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),
                 )),

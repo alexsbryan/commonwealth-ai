@@ -534,7 +534,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn router() -> axum::Router {
-        crate::server::client_router(test_app_state())
+        crate::server::mock_router(test_app_state())
     }
 
     #[tokio::test]

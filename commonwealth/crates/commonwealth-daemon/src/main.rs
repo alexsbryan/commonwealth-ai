@@ -889,6 +889,40 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         );
         state.set_local_inference_capable(inference_capable);
 
+        // The standalone daemon always binds `0.0.0.0` (it exists to
+        // serve a mesh), so non-loopback callers are expected — the
+        // client API therefore requires a bearer token of every remote
+        // caller (the `client_auth` layer; loopback stays exempt).
+        // Precedence: env → auto-generate+persist under data_dir. If a
+        // token can't be obtained, install None → the layer fails
+        // closed for remote callers rather than serving unauthenticated.
+        let client_token = std::env::var("SOVEREIGN_CLIENT_TOKEN")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                commonwealth_api::client_auth::load_or_create_client_token(std::path::Path::new(
+                    &data_dir,
+                ))
+                .map_err(|e| tracing::warn!("client-token persistence failed: {e}"))
+                .ok()
+            });
+        match &client_token {
+            Some(_) => {
+                info!(
+                    "client API requires a bearer token for remote callers \
+                     (token at {data_dir}/client-token; or set SOVEREIGN_CLIENT_TOKEN)"
+                );
+            }
+            None => {
+                tracing::warn!(
+                    "no client token could be resolved/generated — remote callers \
+                     will be REFUSED (fail-closed); fix data-dir perms or set \
+                     SOVEREIGN_CLIENT_TOKEN"
+                );
+            }
+        }
+        state.install_client_token(client_token.map(std::sync::Arc::<str>::from));
+
         // Hourly StorageSnapshot ledger emission. Runs alongside
         // RetentionGc (same shutdown channel, same cadence). The
         // walker closure pulls installed-and-mesh-shared corpora

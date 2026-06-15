@@ -168,7 +168,11 @@ impl SimulatedNode {
         self.client_addr = Some(client_addr);
         self.internal_addr = Some(internal_addr);
 
-        let client_app = client_router(self.state.clone());
+        // Client surface carries the `client_auth` ConnectInfo layer —
+        // serve with the connect_info factory or every request 500s
+        // (matches the production listener in `server::serve`).
+        let client_app =
+            client_router(self.state.clone()).into_make_service_with_connect_info::<SocketAddr>();
         let internal_app = internal_router(self.state.clone());
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();

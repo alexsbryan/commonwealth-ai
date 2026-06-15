@@ -194,12 +194,20 @@ pub struct CreateMeshResult {
     pub mesh_name: String,
     pub join_key: String,
     pub join_link: String,
+    /// The client-API bearer token a joining peer / remote client must
+    /// present, surfaced beside the join key on the invite screen.
+    /// `Some` once the daemon is exposed (bound non-loopback); `None`
+    /// for a loopback-only daemon (no remote access, no token).
+    pub client_token: Option<String>,
 }
 
 /// Result of joining an existing mesh.
 pub struct JoinMeshResult {
     pub mesh_name: String,
     pub node_id: String,
+    /// This node's own client-API token once exposed — so the joiner
+    /// can in turn admit further peers/clients. See `CreateMeshResult`.
+    pub client_token: Option<String>,
 }
 
 impl EmbeddedDaemon {
@@ -632,6 +640,33 @@ impl EmbeddedDaemon {
         }
     }
 
+    /// Opt this daemon into serving REMOTE callers — the explicit
+    /// `mesh create`/`join` action (NOT the silent solo-mesh auto-
+    /// create). Persists the `client-exposed` marker so the bind is
+    /// `0.0.0.0` (+ bearer token required) on this and every future
+    /// start. Call BEFORE `create_mesh`/`join_mesh` when the daemon is
+    /// not yet running, so `start_daemon` binds wide on first start
+    /// with no restart; when called against an already-running daemon
+    /// (attach mode) the new posture takes effect on the next restart
+    /// (`client_bind` is a restart-required field).
+    pub fn expose_client_api(&self) {
+        if let Err(e) = persist::set_client_exposed(&self.data_dir) {
+            warn!(error = %e, "failed to persist client-exposed marker — mesh may bind loopback-only");
+        }
+    }
+
+    /// The running daemon's installed client-API bearer token, if any.
+    /// `None` when not running or bound loopback-only (no token).
+    /// Surfaced on the invite screen beside the join key.
+    pub async fn running_client_token(&self) -> Option<String> {
+        match &*self.state.read().await {
+            DaemonState::Running { app_state, .. } => {
+                app_state.client_token().map(|t| t.to_string())
+            }
+            _ => None,
+        }
+    }
+
     /// Build a `YieldHook` backed by the running daemon's `AppState`.
     /// Returns `None` when the daemon hasn't started yet. Lives here
     /// so callers in `sovereign-cli` (which depends on this crate but
@@ -733,6 +768,7 @@ impl EmbeddedDaemon {
             mesh_name: mesh_name.to_string(),
             join_key,
             join_link,
+            client_token: self.running_client_token().await,
         })
     }
 
@@ -969,6 +1005,7 @@ impl EmbeddedDaemon {
         Ok(JoinMeshResult {
             mesh_name,
             node_id: adopted_node_id.to_string(),
+            client_token: self.running_client_token().await,
         })
     }
 
@@ -1026,6 +1063,11 @@ impl EmbeddedDaemon {
                             error = %e,
                             "join_key.secret could not be deleted on leave"
                         );
+                    }
+                    // Re-secure: leaving the mesh drops the remote-serving
+                    // posture, so the next start binds loopback-only again.
+                    if let Err(e) = persist::clear_client_exposed(&self.data_dir) {
+                        warn!(error = %e, "client-exposed marker could not be cleared on leave");
                     }
                 }
                 if matches!(mode, StopMode::Leave) {
@@ -1508,24 +1550,89 @@ impl EmbeddedDaemon {
             register_local_model_slots(&app_state, cfg, node_id);
         }
 
-        // Client API on 0.0.0.0:9741 — this is the OpenAI-compatible
-        // public surface documented in SYSTEM_OVERVIEW.md §5.5.
-        // Peers fetch `/oicp/v1/capabilities` here, the Joiner's
-        // HybridProvider POSTs `/v1/chat/completions` here for
-        // federated inference, and mesh apps can federate via
-        // `/v1/apps/*`. Was 127.0.0.1 for earlier dev builds where
-        // only the in-process Tauri commands called it — that broke
-        // mesh inference federation because peers couldn't reach us.
+        // Client API bind — the OpenAI-compatible public surface
+        // (SYSTEM_OVERVIEW.md §5.5). Peers fetch `/oicp/v1/capabilities`
+        // here, the Joiner's HybridProvider POSTs `/v1/chat/completions`
+        // here for federated inference, and mesh apps federate via
+        // `/v1/apps/*`.
         //
-        // Trust boundary: this port has no authentication today.
-        // The Commonwealth security model (per glossary) is "a
-        // closed trust ring" — the join_key_hash gates membership,
-        // and deployment environments (Tailscale ACLs, LAN
-        // firewalls) are expected to bound reachability to mesh
-        // members. A future revision should add per-request auth
-        // against `Mesh.join_key_hash` so a reachable-but-
-        // non-member attacker can't burn our inference budget.
-        let client_addr: SocketAddr = format!("0.0.0.0:{client_port}").parse().unwrap();
+        // **Trust boundary (2026-06 auth: localhost-default + bearer).**
+        // `daemon.client_bind` defaults to `127.0.0.1` — secure by
+        // default, single-user needs no auth. When an operator binds a
+        // routable address to serve a mesh / remote clients, the
+        // `client_auth` layer requires a bearer token of every
+        // non-loopback caller. We resolve + install that token here so
+        // the layer (which reads it from `AppState`) has it before the
+        // first request. The internal port (`:9742`, mTLS) is unrelated
+        // and always binds `0.0.0.0`.
+        let (mut client_bind, configured_token) = {
+            let guard = self.setup_config.read().await;
+            match guard.as_ref() {
+                Some(c) => (c.daemon.client_bind.clone(), c.daemon.client_token.clone()),
+                None => ("127.0.0.1".to_string(), None),
+            }
+        };
+        let mut bind_is_loopback = client_bind == "127.0.0.1"
+            || client_bind == "::1"
+            || client_bind.eq_ignore_ascii_case("localhost");
+        // The `client-exposed` marker (written by `expose_client_api`
+        // on an explicit `mesh create`/`join`) bumps a loopback default
+        // to `0.0.0.0`. An explicit non-loopback `client_bind` in config
+        // already wins on its own; this only promotes the default, so
+        // the silent solo-mesh stays loopback (no marker) while a shared
+        // mesh is reachable across restarts (marker persists).
+        if bind_is_loopback && persist::client_exposed(&self.data_dir) {
+            client_bind = "0.0.0.0".to_string();
+            bind_is_loopback = false;
+        }
+        if bind_is_loopback {
+            app_state.install_client_token(None);
+        } else {
+            // Non-loopback: a token is mandatory. Precedence: env →
+            // config → auto-generate+persist. Generating-by-default
+            // means an operator can't accidentally expose an
+            // unauthenticated surface by flipping the bind alone.
+            let token = std::env::var("SOVEREIGN_CLIENT_TOKEN")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .or(configured_token)
+                .or_else(|| {
+                    commonwealth_transport::identity::load_or_create_client_token(&self.data_dir)
+                        .map_err(|e| warn!("client-token persistence failed: {e}"))
+                        .ok()
+                });
+            match token {
+                Some(tok) => {
+                    info!(
+                        bind = %client_bind,
+                        "client API bound non-loopback — bearer token REQUIRED for \
+                         remote callers (token at {}/client-token; or set \
+                         daemon.client_token / SOVEREIGN_CLIENT_TOKEN)",
+                        self.data_dir.display()
+                    );
+                    app_state.install_client_token(Some(tok.into()));
+                }
+                None => {
+                    // Could not obtain a token at all — fail closed:
+                    // install None so the layer refuses every remote
+                    // caller (loopback still works) rather than serving
+                    // unauthenticated.
+                    warn!(
+                        bind = %client_bind,
+                        "client API bound non-loopback but NO token could be \
+                         resolved/generated — remote callers will be REFUSED \
+                         (fail-closed). Fix data-dir perms or set \
+                         daemon.client_token."
+                    );
+                    app_state.install_client_token(None);
+                }
+            }
+        }
+        let client_addr: SocketAddr =
+            format!("{client_bind}:{client_port}").parse().unwrap_or_else(|_| {
+                warn!("invalid client_bind '{client_bind}'; falling back to 127.0.0.1");
+                format!("127.0.0.1:{client_port}").parse().unwrap()
+            });
         let internal_addr: SocketAddr = format!("0.0.0.0:{internal_port}").parse().unwrap();
 
         let mesh_state = Arc::new(RwLock::new(MeshState::from_app_state(&app_state).await));

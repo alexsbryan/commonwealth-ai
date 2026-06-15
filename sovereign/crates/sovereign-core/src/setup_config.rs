@@ -372,6 +372,33 @@ pub struct DaemonSection {
     /// tool emissions on the agent-bench's from-scratch tier.
     #[serde(default = "default_alternation_grammar")]
     pub alternation_grammar: bool,
+
+    /// Address the client API (`:9741`) binds to. Defaults to
+    /// `127.0.0.1` — **secure by default**: the OpenAI-compatible
+    /// surface (inference, knowledge, apps, Ollama shim) is reachable
+    /// only from this machine, so the single-user desktop/CLI/attach
+    /// case needs no authentication.
+    ///
+    /// Set to `0.0.0.0` (or a specific routable interface) to serve
+    /// remote callers — required for multi-machine **mesh federation**
+    /// (peers POST `/v1/chat/completions` here) or remote clients. When
+    /// bound non-loopback, the daemon REQUIRES a bearer token of every
+    /// non-loopback caller (auto-generated to `<data.dir>/client-token`
+    /// unless `client_token` is set) — see `client_token` and
+    /// `commonwealth_api::client_auth`. The internal mesh port
+    /// (`:9742`, mTLS) always binds `0.0.0.0` independently of this.
+    #[serde(default = "default_client_bind")]
+    pub client_bind: String,
+
+    /// Explicit bearer token for the client API when bound non-loopback.
+    /// `None` (default) ⇒ the daemon auto-generates and persists one to
+    /// `<data.dir>/client-token` (0600) on first non-loopback boot and
+    /// prints it once. Set this to pin a known token (e.g. to
+    /// distribute the same secret to mesh peers reproducibly). Ignored
+    /// when `client_bind` is loopback (no token needed). Env override:
+    /// `SOVEREIGN_CLIENT_TOKEN`.
+    #[serde(default)]
+    pub client_token: Option<String>,
 }
 
 /// Filesystem paths for mutable state.
@@ -395,6 +422,8 @@ impl Default for DaemonSection {
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
+            client_bind: default_client_bind(),
+            client_token: None,
         }
     }
 }
@@ -465,6 +494,12 @@ fn default_wf_max_concurrent() -> usize {
 
 fn default_client_port() -> u16 {
     9741
+}
+fn default_client_bind() -> String {
+    // Secure by default: loopback-only. Operators serving a mesh /
+    // remote clients set "0.0.0.0" and accept the bearer-token
+    // requirement that engages for non-loopback callers.
+    "127.0.0.1".to_string()
 }
 fn default_internal_port() -> u16 {
     9742

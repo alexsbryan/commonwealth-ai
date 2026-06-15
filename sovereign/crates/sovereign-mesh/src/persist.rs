@@ -36,6 +36,17 @@ pub const MESH_FILE: &str = "mesh.json";
 /// must keep secret. See `save_join_key` / `load_join_key`.
 pub const JOIN_KEY_FILE: &str = "join_key.secret";
 
+/// Marker file at `<data_dir>/client-exposed`. Its presence means the
+/// operator opted this daemon into serving REMOTE callers (an explicit
+/// `mesh create` / `mesh join` — never the silent solo-mesh auto-create
+/// at first boot). `start_daemon` reads it to bump the client-API bind
+/// from loopback to `0.0.0.0` (and thus require a bearer token). A
+/// separate persisted signal — NOT mesh.json presence, since every
+/// daemon has a solo mesh — so "is a mesh" and "is shared" stay
+/// distinct. Removed on `leave_mesh` to re-secure. See
+/// `set_client_exposed` / `client_exposed` / `clear_client_exposed`.
+pub const CLIENT_EXPOSED_FILE: &str = "client-exposed";
+
 /// Filename at `<data_dir>/node_id` — 16 raw bytes, mode 0600.
 ///
 /// This is the daemon's stable identity across mesh create/join
@@ -250,6 +261,32 @@ pub fn load_join_key(data_dir: &Path) -> std::io::Result<Option<String>> {
 /// alongside `clear`. Idempotent.
 pub fn clear_join_key(data_dir: &Path) -> std::io::Result<()> {
     match fs::remove_file(join_key_file(data_dir)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+fn client_exposed_file(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join(CLIENT_EXPOSED_FILE)
+}
+
+/// Mark this daemon as opted into serving remote callers. Idempotent
+/// (creates an empty marker file). See [`CLIENT_EXPOSED_FILE`].
+pub fn set_client_exposed(data_dir: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(data_dir)?;
+    fs::File::create(client_exposed_file(data_dir))?.sync_all()
+}
+
+/// True iff the client-exposed marker is present.
+pub fn client_exposed(data_dir: &Path) -> bool {
+    client_exposed_file(data_dir).exists()
+}
+
+/// Remove the client-exposed marker (re-secure to loopback on next
+/// start). Called on `leave_mesh`. Idempotent.
+pub fn clear_client_exposed(data_dir: &Path) -> std::io::Result<()> {
+    match fs::remove_file(client_exposed_file(data_dir)) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),

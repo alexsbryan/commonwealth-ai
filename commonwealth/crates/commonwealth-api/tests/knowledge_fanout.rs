@@ -190,16 +190,19 @@ async fn post_knowledge_search(
     state: AppState,
     body: serde_json::Value,
 ) -> (StatusCode, serde_json::Value) {
+    // The client_auth layer reads the real `ConnectInfo<SocketAddr>`
+    // extension directly; inject a loopback one onto the request so the
+    // layer admits it (loopback-exempt). NOT `MockConnectInfo` — that
+    // inserts a different extension type only the extractor reads.
     let app = client_router(state);
-    let response = app
-        .oneshot(
-            Request::post("/v1/knowledge/search")
-                .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
-                .unwrap(),
-        )
-        .await
+    let mut req = Request::post("/v1/knowledge/search")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
         .unwrap();
+    req.extensions_mut().insert(axum::extract::ConnectInfo(
+        "127.0.0.1:12345".parse::<SocketAddr>().unwrap(),
+    ));
+    let response = app.oneshot(req).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
