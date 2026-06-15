@@ -114,6 +114,14 @@ pub(crate) struct MtpRebuildParams {
 }
 
 pub(crate) struct SlotContext {
+    /// **Drop order is load-bearing — do not reorder these two fields.**
+    /// The `LlamaContext`s inside `mode` borrow `_model` as a fake
+    /// `&'static LlamaModel` (minted via `Arc::as_ptr`); `LlamaContext::drop`
+    /// calls `llama_free`, which dereferences that model. Rust drops struct
+    /// fields top-to-bottom, so `mode` MUST be declared before `_model` or the
+    /// contexts would free against a dangling model pointer (use-after-free).
+    /// The laundered `'static` + the `unsafe impl Send/Sync` below mean the
+    /// borrow checker cannot catch a reorder — this comment is the only guard.
     pub(crate) mode: SlotInferenceMode,
     pub(crate) _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence

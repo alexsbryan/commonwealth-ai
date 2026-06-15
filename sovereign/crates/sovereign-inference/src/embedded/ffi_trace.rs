@@ -16,10 +16,16 @@
 //! 2. **A transcript recorder** (`record` / `enable` / `take`) the
 //!    slot code calls at the load-bearing FFI boundaries. Zero-cost
 //!    when disabled (one relaxed atomic load).
-//! 3. **Pure verifiers** over a transcript, unit-tested here and run
-//!    for real by the gated model-smoke tier (a tiny GGUF on a dev
-//!    box — these sequences cannot be CI-verified without weights;
-//!    see `verify_transcript`).
+//! 3. **Pure verifiers** over a transcript (`verify_transcript`),
+//!    unit-tested here on synthetic transcripts. HONESTY NOTE: the
+//!    recorder is wired at the FFI boundaries, but `enable()` is not
+//!    called on any production or model-smoke path today — so the
+//!    verifiers run ONLY against the hand-built transcripts in this
+//!    module's `#[cfg(test)]` block, never against a real decode. They
+//!    are *ready* for a gated model-smoke harness (a tiny GGUF on a dev
+//!    box; these sequences cannot be CI-verified without weights) but
+//!    that harness does not exist yet. Do not read the `record()` calls
+//!    in `model_slot.rs` as active runtime verification.
 //!
 //! ## The invariants and their incidents
 //!

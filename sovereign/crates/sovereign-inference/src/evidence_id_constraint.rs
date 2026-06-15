@@ -203,7 +203,19 @@ impl EvidenceIdAllowlistConstraint {
             return;
         }
         let bytes = self.vocab_bytes[id].clone();
-        let _ = simulate_bytes(&self.nodes, &mut self.cursor, &bytes);
+        // Mirror of url_constraint::accept — emit the breadcrumb on a cursor
+        // desync instead of silently swallowing it (the rest of the chain is
+        // fault-tolerant, so we continue). A desync means evidence-id masking
+        // is no longer enforced for the rest of this generation.
+        if !simulate_bytes(&self.nodes, &mut self.cursor, &bytes) {
+            tracing::warn!(
+                target: "constraint.health",
+                kind = "evidence_id",
+                token = token.0,
+                "accept(): committed a token the evidence-id mask would have clamped — \
+                 cursor desynced; allowlist no longer enforced for this generation"
+            );
+        }
     }
 
     /// Test-only accessor: is the cursor currently emitting a
