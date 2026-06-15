@@ -150,6 +150,19 @@ impl ConfigDiff {
         if old.daemon.client_port != new.daemon.client_port {
             d.restart_required.push("daemon.client_port");
         }
+        if old.daemon.client_bind != new.daemon.client_bind {
+            // Changing the bind address re-opens the listener (and
+            // re-runs token resolution for the new loopback/remote
+            // posture) — can't hot-swap an already-bound TcpListener.
+            // This is the field the desktop's "enable mesh sharing"
+            // toggle flips (127.0.0.1 → 0.0.0.0).
+            d.restart_required.push("daemon.client_bind");
+        }
+        if old.daemon.client_token != new.daemon.client_token {
+            // The token is resolved + installed onto AppState during
+            // start_daemon; restart re-runs that path.
+            d.restart_required.push("daemon.client_token");
+        }
         if old.daemon.internal_port != new.daemon.internal_port {
             d.restart_required.push("daemon.internal_port");
         }

@@ -166,6 +166,66 @@ pub fn verify_join_proof(
         .is_ok()
 }
 
+/// Filename of the client-API bearer token, a sibling of `node_key`
+/// under `<data_dir>`.
+pub const CLIENT_TOKEN_FILE: &str = "client-token";
+
+fn client_token_path(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join(CLIENT_TOKEN_FILE)
+}
+
+/// Load the persisted client-API bearer token, or generate + persist a
+/// fresh one (256-bit, hex-encoded) on first call. Used to authenticate
+/// non-loopback callers of `:9741` when the daemon binds a routable
+/// address — see `commonwealth_api::client_auth`.
+///
+/// Mirrors [`load_or_generate_node_key`]'s persistence shape: atomic
+/// write via a `.tmp` rename, `0600` on unix. Unlike the node key, the
+/// token is a shared secret distributed to mesh peers / remote clients
+/// (the symmetric-token tier — node-identity auth is a later milestone),
+/// so it is stored in cleartext by design: the daemon must present it
+/// verbatim to compare against an incoming `Authorization: Bearer`.
+pub fn load_or_create_client_token(data_dir: &Path) -> std::io::Result<String> {
+    let path = client_token_path(data_dir);
+    match fs::read_to_string(&path) {
+        Ok(s) => {
+            let token = s.trim().to_string();
+            if token.is_empty() {
+                // An empty/corrupt file is worse than none — a blank
+                // secret would match a blank bearer. Regenerate.
+                save_client_token(data_dir)
+            } else {
+                Ok(token)
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => save_client_token(data_dir),
+        Err(e) => Err(e),
+    }
+}
+
+fn save_client_token(data_dir: &Path) -> std::io::Result<String> {
+    let mut raw = [0u8; 32];
+    getrandom::fill(&mut raw)
+        .map_err(|e| std::io::Error::other(format!("client-token entropy failed: {e}")))?;
+    let token = hex::encode(raw);
+
+    fs::create_dir_all(data_dir)?;
+    let target = client_token_path(data_dir);
+    let tmp = target.with_extension("tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(token.as_bytes())?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, &target)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
+    }
+    Ok(token)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,6 +262,40 @@ mod tests {
         std::fs::write(dir.path().join(NODE_KEY_FILE), b"way too short").unwrap();
         // Must not panic; returns a usable (ephemeral) key.
         let _ = load_or_generate_node_key(dir.path());
+    }
+
+    #[test]
+    fn client_token_persists_and_is_stable_across_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = load_or_create_client_token(dir.path()).unwrap();
+        let second = load_or_create_client_token(dir.path()).unwrap();
+        assert_eq!(first, second, "token must be stable across boots");
+        assert_eq!(first.len(), 64, "256-bit hex token");
+        assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(dir.path().join(CLIENT_TOKEN_FILE).exists());
+    }
+
+    #[test]
+    fn empty_token_file_is_regenerated_not_returned_blank() {
+        // A blank secret would match a blank bearer — must never be
+        // returned as-is.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(CLIENT_TOKEN_FILE), b"   \n").unwrap();
+        let token = load_or_create_client_token(dir.path()).unwrap();
+        assert_eq!(token.len(), 64, "blank file regenerated into a real token");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn client_token_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let _ = load_or_create_client_token(dir.path()).unwrap();
+        let mode = std::fs::metadata(dir.path().join(CLIENT_TOKEN_FILE))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]

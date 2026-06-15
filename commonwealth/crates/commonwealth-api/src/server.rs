@@ -74,6 +74,16 @@ pub fn client_router(state: AppState) -> Router {
         .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
         // Reverse proxy to locally running apps.
         .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
+        // OUTERMOST layer: bearer-token auth for non-loopback callers.
+        // Wraps the whole client surface (including the per-route
+        // admission gates), so authentication runs BEFORE load-shedding
+        // and before any handler work. Loopback callers and the
+        // `AUTH_EXEMPT_PATHS` (federation/health) pass through. See
+        // `crate::client_auth`.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::client_auth::client_auth_layer,
+        ))
         .with_state(state)
 }
 
@@ -341,7 +351,16 @@ pub async fn serve(
     client_addr: SocketAddr,
     internal_addr: SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client_app = client_router(state.clone());
+    // CRITICAL: the client router's `client_auth` layer extracts
+    // `ConnectInfo<SocketAddr>` to decide loopback-vs-remote (and fails
+    // closed if it's absent). Bare `axum::serve` does NOT attach
+    // ConnectInfo, so the client listener MUST use
+    // `into_make_service_with_connect_info` or every request — even
+    // loopback — 500s. (The sovereign-mesh daemon already does this on
+    // its own listener; this is the standalone-daemon / test-harness
+    // path. Same requirement the loopback guard documents.)
+    let client_app =
+        client_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
     let internal_app = internal_router(state);
 
     let client_listener = TcpListener::bind(client_addr).await?;
@@ -365,6 +384,32 @@ pub async fn serve(
     Ok(())
 }
 
+/// Test-only: `client_router` plus a `MockConnectInfo` layer supplying
+/// a loopback peer address, so `tower::oneshot` requests carry the
+/// `ConnectInfo<SocketAddr>` the `client_auth` layer requires (which a
+/// bare `oneshot` does not attach). Loopback ⇒ the auth layer admits
+/// the request, leaving the test to exercise the handler. Shared with
+/// `routes_ollama` / `routes_oicp` test modules via `crate::server::`.
+#[cfg(test)]
+pub(crate) fn mock_router(state: AppState) -> Router {
+    // NB: NOT `axum::extract::connect_info::MockConnectInfo` — that
+    // inserts a `MockConnectInfo<T>` extension that only axum's
+    // `ConnectInfo` *extractor* falls back to. `client_auth` reads the
+    // real `ConnectInfo<SocketAddr>` extension directly (for the
+    // fail-closed path), so we insert the real thing via an outer
+    // layer — runs before `client_auth`, mirroring how the production
+    // `into_make_service_with_connect_info` populates it.
+    use axum::extract::{ConnectInfo, Request};
+    use axum::middleware::{from_fn, Next};
+    async fn inject(mut req: Request, next: Next) -> axum::response::Response {
+        req.extensions_mut().insert(ConnectInfo(
+            "127.0.0.1:12345".parse::<SocketAddr>().unwrap(),
+        ));
+        next.run(req).await
+    }
+    client_router(state).layer(from_fn(inject))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint() {
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
 
         let response = app
             .oneshot(Request::get("/status").body(Body::empty()).unwrap())
@@ -394,7 +439,7 @@ mod tests {
 
     #[tokio::test]
     async fn models_endpoint_empty() {
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
 
         let response = app
             .oneshot(Request::get("/v1/models").body(Body::empty()).unwrap())
@@ -413,7 +458,7 @@ mod tests {
 
     #[tokio::test]
     async fn oicp_capabilities_endpoint() {
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
 
         let response = app
             .oneshot(
@@ -439,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn chat_completions_no_model_loaded() {
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
 
         let body = serde_json::json!({
             "messages": [{"role": "user", "content": "Hello"}]
@@ -465,7 +510,7 @@ mod tests {
         // conversation state. A request that carries
         // `previous_response_id` must 400 so codex falls back to
         // resending full history.
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
         let body = serde_json::json!({
             "model": "x",
             "input": "hi",
@@ -496,7 +541,7 @@ mod tests {
         // With no local_inference and no loaded models, the inner
         // chat_completions handler returns 503. The adapter forwards
         // it as-is.
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
         let body = serde_json::json!({
             "model": "x",
             "input": "hello"
@@ -520,7 +565,7 @@ mod tests {
         // it through to a successful inference here — there's no model
         // loaded — but the request must at least deserialise and
         // reach the inner handler (i.e. 503, not 400).
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
         let body = serde_json::json!({
             "model": "primary",
             "input": [
@@ -564,7 +609,7 @@ mod tests {
 
     #[tokio::test]
     async fn chat_completions_rejects_local_only() {
-        let app = client_router(test_app_state());
+        let app = mock_router(test_app_state());
 
         let body = serde_json::json!({
             "messages": [{"role": "user", "content": "Hello"}],
@@ -687,7 +732,7 @@ mod tests {
         };
         state.register_model(model);
 
-        let app = client_router(state);
+        let app = mock_router(state);
         let response = app
             .oneshot(Request::get("/v1/models").body(Body::empty()).unwrap())
             .await

@@ -386,7 +386,7 @@ mod tests {
             .set(&nid(0x33), PeerPreference::new(0.25, None).unwrap())
             .unwrap();
         let _store = PeerPreferenceStore::new;
-        let app = crate::server::client_router(state);
+        let app = crate::server::mock_router(state);
         let resp = app
             .oneshot(
                 Request::get("/oicp/v1/capabilities")

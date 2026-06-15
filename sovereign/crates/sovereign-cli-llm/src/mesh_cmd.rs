@@ -244,9 +244,12 @@ async fn cmd_create(args: &[String]) -> i32 {
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
     let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    // Explicit create = serve remote peers → expose the client API
+    // (bind non-loopback + require a bearer token).
+    daemon.expose_client_api();
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
-            print_mesh_share(&result.mesh_name, &result.join_key);
+            print_mesh_share(&result.mesh_name, &result.join_key, result.client_token.as_deref());
             0
         }
         Err(e) => {
@@ -259,12 +262,17 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// Spec-format banner for a freshly-created or freshly-rotated mesh.
 /// Prints both the https share URL and the CLI form so the inviter
 /// can pick whichever suits the invitee's environment.
-fn print_mesh_share(mesh_name: &str, join_key: &str) {
+fn print_mesh_share(mesh_name: &str, join_key: &str, client_token: Option<&str>) {
     let app_link = build_https_join_link(join_key, None, Some(mesh_name));
     println!();
     println!("Mesh created.");
     println!();
     println!("  Join key:  {join_key}");
+    if let Some(token) = client_token {
+        // Remote peers/clients authenticate to this node's API with
+        // this bearer token (the daemon now binds non-loopback).
+        println!("  API token: {token}");
+    }
     println!();
     println!("Share with a friend:");
     println!("  App:  {app_link}");
@@ -325,6 +333,7 @@ async fn cmd_join(args: &[String]) -> i32 {
 
     eprintln!("(no daemon detected on :9741 — running the join in-process)");
     let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    daemon.expose_client_api();
     let Some(link) = parse_join_argument(arg) else {
         // Pre-validated above, so this is unreachable. Bail
         // defensively rather than panic.
@@ -441,7 +450,10 @@ async fn cmd_rotate(args: &[String]) -> i32 {
             eprintln!();
             eprintln!("Note: existing members stay connected. Only future joins need the new key.");
             eprintln!("If the daemon is currently running, restart it to load the new key.");
-            print_mesh_share(&rotated.mesh_name, &rotated.join_key);
+            // Rotation is an offline persist op — the API token is
+            // unchanged, so it isn't reprinted here (shown on create /
+            // `mesh status`).
+            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None);
             0
         }
         Ok(None) => {

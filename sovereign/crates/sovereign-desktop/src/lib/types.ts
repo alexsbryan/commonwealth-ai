@@ -649,11 +649,16 @@ export interface CreateMeshResponse {
   mesh_name: string;
   join_key: string;
   join_link: string;
+  /** Bearer token a remote app/script must present to this machine's
+   *  API. Present once the mesh is shared (daemon bound non-loopback);
+   *  absent for a loopback-only daemon. */
+  client_token?: string | null;
 }
 
 export interface JoinMeshResponse {
   mesh_name: string;
   node_id: string;
+  client_token?: string | null;
 }
 
 export interface JoinConfirmation {
@@ -795,6 +800,10 @@ export interface MeshStateResponse {
   members: MeshMember[];
   corpora: MeshCorpus[];
   contribution: ContributionSummary | null;
+  /** Bearer token for remote apps/scripts connecting to this machine's
+   *  API. Present on a shared mesh; null when loopback-only. Rendered
+   *  on the active-mesh invite card beside the join key. */
+  client_token?: string | null;
 }
 
 // ─── Recipe Testing ──────────────────────────────────────────

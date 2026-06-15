@@ -502,6 +502,18 @@
             Copy
           </button>
         </div>
+        {#if createResult.client_token}
+          <p class="muted token-note">
+            API token — required by apps or scripts connecting to this
+            machine directly (the join link handles peers automatically).
+          </p>
+          <div class="link-row">
+            <code class="link">{createResult.client_token}</code>
+            <button class="copy-btn" onclick={() => copyToClipboard(createResult!.client_token!)}>
+              Copy
+            </button>
+          </div>
+        {/if}
       </details>
       <div class="form-actions">
         <button class="primary" onclick={dismissCreateResult}>Done</button>
@@ -631,6 +643,21 @@
                 Copy
               </button>
             </div>
+            {#if meshState.client_token}
+              <p class="muted token-note">
+                API token — for apps or scripts connecting to this machine
+                directly (peers use the link above automatically).
+              </p>
+              <div class="link-row">
+                <code class="link">{meshState.client_token}</code>
+                <button
+                  class="copy-btn"
+                  onclick={() => copyToClipboard(meshState!.client_token!)}
+                >
+                  Copy
+                </button>
+              </div>
+            {/if}
           </details>
         {/if}
         <button class="ghost rotate-btn" onclick={openRotateConfirm}>

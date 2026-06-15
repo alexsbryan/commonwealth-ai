@@ -67,6 +67,11 @@ pub struct CreateResponse {
     pub mesh_name: String,
     pub join_key: String,
     pub join_link: String,
+    /// Bearer token a remote peer/client must present, shown beside the
+    /// join key on the invite screen. `None` if the daemon stayed
+    /// loopback-only. See `client_auth`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
 }
 
 /// Request body for `POST /v1/mesh/join`. Accepts any of the three
@@ -83,6 +88,8 @@ pub struct JoinRequest {
 pub struct JoinResponse {
     pub mesh_name: String,
     pub node_id: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,6 +118,12 @@ pub struct StatusResponse {
     pub join_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub join_link: Option<String>,
+    /// Client-API bearer token for remote callers. `Some` once the
+    /// daemon is exposed (shared mesh); `None` for a loopback-only
+    /// solo daemon. Surfaced beside the invite so the share UI can
+    /// render it after a restart without re-creating the mesh.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub client_token: Option<String>,
     /// RPC inference workers + their eligibility state (host side; empty on a
     /// node not running RPC discovery). Lets an operator see WHY a worker isn't
     /// being distributed to — e.g. `quarantined` with a cooldown after flapping.
@@ -178,6 +191,7 @@ async fn mesh_status(
                     members: vec![],
                     join_key: None,
                     join_link: None,
+                    client_token: daemon.running_client_token().await,
                     rpc_workers,
                 })
                 .unwrap(),
@@ -223,6 +237,7 @@ async fn mesh_status(
                 members,
                 join_key,
                 join_link,
+                client_token: daemon.running_client_token().await,
                 rpc_workers,
             })
             .unwrap(),
@@ -245,6 +260,13 @@ async fn mesh_create(
     let node_name = default_node_name(req.node_name);
     let mesh_name = req.name.unwrap_or_else(|| format!("{node_name}'s Mesh"));
 
+    // Explicit create = opt into serving remote peers. Mark exposed so
+    // the daemon binds non-loopback (+ requires a bearer token). For an
+    // already-running daemon this takes effect on the next restart
+    // (client_bind is restart-required); the desktop reloads on the
+    // config change.
+    daemon.expose_client_api();
+
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => (
             StatusCode::OK,
@@ -253,6 +275,7 @@ async fn mesh_create(
                     mesh_name: result.mesh_name,
                     join_key: result.join_key,
                     join_link: result.join_link,
+                    client_token: result.client_token,
                 })
                 .unwrap(),
             ),
@@ -291,6 +314,9 @@ async fn mesh_join(
     };
     let node_name = default_node_name(req.node_name);
 
+    // Joining a mesh = serving/relating to remote peers → expose.
+    daemon.expose_client_api();
+
     match daemon.join_mesh(&link, &node_name).await {
         Ok(result) => (
             StatusCode::OK,
@@ -298,6 +324,7 @@ async fn mesh_join(
                 serde_json::to_value(JoinResponse {
                     mesh_name: result.mesh_name,
                     node_id: result.node_id,
+                    client_token: result.client_token,
                 })
                 .unwrap(),
             ),

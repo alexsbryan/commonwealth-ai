@@ -42,12 +42,19 @@ pub struct CreateMeshResponse {
     pub mesh_name: String,
     pub join_key: String,
     pub join_link: String,
+    /// Bearer token a remote peer/client must present — shown beside
+    /// the join key on the invite screen. `None` if the daemon stayed
+    /// loopback-only.
+    #[serde(default)]
+    pub client_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinMeshResponse {
     pub mesh_name: String,
     pub node_id: String,
+    #[serde(default)]
+    pub client_token: Option<String>,
 }
 
 /// Create a new mesh and return the join link for sharing.
@@ -89,6 +96,10 @@ pub async fn mesh_create(
     let Some(mesh) = state.mesh.as_ref() else {
         return Err("mesh daemon not available".into());
     };
+    // Explicit create = opt into serving remote peers → expose the
+    // client API (bind non-loopback + require a bearer token) before
+    // start_daemon, so it binds wide on first start with no restart.
+    mesh.expose_client_api();
     let result = mesh
         .create_mesh(&mesh_name, &node_name)
         .await
@@ -97,6 +108,7 @@ pub async fn mesh_create(
         mesh_name: result.mesh_name,
         join_key: result.join_key,
         join_link: result.join_link,
+        client_token: result.client_token,
     })
 }
 
@@ -150,6 +162,7 @@ pub async fn mesh_join(
         return Err("mesh daemon not available".into());
     };
     let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
+    mesh.expose_client_api();
     let result = mesh
         .join_mesh(&parsed, &node_name)
         .await
@@ -157,6 +170,7 @@ pub async fn mesh_join(
     Ok(JoinMeshResponse {
         mesh_name: result.mesh_name,
         node_id: result.node_id,
+        client_token: result.client_token,
     })
 }
 
@@ -245,6 +259,9 @@ pub async fn mesh_get_state(
         resp.status.join_key = Some(key);
         resp.status.join_link = Some(link);
     }
+    // Surface the client-API token beside the invite (None on a
+    // loopback-only solo daemon).
+    resp.client_token = mesh.running_client_token().await;
     Ok(Some(resp))
 }
 
@@ -453,6 +470,12 @@ pub struct MeshStateResponse {
     pub members: Vec<sovereign_mesh::MeshMember>,
     pub corpora: Vec<sovereign_mesh::MeshCorpus>,
     pub contribution: Option<sovereign_mesh::ContributionSummary>,
+    /// Client-API bearer token for remote peers/clients, rendered on
+    /// the invite screen beside `status.join_key`. `None` for a
+    /// loopback-only (unshared) daemon. Populated from the running
+    /// daemon (local mode) or `/v1/mesh/status` (attach mode).
+    #[serde(default)]
+    pub client_token: Option<String>,
 }
 
 impl From<MeshState> for MeshStateResponse {
@@ -462,6 +485,9 @@ impl From<MeshState> for MeshStateResponse {
             members: s.members,
             corpora: s.corpora,
             contribution: s.contribution,
+            // Enriched by the caller from the running daemon (the
+            // `MeshState` value doesn't carry it).
+            client_token: None,
         }
     }
 }
@@ -507,6 +533,7 @@ impl MeshStateResponse {
             members,
             corpora: Vec::new(),
             contribution: None,
+            client_token: remote.client_token,
         }
     }
 }
