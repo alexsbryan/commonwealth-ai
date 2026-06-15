@@ -753,9 +753,14 @@ fn cmd_mesh_members(_config: &Option<DaemonConfig>) -> Result<()> {
 }
 
 fn cmd_mesh_revoke(node: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Proposing revocation of node: {node}");
-    println!("(In production, this would broadcast a revocation proposal via gossip.)");
-    Ok(())
+    // HONESTY: revocation is not wired. `Mesh::merge_from` is grow-only with no
+    // tombstone, so a "revoked" node is resurrected on the next gossip round —
+    // returning Ok here would report false success on a security action. Fail
+    // loudly until revocation actually propagates.
+    anyhow::bail!(
+        "mesh revoke is not implemented: revoking '{node}' would not propagate \
+         (membership merge is grow-only, no tombstone). Refusing to report false success."
+    )
 }
 
 fn cmd_mesh_peer(key: &str, _config: &Option<DaemonConfig>) -> Result<()> {

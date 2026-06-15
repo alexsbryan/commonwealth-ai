@@ -2057,6 +2057,22 @@ async fn run_daemon(args: &[String]) -> i32 {
         );
     }
 
+    // ── Block until SIGINT/SIGTERM, then drain, persist, and exit ──
+    shutdown_daemon(daemon, &pid_path, self_pid).await
+}
+
+/// Graceful shutdown choreography, extracted from `run_daemon` so its tail
+/// reads as one named step. Blocks on SIGINT/SIGTERM, persists mesh state (NOT
+/// `leave()` — that would force a fresh solo mesh on next boot), removes our
+/// pidfile if it still points at us, and returns the process exit code: `102`
+/// on the memory watcher's RSS-hard-limit path (so launchd/systemd relaunch),
+/// `0` on every deliberate shutdown. On macOS it `_exit`s to skip the
+/// ggml-metal destructor assertion (full rationale inline).
+async fn shutdown_daemon(
+    daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+    pid_path: &std::path::Path,
+    self_pid: u32,
+) -> i32 {
     // ── Block until SIGINT/SIGTERM ────────────────────────────────
     wait_for_shutdown().await;
 
@@ -2072,9 +2088,9 @@ async fn run_daemon(args: &[String]) -> i32 {
     // shutdown, or a new daemon took our port after we released it)
     // claimed the file, leave it alone — `read_daemon_pid` already
     // handles a stale pidfile via `kill(pid, 0)`.
-    if let Ok(raw) = std::fs::read_to_string(&pid_path) {
+    if let Ok(raw) = std::fs::read_to_string(pid_path) {
         if raw.trim().parse::<u32>().ok() == Some(self_pid) {
-            let _ = std::fs::remove_file(&pid_path);
+            let _ = std::fs::remove_file(pid_path);
         }
     }
 
@@ -2101,8 +2117,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Everything else (Metal devices, KV caches, mmap'd ggufs) is
     // reclaimed by the kernel on `_exit`. Confirmed 2026-05-20: this
     // is the same shutdown shape `llama-server` uses (`_Exit` from
-    // its signal handler) and matches the pattern from
-    // <https://github.com/ggml-org/llama.cpp/issues/...>.
+    // its signal handler).
     //
     // Linux + other targets keep the standard return path — Metal is
     // macOS-only, so the assertion only fires on darwin.
