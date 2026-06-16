@@ -12,18 +12,7 @@ sovereign <subcommand> [flags]
 
 Run `sovereign --help` for the live list of subcommands. There is no interactive REPL — bare `sovereign` prints usage and exits; use `sovereign chat` for an interactive shell.
 
-## Binary layout (2026-05-22)
-
-The user types `sovereign <verb>` and a thin dispatcher routes into one of four binaries based on the verb. Same UX as before; faster builds because editing one binary's code doesn't recompile the others.
-
-| Binary | Hosts | Why split |
-|---|---|---|
-| `sovereign-cli` | Dispatcher + light delegators: `notes`, `status`, `drift`, `audit`, `claim`, `charter`, `amend`, `design`, `plan`, `init`, `milestone`, `refresh`, `reflect`, `rough-edges`, `archaeology-eval`, `git-archaeology`, `agent-bench`, `nudge`, `serve`, `stop` | Pure-FS + SQLite. No LLM dep, no tree-sitter, no lance. Fast leaf edits (~9s release). |
-| `sovereign-cli-daemon` | `daemon`, `setup`, `install-service`, `doctor` | Long-running host process + lifecycle setup. Rarely changes; isolating it means an `atos`/`project` edit doesn't force a daemon binary rebuild. |
-| `sovereign-cli-dev` | `atos`, `project`, `code`, `tools` (workbench) | Local-dev workbench: project lifecycle, code intelligence, MCP tool runner, ATOS workflow. |
-| `sovereign-cli-llm` | `bench`, `chat`, `eval`, `voice`, `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`, `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`, `mesh`, `corpus`, `knowledge-gym`, `search-gym`, `newsworthy` | Model-interaction layer: anything that holds a chat connection or runs a bench loop. Heaviest crate (llama-cpp-2, lance, every grammar). |
-
-Discovery: each sibling is located at `current_exe()`'s parent dir; override with `SOVEREIGN_CLI_DAEMON_BIN` / `SOVEREIGN_CLI_DEV_BIN` / `SOVEREIGN_CLI_LLM_BIN`. On Unix the shim execs into the sibling (same PID, no shell interposition); other platforms spawn-and-wait.
+Under the hood, `sovereign` is a thin dispatcher over four binaries; that split only matters when you're building from source — see [DEVELOPMENT.md](DEVELOPMENT.md#the-cli-binaries).
 
 ## Subcommand reference
 

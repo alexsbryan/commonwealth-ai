@@ -20,6 +20,21 @@ npm install
 cargo tauri dev
 ```
 
+## The CLI binaries
+
+`sovereign` is a thin dispatcher. You always type `sovereign <verb>`, but the verb is handled by one of four binaries — the build is split this way so that editing one binary's code doesn't recompile the others.
+
+| Binary | Handles | Kept separate because |
+|---|---|---|
+| `sovereign-cli` | the dispatcher, plus the light filesystem-and-SQLite verbs: `notes`, `status`, `drift`, `design`, `plan`, `init`, `reflect`, `serve` | no model, tree-sitter, or LanceDB dependency, so its edits rebuild in seconds |
+| `sovereign-cli-daemon` | `daemon`, `setup`, `install-service`, `doctor` | the long-running host process and lifecycle setup; it rarely changes |
+| `sovereign-cli-dev` | `project`, `code`, `tools`, `atos` | the local-dev workbench: project lifecycle, code intelligence, the MCP tool runner |
+| `sovereign-cli-llm` | `chat`, `bench`, `eval`, `enrich`, `recipe`, `pipeline`, `mcp`, `mesh`, `corpus` | anything that holds a chat connection or runs a model loop; the heaviest to compile (llama.cpp bindings, LanceDB, every grammar) |
+
+Each sibling is found next to the dispatcher, or at `$SOVEREIGN_CLI_DAEMON_BIN` / `$SOVEREIGN_CLI_DEV_BIN` / `$SOVEREIGN_CLI_LLM_BIN` if you set one. On Unix the dispatcher execs into the sibling, so it stays the same process.
+
+The footgun to know about: edit a verb's code, rebuild only `sovereign-cli`, and the dispatcher execs the stale sibling — your change appears to do nothing. Rebuild the binary that owns the verb (`cargo build -p sovereign-cli-llm`, say), or build them all with `cargo build --release --bins`. The dispatcher compares sibling build times and prints a one-line warning when one looks stale, so you usually get a nudge rather than a silent miss; `SOVEREIGN_NO_STALE_WARN=1` mutes it.
+
 ## Testing
 
 ```sh

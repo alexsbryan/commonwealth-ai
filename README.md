@@ -1,134 +1,61 @@
 # Commonwealth AI
 
-**Sovereign** is a local-first AI assistant — a desktop app and a CLI that run
-language models, retrieval, and agentic tools **entirely on your own machine**.
-**Commonwealth** is the optional peer-to-peer mesh that lets a few trusted
-machines pool model capacity and knowledge. Nothing leaves your device unless
-you explicitly opt in (a web search, or joining a mesh).
+This is the monorepo behind Sovereign, an AI assistant that runs on your own computer, and Commonwealth, the optional mesh that lets a few machines you trust pool their capacity. To use it, start at [sovereign/README.md](./sovereign/README.md). This page is for people reading, building, or auditing the code.
 
-This repository is **source-available for audit** under the GNU Affero General
-Public License v3.0-or-later — see [`LICENSE`](./LICENSE). The AGPL's
-network-use clause is deliberate: it matters most for the Commonwealth mesh
-daemon, which is a network service.
+The code is published source-available under [AGPL-3.0-or-later](./LICENSE) so it can be read and audited in the open. The network-use clause applies mainly to the Commonwealth mesh daemon, which is a service other people connect to. This is pre-release; external contributions aren't being solicited yet, so there's no contribution process, but reading and building the code is welcome.
 
-> **Status: pre-release.** Published for transparency and review. External
-> contributions are not being solicited yet, so there is no `CONTRIBUTING.md`
-> or PR process — but reading, building, and auditing the code is encouraged.
+## What's in here
 
----
+It is one Cargo workspace — a single `cargo build --workspace`, a single `Cargo.lock`, cross-crate commits that land atomically.
 
-## What's here
+```
+oicp-types/        OICP wire-protocol types; the bottom of the dependency graph
+corpus-engine/     The knowledge layer: acquire → extract → chunk → embed → index
+                   over LanceDB and Tantivy, with carved-out corpus-engine-* siblings
+sovereign/         The local assistant: runtime, CLI, desktop, server, tools
+  SYSTEM_OVERVIEW.md   the system map; read this first
+  ARCH_PRINCIPLES.md   the design rules, each tied to the incident that motivated it
+  docs/                per-subsystem deep dives
+commonwealth/      The symmetric mesh daemon Sovereign embeds; protocol in docs/oicp-v0.3.md
+sovereign-recipes/ Corpus recipe definitions (Wikipedia, SEP, and others)
+sovereign-mobile/  Thin Tauri mobile client (iOS and Android)
+packages/chat-ui/  Shared Svelte chat surface for desktop and mobile
+scripts/           bootstrap.sh, sovereign-lint.sh, sovereign-test.sh
+```
 
-| Component | Path | What it is |
-|-----------|------|------------|
-| **Sovereign Desktop** | `sovereign/crates/sovereign-desktop/` | Tauri 2 + Svelte 5 GUI: chat with streaming + provenance, local knowledge bases, model setup, mesh UI. |
-| **Sovereign CLI** | `sovereign/crates/sovereign-cli/` | `sovereign <verb>` — chat, corpus management, mesh, benchmarks, and more. A thin dispatcher that execs sibling binaries. |
-| **Sovereign server** | `sovereign/crates/sovereign-server/` | Axum REST + WebSocket surface against the same runtime (powers the mobile client). |
-| **corpus-engine** | `corpus-engine/` | The knowledge layer: acquire → extract → chunk → embed → index over LanceDB (vectors) + Tantivy (keyword). |
-| **commonwealth** | `commonwealth/` | The symmetric mesh daemon: discovery, gossip, inference scheduling, knowledge sharing. |
-| **oicp-types** / **sovereign-recipes** | `oicp-types/`, `sovereign-recipes/` | Wire-protocol types and the corpus recipe definitions. |
+Dependencies run one way. Sovereign embeds Commonwealth in-process through `sovereign-mesh`, which is the only place the two meet.
 
-The whole tree is one Cargo workspace: one `cargo build --workspace`, one
-`Cargo.lock`, atomic cross-crate commits.
+## Building it
 
----
-
-## Quick start
-
-### Prerequisites
-- **Rust** (stable) — https://rustup.rs
-- **Node.js 20+** — for the desktop frontend
-- **Platform build deps** — a protobuf compiler and the usual native toolchain.
-  `scripts/bootstrap.sh` wires up a fresh workstation; on Linux the system
-  packages (protobuf, GTK/WebKit for the desktop, mold, etc.) are listed in
-  `sovereign/scripts/bootstrap-linux.sh`. On macOS you need the Xcode command
-  line tools (`xcode-select --install`) and `SDKROOT` exported.
-
-### Build & run the desktop app
+The desktop app:
 ```bash
-cargo install tauri-cli --version '^2'        # one-time
+cargo install tauri-cli --version '^2'        # once
 cd sovereign/crates/sovereign-desktop
 npm install
-cargo tauri dev                               # dev build with hot reload
-# cargo tauri build                           # → a distributable bundle
+cargo tauri dev                               # or cargo tauri build for a bundle
 ```
 
-### Build & run the CLI
-The default build is the end-user surface (chat, corpus, mesh, daemon, …):
+The CLI:
 ```bash
-cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
-./target/release/sovereign-cli --help         # the `sovereign` dispatcher
-ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/sovereign   # optional: onto PATH
-sovereign chat                                # interactive chat through the daemon
-```
-The developer toolchain (project lifecycle, ATOS orchestration, code
-intelligence, archaeology) is gated out of the default build. Enable it by
-building the dev sibling and the dispatcher with `--features dev-tools`:
-```bash
-cargo build --release -p sovereign-cli-dev
-cargo build --release -p sovereign-cli --features dev-tools
+cargo build --release -p sovereign-cli
+./target/release/sovereign-cli --help
 ```
 
----
+The developer toolchain — project lifecycle, ATOS, code intelligence — is gated out of the default build behind `--features dev-tools`. The full setup, including platform build dependencies, is in [sovereign/README.md](./sovereign/README.md).
 
-## Navigating the code (for auditors & reviewers)
+## Reading it
 
-Start with the two authoritative documents — they are kept as contracts, not
-diaries:
+Start with [sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md): every crate and subsystem, and where to look. Then [sovereign/ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) for the rules the code is held to, each one tied to the incident that motivated it. The guiding idea is glassbox: someone running the system should be able to see why it did what it did from the logs, without reaching for a debugger.
 
-- **[`sovereign/SYSTEM_OVERVIEW.md`](./sovereign/SYSTEM_OVERVIEW.md)** — the map.
-  Every crate, every subsystem, and where to look. Read this first.
-- **[`sovereign/ARCH_PRINCIPLES.md`](./sovereign/ARCH_PRINCIPLES.md)** — the
-  design rules the code is held to (SOLID / SICP applied *here*), each rule
-  citing the real incident that motivated it.
-
-Per-subsystem deep dives live in [`sovereign/docs/`](./sovereign/docs/)
-(inference, knowledge views, tiered retrieval, the mesh, and more). The
-canonical mesh protocol spec is `commonwealth/docs/oicp-v0.3.md`.
-
-Design ethos, in one line: **glassbox** — the person running the system should
-be able to see *why* it did what it did from the logs, without a debugger.
-
----
-
-## Repository layout
-
-```
-Cargo.toml              Workspace + shared dependencies (one version per dep)
-LICENSE                 GNU AGPL-3.0-or-later
-oicp-types/             OICP wire-protocol types (bottom of the dep graph)
-corpus-engine/          Knowledge layer (+ carved-out corpus-engine-* siblings)
-sovereign/
-  crates/               Local agent runtime, CLI, desktop, server, tools, …
-  SYSTEM_OVERVIEW.md    The authoritative system map
-  ARCH_PRINCIPLES.md    The design rules
-  docs/                 Per-subsystem deep dives
-commonwealth/
-  crates/               Symmetric mesh daemon
-sovereign-recipes/      Corpus recipe definitions (Wikipedia, SEP, …)
-packages/chat-ui/       Shared Svelte chat render surface (desktop + mobile)
-scripts/                bootstrap.sh, sovereign-lint.sh, sovereign-test.sh
-```
-
----
-
-## Development
-
-The workspace builds and tests as a unit:
+## Working in the tree
 
 ```bash
-./scripts/sovereign-lint.sh --human    # repo-wide `cargo check`
-./scripts/sovereign-test.sh --human    # repo-wide `cargo test`
-./scripts/sovereign-test.sh --human --package <name>   # one crate
+./scripts/sovereign-lint.sh --human    # repo-wide cargo check
+./scripts/sovereign-test.sh --human    # repo-wide cargo test
 ```
 
-Tests are designed to run on a CI box with no GPU, no network, and no model
-weights on disk (mocks stand in for inference and embeddings). Adapter logs
-persist under `target/sovereign-test/latest/` for triage.
-
----
+The tests run on a CI box with no GPU, no network, and no model weights; mocks stand in for inference and embeddings. Adapter logs land under `target/sovereign-test/latest/` for triage.
 
 ## License
 
-GNU Affero General Public License, version 3 or (at your option) any later
-version. See [`LICENSE`](./LICENSE). Copyright © the Commonwealth AI authors.
+[AGPL-3.0-or-later](./LICENSE). Copyright © the Commonwealth AI authors.
