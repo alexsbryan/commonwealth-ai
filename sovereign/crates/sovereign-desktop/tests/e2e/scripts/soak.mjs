@@ -124,6 +124,52 @@ async function refreshLocalCorpora() {
     /* none */
   }
 }
+
+// Seed the 3-file Meridian Lighthouse fixture so corpus-dependent
+// personas (reader, surveyor's lc_search, chatter's sealed-corpus turns)
+// exercise real retrieval + citation resolution instead of erroring on
+// an empty corpusId. Ported from tests/e2e/real/global-setup.ts::
+// ingestFixtureCorpus — the same lc_* path the watched-folder UI uses,
+// over the same dynamic per-job progress channel. Idempotent (skips if
+// already present); the caller treats it best-effort so a seeding hiccup
+// degrades coverage rather than aborting an overnight run.
+const FIXTURE_DISPLAY_NAME = "E2E Fixture Corpus";
+const FIXTURE_CORPUS_DIR = path.resolve(__dirname, "../real/fixtures/corpus");
+async function seedFixtureCorpus() {
+  const existing = await invoke("lc_list", {}, "soak:seed");
+  if (existing.find((c) => c.display_name === FIXTURE_DISPLAY_NAME)) {
+    console.log("[soak] fixture corpus already present — skipping seed");
+    return;
+  }
+  const val = await invoke("lc_validate_path", { path: FIXTURE_CORPUS_DIR }, "soak:seed");
+  if (!val.exists || !val.is_dir) {
+    throw new Error(`fixture corpus dir invalid: ${FIXTURE_CORPUS_DIR}`);
+  }
+  const pre = await invoke(
+    "lc_pre_scan",
+    { path: FIXTURE_CORPUS_DIR, sourceType: "folder", displayName: FIXTURE_DISPLAY_NAME },
+    "soak:seed",
+  );
+  const jobId = await invoke("lc_ingest", { corpusId: pre.corpus_id, withOcr: false }, "soak:seed");
+  // Register the dynamic per-job channel BEFORE polling so a fast ingest
+  // can't outrun us — rows then land in the replay ring (/events/recent).
+  const channel = `local-corpus://progress/${jobId}`;
+  await listen(channel);
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    const rows = (await recent(0)).filter((r) => r.event === channel);
+    const terminal = rows
+      .map((r) => JSON.stringify(r.payload))
+      .find((p) => /complete|error/i.test(p));
+    if (terminal) {
+      if (/error/i.test(terminal)) throw new Error(`fixture ingest failed: ${terminal}`);
+      break;
+    }
+    if (Date.now() > deadline) throw new Error("fixture ingest never reached terminal within 180s");
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  console.log(`[soak] fixture corpus seeded ✓ (${pre.corpus_id})`);
+}
 async function checkTurn(persona, action, sinceSeq, messageId, opts = {}) {
   const rows = await recent(sinceSeq);
   const chunks = rows
@@ -674,6 +720,17 @@ async function main() {
   await listen("message-chunk");
   await listen("message-complete");
   await listen("message-error");
+  // Seed a real corpus so the retrieval / reader / search surface is
+  // actually exercised. Best-effort: degrade (corpus-less), don't abort.
+  await seedFixtureCorpus().catch((e) => {
+    record(FINDINGS, {
+      ts: Date.now(),
+      seed: SEED,
+      kind: "seed_failed",
+      detail: String(e).slice(0, 200),
+    });
+    console.log(`[soak] ⚠ fixture seeding failed (continuing corpus-less): ${e}`);
+  });
   await refreshLocalCorpora();
 
   console.log(
