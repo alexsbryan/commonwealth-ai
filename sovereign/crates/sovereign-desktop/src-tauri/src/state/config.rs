@@ -118,6 +118,16 @@ pub struct DesktopConfig {
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
 
+    /// "Naked mode" — run the loaded model raw, with NONE of the
+    /// Sovereign affordances (no retrieval, router, grounding gate,
+    /// tools, atlas, or gap-check). Chat history → model → reply, with
+    /// only a minimal assistant preamble + `custom_instructions`. For
+    /// A/B-ing a model's raw behaviour against the situated agent, or
+    /// running a model the affordances don't suit. Default off; routes
+    /// chat through `Runtime::handle_message_stream_naked`.
+    #[serde(default = "default_naked_mode")]
+    pub naked_mode: bool,
+
     /// User-authored "custom instructions" / persona — global standing
     /// guidance appended as the outermost layer of every system prompt
     /// (see `sovereign_core::types::InferenceConfig::custom_instructions`).
@@ -238,6 +248,10 @@ fn default_auto_collaborate() -> bool {
     true
 }
 
+fn default_naked_mode() -> bool {
+    false
+}
+
 /// Default 5 min — see the field doc for the rationale.
 fn default_primary_idle_secs() -> u64 {
     300
@@ -351,6 +365,7 @@ impl Default for DesktopConfig {
             think_budget: default_think_budget(),
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            naked_mode: default_naked_mode(),
             custom_instructions: None,
             primary_idle_secs: default_primary_idle_secs(),
             embed_family: ModelFamily::Unknown,

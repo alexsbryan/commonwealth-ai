@@ -92,11 +92,24 @@ pub async fn send_message_stream(
         _ => message.clone(),
     };
 
+    // Naked mode (a user setting) runs the loaded model raw — no
+    // retrieval, router, grounding gate, tools, atlas, or gap-check.
+    // Otherwise the full situated streaming path. Both return the same
+    // StreamHandle, so the forwarding below is identical.
+    let naked_mode = state.config.read().await.naked_mode;
+    let stream_result = if naked_mode {
+        tracing::info!(%conversation_id, "send_message_stream: NAKED mode — raw model, affordances bypassed");
+        runtime
+            .handle_message_stream_naked(&augmented_message, &conversation_id)
+            .await
+    } else {
+        runtime
+            .handle_message_stream(&augmented_message, &conversation_id)
+            .await
+    };
+
     // Try streaming path first.
-    match runtime
-        .handle_message_stream(&augmented_message, &conversation_id)
-        .await
-    {
+    match stream_result {
         Ok(handle) => {
             tracing::info!(
                 message_id = %handle.message_id,

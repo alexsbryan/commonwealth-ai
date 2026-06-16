@@ -70,6 +70,7 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
     let mut conversation_id: Option<String> = None;
     let mut format = OutputFormat::Text;
     let mut show_reasoning = false;
+    let mut naked_mode = false;
 
     let mut i = 0;
     while i < rest.len() {
@@ -95,6 +96,12 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
             }
             "--show-reasoning" => {
                 show_reasoning = true;
+            }
+            // Raw model ("naked") — bypass every Sovereign affordance
+            // (retrieval, router, grounding gate, tools, atlas); mirrors
+            // the desktop "Raw model" setting via handle_message_stream_naked.
+            "--naked" => {
+                naked_mode = true;
             }
             arg if question.is_none() => {
                 question = Some(arg.to_string());
@@ -127,6 +134,7 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         &conversation_id,
         format,
         show_reasoning,
+        naked_mode,
     )
     .await;
     exit
@@ -144,6 +152,7 @@ async fn run_turn(
     conversation_id: &str,
     format: OutputFormat,
     show_reasoning: bool,
+    naked_mode: bool,
 ) -> i32 {
     eprintln!();
     eprintln!("{BAR}");
@@ -151,11 +160,19 @@ async fn run_turn(
     eprintln!("> {question}");
     eprintln!("{BAR}");
 
-    let handle = match session
-        .runtime
-        .handle_message_stream(question, conversation_id)
-        .await
-    {
+    let handle_result = if naked_mode {
+        eprintln!("· raw model — Sovereign affordances bypassed ·");
+        session
+            .runtime
+            .handle_message_stream_naked(question, conversation_id)
+            .await
+    } else {
+        session
+            .runtime
+            .handle_message_stream(question, conversation_id)
+            .await
+    };
+    let handle = match handle_result {
         Ok(h) => h,
         // Non-streamable intents (ComplexTask, document-attached, …) are not
         // token-streamable: the runtime signals this with a NotImplemented
