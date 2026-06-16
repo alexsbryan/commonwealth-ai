@@ -5,8 +5,21 @@
   // failures; the dashboard shows totals + an expandable list.
   import Card from "./Card.svelte";
   import type { DashboardNoteEntry } from "../../types";
+  import { recipeAuthorChat } from "../../stores/recipeAuthorChat";
 
   let { issues }: { issues: DashboardNoteEntry[] } = $props();
+
+  // Conversational recovery: hand the outstanding test issues to the live agent
+  // (prompted to ACT on "fix it"), which rewrites the recipe and re-tests.
+  function askFix() {
+    const lines = issues
+      .slice(0, 20)
+      .map((i) => `- ${i.content}`)
+      .join("\n");
+    recipeAuthorChat.requestTurn(
+      `Fix these issues from the last recipe test, then re-test:\n\n${lines}`,
+    );
+  }
 
   type Group = { category: string; count: number; samples: string[] };
 
@@ -48,6 +61,14 @@
         </li>
       {/each}
     </ul>
+    <button
+      type="button"
+      class="fix"
+      onclick={askFix}
+      data-testid="recipe-issues-ask-fix"
+    >
+      Ask agent to fix
+    </button>
   {/if}
 </Card>
 
@@ -99,5 +120,18 @@
     color: var(--muted, #8a8c93);
     font-style: italic;
     border-left: none;
+  }
+  .fix {
+    margin-top: 0.6rem;
+    font-size: 0.74rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border, #2a2c33);
+    background: var(--bg-elevated);
+    color: var(--fg, #e6e6e8);
+  }
+  .fix:hover {
+    border-color: var(--growth, #4caf82);
   }
 </style>

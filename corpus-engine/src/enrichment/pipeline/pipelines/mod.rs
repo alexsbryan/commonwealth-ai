@@ -4,6 +4,7 @@
 //! Each submodule contributes one pipeline + its prompt assets.
 //! Registration happens in `super::registry::PipelineRegistry::builtin`.
 
+pub mod configurable_atlas;
 pub mod conversation_atlas;
 pub mod engineering_atlas;
 pub mod literary;

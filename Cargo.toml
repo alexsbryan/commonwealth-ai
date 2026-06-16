@@ -39,6 +39,7 @@ members = [
     "sovereign/crates/sovereign-cli-llm",
     "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
+    "sovereign/crates/sovereign-authoring-harness",
     "sovereign/crates/sovereign-pipeline",
     "sovereign/crates/sovereign-work-atlas",
     "sovereign/crates/sovereign-agent-bench",
@@ -117,6 +118,7 @@ sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
+sovereign-authoring-harness = { path = "sovereign/crates/sovereign-authoring-harness" }
 commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
 commonwealth-tdd = { path = "sovereign/crates/commonwealth-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }

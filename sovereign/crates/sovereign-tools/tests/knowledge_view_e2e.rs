@@ -54,7 +54,7 @@ use tempfile::TempDir;
 /// test body, including the splice.
 static INGEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const EMBED_DIMS: usize = 768;
+const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
 
 /// Deterministic embed stub: every call returns a fixed zero vector.
 /// Adequate for the splice path, which never re-embeds.

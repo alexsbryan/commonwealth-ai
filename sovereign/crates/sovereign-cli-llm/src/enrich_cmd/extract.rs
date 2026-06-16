@@ -195,7 +195,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
 
     // Build the pipeline + runner.
     let registry = PipelineRegistry::builtin();
-    let pipeline = match registry.get(&cfg.pipeline_id) {
+    let pipeline = match super::pipeline_resolve::resolve_pipeline(&cfg) {
         Some(p) => p,
         None => {
             eprintln!(
@@ -899,9 +899,7 @@ pub async fn run_with_closures_for_test(
     chat: corpus_engine::enrichment::pipeline::ChatCompletionFn,
 ) -> Result<(usize, bool), String> {
     let cfg = EnrichConfig::require(corpus_id).map_err(|e| e.to_string())?;
-    let registry = PipelineRegistry::builtin();
-    let pipeline = registry
-        .get(&cfg.pipeline_id)
+    let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg)
         .ok_or_else(|| format!("unknown pipeline: {}", cfg.pipeline_id))?;
     let cache = PhaseCache::new(paths::cache_dir(corpus_id));
     let runs = RunOutputWriter::new(paths::runs_dir(corpus_id));

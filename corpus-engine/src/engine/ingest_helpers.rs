@@ -10,8 +10,32 @@ use std::path::Path;
 
 use chrono::Utc;
 
+use crate::chunkers::Chunker;
+use crate::extractors::ExtractedDoc;
 use crate::progress::{SourceFileManifest, SourceFileStatus};
 use crate::recipe::{ExtractorConfig, Recipe};
+
+/// The canonical document → chunk-texts transform: normalize the raw
+/// content, run the configured chunker, then prepend the document title to
+/// each chunk (unless the chunk already leads with it).
+///
+/// This is the ONE place the normalize + title-prepend rule lives. Both the
+/// production ingest loop ([`crate::engine::CorpusEngine::ingest`]) and the
+/// authoring-harness runner call it, so the two paths cannot drift — the
+/// load-bearing seam behind the harness's "no second pipeline" invariant.
+pub(crate) fn chunk_doc(chunker: &dyn Chunker, doc: &ExtractedDoc) -> Vec<String> {
+    let cleaned = super::normalize_content(&doc.content);
+    chunker
+        .chunk(&cleaned)
+        .into_iter()
+        .map(|tc| match &doc.title {
+            Some(title) if !tc.content.starts_with(title.as_str()) => {
+                format!("{title}\n\n{}", tc.content)
+            }
+            _ => tc.content,
+        })
+        .collect()
+}
 
 /// Set the `shard_indices` field on a recipe's `WikipediaJsonl` extractor
 /// config. No-op for recipes with any other extractor — the caller has

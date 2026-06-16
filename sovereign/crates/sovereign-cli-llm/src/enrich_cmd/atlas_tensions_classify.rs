@@ -32,7 +32,7 @@ use corpus_engine::enrichment::atlas::{
     edges::{Edge, EdgeId, EdgeProvenance, EdgeType},
     read_atlas_atoms, read_atlas_edges, read_tension_candidates, write_atlas_edges, ATLAS_DIRNAME,
 };
-use corpus_engine::enrichment::pipeline::{atlas::EntityType, PipelineRegistry};
+use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
@@ -103,8 +103,7 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
         }
     };
 
-    let registry = PipelineRegistry::builtin();
-    let pipeline = match registry.get(&cfg.pipeline_id) {
+    let pipeline = match super::pipeline_resolve::resolve_pipeline(&cfg) {
         Some(p) => p,
         None => {
             eprintln!(

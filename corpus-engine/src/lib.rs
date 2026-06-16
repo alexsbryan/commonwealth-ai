@@ -28,6 +28,7 @@ pub mod error;
 pub mod extractors;
 pub mod filters;
 pub mod freshness;
+pub mod harness;
 pub mod index;
 pub mod meta_atlas;
 pub mod pii;
@@ -141,7 +142,7 @@ pub use testing::{
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, DedupPicker, EmbedFn,
     IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
-    ShardInfo,
+    ShardInfo, DEFAULT_EMBED_DIM,
 };
 pub use yield_hook::YieldHook;
 

@@ -129,6 +129,26 @@ const HELP: Help = Help {
     ],
 };
 
+/// Load a corpus's custom atlas ontology from its recipe, if it declares one.
+///
+/// The `custom_atlas` pipeline is built from DATA, not the registry: this reads
+/// `<data_dir>/recipes/<corpus_id>/recipe.toml` and materializes
+/// `[enrichment.ontology]` into a [`corpus_engine::enrichment::pipeline::CustomAtlasSpec`]
+/// (the single recipe→pipeline mapping is `Recipe::custom_atlas_spec`). `None`
+/// when the recipe is missing or has no non-empty ontology guidance — so the
+/// caller can fall back to (or reject) a registry pipeline.
+fn custom_ontology_spec(
+    corpus_id: &str,
+) -> Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec> {
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .ok()?;
+    let recipe_path = data_dir.join("recipes").join(corpus_id).join("recipe.toml");
+    corpus_engine::Recipe::from_file(&recipe_path)
+        .ok()?
+        .custom_atlas_spec()
+}
+
 pub async fn cmd_init(args: &[String]) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
@@ -158,19 +178,46 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         }
     }
 
+    // A recipe-declared [enrichment.ontology] takes precedence over any
+    // --pipeline pin / domain heuristic. Normalize the pipeline id to
+    // `custom_atlas` up front so validation, config.json, and logs all reflect
+    // what actually runs — the caller need not pass --pipeline custom_atlas.
+    if custom_ontology_spec(&parsed.corpus_id).is_some() {
+        parsed.pipeline_id =
+            corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID
+                .to_string();
+    }
+
     // Validate the pipeline id against the registry before doing
     // anything expensive. A typo here would otherwise only surface at
     // `extract` time, after section detection and model resolution.
     {
-        let registry = corpus_engine::enrichment::pipeline::PipelineRegistry::builtin();
-        if registry.get(&parsed.pipeline_id).is_none() {
-            let mut known = registry.pipeline_ids();
-            known.sort();
-            eprintln!(
-                "error: unknown pipeline: {:?}. Known ids: {:?}",
-                parsed.pipeline_id, known
-            );
-            return 2;
+        let is_custom = parsed.pipeline_id
+            == corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID;
+        if is_custom {
+            // `custom_atlas` is built from the recipe's [enrichment.ontology],
+            // not the registry — require that ontology to be present + non-empty
+            // here so the failure is legible at init, not deep in the build.
+            if custom_ontology_spec(&parsed.corpus_id).is_none() {
+                eprintln!(
+                    "error: --pipeline custom_atlas needs a recipe with a non-empty \
+                     [enrichment.ontology].guidance for corpus `{}` \
+                     (looked in <data_dir>/recipes/{}/recipe.toml)",
+                    parsed.corpus_id, parsed.corpus_id
+                );
+                return 2;
+            }
+        } else {
+            let registry = corpus_engine::enrichment::pipeline::PipelineRegistry::builtin();
+            if registry.get(&parsed.pipeline_id).is_none() {
+                let mut known = registry.pipeline_ids();
+                known.sort();
+                eprintln!(
+                    "error: unknown pipeline: {:?}. Known ids: {:?}",
+                    parsed.pipeline_id, known
+                );
+                return 2;
+            }
         }
     }
 
@@ -377,6 +424,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         // a per-phase cap).
         phase1b_max_output_tokens: None,
         phase_overrides: None,
+        ontology: custom_ontology_spec(&parsed.corpus_id),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -562,6 +610,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         // a per-phase cap).
         phase1b_max_output_tokens: None,
         phase_overrides: None,
+        ontology: custom_ontology_spec(&parsed.corpus_id),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {

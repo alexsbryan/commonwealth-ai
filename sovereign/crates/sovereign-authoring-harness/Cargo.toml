@@ -1,0 +1,15 @@
+[package]
+name = "sovereign-authoring-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Authoring-harness verdict policy + render — Pass/Fail ladder over corpus-engine harness StageOutputs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+corpus-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

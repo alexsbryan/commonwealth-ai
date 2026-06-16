@@ -157,12 +157,31 @@ pub const PIPELINE_ID: &str = "literary_atlas";
 /// Phase 1. Delegates Phases 3–7 to `LiteraryPipeline` unchanged.
 pub struct LiteraryAtlasPipeline {
     inner: LiteraryPipeline,
+    /// When `Some`, this atlas pipeline runs in recipe-customized mode (the
+    /// `custom_atlas` pipeline): `id`/`name`/`vocabulary` and the Phase-1
+    /// extraction prompt come from a recipe ontology instead of the baked
+    /// literary genre. Phases 3–7 are identical either way — a custom atlas is
+    /// THE SAME pipeline with a different Phase-1 ontology. `None` = the literary
+    /// genre pipeline. See [`super::configurable_atlas`].
+    custom: Option<super::configurable_atlas::CustomOntology>,
 }
 
 impl LiteraryAtlasPipeline {
     pub fn new() -> Self {
         Self {
             inner: LiteraryPipeline::new(),
+            custom: None,
+        }
+    }
+
+    /// Build a recipe-customized atlas pipeline from a custom ontology spec.
+    /// Reports `id() = "custom_atlas"` and extracts Phase-1 atoms under the
+    /// recipe's domain guidance (a neutral base prompt + the domain focus);
+    /// downstream phases (3–7) are identical to the literary atlas.
+    pub fn with_custom_ontology(spec: &super::configurable_atlas::CustomAtlasSpec) -> Self {
+        Self {
+            inner: LiteraryPipeline::new(),
+            custom: Some(super::configurable_atlas::CustomOntology::build(spec)),
         }
     }
 }
@@ -175,15 +194,25 @@ impl Default for LiteraryAtlasPipeline {
 
 impl Pipeline for LiteraryAtlasPipeline {
     fn id(&self) -> &'static str {
-        PIPELINE_ID
+        if self.custom.is_some() {
+            super::configurable_atlas::PIPELINE_ID
+        } else {
+            PIPELINE_ID
+        }
     }
 
     fn name(&self) -> &'static str {
-        "Literary — atlas atom graph"
+        match &self.custom {
+            Some(c) => c.name,
+            None => "Literary — atlas atom graph",
+        }
     }
 
     fn vocabulary(&self) -> &Vocabulary {
-        self.inner.vocabulary()
+        match &self.custom {
+            Some(c) => &c.vocabulary,
+            None => self.inner.vocabulary(),
+        }
     }
 
     // ── Phase system preambles ────────────────────────────────
@@ -193,7 +222,10 @@ impl Pipeline for LiteraryAtlasPipeline {
     // those in here.
 
     fn phase1_system(&self) -> &'static str {
-        *PHASE1_ATLAS_SYSTEM
+        match &self.custom {
+            Some(c) => c.phase1_system,
+            None => *PHASE1_ATLAS_SYSTEM,
+        }
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -244,8 +276,15 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*include_exemplars=*/ false,
             /*seed=*/ None,
         );
+        // Custom atlas retries with the SAME custom system prompt (just a lighter
+        // body) so a failed chapter is re-extracted under the domain ontology,
+        // not the literary terse prompt. Literary mode uses its terse system.
+        let system = match &self.custom {
+            Some(c) => c.phase1_system,
+            None => *PHASE1_ATLAS_SYSTEM_TERSE,
+        };
         Some(
-            ChatPrompt::new(*PHASE1_ATLAS_SYSTEM_TERSE, user)
+            ChatPrompt::new(system, user)
                 .with_response_schema(
                     "phase1_section_extraction",
                     phase1_section_extraction_schema(),
@@ -261,6 +300,10 @@ impl Pipeline for LiteraryAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
+        // v1: custom atlas skips the literary-framed 1b coverage top-up.
+        if self.custom.is_some() {
+            return None;
+        }
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(*PHASE1B_ENTITY_COVERAGE, user)
@@ -274,6 +317,10 @@ impl Pipeline for LiteraryAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
+        // v1: custom atlas skips the literary-framed 1b coverage top-up.
+        if self.custom.is_some() {
+            return None;
+        }
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(*PHASE1B_CONCEPT_COVERAGE, user)
@@ -289,7 +336,13 @@ impl Pipeline for LiteraryAtlasPipeline {
     // ── Stage 1a — seed extraction ─────────────────────────────
 
     fn seed_strategy(&self) -> SeedStrategy {
-        SeedStrategy::Llm
+        if self.custom.is_some() {
+            // v1: custom atlas skips the literary seed pass (its seed prompt is
+            // literary-specific); Phase 1 extracts directly under the ontology.
+            SeedStrategy::None
+        } else {
+            SeedStrategy::Llm
+        }
     }
 
     fn compose_seed_prompt(&self, first_section: &ChapterInput) -> Option<ChatPrompt> {

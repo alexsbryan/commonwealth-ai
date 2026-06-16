@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    CascadeStep, ChapterSelection, PhaseCache, PhaseRunner, PipelinePhase, PipelineRegistry,
+    CascadeStep, ChapterSelection, PhaseCache, PhaseRunner, PipelinePhase,
     RunOutputWriter,
 };
 
@@ -69,8 +69,7 @@ pub async fn cmd_cascade(args: &[String]) -> i32 {
         return 2;
     }
 
-    let registry = PipelineRegistry::builtin();
-    let pipeline = match registry.get(&cfg.pipeline_id) {
+    let pipeline = match super::pipeline_resolve::resolve_pipeline(&cfg) {
         Some(p) => p,
         None => {
             eprintln!("error: unknown pipeline: {}", cfg.pipeline_id);

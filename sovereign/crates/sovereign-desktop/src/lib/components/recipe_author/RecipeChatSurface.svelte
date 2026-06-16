@@ -20,6 +20,7 @@
     sendMessageStream,
     recipeAuthorBuildPrelude,
   } from "../../api";
+  import { recipeAuthorChat } from "../../stores/recipeAuthorChat";
 
   let { featureId, projectTitle }: { featureId: string; projectTitle: string } =
     $props();
@@ -116,7 +117,14 @@
     });
   }
 
+  let unregisterBridge: (() => void) | null = null;
+
   onMount(async () => {
+    // Let dashboard cards inject turns ("Ask agent to fix") into this chat —
+    // routed through dispatchTurn so they render + stream like typed messages.
+    unregisterBridge = recipeAuthorChat.register((t) => {
+      void dispatchTurn(t);
+    });
     unlistenChunk = await listen<{
       conversation_id: string;
       message_id: string;
@@ -177,24 +185,35 @@
     unlistenChunk?.();
     unlistenComplete?.();
     unlistenError?.();
+    unregisterBridge?.();
   });
 
   async function send(e?: Event): Promise<void> {
     e?.preventDefault();
     const text = composerValue.trim();
     if (!text || sending) return;
+    composerValue = "";
+    await dispatchTurn(text);
+  }
+
+  /// Dispatch one turn into the live conversation through the normal flow:
+  /// create the conversation if needed, render the user turn, augment with the
+  /// project prelude, stream the reply. Used by `send()` (typed messages) AND by
+  /// the chat bridge (a card's "Ask agent to fix" → same rendering + streaming,
+  /// so recovery is visible in the transcript, not a hidden side-channel call).
+  async function dispatchTurn(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
     if (!conversationId) {
       const resp = await createConversation();
       conversationId = resp.id;
     }
-    const userId = `local-user-${Date.now()}`;
     appendMessage({
-      id: userId,
+      id: `local-user-${Date.now()}`,
       role: "user",
-      content: text,
+      content: trimmed,
       streaming: false,
     });
-    composerValue = "";
     sending = true;
 
     try {
@@ -211,7 +230,7 @@
       } catch (err) {
         console.warn("recipe-author chat: build prelude failed:", err);
       }
-      const augmented = prelude ? `${prelude}${text}` : text;
+      const augmented = prelude ? `${prelude}${trimmed}` : trimmed;
       const resp = await sendMessageStream(augmented, conversationId);
       appendMessage({
         id: resp.message_id,

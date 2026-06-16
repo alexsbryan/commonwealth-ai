@@ -1000,7 +1000,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
     drop(index); // Watcher owns its own CorpusIndex handle via the engine.
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
     });
     let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
     let engine = Arc::new(corpus_engine::CorpusEngine::new(

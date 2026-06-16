@@ -15,10 +15,24 @@
   //                                in its own block, copy-friendly
   import Card from "./Card.svelte";
   import type { RecipeValidationReport } from "../../types";
+  import { recipeAuthorChat } from "../../stores/recipeAuthorChat";
 
   let { validation }: { validation: RecipeValidationReport } = $props();
 
   let copiedIdx: number | null = $state(null);
+
+  // Conversational recovery: hand the parse errors to the live agent, which is
+  // prompted to ACT on "fix it" (rewrite the recipe), or to explain them.
+  function askFix() {
+    recipeAuthorChat.requestTurn(
+      `The recipe has validation errors. Fix them in the recipe and re-validate:\n\n${validation.errors.join("\n\n")}`,
+    );
+  }
+  function askWhy() {
+    recipeAuthorChat.requestTurn(
+      `Explain these recipe validation errors in plain language and what change fixes each — don't edit yet:\n\n${validation.errors.join("\n\n")}`,
+    );
+  }
 
   async function copy(text: string, idx: number) {
     try {
@@ -41,6 +55,18 @@
     <div class="row">
       <span class="pill ok">valid</span>
       <span class="muted">Engine parsed the recipe.toml without errors.</span>
+    </div>
+    <div class="row">
+      {#if validation.enrichment_ready}
+        <span class="pill ok">enrichment ready</span>
+        <span class="muted">Build will produce a knowledge graph (atoms).</span>
+      {:else}
+        <span class="pill warn" data-testid="enrichment-not-ready">no enrichment</span>
+        <span class="muted">
+          This recipe builds with <strong>zero atoms</strong> — turn on atlas
+          enrichment to get a knowledge graph.
+        </span>
+      {/if}
     </div>
   {:else}
     <div class="row">
@@ -66,6 +92,17 @@
         </li>
       {/each}
     </ul>
+    <div class="fix-actions">
+      <button
+        type="button"
+        class="fix"
+        onclick={askFix}
+        data-testid="recipe-validation-ask-fix"
+      >
+        Ask agent to fix
+      </button>
+      <button type="button" class="why" onclick={askWhy}>Explain</button>
+    </div>
   {/if}
 </Card>
 
@@ -96,6 +133,10 @@
   .pill.fail {
     background: var(--coral-dim);
     color: var(--coral);
+  }
+  .pill.warn {
+    background: var(--amber-flash);
+    color: var(--amber);
   }
   .errors {
     list-style: none;
@@ -140,6 +181,33 @@
   }
   .copy:hover {
     background: var(--bg-elevated);
+    color: var(--fg, #e6e6e8);
+  }
+  .fix-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+  }
+  .fix,
+  .why {
+    font-size: 0.74rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border, #2a2c33);
+  }
+  .fix {
+    background: var(--bg-elevated);
+    color: var(--fg, #e6e6e8);
+  }
+  .fix:hover {
+    border-color: var(--growth, #4caf82);
+  }
+  .why {
+    background: transparent;
+    color: var(--muted, #8a8c93);
+  }
+  .why:hover {
     color: var(--fg, #e6e6e8);
   }
 </style>

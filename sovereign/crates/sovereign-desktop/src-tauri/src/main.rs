@@ -490,6 +490,7 @@ fn main() -> ExitCode {
             atlas_commands::atlas_get_entity_aggregate,
             commands::recipe_validate,
             commands::recipe_test,
+            commands::recipe_run_harness,
             recipe_commands::corpus_import_recipe,
             recipe_commands::corpus_get_recipe_parameters,
             recipe_commands::corpus_install_with_parameters,
@@ -498,6 +499,7 @@ fn main() -> ExitCode {
             recipe_author_commands::recipe_author_list_projects,
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,
+            recipe_author_commands::recipe_author_save_edited_toml,
             recipe_author_commands::recipe_author_restore_checkpoint,
             recipe_author_commands::recipe_author_build_prelude,
             mesh_commands::mesh_create,
@@ -559,6 +561,7 @@ fn main() -> ExitCode {
             enrich_commands::enrich_sep_ingest,
             enrich_commands::enrich_list_corpora,
             enrich_commands::enrich_init_for_local_corpus,
+            enrich_commands::recipe_enrich_init_from_corpus,
             enrich_commands::enrich_estimate,
             enrich_commands::enrich_get_active_job,
             enrich_commands::enrich_get_starter_questions,
@@ -588,7 +591,16 @@ fn main() -> ExitCode {
             commands::meshapp_installed_apps,
             commands::meshapp_open,
         ])
-        .run(tauri::generate_context!())
-        .expect("error running Sovereign");
+        .build(tauri::generate_context!())
+        .expect("error building Sovereign")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Graceful shutdown: skip C++ static destructors so ggml-metal's
+                // device sweeper can't abort under `__cxa_finalize` at process
+                // exit (which pops a macOS crash dialog). Reuses the daemon's
+                // proven fast-exit path — the kernel reclaims Metal/KV/mmaps.
+                sovereign_inference::fast_exit_skip_destructors(0);
+            }
+        });
     ExitCode::SUCCESS
 }

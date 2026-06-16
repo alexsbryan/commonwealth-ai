@@ -290,7 +290,8 @@ fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
 }
 
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
+    let stub_embed: EmbedFn =
+        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
     let tmp = std::env::temp_dir().join("sovereign-recipe-author-test");
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }

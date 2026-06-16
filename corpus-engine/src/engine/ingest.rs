@@ -16,9 +16,9 @@ use crate::recipe::{AcquirerConfig, ExtractorConfig, Recipe};
 use crate::types::{CorpusSpec, IngestResult};
 
 use super::ingest_helpers::{
-    apply_jsonl_shard_override, mark_complete_files, mark_complete_shards,
+    apply_jsonl_shard_override, chunk_doc, mark_complete_files, mark_complete_shards,
 };
-use super::{blake3_hex, normalize_content, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
+use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
 
 impl CorpusEngine {
     /// Ingest a corpus from source. Downloads, parses, chunks,
@@ -1170,8 +1170,9 @@ impl CorpusEngine {
 
             docs_processed += 1;
 
-            let cleaned_content = normalize_content(&doc.content);
-            let text_chunks = chunker.chunk(&cleaned_content);
+            // Normalize + chunk + title-prepend via the shared helper that
+            // the authoring-harness runner also calls (no-drift seam).
+            let chunk_texts = chunk_doc(chunker.as_ref(), &doc);
 
             // `doc.embed_text` is honored only when the configured chunker
             // yields exactly one chunk for this document — i.e. the
@@ -1180,23 +1181,13 @@ impl CorpusEngine {
             // be ambiguous, so we silently fall through to per-chunk
             // content embedding for multi-chunk extractors. See the
             // `embed_text` doc on `ExtractedDoc` for context.
-            let single_chunk_embed_override = if text_chunks.len() == 1 {
+            let single_chunk_embed_override = if chunk_texts.len() == 1 {
                 doc.embed_text.as_deref()
             } else {
                 None
             };
 
-            for tc in text_chunks {
-                let content = if let Some(ref title) = doc.title {
-                    if !tc.content.starts_with(title.as_str()) {
-                        format!("{title}\n\n{}", tc.content)
-                    } else {
-                        tc.content
-                    }
-                } else {
-                    tc.content
-                };
-
+            for content in chunk_texts {
                 let content_hash = blake3_hex(&content);
                 // Embed-side dedup gate. If we already have a row
                 // with this content_hash (from a prior run, or from
@@ -1693,6 +1684,30 @@ impl CorpusEngine {
                                     corpus = %recipe.corpus.id,
                                     "install: skipping auto-enrichment for investigation recipe — \
                                      run `sovereign enrich investigation build <id>` to enrich"
+                                );
+                                break 'enrichment;
+                            }
+
+                            // Atlas enrichment is a separate, explicit build
+                            // (`sovereign enrich init <id> --from-corpus <id>
+                            // --pipeline <…_atlas>` then `enrich build <id>`),
+                            // run from the registry of `*_atlas` pipelines — NOT
+                            // the field-model domain registry below. Skip it on
+                            // install for the same reasons as `investigation`:
+                            //   1. running the field-model enricher here would
+                            //      DUPLICATE the work the atlas build redoes, and
+                            //   2. an atlas recipe's `enrichment.domain` selects
+                            //      the atlas pipeline (literary/philosophy), which
+                            //      is NOT a registered field-model domain, so
+                            //      `from_recipe` would trip `UnknownEnrichmentDomain`.
+                            // The desktop "Build & enrich" flow bridges install →
+                            // atlas via `recipe_enrich_init_from_corpus`.
+                            if enrichment_config.enrichment_type == "atlas" {
+                                tracing::info!(
+                                    corpus = %recipe.corpus.id,
+                                    "install: skipping auto-enrichment for atlas recipe — \
+                                     run `sovereign enrich init <id> --from-corpus <id> \
+                                     --pipeline <…_atlas>` then `enrich build <id>` to enrich"
                                 );
                                 break 'enrichment;
                             }

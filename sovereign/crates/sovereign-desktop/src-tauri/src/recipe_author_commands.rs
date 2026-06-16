@@ -253,6 +253,12 @@ pub struct RecipeValidationReport {
     /// drafted one yet). Lets the UI distinguish "nothing yet" from
     /// "we tried and it failed".
     pub no_recipe: bool,
+    /// `true` when the recipe parsed AND its enrichment will produce graph
+    /// atoms (enabled `atlas`/`investigation`). `false` for a valid recipe
+    /// whose enrichment is off or `field_model` (it would build to ZERO
+    /// atoms). Meaningless when `ok == false`. Drives the readiness pill so a
+    /// novice sees "this won't enrich" before the build, not after.
+    pub enrichment_ready: bool,
 }
 
 /// The single struct the dashboard reads on every poll. Coarse on
@@ -277,6 +283,51 @@ pub struct RecipeAuthorDashboardState {
     pub deferred_questions: Vec<DashboardNoteEntry>,
     pub checkpoints: Vec<CheckpointMeta>,
     pub validation: RecipeValidationReport,
+}
+
+/// Validate recipe TOML into the dashboard's [`RecipeValidationReport`] shape.
+/// Single source of truth for "did this recipe parse + will it enrich?" used by
+/// both the dashboard poll and the in-app TOML save (B1) so the partner sees
+/// identical verdicts whether the agent wrote the recipe or they hand-edited it.
+fn validate_recipe_toml(recipe_toml: Option<&str>) -> RecipeValidationReport {
+    match recipe_toml {
+        None => RecipeValidationReport {
+            ok: false,
+            errors: Vec::new(),
+            no_recipe: true,
+            enrichment_ready: false,
+        },
+        Some(toml_str) => match Recipe::from_toml(toml_str) {
+            Ok(recipe) => RecipeValidationReport {
+                ok: true,
+                errors: Vec::new(),
+                no_recipe: false,
+                enrichment_ready: recipe.produces_enriched_atoms(),
+            },
+            // Error text already carries the translate_parse_error rewrite
+            // (missing-section guidance, allowed-variant lists). Split on blank
+            // lines so each guidance block renders as a discrete row, intact.
+            Err(e) => {
+                let message = e.to_string();
+                let errors = if message.is_empty() {
+                    vec!["recipe failed to parse (no message)".to_string()]
+                } else {
+                    message
+                        .split("\n\n")
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                };
+                RecipeValidationReport {
+                    ok: false,
+                    errors,
+                    no_recipe: false,
+                    enrichment_ready: false,
+                }
+            }
+        },
+    }
 }
 
 #[tauri::command]
@@ -348,44 +399,7 @@ pub async fn recipe_author_dashboard_state(
         .list_checkpoints()
         .map_err(|e| format!("recipe_author_dashboard_state: list checkpoints: {e}"))?;
 
-    let validation = match recipe_toml.as_deref() {
-        None => RecipeValidationReport {
-            ok: false,
-            errors: Vec::new(),
-            no_recipe: true,
-        },
-        Some(toml_str) => match Recipe::from_toml(toml_str) {
-            Ok(_) => RecipeValidationReport {
-                ok: true,
-                errors: Vec::new(),
-                no_recipe: false,
-            },
-            // The error text already carries the translate_parse_error
-            // rewrite (missing-section guidance, allowed-variant lists,
-            // field-named unknown-variant lines). Surface verbatim —
-            // splitting on \n\n preserves multi-line guidance blocks
-            // intact while still letting the UI render each error as a
-            // discrete row.
-            Err(e) => {
-                let message = e.to_string();
-                let errors = if message.is_empty() {
-                    vec!["recipe failed to parse (no message)".to_string()]
-                } else {
-                    message
-                        .split("\n\n")
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string)
-                        .collect()
-                };
-                RecipeValidationReport {
-                    ok: false,
-                    errors,
-                    no_recipe: false,
-                }
-            }
-        },
-    };
+    let validation = validate_recipe_toml(recipe_toml.as_deref());
 
     Ok(RecipeAuthorDashboardState {
         feature_id,
@@ -407,6 +421,71 @@ pub async fn recipe_author_dashboard_state(
         checkpoints,
         validation,
     })
+}
+
+// ─── In-app TOML editing (Phase B) ───────────────────────────
+
+/// Validate + atomically save a hand-edited `recipe.toml` for a recipe-author
+/// project, returning the same [`RecipeValidationReport`] the dashboard shows.
+///
+/// Reuses the engine's `Recipe::from_toml` (same verdict as the dashboard) and
+/// the recipe-author write convention (`.toml.part` → atomic rename) so a manual
+/// edit is indistinguishable on disk from an agent-authored one — the agent
+/// picks it up next turn via `recipe_author_build_prelude`'s disk re-read, no
+/// agent change needed.
+///
+/// **Validate-first, write-only-if-valid:** a recipe that doesn't parse is NEVER
+/// persisted (it would break the build + the agent's prelude). The editor keeps
+/// the in-flight text client-side, so the partner fixes the error and re-saves;
+/// `ok == false` carries the parse errors to render inline.
+#[tauri::command]
+pub async fn recipe_author_save_edited_toml(
+    state: State<'_, Arc<AppState>>,
+    feature_id: String,
+    edited_toml: String,
+) -> Result<RecipeValidationReport, String> {
+    let (notes, features) = handles(&state).await?;
+    let project = RecipeProject::load(&feature_id, Arc::clone(&notes), Arc::clone(&features))
+        .await
+        .map_err(|e| format!("recipe_author_save_edited_toml: {e}"))?;
+    let summary = project
+        .read_summary()
+        .map_err(|e| format!("recipe_author_save_edited_toml: read summary: {e}"))?;
+    let recipe_id = summary.recipe_id.ok_or_else(|| {
+        "this project has no recipe yet — draft one with the agent before editing".to_string()
+    })?;
+
+    // Validate against the SAME engine parse the dashboard uses. Do not write a
+    // recipe that fails to parse.
+    let report = validate_recipe_toml(Some(&edited_toml));
+    if !report.ok {
+        return Ok(report);
+    }
+
+    // Atomic write to <recipes>/<recipe_id>/recipe.toml (`.part` → rename),
+    // mirroring RecipeWriteStructuredTool so agent + manual writes are identical.
+    let root = recipe_author::local_recipes_dir()
+        .map_err(|e| format!("recipe_author_save_edited_toml: locate recipes dir: {e}"))?;
+    let dir = root.join(&recipe_id);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("recipe_author_save_edited_toml: create {}: {e}", dir.display()))?;
+    let path = dir.join("recipe.toml");
+    let part = path.with_extension("toml.part");
+    std::fs::write(&part, edited_toml.as_bytes())
+        .map_err(|e| format!("recipe_author_save_edited_toml: write {}: {e}", part.display()))?;
+    std::fs::rename(&part, &path).map_err(|e| {
+        format!(
+            "recipe_author_save_edited_toml: rename {} → {}: {e}",
+            part.display(),
+            path.display()
+        )
+    })?;
+    tracing::info!(
+        feature_id = %feature_id,
+        recipe_id = %recipe_id,
+        "recipe_author_save_edited_toml wrote hand-edited recipe.toml"
+    );
+    Ok(report)
 }
 
 // ─── Restore checkpoint ──────────────────────────────────────

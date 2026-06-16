@@ -2117,26 +2117,16 @@ async fn run_daemon(args: &[String]) -> i32 {
         0
     };
     #[cfg(target_os = "macos")]
-    unsafe {
-        fast_exit_skip_destructors(exit_code);
+    {
+        // Reuse the shared fast-exit (lifted to sovereign-inference 2026-06-16
+        // so the desktop app shares it). Skips `__cxa_finalize_ranges` so the
+        // ggml-metal device sweeper never asserts on still-resident resources.
+        sovereign_inference::fast_exit_skip_destructors(exit_code)
     }
     #[cfg(not(target_os = "macos"))]
     {
         exit_code
     }
-}
-
-/// macOS shutdown helper — see `run_daemon` for rationale. Calls
-/// `_exit(2)` to skip libc's `__cxa_finalize_ranges` chain so the
-/// ggml-metal device sweeper never gets a chance to assert on
-/// still-resident llama-context resources.
-#[cfg(target_os = "macos")]
-unsafe fn fast_exit_skip_destructors(code: i32) -> ! {
-    extern "C" {
-        #[link_name = "_exit"]
-        fn libc_exit_no_finalize(status: i32) -> !;
-    }
-    libc_exit_no_finalize(code)
 }
 
 /// Build the tool registry that serves `/mcp/*`. Mirrors the subset of

@@ -720,7 +720,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("sov-mcp-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
         let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
         });
         Arc::new(corpus_engine::CorpusEngine::new(tmp.clone(), tmp, embed))
     }

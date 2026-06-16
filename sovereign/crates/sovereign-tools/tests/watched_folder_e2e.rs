@@ -30,7 +30,7 @@ use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use tempfile::TempDir;
 
-const EMBED_DIMS: usize = 768;
+const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
 
 /// Deterministic embed: every call returns the same zero vector.
 /// LanceDB stores it as opaque bytes so the diff/apply path completes

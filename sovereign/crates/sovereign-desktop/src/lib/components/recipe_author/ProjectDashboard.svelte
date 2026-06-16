@@ -8,6 +8,8 @@
   import CharterSummary from "./CharterSummary.svelte";
   import CorpusStateCard from "./CorpusStateCard.svelte";
   import RecipeValidationCard from "./RecipeValidationCard.svelte";
+  import HarnessLadderCard from "./HarnessLadderCard.svelte";
+  import BuildEnrichCard from "./BuildEnrichCard.svelte";
   import SampleProgressBar from "./SampleProgressBar.svelte";
   import IssueList from "./IssueList.svelte";
   import DecisionFeed from "./DecisionFeed.svelte";
@@ -31,6 +33,14 @@
     lastTestAt={dashboard.last_test_at ?? null}
   />
   <RecipeValidationCard validation={dashboard.validation} />
+  <HarnessLadderCard
+    recipePath={dashboard.recipe_path ?? null}
+    sampleSize={dashboard.current_sample_size ?? 15}
+  />
+  <BuildEnrichCard
+    recipeId={dashboard.recipe_id ?? null}
+    enrichmentReady={dashboard.validation.enrichment_ready}
+  />
   <SampleProgressBar currentSampleSize={dashboard.current_sample_size ?? null} />
   <IssueList issues={dashboard.recipe_issues} />
   <DecisionFeed
@@ -43,7 +53,10 @@
     checkpoints={dashboard.checkpoints}
   />
   <ResearchLogPanel findings={dashboard.research_findings} />
-  <TechnicalDetailDrawer recipeToml={dashboard.recipe_toml ?? null} />
+  <TechnicalDetailDrawer
+    recipeToml={dashboard.recipe_toml ?? null}
+    featureId={dashboard.feature_id}
+  />
 </div>
 
 <style>

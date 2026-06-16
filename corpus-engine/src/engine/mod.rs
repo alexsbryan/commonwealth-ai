@@ -14,6 +14,7 @@ pub mod reindex;
 
 pub use article_stats::ArticleStats;
 pub use cancel::{CancellationFlag, CancellationRegistry};
+pub(crate) use ingest_helpers::chunk_doc;
 
 /// Consolidated on-disk state for a single corpus — what
 /// [`CorpusEngine::corpus_disk_status`] reports.
@@ -1241,6 +1242,13 @@ impl CorpusEngine {
         }
 
         out.into_iter().collect()
+    }
+
+    /// Path the engine resolves recipe-relative files (e.g. `title_list`
+    /// filter files) against. The authoring-harness runner uses it to build
+    /// the same filter pipeline `ingest` does.
+    pub(crate) fn recipes_dir(&self) -> &Path {
+        self.recipes_dir.as_path()
     }
 
     /// Return a clone of the embedding function.

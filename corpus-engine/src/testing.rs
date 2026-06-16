@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::acquirers::huggingface::{HuggingFaceDatasetAcquirer, HF_USER_AGENT};
-use crate::engine::{blake3_hex, normalize_content, CorpusEngine};
+use crate::engine::{blake3_hex, chunk_doc, CorpusEngine};
 use crate::error::{Error, Result};
 use crate::index::{CorpusIndex, InsertChunk};
 use crate::recipe::{AcquirerConfig, ChunkerConfig, Recipe};
@@ -695,17 +695,7 @@ pub(crate) async fn run_test(
     let mut all_chunks: Vec<(Option<String>, Option<String>, String)> = Vec::new();
 
     for doc in &docs {
-        let cleaned = normalize_content(&doc.content);
-        let text_chunks = chunker.chunk(&cleaned);
-
-        for tc in text_chunks {
-            // Prepend title, same as the production ingest pipeline.
-            let content = match &doc.title {
-                Some(t) if !tc.content.starts_with(t.as_str()) => {
-                    format!("{t}\n\n{}", tc.content)
-                }
-                _ => tc.content,
-            };
+        for content in chunk_doc(chunker.as_ref(), doc) {
             all_chunks.push((doc.title.clone(), doc.url.clone(), content));
         }
     }
@@ -1226,7 +1216,7 @@ async fn acquire_for_test(
 }
 
 /// Returns the display URL for the recipe's source.
-fn acquirer_source_url(recipe: &Recipe) -> String {
+pub(crate) fn acquirer_source_url(recipe: &Recipe) -> String {
     match &recipe.acquire {
         AcquirerConfig::BulkDownload { url, urls, .. } => match (url, urls) {
             (Some(u), _) => u.clone(),
@@ -1263,7 +1253,7 @@ fn acquirer_source_url(recipe: &Recipe) -> String {
 }
 
 /// Extract `max_chars` from any `ChunkerConfig` variant.
-fn chunker_max_chars(config: &ChunkerConfig) -> usize {
+pub(crate) fn chunker_max_chars(config: &ChunkerConfig) -> usize {
     match config {
         ChunkerConfig::Paragraph { max_chars, .. } => *max_chars,
         ChunkerConfig::Sentence { max_chars } => *max_chars,

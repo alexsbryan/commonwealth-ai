@@ -400,7 +400,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
 
 fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
     let registry = PipelineRegistry::builtin();
-    let Some(pipeline) = registry.get(&cfg.pipeline_id) else {
+    let Some(pipeline) = super::pipeline_resolve::resolve_pipeline(cfg) else {
         eprintln!(
             "error: unknown pipeline `{}`; known ids: {:?}",
             cfg.pipeline_id,

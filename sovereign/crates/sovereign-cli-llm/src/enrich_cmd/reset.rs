@@ -376,6 +376,7 @@ mod tests {
             max_output_tokens: 4096,
             phase1b_max_output_tokens: None,
             phase_overrides: None,
+            ontology: None,
             created_at: "t".into(),
         };
         cfg.save().unwrap();

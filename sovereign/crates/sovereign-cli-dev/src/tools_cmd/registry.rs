@@ -389,7 +389,7 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
     let reachable = probe_daemon(daemon_url).await;
     if !reachable {
         return Arc::new(|_text: &str| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
         });
     }
     let url = format!("{}/v1/embeddings", daemon_url);

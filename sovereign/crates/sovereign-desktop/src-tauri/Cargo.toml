@@ -20,6 +20,7 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 commonwealth-core = { path = "../../../../commonwealth/crates/commonwealth-core" }
 commonwealth-state = { path = "../../../../commonwealth/crates/commonwealth-state" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
+sovereign-authoring-harness.workspace = true
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-atos = { workspace = true }

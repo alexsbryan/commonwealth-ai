@@ -940,7 +940,7 @@ domain = "astrology"
         )
         .unwrap();
 
-        let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
+        let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
         let inference: InferenceFn =
             Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let result = FieldModelEngine::from_recipe(&recipe, embed, inference);
@@ -973,7 +973,7 @@ enabled = true
         )
         .unwrap();
 
-        let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
+        let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
         let inference: InferenceFn =
             Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let engine = FieldModelEngine::from_recipe(&recipe, embed, inference).unwrap();
@@ -1013,7 +1013,7 @@ domain = "{domain}"
 "#
             );
             let recipe = crate::recipe::Recipe::from_toml(&toml).unwrap();
-            let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
+            let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
             let inference: InferenceFn =
                 Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
             let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
