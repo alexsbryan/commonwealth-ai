@@ -230,3 +230,11 @@ h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.012em; margin: 0 0 6p
 .heat-cell[data-i="2"] { background: rgba(201, 168, 76, 0.34); }
 .heat-cell[data-i="3"] { background: rgba(201, 168, 76, 0.58); }
 .heat-cell[data-i="4"] { background: var(--accent); box-shadow: 0 0 10px rgba(201, 168, 76, 0.35); }
+
+/* Claim ("argument") + question cards — the atlas atoms the entity graph does
+   not surface (generic Atlas Explorer). */
+.claim, .question { padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input); margin: 8px 0; }
+.claim-content, .q-content { color: var(--ink); font-size: 13.5px; line-height: 1.5; }
+.claim-quote { margin: 8px 0 2px; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--ink-2); font-style: italic; font-size: 12.5px; line-height: 1.5; }
+.door-btn { margin-top: 4px; background: var(--accent-dim); border: 1px solid rgba(201, 168, 76, 0.4); color: var(--accent-light); border-radius: var(--radius); padding: 9px 18px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s, box-shadow 0.15s; }
+.door-btn:hover { background: rgba(201, 168, 76, 0.24); box-shadow: 0 0 16px rgba(201, 168, 76, 0.18); }

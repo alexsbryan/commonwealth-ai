@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas Explorer</title>
+    <link rel="stylesheet" href="../_sdk/meshapp.css" />
+  </head>
+  <body>
+    <main>
+      <h1 id="title">Atlas Explorer</h1>
+      <p class="sub">
+        Everything below was extracted from the corpus by machine — the
+        entities, the arguments they make, the open questions — each traceable
+        to the source it came from. <span class="src" id="source"></span>
+      </p>
+
+      <section id="loading">Loading the atlas from the host…</section>
+
+      <section id="app" hidden>
+        <div id="banner" class="banner"></div>
+
+        <div class="card">
+          <div class="label">Find anything <span class="chip">entities by name</span></div>
+          <div id="search-host"></div>
+        </div>
+
+        <div class="card">
+          <div class="label">The map <span class="chip">who &amp; what, and how they connect</span></div>
+          <div class="meta">Each circle is an entity; the bigger it is, the more central it was. Drag to explore — click one to open it.</div>
+          <div id="map-toggle" class="toggle"></div>
+          <div id="map" class="map"></div>
+          <div id="map-msg" class="meta"></div>
+        </div>
+
+        <div class="card">
+          <div class="label">The arguments <span class="chip">claims, in the corpus's own words</span></div>
+          <div id="claims"></div>
+        </div>
+
+        <div class="card">
+          <div class="label">Open questions <span class="chip">what the corpus raises</span></div>
+          <div id="questions"></div>
+        </div>
+
+        <div id="detail" class="card" hidden></div>
+
+        <div class="card">
+          <div class="label">Ask the corpus <span class="chip">grounded chat</span></div>
+          <div class="meta">Open a conversation scoped to this corpus — answers cite these same sources.</div>
+          <button type="button" id="door" class="door-btn">Ask the corpus →</button>
+        </div>
+      </section>
+
+      <section id="error" hidden class="error"></section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

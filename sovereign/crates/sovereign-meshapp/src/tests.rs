@@ -114,6 +114,24 @@ fn atlas_edges_resolve_sec_to_chunk_and_drop_dangling_participants() {
 }
 
 #[test]
+fn claims_and_questions_read_atoms_and_handle_empty_or_non_atlas() {
+    // The fixture carries entities/relations/events but NO Claim/Question
+    // atoms — load_claims/load_questions must read atoms.json, find none, and
+    // return Ok([]) (no error, no false positives). The positive path (real
+    // claims with resolved attribution + cited evidence) is covered by the
+    // live smoke over the Federalist atlas.
+    let tmp = tempfile::tempdir().unwrap();
+    write_fixture(tmp.path());
+    assert!(load_claims(tmp.path(), 100).unwrap().is_empty());
+    assert!(load_questions(tmp.path(), 100).unwrap().is_empty());
+
+    // A directory with no `atlas/` → empty, not an error (the guard).
+    let bare = tempfile::tempdir().unwrap();
+    assert!(load_claims(bare.path(), 100).unwrap().is_empty());
+    assert!(load_questions(bare.path(), 100).unwrap().is_empty());
+}
+
+#[test]
 fn reconciliation_merges_read_sorted_with_reasons() {
     let tmp = tempfile::tempdir().unwrap();
     write_fixture(tmp.path());

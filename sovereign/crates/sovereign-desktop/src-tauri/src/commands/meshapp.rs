@@ -30,8 +30,8 @@ use corpus_engine::enrichment::atlas::AtomEnvelope;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
 use sovereign_meshapp::{
-    ChunkDto, CorpusStatsDto, FindingDto, GraphNodeDto, NodeDetailDto, ReconciliationMergeDto,
-    SubgraphDto, TimelineDto,
+    ChunkDto, ClaimDto, CorpusStatsDto, FindingDto, GraphNodeDto, NodeDetailDto, QuestionDto,
+    ReconciliationMergeDto, SubgraphDto, TimelineDto,
 };
 
 /// Default SF business-tax take (~$1.4B) the flat land levy must replace.
@@ -398,6 +398,39 @@ pub async fn meshapp_search_entities(
     Ok(sovereign_meshapp::search_entities(&g, &query, node_type.as_deref(), limit.unwrap_or(25).min(100)))
 }
 
+/// `window.meshApp.claims(corpusId, limit?)` — gated on `mesh_store_read`.
+/// Claim atoms (the corpus's arguments) with attribution + cited evidence.
+/// The entity-graph ops don't surface claims; this does.
+#[tauri::command]
+pub async fn meshapp_claims(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    limit: Option<usize>,
+) -> Result<Vec<ClaimDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    sovereign_meshapp::load_claims(&path, limit.unwrap_or(100).min(500))
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
+}
+
+/// `window.meshApp.questions(corpusId, limit?)` — gated on `mesh_store_read`.
+/// Question atoms (open inquiries the corpus raises).
+#[tauri::command]
+pub async fn meshapp_questions(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    limit: Option<usize>,
+) -> Result<Vec<QuestionDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    sovereign_meshapp::load_questions(&path, limit.unwrap_or(100).min(500))
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
+}
+
 /// `window.meshApp.reconciliation(corpusId)` — gated on `mesh_store_read`.
 /// The atlas cross-origin identity merges, richest first.
 #[tauri::command]
@@ -743,6 +776,64 @@ pub async fn meshapp_open(
         .build()
         .map_err(|e| format!("open mesh-app window `{label}`: {e}"))?;
     Ok(())
+}
+
+/// `open_corpus_explorer(corpusId)` — host command (recipe-author + the demo
+/// tutorial) that opens the generic Atlas Explorer mesh app bound to a corpus
+/// chosen at RUNTIME. Ensures the explorer's one-time `mesh_store_read` install
+/// grant exists, then opens the sandboxed window at
+/// `meshapp/explorer/index.html?corpus=<id>` (the bundle reads `?corpus=`). The
+/// corpus must already be built/installed — the explorer only reads its atlas.
+/// One install record unlocks the explorer for every corpus the user authors.
+#[tauri::command]
+pub async fn open_corpus_explorer(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    const EXPLORER_ID: &str = "explorer";
+    // The corpus id is interpolated into the window URL's query string —
+    // slug-guard it (same shape `meshapp_stage_corpus_recipe` enforces).
+    if corpus_id.is_empty()
+        || !corpus_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid corpus id: `{corpus_id}`"));
+    }
+
+    // Ensure the explorer's install record (one-time, read-only). Scoped so the
+    // write guard drops before `meshapp_open` takes its own read guard.
+    {
+        let mut cfg = state.config.write().await;
+        if !cfg.meshapp_installs.iter().any(|i| i.app_id == EXPLORER_ID) {
+            let recorded_at_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            cfg.meshapp_installs.push(crate::meshapp::MeshAppInstall {
+                app_id: EXPLORER_ID.to_string(),
+                name: "Atlas Explorer".to_string(),
+                granted: MeshAppPermissions {
+                    mesh_store_read: true,
+                    mesh_store_write: false,
+                    inference_access: false,
+                    knowledge_access: false,
+                },
+                trust: crate::meshapp::MeshAppTrust::Unsigned,
+                recorded_at_unix,
+            });
+            cfg.save().map_err(|e| format!("save desktop config: {e}"))?;
+        }
+    }
+
+    meshapp_open(
+        app,
+        state,
+        EXPLORER_ID.to_string(),
+        Some(format!("index.html?corpus={corpus_id}")),
+    )
+    .await
 }
 
 /// `$174,097,946,887.00` — full-precision, comma-grouped USD for the

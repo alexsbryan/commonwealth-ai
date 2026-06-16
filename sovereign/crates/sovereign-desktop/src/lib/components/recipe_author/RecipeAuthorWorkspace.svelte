@@ -21,6 +21,13 @@
   import ProjectDashboard from "./ProjectDashboard.svelte";
   import NewProjectDialog from "./NewProjectDialog.svelte";
   import RecipeAuthorWelcome from "./RecipeAuthorWelcome.svelte";
+  import AuthoringTutorial from "./tutorial/AuthoringTutorial.svelte";
+  import TutorialArtifacts from "./tutorial/TutorialArtifacts.svelte";
+  import {
+    FEDERALIST_TUTORIAL,
+    revealThrough,
+  } from "./tutorial/federalistTutorial";
+  import { installStarterCorpus, openCorpusExplorer } from "../../api";
 
   // `onUseInChat` (seed a mined question + leave the workspace for chat)
   // and `onOpenChat` (just leave for chat) are the build-complete handoff
@@ -36,6 +43,50 @@
   } = $props();
 
   let showNewProject = $state(false);
+
+  // Seeded authoring walkthrough — the primary first-run path. When active it
+  // takes over the center + right panes (the left rail stays for orientation);
+  // currentStep lives here so the replay player and the artifacts panel sync.
+  let tutorialActive = $state(false);
+  let tutorialStep = $state(0);
+  const tutorialReveal = $derived(revealThrough(FEDERALIST_TUTORIAL, tutorialStep));
+  const tutorialHighlight = $derived(FEDERALIST_TUTORIAL[tutorialStep]?.highlight);
+
+  function startTutorial() {
+    tutorialStep = 0;
+    tutorialActive = true;
+  }
+  function nextTutorialStep() {
+    if (tutorialStep < FEDERALIST_TUTORIAL.length - 1) tutorialStep += 1;
+  }
+  function backTutorialStep() {
+    if (tutorialStep > 0) tutorialStep -= 1;
+  }
+  function exitTutorial() {
+    tutorialActive = false;
+  }
+  function finishTutorial() {
+    // "Start your own" — drop straight into authoring a real project.
+    tutorialActive = false;
+    showNewProject = true;
+  }
+  async function launchExplorer() {
+    // The demo finale: this isn't a mockup — restore the REAL Federalist
+    // corpus (idempotent snapshot restore) and open the live Atlas Explorer
+    // over it, so the walkthrough ends in a running thing with real data.
+    tutorialActive = false;
+    try {
+      await installStarterCorpus();
+      await openCorpusExplorer("federalist-starter");
+    } catch (e) {
+      console.error("launch federalist explorer:", e);
+    }
+  }
+  /// Open the generic Atlas Explorer over a corpus the user just built — the
+  /// same feature the demo previews, now on their own data.
+  function openExplorerForCorpus(corpusId: string) {
+    void openCorpusExplorer(corpusId);
+  }
 
   onMount(async () => {
     await recipeProjectStore.activate();
@@ -93,7 +144,17 @@
     </aside>
 
     <main class="conversation">
-      {#if selectedFeatureId && dashboard}
+      {#if tutorialActive}
+        <AuthoringTutorial
+          steps={FEDERALIST_TUTORIAL}
+          currentStep={tutorialStep}
+          onNext={nextTutorialStep}
+          onBack={backTutorialStep}
+          onExit={exitTutorial}
+          onFinish={finishTutorial}
+          onLaunchExplorer={launchExplorer}
+        />
+      {:else if selectedFeatureId && dashboard}
         <RecipeChatSurface
           featureId={selectedFeatureId}
           projectTitle={dashboard.title}
@@ -102,14 +163,21 @@
         <RecipeAuthorWelcome
           hasProjects={projects.length > 0}
           onNewProject={() => (showNewProject = true)}
-          {onOpenChat}
+          onStartTutorial={startTutorial}
         />
       {/if}
     </main>
 
     <aside class="dashboard">
-      {#if dashboard}
-        <ProjectDashboard {dashboard} {onUseInChat} {onOpenChat} />
+      {#if tutorialActive}
+        <TutorialArtifacts reveal={tutorialReveal} highlight={tutorialHighlight} />
+      {:else if dashboard}
+        <ProjectDashboard
+          {dashboard}
+          {onUseInChat}
+          {onOpenChat}
+          onOpenExplorer={openExplorerForCorpus}
+        />
       {:else if selectedFeatureId}
         <div class="loading-card">Loading dashboard…</div>
       {:else}

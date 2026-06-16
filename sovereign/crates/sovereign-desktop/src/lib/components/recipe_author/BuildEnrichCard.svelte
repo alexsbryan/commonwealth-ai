@@ -38,11 +38,14 @@
     enrichmentReady,
     onUseInChat,
     onOpenChat,
+    onOpenExplorer,
   }: {
     recipeId: string | null;
     enrichmentReady: boolean;
     onUseInChat?: (question: StarterQuestion) => void;
     onOpenChat?: () => void;
+    // Open the generic Atlas Explorer mesh app over this built corpus.
+    onOpenExplorer?: (corpusId: string) => void;
   } = $props();
 
   type Stage = "idle" | "building" | "enriching" | "done" | "failed";
@@ -190,7 +193,7 @@
            question mined from its atlas grounds in it the moment chat
            retrieves. Chips seed + navigate; "Open in chat" just
            navigates (always available, even with no mined questions). -->
-      {#if onUseInChat || onOpenChat}
+      {#if onUseInChat || onOpenChat || onOpenExplorer}
         <div class="use-corpus" data-testid="use-corpus">
           {#if starters.length > 0 && onUseInChat}
             <StarterChips
@@ -200,16 +203,28 @@
               onPick={(q) => onUseInChat?.(q)}
             />
           {/if}
-          {#if onOpenChat}
-            <button
-              type="button"
-              class="open-chat"
-              onclick={() => onOpenChat?.()}
-              data-testid="open-in-chat"
-            >
-              Open in chat →
-            </button>
-          {/if}
+          <div class="use-actions">
+            {#if onOpenExplorer && recipeId}
+              <button
+                type="button"
+                class="open-explorer"
+                onclick={() => onOpenExplorer?.(recipeId)}
+                data-testid="open-explorer"
+              >
+                Open explorer →
+              </button>
+            {/if}
+            {#if onOpenChat}
+              <button
+                type="button"
+                class="open-chat"
+                onclick={() => onOpenChat?.()}
+                data-testid="open-in-chat"
+              >
+                Open in chat →
+              </button>
+            {/if}
+          </div>
         </div>
       {/if}
     {:else if stage === "failed"}
@@ -277,6 +292,24 @@
   }
   .open-chat:hover {
     background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .use-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .open-explorer {
+    background: var(--lavender-dim, color-mix(in srgb, var(--lavender) 14%, transparent));
+    border: 1px solid color-mix(in srgb, var(--lavender) 50%, transparent);
+    color: var(--lavender-light, #c4b8e8);
+    font-size: 0.8rem;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+  }
+  .open-explorer:hover {
+    background: color-mix(in srgb, var(--lavender) 26%, transparent);
   }
   .pill {
     text-transform: uppercase;

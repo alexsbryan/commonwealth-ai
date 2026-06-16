@@ -14,6 +14,6 @@ export { forceGraph } from "./graph.js";
 export { citationExpander, citedEdge, entityDetail } from "./detail.js";
 export {
   scaleBanner, typeToggle, searchBox, threadList, barList,
-  timelineChart, monthLabel, reconciliationList,
+  timelineChart, monthLabel, reconciliationList, claimList, questionList,
 } from "./views.js";
 export { storyShow, heatGrid } from "./story.js";

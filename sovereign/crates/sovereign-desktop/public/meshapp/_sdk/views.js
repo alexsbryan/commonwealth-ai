@@ -183,4 +183,49 @@ export function reconciliationList(container, merges, opts = {}) {
   }
 }
 
+/**
+ * Claim ("argument") cards. `claims`: `ClaimDto` rows
+ * `{content, discourse_act, epistemic_status, quotable_excerpt, attributed_to,
+ * excerpt}`. Renders the proposition, a meta line (act · status · attribution),
+ * and the corpus's own words as a blockquote when present.
+ */
+export function claimList(container, claims, opts = {}) {
+  clear(container);
+  if (!claims || !claims.length) {
+    container.appendChild(el("div", { class: "meta", text: opts.empty || "no claims extracted." }));
+    return;
+  }
+  for (const c of claims) {
+    const meta = [c.discourse_act, c.epistemic_status, c.attributed_to ? "— " + c.attributed_to : ""]
+      .filter(Boolean).join("  ·  ");
+    const card = el("div", { class: "claim" },
+      el("div", { class: "claim-content", text: c.content }),
+      el("div", { class: "meta", text: meta }));
+    const quote = c.quotable_excerpt || c.excerpt;
+    if (quote) card.appendChild(el("blockquote", { class: "claim-quote", text: "“" + quote + "”" }));
+    container.appendChild(card);
+  }
+}
+
+/**
+ * Question cards. `questions`: `QuestionDto` rows
+ * `{content, question_type, resolution_status, addressed_by}`.
+ */
+export function questionList(container, questions, opts = {}) {
+  clear(container);
+  if (!questions || !questions.length) {
+    container.appendChild(el("div", { class: "meta", text: opts.empty || "no questions raised." }));
+    return;
+  }
+  for (const q of questions) {
+    const n = q.addressed_by || 0;
+    const meta = [q.question_type, q.resolution_status,
+      n ? n + " claim" + (n === 1 ? "" : "s") + " address this" : ""]
+      .filter(Boolean).join("  ·  ");
+    container.appendChild(el("div", { class: "question" },
+      el("div", { class: "q-content", text: q.content }),
+      el("div", { class: "meta", text: meta })));
+  }
+}
+
 export { fmtInt };

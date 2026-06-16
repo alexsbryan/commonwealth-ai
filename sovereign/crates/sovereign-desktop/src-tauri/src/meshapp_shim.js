@@ -26,6 +26,8 @@
     findings: (corpusId, pattern) => invoke("meshapp_findings", { corpusId, pattern }),
     searchEntities: (corpusId, query, nodeType, limit) =>
       invoke("meshapp_search_entities", { corpusId, query, nodeType, limit }),
+    claims: (corpusId, limit) => invoke("meshapp_claims", { corpusId, limit }),
+    questions: (corpusId, limit) => invoke("meshapp_questions", { corpusId, limit }),
     reconciliation: (corpusId) => invoke("meshapp_reconciliation", { corpusId }),
     subgraph: (corpusId, nodeType, limit) =>
       invoke("meshapp_subgraph", { corpusId, nodeType, limit }),

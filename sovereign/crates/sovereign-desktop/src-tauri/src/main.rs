@@ -578,6 +578,8 @@ fn main() -> ExitCode {
             commands::meshapp_node,
             commands::meshapp_findings,
             commands::meshapp_search_entities,
+            commands::meshapp_claims,
+            commands::meshapp_questions,
             commands::meshapp_reconciliation,
             commands::meshapp_subgraph,
             commands::meshapp_corpus_stats,
@@ -591,6 +593,7 @@ fn main() -> ExitCode {
             commands::meshapp_stage_corpus_recipe,
             commands::meshapp_installed_apps,
             commands::meshapp_open,
+            commands::open_corpus_explorer,
         ])
         .build(tauri::generate_context!())
         .expect("error building Sovereign")
