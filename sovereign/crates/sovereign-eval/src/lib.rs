@@ -11,6 +11,12 @@
 //! Operator-driven — no daemon source changes.
 
 pub mod audit_trail;
+// The authoring-harness verdict policy was extracted into its own light crate
+// (`sovereign-authoring-harness`, deps: corpus-engine + serde only) so the
+// desktop can consume it without dragging sovereign-eval's heavy deps
+// (rusqlite-bundled, reqwest, clap) into the Tauri build. Re-exported here so
+// `sovereign_eval::authoring_harness::*` keeps resolving for existing callers.
+pub use sovereign_authoring_harness as authoring_harness;
 pub mod chaos_monkey;
 pub mod cognitive;
 pub mod diff;

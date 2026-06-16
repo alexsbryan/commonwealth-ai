@@ -279,7 +279,71 @@ type = "paragraph"
 max_chars = 2048
 overlap_chars = 256
 
-# Investigation enrichment is optional.
+# ── Enrichment: build the partner's domain ONTOLOGY (this is the point) ──
+# Enrichment gives the corpus a KNOWLEDGE GRAPH (atoms) that feeds chat and that
+# the partner verifies ("Verify enrichment"). Three ways to produce it, in
+# priority order:
+#
+#  • type = "atlas" + [enrichment.ontology]  — THE HEADLINE. Author a CUSTOM
+#    ontology for the partner's specific domain. Interview them: what kinds of
+#    things matter (entities), how do they relate, what claims/arguments and
+#    events does the corpus carry — IN THEIR OWN LANGUAGE. Capture that as prose
+#    `guidance`; a generic atlas pipeline extracts to it and writes the same
+#    atoms.json that feeds chat. No fixed schema, no Rust. Use this whenever the
+#    corpus is about a real domain (numismatics, a legal practice area, a
+#    research field, a company's internal docs):
+#         [enrichment]
+#         enabled = true
+#         type = "atlas"
+#         domain = "medieval-numismatics"   # short label
+#         [enrichment.ontology]
+#         guidance = (one prose paragraph, in the domain's own words, e.g.:)
+#           Extract coins (note mint, ruler, denomination, metal), mints,
+#           rulers, hoards, scholars. Relations: minted_by, found_in_hoard,
+#           succeeds_ruler. Claims: attributions, datings, metrological
+#           arguments. Events: hoard finds, reforms. Prefer the document's own
+#           canonical names (e.g. Offa of Mercia), not generic ones.
+#    Entity/relation TYPES are open — use the domain's own words ("coin",
+#    "hoard"); the engine accepts them. Write guidance a colleague could follow.
+#
+#  • type = "atlas" + domain only (NO ontology)  — QUICK fallback for generic
+#    corpora when the partner doesn't want to author an ontology. `domain =
+#    "literary"` (narrative/general) or `"philosophy"` (arguments/claims) picks a
+#    prebuilt genre pipeline; atoms are less domain-tuned. Prefer the custom
+#    ontology above for anything domain-specific.
+#
+#  • type = "investigation" — ADVANCED. A TYPED entity/relationship schema +
+#    pattern detectors (cycles, role-overlap, thresholds) for structured /
+#    analytical queries (the example below). Produces a separate reconciliation
+#    graph (entities.json/relationships.json), NOT the chat atoms.json — choose
+#    it only when the partner needs typed records + pattern detection by name.
+#
+# Default: author a custom [enrichment.ontology] for the partner's domain. The
+# desktop "Build & enrich" button runs install → atlas → atoms; "Verify
+# enrichment" confirms them. Minimal generic fallback:
+#     [enrichment]
+#     enabled = true
+#     type = "atlas"
+#     domain = "literary"
+#
+# ── Eliciting the ontology (interview the partner) ──
+# The ontology is the PARTNER's domain knowledge — you can't write good
+# `guidance` from the charter alone. When a corpus would benefit from a
+# knowledge graph (almost always, for chat), INTERVIEW before drafting
+# enrichment. Ask 2–3 sharp questions, in their language — e.g.:
+#   • "What kinds of things does this material talk about that you'd want to
+#      look up or connect?"            (→ entities, with the domain's own types)
+#   • "How do those relate — what links between them matter?"   (→ relations)
+#   • "What claims, arguments, or decisions does it make that you'd want to
+#      find and weigh against each other?"               (→ claims / events)
+# Asking these IS the work, not stalling — but keep it focused (not a survey),
+# and don't re-ask what the charter already answers. Then capture their answers
+# as `[enrichment.ontology].guidance` (prose, their words) via
+# recipe_write_structured, with `type="atlas"` + a short `domain` label. If the
+# partner can't or won't specify a domain shape, fall back to the genre default
+# (`domain="literary"`/`"philosophy"`, no ontology) and tell them you did.
+#
+# ── Investigation example (advanced typed schema) ──
 [enrichment]
 enabled = true
 type = "investigation"
@@ -343,9 +407,20 @@ comparison = "greater_than"
   an entity_type. A threshold matches relationship edges and their numeric
   attributes; pointing it at an entity type means it finds nothing.
   `recipe_validate` errors on an edge_type that isn't a declared relationship.
-- `enrichment.domain` is an OPTIONAL free-form tuning hint. For
-  `type = "investigation"` you can omit it. Do NOT invent a domain string —
-  an unrecognised domain can fail `corpus install`.
+- `enrichment.domain` meaning depends on `type`:
+    - `type = "atlas"` WITH `[enrichment.ontology]` → `domain` is just a short
+      label for the custom pipeline (e.g. `"medieval-numismatics"`). The
+      ontology guidance — not the domain — drives extraction. Preferred path.
+    - `type = "atlas"` WITHOUT an ontology → `domain` picks a prebuilt genre
+      pipeline: `"philosophy"` (arguments/claims) or `"literary"` (everything
+      else, default). Install does NOT validate it (atlas defers to build).
+    - `type = "investigation"` → you can omit it (the typed schema drives
+      extraction, not the domain).
+    - `type = "field_model"` → it MUST be one of the registered domains
+      (`philosophy`, `science`, `policy`, `legal`, `community`, `engineering`,
+      `personal`, `conversational`, `business_email`, `institutional`, `multi`).
+      Do NOT invent one — an unrecognised field-model domain fails
+      `corpus install` with `UnknownEnrichmentDomain`.
 - `[[extract.extractors]]` and similar invented sub-tables are
   not part of the schema.
 - `page_size` for offset pagination lives INSIDE

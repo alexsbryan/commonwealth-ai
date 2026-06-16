@@ -378,10 +378,45 @@ fn enrichment_schema() -> Value {
             "enabled": { "type": "boolean" },
             "type": { "enum": ["field_model", "atlas", "investigation", "multi"] },
             "domain": { "type": "string" },
+            // Explicit atlas pipeline pin (genre `*_atlas`); usually omitted —
+            // a custom `ontology` (below) or `domain` selects the pipeline.
+            "pipeline": { "type": "string" },
+            // CUSTOM ATLAS ONTOLOGY — the headline "build the ontology for this
+            // domain" surface. Declared here so the grammar GUIDES the agent to
+            // emit it (not just permits it): `guidance` is prose describing what
+            // entities/relations/claims/events matter, in the domain's language;
+            // a generic atlas pipeline extracts to it → atoms.json that feeds chat.
+            "ontology": ontology_schema(),
             "prompt_version": { "type": "string" },
             "entity_types": { "type": "array", "items": entity_type_schema() },
             "relationship_types": { "type": "array", "items": relationship_type_schema() },
             "patterns": { "type": "array", "items": pattern_schema() }
+        }
+    })
+}
+
+/// Custom atlas ontology (`[enrichment.ontology]`). `guidance` is the
+/// load-bearing field — prose, in the domain's own language, naming what
+/// entities / relations / claims / events the extractor should lift. Optional
+/// `vocabulary` renames the CLI/label terms per domain.
+fn ontology_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["guidance"],
+        "additionalProperties": true,
+        "properties": {
+            "guidance": { "type": "string" },
+            "vocabulary": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "concern_term":  { "type": "string" },
+                    "position_term": { "type": "string" },
+                    "tension_term":  { "type": "string" },
+                    "absence_term":  { "type": "string" },
+                    "evidence_term": { "type": "string" }
+                }
+            }
         }
     })
 }

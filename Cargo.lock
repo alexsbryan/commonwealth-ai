@@ -11783,6 +11783,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-authoring-harness"
+version = "0.1.16"
+dependencies = [
+ "corpus-engine",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "sovereign-cli"
 version = "0.1.16"
 dependencies = [
@@ -12014,6 +12024,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-authoring-harness",
  "sovereign-core",
  "sovereign-inference",
  "sovereign-mesh",
@@ -12053,6 +12064,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-authoring-harness",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

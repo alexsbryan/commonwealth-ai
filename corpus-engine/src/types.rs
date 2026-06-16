@@ -15,6 +15,15 @@ use crate::error::Result;
 /// Sovereign passes its local Embed slot.
 /// Commonwealth passes an HTTP client to /v1/embeddings.
 /// Tests pass a mock returning zero vectors.
+/// Canonical default embedding dimensionality (Qwen3-Embedding-0.6B → 1024).
+/// The ONE place this number lives: stub / zero-vector `EmbedFn`s and any
+/// "what dim should I assume?" fallback must reference this, never a bare
+/// literal. The recurring `768` leak was a wrong guess that kept getting
+/// copy-pasted into new stubs; routing every stub through this constant stops
+/// it drifting back. Real ingests still read the model's actual `n_embd` — this
+/// is only the fallback for model-free / stub paths.
+pub const DEFAULT_EMBED_DIM: usize = 1024;
+
 pub type EmbedFn =
     Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync>;
 

@@ -739,7 +739,7 @@ fn load_pipeline_capabilities(corpus_id: &str) -> Result<PipelineCapabilities, (
         )
     })?;
     let registry = PipelineRegistry::builtin();
-    let pipeline = registry.get(&cfg.pipeline_id).ok_or_else(|| {
+    let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg).ok_or_else(|| {
         (
             1,
             format!(

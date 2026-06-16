@@ -146,11 +146,121 @@ pub async fn recipe_test(
     })
 }
 
+/// The deterministic verdict ladder, flattened for the UI. Mirrors the CLI's
+/// rendered ladder (Acquire→Extract→Filter→Chunk→Index) but as structured data
+/// the frontend renders as green/red/amber cards with expandable evidence.
+#[derive(Serialize)]
+pub struct HarnessRunCard {
+    /// Roll-up: all stages pass → green; any fail → red. Warns never gate.
+    pub green: bool,
+    /// The full per-stage verdict ladder (serializable `HarnessRun`).
+    pub run: sovereign_authoring_harness::HarnessRun,
+    pub ran_at_unix: u64,
+    /// Frozen-sample provenance — surfaced as a "❄ Frozen: N docs" chip.
+    pub frozen_docs: usize,
+    pub frozen_captured_at: i64,
+    /// True when THIS call performed the one networked capture step — lets the
+    /// UI say "froze N docs" the first time and "offline" thereafter.
+    pub frozen_captured_now: bool,
+}
+
+/// Run the deterministic authoring harness over a frozen sample and return the
+/// per-stage verdict ladder. Rungs 1–5 (Acquire→Extract→Filter→Chunk→Index) are
+/// model-free + offline after the first run (the sample is captured once under
+/// `~/.sovereign/harness/<recipe-id>/`, then byte-identical, I1).
+///
+/// `enrich` adds rung 6 — but it does NOT stand up a parallel enrichment path.
+/// It REUSES the atoms the desktop's existing ingest/enrich flow already wrote
+/// for this corpus (via the shared `state.corpus_engine` — the daemon-backed
+/// OICP `InferenceProvider` seam) and only VERIFIES their integrity with
+/// `verify_atoms_at`. Returns no rung-6 verdict when the corpus isn't enriched
+/// yet — install/enrich it through the normal flow first.
+#[tauri::command]
+pub async fn recipe_run_harness(
+    state: State<'_, Arc<AppState>>,
+    recipe_path: String,
+    sample_size: usize,
+    enrich: bool,
+) -> Result<HarnessRunCard, String> {
+    use corpus_engine::harness::{capture, verify_atoms_at, FrozenSample, HarnessRunner};
+    use sovereign_authoring_harness::{run_deterministic, Declaration};
+
+    let path = PathBuf::from(&recipe_path);
+    let recipe =
+        corpus_engine::Recipe::from_file(&path).map_err(|e| format!("load recipe: {e}"))?;
+    let engine = recipe_stub_engine();
+
+    // Frozen sample under ~/.sovereign/harness/<recipe-id>/ — capture once
+    // (network), iterate offline thereafter. Same store the CLI uses.
+    let harness_root = dirs::home_dir()
+        .ok_or_else(|| "no home directory".to_string())?
+        .join(".sovereign")
+        .join("harness")
+        .join(&recipe.corpus.id);
+
+    let mut frozen_captured_now = false;
+    if !harness_root.join("capture.json").exists() {
+        capture(&engine, &recipe, &harness_root, sample_size)
+            .await
+            .map_err(|e| format!("frozen-sample capture failed: {e}"))?;
+        frozen_captured_now = true;
+    }
+    let frozen = FrozenSample::load(&harness_root)
+        .map_err(|e| format!("load frozen sample: {e}"))?
+        .ok_or_else(|| "no frozen sample found after capture".to_string())?;
+
+    let work_dir = std::env::temp_dir().join(format!("harness-run-{}", recipe.corpus.id));
+    let outputs = HarnessRunner::new(&engine, &recipe, &frozen)
+        .run(&work_dir, sample_size)
+        .await
+        .map_err(|e| format!("harness run failed: {e}"))?;
+
+    // Rung 6 (opt-in): verify the atoms the desktop's existing ingest/enrich
+    // flow already produced for this corpus — REUSE the shared daemon-backed
+    // `state.corpus_engine`, not a parallel enrichment pipeline. `None` (no
+    // rung-6 verdict) when the corpus isn't enriched yet.
+    let enrich_out = if enrich {
+        let daemon_engine = state
+            .corpus_engine
+            .read()
+            .await
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or_else(|| "corpus engine not ready (is the daemon connected?)".to_string())?;
+        verify_atoms_at(&daemon_engine.index_dir().join(&recipe.corpus.id))
+            .await
+            .map_err(|e| format!("enrich verify failed: {e}"))?
+    } else {
+        None
+    };
+
+    let run = run_deterministic(
+        &frozen.manifest,
+        &recipe,
+        &outputs,
+        enrich_out.as_ref(),
+        &Declaration::default(),
+    );
+
+    Ok(HarnessRunCard {
+        green: run.green(),
+        frozen_docs: frozen.manifest.docs.len(),
+        frozen_captured_at: frozen.manifest.captured_at,
+        frozen_captured_now,
+        ran_at_unix: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        run,
+    })
+}
+
 /// Build a `CorpusEngine` with a stub embed function for recipe testing.
 /// The stub is never called because the embed phase is always disabled.
 fn recipe_stub_engine() -> corpus_engine::CorpusEngine {
-    let stub: corpus_engine::EmbedFn =
-        std::sync::Arc::new(|_| Box::pin(async { Ok(vec![0f32; 768]) }));
+    let stub: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
+        Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) })
+    });
     let tmp = std::env::temp_dir().join("sovereign-recipe-test");
     corpus_engine::CorpusEngine::new(tmp.clone(), tmp, stub)
 }

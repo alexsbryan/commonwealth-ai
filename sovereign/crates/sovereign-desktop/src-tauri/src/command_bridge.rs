@@ -320,15 +320,14 @@ async fn invoke(
         );
     };
     let webview = window.as_ref().clone();
-    let url = match webview.url() {
-        Ok(u) => u,
-        Err(e) => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "ok": false, "error": format!("webview url: {e}") })),
-            );
-        }
-    };
+    // Do NOT call `webview.url()`. On a webview that never finished loading a
+    // page (headless run — no foreground GUI loop rendering the frontend),
+    // wry's `url_from_webview` reads a nil WKWebView URL and PANICS on the main
+    // event-loop thread (wkwebview/mod.rs → ggml_abort, SIGABRT). `on_message`
+    // dispatches the command Rust-side (invoke-key/ACL/State injection — see
+    // module docs) and only needs an origin for ACL, so use the static app
+    // origin and never touch the live webview's URL.
+    let url = "tauri://localhost".parse().expect("static origin url");
 
     let request = InvokeRequest {
         cmd: payload.cmd.clone(),

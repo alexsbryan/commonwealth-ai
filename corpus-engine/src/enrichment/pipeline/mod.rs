@@ -56,6 +56,7 @@ pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
+pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{

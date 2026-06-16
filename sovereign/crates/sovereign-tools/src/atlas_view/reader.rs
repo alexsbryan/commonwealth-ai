@@ -562,7 +562,7 @@ mod tests {
                 "corpus_id": "conversations-anthropic",
                 "corpus_name": "Claude conversations",
                 "embedding_model": "qwen-embedding-0.6b",
-                "embedding_dimensions": 768,
+                "embedding_dimensions": 1024,
                 "mesh_sharing": false,
                 "license": "private",
                 "created_at": 0,

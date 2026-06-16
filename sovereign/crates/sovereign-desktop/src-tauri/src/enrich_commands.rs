@@ -515,7 +515,8 @@ fn staging_jsonl_path_for(corpus_id: &str) -> PathBuf {
 /// questions-only flow), but the onboarding + Settings surfaces only
 /// drive atlas-producing pipelines — matches the validation
 /// `build.rs` already does at phase time (`pipeline_id.ends_with("_atlas")`).
-const ALLOWED_ATLAS_PIPELINES: &[&str] = &["literary_atlas", "philosophy_atlas"];
+const ALLOWED_ATLAS_PIPELINES: &[&str] =
+    &["literary_atlas", "philosophy_atlas", "custom_atlas"];
 
 /// Summary of the sampled documents, so the UI can say "ready to ask
 /// about X, Y, Z" after the sample atlas build finishes. Populated by
@@ -684,6 +685,107 @@ fn existing_source_matches_sample(source_path: &Path, sample_size: Option<usize>
         Some(n) => header_count == n,
         None => header_count > 0,
     }
+}
+
+/// Map a recipe's enrichment `domain` to one of the desktop's wired atlas
+/// pipelines. Only `literary_atlas` / `philosophy_atlas` are allowed here
+/// ([`ALLOWED_ATLAS_PIPELINES`]); anything else (or unset) falls back to
+/// `literary_atlas`, the most general narrative entity/event extractor — the
+/// "agent picks the closest domain" strategy, with a safe catch-all.
+fn atlas_pipeline_for_domain(domain: Option<&str>) -> &'static str {
+    match domain.map(|d| d.to_ascii_lowercase()) {
+        Some(d) if d.contains("philosoph") => "philosophy_atlas",
+        _ => "literary_atlas",
+    }
+}
+
+/// Bridge the recipe→install path into the atlas-enrichment path. After a
+/// recipe's corpus is INSTALLED (`install_corpus` → daemon ingest → index),
+/// `enrich build` still needs an atlas config that ingest never writes — for a
+/// `type="atlas"` text recipe, ingest runs the field-model enricher (skeleton,
+/// no atoms). This scaffolds that config straight from the installed index via
+/// `enrich init --from-corpus` (no source-file synthesis: the chapter manifest
+/// is built from the corpus rows), choosing the pipeline from the recipe's
+/// `[enrichment] domain`. Run it AFTER install and BEFORE `enrich_build_async`.
+/// `--force` makes it idempotent (re-scaffolds cleanly on repeat). Returns the
+/// pipeline id chosen, so the UI can show what it's building.
+#[tauri::command]
+pub async fn recipe_enrich_init_from_corpus(corpus_id: String) -> Result<String, String> {
+    use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
+
+    // Choose the atlas pipeline from the recipe's enrichment domain.
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let recipe_path = data_dir
+        .join("recipes")
+        .join(&corpus_id)
+        .join("recipe.toml");
+    let recipe = corpus_engine::Recipe::from_file(&recipe_path).ok();
+    // Precedence (matches the engine): a recipe-declared custom ONTOLOGY wins →
+    // the configurable `custom_atlas` pipeline (domain ontology authored in the
+    // recipe). Otherwise an explicit, desktop-allowed `pipeline` pin; otherwise
+    // infer a prebuilt genre pipeline from `domain`.
+    let pipeline: String = if recipe.as_ref().is_some_and(|r| r.custom_ontology().is_some()) {
+        corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID.to_string()
+    } else {
+        let enrichment = recipe.and_then(|r| r.enrichment);
+        let domain = enrichment.as_ref().and_then(|e| e.domain.clone());
+        enrichment
+            .as_ref()
+            .and_then(|e| e.pipeline.clone())
+            .filter(|p| ALLOWED_ATLAS_PIPELINES.contains(&p.as_str()))
+            .unwrap_or_else(|| atlas_pipeline_for_domain(domain.as_deref()).to_string())
+    };
+
+    let bin = resolve_sovereign_cli().ok_or_else(|| {
+        "sovereign-cli not found on PATH or alongside the desktop binary. \
+         Build via `cargo build --release -p sovereign-cli` and put it on \
+         $PATH, or set SOVEREIGN_CLI=/abs/path/to/sovereign-cli."
+            .to_string()
+    })?;
+
+    // Streaming the index + building the manifest is inference-free but can
+    // take a bit on a large corpus; give it room.
+    const INIT_TIMEOUT: Duration = Duration::from_secs(180);
+    let fut = async {
+        Command::new(&bin)
+            .arg("enrich")
+            .arg("init")
+            .arg(&corpus_id)
+            .arg("--from-corpus")
+            .arg(&corpus_id)
+            .arg("--pipeline")
+            .arg(&pipeline)
+            .arg("--force")
+            .output()
+            .await
+            .map_err(|e| format!("spawning sovereign-cli: {e}"))
+    };
+    let output = timeout(INIT_TIMEOUT, fut).await.map_err(|_| {
+        format!(
+            "sovereign-cli enrich init timed out after {}s",
+            INIT_TIMEOUT.as_secs()
+        )
+    })??;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "sovereign-cli enrich init exited with code {}: {stderr}",
+            output.status.code().unwrap_or(-1)
+        ));
+    }
+    tracing::info!(
+        corpus_id = %corpus_id,
+        pipeline = %pipeline,
+        "recipe_enrich_init_from_corpus scaffolded atlas config from installed index"
+    );
+    Ok(pipeline.to_string())
 }
 
 /// Post-hoc read of the sampled-document titles for the "no-op when
@@ -1361,6 +1463,27 @@ mod tests {
     fn starter_question_ranker_limit_zero_returns_empty() {
         let picks = rank_starter_questions(&[], 0);
         assert!(picks.is_empty());
+    }
+
+    #[test]
+    fn atlas_pipeline_for_domain_maps_philosophy_and_defaults_literary() {
+        // philosophy-ish domains → the claim/argument pipeline.
+        assert_eq!(atlas_pipeline_for_domain(Some("philosophy")), "philosophy_atlas");
+        assert_eq!(atlas_pipeline_for_domain(Some("Philosophy")), "philosophy_atlas");
+        assert_eq!(
+            atlas_pipeline_for_domain(Some("moral philosophy")),
+            "philosophy_atlas"
+        );
+        // everything else (incl. field-model domain names and unset) → the
+        // general narrative pipeline, the safe catch-all.
+        assert_eq!(atlas_pipeline_for_domain(Some("literary")), "literary_atlas");
+        assert_eq!(atlas_pipeline_for_domain(Some("science")), "literary_atlas");
+        assert_eq!(atlas_pipeline_for_domain(Some("engineering")), "literary_atlas");
+        assert_eq!(atlas_pipeline_for_domain(None), "literary_atlas");
+        // Whatever it returns is always a desktop-allowed atlas pipeline.
+        for d in [Some("philosophy"), Some("literary"), Some("anything"), None] {
+            assert!(ALLOWED_ATLAS_PIPELINES.contains(&atlas_pipeline_for_domain(d)));
+        }
     }
 
     #[test]

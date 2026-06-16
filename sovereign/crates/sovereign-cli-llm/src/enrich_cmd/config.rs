@@ -105,6 +105,14 @@ pub struct EnrichConfig {
     /// DeepSeek-reasoner) — others ignore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_overrides: Option<BTreeMap<String, PhaseOverride>>,
+    /// Custom atlas ontology — set when this corpus was init'd from a recipe
+    /// with an `[enrichment.ontology]` block. When present, `pipeline_id` is
+    /// `"custom_atlas"` and `resolve_pipeline` builds a recipe-customized atlas
+    /// pipeline from this spec (domain guidance → neutral Phase-1 prompt)
+    /// instead of looking `pipeline_id` up in the builtin registry. `None` ⇒ a
+    /// prebuilt registry pipeline (the genre `*_atlas` pipelines).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec>,
     pub created_at: String,
 }
 
@@ -243,6 +251,7 @@ mod tests {
             max_output_tokens: default_max_output_tokens(),
             phase1b_max_output_tokens: None,
             phase_overrides: None,
+            ontology: None,
             created_at: "2026-04-22T00:00:00Z".into(),
         }
     }

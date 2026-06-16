@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // don't use inference in this smoke test (CodeSearchTool falls back
     // to FTS-only when no inference provider is wired).
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
     });
     let engine = Arc::new(CorpusEngine::new(
         data_dir.clone().join("_recipes"),

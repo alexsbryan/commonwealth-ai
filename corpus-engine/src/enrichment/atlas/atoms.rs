@@ -1033,6 +1033,27 @@ impl AtomEnvelope {
             AtomEnvelope::Asset(a) => a.enrichment_depth,
         }
     }
+
+    /// Every evidence chunk this atom cites. The single canonical accessor over
+    /// the per-variant evidence fields (`first_appearance` / `evidence` /
+    /// `raised_at`) — callers (the authoring-harness link-integrity check, drift
+    /// tooling) must use this rather than re-matching the variants, so a new
+    /// atom kind can't silently escape evidence checks.
+    pub fn evidence(&self) -> Vec<&ChunkRef> {
+        match self {
+            AtomEnvelope::Entity(a) => vec![&a.first_appearance],
+            AtomEnvelope::Position(a) => vec![&a.first_appearance],
+            AtomEnvelope::Opposition(a) => vec![&a.first_appearance],
+            AtomEnvelope::Event(a) => a.evidence.iter().collect(),
+            AtomEnvelope::State(a) => a.evidence.iter().collect(),
+            AtomEnvelope::Relation(a) => a.evidence.iter().collect(),
+            AtomEnvelope::Claim(a) => a.evidence.iter().collect(),
+            AtomEnvelope::Configuration(a) => a.evidence.iter().collect(),
+            AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
+            AtomEnvelope::Question(a) => a.raised_at.iter().collect(),
+            AtomEnvelope::Asset(_) => Vec::new(),
+        }
+    }
 }
 
 /// Top-level atom file written to `atlas/atoms.json`.

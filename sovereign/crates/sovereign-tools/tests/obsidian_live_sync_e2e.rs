@@ -39,7 +39,7 @@ use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use tempfile::TempDir;
 
-const EMBED_DIMS: usize = 768;
+const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
 
 fn stub_embed() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIMS]) }))

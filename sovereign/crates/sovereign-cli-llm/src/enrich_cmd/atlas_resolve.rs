@@ -23,7 +23,7 @@ use corpus_engine::enrichment::atlas::{
     resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{
-    ExtractedQuestion, Phase1Output, PhaseCache, PipelinePhase, PipelineRegistry, SectionExtraction,
+    ExtractedQuestion, Phase1Output, PhaseCache, PipelinePhase, SectionExtraction,
 };
 use corpus_engine::types::EmbedFn;
 
@@ -102,8 +102,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // doesn't carry section_extraction payloads, so Phase 3a
     // resolution would produce an empty atlas — tell the operator
     // rather than silently writing empty files.
-    let registry = PipelineRegistry::builtin();
-    if registry.get(&cfg.pipeline_id).is_none() {
+    if super::pipeline_resolve::resolve_pipeline(&cfg).is_none() {
         eprintln!(
             "error: unknown pipeline `{}` in enrichment config",
             cfg.pipeline_id

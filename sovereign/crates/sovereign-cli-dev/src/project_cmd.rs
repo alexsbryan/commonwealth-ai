@@ -768,7 +768,7 @@ vector = false
     }
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
     });
     let recipes_dir = tempdir.clone();
     let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
@@ -2648,7 +2648,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // ── Build CorpusEngine (zero-vector, no model) ──────────────
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
     });
     let recipes_dir = data_dir.clone();
     let engine = Arc::new(

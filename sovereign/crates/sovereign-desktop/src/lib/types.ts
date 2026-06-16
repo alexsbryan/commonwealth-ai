@@ -832,6 +832,60 @@ export interface RecipeTestResult {
   report_markdown: string;
 }
 
+// ─── Authoring harness (deterministic verdict ladder) ────────
+// Mirrors `sovereign_authoring_harness::HarnessRun` + the desktop
+// `HarnessRunCard` Tauri return. The harness runs the REAL pipeline
+// stages over a frozen sample and emits a Pass/Fail/Warn verdict per
+// stage with the failing items shown, not summarized.
+
+export type HarnessStatus = "pass" | "fail" | "warn";
+
+export interface HarnessLocus {
+  kind: "doc" | "chunk" | "atom";
+  id: string;
+}
+
+export interface HarnessEvidenceItem {
+  locus: HarnessLocus;
+  excerpt: string;
+}
+
+export interface HarnessVerdict {
+  check: string;
+  status: HarnessStatus;
+  /** What the declaration promised — threshold always on screen. */
+  expected: string;
+  /** What actually happened. */
+  observed: string;
+  /** Concrete failing/sample items — never just a count. */
+  evidence: HarnessEvidenceItem[];
+}
+
+export interface HarnessStageResult {
+  stage: string;
+  config_hash: string;
+  cache_hit: boolean;
+  verdicts: HarnessVerdict[];
+}
+
+export interface HarnessRun {
+  sample_id: string;
+  recipe_hash: string;
+  stages: HarnessStageResult[];
+}
+
+export interface HarnessRunCard {
+  /** Roll-up: all stages pass → green; any fail → red. Warns never gate. */
+  green: boolean;
+  run: HarnessRun;
+  ran_at_unix: number;
+  /** Frozen-sample provenance — "❄ Frozen: N docs". */
+  frozen_docs: number;
+  frozen_captured_at: number;
+  /** True when this call performed the one networked capture step. */
+  frozen_captured_now: boolean;
+}
+
 // ─── UI State ────────────────────────────────────────────────
 
 export interface TaskStep {
@@ -1824,6 +1878,10 @@ export interface RecipeValidationReport {
   /** True when the project hasn't drafted a recipe yet — distinguishes
    *  "nothing to validate" from "we tried and it failed". */
   no_recipe: boolean;
+  /** True when the recipe parsed AND its enrichment will produce graph atoms
+   *  (enabled atlas/investigation). False for a valid recipe whose enrichment
+   *  is off or field_model — it would build to ZERO atoms. */
+  enrichment_ready: boolean;
 }
 
 /** Single coarse read for the workspace dashboard. */

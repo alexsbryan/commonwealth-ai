@@ -16,7 +16,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn, RecipeRegistry, TestOptions};
+use corpus_engine::harness::{capture, FrozenSample, HarnessRunner};
+use corpus_engine::{CorpusEngine, EmbedFn, Recipe, RecipeRegistry, TestOptions};
+use sovereign_eval::authoring_harness::{render_report, run_deterministic, Declaration};
 
 // ── Public entry points ─────────────────────────────────────────────────────
 
@@ -76,10 +78,11 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 
 async fn cmd_test(args: &[String]) -> i32 {
     let mut recipe_path: Option<PathBuf> = None;
-    let mut sample_size: usize = 100;
+    let mut sample_size: usize = 50;
     let mut output: Option<PathBuf> = None;
-    let mut offline = false;
-    let mut verbose = false;
+    let mut recapture = false;
+    let mut json = false;
+    let mut enrich_flag = false;
     let mut parameters: std::collections::BTreeMap<String, toml::Value> =
         std::collections::BTreeMap::new();
 
@@ -144,9 +147,9 @@ async fn cmd_test(args: &[String]) -> i32 {
                     }
                 }
             }
-            "--no-embed" => { /* default — embed is always false here */ }
-            "--offline" => offline = true,
-            "--verbose" | "-v" => verbose = true,
+            "--recapture" => recapture = true,
+            "--json" => json = true,
+            "--enrich" => enrich_flag = true,
             flag if flag.starts_with('-') => {
                 eprintln!("warning: unknown flag '{flag}' — ignored");
             }
@@ -162,79 +165,248 @@ async fn cmd_test(args: &[String]) -> i32 {
         None => {
             eprintln!("error: missing recipe path");
             eprintln!(
-                "Usage: sovereign recipe test <path> [--sample-size N] [--output path] \
-                 [--params k=v[,...]]... [--params-file <json>] [--offline] [--verbose]"
+                "Usage: sovereign recipe test <path> [--sample-size N] [--recapture] [--json] \
+                 [--enrich] [--params k=v[,...]]... [--params-file <json>] [--output path]"
             );
             return 1;
         }
     };
 
-    // Derive the default output path from the recipe's directory.
-    let output = output.unwrap_or_else(|| {
-        recipe_path
-            .parent()
-            .unwrap_or(std::path::Path::new("."))
-            .join("TEST_REPORT.md")
-    });
-
     let engine = build_stub_engine();
-    let options = TestOptions {
-        sample_size,
-        embed: false,
-        queries: None,
-        output: Some(output.clone()),
-        offline,
-        verbose,
-        parameters,
+
+    // ── Load + resolve the recipe ────────────────────────────────────────────
+    let mut recipe = match Recipe::from_file(&recipe_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "error: failed to load recipe {}: {e}",
+                recipe_path.display()
+            );
+            return 1;
+        }
     };
-
-    eprintln!("Testing recipe: {}", recipe_path.display());
-    eprintln!("Sample size:    {sample_size}");
-    eprintln!("Output:         {}", output.display());
-
-    match engine.test_recipe(&recipe_path, &options).await {
-        Ok(report) => {
-            let markdown = report.to_markdown();
-
-            if let Err(e) = std::fs::write(&output, &markdown) {
-                eprintln!("error: failed to write report to {}: {e}", output.display());
+    if !recipe.parameters.is_empty() || !parameters.is_empty() {
+        match recipe.resolve_parameters(&parameters) {
+            Ok(resolved) => recipe = recipe.with_resolved_parameters(resolved),
+            Err(e) => {
+                eprintln!("error: parameter resolution failed: {e}");
+                eprintln!(
+                    "  supply values with --params key=value (repeatable) or --params-file <json>"
+                );
                 return 1;
             }
-
-            eprintln!();
-            eprintln!("Report written to: {}", output.display());
-
-            let warnings = report.warnings();
-            if !warnings.is_empty() {
-                eprintln!();
-                eprintln!("Warnings:");
-                for w in &warnings {
-                    eprintln!("  ⚠  {w}");
-                }
-            }
-
-            if !report.validation.errors.is_empty() {
-                eprintln!();
-                eprintln!("Errors:");
-                for e in &report.validation.errors {
-                    eprintln!("  ✗  {e}");
-                }
-            }
-
-            eprintln!();
-            if report.passed() {
-                eprintln!("Result: PASS");
-                0
-            } else {
-                eprintln!("Result: FAIL");
-                1
-            }
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            1
         }
     }
+
+    // ── Frozen sample: capture once (the one networked step), then iterate ───
+    let Some(harness_root) = harness_root_for(&recipe.corpus.id) else {
+        eprintln!("error: cannot resolve home directory for the harness sample store");
+        return 1;
+    };
+    let need_capture = recapture || !harness_root.join("capture.json").exists();
+    if need_capture {
+        if recapture {
+            let _ = std::fs::remove_dir_all(&harness_root);
+        }
+        eprintln!("❄  Capturing a frozen sample (the one networked step)…");
+        match capture(&engine, &recipe, &harness_root, sample_size).await {
+            Ok(m) => eprintln!(
+                "❄  Froze {} docs from {} — sample {}. Future runs are offline; --recapture to refresh.",
+                m.docs.len(),
+                m.acquirer,
+                short_hash(&m.sample_id),
+            ),
+            Err(e) => {
+                eprintln!("error: capture failed: {e}");
+                return 1;
+            }
+        }
+    }
+
+    // ── Run the deterministic rungs over the frozen sample (model-free) ──────
+    let frozen = match FrozenSample::load(&harness_root) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            eprintln!("error: no frozen sample found after capture");
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("error: failed to load frozen sample: {e}");
+            return 1;
+        }
+    };
+    let work_dir = std::env::temp_dir().join(format!("harness-run-{}", recipe.corpus.id));
+    let runner = HarnessRunner::new(&engine, &recipe, &frozen);
+    let outputs = match runner.run(&work_dir, sample_size).await {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("error: harness run failed: {e}");
+            return 1;
+        }
+    };
+
+    // ── Rung 6 (opt-in): ingest+enrich the frozen sample through the REAL
+    //    pipeline (SSOT — `engine.ingest`, not a reimplementation) with a
+    //    daemon-backed engine, then verify the integrity of the atoms it
+    //    produced. Reads the frozen materialized source (I3 — no re-acquire).
+    let enrich = if enrich_flag {
+        match run_enrich_and_verify(&recipe, &frozen).await {
+            Ok(e) => e,
+            Err(msg) => {
+                eprintln!("ℹ  --enrich skipped: {msg}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let run = run_deterministic(
+        &frozen.manifest,
+        &recipe,
+        &outputs,
+        enrich.as_ref(),
+        &Declaration::default(),
+    );
+
+    // ── Report ───────────────────────────────────────────────────────────────
+    println!("{}", render_report(&run));
+    if let Some(path) = output {
+        if let Err(e) = std::fs::write(&path, render_report(&run)) {
+            eprintln!("warning: failed to write report to {}: {e}", path.display());
+        } else {
+            eprintln!("Report written to {}", path.display());
+        }
+    }
+    if json {
+        match serde_json::to_string(&run) {
+            Ok(line) => println!("{line}"),
+            Err(e) => eprintln!("warning: failed to serialize harness run to JSON: {e}"),
+        }
+    }
+
+    if run.green() {
+        0
+    } else {
+        1
+    }
+}
+
+/// `~/.sovereign/harness/<recipe-id>/` — the content-addressed frozen-sample
+/// store for the authoring harness.
+fn harness_root_for(recipe_id: &str) -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".sovereign").join("harness").join(recipe_id))
+}
+
+fn short_hash(h: &str) -> &str {
+    if h.len() >= 8 {
+        &h[..8]
+    } else {
+        h
+    }
+}
+
+/// Ingest + enrich the frozen sample through the real `engine.ingest` pipeline
+/// (SSOT — not a reimplementation) with a daemon-backed engine, then verify the
+/// integrity of the atoms it produced. Reads the frozen materialized source, so
+/// no network runs (I3). Returns `Ok(None)` when there's nothing to verify;
+/// `Err(msg)` on a setup/ingest failure (the caller reports + skips the rung).
+async fn run_enrich_and_verify(
+    recipe: &Recipe,
+    frozen: &FrozenSample,
+) -> Result<Option<corpus_engine::harness::EnrichOutput>, String> {
+    if !recipe.enrichment.as_ref().is_some_and(|e| e.enabled) {
+        return Err(format!(
+            "recipe '{}' declares no [enrichment] — nothing to enrich or verify",
+            recipe.corpus.id
+        ));
+    }
+
+    // The daemon's loaded models are the SSOT for what to call; the daemon URL
+    // comes from the canonical port constant + builder (one place owns the
+    // port — see `sovereign_cli_shared::urls`), not a hand-written literal.
+    let v1 = sovereign_cli_shared::urls::v1_url(sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT);
+    let (chat_model, embed_model) = resolve_daemon_models(&v1).await?;
+
+    // Daemon-backed engine via the canonical provider + adapters (SSOT — the
+    // same path `chat` bootstraps).
+    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> = Arc::new(
+        crate::chat_cmd::bootstrap::SplitInferenceProvider::new(
+            &v1,
+            chat_model,
+            embed_model.clone(),
+            8192,
+        ),
+    );
+    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
+    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
+
+    // Reconstruct the frozen source (I3 — no network) and point an inline recipe
+    // at it, so `ingest` runs over exactly the frozen bytes.
+    let work = std::env::temp_dir().join(format!("harness-enrich-{}", recipe.corpus.id));
+    let _ = std::fs::remove_dir_all(&work);
+    let src_dir = work.join("src");
+    std::fs::create_dir_all(&src_dir).map_err(|e| e.to_string())?;
+    let materialized = frozen.materialize(&src_dir).map_err(|e| e.to_string())?;
+
+    let mut enrich_recipe = recipe.clone();
+    enrich_recipe.acquire = corpus_engine::recipe::AcquirerConfig::LocalFile {
+        path: materialized.to_string_lossy().into_owned(),
+    };
+
+    let index_root = work.join("indexes");
+    let engine = CorpusEngine::new(work.join("recipes"), index_root.clone(), embed_fn)
+        .with_embedding_model(&embed_model)
+        .with_inference_fn(inference_fn);
+
+    eprintln!(
+        "⚙  --enrich: ingesting + enriching the frozen sample via the daemon (corpus '{}')…",
+        recipe.corpus.id
+    );
+    engine
+        .ingest(
+            &corpus_engine::CorpusSpec::Inline(Box::new(enrich_recipe)),
+            None,
+        )
+        .await
+        .map_err(|e| format!("ingest+enrich failed: {e}"))?;
+
+    corpus_engine::harness::verify_atoms_at(&index_root.join(&recipe.corpus.id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Resolve the daemon's loaded chat + embed model ids from `/v1/models` (the
+/// SSOT for what's actually serving): the embed model's id contains "embed",
+/// the chat model is the other.
+async fn resolve_daemon_models(v1: &str) -> Result<(String, String), String> {
+    let body: serde_json::Value = reqwest::Client::new()
+        .get(format!("{v1}/models"))
+        .send()
+        .await
+        .map_err(|e| format!("daemon /v1/models unreachable ({e}); is the daemon running?"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse /v1/models: {e}"))?;
+    let ids: Vec<String> = body["data"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| m["id"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let embed = ids
+        .iter()
+        .find(|id| id.to_lowercase().contains("embed"))
+        .cloned()
+        .ok_or_else(|| "daemon advertises no embedding model".to_string())?;
+    let chat = ids
+        .iter()
+        .find(|id| !id.to_lowercase().contains("embed"))
+        .cloned()
+        .ok_or_else(|| "daemon advertises no chat model".to_string())?;
+    Ok((chat, embed))
 }
 
 // ── `recipe validate` ───────────────────────────────────────────────────────
@@ -383,7 +555,7 @@ async fn cmd_list(args: &[String]) -> i32 {
 ///
 /// The stub returns zero-vectors; it is never called when `embed = false`.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
+    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
 
     // Use a temporary location for downloads; the engine's index_dir is
     // unused since we never write a production index.

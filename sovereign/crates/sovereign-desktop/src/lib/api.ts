@@ -28,6 +28,7 @@ import type {
   MeshStateResponse,
   RecipeValidateResult,
   RecipeTestResult,
+  HarnessRunCard,
   InsightNodeDto,
   SinkStatusDto,
   DocumentAsset,
@@ -974,6 +975,19 @@ export async function recipeTest(
   return invoke("recipe_test", { recipePath, sampleSize, offline });
 }
 
+/**
+ * Run the deterministic authoring harness (rungs 1–5: Acquire→Extract→Filter→
+ * Chunk→Index) over a frozen sample and return the per-stage verdict ladder.
+ * Model-free + offline after the first run (the frozen sample is captured once).
+ */
+export async function recipeRunHarness(
+  recipePath: string,
+  sampleSize: number,
+  enrich: boolean = false,
+): Promise<HarnessRunCard> {
+  return invoke("recipe_run_harness", { recipePath, sampleSize, enrich });
+}
+
 // ─── Recipe authoring ("Add Knowledge Source") ─────────────
 
 /** Result of an `Import recipe` paste/drop. When `success` is
@@ -1497,6 +1511,20 @@ export async function enrichBuildAsync(
   });
 }
 
+/** Bridge a freshly-INSTALLED recipe corpus into the atlas-enrichment path.
+ *  Scaffolds the atlas config straight from the installed index
+ *  (`enrich init --from-corpus`), choosing the pipeline from the recipe's
+ *  `[enrichment] domain`. Call this AFTER `installCorpus` resolves and BEFORE
+ *  `enrichBuildAsync` — `enrich build` requires this config (plain ingest of a
+ *  `type="atlas"` text recipe runs the field-model enricher, which writes no
+ *  atoms). `--force` makes it idempotent. Returns the pipeline id chosen
+ *  (e.g. `"literary_atlas"`), so the UI can show what it's about to build. */
+export async function recipeEnrichInitFromCorpus(
+  corpusId: string,
+): Promise<string> {
+  return invoke("recipe_enrich_init_from_corpus", { corpusId });
+}
+
 /** Request cancellation of an in-flight build. Returns `true` if
  *  the job was found and flagged, `false` if the job_id isn't
  *  tracked (already finished or never started). Idempotent —
@@ -1612,6 +1640,7 @@ export async function markFirstRunComplete(): Promise<void> {
 import type {
   RecipeProjectListEntry,
   RecipeAuthorDashboardState,
+  RecipeValidationReport,
   RestoreCheckpointOutcome,
 } from "./types";
 
@@ -1643,6 +1672,22 @@ export async function recipeAuthorDashboardState(
   featureId: string,
 ): Promise<RecipeAuthorDashboardState> {
   return invoke("recipe_author_dashboard_state", { featureId });
+}
+
+/** Validate + atomically save a hand-edited `recipe.toml` for a project,
+ *  returning the SAME `RecipeValidationReport` the dashboard shows. Validate-
+ *  first: a recipe that doesn't parse is NOT written (`ok=false` carries the
+ *  parse errors to render inline; keep the editor text so the user can fix +
+ *  re-save). On success the agent picks up the edit next turn via its disk
+ *  re-read — no agent round-trip needed. */
+export async function recipeAuthorSaveEditedToml(
+  featureId: string,
+  editedToml: string,
+): Promise<RecipeValidationReport> {
+  return invoke("recipe_author_save_edited_toml", {
+    featureId,
+    editedToml,
+  });
 }
 
 /** Restore a project to a prior checkpoint snapshot. Lays down a new

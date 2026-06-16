@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    PhaseCache, PhaseRunner, PipelineRegistry, RunOutputWriter,
+    PhaseCache, PhaseRunner, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -73,8 +73,7 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
         return 2;
     }
 
-    let registry = PipelineRegistry::builtin();
-    let pipeline = match registry.get(&cfg.pipeline_id) {
+    let pipeline = match super::pipeline_resolve::resolve_pipeline(&cfg) {
         Some(p) => p,
         None => {
             eprintln!("error: unknown pipeline: {}", cfg.pipeline_id);

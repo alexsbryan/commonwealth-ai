@@ -77,7 +77,7 @@ async fn main() {
         Some(p) => p,
         None => {
             print_usage();
-            std::process::exit(1);
+            sovereign_inference::fast_exit_skip_destructors(1);
         }
     };
 
@@ -85,7 +85,7 @@ async fn main() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Configuration error: {e}");
-            std::process::exit(1);
+            sovereign_inference::fast_exit_skip_destructors(1);
         }
     };
 
@@ -119,7 +119,7 @@ async fn main() {
                 Ok(p) => Arc::new(p),
                 Err(e) => {
                     eprintln!("Failed to load model: {e}");
-                    std::process::exit(1);
+                    sovereign_inference::fast_exit_skip_destructors(1);
                 }
             };
             if config.inference.primary_model.is_some() {
@@ -192,7 +192,7 @@ async fn main() {
 
             if backends.is_empty() {
                 eprintln!("No backends loaded successfully");
-                std::process::exit(1);
+                sovereign_inference::fast_exit_skip_destructors(1);
             }
 
             let hybrid = Arc::new(HybridProvider::with_defaults(backends));
@@ -209,7 +209,7 @@ async fn main() {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("Failed to open database: {e}");
-            std::process::exit(1);
+            sovereign_inference::fast_exit_skip_destructors(1);
         }
     };
     let store: Arc<dyn StateStore> = store_concrete.clone();
@@ -721,7 +721,7 @@ async fn main() {
         Ok(l) => l,
         Err(e) => {
             eprintln!("Failed to bind to {bind_addr}: {e}");
-            std::process::exit(1);
+            sovereign_inference::fast_exit_skip_destructors(1);
         }
     };
     let http_port = listener.local_addr().map(|a| a.port()).unwrap_or(8080);
@@ -775,7 +775,7 @@ async fn main() {
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
     if let Err(e) = axum::serve(listener, service).await {
         eprintln!("Server error: {e}");
-        std::process::exit(1);
+        sovereign_inference::fast_exit_skip_destructors(1);
     }
 }
 

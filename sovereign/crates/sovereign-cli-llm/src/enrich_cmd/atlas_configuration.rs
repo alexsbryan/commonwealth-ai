@@ -22,7 +22,7 @@ use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full, AtomEnvelope,
     ATLAS_DIRNAME,
 };
-use corpus_engine::enrichment::pipeline::{ChatPrompt, PipelineRegistry};
+use corpus_engine::enrichment::pipeline::ChatPrompt;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
@@ -74,8 +74,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
     };
 
     // Resolve the pipeline and check the opt-in gate.
-    let registry = PipelineRegistry::builtin();
-    let Some(pipeline) = registry.get(&cfg.pipeline_id) else {
+    let Some(pipeline) = super::pipeline_resolve::resolve_pipeline(&cfg) else {
         eprintln!(
             "error: unknown pipeline `{}` in enrichment config",
             cfg.pipeline_id

@@ -44,6 +44,7 @@ pub mod init;
 pub mod investigation;
 pub mod paths;
 pub mod phase_cmd;
+pub mod pipeline_resolve;
 pub mod promote;
 pub mod providers;
 pub mod query;

@@ -73,7 +73,9 @@ impl Fixture {
         // ── Index the fixture ───────────────────────────────
 
         let embed: EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+            Box::pin(async {
+                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            })
         });
         // `with_embedding_model` is a hard precondition of `ingest()`:
         // the engine refuses to write `_corpus_meta.json` without a
@@ -673,7 +675,9 @@ impl AuthFixture {
         // ── Index the fixture (LanceDB for symbol_lookup/code_search) ─
 
         let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+            Box::pin(async {
+                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            })
         });
         // See `Fixture::setup` for why this is required — the engine
         // refuses to ingest without a declared embedding model name.
