@@ -20,10 +20,17 @@ pub(crate) fn dbg(msg: &str) {
     }
 }
 
+/// The grounding verification contract is ON by default — it is the
+/// "Grounded Everywhere" promise (desktop chat and every other
+/// answer-producing surface ship with it live), not an opt-in env flag.
+/// Only an explicit `SOVEREIGN_GROUNDING_GATE=0` / `false` turns it off
+/// (naked benches, latency debugging); unset — or any other value —
+/// leaves it on. Per-surface overrides (`SOVEREIGN_GROUNDING_GATE_<SURFACE>`)
+/// still win over this global default, see `GateSurface::enabled`.
 pub(crate) fn grounding_gate_enabled() -> bool {
     std::env::var("SOVEREIGN_GROUNDING_GATE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
 }
 
 pub(crate) fn grounding_gate_threshold() -> f64 {
@@ -175,8 +182,8 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
             "gate",
             EnvFlag {
                 name: "SOVEREIGN_GROUNDING_GATE",
-                default: "off",
-                purpose: "Global default for the hold→verify→retry→abstain gate on answer-producing surfaces.",
+                default: "on",
+                purpose: "Global on/off for the hold→verify→retry→abstain gate on answer-producing surfaces. ON by default (the Grounded-Everywhere contract); set =0 to opt out (naked benches, latency debugging).",
             },
         ),
         (
