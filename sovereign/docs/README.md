@@ -1,76 +1,61 @@
 # Sovereign docs
 
-Index of everything under `sovereign/docs/`. The top-of-tree docs ([`README`](../README.md), [`SYSTEM_OVERVIEW`](../SYSTEM_OVERVIEW.md), [`ARCHITECTURE`](../ARCHITECTURE.md), [`ARCH_PRINCIPLES`](../ARCH_PRINCIPLES.md)) are the system-wide map — start there. The files in this directory go deeper on one feature, one workflow, or one runbook each.
+Two kinds of docs live here: docs for **using Sovereign**, and docs for **working on it**. The system-wide map is one level up — [`README`](../README.md), [`SYSTEM_OVERVIEW`](../SYSTEM_OVERVIEW.md), [`ARCH_PRINCIPLES`](../ARCH_PRINCIPLES.md) — start there either way.
 
-## Quickstart & operator basics
+## Using Sovereign
 
-Three short docs people hit first.
+- [`FAQ.md`](FAQ.md) — common questions: offline mode, models, ports, the mesh
+- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — symptom-to-fix pairs; run `sovereign doctor` first
+- [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every command and flag
+- [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — index your codebase: symbols, call graphs, search, and the tools your AI harness gets
+- [`FEATURES.md`](FEATURES.md) — what the assistant does beyond the basics
+- [`KNOWLEDGE_BASES.md`](KNOWLEDGE_BASES.md) — the corpora you can install, and how search uses them
 
-- [`FAQ.md`](FAQ.md) — common questions about offline mode, models, ports, mesh
-- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — symptom → diagnosis pairs; run `sovereign doctor` first
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — building from source, crate layout, adding tools / corpora / skills
+Running it on particular hardware or in the cloud:
 
-## Reference
+- [`TOOLBOX_SETUP.md`](TOOLBOX_SETUP.md) — AMD Strix Halo via toolbox containers (ROCm / Vulkan)
+- [`CLOUD_PEER_DEPLOY.md`](CLOUD_PEER_DEPLOY.md) — add a cloud GPU as a mesh worker
+- [`RUNBOOK.md`](RUNBOOK.md) — operating the inference stack day to day
+- [`BENCHMARKING.md`](BENCHMARKING.md) — embed/decode throughput across Metal / Vulkan / ROCm
 
-The "look it up" docs — flag tables, tool inventories, schema specs.
+Building on the platform:
 
-- [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every `sovereign-cli` subcommand, flags, deprecations
-- [`CORRECTNESS_TOOLING.md`](CORRECTNESS_TOOLING.md) — `eval`, `voice eval`, `enrich atlas-eval`, `reading-diag` — pick the right tool
-- [`specs/`](specs/README.md) — in-flight design proposals, reference patterns, and canonical wire specs (incl. OICP v0.1.0 protocol)
+- [`ATOS.md`](ATOS.md) — Agent Task Orchestration: design → plan → charter → phases → milestones
+- [`ATOS_RUNNER.md`](ATOS_RUNNER.md) — the runner loop, and [`ATOS_RUNNER_SMOKE.md`](ATOS_RUNNER_SMOKE.md), its smoke test
+- [`MESHAPP_AUTHORING.md`](MESHAPP_AUTHORING.md) — write a mesh app; [`MESHAPP_CONSUMER.md`](MESHAPP_CONSUMER.md) — install and run one
 
-## Feature deep-dives
+## Working on Sovereign
 
-Stable behaviours users interact with beyond the quick-start path.
+Start with [`DEVELOPMENT.md`](DEVELOPMENT.md): building from source, the crate layout, the CLI binaries, and how to add a tool, corpus, or skill. The design rules are in [`../ARCH_PRINCIPLES.md`](../ARCH_PRINCIPLES.md); per-crate conventions live in each crate's `AGENTS.md`.
 
-- [`FEATURES.md`](FEATURES.md) — what's wired beyond setup / project init / mesh create
-- [`KNOWLEDGE_BASES.md`](KNOWLEDGE_BASES.md) — curated corpora (Wikipedia / SEP / OpenAlex / Stack Exchange / Gutenberg / CRS)
-- [`knowledge-view.md`](knowledge-view.md) — KnowledgeView: personal / conversational / institutional memory maps
-- [`PLAN_ALIGNMENT.md`](PLAN_ALIGNMENT.md) — the four alignment questions every `~/.claude/plans/` plan answers
+The rest of this folder is subsystem deep-dives and design notes, one feature or workflow each. They're linked from the code that owns them and indexed in SYSTEM_OVERVIEW's "Subsystems with their own docs" section; they're listed here so you can see what the folder holds.
+
+Subsystems:
+
+- [`inference.md`](inference.md) — slots, OICP scoring, harness adapters, cutoff legibility
+- [`retrieval-pipeline.md`](retrieval-pipeline.md) — the retrieval steps and their knobs (generated from the code)
+- [`TIERED_RETRIEVAL.md`](TIERED_RETRIEVAL.md) — the tiered retrieval surface
+- [`knowledge-view.md`](knowledge-view.md) — KnowledgeView: your terrain, not your transcript
+- [`notes-mesh.md`](notes-mesh.md) — how NoteStore propagates across the mesh
+- [`WORK_ATLAS.md`](WORK_ATLAS.md) — coordination for agents on a shared mesh (declare / observe scope)
+- [`DELEGATION_SUBSTRATE.md`](DELEGATION_SUBSTRATE.md) — the delegation substrate
+- [`MESH_LOAD_AWARENESS.md`](MESH_LOAD_AWARENESS.md) — cluster-wide load awareness for mesh inference
+
+Tooling and correctness:
+
+- [`CORRECTNESS_TOOLING.md`](CORRECTNESS_TOOLING.md) — `eval` / `voice eval` / `reading-diag`: which tool when
 - [`DRIFT_DETECTION.md`](DRIFT_DETECTION.md) — `sovereign drift detect`: narrative-vs-code drift
-- [`GIT_ARCHAEOLOGY.md`](GIT_ARCHAEOLOGY.md) — `sovereign git-archaeology`: provenance + co-evolution per atom
-- [`ARCHAEOLOGY_EVAL.md`](ARCHAEOLOGY_EVAL.md) — `sovereign archaeology-eval`: witness checks + baseline diff + inquiries
+- [`GIT_ARCHAEOLOGY.md`](GIT_ARCHAEOLOGY.md) — provenance and co-evolution per atom
+- [`ARCHAEOLOGY_EVAL.md`](ARCHAEOLOGY_EVAL.md) — witness checks, baseline diff, inquiries
+- [`TESTING_SURFACE.md`](TESTING_SURFACE.md) — the daemon testing surface and priority matrix
+- [`PLAN_ALIGNMENT.md`](PLAN_ALIGNMENT.md) — the four questions every plan answers
 
-## ATOS — Agent Task Orchestration
+Design notes and studies — [`QUERY_TAXONOMY_MECE.md`](QUERY_TAXONOMY_MECE.md), [`RETRIEVAL_DISCRIMINATION_PLAN.md`](RETRIEVAL_DISCRIMINATION_PLAN.md), [`SOLVER_DESIGN.md`](SOLVER_DESIGN.md), [`TDD_MACHINE.md`](TDD_MACHINE.md) and [`TDD_MACHINE_DESIGN.md`](TDD_MACHINE_DESIGN.md), [`SITUATED_HARNESS_STUDY.md`](SITUATED_HARNESS_STUDY.md), [`EPHEMERAL_WORKER_PODS.md`](EPHEMERAL_WORKER_PODS.md), [`PINNED_WORKER_AS_INFERENCE_PEER.md`](PINNED_WORKER_AS_INFERENCE_PEER.md), [`OCR_PADDLE_ENGINE.md`](OCR_PADDLE_ENGINE.md), [`HANDOFF_atlas_directs_retrieval.md`](HANDOFF_atlas_directs_retrieval.md) — each captures a decision or a one-off; the durable lessons also live in the NoteStore (`sovereign notes --query <topic>`).
 
-The charter / phases / runner stack lives across four docs. Start with `ATOS.md`.
+## Specs, examples, archive
 
-- [`ATOS.md`](ATOS.md) — the full system: design → plan → charter → phases → milestones
-- [`ATOS_RUNNER.md`](ATOS_RUNNER.md) — the ralph-wiggum loop: spawn driver, judge against charter, repeat
-- [`ATOS_RUNNER_SMOKE.md`](ATOS_RUNNER_SMOKE.md) — smoke-test runbook for the runner against `oicp-types`
+- [`specs/`](specs/README.md) — in-flight design proposals and the canonical OICP wire spec
+- [`examples/plan_v0_brief_aligned.md`](examples/plan_v0_brief_aligned.md) — a plan that satisfies the alignment questions
+- [`archive/`](archive/README.md) — historical experiment writeups and status docs, kept for context
 
-## Runbooks
-
-End-to-end operator workflows + deployment patterns.
-
-- [`TOOLBOX_SETUP.md`](TOOLBOX_SETUP.md) — AMD Strix Halo via toolbox containers (Fedora/Ubuntu, ROCm/Vulkan)
-- [`CLOUD_PEER_DEPLOY.md`](CLOUD_PEER_DEPLOY.md) — spin up a transient cloud GPU as a sovereign-mesh worker
-- [`BENCHMARKING.md`](BENCHMARKING.md) — embed-decode throughput across Metal / Vulkan / ROCm
-
-Prospect-facing demo walkthroughs (different audience, dated, not
-maintained) live under [`../handoff/`](../handoff/README.md).
-
-## Experiments
-
-Historical experiment writeups have been moved to
-[`archive/`](archive/README.md); the durable lessons live in the
-NoteStore (`sovereign notes --query <topic>`). The reranker code
-stays in-tree but is opt-in via env vars; the writeup is at
-[`archive/RERANK_EXPERIMENT.md`](archive/RERANK_EXPERIMENT.md).
-
-## Internal / contributor
-
-Implementation conventions live next to the crate that owns them as
-`AGENTS.md` (mirroring root `AGENTS.md`). Pair with
-[`../ARCH_PRINCIPLES.md`](../ARCH_PRINCIPLES.md).
-
-- [`../crates/sovereign-desktop/AGENTS.md`](../crates/sovereign-desktop/AGENTS.md) — Svelte 5 + runes + XState state-management tiers, immutability rule, Tauri-event discipline
-
-## Examples
-
-Templates and reference artifacts.
-
-- [`examples/plan_v0_brief_aligned.md`](examples/plan_v0_brief_aligned.md) — example plan that satisfies the four alignment questions
-
-## Archive
-
-Historical status docs — kept for context, not current. See [`archive/README.md`](archive/README.md).
+Prospect-facing demo walkthroughs (a different audience, dated, not maintained) are under [`../handoff/`](../handoff/README.md).

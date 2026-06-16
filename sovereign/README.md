@@ -1,191 +1,75 @@
 # Sovereign
 
-AI that belongs to the people running it.
+Sovereign is an AI assistant that runs on your own computer. Ask it to write, to search what you already know, or to think through a problem, and the model that answers you lives on your machine rather than in someone's cloud. Nothing leaves your device unless you ask it to.
 
-Sovereign runs open-source language models on your hardware and gives you a real assistant — one that understands code, reads documents, searches knowledge bases you install, remembers across sessions, and does multi-step work without asking anyone's permission.
+Commonwealth, its optional mesh, lets you pool machines with a few people you trust so you can run models no single one of you could hold alone. There's more on that further down.
 
-## What it does well
+It's early — pre-release, and source-available for audit under [AGPL-3.0-or-later](../LICENSE). Reading, building, and taking the code apart is welcome; there's just no contribution process yet.
 
-**Understands code like a codebase.** Compiler-resolved call graphs, not fuzzy grep. Symbol-level search, watchers that stay fresh as you edit, answers cited to file and line. Session memory that persists — notes, reflections, the continuity of thought commercial tools throw away between chats.
+## What you get
 
-**Grounds answers in knowledge worth trusting.** Wikipedia, Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts — installed locally, searched before every answer, cited. Your own documents too.
+Your conversations, documents, and memory stay on the machine in front of you. Web search is there if you want it, off by default and labelled plainly when it runs, and there's no telemetry because nothing was built to phone home in the first place.
 
-**Private by construction. Sovereign.** Conversations, documents, and memories stay on your machine. Web search is optional and clearly labeled. No telemetry, no phoning home, no policy anyone could change — it's how the software is built.
+Answers come grounded in sources you choose to keep locally — Wikipedia, the Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts, your own files — searched before each reply and cited, so you can follow a claim back to where it came from. It remembers what mattered from earlier conversations instead of starting cold every time. And it reads code as a codebase: real call graphs and symbol search that answer to a file and a line, not a plausible guess.
 
-**Shaped by skills, not code.** Skills are TOML manifests that configure routing, planning, synthesis, and memory for different kinds of work. Modify the ones we ship. Write your own. Just a file.
+## Quick start
 
-**Works offline.** Once models and corpora are downloaded, everything runs without a connection.
-
-## The larger idea
-
-The tools we use to think are becoming infrastructure, and right now that infrastructure is being built to belong to a few companies. We don't think that's the only shape it can take.
-
-Commonwealth is a protocol for small trusted groups to pool machines into a shared mesh — friends, teams, research collectives, households. Run models no one machine could hold. Share knowledge across the group. Route heavy work to whoever's idle. No central server, no billing, no data leaving a ring of trust. A gift economy for compute, among people who already trust each other.
-
-Sovereign works alone, and it works well alone. When you want to build something larger with people you trust, we're here.
-
-## Quick start for coding (three commands)
+Set it up once. This finds models that fit your hardware, downloads them, and starts a background daemon that survives a logout:
 
 ```sh
-sovereign setup         # once — detects hardware, downloads models, starts the daemon
-sovereign project init  # per project — indexes the codebase, registers MCP tools
-sovereign mesh create   # optional — promotes your local mesh to a joinable one
+sovereign setup
 ```
 
-`localhost:9741` serves **both** the OpenAI-compatible completions endpoint (`/v1/chat/completions`, `/v1/models`) **and** the MCP tool server (`/mcp`). Point opencode, Claude Code, or any OpenAI-compatible client at it and everything just works.
-
-### `sovereign setup`
-
-First-run onboarding. Detects your hardware, curates a list of primary models that fit, downloads all three slots (primary / fast / embed) in parallel, writes a config, and registers the daemon with launchd (macOS) or systemd (Linux) so it survives logout.
+Then talk to it:
 
 ```sh
-sovereign setup              # interactive — pick your primary model
-sovereign setup --yes        # non-interactive — accept recommended
-sovereign setup --reset      # wipe config and re-run
+sovereign chat
 ```
 
-When it finishes:
-
-```
-✓ Models ready
-✓ Mesh running — 1 node (you)
-✓ Endpoint: localhost:9741/v1
-```
-
-Run `curl http://localhost:9741/v1/models` to confirm it's alive.
-
-### `sovereign project init`
-
-Per-project code intelligence: tree-sitter symbol index + SCIP call graph + generated `SOVEREIGN.md` + auto-detected `.claude/` or `.opencode/` config. See [`docs/CODE_INTELLIGENCE.md`](docs/CODE_INTELLIGENCE.md) for the full flow and multi-project ecosystem recipes.
-
-### `sovereign mesh create` / `join` / `rotate`
-
-Share compute with trusted friends. `setup` leaves you on a silent single-node mesh; `mesh create` promotes it and prints a shareable invite:
+That's the whole loop. The daemon also serves an OpenAI-compatible API and an MCP tool server on a single port, so you can point opencode, Claude Code, or any OpenAI-compatible client at `localhost:9741` and it will just work:
 
 ```sh
-$ sovereign mesh create
-
-Mesh created.
-
-  Join key:  cwth-a1b2-c3d4-e5f6
-
-Share with a friend:
-  App:  https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6
-  CLI:  sovereign mesh join cwth-a1b2-c3d4-e5f6
+curl http://localhost:9741/v1/models      # confirm it's alive
 ```
 
-Your friend runs any of:
+## Three ways in
+
+The desktop app — Tauri and Svelte — gives you chat, knowledge bases, model setup, and a guided first run, built with `npm install && cargo tauri dev` in `crates/sovereign-desktop`. The CLI does everything the desktop does and adds `setup`, `project`, `mesh`, `corpus`, and `doctor`; every command takes `--help`, and the build is below. The server exposes the same runtime over REST and WebSocket for your own frontends — its [endpoints](docs/CLI_REFERENCE.md#http-endpoints) are in the CLI reference.
+
+## For your code
 
 ```sh
-sovereign mesh join cwth-a1b2-c3d4-e5f6                          # bare key
-sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6   # https url
-sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6         # deep link
+sovereign project init
 ```
 
-Lost the key? The plaintext is never stored (only a BLAKE3 hash lives on disk). Run `sovereign mesh rotate` to generate a new one — existing members stay connected, only future joins need the new key.
+This indexes the current repository — tree-sitter symbols, a SCIP call graph, and MCP tools your AI harness can call — and wires up `.claude/` or `.opencode/` if it finds them. The full flow, the tools, and multi-project setups are in [Code intelligence](docs/CODE_INTELLIGENCE.md).
+
+## Commonwealth
+
+Setup leaves you on a private mesh of one. When you want company, promote it and share the key it prints:
+
+```sh
+sovereign mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
+```
+
+A friend runs `sovereign mesh join cwth-a1b2-c3d4-e5f6`, and from then on your machines answer as one endpoint — enough, together, to run a model neither of you could run alone, or to share a knowledge base across the group. There's no central server, and nothing leaves the group. [Run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
 
 ## Install
 
-### Requirements
-
-1. **8 GB RAM minimum.** 16 GB is comfortable; 32 GB lets you run the best open models.
-2. **Rust toolchain** and **CMake** for building from source.
-3. A `.gguf` model file is optional — `sovereign setup` downloads one for you.
-
-### Install build tools
-
-**macOS:**
-```sh
-# Xcode Command Line Tools — provides clang + the C++ stdlib headers
-# that llama-cpp-sys-4's bindgen step needs. Without these, the build
-# fails with `'memory' file not found` partway through llama-cpp-sys-4.
-xcode-select --install   # no-op if already installed
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-brew install cmake
-# Persist the SDK root so bindgen finds <memory> et al. across new
-# shells — Apple's clang doesn't read this from a global default.
-echo 'export SDKROOT="$(xcrun --show-sdk-path)"' >> ~/.zshrc
-export SDKROOT="$(xcrun --show-sdk-path)"
-```
-
-**Linux (Ubuntu/Debian):**
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-sudo apt install cmake build-essential
-```
-
-### Clone and build
+Pre-release means building from source. You'll need 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models — along with a Rust toolchain and CMake. On macOS, run `xcode-select --install`, then export `SDKROOT="$(xcrun --show-sdk-path)"`, which bindgen needs to find the system headers. On Linux, `sudo apt install cmake build-essential` covers it.
 
 ```sh
-git clone https://github.com/alexsbryan/sovereign.git
-cd sovereign
 cargo build --release -p sovereign-cli
+ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/sovereign
+sovereign setup
 ```
 
-Put `./target/release/sovereign-cli` on your PATH (or `cargo install --path crates/sovereign-cli`) and you're ready for `sovereign setup`. If you prefer to manually pick a model, see [`docs/KNOWLEDGE_BASES.md`](docs/KNOWLEDGE_BASES.md) for model size recommendations by RAM tier.
-
-## Three interfaces
-
-### Desktop App
-
-A native app with chat, conversation history, knowledge base management, and a setup wizard. On first launch, choose a persona:
-
-- **Research & Analysis** — Activates the research-analyst skill. Searches local knowledge bases first, supplements with web when needed, cites findings.
-- **Personal Assistant** — General-purpose helper for tasks, planning, and organization.
-- **Developer** — Full control over model selection, inference settings, and search backends.
-
-The setup wizard includes knowledge-base tier selection (Essential through Full — see [`docs/KNOWLEDGE_BASES.md`](docs/KNOWLEDGE_BASES.md)) and optional web search API key configuration. Knowledge bases download and index in the background — you can start chatting immediately.
-
-```sh
-cargo install tauri-cli --version "^2"
-cd crates/sovereign-desktop
-npm install
-cargo tauri dev
-```
-
-### CLI
-
-Interactive terminal REPL with all the same capabilities, plus the `setup` / `project` / `mesh` / `doctor` / `reflect` / `corpus` subcommands. Every command accepts `--help`. Full flag and subcommand reference: [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md).
-
-```sh
-sovereign --model models/fast.gguf --router     # legacy REPL mode
-sovereign setup                                 # first-run (recommended)
-sovereign project init                          # per-project code intelligence
-```
-
-### HTTP Server
-
-REST + WebSocket API for custom frontends. See [`docs/CLI_REFERENCE.md#http-endpoints`](docs/CLI_REFERENCE.md#http-endpoints) for the endpoint list.
-
-```sh
-cargo run --release -p sovereign-server -- --config sovereign-server.toml
-```
-
-## Troubleshooting
-
-- **Daemon didn't come up after `sovereign setup`** → Check `~/.sovereign/logs/daemon.err`. Most common cause: a corrupt GGUF download (a sub-1 MB file). See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#sovereign-setup-finishes-but-waiting-for-daemon-to-come-up-times-out).
-- **`project serve` listens on `:8080` instead of `:9741`** → Stale binary; rebuild.
-- **`mesh create` fails with "mesh already exists"** → Run `sovereign mesh rotate` instead.
-- **Want to switch models post-setup** → Edit `~/.sovereign/config.toml` or `sovereign setup --reset`.
-- **Anything else** → `sovereign doctor` walks through every check, or see [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+Running on AMD Strix Halo, or adding a cloud-GPU peer, takes a little more — see the [toolbox](docs/TOOLBOX_SETUP.md) and [cloud-peer](docs/CLOUD_PEER_DEPLOY.md) guides.
 
 ## Where to go next
 
-| Doc | For |
-|---|---|
-| [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md) | Full flag + subcommand reference; HTTP endpoint list |
-| [`docs/CODE_INTELLIGENCE.md`](docs/CODE_INTELLIGENCE.md) | `project init`, SCIP exporters, multi-project ecosystems |
-| [`docs/ATOS.md`](docs/ATOS.md) | Agent Task Orchestration System: charters, approvals, drift, auto red-team |
-| [`docs/KNOWLEDGE_BASES.md`](docs/KNOWLEDGE_BASES.md) | Corpora, tier sizing, coverage-aware search pipeline |
-| [`docs/FEATURES.md`](docs/FEATURES.md) | Routing, memory, skills, provenance, OICP |
-| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Setup/daemon issues, uninstall, port conflicts |
-| [`docs/FAQ.md`](docs/FAQ.md) | Quick answers to common questions |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Building, testing, adding tools/corpora/skills |
-| [`docs/TOOLBOX_SETUP.md`](docs/TOOLBOX_SETUP.md) | Running on AMD Strix Halo via kyuz0 ROCm/Vulkan toolboxes |
-| [`docs/CLOUD_PEER_DEPLOY.md`](docs/CLOUD_PEER_DEPLOY.md) | Spinning up an ad-hoc cloud-GPU mesh peer (RunPod MI300X / H100 / A100) |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Deep architectural design document |
-| [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) | Cross-project (sovereign + commonwealth + corpus-engine) map |
+If something breaks, `sovereign doctor` walks the checks and the [troubleshooting guide](docs/TROUBLESHOOTING.md) covers the rest. The [full command reference](docs/CLI_REFERENCE.md), the [knowledge-base catalogue](docs/KNOWLEDGE_BASES.md) and its tiers, and a tour of [what it can do](docs/FEATURES.md) each have their own page, as does the [FAQ](docs/FAQ.md). If you mean to build on it or add a tool or corpus, start with the [development guide](docs/DEVELOPMENT.md). And if you came to audit, the [system overview](SYSTEM_OVERVIEW.md) and the [architecture principles](ARCH_PRINCIPLES.md) are the two documents to read first.
 
 ## License
 
-MIT
+AGPL-3.0-or-later, one license across the whole monorepo. The network-use clause applies mainly to the Commonwealth mesh daemon, which is a service other people connect to.

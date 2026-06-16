@@ -1,16 +1,16 @@
-# FAQ
+# Common questions
 
-← [back to README](../README.md)
+Short answers to what people ask first. If something's broken, [TROUBLESHOOTING](TROUBLESHOOTING.md) goes deeper and `sovereign doctor` checks most of it for you.
 
-### Do I need an internet connection to use Sovereign?
+## Do I need an internet connection?
 
-No. After `sovereign setup` downloads your models and any knowledge bases, everything runs offline. Web search is optional — set `--brave-api-key` or `--tavily-api-key` if you want supplemental web results, skip them otherwise.
+No. Once `sovereign setup` has downloaded your models and any knowledge bases, everything runs offline. Web search is the one exception, and it's optional — set a Brave or Tavily API key if you want it, skip it otherwise.
 
-### Can I use a remote model instead of the local one?
+## Can I use a remote model instead of the local one?
 
-Yes. `sovereign-inference` supports an OpenAI-compatible `RemoteApiProvider`. For now this is configured at the library level; CLI-first remote-model setup is on the roadmap. Short-term, point opencode directly at the remote provider and leave Sovereign's local daemon serving MCP tools only.
+You can, though it isn't wired into the CLI yet. For now the simplest way is to point your client — opencode, say — straight at the remote provider, and leave Sovereign's daemon running for the local tools and knowledge search. First-class remote-model setup is on the list.
 
-### How do I switch to a different primary model?
+## How do I switch to a different primary model?
 
 Edit `~/.sovereign/config.toml`:
 
@@ -19,43 +19,32 @@ Edit `~/.sovereign/config.toml`:
 primary = "/path/to/new-model.gguf"
 ```
 
-Then restart the daemon (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#want-to-switch-models-after-setup)). Or run `sovereign setup --reset` for a full re-download with the picker.
+Then restart the daemon — the [troubleshooting guide](TROUBLESHOOTING.md#want-to-switch-models-after-setup) has the per-platform command — or run `sovereign setup --reset` to re-download with the picker.
 
-### Why ports 9741 / 9742?
+## Why ports 9741 and 9742?
 
-`:9741` serves both the OpenAI-compatible `/v1` API and the MCP `/mcp` JSON-RPC endpoint. `:9742` carries internal mesh gossip (never exposed to user code). Both are overridable in the config file if they conflict with another tool.
+`:9741` serves both the OpenAI-compatible `/v1` API and the MCP `/mcp` endpoint. `:9742` carries the internal traffic between mesh nodes and isn't exposed to your own code. Both can be changed in the config file if something else wants the port.
 
-### Can I run multiple instances on one machine?
+## Can I run more than one instance on a machine?
 
-Not by default — the daemon is a user-level service. You can run a second instance by overriding ports (`client_port` / `internal_port` in config.toml) and pointing `--data-dir` at a separate path. This is rare; most users want one.
+Not by default — the daemon is a single per-user service. You can run a second by giving it different ports (`client_port` / `internal_port` in config.toml) and a separate `--data-dir`, but most people want just the one.
 
-### What's the difference between Commonwealth and Sovereign?
+## What's the difference between Commonwealth and Sovereign?
 
-- **Sovereign** is the per-user assistant: chat, knowledge bases, code intelligence, skills.
-- **Commonwealth** is the mesh layer: multiple Sovereign users share inference compute with each other. It runs *inside* Sovereign as `EmbeddedDaemon` — you never install or run it separately.
+Sovereign is the assistant you use: chat, knowledge bases, code intelligence, skills. Commonwealth is the mesh layer underneath it, where a few people share inference across their machines. It runs inside Sovereign — you never install or start it separately. From where you sit there's one command (`sovereign`), one daemon, one port; the mesh is just `sovereign mesh create` / `join` / `rotate`.
 
-From the user's point of view there's one binary (`sovereign`), one daemon (`sovereign daemon run`), one port (`:9741`). Mesh operations are `sovereign mesh create/join/rotate`.
+## Where do my models, corpora, and indexes live?
 
-### Where do my models / corpora / indexes live?
+- Models — `~/.sovereign/models/*.gguf`
+- Config — `~/.sovereign/config.toml`
+- Logs — `~/.sovereign/logs/daemon.log`
+- Code and knowledge indexes — `~/.sovereign/indexes/<corpus>/` (downloaded shards land in `_downloads/` and index into the same place)
+- Mesh state — `mesh.json`, in your platform's data directory (`~/Library/Application Support/sovereign/` on macOS, `~/.local/share/sovereign/` on Linux). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
 
-- **Models**: `~/.sovereign/models/*.gguf`
-- **Mesh state**: platform-native data dir (e.g. `~/Library/Application Support/sovereign/mesh.json` on macOS)
-- **Code intelligence indexes**: `~/.sovereign/indexes/<corpus>/`
-- **Knowledge corpora**: `~/.sovereign/indexes/_downloads/<corpus>/` (shards) + indexed into the same corpus dir
-- **Config**: `~/.sovereign/config.toml`
-- **Logs**: `~/.sovereign/logs/daemon.log`
+## How do I set a web search API key?
 
-### How do I configure a web search API key?
+For now you pass it when you start the REPL — `sovereign --model <path> --brave-api-key <key>`, or `--tavily-api-key`. Storing it through setup is on the list; until then, keep it in your shell environment and expand it yourself.
 
-At REPL invocation: `sovereign --model <path> --brave-api-key <key>`. For persistent storage via setup, roadmap; for now, add to your shell's environment and use `${BRAVE_API_KEY}`-style expansion in your own wrapper.
+## What's the difference between `project init` and `code index`?
 
-### What's the difference between `project init` and `code index`?
-
-- `sovereign project init` is the full workflow: tree-sitter symbol index **and** SCIP call graph **and** `.claude`/`.opencode` wiring **and** git hooks.
-- `sovereign code index <path>` is the low-level primitive: just the tree-sitter pass.
-
-If you want call graphs and AI harness auto-detection, use `project init`. If you're scripting a narrow pipeline, `code index` is smaller.
-
-### Where does mesh state persist?
-
-`mesh.json` lives under `dirs::data_dir()` (macOS: `~/Library/Application Support/sovereign/`, Linux: `~/.local/share/sovereign/`). Deleting it resets the mesh; `sovereign mesh leave` is the supported way to do it cleanly.
+`sovereign project init` is the whole setup: the symbol index, the call graph, the `.claude` / `.opencode` wiring, and the git hooks. `sovereign code index <path>` is just the first piece, the symbol pass on its own. Use `project init` for the full thing; reach for `code index` when you're scripting something narrow.
