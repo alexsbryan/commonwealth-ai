@@ -1093,6 +1093,27 @@
               </div>
             </div>
 
+            <!-- Raw model (naked mode) — model with no Sovereign affordances -->
+            <div class="cfg-entry">
+              <div class="cfg-entry-display cfg-entry-display--static">
+                <span class="cfg-entry-name">Raw model</span>
+                <span class="cfg-entry-current">
+                  <span class="cfg-entry-val">{config.naked_mode ? 'On' : 'Off'}</span>
+                  <span class="cfg-entry-tech">naked_mode</span>
+                </span>
+              </div>
+              <div class="cfg-entry-edit cfg-entry-edit--always">
+                <label class="cfg-toggle-row">
+                  <input
+                    type="checkbox"
+                    bind:checked={config.naked_mode}
+                    onchange={() => markDirty('naked_mode')}
+                  />
+                  <span class="cfg-toggle-label">Run the model raw — no retrieval, routing, grounding checks, or tools. Just the model and your chat history (plus your custom instructions). Best for A/B-ing a model's own behaviour.</span>
+                </label>
+              </div>
+            </div>
+
             <!-- Auto-escalate to web -->
             <div class="cfg-entry">
               <div class="cfg-entry-display cfg-entry-display--static">

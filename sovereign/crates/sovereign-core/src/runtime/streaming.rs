@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use futures::{Stream, StreamExt};
 
-use crate::context::build_context;
+use crate::context::{build_context, format_history_as_prompt};
 use crate::error::{Error, Result};
 use crate::memory;
 use crate::skills::SkillRegister;
@@ -419,6 +419,123 @@ impl Runtime {
     ) -> Result<StreamHandle> {
         self.handle_message_stream_with_classification(message, conversation_id, None)
             .await
+    }
+
+    /// Naked chat turn — raw model, none of the Sovereign affordances.
+    ///
+    /// Desktop "naked mode" (a user setting) routes here instead of
+    /// `handle_message_stream`: the conversation history is rendered
+    /// straight into the prompt and streamed from the loaded model with
+    /// NO retrieval, router, grounding gate, tools, atlas, or gap-check.
+    /// The only system context is a minimal assistant preamble plus the
+    /// user's custom instructions (persona) when set — the desktop
+    /// equivalent of the benches' `--naked` mode. Returns the same
+    /// `StreamHandle` so the caller's streaming UI is unchanged.
+    ///
+    /// v1 cancellation is a standalone token: the stop button doesn't
+    /// reach naked turns yet (naked is affordance-free by construction
+    /// and never calls `sessions.begin`). Wiring stop is a follow-up.
+    pub async fn handle_message_stream_naked(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<StreamHandle> {
+        if message.len() > MAX_TURN_MESSAGE_CHARS {
+            return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
+        }
+
+        // Prior history only — no working-memory / topic shaping.
+        let mut context =
+            build_context(self.store.as_ref(), conversation_id, message).await?;
+
+        // Persist the user turn (same as the situated path).
+        let user_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::User,
+            content: message.to_string(),
+            created_at: now(),
+            metadata: None,
+            version: now(),
+        };
+        self.store.save_message(&user_msg).await?;
+        context.conversation.messages.push(user_msg);
+
+        // System = minimal assistant preamble + the user's persona
+        // (custom instructions) when set. Nothing else.
+        let mut system = "You are a helpful assistant.".to_string();
+        if let Some(ci) = self.inference_config.custom_instructions.as_deref() {
+            let ci = ci.trim();
+            if !ci.is_empty() {
+                system.push_str("\n\n");
+                system.push_str(ci);
+            }
+        }
+
+        // Raw request: the rendered transcript is the prompt; no tools,
+        // evidence, or grammar. `Speed::Slow` serves the loaded primary
+        // — the model the user chose to run naked.
+        let request = CompletionRequest {
+            prompt: format_history_as_prompt(&context, 24),
+            system_message: Some(system),
+            preferred_speed: Speed::Slow,
+            ..Default::default()
+        };
+
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
+        let inference = Arc::clone(&self.inference);
+        let store = Arc::clone(&self.store);
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let conversation_id_owned = conversation_id.to_string();
+        let message_id_owned = message_id.clone();
+
+        tokio::spawn(async move {
+            let (s, model_id) =
+                match inference.complete_stream_with_id_and_finish(&request).await {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+                };
+            let mut full_text = String::new();
+            let _ = run_synthesis_stream(
+                &inference,
+                s,
+                model_id,
+                &request,
+                &tx,
+                &cancel,
+                &mut full_text,
+                false, // had_retrieved_chunks — naked has no evidence
+                false, // gate_on — no grounding gate
+                "naked",
+            )
+            .await;
+
+            let assistant_msg = Message {
+                id: message_id_owned,
+                conversation_id: conversation_id_owned.clone(),
+                role: Role::Assistant,
+                content: full_text,
+                created_at: now(),
+                metadata: None,
+                version: now(),
+            };
+            if let Err(e) = store.save_message(&assistant_msg).await {
+                tracing::warn!(
+                    conversation_id = %conversation_id_owned,
+                    error = %e,
+                    "naked stream: failed to save assistant message"
+                );
+            }
+        });
+
+        Ok(StreamHandle {
+            message_id,
+            stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+        })
     }
 
     /// KnowledgeQuery / ComparisonQuery streaming turn. Lifted verbatim

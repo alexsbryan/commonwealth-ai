@@ -154,6 +154,11 @@ export interface DesktopConfig {
    *  draft for thin evidence and may surface an InformationRequest
    *  card. Default on. */
   auto_collaborate: boolean;
+  /** Naked mode — run the loaded model raw, with none of the Sovereign
+   *  affordances (retrieval, router, grounding gate, tools, atlas, gap
+   *  check). Chat history → model → reply, with only a minimal assistant
+   *  preamble + custom_instructions. Default off. */
+  naked_mode: boolean;
   /** User-authored "custom instructions" / persona. Global standing
    *  guidance appended as the outermost layer of every system prompt —
    *  append-only, never replacing the situated context. Null/empty is a
