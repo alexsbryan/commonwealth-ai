@@ -41,6 +41,20 @@ pub(crate) async fn load_inference(
             Arc::clone(inf)
         } else {
             drop(existing);
+            // ── Attach mode: a CLI daemon already owns the models on :9741. ──
+            // Route ALL inference to it over HTTP and load NO local weights.
+            // (The desktop historically loaded a redundant second copy of the
+            // chat model here even in Attach mode — ~16GB wasted + Metal
+            // contention that surfaced as the qwen-MoE FastShort Decode -3
+            // under co-residency.) chat → primary stem, embed → embed stem —
+            // the ids the daemon advertises on /v1/models, resolved exactly
+            // like `sovereign chat`'s daemon bootstrap. Rebuilds reuse the slot
+            // above; the tail's mesh-wrap is a no-op when mesh == None.
+            if mesh.is_none() {
+                let raw: Arc<dyn InferenceProvider> = build_attach_provider(config)?;
+                *inference_slot.write().await = Some(Arc::clone(&raw));
+                return Ok((Arc::clone(&raw), raw));
+            }
             tracing::info!("Loading fast model: {}", config.model_path.display());
             if let Some(ref ep) = config.embed_model_path {
                 tracing::info!("Loading embed model: {}", ep.display());
@@ -178,6 +192,48 @@ pub(crate) async fn load_inference(
         None => Arc::clone(&raw_inference),
     };
     Ok((raw_inference, inference))
+}
+
+/// Build the daemon-routing provider for Attach mode: a
+/// [`sovereign_inference::remote::SplitInferenceProvider`] that sends chat
+/// completions + embeddings to the CLI daemon's OpenAI-compatible `/v1` on the
+/// configured client port, owning NO local weights. Model ids are the filename
+/// stems of the configured primary (chat) + embed models — the same ids the
+/// daemon advertises on `/v1/models` (it loaded the same `SetupConfig.models.*`
+/// files), resolved the same way `sovereign chat`'s daemon bootstrap does. The
+/// daemon's own engine still tier-routes Fast/Slow per request, so the chat id
+/// is just the address — reasoning turns still reach the primary slot.
+fn build_attach_provider(config: &DesktopConfig) -> Result<Arc<dyn InferenceProvider>, String> {
+    let setup = sovereign_core::setup_config::SetupConfig::load()
+        .map_err(|e| format!("Attach mode: load SetupConfig for daemon routing: {e}"))?;
+    let v1 = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
+    let ctx = setup.models.effective_context_size();
+
+    let stem = |p: &std::path::Path| p.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+    let chat_id = config
+        .primary_model_path
+        .as_deref()
+        .and_then(stem)
+        .or_else(|| stem(&config.model_path))
+        .ok_or_else(|| "Attach mode: no chat model path to derive a daemon model id".to_string())?;
+    let embed_id = config
+        .embed_model_path
+        .as_deref()
+        .and_then(stem)
+        .ok_or_else(|| {
+            "Attach mode: no embedding model configured (Settings → Embedding model)".to_string()
+        })?;
+
+    tracing::info!(
+        endpoint = %v1,
+        chat_model = %chat_id,
+        embed_model = %embed_id,
+        context_size = ctx,
+        "Attach mode: routing inference to the daemon over HTTP — no local weights loaded"
+    );
+    Ok(Arc::new(
+        sovereign_inference::remote::SplitInferenceProvider::new(&v1, chat_id, embed_id, ctx),
+    ))
 }
 
 #[cfg(test)]

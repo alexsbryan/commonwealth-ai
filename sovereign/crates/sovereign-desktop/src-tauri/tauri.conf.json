@@ -45,7 +45,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "resources/starter/federalist-starter.tar.zst": "starter/federalist-starter.tar.zst"
+    }
   },
   "plugins": {
     "deep-link": {

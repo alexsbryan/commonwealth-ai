@@ -712,6 +712,105 @@ impl InferenceProvider for RemoteApiProvider {
     }
 }
 
+/// Wraps two [`RemoteApiProvider`]s — one per endpoint — and routes
+/// `InferenceProvider` trait calls to the correct one. `RemoteApiProvider` is
+/// constructed with a single `model_id` used for BOTH `/chat/completions` and
+/// `/embeddings`; sending a chat model to the embeddings endpoint returns
+/// non-embedding shapes (or errors). Keeping two instances and routing by
+/// method keeps the daemon honest: the chat endpoint never sees an embed model
+/// id, and vice versa.
+///
+/// This is the "talk to the daemon over HTTP, own no weights" provider for
+/// **both** `sovereign chat` (the daemon-backed CLI) and the desktop's Attach
+/// mode (a CLI daemon already owns the models on `:9741`). Promoted here from
+/// `sovereign-cli-llm::chat_cmd::bootstrap` (2026-06-16) so the two callers
+/// share one impl rather than diverging.
+pub struct SplitInferenceProvider {
+    chat: std::sync::Arc<RemoteApiProvider>,
+    embed: std::sync::Arc<RemoteApiProvider>,
+    chat_model_id: String,
+    /// Daemon-side chat slot context window, captured at construction (the same
+    /// `SetupConfig.effective_context_size()` value the daemon's slot loader
+    /// uses) so `effective_context_size` answers without a daemon round-trip —
+    /// the runtime's budget-aware compaction arm reads it.
+    context_size: u32,
+}
+
+impl SplitInferenceProvider {
+    pub fn new(
+        endpoint_v1: &str,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+    ) -> Self {
+        let chat = std::sync::Arc::new(RemoteApiProvider::new(
+            endpoint_v1,
+            None,
+            &chat_model_id,
+            context_size,
+        ));
+        let embed = std::sync::Arc::new(RemoteApiProvider::new(
+            endpoint_v1,
+            None,
+            &embed_model_id,
+            context_size,
+        ));
+        Self {
+            chat,
+            embed,
+            chat_model_id,
+            context_size,
+        }
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for SplitInferenceProvider {
+    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        self.chat.complete(request).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        self.chat.complete_stream(request).await
+    }
+
+    async fn complete_batch(
+        &self,
+        requests: &[CompletionRequest],
+    ) -> Result<Vec<CompletionResponse>> {
+        self.chat.complete_batch(requests).await
+    }
+
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        self.embed.embed(text).await
+    }
+
+    /// Route to the embed provider's `embed_query` so its model-specific
+    /// query-instruction prefix is applied (the trait default would call
+    /// `Self::embed`, the document path, silently dropping the prefix).
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        self.embed.embed_query(query).await
+    }
+
+    fn model_id_for(&self, _speed: Speed) -> String {
+        // Only one chat slot over HTTP; the daemon's own engine maps the
+        // request (Speed / max_tokens) to its loaded fast/primary slots.
+        // Reporting the request model is the most honest client-side signal.
+        self.chat_model_id.clone()
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        self.chat.capabilities()
+    }
+
+    fn effective_context_size(&self) -> Option<u32> {
+        Some(self.context_size)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

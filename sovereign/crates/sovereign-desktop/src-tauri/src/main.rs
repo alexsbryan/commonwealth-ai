@@ -565,6 +565,7 @@ fn main() -> ExitCode {
             enrich_commands::enrich_estimate,
             enrich_commands::enrich_get_active_job,
             enrich_commands::enrich_get_starter_questions,
+            enrich_commands::install_starter_corpus,
             enrich_commands::is_first_run,
             enrich_commands::mark_first_run_complete,
             update_commands::check_for_update,

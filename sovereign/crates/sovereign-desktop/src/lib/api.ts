@@ -1622,6 +1622,19 @@ export async function enrichGetStarterQuestions(
   return invoke("enrich_get_starter_questions", { corpusId, limit });
 }
 
+/** Install the bundled "Federalist Papers" starter corpus by restoring its
+ *  pre-enriched snapshot — offline, no inference, no network (~1s). Idempotent:
+ *  returns `already_installed: true` if the corpus is already present. The
+ *  snapshot ships as a Tauri resource and restores into the shared corpus
+ *  store, so a first-time user can chat with a real, grounded corpus before
+ *  authoring their own. */
+export async function installStarterCorpus(): Promise<{
+  corpus_id: string;
+  already_installed: boolean;
+}> {
+  return invoke("install_starter_corpus");
+}
+
 /** True when the user has never completed the onboarding corpus
  *  flow. Checked alongside `enrichListCorpora().length === 0` in
  *  App.svelte to decide whether to gate the first-corpus flow. */

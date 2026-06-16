@@ -351,6 +351,39 @@ fn extract_cache_has_atlas_payloads(cache_path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+/// True when `atoms.json` exists but carries no resolved atoms — the
+/// empty placeholder every `corpus install` leaves behind. Each install
+/// fires a model-free STRUCTURAL atlas pass (see `EnrichmentState` —
+/// "post-install structural atlas, every corpus install fires this");
+/// for prose corpora that pass emits zero atoms but still writes
+/// `atlas/atoms.json`. If the resolve step treated that placeholder as
+/// "already done" it would skip the real model-based resolve, leaving
+/// the corpus with a 0-atom atlas even though Phase 1 extraction was
+/// rich — the root cause of custom-atlas enrichments (CLI *and* the
+/// in-app `BuildEnrichCard`, which spawns this same `enrich build`)
+/// silently producing empty atlases.
+///
+/// Re-running resolve when the cache is empty is safe: resolve is
+/// model-free (it assembles atoms from the cached extract + clusters),
+/// so the worst case for a genuinely-empty corpus is a cheap, idempotent
+/// re-run. A populated `atoms.json` (a real prior resolve) is preserved.
+fn resolve_cache_is_structural_placeholder(cache_path: &std::path::Path) -> bool {
+    let bytes = match std::fs::read(cache_path) {
+        Ok(b) => b,
+        Err(_) => return true, // unreadable → don't trust it → re-resolve
+    };
+    let v: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return true, // unparseable → re-resolve
+    };
+    // Resolved atoms live under `.atoms`; an empty (or absent) array is
+    // the structural placeholder.
+    v.get("atoms")
+        .and_then(|a| a.as_array())
+        .map(|a| a.is_empty())
+        .unwrap_or(true)
+}
+
 async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
     let corpus = parsed.corpus_id.as_str();
 
@@ -382,10 +415,30 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
                 // Phase 1 here MUST carry section_extraction — if it
                 // doesn't, the cache is stale; re-run extract instead
                 // of silently skipping into a doomed cluster step.
-                if matches!(step, Step::Extract) && !extract_cache_has_atlas_payloads(&cache_path) {
+                // File-exists alone is not enough for two steps whose
+                // canonical output can be a STALE placeholder another code
+                // path wrote:
+                //   - Extract: a legacy non-atlas `questions.json` has no
+                //     section_extraction payloads → the cluster step dies.
+                //   - Resolve: every `corpus install` fires a model-free
+                //     structural atlas that writes an EMPTY `atoms.json`.
+                //     Treating that as "resolve done" leaves the corpus with
+                //     a 0-atom atlas even though Phase 1 extraction was rich
+                //     (the in-app custom-atlas enrich bug).
+                let stale_reason: Option<&str> = if matches!(step, Step::Extract)
+                    && !extract_cache_has_atlas_payloads(&cache_path)
+                {
+                    Some("from a non-atlas run (no section_extraction payloads)")
+                } else if matches!(step, Step::Resolve)
+                    && resolve_cache_is_structural_placeholder(&cache_path)
+                {
+                    Some("an empty post-install structural placeholder (no resolved atoms)")
+                } else {
+                    None
+                };
+                if let Some(reason) = stale_reason {
                     println!(
-                        "  · {} cached file at {} is from a non-atlas run \
-                         (no section_extraction payloads); invalidating cache.",
+                        "  · {} cached file at {} is {reason}; invalidating cache.",
                         step.label(),
                         cache_path.display()
                     );
@@ -1150,6 +1203,40 @@ mod tests {
             seed_strategy_none: false,
             runs_configuration_phase: true,
         }
+    }
+
+    #[test]
+    fn resolve_cache_structural_placeholder_is_invalidated_but_real_resolve_is_kept() {
+        // Pins the fix for the post-install structural atlas blocking
+        // resolve: an empty `atoms.json` (the structural placeholder) must
+        // be treated as stale so resolve re-runs; a populated one (a real
+        // prior resolve) must be preserved so we don't redo finished work.
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("atoms.json");
+
+        // The post-install structural placeholder: empty atoms array.
+        std::fs::write(&p, r#"{"schema_version":1,"atoms":[]}"#).unwrap();
+        assert!(
+            resolve_cache_is_structural_placeholder(&p),
+            "empty atoms ⇒ placeholder ⇒ must re-resolve"
+        );
+
+        // A real resolve output is preserved (skip).
+        std::fs::write(&p, r#"{"schema_version":1,"atoms":[{"kind":"Entity"}]}"#).unwrap();
+        assert!(
+            !resolve_cache_is_structural_placeholder(&p),
+            "non-empty atoms ⇒ real resolve ⇒ must be kept"
+        );
+
+        // Absent / unparseable / missing ⇒ can't trust it ⇒ re-resolve.
+        std::fs::write(&p, r#"{"schema_version":1}"#).unwrap();
+        assert!(resolve_cache_is_structural_placeholder(&p), "absent atoms key");
+        std::fs::write(&p, "not json").unwrap();
+        assert!(resolve_cache_is_structural_placeholder(&p), "unparseable");
+        assert!(
+            resolve_cache_is_structural_placeholder(&dir.path().join("nope.json")),
+            "missing file"
+        );
     }
 
     #[test]

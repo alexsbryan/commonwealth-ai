@@ -22,12 +22,10 @@
 //! and route by method.
 
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures::Stream;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::planner::LlmPlanner;
@@ -35,119 +33,14 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::{SkillRegistry, ToolRegistry};
-use sovereign_inference::remote::RemoteApiProvider;
+// Re-exported (not just `use`d) so the other CLI modules that referenced the
+// formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
+// recipe_cmd) keep resolving after it was promoted to sovereign-inference.
+pub use sovereign_inference::remote::SplitInferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::shell::ShellTool;
 
 use crate::chat_cmd::config::ChatGlobals;
-
-/// Wraps two `RemoteApiProvider`s — one per endpoint — and routes
-/// `InferenceProvider` trait calls to the correct one.
-///
-/// Everything that generates text (complete / complete_stream /
-/// complete_batch / capabilities / model_id_for) goes to `chat`.
-/// Everything that produces vectors (embed / embed_batch / embed_query)
-/// goes to `embed`. Keeps the daemon honest: the chat endpoint never
-/// sees an embed model id, and vice versa.
-pub struct SplitInferenceProvider {
-    chat: Arc<RemoteApiProvider>,
-    embed: Arc<RemoteApiProvider>,
-    chat_model_id: String,
-    /// Daemon-side chat slot context window. Stored so
-    /// `effective_context_size` can return a concrete value without
-    /// a daemon round-trip on every call — the CLI reads
-    /// `SetupConfig.effective_context_size()` at construction (same
-    /// value the daemon's slot loader uses) and mirrors it here.
-    ///
-    /// Wired 2026-05-26 so the runtime's budget-aware compaction arm
-    /// (M1) activates on CLI bench paths; previously the trait
-    /// default returned `None` and only the turn-count arm fired.
-    context_size: u32,
-}
-
-impl SplitInferenceProvider {
-    pub fn new(
-        endpoint_v1: &str,
-        chat_model_id: String,
-        embed_model_id: String,
-        context_size: u32,
-    ) -> Self {
-        let chat = Arc::new(RemoteApiProvider::new(
-            endpoint_v1,
-            None,
-            &chat_model_id,
-            context_size,
-        ));
-        let embed = Arc::new(RemoteApiProvider::new(
-            endpoint_v1,
-            None,
-            &embed_model_id,
-            context_size,
-        ));
-        Self {
-            chat,
-            embed,
-            chat_model_id,
-            context_size,
-        }
-    }
-}
-
-#[async_trait]
-impl InferenceProvider for SplitInferenceProvider {
-    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        self.chat.complete(request).await
-    }
-
-    async fn complete_stream(
-        &self,
-        request: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        self.chat.complete_stream(request).await
-    }
-
-    async fn complete_batch(
-        &self,
-        requests: &[CompletionRequest],
-    ) -> Result<Vec<CompletionResponse>> {
-        self.chat.complete_batch(requests).await
-    }
-
-    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        self.embed.embed(text).await
-    }
-
-    /// Route to the embed provider's `embed_query` so its model-specific
-    /// query-instruction prefix is applied. Without this override the trait
-    /// default would call `SplitInferenceProvider::embed` (the document path),
-    /// silently dropping the prefix — the latent bug this fixes.
-    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        self.embed.embed_query(query).await
-    }
-
-    fn model_id_for(&self, _speed: Speed) -> String {
-        // We only have one chat slot over HTTP; the daemon itself
-        // maps Fast/Slow to its loaded models. Reporting the request
-        // model is the most honest signal we have client-side.
-        self.chat_model_id.clone()
-    }
-
-    fn capabilities(&self) -> ProviderCapabilities {
-        self.chat.capabilities()
-    }
-
-    /// Surface the daemon-side context window so the runtime's
-    /// compaction layer (M1 budget arm) can budget against it. The
-    /// value is captured at construction from
-    /// `SetupConfig.effective_context_size()` — the same value the
-    /// daemon's slot loader uses — and stays accurate as long as the
-    /// daemon isn't hot-reloaded with a different ctx mid-session.
-    /// (Hot reload triggers a new bench bootstrap anyway, so the
-    /// captured-once shape is safe.)
-    fn effective_context_size(&self) -> Option<u32> {
-        Some(self.context_size)
-    }
-}
 
 /// Bundle of everything the chat subcommands need from bootstrap.
 /// Carries `Arc<Runtime>` plus the handles required to persist turns
