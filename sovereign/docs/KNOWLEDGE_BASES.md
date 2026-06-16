@@ -6,23 +6,25 @@ Sovereign indexes curated reference sources locally. Every query searches these 
 
 ## Available corpora
 
-| Corpus | Description | Size | License |
+| Corpus | What it is | Indexed size | License |
 |---|---|---|---|
-| **Wikipedia** | 6.8M English articles | 55 GB indexed | CC BY-SA 4.0 |
-| **Stanford Encyclopedia of Philosophy** | Peer-reviewed philosophy articles (via HuggingFace dataset) | 0.5 GB indexed | CC BY-NC-ND 4.0 |
-| **OpenAlex** | 250M+ scholarly abstracts with citations | 45 GB indexed | CC0 |
-| **Stack Exchange** | Expert Q&A across 170+ communities (score ≥ 3) | 40 GB indexed | CC BY-SA 4.0 |
-| **Project Gutenberg** | 70,000+ public domain books | 25 GB indexed | Public Domain |
-| **CRS Reports** | US Congressional policy analysis | 4 GB indexed | Public Domain |
+| Wikipedia | Wikipedia Core — ~51K Vital Articles, expandable in place to the full 6.7M-article dump | 2.5 GB | CC BY-SA 4.0 |
+| Stanford Encyclopedia of Philosophy | Peer-reviewed philosophy articles | 6 GB | CC BY-NC-ND 4.0 |
+| Stack Exchange | Expert Q&A across many communities | 120 GB | CC BY-SA 4.0 |
+| OpenAlex | Scholarly abstracts and metadata | 500 GB | CC0 |
+| Project Gutenberg | Public-domain books | 0.3 GB | Public Domain |
+| CRS Reports | US Congressional policy analysis | 5 GB | Public Domain |
+
+Sizes are the indexed footprint and shift as corpora are added; `sovereign corpus list` shows the live catalog and what's installed.
 
 ## Tiers
 
-The Sovereign desktop app offers four curated tiers at setup time. Pick by storage budget and research focus:
+The desktop app groups corpora into four tiers at setup time. Pick by storage budget and focus:
 
-- **Essential** (55 GB) — Wikipedia only. Broad general knowledge.
-- **Research** (105 GB) — Wikipedia + SEP + OpenAlex + CRS. Academic and policy research.
-- **Technical** (95 GB) — Wikipedia + Stack Exchange. Programming and engineering.
-- **Full** (170 GB) — All corpora.
+- Essential — Wikipedia Core (plus Simple English). The general-knowledge baseline, a couple of GB.
+- Research — Essential plus SEP, OpenAlex, and CRS Reports. Academic and policy work, and large: OpenAlex alone is around 500 GB.
+- Technical — Essential plus Stack Exchange. Programming and engineering, around 120 GB.
+- Full — every corpus.
 
 From the CLI, install corpora individually:
 
@@ -35,7 +37,7 @@ sovereign corpus status            # shard download / index progress
 
 ## How it works
 
-Knowledge bases are defined in `data/corpora.toml`. The corpus manager downloads source files (Parquet, XML, JSONL), parses them with streaming parsers (never loading full corpora into memory), and indexes chunks via SQLite FTS5 full-text search.
+Corpora are defined as recipes in `sovereign-recipes/registry.toml`. The corpus manager downloads source files (Parquet, XML, JSONL), parses them with streaming parsers (never loading full corpora into memory), and indexes chunks via SQLite FTS5 full-text search.
 
 Every query — regardless of how the router classifies it — searches the local knowledge base. Results are injected as context before the model generates a response. Provenance metadata records which corpora were consulted and how many chunks matched.
 

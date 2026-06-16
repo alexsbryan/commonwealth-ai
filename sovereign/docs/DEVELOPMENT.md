@@ -64,13 +64,9 @@ sovereign/
 │   ├── sovereign-server/      # REST + WebSocket API
 │   ├── sovereign-mesh/        # Embedded Commonwealth daemon + MCP router
 │   └── sovereign-desktop/     # Tauri + Svelte desktop app
-├── data/
-│   └── corpora.toml           # Knowledge base manifest (compiled into desktop app)
-├── skills/
-│   ├── research-analyst/      # Multi-source research with citations
-│   ├── code-review/           # Structured code analysis
-│   ├── personal-assistant/    # Task management
-│   └── inner-work/            # Reflective companion (local-only)
+├── modes/                    # Bundled skills (each a skill.toml)
+│   ├── inner-work/            # Reflective companion (local-only)
+│   └── recipe-author/        # Corpus-recipe authoring workflow
 ├── docs/
 │   ├── CLI_REFERENCE.md       # Flag + subcommand reference
 │   ├── CODE_INTELLIGENCE.md   # Per-project code intelligence setup
@@ -127,14 +123,11 @@ tools.register(Box::new(MyTool::new()));
 
 ## Adding a corpus
 
-1. Add a parser implementing `CorpusParser` trait in `sovereign-tools/src/corpus/`.
-2. Register it in `registry.rs::parser_for_corpus()`.
-3. Add the corpus definition to `data/corpora.toml`.
-4. Supported formats: Parquet, MediaWiki XML (bzip2), Stack Exchange XML, JSONL (gzip), HTML directory, plain text directory.
+A corpus is a recipe — a TOML file declaring `acquire → extract → chunk → embed → index`, no code required. Author one with `sovereign recipe`, and to ship it add an entry to `sovereign-recipes/registry.toml`. The walkthrough is [sovereign-recipes/GETTING_STARTED.md](../../sovereign-recipes/GETTING_STARTED.md); every field is in [SCHEMA.md](../../sovereign-recipes/SCHEMA.md). The built-in extractors (Parquet, JSONL, HTML, email, Markdown, CSV, …) live in `corpus-engine/src/extractors/`; for a format they don't cover, add one there — or a `CorpusParser` in `sovereign-tools/src/corpus/` for the legacy built-in path.
 
 ## Adding a skill
 
-Create `skills/my-skill/skill.toml`:
+Create `modes/my-skill/skill.toml` (bundled skills live in `sovereign/modes/`; the corpora are recipes in `sovereign-recipes/`, not under `sovereign/`):
 
 ```toml
 [skill]

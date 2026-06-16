@@ -1,5 +1,7 @@
 # Cloud peer deployment
 
+> **Superseded.** This documents the original "pod joins your mesh as a peer" design (Tailscale + R2 + mesh-join). As of 2026-05-15 the container boots the ephemeral-worker model instead — a pod owned by one peer for one job, driven over a pinned transport, that never gossip-joins the mesh ([EPHEMERAL_WORKER_PODS.md](EPHEMERAL_WORKER_PODS.md)). The flow below won't boot as written against the current image (its `entrypoint.sh` now expects a `SOVEREIGN_BOOTSTRAP` blob), so treat it as the architecture-and-cost reference until the ephemeral-worker CLI lands and this is rewritten.
+
 Spin up a transient cloud GPU as a sovereign-mesh worker. The remote
 pod joins your tailnet, advertises its slots over OICP, and your
 laptop's existing `sovereign enrich ...` flow routes Phase 1 chat
@@ -40,10 +42,10 @@ shape is in the [Cost](#cost) section below.
  │  ├── primary slot       │        │  ├── 1. tailscale up             │
  │  ├── fast slot          │        │  ├── 2. rclone sync r2:models/   │
  │  ├── embed slot         │        │  ├── 3. write config.toml        │
- │  └── OICP server :9742  │◄──────►│  └── 4. exec sovereign-cli       │
+ │  └── OICP server :9741  │◄──────►│  └── 4. exec sovereign-cli       │
  │                         │ tailnet│        daemon run                │
  │ enrich extract sep-X    │  9742  │   ├── primary slot(s)            │
- │  → routes Phase 1 to    │        │   └── OICP server :9742          │
+ │  → routes Phase 1 to    │        │   └── OICP server :9741          │
  │    whichever peer has   │        │                                  │
  │    capacity             │        │   advertised via mesh gossip     │
  └─────────────────────────┘        └──────────────────────────────────┘

@@ -42,11 +42,7 @@ A config file exists at `~/.sovereign/config.toml`. Use `sovereign setup --reset
 Edit the `[models]` section of the config file directly, then restart the daemon:
 
 ```sh
-# macOS
-launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon
-
-# Linux
-systemctl --user restart sovereign
+sovereign daemon restart
 ```
 
 Or run `sovereign setup --reset` for a full re-download.
@@ -134,10 +130,9 @@ Full removal:
 
 ```sh
 # macOS
-launchctl bootout gui/$(id -u)/com.sovereign.daemon
+launchctl unload ~/Library/LaunchAgents/com.sovereign.daemon.plist
 rm ~/Library/LaunchAgents/com.sovereign.daemon.plist
 rm -rf ~/.sovereign
-rm -rf "~/Library/Application Support/sovereign"
 
 # Linux
 systemctl --user disable --now sovereign

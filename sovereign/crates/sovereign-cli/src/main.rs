@@ -559,8 +559,8 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe"
-            | "pipeline" | "recipe-agent" | "maintainer" => {
+            "mesh" | "meshapp" | "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp"
+            | "recipe" | "pipeline" | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

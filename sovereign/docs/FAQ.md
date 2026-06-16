@@ -39,7 +39,7 @@ Sovereign is the assistant you use: chat, knowledge bases, code intelligence, sk
 - Config — `~/.sovereign/config.toml`
 - Logs — `~/.sovereign/logs/daemon.log`
 - Code and knowledge indexes — `~/.sovereign/indexes/<corpus>/` (downloaded shards land in `_downloads/` and index into the same place)
-- Mesh state — `mesh.json`, in your platform's data directory (`~/Library/Application Support/sovereign/` on macOS, `~/.local/share/sovereign/` on Linux). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
+- Mesh state — `mesh.json`, in your data directory (`~/.sovereign/` by default, on both macOS and Linux). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
 
 ## How do I set a web search API key?
 
