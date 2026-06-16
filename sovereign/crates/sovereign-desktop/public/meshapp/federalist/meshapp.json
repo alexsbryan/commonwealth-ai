@@ -1,0 +1,15 @@
+{
+  "id": "federalist",
+  "name": "The Federalist Papers",
+  "version": "0.1.0",
+  "blurb": "Explore the founding essays — the entities, the arguments, the open questions — each traceable to its source. A complete, working example you can copy to build a mesh app for your own corpus.",
+  "corpus": "federalist-starter",
+  "entry": "index.html",
+  "grants": {
+    "mesh_store_read": true,
+    "mesh_store_write": false,
+    "inference_access": false,
+    "knowledge_access": false
+  },
+  "trust": "unsigned"
+}

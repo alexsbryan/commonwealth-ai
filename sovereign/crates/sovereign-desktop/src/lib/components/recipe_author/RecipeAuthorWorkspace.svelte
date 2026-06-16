@@ -27,7 +27,12 @@
     FEDERALIST_TUTORIAL,
     revealThrough,
   } from "./tutorial/federalistTutorial";
-  import { installStarterCorpus, openCorpusExplorer } from "../../api";
+  import {
+    installStarterCorpus,
+    openCorpusExplorer,
+    recordMeshAppInstall,
+    openMeshApp,
+  } from "../../api";
 
   // `onUseInChat` (seed a mined question + leave the workspace for chat)
   // and `onOpenChat` (just leave for chat) are the build-complete handoff
@@ -72,14 +77,21 @@
   }
   async function launchExplorer() {
     // The demo finale: this isn't a mockup — restore the REAL Federalist
-    // corpus (idempotent snapshot restore) and open the live Atlas Explorer
-    // over it, so the walkthrough ends in a running thing with real data.
+    // corpus (idempotent snapshot restore) and open the bundled Federalist
+    // mesh app over it (a real, copy-paste-able app — public/meshapp/federalist/),
+    // so the walkthrough ends in a running thing with real data.
     tutorialActive = false;
     try {
       await installStarterCorpus();
-      await openCorpusExplorer("federalist-starter");
+      await recordMeshAppInstall("federalist", "The Federalist Papers", {
+        mesh_store_read: true,
+        mesh_store_write: false,
+        inference_access: false,
+        knowledge_access: false,
+      });
+      await openMeshApp("federalist");
     } catch (e) {
-      console.error("launch federalist explorer:", e);
+      console.error("launch federalist app:", e);
     }
   }
   /// Open the generic Atlas Explorer over a corpus the user just built — the

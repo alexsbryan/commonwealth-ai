@@ -59,7 +59,7 @@
       <span class="card-label">Build &amp; enrich</span>
       <p class="card-text">
         {reveal.build === "done"
-          ? "✓ Pipeline complete — corpus indexed and enriched"
+          ? "Pipeline complete — corpus indexed and enriched"
           : "Running the pipeline…"}
       </p>
     </div>
