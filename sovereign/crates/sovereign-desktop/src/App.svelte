@@ -470,7 +470,11 @@
       {/if}
 
       {#if view === "recipe_author"}
-        <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
+        <RecipeAuthorWorkspace
+          onExit={() => (view = "chat")}
+          onUseInChat={handleSettingsStarterPick}
+          onOpenChat={handleDropToChat}
+        />
       {:else if view === "atlas"}
         <div class="atlas-surface">
           <AtlasSurface />

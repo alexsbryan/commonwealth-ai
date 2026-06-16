@@ -15,12 +15,25 @@
 
   import { onMount, onDestroy } from "svelte";
   import { recipeProjectStore } from "../../stores/recipeProject.svelte";
+  import type { StarterQuestion } from "../../types";
   import RecipeProjectList from "./RecipeProjectList.svelte";
   import RecipeChatSurface from "./RecipeChatSurface.svelte";
   import ProjectDashboard from "./ProjectDashboard.svelte";
   import NewProjectDialog from "./NewProjectDialog.svelte";
+  import RecipeAuthorWelcome from "./RecipeAuthorWelcome.svelte";
 
-  let { onExit }: { onExit: () => void } = $props();
+  // `onUseInChat` (seed a mined question + leave the workspace for chat)
+  // and `onOpenChat` (just leave for chat) are the build-complete handoff
+  // — host-provided so the workspace stays free of view-routing state.
+  let {
+    onExit,
+    onUseInChat,
+    onOpenChat,
+  }: {
+    onExit: () => void;
+    onUseInChat?: (question: StarterQuestion) => void;
+    onOpenChat?: () => void;
+  } = $props();
 
   let showNewProject = $state(false);
 
@@ -86,15 +99,17 @@
           projectTitle={dashboard.title}
         />
       {:else}
-        <div class="empty-state">
-          <p>Pick a project on the left, or start a new one.</p>
-        </div>
+        <RecipeAuthorWelcome
+          hasProjects={projects.length > 0}
+          onNewProject={() => (showNewProject = true)}
+          {onOpenChat}
+        />
       {/if}
     </main>
 
     <aside class="dashboard">
       {#if dashboard}
-        <ProjectDashboard {dashboard} />
+        <ProjectDashboard {dashboard} {onUseInChat} {onOpenChat} />
       {:else if selectedFeatureId}
         <div class="loading-card">Loading dashboard…</div>
       {:else}
@@ -181,7 +196,6 @@
     padding: 0.75rem;
     background: transparent;
   }
-  .empty-state,
   .loading-card,
   .empty-card {
     display: flex;

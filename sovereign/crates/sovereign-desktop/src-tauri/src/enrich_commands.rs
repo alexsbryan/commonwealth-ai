@@ -502,6 +502,97 @@ fn index_root_for(corpus_id: &str) -> PathBuf {
     sovereign_root().join("indexes").join(corpus_id)
 }
 
+/// Result of [`install_starter_corpus`].
+#[derive(Serialize)]
+pub struct StarterInstallResult {
+    pub corpus_id: String,
+    /// True when the corpus was already present (no work done) — the
+    /// caller can skip straight to chat.
+    pub already_installed: bool,
+}
+
+/// Install the bundled "Federalist Papers" starter corpus by restoring its
+/// pre-enriched snapshot — offline, no inference, no network, ~1s.
+///
+/// The snapshot ships as a Tauri resource (`starter/federalist-starter.tar.zst`,
+/// ~162 KB), embedded with `qwen-embedding-0.6b` (the app's embed model), and is
+/// restored into `~/.sovereign/indexes` via the shared snapshot-restore primitive
+/// — the SAME root the daemon + desktop read corpora from. NO hardcoded paths:
+/// the archive resolves via `app.path().resource_dir()` and the data root via
+/// `sovereign_root()` (`dirs::home_dir()`). The restore gates on the snapshot's
+/// sha256 and refuses on an embedding-dimension mismatch. Idempotent — returns
+/// early if the corpus is already present.
+///
+/// Dev override: `SOVEREIGN_STARTER_SNAPSHOT=<path>` points at an unbundled
+/// archive (e.g. `~/.sovereign/snapshots/…`) when running `tauri dev` before the
+/// resource is staged into the dev resource dir.
+#[tauri::command]
+pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResult, String> {
+    use tauri::Manager;
+    const STARTER_ID: &str = "federalist-starter";
+    // sha256 of resources/starter/federalist-starter.tar.zst (gates restore).
+    const STARTER_SHA256: &str =
+        "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
+
+    // Idempotent: a resolved atoms.json ⇒ already restored + enriched.
+    if index_root_for(STARTER_ID)
+        .join("atlas")
+        .join("atoms.json")
+        .exists()
+    {
+        return Ok(StarterInstallResult {
+            corpus_id: STARTER_ID.to_string(),
+            already_installed: true,
+        });
+    }
+
+    // Resolve the bundled snapshot: dev escape hatch first, then the bundled
+    // resource. No hardcoded paths on the shipping path.
+    let archive: PathBuf = match std::env::var("SOVEREIGN_STARTER_SNAPSHOT") {
+        Ok(p) if !p.is_empty() => PathBuf::from(p),
+        _ => app
+            .path()
+            .resource_dir()
+            .map_err(|e| format!("resolve resource dir: {e}"))?
+            .join("starter")
+            .join("federalist-starter.tar.zst"),
+    };
+    if !archive.exists() {
+        return Err(format!(
+            "starter snapshot not found at {} (set SOVEREIGN_STARTER_SNAPSHOT for dev)",
+            archive.display()
+        ));
+    }
+
+    // restore_snapshot_archive is blocking (tar extract + streaming sha) — run it
+    // off the async runtime. ~162 KB ⇒ milliseconds, but keep the hot path clean.
+    let data_dir = sovereign_root();
+    let archive_for_task = archive.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        corpus_engine::restore_snapshot_archive(
+            &archive_for_task,
+            &data_dir,
+            STARTER_ID,
+            Some(STARTER_SHA256),
+            "qwen-embedding-0.6b",
+            corpus_engine::DEFAULT_EMBED_DIM,
+        )
+    })
+    .await
+    .map_err(|e| format!("starter restore task join: {e}"))?
+    .map_err(|e| format!("restore starter snapshot from {}: {e}", archive.display()))?;
+
+    tracing::info!(
+        corpus_id = %STARTER_ID,
+        index_dir = %outcome.index_dir.display(),
+        "starter corpus restored from bundled snapshot (offline, no inference)"
+    );
+    Ok(StarterInstallResult {
+        corpus_id: STARTER_ID.to_string(),
+        already_installed: false,
+    })
+}
+
 fn staging_jsonl_path_for(corpus_id: &str) -> PathBuf {
     sovereign_root()
         .join("local-corpus-staging")

@@ -1,0 +1,80 @@
+# Starter corpus — The Federalist Papers (No. 1, 10, 51).
+#
+# This recipe is BUILD-TIME ONLY. The desktop ships the *enriched snapshot*
+# (federalist-starter-…tar.zst) produced from this build and restores it
+# offline via `restore_snapshot_archive` — the raw text + this recipe are not
+# read at runtime. Kept in-repo for provenance + reproducibility.
+#
+# Content: public-domain text from Project Gutenberg eBook #1404, concatenated to
+# src-tauri/resources/starter/federalist/federalist-starter.md as three `#`-headed
+# sections (No. 1 — the case for union; No. 10 — factions; No. 51 — checks and balances).
+# Single file because the markdown extractor reads one file, splitting on headings.
+#
+# Rebuild (run from the sovereign-desktop crate root; no machine-specific paths —
+# the acquirer expands `~`):
+#   mkdir -p ~/.sovereign/recipes/federalist-starter
+#   cp src-tauri/resources/starter/recipe.toml                      ~/.sovereign/recipes/federalist-starter/
+#   cp src-tauri/resources/starter/federalist/federalist-starter.md ~/.sovereign/recipes/federalist-starter/
+#   sovereign corpus install federalist-starter
+#   sovereign enrich init  federalist-starter --from-corpus federalist-starter   # auto → custom_atlas
+#   sovereign enrich build federalist-starter --full
+#   # sanitize baked source url → Gutenberg, then:
+#   sovereign corpus snapshot publish federalist-starter            # → the shipped .tar.zst
+
+[corpus]
+id = "federalist-starter"
+name = "The Federalist Papers (Starter)"
+description = "A three-essay starter corpus — Federalist No. 1, 10, and 51 — on union, faction, and the separation of powers. Public-domain; ships pre-enriched so a first-time user can ask questions immediately, then bring their own files."
+license = "public-domain"
+schema_version = 1
+
+[acquire]
+type = "local_file"
+# Absolute path to the in-repo content file, set at build time.
+path = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/resources/starter/federalist/federalist-starter.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "political-theory"
+
+# Custom ontology (dogfoods the [enrichment.ontology] custom-atlas path): the
+# Federalist is political theory, neither literary nor generic philosophy, so a
+# domain-tuned extraction ontology beats any prebuilt genre pipeline.
+[enrichment.ontology]
+guidance = """
+These are foundational essays (The Federalist Papers) arguing for ratification of the U.S. Constitution, written under the pseudonym Publius by Hamilton, Madison, and Jay.
+
+Extract:
+- Concepts and principles: faction, federalism, separation of powers, checks and balances, republic vs. pure democracy, tyranny, union, representation, liberty, factional majority vs. minority rights.
+- Institutions and bodies: the Union, the federal government, the Senate, the House of Representatives, the Executive, the Judiciary, the state governments.
+- Persons: Publius (the shared authorial voice) and the historical authors (Alexander Hamilton, James Madison, John Jay) when named.
+- Arguments and claims: each essay's central thesis and the reasoning that supports it (e.g., "a large republic better controls the effects of faction").
+- Tensions: liberty vs. order, majority rule vs. minority rights, federal power vs. state power, energy in government vs. safety from tyranny.
+
+Relations to look for: argues_for (an author/essay argues for a principle), guards_against (an institution or design guards against a danger), checks (one branch checks another), causes (faction causes instability).
+
+Reader questions worth surfacing: What is a faction and how does the Constitution control it? How do checks and balances prevent tyranny? Why is a large republic preferable to a small one? What is the difference between a republic and a democracy?
+"""
+
+[enrichment.ontology.vocabulary]
+concern_term = "political-theory question"
+position_term = "argument"
+tension_term = "tension"
+evidence_term = "passage"
+
+[display]
+category = "reference"
+icon = "book"

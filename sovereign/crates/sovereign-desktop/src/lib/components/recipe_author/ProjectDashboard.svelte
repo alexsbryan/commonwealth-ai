@@ -3,7 +3,7 @@
   // Right-rail dashboard for the selected recipe-author project.
   // Pure layout — composes the leaf cards in stable order over a
   // single coarse `RecipeAuthorDashboardState` object.
-  import type { RecipeAuthorDashboardState } from "../../types";
+  import type { RecipeAuthorDashboardState, StarterQuestion } from "../../types";
 
   import CharterSummary from "./CharterSummary.svelte";
   import CorpusStateCard from "./CorpusStateCard.svelte";
@@ -18,7 +18,18 @@
   import ResearchLogPanel from "./ResearchLogPanel.svelte";
   import TechnicalDetailDrawer from "./TechnicalDetailDrawer.svelte";
 
-  let { dashboard }: { dashboard: RecipeAuthorDashboardState } = $props();
+  // `onUseInChat` / `onOpenChat` are the build-complete "land in use"
+  // handoff, threaded down to BuildEnrichCard. Callbacks (not part of
+  // the coarse dashboard state) — passed straight through.
+  let {
+    dashboard,
+    onUseInChat,
+    onOpenChat,
+  }: {
+    dashboard: RecipeAuthorDashboardState;
+    onUseInChat?: (question: StarterQuestion) => void;
+    onOpenChat?: () => void;
+  } = $props();
 </script>
 
 <div class="dashboard" data-testid="recipe-author-dashboard">
@@ -40,6 +51,8 @@
   <BuildEnrichCard
     recipeId={dashboard.recipe_id ?? null}
     enrichmentReady={dashboard.validation.enrichment_ready}
+    {onUseInChat}
+    {onOpenChat}
   />
   <SampleProgressBar currentSampleSize={dashboard.current_sample_size ?? null} />
   <IssueList issues={dashboard.recipe_issues} />

@@ -17,24 +17,53 @@
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import Card from "./Card.svelte";
+  import StarterChips from "../StarterChips.svelte";
   import {
     installCorpus,
     enrichBuildAsync,
     recipeEnrichInitFromCorpus,
+    enrichGetStarterQuestions,
   } from "../../api";
   import { corpusProgressStore } from "../../stores/corpusProgress.svelte";
   import { phaseLabel } from "../knowledgeStatusFormat";
-  import type { EnrichProgress } from "../../types";
+  import type { EnrichProgress, StarterQuestion } from "../../types";
 
+  // `onUseInChat` (seed a starter question + navigate) and `onOpenChat`
+  // (navigate, no seed) are the "land in use" handoff — the host
+  // (App.svelte) provides the same two handlers Settings → Knowledge
+  // uses (`handleSettingsStarterPick` / `handleDropToChat`). Optional so
+  // the card still renders standalone (tests, storybook) without them.
   let {
     recipeId,
     enrichmentReady,
-  }: { recipeId: string | null; enrichmentReady: boolean } = $props();
+    onUseInChat,
+    onOpenChat,
+  }: {
+    recipeId: string | null;
+    enrichmentReady: boolean;
+    onUseInChat?: (question: StarterQuestion) => void;
+    onOpenChat?: () => void;
+  } = $props();
 
   type Stage = "idle" | "building" | "enriching" | "done" | "failed";
   let stage = $state<Stage>("idle");
   let detail = $state<string>("");
   let error = $state<string | null>(null);
+
+  // Mined "use this corpus" chips, populated once the build reaches
+  // `done`. Empty for a built-but-not-enriched corpus (no atlas to mine)
+  // — the plain "Open in chat" action still appears. `recipeId` IS the
+  // corpus id here (install/init/build all key off it).
+  let starters = $state<StarterQuestion[]>([]);
+  async function loadStarters(): Promise<void> {
+    if (!recipeId) return;
+    try {
+      starters = await enrichGetStarterQuestions(recipeId, 3);
+    } catch {
+      // A missing/half-built atlas is not an error here — just no chips.
+      starters = [];
+    }
+  }
 
   // One-shot guard + listener handle (plain refs — not display state).
   let enrichStarted = false;
@@ -64,6 +93,7 @@
       } else {
         stage = "done";
         detail = "built (no enrichment configured)";
+        void loadStarters();
       }
     }
   });
@@ -102,6 +132,7 @@
           detail = `enriched — ${e.steps_completed} steps`;
           enrichUnlisten?.();
           enrichUnlisten = null;
+          void loadStarters();
         } else if (e.kind === "step_failed" || e.kind === "aborted") {
           stage = "failed";
           error = `enrichment ${e.kind.replace("_", " ")}`;
@@ -155,6 +186,32 @@
         <span class="pill ok">done</span>
         <span class="muted">{detail || "corpus built + enriched"}</span>
       </div>
+      <!-- Land-in-use handoff: the corpus is built + installed, so a
+           question mined from its atlas grounds in it the moment chat
+           retrieves. Chips seed + navigate; "Open in chat" just
+           navigates (always available, even with no mined questions). -->
+      {#if onUseInChat || onOpenChat}
+        <div class="use-corpus" data-testid="use-corpus">
+          {#if starters.length > 0 && onUseInChat}
+            <StarterChips
+              questions={starters}
+              heading="Use this corpus"
+              subheading="Pick a question to drop into a grounded conversation."
+              onPick={(q) => onUseInChat?.(q)}
+            />
+          {/if}
+          {#if onOpenChat}
+            <button
+              type="button"
+              class="open-chat"
+              onclick={() => onOpenChat?.()}
+              data-testid="open-in-chat"
+            >
+              Open in chat →
+            </button>
+          {/if}
+        </div>
+      {/if}
     {:else if stage === "failed"}
       <pre class="err-text">{error}</pre>
     {/if}
@@ -198,6 +255,28 @@
     align-items: baseline;
     font-size: 0.82rem;
     margin-top: 0.6rem;
+  }
+  .use-corpus {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--border, #2a2c33);
+  }
+  .open-chat {
+    align-self: flex-start;
+    background: var(--accent-glow, color-mix(in srgb, var(--accent) 12%, transparent));
+    border: 1px solid var(--accent, #c4a46a);
+    color: var(--accent-light, #dfc068);
+    font-size: 0.8rem;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+  }
+  .open-chat:hover {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .pill {
     text-transform: uppercase;
