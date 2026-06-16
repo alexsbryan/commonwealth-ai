@@ -1,60 +1,36 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  // Center-pane welcome shown when no project is selected — the
-  // first-timer's first screen. Replaces the bare "Pick a project…"
-  // line with a short explanation of what Recipe Author does and the
-  // three-step arc it actually follows (charter → BuildEnrichCard →
-  // land-in-use handoff). Pure presentation; the CTA reuses the same
-  // new-project trigger the sidebar button fires.
-  import { installStarterCorpus } from "../../api";
-
+  // Center-pane welcome shown when no project is selected. The Recipe Author
+  // teaches the *authoring* skill, so the headline action is a guided
+  // walkthrough of authoring a real recipe — primary for a first-timer (no
+  // projects yet), demoted to secondary once they have one and "+ New project"
+  // leads. Pure presentation; the host owns the actions.
   let {
     hasProjects,
     onNewProject,
-    onOpenChat,
+    onStartTutorial,
   }: {
     hasProjects: boolean;
     onNewProject: () => void;
-    // Navigate to chat (host-provided). After the sample corpus installs we
-    // call this; ChatView's empty state then mines its starter questions.
-    onOpenChat?: () => void;
+    onStartTutorial: () => void;
   } = $props();
 
-  // "Try a sample corpus" — restore the bundled Federalist starter (offline,
-  // ~1s) so a first-timer can chat with a real grounded corpus before
-  // authoring their own. Idempotent backend; we just land in chat after.
-  let installing = $state(false);
-  let installError = $state<string | null>(null);
-  async function tryStarter() {
-    if (installing) return;
-    installing = true;
-    installError = null;
-    try {
-      await installStarterCorpus();
-      onOpenChat?.();
-    } catch (e) {
-      installError = typeof e === "string" ? e : String(e);
-    } finally {
-      installing = false;
-    }
-  }
-
-  // Mirrors the real flow the dashboard cards drive, in order.
+  // The authoring arc the tutorial then demonstrates, in order.
   const STEPS: { n: string; title: string; body: string }[] = [
     {
       n: "1",
       title: "Describe your domain",
-      body: "Write a short charter — what the corpus is, who it's for, and any boundaries you've already settled. The agent reads it on every turn.",
+      body: "Write a short charter — what you're building and who it's for. The agent reasons from it on every turn.",
     },
     {
       n: "2",
-      title: "Build & enrich",
-      body: "The agent drafts the recipe — where documents come from, how they're parsed, and the ontology used to extract entities, claims, and questions. You run it.",
+      title: "The agent drafts the recipe",
+      body: "It interviews you for an ontology — your domain's entities, relationships, and questions — and writes the recipe as plain, editable TOML.",
     },
     {
       n: "3",
-      title: "Use it in chat",
-      body: "Once built, jump straight into a conversation grounded in your sources — with starter questions mined from the corpus itself.",
+      title: "Build it into a knowledge graph",
+      body: "Run the recipe: your documents become an atlas of exactly the things your ontology named — the skill you can now apply to any domain.",
     },
   ];
 </script>
@@ -62,10 +38,11 @@
 <div class="welcome" data-testid="recipe-author-welcome">
   <div class="inner">
     <span class="mark" aria-hidden="true">◇</span>
-    <h1>Author a knowledge corpus</h1>
+    <h1>Author a knowledge recipe</h1>
     <p class="lede">
-      Turn a body of documents into a corpus you can ask questions of —
-      grounded in your own sources, enriched with an ontology you shape.
+      A recipe turns your documents into a knowledge graph — and you shape what
+      it extracts by teaching the agent your domain. This tool is about learning
+      that authoring skill, so you can do it for anything.
     </p>
 
     <ol class="steps">
@@ -80,36 +57,44 @@
       {/each}
     </ol>
 
+    <!-- Tutorial leads for a first-timer; "+ New project" leads once they
+         have a project of their own. -->
     <div class="cta-row">
-      <button
-        type="button"
-        class="cta"
-        onclick={onNewProject}
-        data-testid="recipe-author-welcome-cta"
-      >
-        + New project
-      </button>
-      {#if onOpenChat}
+      {#if hasProjects}
+        <button
+          type="button"
+          class="cta"
+          onclick={onNewProject}
+          data-testid="recipe-author-welcome-cta"
+        >+ New project</button>
         <button
           type="button"
           class="cta-secondary"
-          onclick={tryStarter}
-          disabled={installing}
-          data-testid="recipe-author-welcome-starter"
-        >
-          {installing ? "Setting up…" : "Try a sample corpus →"}
-        </button>
+          onclick={onStartTutorial}
+          data-testid="recipe-author-welcome-tutorial"
+        >Walk through a guided example →</button>
+      {:else}
+        <button
+          type="button"
+          class="cta"
+          onclick={onStartTutorial}
+          data-testid="recipe-author-welcome-tutorial"
+        >Walk through an example →</button>
+        <button
+          type="button"
+          class="cta-secondary"
+          onclick={onNewProject}
+          data-testid="recipe-author-welcome-cta"
+        >+ New project</button>
       {/if}
     </div>
-    {#if installError}
-      <p class="install-error" role="alert">{installError}</p>
-    {/if}
+
     {#if hasProjects}
       <p class="aside">…or pick a project from the list on the left.</p>
     {:else}
       <p class="aside">
-        The sample is <em>The Federalist Papers</em> — ask it a question, then
-        build a corpus from your own files.
+        New here? The guided example walks through authoring a real recipe
+        (The Federalist Papers), step by step — then you make your own.
       </p>
     {/if}
   </div>
@@ -218,22 +203,14 @@
     cursor: pointer;
     font-size: 0.92rem;
   }
-  .cta-secondary:hover:not(:disabled) {
+  .cta-secondary:hover {
     border-color: color-mix(in srgb, var(--lavender) 45%, transparent);
     color: inherit;
-  }
-  .cta-secondary:disabled {
-    opacity: 0.6;
-    cursor: progress;
-  }
-  .install-error {
-    margin: 0.5rem 0 0;
-    color: var(--coral, #e2706e);
-    font-size: 0.82rem;
   }
   .aside {
     margin: 0.5rem 0 0;
     color: var(--muted, #8a8c93);
     font-size: 0.82rem;
+    line-height: 1.5;
   }
 </style>

@@ -25,10 +25,12 @@
     dashboard,
     onUseInChat,
     onOpenChat,
+    onOpenExplorer,
   }: {
     dashboard: RecipeAuthorDashboardState;
     onUseInChat?: (question: StarterQuestion) => void;
     onOpenChat?: () => void;
+    onOpenExplorer?: (corpusId: string) => void;
   } = $props();
 </script>
 
@@ -53,6 +55,7 @@
     enrichmentReady={dashboard.validation.enrichment_ready}
     {onUseInChat}
     {onOpenChat}
+    {onOpenExplorer}
   />
   <SampleProgressBar currentSampleSize={dashboard.current_sample_size ?? null} />
   <IssueList issues={dashboard.recipe_issues} />

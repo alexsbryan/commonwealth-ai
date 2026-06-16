@@ -19,6 +19,21 @@
     "trust": "unsigned"
   },
   {
+    "id": "explorer",
+    "name": "Atlas Explorer",
+    "version": "0.1.0",
+    "blurb": "A generic explorer over any corpus's atlas — entities, the arguments they make, open questions, and the source behind each. Bound to a corpus at launch.",
+    "corpus": "",
+    "entry": "index.html",
+    "grants": {
+      "mesh_store_read": true,
+      "mesh_store_write": false,
+      "inference_access": false,
+      "knowledge_access": false
+    },
+    "trust": "unsigned"
+  },
+  {
     "id": "lvt",
     "name": "SF Land-Value Tax",
     "version": "0.1.0",

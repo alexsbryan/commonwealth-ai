@@ -146,6 +146,34 @@ pub struct ChunkDto {
     pub title: Option<String>,
 }
 
+/// A claim atom projected for the explorer's "arguments" view — the entity
+/// graph ops don't surface claims, so this carries the proposition, its
+/// discourse + epistemic framing, who it's attributed to (entity name,
+/// resolved), and its first cited evidence.
+#[derive(Debug, Clone, Serialize)]
+pub struct ClaimDto {
+    pub id: String,
+    pub content: String,
+    pub discourse_act: String,
+    pub epistemic_status: String,
+    pub quotable_excerpt: Option<String>,
+    pub attributed_to: Option<String>,
+    pub source_chunk: String,
+    pub excerpt: String,
+}
+
+/// A question atom projected for the explorer — the inquiry, its type +
+/// resolution status, how many claims address it, and where it's raised.
+#[derive(Debug, Clone, Serialize)]
+pub struct QuestionDto {
+    pub id: String,
+    pub content: String,
+    pub question_type: String,
+    pub resolution_status: String,
+    pub addressed_by: usize,
+    pub source_chunk: String,
+}
+
 // ─── The dispatched graph ────────────────────────────────────────────
 
 /// A corpus's entity graph: entities + relationships + findings, projected
@@ -499,6 +527,100 @@ pub fn subgraph(g: &Graph, node_type: Option<&str>, limit: usize) -> SubgraphDto
         }
     }
     SubgraphDto { nodes, edges }
+}
+
+// ─── Claims + Questions (atlas atoms the entity graph doesn't surface) ─
+
+/// Map entity AtomId → canonical name, for resolving a claim's attribution to
+/// a human-readable name.
+fn entity_name_map(atoms: &[AtomEnvelope]) -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    for env in atoms {
+        if let AtomEnvelope::Entity(e) = env {
+            m.insert(e.id.as_str().to_string(), e.canonical_name.clone());
+        }
+    }
+    m
+}
+
+/// Render an atom enum to a display string. Plain string enums (DiscourseAct,
+/// EpistemicStatus, QuestionType) serialise to `"argue"`; tagged unions
+/// (ResolutionStatus) serialise to `{"kind":"resolved", ...}` — pull the kind.
+fn enum_label<T: Serialize>(v: &T, fallback: &str) -> String {
+    match serde_json::to_value(v) {
+        Ok(serde_json::Value::String(s)) => s,
+        Ok(serde_json::Value::Object(m)) => m
+            .get("kind")
+            .and_then(|k| k.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| fallback.to_string()),
+        _ => fallback.to_string(),
+    }
+}
+
+/// Claim atoms → cited DTOs (empty for non-atlas corpora). Reuses the same
+/// `atoms.json` read + `sec_NNNNN → chunk` resolution as the graph adapter.
+pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, String> {
+    let atlas_dir = index_path.join("atlas");
+    if !atlas_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms: {e}"))?;
+    let sec_to_chunk = read_chapter_chunk_map(index_path)?;
+    let names = entity_name_map(&file.atoms);
+    let mut out = Vec::new();
+    for env in &file.atoms {
+        if let AtomEnvelope::Claim(c) = env {
+            let (excerpt, source_chunk) = first_evidence(c.evidence.first(), &sec_to_chunk);
+            out.push(ClaimDto {
+                id: c.id.as_str().to_string(),
+                content: c.content.clone(),
+                discourse_act: enum_label(&c.discourse_act, "claim"),
+                epistemic_status: enum_label(&c.epistemic_status, "stated"),
+                quotable_excerpt: c.quotable_excerpt.clone(),
+                attributed_to: c
+                    .attributed_to
+                    .as_ref()
+                    .and_then(|id| names.get(id.as_str()).cloned()),
+                source_chunk,
+                excerpt,
+            });
+            if out.len() >= limit {
+                break;
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Question atoms → DTOs (empty for non-atlas corpora).
+pub fn load_questions(index_path: &Path, limit: usize) -> Result<Vec<QuestionDto>, String> {
+    let atlas_dir = index_path.join("atlas");
+    if !atlas_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms: {e}"))?;
+    let sec_to_chunk = read_chapter_chunk_map(index_path)?;
+    let mut out = Vec::new();
+    for env in &file.atoms {
+        if let AtomEnvelope::Question(q) = env {
+            let (_, source_chunk) = first_evidence(q.raised_at.first(), &sec_to_chunk);
+            out.push(QuestionDto {
+                id: q.id.as_str().to_string(),
+                content: q.content.clone(),
+                question_type: enum_label(&q.question_type, "question"),
+                resolution_status: enum_label(&q.resolution_status, "open"),
+                addressed_by: q.addressed_by.len(),
+                source_chunk,
+            });
+            if out.len() >= limit {
+                break;
+            }
+        }
+    }
+    Ok(out)
 }
 
 // ─── File-based reads (chapters / reconciliation / stats) ────────────

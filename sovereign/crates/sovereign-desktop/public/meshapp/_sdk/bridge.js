@@ -32,6 +32,8 @@ export function connect(corpus) {
     node: (id) => m.node(corpus, id),
     findings: (pattern) => m.findings(corpus, pattern),
     search: (query, nodeType, limit) => m.searchEntities(corpus, query, nodeType, limit),
+    claims: (limit) => m.claims(corpus, limit),
+    questions: (limit) => m.questions(corpus, limit),
     reconciliation: () => m.reconciliation(corpus),
     corpusStats: () => m.corpusStats(corpus),
     timeline: () => m.timeline(corpus),

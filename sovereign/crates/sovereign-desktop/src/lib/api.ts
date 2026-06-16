@@ -740,6 +740,13 @@ export async function openMeshApp(appId: string): Promise<void> {
   return invoke("meshapp_open", { appId });
 }
 
+/** Open the generic Atlas Explorer mesh app bound to `corpusId` (read-only).
+ *  Ensures the explorer's one-time install grant, then opens the sandboxed
+ *  window over the corpus's atlas. The corpus must already be built/installed. */
+export async function openCorpusExplorer(corpusId: string): Promise<void> {
+  return invoke("open_corpus_explorer", { corpusId });
+}
+
 export async function uninstallMeshApp(appId: string): Promise<void> {
   return invoke("meshapp_uninstall", { appId });
 }
