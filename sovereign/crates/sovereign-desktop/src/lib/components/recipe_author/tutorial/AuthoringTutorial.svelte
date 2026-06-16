@@ -60,7 +60,7 @@
         onclick={onExit}
         title="Exit the walkthrough"
         aria-label="Exit the walkthrough"
-      >✕</button>
+      >×</button>
     </div>
   </header>
 
