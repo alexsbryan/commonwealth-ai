@@ -32,7 +32,7 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 
 | Subcommand | Description |
 |---|---|
-| `init [--no-git\|--yes-git]` | Set up code intelligence for the current workspace; prompt-and-offer `git init` when absent (respects `--no-git` / `--yes-git`, and remembers a prior declination via `lifecycle.git_declined_at_init`); soft-paths empty repos when `DESIGN.md` is present; installs the opencode ATOS plugin |
+| `init [--name <id>] [--no-scip] [--no-hooks] [--no-claude-config] [--workspace-root <dir>] [--port <port>]` | Set up code intelligence for the current workspace: symbol index, SCIP call graph, generated `.sovereign/`, `.claude`/`.opencode` wiring, daemon registration. Also available as `sovereign init`. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md). |
 | `design [--import <path>] [--via <agent>] [--solo\|--stopgap] [--port <port>]` | Agent-collaborative `DESIGN.md` session against the Commonwealth daemon. Default launches opencode with the session brief primed; `--solo` drives structural-parser CLI prompts and writes `OPEN_QUESTIONS.md`; `--stopgap` is a provisional in-terminal chat (always flagged as such); `--import <path>` copies an existing doc into `<repo>/DESIGN.md` with diff-confirm |
 | `plan [--allow-open]` | Compose `IMPLEMENTATION_PLAN.md` from `DESIGN.md` + `OPEN_QUESTIONS.md`; upsert rows into `.sovereign/plan.db` (`plan_items` table); defer stale rows from prior generations. Unanswered `OPEN_QUESTIONS.md` entries block unless `--allow-open` (then they surface as `Open risks` on the matching phase) |
 | `charter [--print]` | Create or edit `.sovereign/CHARTER.md` — the team's free-form governance/onboarding doc. First invocation writes a minimal skeleton and opens `$EDITOR`; subsequent invocations just open the existing file. `--print` outputs the current file without spawning the editor |
@@ -40,7 +40,7 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 | `refresh [--rebuild-index]` | Re-export the SCIP call graph. Auto-rebuilds the LanceDB corpus index when the on-disk meta is stale (missing `_corpus_meta.json`, or `embedding_dimensions == 768` from the legacy zero-vector code-index path); otherwise keeps LanceDB work fast by skipping it. `--rebuild-index` forces a full LanceDB rebuild even when the meta looks current. |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
-| `found [--design <path>] [--orchestrate]` | Default: four-stage founding conversation; writes `.sovereign/CHARTER.md` and `PHASES.md`, records answers as `decision` notes. Stage-1/Stage-2 predicates are signal-gated against `DesignSignals` extracted from `DESIGN.md`. `--orchestrate`: require `DESIGN.md` + answered `OPEN_QUESTIONS.md` + `IMPLEMENTATION_PLAN.md` + `CHARTER.md`, skip the questionnaire, elicit only the Phase-1 stop condition, then flip the lifecycle |
+| `found` | **Retired** — founding is implicit now: `sovereign init` plus a committed spec is sufficient |
 | `amend [charter\|design]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash. `amend design`: track edits to `DESIGN.md`'s curated sections (`Anchors`, `Data & interfaces`, `Open questions`), ask targeted adversarial questions, append the Q&A to `DESIGN.md`'s inline `## Amendment log` (newest on top; does NOT bump `charter_version`) |
 | `phase status` | Show founding state + current phase |
 | `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
@@ -64,10 +64,10 @@ Manage the local Commonwealth mesh.
 | `rotate` | Generate a new shareable join key (invalidates previous) |
 | `status` | Show mesh members, hosted knowledge, loaded models |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
-| `peer-preference set <node> <multiplier>` | Privately offer reduced affinity to a peer (e.g. `0.5` or `50%`) |
-| `peer-preference list` | List current per-peer preferences |
-| `peer-preference clear <node>` | Restore full affinity to a peer |
 | `leave` | Leave the current mesh |
+| `logs` | Show mesh daemon logs |
+| `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
+| `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
 
 ### `sovereign corpus`
 
@@ -385,12 +385,14 @@ Related project-layer commands (under `sovereign project`) for the charter-level
 
 ### `sovereign daemon`
 
-Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `sovereign setup` registers it with the OS service manager. You don't normally invoke this directly.
+Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `sovereign install-service` registers it with the OS service manager. You don't normally invoke this directly.
 
 | Subcommand | Description |
 |---|---|
-| `run` | Run in the foreground; exits on SIGINT/SIGTERM |
+| `run` (or bare `daemon`) | Run in the foreground; exits on SIGINT/SIGTERM |
 | `start` / `stop` / `status` / `restart` | Lifecycle management against the installed service |
+| `reload` | Apply config changes without a restart |
+| `--setup-only` | Run the first-boot wizard and exit (what `sovereign setup` aliases to) |
 
 Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
 

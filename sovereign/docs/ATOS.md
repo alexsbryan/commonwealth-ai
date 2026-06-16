@@ -213,12 +213,9 @@ yet). `sovereign project design` collaborates with the agent
 `OPEN_QUESTIONS.md` at repo root. `sovereign project plan`
 turns those into `IMPLEMENTATION_PLAN.md`. `sovereign project
 charter` writes the free-form team `CHARTER.md` in
-`.sovereign/`. `sovereign project found --orchestrate` verifies
-all four artifacts exist, elicits the Phase-1 stop condition,
-and flips the lifecycle. (Default `project found` — without
-`--orchestrate` — runs the classic Stage 1 + Stage 2
-signal-gated questionnaire instead, auto-composing the
-charter; use it when you want a questionnaire-first flow.)
+`.sovereign/`. Founding is implicit: once those artifacts exist and are
+committed, the project is founded — there's no separate
+`found` step (it was retired).
 Amendments go through `sovereign project amend charter` / `amend
 design` with adversarial review. Progression tracks via
 `sovereign project phase pass`.
@@ -247,7 +244,7 @@ IMPLEMENTATION_PLAN.md ──▶ phases derived from DESIGN.md sections
 CHARTER.md ──▶ free-form team governance (Who we are / How we decide)
    │
    ▼
-PHASES.md ──▶ composed by `project found`; drives phase pass/amend
+PHASES.md ──▶ drives phase pass/amend
    │
    ▼
 artifacts (phase-N.md, milestone-N.md, amendment log, notes.db)

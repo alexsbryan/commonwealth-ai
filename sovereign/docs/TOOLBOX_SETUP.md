@@ -130,21 +130,17 @@ The kyuz0 repo publishes five tags with different backends. For
 this project, the calculus is driven by **which GGUFs you want to
 host**:
 
-| Variant | Strix Halo behaviour | Pick when |
+| Variant | Notes | Pick when |
 |---|---|---|
-| **ROCm 7.2.1** (recommended default) | Full feature parity with upstream llama.cpp; no buffer caps; biggest image | You want the 27B / 35B-A3B thoughtful-slot models to load. |
-| ROCm 6.4.4 | Stable older ROCm | You hit a regression on 7.2.1 specifically. |
-| ROCm 7 Nightly | Tip of tree | You're upstreaming fixes. |
-| **Vulkan — Mesa RADV** (tested) | Stable, broad compatibility; ships with two image quirks bootstrap fixes | ROCm won't load on your kernel, or you want a smaller image for CLI/daemon work. |
-| Vulkan — AMDVLK | Fastest small-model decode in the author's benches | You're only running ≤ 8B models (**2 GiB buffer cap** means 27B / 35B-A3B Q4 loads won't fit). |
+| **Vulkan — Mesa RADV** (recommended) | The committed Linux backend. Stable, broad compatibility, loads the 27B / 35B-A3B thoughtful-slot models; ships with two image quirks bootstrap fixes. | The default — start here. |
+| Vulkan — AMDVLK | Fastest small-model decode in the author's benches, but a **2 GiB buffer cap** keeps 27B / 35B-A3B Q4 loads from fitting. | You're only running ≤ 8B models. |
+| ROCm 7.2.1 / 6.4.4 / Nightly | ROCm was dropped as the llama.cpp backend after a Strix Halo crash on the A3B MoE model ([llama.cpp #20176](https://github.com/ggml-org/llama.cpp/issues/20176)); the build uses Vulkan even inside a ROCm toolbox. | Rarely — for the GPU tooling (`rocminfo` / `rocm-smi`) or chasing the upstream fix. |
 
-Both backends are supported first-class by `bootstrap-linux.sh` — it
-autodetects which you're in and installs the right deps. The
-examples below use **ROCm 7.2.1**; the Vulkan path differs only in
-the image tag (`vulkan-radv` instead of `rocm-7.2.1`), and bootstrap
-handles the `rocm` → `vulkan` feature swap in
-`crates/sovereign-inference/Cargo.toml` automatically (as a local,
-uncommitted edit — see §4).
+`bootstrap-linux.sh` autodetects which toolbox you're in and installs
+the right build deps (or pass `--backend=rocm|vulkan`). The examples
+below use the **vulkan-radv** image. The llama.cpp backend itself is
+committed in `crates/sovereign-inference/Cargo.toml` — Vulkan on Linux,
+nothing to edit (see §4).
 
 ---
 
@@ -153,20 +149,20 @@ uncommitted edit — see §4).
 Fedora host:
 
 ```bash
-toolbox create --image docker.io/kyuz0/amd-strix-halo-toolboxes:rocm-7.2.1 \
-    sovereign-rocm
-toolbox enter sovereign-rocm
+toolbox create --image docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv \
+    sovereign-vulkan
+toolbox enter sovereign-vulkan
 ```
 
 Ubuntu host (use `distrobox` — Fedora's `toolbox` command won't
 cooperate on non-Fedora hosts):
 
 ```bash
-distrobox create --image docker.io/kyuz0/amd-strix-halo-toolboxes:rocm-7.2.1 \
-    --name sovereign-rocm \
+distrobox create --image docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv \
+    --name sovereign-vulkan \
     --additional-flags "--device /dev/dri --device /dev/kfd \
         --group-add video --group-add render --group-add sudo"
-distrobox enter sovereign-rocm
+distrobox enter sovereign-vulkan
 ```
 
 Toolbox containers **bind-mount your host home** by default — your
@@ -211,7 +207,7 @@ It detects Fedora vs Ubuntu/Debian, autodetects ROCm vs Vulkan from
 what's already in the image, and handles:
 
 - Rust + cargo via `rustup` (if not already installed), **plus the
-  `rustfmt` component** (llama-cpp-sys-2's bindgen needs it — the
+  `rustfmt` component** (llama-cpp-sys-4's bindgen needs it — the
   minimal rustup profile omits it and the build errors confusingly
   with `'rustfmt' is not installed for the toolchain`),
 - clang + `libclang.so` (for bindgen),
@@ -226,17 +222,12 @@ what's already in the image, and handles:
     at runtime without `LD_LIBRARY_PATH`,
   - `/etc/profile.d/sovereign-rocm.sh` so new shells have
     `ROCM_PATH` / `HIP_PATH` / `PATH` / `CMAKE_PREFIX_PATH` pre-set.
-- Vulkan path only:
-  - `vulkan-loader-devel`, `vulkan-headers`, `glslc` for the Vulkan
-    compile path in llama.cpp,
-  - rewrites the `llama-cpp-2` feature in
-    `crates/sovereign-inference/Cargo.toml` from `"rocm"` to
-    `"vulkan"`. **This is a local, uncommitted edit** — the repo
-    default stays ROCm (see §4). Undo with
-    `./scripts/bootstrap-linux.sh --revert-cargo`.
+- Vulkan path only: `vulkan-loader-devel`, `vulkan-headers`, `glslc`
+  for the Vulkan compile path in llama.cpp. (No Cargo.toml edit — the
+  Vulkan backend is committed; see §4.)
 - Cross-backend: if `target/.sovereign-backend` records a previous
   build in the other backend, the script wipes
-  `target/*/build/llama-cpp-sys-2-*` so cmake reconfigures from
+  `target/*/build/llama-cpp-sys-4-*` so cmake reconfigures from
   scratch (mixing ROCm and Vulkan cmake caches doesn't end well).
 
 ### 3a. kyuz0 image quirks (`vulkan-radv`)
@@ -285,20 +276,22 @@ a given dep is missing — the rest of this section still holds. The
 Fedora install boils down to:
 
 ```bash
-sudo dnf install -y rust cargo protobuf-compiler protobuf-devel \
-    cmake gcc gcc-c++ pkg-config openssl-devel \
-    clang clang-devel \
-    rocm-hip-sdk7.2.1 \
+# core build deps + the Vulkan backend deps (a ROCm toolbox swaps the
+# vulkan-* line for rocm-hip-sdk7.2.1)
+sudo dnf install -y rust cargo \
+    clang clang-devel cmake gcc gcc-c++ pkg-config binutils mold \
+    protobuf-compiler protobuf-devel openssl-devel bzip2-devel \
+    vulkan-loader-devel vulkan-headers glslc \
     webkit2gtk4.1-devel gtk3-devel libsoup3-devel librsvg2-devel \
     libayatana-appindicator-gtk3
 ```
 
-(Ubuntu: `sudo apt install -y cargo rustc protobuf-compiler
-libprotobuf-dev cmake build-essential pkg-config libssl-dev
-libclang-dev rocm-hip-sdk libwebkit2gtk-4.1-dev libgtk-3-dev
-libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-1` — the
-rocm-hip-sdk meta-package name comes from the AMD apt repo, which
-the kyuz0 Ubuntu image already configures.)
+(Ubuntu: the same set via `apt` — `clang libclang-dev cmake
+build-essential pkg-config mold protobuf-compiler libprotobuf-dev
+libssl-dev libbz2-dev libvulkan-dev glslang-tools libwebkit2gtk-4.1-dev
+libgtk-3-dev libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-1`.)
+The authoritative lists are `install_fedora_*` / `install_ubuntu_*` in
+`scripts/bootstrap-linux.sh` — read them from there if this ever drifts.
 
 The GTK/WebKit deps are only needed for `sovereign-desktop` (the
 Tauri 2 frontend). If you're CLI-only, build with `cargo build
@@ -316,7 +309,7 @@ Several of those dependencies are load-bearing in non-obvious ways:
   Error: protoc failed: google/protobuf/empty.proto: File not found.
   ```
 
-- **`clang-devel` / `libclang-dev`.** `llama-cpp-sys-2`'s `bindgen`
+- **`clang-devel` / `libclang-dev`.** `llama-cpp-sys-4`'s `bindgen`
   step needs `libclang.so` to parse llama.cpp's headers. Skip it and
   you get:
 
@@ -326,7 +319,7 @@ Several of those dependencies are load-bearing in non-obvious ways:
   ['libclang.so', ...]"
   ```
 
-- **`rustfmt` rustup component.** llama-cpp-sys-2 pipes its bindgen
+- **`rustfmt` rustup component.** llama-cpp-sys-4 pipes its bindgen
   output through `rustfmt` for readability; rustup's `minimal`
   profile (what bootstrap installs) omits it. Without it:
 
@@ -386,33 +379,15 @@ inside the toolbox to keep builds separate.
 
 ---
 
-## 4. Pick a non-ROCm backend (optional)
+## 4. The GPU backend (nothing to edit)
 
-The Linux default in `sovereign-inference/Cargo.toml` is ROCm, gated
-on `cfg(target_os = "linux")`:
-
-```toml
-[target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["rocm"] }
-```
-
-If you're in a Vulkan toolbox, bootstrap rewrites the feature to
-`"vulkan"` for you as part of §3. The swap is a **local,
-uncommitted edit** — `git status` will show Cargo.toml dirty. Do
-not commit it: the repo default stays ROCm, since that's the
-fastest and most featureful backend on Strix Halo. To undo the
-swap (e.g. before committing other work):
-
-```bash
-./scripts/bootstrap-linux.sh --revert-cargo
-```
-
-We'd prefer to make this a feature flag rather than a file edit,
-but llama-cpp-2's `rocm`/`vulkan`/`metal` features are mutually
-exclusive per-target and cargo can't express "default to rocm on
-Linux, metal on macOS, and nothing on Linux-but-with-vulkan-feature"
-cleanly. File edit is the least-bad option until cargo grows
-target-gated default features.
+The llama.cpp backend is committed in `sovereign-inference/Cargo.toml`,
+cfg-gated per target: Metal on macOS, **Vulkan on Linux**. ROCm was
+dropped as the Linux backend after a Strix Halo crash on the A3B MoE
+model ([llama.cpp #20176](https://github.com/ggml-org/llama.cpp/issues/20176)),
+so there's no feature to swap, no `Cargo.toml` to edit, and nothing to
+revert. Whichever toolbox you're in, the build uses the committed
+backend; `bootstrap-linux.sh` just installs the matching build deps.
 
 ---
 
@@ -426,7 +401,7 @@ cargo build --release
 First build compiles the vendored llama.cpp against the GPU backend —
 this is the 3–8 minute step. Subsequent builds reuse the cache.
 
-Everything else (the cfg-gated llama-cpp-2 feature, the HIP `-fPIC`
+Everything else (the cfg-gated llama-cpp-4 feature, the HIP `-fPIC`
 cmake flag, the runtime library path, the shell env) is handled by
 `scripts/bootstrap-linux.sh` + the workspace `.cargo/config.toml`.
 The walkthroughs below exist so you know what to look at if something
@@ -461,7 +436,7 @@ cached llama-cpp-sys cmake dir so cmake re-configures from scratch
 with the new env:
 
 ```bash
-rm -rf target/release/build/llama-cpp-sys-2-*
+rm -rf target/release/build/llama-cpp-sys-4-*
 ```
 
 Verify the binary is linked against the expected GPU library:
@@ -669,14 +644,13 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
   (ROCm or Vulkan), every slot logs `compute_backend="cpu"` at load
   time. This is a reporting gap, not an actual-compute fact:
   `embed_compute_backend_label()` in
-  `crates/sovereign-inference/src/embedded.rs` only branches on
-  `used_metal`, so anything non-Metal falls through to the `"cpu"`
+  `crates/sovereign-inference/src/embedded/rerank_slot.rs` only branches
+  on `used_metal`, so anything non-Metal falls through to the `"cpu"`
   literal. The real signal that GPU offload is active is the
   `Hardware: ... GPU: Vulkan0 (layers: 999, ...)` line at startup,
   plus `ggml_vulkan: Found 1 Vulkan devices:`. Fix-me: teach the
-  label helper to return `"gpu+rocm"` / `"gpu+vulkan"` when those
-  features are on (see
-  [`embedded.rs:956`](../crates/sovereign-inference/src/embedded.rs)).
+  label helper to return `"gpu+vulkan"` when that feature is on (see
+  [`embedded/rerank_slot.rs`](../crates/sovereign-inference/src/embedded/rerank_slot.rs)).
   The embed slot is genuinely CPU-pinned via
   `with_offload_kqv(false).with_op_offload(false)` on every
   platform, by design — don't confuse that with the label bug.
@@ -718,7 +692,7 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
   a PIE object` line at the very end of a 5+ minute build. Fix with
   the `CMAKE_HIP_FLAGS=-fPIC HIPFLAGS=-fPIC` exports from §5; if
   the error persists, the cmake configure was cached without those
-  flags — `rm -rf target/release/build/llama-cpp-sys-2-*` and
+  flags — `rm -rf target/release/build/llama-cpp-sys-4-*` and
   rebuild.
 - **`Failed to find ROCm root directory`.** CMake can't find hipcc.
   Either you're missing `rocm-hip-sdk7.2.1` (kyuz0 image only ships
@@ -736,8 +710,8 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
 - **`compute_backend` label on Linux.** See §9 — the slot-load log
   line always says `compute_backend="cpu"` on Linux even when ROCm
   or Vulkan is offloading layers. Small fix in
-  `crates/sovereign-inference/src/embedded.rs` to branch on the
-  active feature.
+  `crates/sovereign-inference/src/embedded/rerank_slot.rs` to branch on
+  the active feature.
 - **A project-owned toolbox image** (kyuz0 ROCm 7.2.1 base + our
   dep layer pre-baked) would cut §3 out entirely. Worth doing once
   there are multiple Linux contributors; skip it while the kyuz0

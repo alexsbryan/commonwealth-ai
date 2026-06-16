@@ -14,7 +14,7 @@ Answers come grounded in sources you choose to keep locally — Wikipedia, the S
 
 ## Quick start
 
-Set it up once. This finds models that fit your hardware, downloads them, and starts a background daemon that survives a logout:
+Set it up once. This finds models that fit your hardware, downloads them, and starts a background daemon:
 
 ```sh
 sovereign setup
@@ -23,10 +23,10 @@ sovereign setup
 Then talk to it:
 
 ```sh
-sovereign chat
+sovereign chat session
 ```
 
-That's the whole loop. The daemon also serves an OpenAI-compatible API and an MCP tool server on a single port, so you can point opencode, Claude Code, or any OpenAI-compatible client at `localhost:9741` and it will just work:
+That's the whole loop. To keep the daemon running across logouts, register it as a service once with `sovereign install-service`. The daemon also serves an OpenAI-compatible API and an MCP tool server on a single port, so you can point opencode, Claude Code, or any OpenAI-compatible client at `localhost:9741` and it will just work:
 
 ```sh
 curl http://localhost:9741/v1/models      # confirm it's alive
