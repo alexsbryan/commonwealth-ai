@@ -683,14 +683,12 @@ impl EmbeddedLlamaCpp {
         let fast_arch = read_gguf_arch(&fast.model);
         // FastShort construction gate — decision matrix + history in
         // `gates::fast_short_gate` (tested weight-free). NARROWED
-        // 2026-06-11: the qwen-MoE and MTP-by-name vetoes were removed
-        // after the repro campaign burst-cleared both (see the gate's
-        // doc for the evidence and the bite-back protocol); only
-        // never-cleared recurrent families (mamba/rwkv/deltanet/ssm)
-        // remain vetoed. If batched decodes start failing with
-        // `Decode Error -3` — possibly only on long runs the repro's
-        // max_tokens=8 bursts didn't exercise —
-        // SOVEREIGN_FAST_SHORT_DISABLE=1 is the immediate mitigation.
+        // 2026-06-11 (qwen-MoE + MTP-by-name vetoes removed); qwen-MoE
+        // RE-VETOED 2026-06-16 after the predicted `Decode Error -3`
+        // bite-back on a ~10k-prefill + sustained-FastShort workload
+        // (see the gate's doc). MTP-by-name stays cleared; recurrent
+        // families (mamba/rwkv/deltanet/ssm) + qwen*moe are vetoed.
+        // SOVEREIGN_FAST_SHORT_DISABLE=1 is the catch-all mitigation.
         // [[invariant_fast_short_recurrent_arch]]
         let gate = fast_short_gate(&fast_arch, |k| std::env::var(k).ok());
         let (fast_short, fast_short_coalescer) = if gate == FastShortGate::Disabled {
@@ -709,6 +707,19 @@ impl EmbeddedLlamaCpp {
                  never run against it. All callers route to `fast`. To \
                  clear it: ./scripts/gate-repros.sh --fastshort <gguf> \
                  (see gates::fast_short_gate doc)."
+            );
+            (None, None)
+        } else if gate == FastShortGate::UnsafeQwenMoeBiteback {
+            tracing::warn!(
+                slot = "fast_short",
+                arch = %fast_arch,
+                model_id = %fast.model_id,
+                "skipped — qwen*moe FastShort `Decode Error -3` bite-back \
+                 (re-vetoed 2026-06-16: a ~10k-token prefill + a background \
+                 FastShort heartbeat corrupted shared decode state on APEX \
+                 qwen35moe). All callers route to `fast` (n_seq_max=1) — \
+                 forfeits the batched speedup, never crashes. Diagnostic \
+                 override: SOVEREIGN_FAST_SHORT_FORCE=1 (see gates doc)."
             );
             (None, None)
         } else {

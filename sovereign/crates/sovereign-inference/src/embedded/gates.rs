@@ -110,6 +110,16 @@ pub(crate) enum FastShortGate {
     /// the 2026-06-11 repro campaign could NOT burst-test (no local
     /// weights). Vetoed until cleared — see [`fast_short_gate`].
     UnsafeRecurrent,
+    /// `qwen*moe` arch — RE-VETOED 2026-06-16 after the bite-back the
+    /// 2026-06-11 narrowing's doc predicted. The narrowing cleared
+    /// qwen-MoE on `max_tokens=8` bursts, but a sustained recipe-author
+    /// workload (a ~10k-token prefill + a background heartbeat hitting
+    /// FastShort every ~30s) reproduced `Decode Error -3` on both the
+    /// `fast_short` slot (batch_n_tokens as low as 18) AND — via the
+    /// shared model/Metal state — the `fast`/`primary` slot's prompt
+    /// decode, on the APEX `qwen35moe` model in BOTH the daemon and the
+    /// desktop. See [`fast_short_gate`].
+    UnsafeQwenMoeBiteback,
     /// `SOVEREIGN_FAST_SHORT_FORCE=1` overrode the remaining veto —
     /// DIAGNOSTIC ONLY, for clearing an untested arch via
     /// `tests/gate_repros.rs`. Build the companion and warn loudly.
@@ -127,6 +137,16 @@ fn fast_short_untested_recurrent_arch(arch: &str) -> bool {
     ["mamba", "rwkv", "deltanet", "ssm"]
         .iter()
         .any(|marker| lower.contains(marker))
+}
+
+/// `qwen*moe` (qwen3moe / qwen35moe / qwen36moe …) — RE-VETOED 2026-06-16 for
+/// the FastShort companion. NOT recurrent: this is the MoE continuous-batch
+/// `Decode Error -3` bite-back (see [`FastShortGate::UnsafeQwenMoeBiteback`]).
+/// Dense qwen (`qwen35`, `qwen3`) is intentionally NOT matched — only the MoE
+/// variants carry the hazard.
+fn fast_short_qwen_moe_biteback(arch: &str) -> bool {
+    let lower = arch.to_lowercase();
+    lower.contains("qwen") && lower.contains("moe")
 }
 
 /// Decide whether to construct the FastShort continuous-batching
@@ -151,6 +171,21 @@ fn fast_short_untested_recurrent_arch(arch: &str) -> bool {
 /// vetoes were removed; mamba/rwkv/deltanet/ssm stay vetoed only
 /// because no local weights existed to clear them.
 ///
+/// **qwen-MoE RE-VETOED 2026-06-16 — the bite-back this doc predicted.**
+/// The narrowing's clearing evidence was `max_tokens=8` bursts; it did
+/// NOT exercise a large prefill or a sustained background call rate. The
+/// recipe-author workload does both: a ~10k-token prefill (skill + 19k-char
+/// grammar) plus a heartbeat hitting FastShort every ~30s reproduced
+/// `Decode Error -3` on the `fast_short` slot (batch_n_tokens as low as 18)
+/// AND — via shared model/Metal state — the `fast`/`primary` slot's prompt
+/// decode, on APEX `qwen35moe`, in BOTH the daemon and the desktop. (A lone
+/// large prefill on the primary slot decoded fine; the failures correlated
+/// with FastShort activity.) Per step 3 below the veto is restored via
+/// [`fast_short_qwen_moe_biteback`] → [`FastShortGate::UnsafeQwenMoeBiteback`];
+/// MTP-by-name stays cleared (no evidence it bit). qwen-MoE now routes all
+/// short calls to `fast` (n_seq_max=1) — forfeits the batched speedup,
+/// never crashes. `SOVEREIGN_FAST_SHORT_FORCE=1` overrides for diagnostics.
+///
 /// **IF THIS BITES AGAIN** — suspect signature: `Decode Error -3:
 /// unknown` on a continuous-batched call. The clearing evidence was
 /// `max_tokens=8` bursts; LONG generations, sustained multi-hour
@@ -169,11 +204,19 @@ pub(crate) fn fast_short_gate(
     if env_flag_truthy(&env_get, "SOVEREIGN_FAST_SHORT_DISABLE") {
         return FastShortGate::Disabled;
     }
+    let forced = env_flag_truthy(&env_get, "SOVEREIGN_FAST_SHORT_FORCE");
     if fast_short_untested_recurrent_arch(arch) {
-        return if env_flag_truthy(&env_get, "SOVEREIGN_FAST_SHORT_FORCE") {
+        return if forced {
             FastShortGate::ForcedSafe
         } else {
             FastShortGate::UnsafeRecurrent
+        };
+    }
+    if fast_short_qwen_moe_biteback(arch) {
+        return if forced {
+            FastShortGate::ForcedSafe
+        } else {
+            FastShortGate::UnsafeQwenMoeBiteback
         };
     }
     FastShortGate::Safe
@@ -500,18 +543,26 @@ mod tests {
     }
 
     #[test]
-    fn fast_short_cleared_archs_no_longer_vetoed() {
-        // NARROWED 2026-06-11: the qwen-MoE veto (2026-05-24 incident)
-        // and the MTP-by-name veto were removed after the repro
-        // campaign cleared both — the canonical incident model (APEX
-        // qwen35moe) survived a saturated 8-concurrent FastShort
-        // burst, 8/8 served slot="fast_short". See fast_short_gate's
-        // doc for the bite-back protocol if this regresses.
-        for arch in ["qwen3moe", "qwen35moe", "qwen36moe", "qwen35"] {
+    fn fast_short_revetoes_qwen_moe_but_not_dense_qwen() {
+        // RE-VETOED 2026-06-16: the 2026-06-11 narrowing cleared qwen-MoE on
+        // max_tokens=8 bursts, but a ~10k-prefill + sustained-FastShort
+        // workload reproduced `Decode Error -3` on APEX qwen35moe (daemon +
+        // desktop). The veto is restored for the MoE variants — see the
+        // fast_short_gate doc for the evidence + the FORCE diagnostic escape.
+        for arch in ["qwen3moe", "qwen35moe", "qwen36moe", "qwen3_moe", "Qwen35MoE"] {
+            assert_eq!(
+                fast_short_gate(arch, no_env),
+                FastShortGate::UnsafeQwenMoeBiteback,
+                "{arch} is qwen*moe — must be re-vetoed (Decode -3 bite-back)"
+            );
+        }
+        // DENSE qwen (no MoE) carries no bite-back and stays safe — the veto
+        // is narrow to the MoE variants, not all qwen.
+        for arch in ["qwen35", "qwen3", "qwen2"] {
             assert_eq!(
                 fast_short_gate(arch, no_env),
                 FastShortGate::Safe,
-                "{arch} was burst-cleared and must not be vetoed"
+                "{arch} is dense qwen — must NOT be vetoed"
             );
         }
     }
@@ -532,10 +583,12 @@ mod tests {
     #[test]
     fn fast_short_force_overrides_remaining_veto_but_not_disable() {
         let force = env(&[("SOVEREIGN_FAST_SHORT_FORCE", "1")]);
-        // The clearing lever for an untested arch.
+        // The clearing lever for an untested recurrent arch.
         assert_eq!(fast_short_gate("mamba2", &force), FastShortGate::ForcedSafe);
-        // Force is inert when nothing is vetoed.
-        assert_eq!(fast_short_gate("qwen3moe", &force), FastShortGate::Safe);
+        // FORCE also overrides the qwen-MoE bite-back veto (diagnostic escape).
+        assert_eq!(fast_short_gate("qwen3moe", &force), FastShortGate::ForcedSafe);
+        // Force is inert when nothing is vetoed (dense attention model).
+        assert_eq!(fast_short_gate("qwen3", &force), FastShortGate::Safe);
         // Operator disable still wins over the diagnostic force.
         let both = env(&[
             ("SOVEREIGN_FAST_SHORT_FORCE", "1"),
