@@ -1,0 +1,218 @@
+# Cross-corpus eval bank — SEP × Wikipedia "stereo view".
+#
+# Each question is answerable WELL only with BOTH corpora: SEP supplies the
+# argument structure (premises, objections, positions, reconstructions),
+# Wikipedia the encyclopedic framing (who, when, named developers, dates,
+# canonical works). The whole-game test for the meta-atlas bridge is whether
+# routing the SEP↔Wikipedia bridge edges (SOVEREIGN_META_BRIDGE=1) lifts
+# source + fact coverage over the bridge-off baseline.
+#
+# expected_sources span BOTH corpora: SEP article slugs (lowercase) AND
+# Wikipedia article titles (title-case). A bridge-off run that only reaches
+# the sealed driver corpus should under-cover the other side's sources.
+#
+# RUN (see README.md): run WITHOUT `--isolate` so retrieval reaches all
+# installed corpora (both sep + wikipedia). --isolate would seal to one.
+
+[bank]
+name = "cross-corpus-v1"
+corpus = "sep"
+description = """
+8-question SEP × Wikipedia bridge bank. Argument structure (SEP) fused with
+encyclopedic framing (Wikipedia). Scored bridge-on vs bridge-off for the
+meta-atlas stereo-view lift. Driver corpus = sep; the right side = wikipedia.
+"""
+
+[[questions]]
+id = "consequence_argument_van_inwagen"
+category = "cross_corpus"
+question = """
+Reconstruct van Inwagen's consequence argument against compatibilism, and
+state who Peter van Inwagen is and when the argument was formulated.
+"""
+expected_facts = [
+    "consequence argument",
+    "no choice about",
+    "rule beta",
+    "van Inwagen",
+    "incompatibilism",
+    "1983",
+]
+expected_sources = [
+    "incompatibilism-arguments",
+    "compatibilism",
+    "freewill",
+    "Compatibilism",
+    "Free will",
+]
+
+[[questions]]
+id = "twin_earth_content_externalism"
+category = "cross_corpus"
+question = """
+Explain Putnam's Twin Earth thought experiment as an argument for content
+externalism, and identify the philosophers credited with developing semantic
+externalism.
+"""
+expected_facts = [
+    "Twin Earth",
+    "meanings just ain't in the head",
+    "XYZ",
+    "Hilary Putnam",
+    "Tyler Burge",
+    "natural kind",
+]
+expected_sources = [
+    "content-externalism",
+    "externalism",
+    "Semantic externalism",
+    "Twin Earth thought experiment",
+    "Hilary Putnam",
+]
+
+[[questions]]
+id = "locke_memory_personal_identity"
+category = "cross_corpus"
+question = """
+Reconstruct Locke's memory criterion of personal identity and the standard
+objections to it, and situate Locke's Essay historically.
+"""
+expected_facts = [
+    "memory criterion",
+    "consciousness",
+    "Reid",
+    "brave officer",
+    "transitivity",
+    "John Locke",
+    "Essay Concerning Human Understanding",
+]
+expected_sources = [
+    "locke-personal-identity",
+    "identity-personal",
+    "Personal identity",
+    "John Locke",
+]
+
+[[questions]]
+id = "aristotle_function_argument_eudaimonia"
+category = "cross_corpus"
+question = """
+Explain Aristotle's function (ergon) argument for eudaimonia and the role of
+practical wisdom, and identify the work in which it appears.
+"""
+expected_facts = [
+    "ergon",
+    "function argument",
+    "eudaimonia",
+    "rational activity",
+    "phronesis",
+    "Nicomachean Ethics",
+    "Aristotle",
+]
+expected_sources = [
+    "aristotle-ethics",
+    "eudaimonia",
+    "ergon",
+    "ethics-virtue",
+    "Nicomachean Ethics",
+    "Eudaimonia",
+]
+
+[[questions]]
+id = "kant_hume_causality"
+category = "cross_corpus"
+question = """
+Reconstruct Kant's response to Hume's skepticism about causality, and give the
+dates and major works of each philosopher.
+"""
+expected_facts = [
+    "constant conjunction",
+    "synthetic a priori",
+    "category of causality",
+    "wakened from dogmatic slumber",
+    "David Hume",
+    "Immanuel Kant",
+    "Critique of Pure Reason",
+]
+expected_sources = [
+    "kant-hume-causality",
+    "kant",
+    "hume",
+    "Immanuel Kant",
+    "David Hume",
+    "Causality",
+]
+
+[[questions]]
+id = "godel_hilbert_program"
+category = "cross_corpus"
+question = """
+Explain how Gödel's incompleteness theorems bear on Hilbert's program, and
+state when the theorems were proved and by whom.
+"""
+expected_facts = [
+    "incompleteness",
+    "consistency",
+    "second theorem",
+    "Hilbert's program",
+    "formal system",
+    "Kurt Gödel",
+    "1931",
+]
+expected_sources = [
+    "goedel-incompleteness",
+    "hilbert-program",
+    "logicism",
+    "Gödel's incompleteness theorems",
+    "Hilbert's program",
+]
+
+[[questions]]
+id = "rawls_original_position_nozick"
+category = "cross_corpus"
+question = """
+Reconstruct Rawls's original-position argument for the difference principle
+and Nozick's entitlement-theory objection, citing the major works.
+"""
+expected_facts = [
+    "original position",
+    "veil of ignorance",
+    "difference principle",
+    "entitlement theory",
+    "Wilt Chamberlain",
+    "John Rawls",
+    "A Theory of Justice",
+    "Anarchy, State, and Utopia",
+]
+expected_sources = [
+    "original-position",
+    "justice-distributive",
+    "nozick-political",
+    "Original position",
+    "John Rawls",
+    "A Theory of Justice",
+]
+
+[[questions]]
+id = "consequentialism_vs_deontology"
+category = "cross_corpus"
+question = """
+Contrast consequentialist and deontological ethics on what makes an act right,
+and give the encyclopedic definitions and a key proponent of each.
+"""
+expected_facts = [
+    "consequences",
+    "maximize",
+    "duty",
+    "categorical imperative",
+    "act vs rule",
+    "Bentham",
+    "Kant",
+]
+expected_sources = [
+    "consequentialism",
+    "deontological",
+    "ethics-deontological",
+    "Consequentialism",
+    "Deontology",
+]

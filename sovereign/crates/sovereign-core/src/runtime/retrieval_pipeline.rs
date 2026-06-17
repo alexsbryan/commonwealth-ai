@@ -190,6 +190,11 @@ const FLAG_GRAPH_NEIGHBOR_EXPAND: EnvFlag = EnvFlag {
     default: "off",
     purpose: "Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges).",
 };
+const FLAG_META_BRIDGE: EnvFlag = EnvFlag {
+    name: "SOVEREIGN_META_BRIDGE",
+    default: "off",
+    purpose: "Cross-corpus bridge boost: question entities matching a bridge topic pull the LINKED corpus's framing via typed edges (the 'stereo' view). Built by `sovereign meta-atlas align`.",
+};
 
 /// Every env knob the retrieval pipeline (and its immediate post-steps)
 /// reads, with the step it belongs to. Renderable as a doc table
@@ -216,6 +221,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_MIN_LEVEL", default: "see helper", purpose: "Minimum tree level for injected summaries." }),
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_DEDUPE", default: "see helper", purpose: "Collapse one entry's multi-level nodes to its best." }),
         ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
+        ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "see helper", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
         ("-", EnvFlag { name: "SOVEREIGN_COMPACTION_DISABLE", default: "off", purpose: "History layer: =1 disables dropped-history compaction." }),
@@ -505,6 +511,7 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
         step("entity_boost", None, step_entity_boost),
         step("meta_atlas_boost", None, step_meta_atlas_boost),
+        step("bridge_boost", Some(FLAG_META_BRIDGE), step_bridge_boost),
         step("query_decomp", Some(FLAG_QUERY_DECOMP), step_query_decomp),
         step("title_expand", Some(FLAG_TITLE_EXPAND), step_title_expand),
         step("noise_floor", None, step_noise_floor),
@@ -576,6 +583,24 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
 }
 
 // ─── Shared steps (identical on both paths, modulo the label) ────
+
+fn step_bridge_boost<'a, 'ctx>(
+    rt: &'a Runtime,
+    st: &'a mut PipelineState<'ctx>,
+) -> StepFuture<'a> {
+    Box::pin(async move {
+        // Cross-corpus stereo view (Phase 6, gated SOVEREIGN_META_BRIDGE,
+        // default off). For each question entity matching a bridge topic,
+        // pull the linked corpus's framing through the typed edge. No-op
+        // when the gate is off or the bridge index is empty.
+        let added = rt
+            .bridge_boost(&mut st.chunks, &st.entities, st.enabled_corpora)
+            .await;
+        StepOutcome {
+            note: (added > 0).then(|| format!("bridge: +{added} cross-corpus chunks")),
+        }
+    })
+}
 
 fn step_meta_atlas_boost<'a, 'ctx>(
     rt: &'a Runtime,
@@ -1397,6 +1422,7 @@ mod tests {
                 "store_search",
                 "entity_boost",
                 "meta_atlas_boost",
+                "bridge_boost",
                 "query_decomp",
                 "title_expand",
                 "noise_floor",
@@ -1423,6 +1449,7 @@ mod tests {
                 "store_search",
                 "entity_boost",
                 "meta_atlas_boost",
+                "bridge_boost",
                 "query_decomp",
                 "title_expand",
                 "noise_floor",

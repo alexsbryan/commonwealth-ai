@@ -166,8 +166,18 @@ pub fn classify_by_chunk_preview(text: &str) -> ArticulationVector {
         return ArticulationVector::new(0.65, 0.25, 0.10);
     }
 
-    // Sample only the first 600 chars to keep regex work bounded.
-    let head = if text.len() > 600 { &text[..600] } else { text };
+    // Sample only the first ~600 bytes to keep regex work bounded,
+    // floored to a char boundary so a multi-byte char straddling the cap
+    // (e.g. an em-dash at bytes 598..601) doesn't panic the slice.
+    let head = if text.len() > 600 {
+        let mut end = 600;
+        while end > 0 && !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        &text[..end]
+    } else {
+        text
+    };
 
     // 1. Wiki opener — strongest possible Inventory signal.
     if WIKI_OPENER.is_match(head) {
@@ -631,6 +641,16 @@ mod tests {
     fn preview_bullet_list_inventory_dominant() {
         let v = classify_by_chunk_preview("- alpha\n- beta\n- gamma");
         assert_eq!(v.dominant(), Articulation::Inventory);
+    }
+
+    #[test]
+    fn preview_multibyte_char_at_byte_cap_does_not_panic() {
+        // An em-dash straddling byte 600 must not panic the slice — a
+        // real Wikipedia chunk ("Consequentialism … —") hit this.
+        let mut s = "a".repeat(598);
+        s.push('—'); // occupies bytes 598..601, straddling the 600 cap
+        s.push_str(" and considerably more text after the boundary point");
+        let _ = classify_by_chunk_preview(&s); // must not panic
     }
 
     #[test]
