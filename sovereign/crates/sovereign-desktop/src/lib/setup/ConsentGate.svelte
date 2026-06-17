@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { recordFirstMeshConsent } from "../api";
-  import InkStamp from "../components/onboarding/InkStamp.svelte";
+  import BrandMark from "../components/BrandMark.svelte";
 
   interface Props {
     onChoice: () => void;
@@ -28,14 +28,16 @@
 
 <div class="gate">
   <div class="gate-content">
-    <div class="mark"><InkStamp size="md" active={false} /></div>
+    <div class="mark"><BrandMark size={56} /></div>
     <p class="line line-primary">A mesh is a network of friends.</p>
     <p class="line line-secondary">
       When their machines need help with a thought, your machine could lend a
       hand — gently, only when you're not using it yourself.
     </p>
     <p class="line line-tertiary">
-      You decide. You can always change your mind later in Settings.
+      Off unless you choose it. You'll see every time your machine helps a peer
+      in Settings → Activity &amp; Sharing, and can pause or change the limit
+      there any time.
     </p>
 
     <div class="choices">

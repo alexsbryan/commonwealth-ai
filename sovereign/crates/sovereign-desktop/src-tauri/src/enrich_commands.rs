@@ -1236,6 +1236,11 @@ fn first_run_marker_path() -> PathBuf {
 
 #[tauri::command]
 pub async fn is_first_run() -> Result<bool, String> {
+    // Dev: SOVEREIGN_DEV_FORCE_FIRST_RUN replays the corpus onboarding
+    // as a first launch (in-memory; the marker on disk is untouched).
+    if crate::dev_flags::force_first_run() {
+        return Ok(true);
+    }
     Ok(!first_run_marker_path().exists())
 }
 

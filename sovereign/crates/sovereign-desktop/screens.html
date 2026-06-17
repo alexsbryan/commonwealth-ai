@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  Dev-only onboarding screen gallery (a no-backend "storybook").
+  Run `npm run dev` (or `npm run screens`) and open /screens.html — pure
+  browser, no Tauri / daemon / models. Audit copy, click the flow, and
+  check the recommended models. Not part of the production build.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sovereign — onboarding screens (dev)</title>
+    <link rel="stylesheet" href="/src/app.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/screens.ts"></script>
+  </body>
+</html>

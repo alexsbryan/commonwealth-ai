@@ -2030,6 +2030,29 @@ impl Recipe {
         })
     }
 
+    /// Explicit opt-out from the default post-install structural-atlas hook.
+    ///
+    /// The product default is "every installed corpus gets a lightweight
+    /// structural atlas (atoms/edges) plus the Tier-2 RAPTOR pass" — useful
+    /// grounding for chat on most corpora, and the source of the desktop
+    /// "Extracting atoms…" progress chip. A recipe declares itself
+    /// **retrieval-only** by shipping an `[enrichment]` block with
+    /// `enabled = false`; the post-install hook then skips that pass entirely,
+    /// so retrieval stays sealed to the recipe's own chunks. This is the
+    /// machine-readable form of "source-only evidence" — e.g. the chaos-monkey
+    /// bench corpus, whose fairness premise requires that facts the source
+    /// withholds (a withheld first name, an unnamed country) stay genuinely
+    /// absent rather than being re-introduced by an LLM-generated RAPTOR
+    /// summary.
+    ///
+    /// A MISSING `[enrichment]` section keeps the default-on hook — opting out
+    /// is always explicit, never implied by omission. (Note: because
+    /// `enabled` defaults to `false`, a present-but-bare `[enrichment]` block
+    /// also opts out, consistent with [`Self::produces_enriched_atoms`].)
+    pub fn opts_out_of_auto_enrichment(&self) -> bool {
+        self.enrichment.as_ref().is_some_and(|e| !e.enabled)
+    }
+
     /// The custom atlas ontology this recipe declares, if any. Returns `Some`
     /// only when `[enrichment.ontology]` is present with **non-empty**
     /// `guidance` — that's the signal to use the `ConfigurableAtlasPipeline`

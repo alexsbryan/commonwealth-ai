@@ -34,6 +34,7 @@
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupFlow from "./lib/setup/SetupFlow.svelte";
   import WelcomeThreshold from "./lib/setup/WelcomeThreshold.svelte";
+  import SetupPlan from "./lib/setup/SetupPlan.svelte";
   import ConsentGate from "./lib/setup/ConsentGate.svelte";
   import ReconnectBanner from "./lib/components/ReconnectBanner.svelte";
   import { getFirstMeshConsent } from "./lib/api";
@@ -43,6 +44,7 @@
   type AppView =
     | "loading"
     | "welcome"
+    | "setup_plan"
     | "setup"
     | "consent"
     | "chat"
@@ -72,8 +74,19 @@
   );
 
   let showNavRail = $derived(
-    view !== "loading" && view !== "welcome" && view !== "setup" && view !== "consent"
+    view !== "loading" && view !== "welcome" && view !== "setup_plan"
+      && view !== "setup" && view !== "consent"
   );
+
+  // The user's starter-corpus choice from the Setup Plan screen. Defaults
+  // to true (batteries-included) but is only honored after explicit consent
+  // — `handleSetupComplete` gates the background install on it, so the
+  // Wikipedia download never happens unconsented.
+  let installStarterCorpus = $state(true);
+
+  // The user's "Customize" primary-model choice from the Setup Plan screen
+  // (a catalog GGUF filename); undefined = the hardware-recommended default.
+  let chosenPrimaryFile = $state<string | undefined>(undefined);
 
   // M3 — Recipe Author workspace gate. Read from `DesktopConfig`
   // on bootstrap and cached in $state so it stays reactive when the
@@ -307,13 +320,14 @@
       console.warn("getFirstMeshConsent failed:", e);
     }
     view = needsConsent ? "consent" : "chat";
-    // Fire-and-forget background install of the default Wikipedia
-    // Core corpus so the user lands in chat with retrieval coming
-    // online. Idempotent on the daemon; safe to call on every setup
-    // completion. Errors are silent — the user discovers Knowledge
-    // from Settings if they care. (Newsworthy + Catalog are opt-in
-    // add-ons; Simple English is parked in "Coming soon".)
-    void startDefaultCorpusInstall().catch(() => {});
+    // Background install of the default Wikipedia Core corpus — ONLY when
+    // the user opted in on the Setup Plan screen. Never a silent,
+    // unconsented download (that was the old behaviour this redesign fixes).
+    // Idempotent on the daemon; its progress is surfaced in chat via the
+    // corpus-progress store. Errors are non-fatal — Knowledge is in Settings.
+    if (installStarterCorpus) {
+      void startDefaultCorpusInstall().catch(() => {});
+    }
   }
 
   function handleConsentRecorded() {
@@ -437,9 +451,18 @@
     </div>
   </div>
 {:else if view === "welcome"}
-  <WelcomeThreshold onBegin={() => (view = "setup")} />
+  <WelcomeThreshold onBegin={() => (view = "setup_plan")} />
+{:else if view === "setup_plan"}
+  <SetupPlan
+    onConfirm={({ installStarterCorpus: optIn, primaryFile }) => {
+      installStarterCorpus = optIn;
+      chosenPrimaryFile = primaryFile;
+      view = "setup";
+    }}
+    onBack={() => (view = "welcome")}
+  />
 {:else if view === "setup"}
-  <SetupFlow onComplete={handleSetupComplete} />
+  <SetupFlow onComplete={handleSetupComplete} primaryFile={chosenPrimaryFile} />
 {:else if view === "consent"}
   <ConsentGate onChoice={handleConsentRecorded} />
 {:else}

@@ -118,6 +118,8 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `enabled` | `bool` | no | type default |  |
 | `type` | `String` | no | `default_enrichment_type()` | Enrichment type: "field_model" (default), "atlas", "investigation". |
 | `domain` | `Option<String>` | no | type default | Domain identifier: "philosophy", "science", "policy", "legal", "community", "multi". |
+| `pipeline` | `Option<String>` | no | type default | Explicit atlas pipeline id (e.g. `"literary_atlas"`, `"philosophy_atlas"`) for `type = "atlas"` recipes. Optional override: when set, the desktop "Build & enrich" bridge (`recipe_enrich_init_from_corpus`) uses it directly instead of inferring the pipeline from `domain`. Previously this key was accepted and silently dropped (decorative); making it a real field means a recipe that pins a pipeline gets the pipeline it asked for. `None` → infer from `domain`. |
+| `ontology` | `Option<OntologyConfig>` | no | type default | Custom atlas ONTOLOGY for `type = "atlas"` recipes. This is the headline "build the ontology for your specific domain" path: instead of picking a prebuilt genre pipeline (`literary_atlas`/`philosophy_atlas`), the recipe author (with the agent) describes — in the domain's own language — what entities / relations / claims / events matter. A generic `ConfigurableAtlasPipeline` runs the universal 7-phase atlas machinery with this guidance and writes the same `atoms.json` that feeds chat. When present (with non-empty `guidance`), it takes precedence over `pipeline` and `domain`. `None` → fall back to a prebuilt atlas pipeline. |
 | `prompt_version` | `Option<String>` | no | type default | Prompt version tag. Recorded in `_corpus_meta.json` so the health checker can detect stale enrichment when prompts change. |
 | `clustering` | `Option<ClusteringToml>` | no | type default | HDBSCAN clustering parameters. |
 | `alignment` | `Option<AlignmentToml>` | no | type default | Alignment parameters. |
@@ -127,6 +129,27 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph-level patterns to detect once the relationship graph is built. Built-in detectors cover cycle / role-overlap / threshold patterns; the recipe author chooses which to run. |
 | `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
 | `normalization` | `Option<NormalizationConfig>` | no | type default | Corpus-specific entity-name coalescing rules for the investigation pipeline. The engine supplies the *mechanism* (alias map, prefix / suffix / qualifier stripping, identity-by-attribute); this block supplies the *vocabulary*, so domain knowledge (US states, Air Force base aliases, disposition categories) lives in the recipe as data rather than hardcoded in the abstraction layer. `None` → names fold by case/punctuation only (the engine default). Consumed by [`crate::enrichment::investigation::normalize::Normalizer`]. |
+
+## `OntologyConfig`
+
+Custom atlas ontology declared in `[enrichment.ontology]`. The headline "build the ontology for your domain" surface: `guidance` is domain-language instructions for what to extract (entities, relations, events, claims), injected into a NEUTRAL atlas Phase-1 prompt by [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`]. The universal atom schema + open `EntityType::Other(..)` labels let a domain expert author the extraction shape in TOML without touching Rust, and the result feeds chat via the same `atoms.json` the prebuilt genre pipelines produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `guidance` | `String` | no | type default | Domain-language extraction guidance — what entities, relations, events, and claims matter in THIS corpus's domain, in the domain's own words. Appended under a "Domain focus" heading to the neutral atlas Phase-1 system prompt. The load-bearing field; an empty `guidance` disables the custom path (falls back to a prebuilt atlas pipeline). |
+| `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Optional CLI/label vocabulary overrides (what a "concern", "position", "tension", "absence", and unit of "evidence" are called for this domain). Omitted fields fall back to generic defaults in the pipeline. |
+
+## `OntologyVocabulary`
+
+Per-domain term overrides for the configurable atlas pipeline's vocabulary. Maps onto the engine's `Vocabulary`; any omitted term uses a generic default.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `concern_term` | `Option<String>` | no | type default |  |
+| `position_term` | `Option<String>` | no | type default |  |
+| `tension_term` | `Option<String>` | no | type default |  |
+| `absence_term` | `Option<String>` | no | type default |  |
+| `evidence_term` | `Option<String>` | no | type default |  |
 
 ## `NormalizationConfig`
 

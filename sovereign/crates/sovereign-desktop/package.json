@@ -7,6 +7,7 @@
     "meshapp:catalog": "node scripts/gen-meshapp-catalog.mjs",
     "predev": "npm run meshapp:catalog",
     "dev": "vite dev",
+    "screens": "vite dev --open /screens.html",
     "prebuild": "npm run meshapp:catalog",
     "build": "vite build",
     "preview": "vite preview",

@@ -452,8 +452,19 @@ export async function completeSetup(setup: SetupConfig): Promise<void> {
  *  three model slots, opens the database, loads the model. The
  *  `setup-progress` Tauri event channel narrates progress; this
  *  promise resolves when the backend is ready to serve chat. */
-export async function completeSetupAuto(): Promise<void> {
-  return invoke("complete_setup_auto");
+export async function completeSetupAuto(primaryFile?: string): Promise<void> {
+  // `primaryFile` is the user's "Customize" choice from the Setup Plan
+  // screen (a catalog GGUF filename); omitted = the hardware-recommended
+  // primary. Either way, the download only happens here, post-consent.
+  return invoke("complete_setup_auto", { primaryFile: primaryFile ?? null });
+}
+
+/** The machine-readable setup report (`~/.sovereign/setup-report.json`) as a
+ *  raw JSON string, or null if setup hasn't run yet. Powers the "What setup
+ *  did" panel in Settings → About; a `setup-report.md` sits beside it on
+ *  disk. */
+export async function getSetupReport(): Promise<string | null> {
+  return invoke("get_setup_report");
 }
 
 /** Fire-and-forget background install of the default

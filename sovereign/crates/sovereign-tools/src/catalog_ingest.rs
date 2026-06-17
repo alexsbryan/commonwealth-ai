@@ -317,6 +317,11 @@ pub async fn run_catalog_ingest(
                     outer(CatalogIngestEvent::Ingest(ev));
                 })
             });
+    // Respect a content recipe's explicit retrieval-only opt-out
+    // (`[enrichment] enabled = false`): skip the structural-atlas hook below.
+    // Computed before `content_recipe` is moved into the CorpusSpec.
+    let catalog_content_opts_out_of_auto_enrichment =
+        content_recipe.opts_out_of_auto_enrichment();
     let mut ingest_result = engine
         .ingest(
             &CorpusSpec::Inline(Box::new(content_recipe)),
@@ -436,7 +441,12 @@ pub async fn run_catalog_ingest(
     // circuits when atoms.json already exists. Best-effort: a
     // failure here is logged and swallowed so the catalog-ingest
     // path still returns success on the chunk side.
-    {
+    if catalog_content_opts_out_of_auto_enrichment {
+        tracing::info!(
+            corpus = %final_corpus_id,
+            "catalog_ingest: content recipe is retrieval-only ([enrichment] enabled=false) — skipping structural atlas"
+        );
+    } else {
         let indexes_dir = engine.index_dir().to_path_buf();
         match crate::atlas_postinstall::build_structural_atlas(
             &final_corpus_id,

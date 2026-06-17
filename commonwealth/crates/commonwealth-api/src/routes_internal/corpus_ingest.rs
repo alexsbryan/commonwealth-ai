@@ -705,6 +705,13 @@ pub async fn spawn_corpus_install_with_parameters(
             });
         });
 
+        // Respect a recipe's explicit retrieval-only opt-out: a recipe with
+        // `[enrichment] enabled = false` skips the default post-install
+        // structural-atlas + Tier-2 RAPTOR pass below, keeping retrieval sealed
+        // to its own chunks (e.g. the chaos-monkey bench corpus). A recipe with
+        // NO [enrichment] keeps the default-on hook. Computed here because
+        // `recipe` is moved into the CorpusSpec on the next line.
+        let recipe_opts_out_of_auto_enrichment = recipe.opts_out_of_auto_enrichment();
         let spec = corpus_engine::CorpusSpec::Inline(Box::new(recipe));
         let result = engine.ingest(&spec, Some(progress_cb)).await;
 
@@ -749,6 +756,16 @@ pub async fn spawn_corpus_install_with_parameters(
                 let recipes = indexes.clone();
                 let enrich_activity = state_for_task.inner.activity_emitter.clone();
                 tokio::spawn(async move {
+                    // Recipe opted out of auto-enrichment (retrieval-only):
+                    // skip the structural-atlas + Tier-2 RAPTOR pass entirely
+                    // so retrieval stays sealed to the source chunks.
+                    if recipe_opts_out_of_auto_enrichment {
+                        tracing::info!(
+                            corpus = %cid,
+                            "post-install: recipe is retrieval-only ([enrichment] enabled=false) — skipping structural atlas + Tier-2 RAPTOR"
+                        );
+                        return;
+                    }
                     use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
                     use sovereign_tools::atlas_postinstall::{
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
