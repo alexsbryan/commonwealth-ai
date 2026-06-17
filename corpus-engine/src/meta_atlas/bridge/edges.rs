@@ -176,12 +176,16 @@ impl BridgeEdge {
     /// right. Otherwise it matched the right title → fetch left.
     pub fn other_side(&self, surface: &str) -> &TopicRef {
         let k = lookup_key(surface);
-        let matched_left =
-            k == lookup_key(&self.left.title) || self.left_entity_keys.contains(&k);
-        if matched_left {
-            &self.right
-        } else {
+        let rk = lookup_key(&self.right.title);
+        // If the surface IS (or contains, or is contained by) the right
+        // title, it came in via the right side → fetch left. Otherwise it
+        // matched the left side — its title, a constituent entity, or a
+        // token fragment thereof — → fetch right (the candidate corpus).
+        let contained = k.chars().count() >= 4 && (rk.contains(&k) || k.contains(&rk));
+        if !k.is_empty() && (k == rk || contained) {
             &self.left
+        } else {
+            &self.right
         }
     }
 }

@@ -21,8 +21,29 @@ use super::{default_bridge_edges_path, read_bridge_edges, BridgeEdgesFile};
 #[derive(Debug, Clone, Default)]
 pub struct BridgeIndex {
     edges: Vec<Arc<BridgeEdge>>,
-    /// normalised title (`lookup_key`) → indices into `edges`.
+    /// normalised full key (title / entity key) → edge indices. Exact,
+    /// precise path.
     by_key: HashMap<String, Vec<usize>>,
+    /// significant token → edge indices. The robustness fallback: the
+    /// entity extractor shreds "Computer Fraud and Abuse Act" into
+    /// fragments, so an exact-key index alone misses them. A query token
+    /// that overlaps any of an edge's key tokens resolves the edge.
+    by_token: HashMap<String, Vec<usize>>,
+}
+
+/// Tokens of `s` worth indexing/matching on: ≥4 chars after normalisation
+/// (`lookup_key` lowercases + folds punctuation to spaces, so
+/// `"18 U.S.C. § 1030"` → `u s c 1030` → only `1030`). Deliberately NO
+/// domain stopword list — commonness is discovered from the edge set
+/// itself, by pruning high-document-frequency tokens in
+/// [`BridgeIndex::from_file`]. The 4-char floor is a generic low-signal
+/// cut, not corpus knowledge.
+fn significant_tokens(s: &str) -> Vec<String> {
+    crate::atlas_canonical::lookup_key(s)
+        .split_whitespace()
+        .filter(|t| t.chars().count() >= 4)
+        .map(String::from)
+        .collect()
 }
 
 impl BridgeIndex {
@@ -50,6 +71,7 @@ impl BridgeIndex {
     pub fn from_file(file: BridgeEdgesFile) -> Self {
         let mut edges: Vec<Arc<BridgeEdge>> = Vec::with_capacity(file.edges.len());
         let mut by_key: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut by_token: HashMap<String, Vec<usize>> = HashMap::new();
         for edge in file.edges {
             let idx = edges.len();
             // Key by both titles (normalised) AND the left topic's entity
@@ -59,14 +81,31 @@ impl BridgeIndex {
             let mut keys: Vec<String> =
                 vec![lookup_key(&edge.left.title), lookup_key(&edge.right.title)];
             keys.extend(edge.left_entity_keys.iter().cloned());
-            for key in keys {
+            for key in &keys {
                 if !key.is_empty() {
-                    by_key.entry(key).or_default().push(idx);
+                    by_key.entry(key.clone()).or_default().push(idx);
+                }
+                for tok in significant_tokens(key) {
+                    by_token.entry(tok).or_default().push(idx);
                 }
             }
             edges.push(Arc::new(edge));
         }
-        Self { edges, by_key }
+        // Prune corpus-derived stopwords: a token appearing in too many
+        // edges carries no discriminative signal (e.g. "section" across a
+        // US-Code edge set). Threshold is data-driven (≤40% of edges, floor
+        // 2) — nothing domain-specific is baked in.
+        let max_df = ((edges.len() as f32 * 0.4).ceil() as usize).max(2);
+        by_token.retain(|_, idxs| {
+            idxs.sort_unstable();
+            idxs.dedup();
+            idxs.len() <= max_df
+        });
+        Self {
+            edges,
+            by_key,
+            by_token,
+        }
     }
 
     /// Edges whose left or right title matches `surface` (normalised).
@@ -76,10 +115,24 @@ impl BridgeIndex {
         if key.is_empty() {
             return Vec::new();
         }
-        let Some(idxs) = self.by_key.get(&key) else {
-            return Vec::new();
-        };
-        idxs.iter().map(|&i| Arc::clone(&self.edges[i])).collect()
+        // Exact key match first (precise path).
+        if let Some(idxs) = self.by_key.get(&key) {
+            return idxs.iter().map(|&i| Arc::clone(&self.edges[i])).collect();
+        }
+        // Token fallback: any significant token the surface shares with an
+        // edge's keys resolves it. Dedup by edge, preserve first-seen order.
+        let mut seen = std::collections::BTreeSet::new();
+        let mut out = Vec::new();
+        for tok in significant_tokens(surface) {
+            if let Some(idxs) = self.by_token.get(&tok) {
+                for &i in idxs {
+                    if seen.insert(i) {
+                        out.push(Arc::clone(&self.edges[i]));
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Bulk lookup across surfaces; dedupes edges by their topic-key pair.
@@ -165,6 +218,46 @@ mod tests {
         assert_eq!(idx.lookup("Externalism About the Mind").len(), 1);
         // Entity key on the other edge resolves too.
         assert_eq!(idx.lookup("aristotle").len(), 1);
+    }
+
+    #[test]
+    fn token_fallback_resolves_fragments_and_self_prunes_common_tokens() {
+        let mk = |t: &str, c: &str, keys: Vec<&str>| BridgeEdge {
+            left: TopicRef::new("us-code", "x", t),
+            right: TopicRef::new("scotus", "y", c),
+            relation: BridgeRelation::Related,
+            confidence: 0.9,
+            signals_fired: vec![BridgeSignal::NameMatch],
+            source: EdgeSource::Adjudicated,
+            rationale: None,
+            left_entity_keys: keys.into_iter().map(String::from).collect(),
+        };
+        // Three edges that all share the token "section" but each carry a
+        // distinctive multi-word entity (the exact shape the legal seed
+        // had, where the extractor shredded the phrases).
+        let file = BridgeEdgesFile::new(
+            vec![
+                mk("18 U.S.C. § 1030", "Van Buren v. United States",
+                   vec!["section 1030", "computer fraud and abuse act", "exceeds authorized access"]),
+                mk("47 U.S.C. § 230", "Zeran v. America Online, Inc.",
+                   vec!["section 230", "communications decency act"]),
+                mk("17 U.S.C. § 107", "Campbell v. Acuff-Rose Music, Inc.",
+                   vec!["section 107", "fair use"]),
+            ],
+            vec![],
+        );
+        let idx = BridgeIndex::from_file(file);
+        // A fragment of a multi-word entity still resolves via tokens.
+        let cf = idx.lookup("Computer Fraud");
+        assert_eq!(cf.len(), 1);
+        assert_eq!(cf[0].right.title, "Van Buren v. United States");
+        // "section" is in all 3 edges → pruned as a corpus-derived stopword
+        // → no spurious over-match (was the engine-hardcoded-stoplist case).
+        assert!(idx.lookup("Section").is_empty());
+        // other_side picks the candidate (right) for a left-side fragment.
+        let dec = idx.lookup("decency");
+        assert_eq!(dec.len(), 1);
+        assert_eq!(dec[0].other_side("decency").title, "Zeran v. America Online, Inc.");
     }
 
     #[test]

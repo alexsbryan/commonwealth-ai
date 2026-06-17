@@ -85,7 +85,7 @@ pub(crate) use self::question_analysis::{
     reserve_raptor_chunks, reserve_chunks_per_entity, MetalingualLocator,
 };
 pub(crate) use self::retrieval_helpers::{
-    atlas_grounding_enabled, build_per_corpus_k_overrides, build_retrieval_query,
+    atlas_grounding_enabled, blend_query_aware, build_per_corpus_k_overrides, build_retrieval_query,
     collect_hot_corpora, cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
     reweight_by_query_relevance,
 };
