@@ -59,6 +59,7 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
+        "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
         other => {
             eprintln!("error: unknown flywheel subcommand `{other}`");
             help::print(&HELP);
