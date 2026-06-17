@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  import InkStamp from "../components/onboarding/InkStamp.svelte";
+  import BrandMark from "../components/BrandMark.svelte";
 
   interface Props {
     onBegin: () => void;
@@ -11,10 +11,10 @@
 
 <div class="threshold">
   <div class="threshold-content">
-    <div class="mark"><InkStamp size="md" active={false} /></div>
-    <p class="line line-primary">A place to write, think, and remember.</p>
-    <p class="line line-secondary">Everything stays on this machine.</p>
-    <p class="line line-tertiary">Let's prepare it.</p>
+    <div class="mark"><BrandMark size={56} /></div>
+    <p class="line line-primary">This is Sovereign.</p>
+    <p class="line line-secondary">Your app for local intelligence and knowledge.</p>
+    <p class="line line-tertiary">Let's start the future of AI.</p>
     <button class="begin-btn" onclick={onBegin}>Begin</button>
   </div>
 </div>

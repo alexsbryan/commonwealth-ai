@@ -45,3 +45,14 @@ overlap_chars = 256
 [index]
 fts = true
 vector = true
+
+# Retrieval-only opt-OUT (machine-readable form of the header note above).
+# The default post-install hook builds a structural atlas + Tier-2 RAPTOR
+# summaries on EVERY installed corpus; for this bench that re-introduces facts
+# the source withholds (an LLM-generated RAPTOR summary asserted "the Russian
+# agent Vladimir", breaking the bank's "country never named" premise). Setting
+# `enabled = false` makes the install honor this corpus as retrieval-only, so
+# retrieval stays sealed to Conrad's actual prose. See
+# Recipe::opts_out_of_auto_enrichment.
+[enrichment]
+enabled = false

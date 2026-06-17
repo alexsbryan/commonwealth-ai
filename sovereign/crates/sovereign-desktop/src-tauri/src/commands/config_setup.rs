@@ -502,8 +502,26 @@ pub async fn is_setup_complete(state: State<'_, Arc<AppState>>) -> Result<bool, 
 pub async fn complete_setup_auto(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
+    primary_file: Option<String>,
 ) -> Result<(), String> {
-    crate::setup_flow::run(app_handle, state.inner().clone()).await
+    crate::setup_flow::run(app_handle, state.inner().clone(), primary_file).await
+}
+
+/// Read the machine-readable setup report written at the end of setup
+/// (`~/.sovereign/setup-report.json`). Powers the "What setup did" panel in
+/// Settings → About. Returns the raw JSON string, or `None` if setup hasn't
+/// run / the report is absent. The companion `setup-report.md` sits beside it
+/// on disk for direct inspection.
+#[tauri::command]
+pub async fn get_setup_report() -> Result<Option<String>, String> {
+    let path = dirs::home_dir()
+        .map(|h| h.join(".sovereign").join("setup-report.json"))
+        .ok_or_else(|| "could not resolve home directory".to_string())?;
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Ok(Some(s)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("read {}: {e}", path.display())),
+    }
 }
 
 /// Fire-and-forget background install of the default `wikipedia` Core

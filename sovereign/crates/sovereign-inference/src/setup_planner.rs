@@ -83,6 +83,27 @@ pub fn build_primary_catalog(profile: &ProfileName) -> Vec<PrimaryOption> {
             slot,
         });
     }
+
+    // Curated opt-in alternatives (e.g. Gemma 4 12B) — NOT hardware tiers, so
+    // hardware detection and `recommended_primary` never pick them. Surface
+    // them as NON-recommended options for tiers that can actually run them
+    // (Default and up); the auto-default stays the tier's recommended Qwen
+    // pick pushed above. `profile: "default"` is only the display/sizing key
+    // the picker reads — it does not make this a selectable hardware profile.
+    if tier_rank(profile) >= tier_rank(&ProfileName::Default) {
+        if let Some(slot) = DEFAULT_MANIFEST
+            .profiles
+            .get("alt_gemma_12b")
+            .and_then(|p| p.thoughtful.clone())
+        {
+            out.push(PrimaryOption {
+                profile: "default",
+                recommended: false,
+                slot,
+            });
+        }
+    }
+
     out
 }
 
@@ -282,4 +303,61 @@ fn reject_non_binary_content_type(resp: &reqwest::Response, url: &str) -> Result
 
 fn has_content(p: &Path) -> bool {
     p.metadata().map(|m| m.len() > 0).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn offers_gemma_alt(profile: &ProfileName) -> bool {
+        build_primary_catalog(profile)
+            .iter()
+            .any(|o| !o.recommended && o.slot.base_name.contains("gemma-4-12B"))
+    }
+
+    #[test]
+    fn gemma_alternative_offered_to_capable_tiers_only() {
+        // Surfaced as a NON-recommended option on Default and up...
+        assert!(offers_gemma_alt(&ProfileName::Default), "default should offer Gemma");
+        assert!(offers_gemma_alt(&ProfileName::High), "high should offer Gemma");
+        assert!(offers_gemma_alt(&ProfileName::VeryHigh), "very_high should offer Gemma");
+        // ...and withheld from tiers that can't run a 7.4 GB model.
+        assert!(!offers_gemma_alt(&ProfileName::LowMem), "low_mem must not offer Gemma");
+        assert!(!offers_gemma_alt(&ProfileName::CpuOnly), "cpu_only must not offer Gemma");
+    }
+
+    #[test]
+    fn moe_tiers_use_expected_models() {
+        // very_high bumped to the 3.5-generation 35B-A3B MoE...
+        let vh = recommended_primary(&ProfileName::VeryHigh).expect("very_high primary");
+        assert!(
+            vh.base_name.contains("Qwen3.5-35B-A3B"),
+            "very_high should be the 35B-A3B bump, got {}",
+            vh.base_name
+        );
+        // ...while high stays on 30B-A3B so it still fits a 20 GB card.
+        let high = recommended_primary(&ProfileName::High).expect("high primary");
+        assert!(
+            high.base_name.contains("Qwen3-30B-A3B"),
+            "high must stay on 30B-A3B (fits 20 GB), got {}",
+            high.base_name
+        );
+    }
+
+    #[test]
+    fn gemma_alternative_is_never_the_auto_default() {
+        for p in [ProfileName::Default, ProfileName::High, ProfileName::VeryHigh] {
+            let rec = recommended_primary(&p).expect("a recommended primary exists");
+            assert!(
+                !rec.base_name.to_lowercase().contains("gemma"),
+                "{p:?}: auto-default must stay Qwen, got {}",
+                rec.base_name
+            );
+            let recommended_count = build_primary_catalog(&p)
+                .iter()
+                .filter(|o| o.recommended)
+                .count();
+            assert_eq!(recommended_count, 1, "{p:?}: exactly one recommended entry");
+        }
+    }
 }

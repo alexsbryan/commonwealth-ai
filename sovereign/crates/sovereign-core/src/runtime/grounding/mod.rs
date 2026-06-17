@@ -77,6 +77,33 @@ pub(crate) struct EvidenceContext {
     pub entity_anchored: bool,
 }
 
+/// Fix B — provenance-aware grounding (2026-06-17). Build the gate's evidence
+/// chunk strings from scored chunks, EXCLUDING derived RAPTOR summary chunks
+/// (`metadata["source"]=="raptor"`) by default.
+///
+/// A RAPTOR summary is an abstractive, LLM-generated paraphrase: it
+/// legitimately aids retrieval and synthesis (recall), but it must never be
+/// the source-of-truth a factual claim is VERIFIED against. A summary that
+/// inferred an unstated fact (the witnessed "the Russian agent Vladimir", with
+/// "Russian" absent from the source) would otherwise "support" an answer
+/// asserting the same — a fabrication grounding a fabrication. Excluding
+/// derived summaries here keeps the gate anchored to actual source chunks
+/// while leaving summaries in the upstream synthesis context.
+///
+/// Set `SOVEREIGN_GATE_EXCLUDE_RAPTOR=0`/`false` to disable (the A/B baseline
+/// that reproduces the pre-fix "summaries are source-equivalent evidence"
+/// behaviour).
+pub(crate) fn gate_evidence_chunks(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+    let exclude = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true);
+    chunks
+        .iter()
+        .filter(|c| !(exclude && c.metadata.get("source").map(String::as_str) == Some("raptor")))
+        .map(|c| c.content.clone())
+        .collect()
+}
+
 /// One audit-failed claim plus the claim-conditioned passages its
 /// targeted search returned — the rewrite's correction material.
 struct FailedClaim {

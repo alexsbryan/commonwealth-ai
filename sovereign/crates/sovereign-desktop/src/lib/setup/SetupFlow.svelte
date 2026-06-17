@@ -2,61 +2,97 @@
 <!--
   SetupFlow — the only multi-step screen in the entire app.
 
-  Listens to a single `setup-progress` Tauri event channel and
-  invokes `complete_setup_auto`, which runs the whole setup chain
-  (hardware probe → 3-model download → DB open → model load → smoke
-  test) with no user choices. Renders one sentence, one
-  ProgressRule, and the breathing InkStamp — nothing else. No
-  cancel button: closing the window pauses (downloads resume from
-  `.part` on relaunch).
+  Listens to a single `setup-progress` Tauri event channel and invokes
+  `complete_setup_auto`, which runs the whole setup chain (hardware probe
+  → 3-model download → DB open → model load → smoke test) with no user
+  choices. The actual rendering lives in `SetupScreen.svelte` (a pure,
+  backend-free view) — this file is just the wiring that feeds it live
+  progress. The dev screen gallery drives the same SetupScreen with
+  per-phase fixtures, so you can audit every phase's copy without setup.
 
-  Themed with the app's Lavender Court palette — dark plum
-  background, lavender-cream ink, gold accent — so the transition
-  into chat is unbroken. The breathing ◈ and the progress rule
-  already render in gold by default.
+  No cancel button: closing the window pauses (downloads resume from
+  `.part` on relaunch).
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { completeSetupAuto } from "../api";
-  import InkStamp from "../components/onboarding/InkStamp.svelte";
-  import ProgressRule from "../components/onboarding/ProgressRule.svelte";
+  import {
+    completeSetupAuto,
+    primaryCatalog,
+    slotRecommendation,
+    getConfig,
+  } from "../api";
+  import SetupScreen from "./SetupScreen.svelte";
+  import type { Progress, Provenance, SlotProvenance } from "./setupTypes";
 
   interface Props {
     onComplete: () => void;
+    /// The user's "Customize" primary-model choice from the Setup Plan
+    /// screen (a catalog GGUF filename). Undefined = hardware-recommended.
+    primaryFile?: string;
   }
 
-  let { onComplete }: Props = $props();
+  let { onComplete, primaryFile }: Props = $props();
 
-  type SetupPhase =
-    | { kind: "detecting_hardware" }
-    | { kind: "preparing_data_dir" }
-    | { kind: "downloading_primary"; mb_total: number | null }
-    | { kind: "downloading_fast" }
-    | { kind: "downloading_embed" }
-    | { kind: "opening_database" }
-    | { kind: "loading_model" }
-    | { kind: "smoke_testing" }
-    | { kind: "ready" }
-    | { kind: "failed"; recoverable: boolean };
-
-  type Progress = {
-    phase: SetupPhase;
-    message: string;
-    fraction: number | null;
-    eta_seconds: number | null;
-    indeterminate: boolean;
-  };
-
-  let progress = $state<Progress>({
+  const initialProgress: Progress = {
     phase: { kind: "detecting_hardware" },
     message: "Reading what this machine can do.",
     fraction: null,
     eta_seconds: null,
     indeterminate: true,
-  });
+  };
+
+  let progress = $state<Progress>({ ...initialProgress });
   let failed = $state<{ message: string; recoverable: boolean } | null>(null);
   let unlisten: UnlistenFn | null = null;
+
+  // Read-only provenance for the ledger — what WILL download, from where, to
+  // where. The setup-progress event carries only a generic message, so we
+  // fetch this and SetupScreen joins it to the current phase. Best-effort:
+  // if it fails the screen falls back to the plain phase messages.
+  let provenance = $state<Provenance | null>(null);
+
+  function slim(s: {
+    base_name: string;
+    file: string;
+    quant: string;
+    size_gb: number;
+    hf_url: string;
+  }): SlotProvenance {
+    return {
+      name: s.base_name || s.file,
+      quant: s.quant,
+      size_gb: s.size_gb,
+      repo:
+        (s.hf_url || "")
+          .replace(/^https?:\/\/huggingface\.co\//, "")
+          .replace(/\/$/, "") || "HuggingFace",
+    };
+  }
+
+  async function loadProvenance() {
+    try {
+      const [cat, f, e, cfg] = await Promise.all([
+        primaryCatalog(),
+        slotRecommendation("fast"),
+        slotRecommendation("embed"),
+        getConfig().catch(() => null),
+      ]);
+      const prim =
+        (primaryFile ? cat.find((o) => o.file === primaryFile) : null) ??
+        cat.find((o) => o.recommended) ??
+        cat[0] ??
+        null;
+      provenance = {
+        modelsDir: cfg?.data_dir ? `${cfg.data_dir}/models` : "~/.sovereign/models",
+        primary: prim ? slim(prim) : null,
+        fast: f ? slim(f) : null,
+        embed: e ? slim(e) : null,
+      };
+    } catch {
+      // Ledger degrades to the generic phase messages — non-fatal.
+    }
+  }
 
   onMount(async () => {
     unlisten = await listen<Progress>("setup-progress", (e) => {
@@ -70,8 +106,9 @@
         failed = null;
       }
     });
+    void loadProvenance();
     try {
-      await completeSetupAuto();
+      await completeSetupAuto(primaryFile);
       onComplete();
     } catch (e) {
       // Backend will already have emitted Failed; this catch handles
@@ -86,37 +123,11 @@
     unlisten?.();
   });
 
-  function fmtEta(secs: number | null): string | null {
-    if (!secs || secs <= 0) return null;
-    if (secs < 60) return `~${secs}s remaining`;
-    const m = Math.round(secs / 60);
-    return `~${m} min remaining`;
-  }
-
-  function fmtCounter(p: Progress): string | undefined {
-    if (p.fraction == null) return undefined;
-    return `${Math.round(p.fraction * 100)}%`;
-  }
-
-  function isDownloadPhase(kind: string): boolean {
-    return (
-      kind === "downloading_primary" ||
-      kind === "downloading_fast" ||
-      kind === "downloading_embed"
-    );
-  }
-
   async function retry() {
     failed = null;
-    progress = {
-      phase: { kind: "detecting_hardware" },
-      message: "Reading what this machine can do.",
-      fraction: null,
-      eta_seconds: null,
-      indeterminate: true,
-    };
+    progress = { ...initialProgress };
     try {
-      await completeSetupAuto();
+      await completeSetupAuto(primaryFile);
       onComplete();
     } catch (e) {
       if (!failed) {
@@ -126,126 +137,4 @@
   }
 </script>
 
-<div class="setup-flow">
-  <div class="content">
-    <div class="mark"><InkStamp size="md" active={!failed} /></div>
-
-    <p class="sentence">{failed?.message ?? progress.message}</p>
-
-    {#if !failed}
-      <div class="rule">
-        <ProgressRule
-          value={progress.indeterminate ? null : progress.fraction}
-          counter={fmtCounter(progress)}
-          tone="neutral"
-        />
-      </div>
-      {#if isDownloadPhase(progress.phase.kind) && fmtEta(progress.eta_seconds)}
-        <p class="eta">{fmtEta(progress.eta_seconds)}</p>
-      {/if}
-    {:else}
-      <!-- Even non-recoverable backend errors get a retry path: many
-           "unrecoverable" diagnoses (mkdir, save-config) are actually
-           transient permission / disk-space races, and giving the
-           user *some* action beats the previous behaviour of stranding
-           them on an error sentence with no button. The hint line
-           below tells them where to look if retry keeps failing. -->
-      <button class="retry" onclick={retry}>Try again</button>
-      {#if !failed.recoverable}
-        <p class="report-hint">
-          If this keeps happening, please share <code>~/.sovereign/logs</code>
-          when reporting.
-        </p>
-      {/if}
-    {/if}
-  </div>
-</div>
-
-<style>
-  .setup-flow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    background: var(--bg-primary);
-  }
-
-  .content {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 22px;
-    max-width: 460px;
-    padding: 0 32px;
-  }
-
-  .mark {
-    margin-bottom: 4px;
-  }
-
-  .sentence {
-    font-family: var(--font-sans);
-    font-size: 1.05rem;
-    font-weight: 400;
-    line-height: 1.5;
-    letter-spacing: -0.005em;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .rule {
-    width: 100%;
-    max-width: 360px;
-  }
-
-  .eta {
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin: 0;
-  }
-
-  .retry {
-    font-family: var(--font-sans);
-    font-size: 0.82rem;
-    font-weight: 500;
-    letter-spacing: 0.07em;
-    color: var(--text-primary);
-    background: none;
-    border: 1px solid var(--border-bright);
-    padding: 10px 28px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: border-color 180ms ease, background 180ms ease,
-      color 180ms ease;
-  }
-
-  .retry:hover {
-    border-color: var(--accent);
-    color: var(--accent-light);
-    background: var(--bg-surface);
-  }
-
-  .retry:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-  }
-
-  .report-hint {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    line-height: 1.5;
-    letter-spacing: 0.02em;
-    color: var(--text-muted);
-    margin: 6px 0 0;
-  }
-
-  .report-hint code {
-    font-family: var(--font-mono);
-    background: var(--bg-surface);
-    padding: 1px 5px;
-    border-radius: 3px;
-    color: var(--text-secondary);
-  }
-</style>
+<SetupScreen {progress} {failed} {provenance} onRetry={retry} />

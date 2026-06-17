@@ -1145,7 +1145,7 @@ impl Runtime {
             // The turn's sealed evidence universe; claim search
             // sealed to the conversation's corpora.
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: plan.chunks.iter().map(|c| c.content.clone()).collect(),
+                chunks: crate::runtime::grounding::gate_evidence_chunks(&plan.chunks),
                 searcher: Some(std::sync::Arc::new(self.claim_searcher(
                     context.conversation.enabled_corpora.as_deref(),
                     &plan.chunks,

@@ -105,6 +105,12 @@ impl RecipeProjectListEntry {
 pub async fn recipe_author_list_projects(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<RecipeProjectListEntry>, String> {
+    // Dev: SOVEREIGN_DEV_FORCE_FIRST_RUN hides real projects (in-memory
+    // only — they stay on disk) so the recipe-author Welcome shows its
+    // first-timer tutorial CTA, replaying the onboarding surface.
+    if crate::dev_flags::force_first_run() {
+        return Ok(Vec::new());
+    }
     let (notes, features) = handles(&state).await?;
     let all = features
         .list(false)

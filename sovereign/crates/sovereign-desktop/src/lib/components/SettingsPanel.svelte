@@ -44,6 +44,7 @@
   import ModelSelector from "../setup/ModelSelector.svelte";
   import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
+  import SetupReportCard from "./SetupReportCard.svelte";
 
   interface Props {
     onClose: () => void;
@@ -1694,6 +1695,7 @@
           <h2 class="doc-h2">About</h2>
           <p class="doc-intro">Version info and updates. Releases are signed at <code>svrnme.sh</code> and verified on this machine before they install.</p>
           <UpdatesSection />
+          <SetupReportCard />
         </section>
       {/if}
 

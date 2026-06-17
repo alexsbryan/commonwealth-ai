@@ -6,6 +6,7 @@ mod bootstrap;
 mod command_bridge;
 mod commands;
 mod crash_bundle;
+mod dev_flags;
 mod enrich_commands;
 mod error;
 mod friendly_names;
@@ -230,9 +231,8 @@ fn main() -> ExitCode {
                 // In-memory override only: not persisted to disk, so
                 // restarting without the env var resumes the saved
                 // setup state.
-                let force_setup = std::env::var("SOVEREIGN_DEV_FORCE_SETUP")
-                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false);
+                dev_flags::log_active();
+                let force_setup = dev_flags::force_setup();
                 if force_setup {
                     tracing::info!(
                         "SOVEREIGN_DEV_FORCE_SETUP=1 — re-running onboarding \
@@ -417,6 +417,7 @@ fn main() -> ExitCode {
             commands::is_setup_complete,
             commands::complete_setup,
             commands::complete_setup_auto,
+            commands::get_setup_report,
             commands::start_default_corpus_install,
             commands::detect_hardware,
             commands::detect_bootstrap,

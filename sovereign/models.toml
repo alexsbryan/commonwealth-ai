@@ -303,19 +303,23 @@ general     = 1
 instruction = 2
 
 [profiles.very_high.thoughtful]
-repo     = "unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
-file     = "Qwen3-30B-A3B-Thinking-2507-Q5_K_M.gguf"
-family   = "Qwen3"
-quant    = "Q5_K_M"
-size_gb  = 21.0
+repo     = "unsloth/Qwen3.5-35B-A3B-GGUF"
+file     = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
+family   = "Qwen35"
+quant    = "Q4_K_M"
+size_gb  = 22.0
 thinking = true
-hf_url   = "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
-# Same model as the high profile, stepped up to Q5_K_M (~21 GB)
-# for the small but measurable quality bump that ≥24 GB VRAM
-# allows. Still uses 3B active params, so generation speed is
-# unchanged from Q4_K_M; only the per-token weight read pays
-# the bigger-quant cost. Top tier for federated synthesis.
-base_name = "Qwen3-30B-A3B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF"
+# Qwen3.5-35B-A3B at Q4_K_M (~22 GB): the ≥24 GB tier steps up from the
+# `high` profile's 30B-A3B to the larger 3.5-generation MoE. `qwen35moe`
+# arch — loads on the bundled llama.cpp (b9180), same family as the
+# cluster 122B-A10B. Still ~3B active params, so generation speed stays
+# in the 30B-A3B range while total knowledge grows. Q4_K_M (not Q5) keeps
+# it inside the 24 GB floor with KV headroom; higher-memory users can
+# step up a quant via Settings. The `high` profile (20–23 GB) stays on
+# 30B-A3B, which at Q4 (~17.5 GB) still fits a 20 GB card — the 35B at
+# Q4 (~22 GB) would not.
+base_name = "Qwen3.5-35B-A3B"
 [profiles.very_high.thoughtful.capabilities]
 general     = 4
 analysis    = 4
@@ -334,6 +338,43 @@ thinking = false
 hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF"
 [profiles.very_high.embed.quirks_override]
 "embed.output_dimensions" = 2560
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CURATED ALTERNATIVES (opt-in, never auto-selected)
+#
+# These are NOT hardware ProfileName variants, so hardware detection never
+# selects them and `recommended_primary` never returns them.
+# `build_primary_catalog` appends them as NON-recommended options in the
+# Settings → Models picker for tiers that can run them (Default and up), so
+# users can opt in without leaving Settings. The auto-default stays Qwen
+# (proven llama.cpp JSON-grammar compliance, which the router + extraction
+# pipeline depend on).
+#
+# Gemma 4 12B (Google, released 2026-06-03; Apache 2.0): the strongest
+# reasoning model that fits the 12–16 GB GPU / 24 GB Mac envelope (vendor
+# GPQA Diamond ~78.8%, not yet independently verified). Kept opt-in — NOT the
+# default — because the llama.cpp `--json-schema` path for Gemma 4 is
+# unconfirmed, and Sovereign leans on grammar-constrained output for routing
+# and extraction. Promote it to a profile's thoughtful slot once grammar
+# compliance is verified in our bundled llama.cpp. (Multimodal needs an
+# mmproj file; the text slot below is text-only, which is all chat needs.)
+[profiles.alt_gemma_12b.thoughtful]
+repo      = "ggml-org/gemma-4-12B-it-GGUF"
+file      = "gemma-4-12B-it-Q4_K_M.gguf"
+family    = "Gemma4"
+quant     = "Q4_K_M"
+size_gb   = 7.38
+thinking  = false  # disable thinking for the structured tasks that dominate
+                   # the chat surface (per the Gemma 4 model-card guidance)
+hf_url    = "https://huggingface.co/ggml-org/gemma-4-12B-it-GGUF"
+base_name = "gemma-4-12B"
+[profiles.alt_gemma_12b.thoughtful.capabilities]
+general     = 3
+analysis    = 3
+instruction = 3
+math        = 3
+code        = 2
+creative    = 2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BYOM EXAMPLES

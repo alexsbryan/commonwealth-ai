@@ -22,9 +22,11 @@ use tauri::{AppHandle, Emitter};
 
 use sovereign_inference::hardware::{self, HardwareProfile};
 use sovereign_inference::setup_planner::{
-    download_gguf, hf_download_url, recommended_primary, resolve_slot, SlotKind,
+    build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_slot,
+    SlotKind,
 };
 use sovereign_inference::GgufExpectation;
+use sovereign_core::models_manifest::SlotConfig;
 
 use crate::state::{self, AppState, BootstrapPhase};
 
@@ -63,7 +65,11 @@ const EVENT: &str = "setup-progress";
 /// short diagnosis on any unrecoverable failure (the UI also
 /// receives a `Failed` `setup-progress` event with the same
 /// message before the error returns).
-pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
+pub async fn run(
+    app: AppHandle,
+    state: Arc<AppState>,
+    preferred_primary_file: Option<String>,
+) -> Result<(), String> {
     // ── 1. Hardware probe ────────────────────────────────────────
     emit_indet(
         &app,
@@ -76,13 +82,26 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
     let profile = hardware::select_profile(&hw);
 
     // ── 2. Resolve catalog ───────────────────────────────────────
-    let primary_slot = recommended_primary(&profile).ok_or_else(|| {
-        failed(
-            &app,
-            false,
-            "bundled manifest has no primary candidate for this hardware".into(),
-        )
-    })?;
+    // Honor an explicit choice from the Setup Plan "Customize" picker (a
+    // catalog file the user selected before consenting); otherwise use the
+    // hardware-recommended primary. The slot is only *resolved* here and
+    // downloaded below — nothing was fetched before the user consented.
+    let primary_slot = preferred_primary_file
+        .as_deref()
+        .and_then(|file| {
+            build_primary_catalog(&profile)
+                .into_iter()
+                .find(|opt| opt.slot.file == file)
+                .map(|opt| opt.slot)
+        })
+        .or_else(|| recommended_primary(&profile))
+        .ok_or_else(|| {
+            failed(
+                &app,
+                false,
+                "bundled manifest has no primary candidate for this hardware".into(),
+            )
+        })?;
     let fast_slot = resolve_slot(&profile, SlotKind::Fast).ok_or_else(|| {
         failed(
             &app,
@@ -221,10 +240,10 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
         let (sp, msg) = match phase {
             BootstrapPhase::SmokeTesting => (SetupPhase::SmokeTesting, "Testing the connection."),
             BootstrapPhase::LoadingModel => {
-                (SetupPhase::LoadingModel, "Bringing the model online.")
+                (SetupPhase::LoadingModel, "Bringing a model online.")
             }
             BootstrapPhase::OpeningDatabase => {
-                (SetupPhase::OpeningDatabase, "Opening your library.")
+                (SetupPhase::OpeningDatabase, "Breaking ground on your library.")
             }
             // The post-database phases reuse the OpeningDatabase
             // setup chip — they're sub-second in the common case and
@@ -234,7 +253,7 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
                 (SetupPhase::OpeningDatabase, "Tuning the router.")
             }
             BootstrapPhase::WiringKnowledge => {
-                (SetupPhase::OpeningDatabase, "Connecting your knowledge.")
+                (SetupPhase::OpeningDatabase, "Connecting knowledge.")
             }
             BootstrapPhase::BuildingRuntime => {
                 (SetupPhase::OpeningDatabase, "Almost there.")
@@ -262,6 +281,18 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
         // proceed.
         tracing::warn!(error = %e, "could not write first_run_complete marker");
     }
+
+    // ── 7b. Setup report (glassbox: an auditable record of what we did) ──
+    write_setup_report(
+        &hw,
+        &profile,
+        &[
+            ("primary", &primary_slot, &primary_path),
+            ("fast", &fast_slot, &fast_path),
+            ("embed", &embed_slot, &embed_path),
+        ],
+        preferred_primary_file.is_some(),
+    );
 
     // ── 8. Ready signals ────────────────────────────────────────
     let _ = app.emit(
@@ -419,6 +450,151 @@ fn write_first_run_marker() -> Result<(), String> {
     let ts = chrono::Utc::now().to_rfc3339();
     std::fs::write(&path, ts).map_err(|e| format!("writing {}: {e}", path.display()))?;
     Ok(())
+}
+
+// ─── Setup report (glassbox: "what setup did") ────────────────────
+
+#[derive(Serialize)]
+struct ReportModel {
+    role: String,
+    name: String,
+    file: String,
+    quant: String,
+    size_gb: f64,
+    repo: String,
+    dest: String,
+}
+
+#[derive(Serialize)]
+struct ReportHardware {
+    effective_memory_gb: f64,
+    is_unified_memory: bool,
+}
+
+#[derive(Serialize)]
+struct SetupReport {
+    schema_version: u32,
+    completed_at: String,
+    completed_at_unix: i64,
+    hardware: ReportHardware,
+    profile: String,
+    primary_customized: bool,
+    models: Vec<ReportModel>,
+    smoke_passed: bool,
+}
+
+fn profile_str(p: &hardware::ProfileName) -> &'static str {
+    use hardware::ProfileName::*;
+    match p {
+        CpuOnly => "cpu_only",
+        LowMem => "low_mem",
+        Default => "default",
+        High => "high",
+        VeryHigh => "very_high",
+    }
+}
+
+fn slot_repo(s: &SlotConfig) -> String {
+    s.hf_url
+        .trim_start_matches("https://huggingface.co/")
+        .trim_start_matches("http://huggingface.co/")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Write a human + machine readable record of what setup did to
+/// `~/.sovereign/setup-report.{json,md}` — mirroring the drift report's
+/// dual-write so a fresh install is auditable after the fact (glassbox).
+/// Best-effort: any write failure is logged, never fatal (onboarding has
+/// already succeeded by the time this runs).
+fn write_setup_report(
+    hw: &HardwareProfile,
+    profile: &hardware::ProfileName,
+    models: &[(&str, &SlotConfig, &Path)],
+    primary_customized: bool,
+) {
+    let now = chrono::Utc::now();
+    let report = SetupReport {
+        schema_version: 1,
+        completed_at: now.to_rfc3339(),
+        completed_at_unix: now.timestamp(),
+        hardware: ReportHardware {
+            effective_memory_gb: hw.effective_vram_gb() as f64,
+            is_unified_memory: hw.is_unified_memory,
+        },
+        profile: profile_str(profile).to_string(),
+        primary_customized,
+        models: models
+            .iter()
+            .map(|(role, slot, path)| ReportModel {
+                role: (*role).to_string(),
+                name: if slot.base_name.is_empty() {
+                    slot.file.clone()
+                } else {
+                    slot.base_name.clone()
+                },
+                file: slot.file.clone(),
+                quant: slot.quant.clone(),
+                size_gb: slot.size_gb,
+                repo: slot_repo(slot),
+                dest: path.display().to_string(),
+            })
+            .collect(),
+        smoke_passed: true,
+    };
+
+    let dir = sovereign_root();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!(error = %e, "setup-report: mkdir failed");
+        return;
+    }
+    match serde_json::to_string_pretty(&report) {
+        Ok(json) => {
+            let p = dir.join("setup-report.json");
+            if let Err(e) = std::fs::write(&p, json) {
+                tracing::warn!(error = %e, path = %p.display(), "setup-report: json write failed");
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, "setup-report: serialize failed"),
+    }
+    let p = dir.join("setup-report.md");
+    if let Err(e) = std::fs::write(&p, render_setup_report_md(&report)) {
+        tracing::warn!(error = %e, path = %p.display(), "setup-report: md write failed");
+    }
+    tracing::info!(dir = %dir.display(), "setup-report written");
+}
+
+fn render_setup_report_md(r: &SetupReport) -> String {
+    let mut s = String::new();
+    s.push_str("# Sovereign — setup report\n\n");
+    s.push_str(&format!("Completed: {}\n\n", r.completed_at));
+    s.push_str(&format!(
+        "Hardware: {:.0} GB {} · profile `{}`\n\n",
+        r.hardware.effective_memory_gb,
+        if r.hardware.is_unified_memory {
+            "unified memory"
+        } else {
+            "GPU / RAM"
+        },
+        r.profile,
+    ));
+    s.push_str("## Models installed\n\n");
+    for m in &r.models {
+        s.push_str(&format!(
+            "- **{}** — {} ({}, {:.1} GB) from `{}` -> `{}`\n",
+            m.role, m.name, m.quant, m.size_gb, m.repo, m.dest,
+        ));
+    }
+    s.push_str(if r.primary_customized {
+        "\nPrimary model: customized by you at setup.\n"
+    } else {
+        "\nPrimary model: hardware-recommended default.\n"
+    });
+    s.push_str(
+        "\nChange models in Settings -> Models. This report lives at \
+         `~/.sovereign/setup-report.{json,md}`.\n",
+    );
+    s
 }
 
 fn sovereign_root() -> PathBuf {

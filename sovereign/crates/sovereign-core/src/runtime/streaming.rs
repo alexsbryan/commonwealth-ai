@@ -755,7 +755,7 @@ impl Runtime {
         // sealed to the conversation's corpora.
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if gate_on {
-                chunks.iter().map(|c| c.content.clone()).collect()
+                crate::runtime::grounding::gate_evidence_chunks(&chunks)
             } else {
                 Vec::new()
             },
@@ -1530,7 +1530,7 @@ impl Runtime {
         // agentic loop (and its atlas gazetteer verdict) is KQ-only.
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if deep_gate_on {
-                kc.chunks.iter().map(|c| c.content.clone()).collect()
+                crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
             } else {
                 Vec::new()
             },

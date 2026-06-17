@@ -189,7 +189,7 @@ impl Runtime {
         let response_text = if gate_surface.enabled() && !want_witness_path && !kc.chunks.is_empty()
         {
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: kc.chunks.iter().map(|c| c.content.clone()).collect(),
+                chunks: crate::runtime::grounding::gate_evidence_chunks(&kc.chunks),
                 searcher: Some(std::sync::Arc::new(self.claim_searcher(
                     context.conversation.enabled_corpora.as_deref(),
                     &kc.chunks,
