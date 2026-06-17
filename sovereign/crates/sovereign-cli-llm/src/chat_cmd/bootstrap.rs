@@ -455,6 +455,20 @@ pub async fn build_session_with_skills(
     );
     runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
 
+    // Cross-corpus bridge edges (Phase 6). Loads
+    // `~/.sovereign/meta-atlas/bridge_edges.json` produced by `sovereign
+    // meta-atlas align`. Empty/absent → bridge_boost is a no-op; the
+    // boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
+    let bridge_index = match corpus_engine::meta_atlas::BridgeIndex::load(None) {
+        Ok(idx) => Arc::new(idx),
+        Err(e) => {
+            eprintln!("Bridge: load failed ({e}); bridge boost disabled");
+            Arc::new(corpus_engine::meta_atlas::BridgeIndex::empty())
+        }
+    };
+    eprintln!("Bridge:      {} cross-corpus edges", bridge_index.len());
+    runtime = runtime.with_bridge(Arc::clone(&bridge_index));
+
     // Optional cross-encoder reranker. When `SOVEREIGN_RERANK_MODEL_PATH`
     // is set, load that GGUF into a `StandaloneReranker` and wire it
     // into the Runtime. The reranker runs locally (the daemon-attached

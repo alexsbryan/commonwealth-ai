@@ -2539,6 +2539,128 @@ impl Runtime {
 
         applied
     }
+
+    /// Cross-corpus bridge boost (gated `SOVEREIGN_META_BRIDGE`, default
+    /// OFF — opt-in). For each question entity that matches a bridge
+    /// topic, fetch the LINKED corpus's framing through the typed edge
+    /// and inject it, so a query that only hit one corpus still receives
+    /// the other's treatment (the "stereo" view). Injected chunks are
+    /// stamped `bridge_relation` + `bridge_confidence` for trace/explain.
+    /// Returns the number of chunks added. `None`/empty index = no-op.
+    pub(crate) async fn bridge_boost(
+        &self,
+        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        entities: &[String],
+        // Intentionally unused: the bridge reaches the linked corpus even
+        // when the turn is scoped (see the fetch below).
+        _enabled_corpora: Option<&[String]>,
+    ) -> usize {
+        let on = std::env::var("SOVEREIGN_META_BRIDGE")
+            .ok()
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
+            .unwrap_or(false);
+        if !on {
+            return 0;
+        }
+        let Some(index) = self.bridge.as_ref() else {
+            return 0;
+        };
+        if index.is_empty() || entities.is_empty() {
+            return 0;
+        }
+
+        let top_score = chunks
+            .iter()
+            .map(|c| c.score)
+            .fold(f32::MIN, f32::max)
+            .max(1.0);
+        let mut rank: usize = 0;
+        let mut added: usize = 0;
+        // Fetch each linked topic at most once across all entities.
+        let mut fetched: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+        let mut matched_entities = 0usize;
+        for entity in entities {
+            let elist = index.lookup(entity);
+            if !elist.is_empty() {
+                matched_entities += 1;
+            }
+            for edge in elist {
+                let other = edge.other_side(entity);
+                if !fetched.insert(format!("{}::{}", other.corpus_id, other.title)) {
+                    continue;
+                }
+                let emb = self
+                    .inference
+                    .embed_query(&other.title)
+                    .await
+                    .unwrap_or_default();
+                if emb.is_empty() {
+                    continue;
+                }
+                // Exempt from `enabled_corpora`: reaching the LINKED corpus
+                // is the bridge's entire purpose, so it must fetch
+                // `other.corpus_id` even when the turn's retrieval is scoped
+                // away from it (e.g. a SEP-sealed turn pulling the linked
+                // Wikipedia article through a typed edge). `name_match`
+                // still pins the fetch to exactly that corpus.
+                let hits = self
+                    .search_corpora_filtered(
+                        &emb,
+                        &other.title,
+                        CANONICAL_PRIMARY_LIMIT,
+                        None,
+                        Some(&other.corpus_id),
+                        "BridgeBoost",
+                        None,
+                    )
+                    .await;
+                let relation = edge.relation.as_str();
+                let confidence = format!("{:.2}", edge.confidence);
+                for mut hit in hits {
+                    if hit.corpus_id != other.corpus_id {
+                        continue;
+                    }
+                    rank += 1;
+                    let lifted = top_score + 1e-4 * (rank as f32);
+                    // Already present: lift score + tag in place.
+                    if let Some(existing) = chunks.iter_mut().find(|c| {
+                        c.corpus_id == hit.corpus_id
+                            && c.chunk_id.is_some()
+                            && c.chunk_id == hit.chunk_id
+                    }) {
+                        existing.score = lifted;
+                        existing
+                            .metadata
+                            .insert("bridge_relation".to_string(), relation.to_string());
+                        existing
+                            .metadata
+                            .insert("bridge_confidence".to_string(), confidence.clone());
+                        continue;
+                    }
+                    hit.score = lifted;
+                    hit.metadata
+                        .insert("source".to_string(), "bridge_boost".to_string());
+                    hit.metadata
+                        .insert("bridge_relation".to_string(), relation.to_string());
+                    hit.metadata
+                        .insert("bridge_confidence".to_string(), confidence.clone());
+                    chunks.push(hit);
+                    added += 1;
+                }
+            }
+        }
+        tracing::info!(
+            target: "bridge",
+            n_entities = entities.len(),
+            matched_entities,
+            chunks_added = added,
+            bridge_edges = index.len(),
+            entities = %entities.iter().take(12).cloned().collect::<Vec<_>>().join(" | "),
+            "bridge_boost ran"
+        );
+        added
+    }
     /// Source-cohesion expansion.
     ///
     /// When the initial retrieval has clearly landed on a single

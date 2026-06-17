@@ -258,6 +258,10 @@ pub struct Runtime {
     /// question entity. `None` (or empty index) = no boost; retrieval
     /// falls back to cosine + entity-boost search exactly as before.
     pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
+    /// Cross-corpus bridge edges (typed topic-to-topic alignment from
+    /// `sovereign meta-atlas align`), consumed by [`Self::bridge_boost`].
+    /// `None`/empty → no-op (retrieval behaves as before).
+    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
     /// Per-conversation last-turn provenance snapshot, written at
     /// dispatch inside [`Self::handle_expressive_query_stream`] and
     /// read by [`Self::get_last_turn_provenance`]. Last-write-wins
@@ -388,6 +392,7 @@ impl Runtime {
             rerank_fn: None,
             rerank_config: corpus_engine::RerankConfig::default(),
             meta_atlas: None,
+            bridge: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
             gliner: None,
         }
@@ -479,6 +484,17 @@ impl Runtime {
         index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
     ) -> Self {
         self.meta_atlas = Some(index);
+        self
+    }
+
+    /// Install the cross-corpus bridge index (typed topic-to-topic edges
+    /// from `sovereign meta-atlas align`). Optional — `None` short-
+    /// circuits [`Self::bridge_boost`] and retrieval is unchanged.
+    pub fn with_bridge(
+        mut self,
+        index: Arc<corpus_engine::meta_atlas::BridgeIndex>,
+    ) -> Self {
+        self.bridge = Some(index);
         self
     }
 

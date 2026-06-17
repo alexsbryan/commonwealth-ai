@@ -27,9 +27,15 @@ pub mod builder;
 pub mod classifier;
 pub mod index;
 
+/// Cross-corpus topic-to-topic ontological bridge (SEP ↔ Wikipedia) —
+/// promotes the name-equality meta-atom into a typed concept-alignment
+/// graph. See [`bridge`] module docs.
+pub mod bridge;
+
 pub use builder::{
     build_meta_atlas, default_meta_atlas_path, read_meta_atlas, rebuild_for_corpus,
     write_meta_atlas, Anchor, AtlasSeen, MetaAtlasFile, MetaAtom,
 };
 pub use classifier::{classify_articulation, classify_by_chunk_preview};
+pub use bridge::BridgeIndex;
 pub use index::MetaAtlasIndex;
