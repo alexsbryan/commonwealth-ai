@@ -31,6 +31,7 @@ pub mod det_checks;
 pub mod generators;
 pub mod mining;
 pub mod probe;
+pub mod redteam;
 pub mod verify;
 
 pub use case::{validate_fairness, RegressionBank, RegressionCase};

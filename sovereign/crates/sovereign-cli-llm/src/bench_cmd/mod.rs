@@ -40,6 +40,7 @@ mod live_runner;
 mod mechanism_fidelity;
 mod obsidian;
 mod promote;
+mod redteam;
 mod render;
 mod routing_replay;
 mod scaffold;
