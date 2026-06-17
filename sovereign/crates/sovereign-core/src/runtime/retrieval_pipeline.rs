@@ -594,7 +594,13 @@ fn step_bridge_boost<'a, 'ctx>(
         // pull the linked corpus's framing through the typed edge. No-op
         // when the gate is off or the bridge index is empty.
         let added = rt
-            .bridge_boost(&mut st.chunks, &st.entities, st.enabled_corpora)
+            .bridge_boost(
+                &mut st.chunks,
+                &st.entities,
+                st.message,
+                &st.embedding,
+                st.enabled_corpora,
+            )
             .await;
         StepOutcome {
             note: (added > 0).then(|| format!("bridge: +{added} cross-corpus chunks")),

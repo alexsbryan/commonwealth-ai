@@ -2551,10 +2551,20 @@ impl Runtime {
         &self,
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         entities: &[String],
+        // The live retrieval query — text + its already-computed embedding
+        // — used to make the cross-corpus fetch query-aware (steer the pull
+        // toward what the user actually asked, not just the bridged topic).
+        query: &str,
+        query_embedding: &[f32],
         // Intentionally unused: the bridge reaches the linked corpus even
         // when the turn is scoped (see the fetch below).
         _enabled_corpora: Option<&[String]>,
     ) -> usize {
+        // Topic-vs-query mix for the cross-corpus fetch embedding. 0.5 =
+        // equal weight: the topic anchor keeps the pull inside the linked
+        // subject's region of the other corpus, the live query steers to
+        // the chunk that answers *this* question. The single tuning point.
+        const ANCHOR_WEIGHT: f32 = 0.5;
         let on = std::env::var("SOVEREIGN_META_BRIDGE")
             .ok()
             .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
@@ -2590,24 +2600,39 @@ impl Runtime {
                 if !fetched.insert(format!("{}::{}", other.corpus_id, other.title)) {
                     continue;
                 }
-                let emb = self
+                let anchor = self
                     .inference
                     .embed_query(&other.title)
                     .await
                     .unwrap_or_default();
-                if emb.is_empty() {
+                if anchor.is_empty() {
                     continue;
                 }
+                // Query-aware fetch: blend the topic anchor with the live
+                // query embedding so the pull lands on the chunk that
+                // answers THIS question, while staying inside the linked
+                // topic's region. Topic-only fallback when the query
+                // embedding is absent (see `blend_query_aware`).
+                let emb = blend_query_aware(&anchor, query_embedding, ANCHOR_WEIGHT);
                 // Exempt from `enabled_corpora`: reaching the LINKED corpus
                 // is the bridge's entire purpose, so it must fetch
                 // `other.corpus_id` even when the turn's retrieval is scoped
                 // away from it (e.g. a SEP-sealed turn pulling the linked
                 // Wikipedia article through a typed edge). `name_match`
                 // still pins the fetch to exactly that corpus.
+                // The rerank text goes query-aware too: topic title + the
+                // user's question, so lexical/rerank signals favour query
+                // terms within the linked topic. The corpus is still pinned
+                // by `other.corpus_id` (the name_match arg), not this text.
+                let fetch_text = if query.is_empty() {
+                    other.title.clone()
+                } else {
+                    format!("{} {}", other.title, query)
+                };
                 let hits = self
                     .search_corpora_filtered(
                         &emb,
-                        &other.title,
+                        &fetch_text,
                         CANONICAL_PRIMARY_LIMIT,
                         None,
                         Some(&other.corpus_id),
@@ -2656,6 +2681,7 @@ impl Runtime {
             matched_entities,
             chunks_added = added,
             bridge_edges = index.len(),
+            query_aware = !query_embedding.is_empty(),
             entities = %entities.iter().take(12).cloned().collect::<Vec<_>>().join(" | "),
             "bridge_boost ran"
         );

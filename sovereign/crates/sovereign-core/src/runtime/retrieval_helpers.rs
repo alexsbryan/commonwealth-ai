@@ -312,6 +312,41 @@ pub(crate) fn reweight_by_query_relevance(chunks: &mut [ScoredChunk], query: &st
     }
 }
 
+/// Blend a topic-anchor embedding with the live query embedding so a
+/// cross-corpus fetch is steered by *what the user actually asked*, not
+/// only by the bridged topic. `anchor` (the linked topic's embedding)
+/// keeps the pull inside the right region of the other corpus so it
+/// can't wander into unrelated material; `query` then selects the chunk
+/// that answers *this* question within that region.
+///
+/// `anchor_weight ∈ [0, 1]` is the topic-vs-query mix (`0.5` = equal,
+/// `1.0` = the prior topic-only behaviour). The result is L2-normalised:
+/// an ANN ranks on direction, so the renorm doesn't change ranking — it
+/// keeps the vector tidy for any downstream cosine and makes the blend
+/// independent of the two inputs' magnitudes.
+///
+/// Defensive fallback: returns `anchor` verbatim when the query embedding
+/// is empty or dimension-mismatched, so a missing/garbled query
+/// embedding is never *worse* than the topic-only fetch it replaces.
+pub(crate) fn blend_query_aware(anchor: &[f32], query: &[f32], anchor_weight: f32) -> Vec<f32> {
+    if query.is_empty() || query.len() != anchor.len() {
+        return anchor.to_vec();
+    }
+    let qw = 1.0 - anchor_weight;
+    let mut out: Vec<f32> = anchor
+        .iter()
+        .zip(query)
+        .map(|(a, q)| anchor_weight * a + qw * q)
+        .collect();
+    let norm = out.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for x in &mut out {
+            *x /= norm;
+        }
+    }
+    out
+}
+
 /// Inject canonical-entity boost hits into the merge bag. Each newly
 /// injected chunk gets a small score lift above `top_score` so it
 /// survives `chunks.truncate(KQ_MERGED_LIMIT)`. Existing chunks with
@@ -458,7 +493,7 @@ pub(crate) fn drop_no_overlap_chunks(chunks: Vec<ScoredChunk>, query: &str) -> V
 
 #[cfg(test)]
 mod query_relevance_tests {
-    use super::reweight_by_query_relevance;
+    use super::{blend_query_aware, reweight_by_query_relevance};
     use corpus_engine::ScoredChunk;
     use std::collections::HashMap;
 
@@ -579,5 +614,31 @@ mod query_relevance_tests {
             "off-domain chunk with no overlap should keep its baseline RRF score; got {}",
             chunks[0].score
         );
+    }
+
+    #[test]
+    fn blend_query_aware_steers_toward_query_yet_stays_unit() {
+        // Two distinct unit directions: the blend must sit between them
+        // and stay unit-length so an ANN sees a clean steered query.
+        let anchor = vec![1.0_f32, 0.0, 0.0];
+        let query = vec![0.0_f32, 1.0, 0.0];
+        let blended = blend_query_aware(&anchor, &query, 0.5);
+        let norm = blended.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-5, "result must be unit length; got {norm}");
+        // Equal weight → symmetric mix that carries BOTH directions.
+        assert!((blended[0] - blended[1]).abs() < 1e-5, "0.5 blend must be symmetric");
+        assert!(blended[0] > 0.0 && blended[1] > 0.0, "must carry anchor AND query");
+    }
+
+    #[test]
+    fn blend_query_aware_falls_back_to_anchor_when_query_unusable() {
+        let anchor = vec![1.0_f32, 0.0, 0.0];
+        // Empty query embedding → topic-only fetch (never worse than before).
+        assert_eq!(blend_query_aware(&anchor, &[], 0.5), anchor);
+        // Dimension mismatch → same defensive fallback, no panic.
+        assert_eq!(blend_query_aware(&anchor, &[1.0, 2.0], 0.5), anchor);
+        // anchor_weight = 1.0 → pure (normalised) anchor: the prior behaviour.
+        let pure = blend_query_aware(&anchor, &[0.0, 1.0, 0.0], 1.0);
+        assert!((pure[0] - 1.0).abs() < 1e-5 && pure[1].abs() < 1e-5);
     }
 }
