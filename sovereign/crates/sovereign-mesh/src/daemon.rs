@@ -176,6 +176,12 @@ enum DaemonState {
         /// gossip; no explicit teardown.
         _gossip_handle: GossipHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
+        /// Server-half iroh endpoint + acceptor (Track W, W1 — see
+        /// `crate::iroh_access`). `None` unless `[iroh] enabled`. Held
+        /// purely for its Drop: tying it to the Running variant means
+        /// leaving the mesh / stopping the daemon also stops accepting
+        /// dial-by-key traffic, same pattern as `_browse_handle`.
+        _iroh_access: Option<crate::iroh_access::MeshIrohAccess>,
     },
 }
 
@@ -1404,9 +1410,15 @@ impl EmbeddedDaemon {
         // for the Inference/StatusProbe port rewrite is anchored.
         // RwLock-based installer, so it is exempt from the
         // `Arc::get_mut` ordering constraint documented below.
-        app_state.install_peer_transport(Arc::new(commonwealth_transport::IpTransport::new(
-            client_port,
-        )));
+        //
+        // Bound to a variable because W3 may RE-install a
+        // `RoutedTransport` over iroh later in this fn (after the iroh
+        // endpoint binds), reusing THIS `IpTransport` as the fallback
+        // default. Until then — and in every non-iroh deployment — this
+        // is the one and only install, byte-identical to before.
+        let ip_transport: Arc<dyn commonwealth_transport::PeerTransport> =
+            Arc::new(commonwealth_transport::IpTransport::new(client_port));
+        app_state.install_peer_transport(ip_transport.clone());
 
         // Publish this install's identity pubkey (key beside node_id
         // at `<data_dir>/node_key`; same unconditional
@@ -1986,6 +1998,70 @@ impl EmbeddedDaemon {
             }
         } // freshness_enabled
 
+        // W1 (TRANSPORT_MIGRATION.md): bind a dial-by-key endpoint
+        // (server half) when `[iroh] enabled`. Uses the SAME node_key
+        // identity gossip already publishes as `MemberRecord
+        // .node_pubkey`, so a known member is a dialable member. The
+        // acceptor routes by negotiated ALPN to the loopback client /
+        // internal listeners bound above. Strictly additive: a bind
+        // failure logs and yields `None`, leaving the `IpTransport`
+        // path untouched. Forwarding is lazy per stream, so binding
+        // after the listener spawn (which races to bind) is safe.
+        let (iroh_enabled, iroh_transport_cfg) = {
+            let guard = self.setup_config.read().await;
+            match guard.as_ref() {
+                Some(c) => (c.iroh.enabled, c.iroh.transport.clone()),
+                None => (false, Default::default()),
+            }
+        };
+        let iroh_access = crate::iroh_access::MeshIrohAccess::start(
+            &self.data_dir,
+            internal_port,
+            client_port,
+            iroh_enabled,
+        )
+        .await;
+        let iroh_routed_classes = crate::iroh_access::iroh_routed_classes(&iroh_transport_cfg);
+        // W2: publish our own dial info so peers can reach us by key.
+        // The gossip self-stamp pulls this each round and writes
+        // relay_url + iroh_direct_addrs into our `MemberRecord` — the
+        // "membership = dialability" collapse. RwLock-based install, so
+        // it's exempt from the `Arc::get_mut` ordering constraint above.
+        if let Some(access) = &iroh_access {
+            app_state.install_self_iroh_dialinfo(access.dial_info_provider());
+
+            // W3: when `[iroh.transport]` flips one or more classes to
+            // iroh, re-install a `RoutedTransport` that routes those
+            // classes over iroh (dialing from THIS endpoint) and falls
+            // back to the `ip_transport` above per dial. No flip => the
+            // plain `IpTransport` install above stands, unchanged.
+            if !iroh_routed_classes.is_empty() {
+                let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
+                    Arc::new(access.client_transport());
+                let mut per_class = std::collections::HashMap::new();
+                for class in &iroh_routed_classes {
+                    per_class.insert(*class, iroh_t.clone());
+                }
+                app_state.install_peer_transport(Arc::new(
+                    commonwealth_transport::RoutedTransport::new(per_class, ip_transport.clone()),
+                ));
+                info!(
+                    classes = ?iroh_routed_classes
+                        .iter()
+                        .map(|c| c.as_str())
+                        .collect::<Vec<_>>(),
+                    "iroh(mesh): routing these traffic classes over iroh \
+                     (per-dial IP fallback retained)"
+                );
+            }
+        } else if !iroh_routed_classes.is_empty() {
+            warn!(
+                classes = ?iroh_routed_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
+                "iroh(mesh): [iroh.transport] routes classes to iroh but [iroh] enabled=false \
+                 — ignoring, staying on IP. Set [iroh] enabled=true to activate."
+            );
+        }
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,
@@ -1995,6 +2071,7 @@ impl EmbeddedDaemon {
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
             _shutdown_tx: shutdown_tx,
+            _iroh_access: iroh_access,
         };
 
         Ok(())
@@ -2349,6 +2426,7 @@ mod tests {
             data: DataSection::default(),
             watched_folders: Default::default(),
             memory: Default::default(),
+            iroh: Default::default(),
         };
 
         register_local_model_slots(&app_state, &cfg, node_id);

@@ -1,9 +1,20 @@
 # Transport Migration — iroh for mobile first, then the mesh
 
 Status: **Track M implemented in code** (2026-06-10, same day as the
-seam); Track W remains roadmap. Tailscale remains the production
-transport until each phase's exit criteria are met, and every phase
-is independently reversible.
+seam); **W1 (server half) + W2 (dial info in trust ring) + W3
+mechanism (`RoutedTransport` + `[iroh.transport]` config) implemented**
+(2026-06-18, on iroh 1.0 stable). Remaining: W2b (join over iroh),
+**doing** the W3 per-class flips (config + soak, gossip first), W4
+(self-hosted relays), W5 (Tailscale optional). The plumbing for iroh
+to carry live mesh traffic is in place behind config; no class is
+flipped by default. Tailscale remains the production transport until
+each phase's exit criteria are met, and every phase is independently
+reversible.
+
+iroh dependency: **1.0.0 stable** (shipped 2026-06-15; wire-protocol
+stable — any v1 endpoint interops with any other v1 endpoint). Bumped
+from `1.0.0-rc.1` on 2026-06-18; all iroh symbol use stays confined to
+`commonwealth-transport/src/iroh.rs`.
 
 Track M implementation state:
 
@@ -183,50 +194,113 @@ one PR-sized, independently-landable step.
 
 ### W1 — every daemon binds an iroh endpoint
 
-- `EmbeddedDaemon::start_daemon` builds the iroh `Endpoint` from
-  `node_key` alongside the existing HTTP listeners. Two ALPNs map to
-  the two routers — `cwth/internal/0` → internal listener (9742-
-  equivalent), `cwth/client/0` → client listener (9741-equivalent).
-  This lifts the spike's single-forward-target limitation and is
-  why the port-rewrite logic in `IpTransport` has no iroh analogue:
-  the *class chooses the ALPN*, not a port.
-- `IrohTransport` graduates from test-only: constructed by the
-  daemon (feature-gated still), selecting ALPN by `TrafficClass`
-  (Inference/StatusProbe → client ALPN, everything else → internal).
-- Config: `[mesh.iroh] enabled = false` default; `relay_url`
-  optional override.
+**Server half — done in code (2026-06-18).** `EmbeddedDaemon::start_daemon`
+builds the iroh `Endpoint` from `<data_dir>/node_key` (the identity
+gossip already publishes as `MemberRecord.node_pubkey`, so a known
+member is a dialable member) alongside the existing HTTP listeners,
+when `[iroh] enabled = true`. One endpoint serves **both** ALPNs;
+`IrohAcceptor::spawn_routed` dispatches each accepted connection by its
+negotiated ALPN to the matching loopback listener — `cwth/http/0`
+(the existing `ALPN` const, internal/9742-equivalent) → internal
+router, `cwth/client/0` (`CLIENT_ALPN`) → client/9741-equivalent
+router. This lifts the spike's single-forward-target limitation and is
+why the port-rewrite logic in `IpTransport` has no iroh analogue: the
+*class chooses the ALPN*, not a port. Strictly additive and fail-soft
+(`MeshIrohAccess::start` returns `None` on any bind failure; the
+`IpTransport`/tailnet path is untouched). Glassbox: a startup
+`tracing::info!` logs the endpoint id + dial string.
+
+Implementation: `sovereign-mesh/src/iroh_access.rs` (`MeshIrohAccess`,
+held in `DaemonState::Running` so it drops with the daemon);
+`commonwealth-transport/src/iroh.rs` (`IrohAcceptor::spawn_routed` +
+shared `build_relayed_endpoint`); config `[iroh] enabled` on
+`SetupConfig` (spec calls it `[mesh.iroh]`; in the unified
+`~/.sovereign/config.toml` it is the top-level `[iroh]` section,
+matching `sovereign-server`'s). iroh is compiled into `sovereign-mesh`'s
+default build (runtime-gated, mirroring `sovereign-server`'s M1).
+Proof: `commonwealth-transport` `routed_acceptor_dispatches_by_alpn`
++ `routed_acceptor_drops_unknown_alpn` (hermetic, dial-by-key, no
+relays).
+
+**Client half — resolution done in W2 (below); routing in W3.**
+`IrohTransport` now selects ALPN by `TrafficClass`
+(Inference/StatusProbe → client ALPN, everything else → internal) and
+resolves its dial target from the gossiped `PeerContact` — so it can
+*dial peers* by key. It is not yet *wired* as a live transport: that
+needs a `RoutedTransport` to compose it with the IP fallback (W3).
+Until W3 the daemon is reachable by key (W1) and *can* dial by key
+(W2) but still routes its own peer traffic over `IpTransport`.
 
 ### W2 — dial info rides the trust ring
 
-- `MemberRecord` gains `relay_url: Option<String>` (serde-defaulted,
-  same wire-compat pattern as `node_pubkey`) and optionally
-  `iroh_direct_addrs: Vec<SocketAddr>` for LAN-direct hints. Gossip
-  self-stamping (already in place for the pubkey) keeps them fresh.
-- `peer_contact()` carries them into `PeerContact`; `IrohTransport`
-  drops its spike-only `add_known_peer` seeding and resolves from
-  the contact. **Mesh membership = dialability**, the doc's central
-  collapse: knowing a member record is sufficient to dial it.
-- Join over iroh: the deep link gains `&peer=<endpoint-id>@<relay>`
-  alongside the existing `?relay=<ip>` hint, and `perform_join`
-  tries the iroh hint first. This is the moment the `?relay=`
-  Tailscale-IP wart becomes legacy: joining a mesh from a hostile
-  network needs no shared overlay at all.
+**Done in code (2026-06-18).**
+
+- `MemberRecord` gained `relay_url: Option<String>` +
+  `iroh_direct_addrs: Vec<SocketAddr>` (both serde-defaulted +
+  `skip_serializing_if`, same wire-compat pattern as `node_pubkey`).
+  Crucially these are MUTABLE reachability, so — unlike the immutable,
+  anti-downgrade-preserved `node_pubkey` — they ride normal last-seen
+  LWW: a newer record replaces them (even to `None` when a node turns
+  iroh off). Locked by `mesh::tests::iroh_dial_fields_serde_back_compat_and_mutable_lww`.
+- The daemon self-stamps its own dial info every gossip round
+  (`gossip.rs`, beside the pubkey stamp). The info is DYNAMIC (relay +
+  hole-punched addrs appear after bind), so it's a pull-provider:
+  `MeshIrohAccess::dial_info_provider()` captures the live endpoint and
+  is installed on `AppState` (`install_self_iroh_dialinfo`, type-erased
+  so `commonwealth-api` needs no iroh dep). Within one interval of
+  binding, the whole mesh learns how to dial this node by key.
+- `peer_contact()` carries the fields into `PeerContact`;
+  `IrohTransport` resolves its `EndpointAddr` from them (relay +
+  direct addrs + pubkey), `add_known_peer` demoted to a test-only
+  fallback (merged when present). A peer with a key but no relay/addr
+  has no path and is not dialable (falls through to IP in a routed
+  composition). **Mesh membership = dialability** — knowing a member
+  record is sufficient to dial it. Proof:
+  `iroh_transport_dials_from_contact_dial_info` (dials a host purely
+  from `PeerContact` direct addrs, no seeding).
+
+**Remaining (W2b — not yet done): join over iroh.** The join deep link
+should gain `&peer=<endpoint-id>@<relay>` alongside the existing
+`?relay=<ip>` hint, and `perform_join` try the iroh hint first — the
+moment the `?relay=` Tailscale-IP wart becomes legacy and joining from
+a hostile network needs no shared overlay. This is bootstrap
+(pre-membership) and independent of the steady-state dialing above, so
+it's split out as its own step.
 
 ### W3 — per-class flips via `RoutedTransport`
 
-The ~20-line composition the seam was designed for:
+**Mechanism done in code (2026-06-18); the flips themselves are an
+operator/soak exercise.** The ~20-line composition the seam was
+designed for now exists — `commonwealth-transport/src/routed.rs`:
 
 ```rust
 struct RoutedTransport {
     per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>>,
     default:   Arc<dyn PeerTransport>,   // IpTransport
 }
-// endpoints(): route by class, CONCATENATE iroh candidates before
-// ip candidates — callers already try-in-order, so per-dial
-// fallback to the tailnet path is free and automatic.
+// endpoints(): primary-for-class candidates THEN default's,
+// concatenated — callers already try-in-order, so per-dial fallback
+// to the tailnet path is free and automatic. note_success() routes
+// feedback to the producing transport by label prefix.
 ```
 
-Flip order, one class per step, each soaked on the house mesh:
+Wiring: `[iroh.transport] <class> = "iroh"` (under `[iroh]`, only
+active when `enabled`) selects which classes flip;
+`sovereign-mesh::iroh_access::iroh_routed_classes` maps the config to
+`TrafficClass`es, and `EmbeddedDaemon::start_daemon` installs a
+`RoutedTransport{ per_class: class→IrohTransport(this endpoint),
+default: IpTransport }` when ≥1 class is flipped (otherwise the plain
+`IpTransport` install stands — zero change for non-iroh deployments).
+Routes set with `enabled=false` are ignored with a warning. Proof:
+`routed.rs` unit tests (route / fallback-order / note_success
+dispatch) + e2e `routed_transport_prefers_iroh_then_falls_back_to_ip`
+(iroh-first candidate serves a real request; a no-iroh-path peer
+degrades to the IP candidate alone). `IrohTransport` selects the ALPN
+per class (`alpn_for_class`), so a flipped class reaches the right
+peer router.
+
+What remains is **doing** the flips — each is a one-line config change
++ a soak, in this order, one class per step:
 
 1. **Gossip** — lowest risk (10s cadence, 3s timeout, anti-entropy
    self-heals anything missed), highest signal (constant traffic =
@@ -242,9 +316,11 @@ Flip order, one class per step, each soaked on the house mesh:
 4. **Inference** — last because streaming latency is the product.
    A/B with the bench suite before and after (wikipedia/SEP judge +
    TTFT comparisons; regression gate = no flip).
-- Config: `[mesh.transport] gossip = "iroh" | "ip"` etc.; the
-  installed transport is glassboxed per-resolution (`transport=`
-  field already in every trace line).
+- Config (as implemented): `[iroh.transport] gossip = "iroh" | "ip"`
+  etc. (nested under `[iroh]`, not a top-level `[mesh.transport]`); the
+  installed transport is glassboxed per-resolution (`transport=` field
+  already in every trace line, plus a one-time startup log of the
+  flipped classes).
 
 ### W4 — self-hosted relays
 

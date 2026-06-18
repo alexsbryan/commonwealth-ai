@@ -37,8 +37,10 @@ pub mod identity;
 mod ip;
 #[cfg(feature = "iroh")]
 pub mod iroh;
+mod routed;
 
 pub use ip::IpTransport;
+pub use routed::RoutedTransport;
 
 use std::net::SocketAddr;
 
@@ -96,6 +98,13 @@ pub struct PeerContact {
     /// Ed25519 identity key (the future iroh node id). `None` for
     /// peers running pre-identity builds.
     pub node_pubkey: Option<NodePubkey>,
+    /// iroh relay URL the peer gossiped (W2). With `node_pubkey` +
+    /// `iroh_direct_addrs`, this is everything `IrohTransport` needs to
+    /// dial the peer by key — no out-of-band seeding. `None` when the
+    /// peer isn't iroh-reachable.
+    pub relay_url: Option<String>,
+    /// iroh direct (hole-punch / LAN) socket hints the peer gossiped.
+    pub iroh_direct_addrs: Vec<SocketAddr>,
 }
 
 /// One dialable candidate for a peer.
@@ -143,5 +152,7 @@ pub fn peer_contact(member: &MemberRecord) -> PeerContact {
         node_id: member.node_id,
         addresses: member.addresses.clone(),
         node_pubkey: member.node_pubkey,
+        relay_url: member.relay_url.clone(),
+        iroh_direct_addrs: member.iroh_direct_addrs.clone(),
     }
 }

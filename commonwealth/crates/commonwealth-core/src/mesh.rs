@@ -36,6 +36,37 @@ pub struct MemberRecord {
     /// bytes identical when no key exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_pubkey: Option<NodePubkey>,
+    /// iroh relay URL for dial-by-key reachability (Track W2 of
+    /// TRANSPORT_MIGRATION.md). `None` when this node isn't reachable
+    /// over iroh (iroh disabled, or no relay connected yet). Together
+    /// with [`Self::node_pubkey`] and [`Self::iroh_direct_addrs`] this
+    /// is everything a peer needs to dial this node by key — the
+    /// "membership = dialability" collapse. Unlike `node_pubkey` (an
+    /// immutable identity, anti-downgrade-protected in `merge_from`),
+    /// this is MUTABLE reachability: it rides normal last-seen LWW, so
+    /// a node that gains/loses a relay updates peers within one round.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
+    /// iroh direct (hole-punched / LAN) socket hints for dial-by-key.
+    /// Empty when unknown. Mutable reachability — rides normal LWW like
+    /// [`Self::relay_url`]. Lets a LAN peer dial without a relay round
+    /// trip; iroh still verifies the key on connect.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iroh_direct_addrs: Vec<SocketAddr>,
+}
+
+/// This node's current iroh dial info, pulled fresh each gossip round
+/// from the live endpoint and stamped into its own [`MemberRecord`].
+/// A plain struct (no iroh types) so it crosses the
+/// `commonwealth-core` boundary — the `commonwealth-api` `AppState`
+/// stores a type-erased provider yielding this, installed by the
+/// daemon (which owns the iroh endpoint). Empty/`None` fields mean
+/// "not reachable that way yet"; the values change over a node's
+/// lifetime as iroh discovers a relay and hole-punches direct paths.
+#[derive(Debug, Clone, Default)]
+pub struct IrohDialInfo {
+    pub relay_url: Option<String>,
+    pub direct_addrs: Vec<SocketAddr>,
 }
 
 /// Current status of a node as observed by the mesh.
@@ -206,6 +237,8 @@ mod tests {
     fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id,
             name: name.into(),
             invited_by: id,
@@ -249,6 +282,66 @@ mod tests {
             members: map,
             peers: vec![],
         }
+    }
+
+    #[test]
+    fn iroh_dial_fields_serde_back_compat_and_mutable_lww() {
+        // Back-compat: a record with no iroh dial info serializes
+        // WITHOUT the keys (skip_serializing_if), so a pre-W2 node sees
+        // identical bytes — and such a payload reads back as None/empty.
+        let bare = member(NodeId::from_u128(1), "a", 1);
+        let json = serde_json::to_value(&bare).unwrap();
+        assert!(json.get("relay_url").is_none(), "relay_url omitted when None");
+        assert!(
+            json.get("iroh_direct_addrs").is_none(),
+            "iroh_direct_addrs omitted when empty"
+        );
+        let back: MemberRecord = serde_json::from_value(json).unwrap();
+        assert_eq!(back.relay_url, None);
+        assert!(back.iroh_direct_addrs.is_empty());
+
+        // Round-trips with values.
+        let mut keyed = member(NodeId::from_u128(3), "c", 5);
+        keyed.relay_url = Some("https://relay.example./".into());
+        keyed.iroh_direct_addrs = vec!["127.0.0.1:5000".parse().unwrap()];
+        let rt: MemberRecord =
+            serde_json::from_value(serde_json::to_value(&keyed).unwrap()).unwrap();
+        assert_eq!(rt.relay_url.as_deref(), Some("https://relay.example./"));
+        assert_eq!(rt.iroh_direct_addrs, keyed.iroh_direct_addrs);
+
+        // The load-bearing distinction: relay_url/iroh_direct_addrs are
+        // MUTABLE reachability and ride normal last-seen LWW — a newer
+        // record replaces them (even to None when a node turns iroh
+        // off). node_pubkey is IMMUTABLE identity and is
+        // anti-downgrade-preserved when a relayer drops it.
+        let mesh_id = MeshId::from_u128(9);
+        let hash = [3u8; 32];
+        let mut have = member(NodeId::from_u128(7), "p", 1);
+        have.relay_url = Some("https://old.relay./".into());
+        have.node_pubkey = Some(NodePubkey([0xAB; 32]));
+        let mut local = mesh_with(
+            vec![member(NodeId::from_u128(1), "self", 100), have],
+            mesh_id,
+            hash,
+        );
+
+        let mut newer = member(NodeId::from_u128(7), "p", 2); // higher last_seen
+        newer.relay_url = Some("https://new.relay./".into());
+        newer.node_pubkey = None; // relayed by a peer that didn't carry the key
+        let incoming = mesh_with(vec![newer], mesh_id, hash);
+
+        local.merge_from(NodeId::from_u128(1), &incoming);
+        let merged = local.members.get(&NodeId::from_u128(7)).unwrap();
+        assert_eq!(
+            merged.relay_url.as_deref(),
+            Some("https://new.relay./"),
+            "relay_url is mutable LWW — the newer record wins"
+        );
+        assert_eq!(
+            merged.node_pubkey,
+            Some(NodePubkey([0xAB; 32])),
+            "node_pubkey anti-downgrade still preserves the known identity key"
+        );
     }
 
     #[test]

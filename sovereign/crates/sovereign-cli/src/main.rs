@@ -191,6 +191,10 @@ const HELP: Help = Help {
                 "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
             ),
             ("corpus", "Knowledge corpus install / remove / status"),
+            (
+                "govern",
+                "Common-law governance over a corpus — tensions / resolve / ask",
+            ),
             ("doctor", "Diagnose setup and daemon health"),
             ("recipe", "Run a corpus ingestion recipe"),
             (
@@ -696,7 +700,7 @@ async fn async_main() {
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
             "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
-            | "chat" | "reading-diag" | "newsworthy" => {
+            | "chat" | "reading-diag" | "newsworthy" | "govern" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

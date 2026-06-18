@@ -50,6 +50,8 @@ fn mesh_with_known_key() -> (AppState, String) {
 
     let founder = MemberRecord {
         node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
         node_id: founder_id,
         name: "Founder".into(),
         invited_by: founder_id,

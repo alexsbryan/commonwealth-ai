@@ -221,6 +221,18 @@ pub async fn run_one_round(
             if let Some(pubkey) = app_state.self_node_pubkey() {
                 me.node_pubkey = Some(pubkey);
             }
+            // Stamp our LIVE iroh dial info every round (W2). Unlike
+            // the immutable pubkey, relay + hole-punched addrs appear
+            // and change after the endpoint binds, so we re-read the
+            // provider each round — peers learn our current
+            // reachability within one interval. With this + the
+            // pubkey, "known member" == "dialable by key". A `None`
+            // provider (iroh disabled) leaves these fields at their
+            // default empty, so a non-iroh node publishes nothing here.
+            if let Some(info) = app_state.self_iroh_dialinfo() {
+                me.relay_url = info.relay_url;
+                me.iroh_direct_addrs = info.direct_addrs;
+            }
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {

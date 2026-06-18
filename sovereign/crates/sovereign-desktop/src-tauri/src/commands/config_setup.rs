@@ -171,6 +171,7 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         },
         watched_folders: Default::default(),
         memory: Default::default(),
+        iroh: Default::default(),
     });
 
     let cli_primary_before = cli.models.primary.clone();
@@ -461,6 +462,7 @@ pub async fn set_setup_context_size(
                 },
                 watched_folders: Default::default(),
                 memory: Default::default(),
+                iroh: Default::default(),
             }
         }
     };

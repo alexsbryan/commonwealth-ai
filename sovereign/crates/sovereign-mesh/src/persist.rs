@@ -392,6 +392,8 @@ mod tests {
         let node_id = NodeId::generate();
         let member = MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id,
             name: "Alice".into(),
             invited_by: node_id,

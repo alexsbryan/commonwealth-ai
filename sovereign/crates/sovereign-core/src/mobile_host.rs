@@ -391,6 +391,7 @@ mod tests {
             },
             watched_folders: Default::default(),
             memory: Default::default(),
+            iroh: Default::default(),
         }
     }
 

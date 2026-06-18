@@ -12,10 +12,10 @@ tracing = { workspace = true }
 ed25519-dalek = { workspace = true }
 getrandom = "0.3"
 hex = "0.4"
-# EXPERIMENTAL (feature `iroh`): pinned to the final 1.0 release
-# candidate (2026-05-27) — the API surface is committed but the
-# stable release hasn't shipped. Off by default so workspace gates
-# never compile it; all iroh symbol use is confined to src/iroh.rs.
+# Dial-by-key transport (feature `iroh`). Pinned to iroh 1.0 stable
+# (shipped 2026-06-15, wire-protocol-stable). Optional so a build that
+# doesn't need the iroh path doesn't compile it; all iroh symbol use is
+# confined to src/iroh.rs, so version churn is a one-file change.
 iroh = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }

@@ -107,6 +107,10 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
         node_id: founder_id,
         addresses: vec![],
         node_pubkey: Some(founder_pubkey),
+        // This test seeds the dial addrs via `add_known_peer` (the
+        // fallback merge), so the contact itself carries none.
+        relay_url: None,
+        iroh_direct_addrs: vec![],
     };
     let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
     assert_eq!(endpoints.len(), 1, "dial-by-key yields one bridge endpoint");
@@ -266,10 +270,169 @@ async fn peer_without_pubkey_is_not_dialable_on_iroh() {
         node_id: NodeId::from_u128(7),
         addresses: vec!["100.64.0.2:9742".parse().unwrap()],
         node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
     };
     let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
     assert!(
         endpoints.is_empty(),
         "no identity key → no iroh dial (a routed transport would fall back to IP)"
+    );
+}
+
+/// W2 keystone: a peer is dialable purely from the dial info its
+/// `MemberRecord` gossiped — here, the direct addrs carried in the
+/// `PeerContact` — with NO `add_known_peer` seeding. "Knowing a member
+/// record is sufficient to dial it." Also asserts the negative: a key
+/// with no relay and no addrs has no path, so it's not dialable (a
+/// routed composition falls back to IP).
+#[tokio::test]
+async fn iroh_transport_dials_from_contact_dial_info() {
+    // Host: a plain axum router behind an iroh acceptor (internal ALPN,
+    // which the Gossip traffic class selects).
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let http_addr = listener.local_addr().unwrap();
+    let router = axum::Router::new().route(
+        "/status",
+        axum::routing::get(|| async { axum::Json(serde_json::json!({"ok": true})) }),
+    );
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+
+    let host_ep = bind_iroh_endpoint(21).await;
+    let host_pubkey = NodePubkey(*host_ep.id().as_bytes());
+    let host_socks = dialable_sockets(&host_ep);
+    assert!(!host_socks.is_empty(), "host must expose a dialable socket");
+    let _acceptor = IrohAcceptor::spawn(host_ep.clone(), http_addr);
+
+    // Client transport — dial info comes ONLY from the contact, never
+    // from add_known_peer.
+    let transport = IrohTransport::new(bind_iroh_endpoint(22).await);
+    let contact = PeerContact {
+        node_id: NodeId::from_u128(21),
+        addresses: vec![],
+        node_pubkey: Some(host_pubkey),
+        relay_url: None,
+        iroh_direct_addrs: host_socks,
+    };
+    let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
+    assert_eq!(
+        endpoints.len(),
+        1,
+        "a contact carrying direct addrs is dialable with no seeding"
+    );
+    let resp = reqwest::Client::new()
+        .get(format!("{}/status", endpoints[0].base_url))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("GET /status over iroh, dialed purely from contact dial info");
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["ok"], true);
+
+    // Negative: a key with NO relay and NO addrs has no path. Use a
+    // FRESH transport + a distinct (real) key so the prior dial's
+    // per-(peer,ALPN) bridge cache can't mask the result.
+    let other_ep = bind_iroh_endpoint(24).await;
+    let other_pubkey = NodePubkey(*other_ep.id().as_bytes());
+    let fresh = IrohTransport::new(bind_iroh_endpoint(23).await);
+    let no_path = PeerContact {
+        node_id: NodeId::from_u128(24),
+        addresses: vec![],
+        node_pubkey: Some(other_pubkey),
+        relay_url: None,
+        iroh_direct_addrs: vec![],
+    };
+    assert!(
+        fresh
+            .endpoints(&no_path, TrafficClass::Gossip)
+            .await
+            .is_empty(),
+        "a bare key with no relay/addr is not dialable"
+    );
+}
+
+/// W3 keystone: a `RoutedTransport` with Gossip flipped to iroh lists
+/// the iroh candidate FIRST and the IP candidate AFTER (automatic
+/// per-dial fallback), and the iroh-first candidate actually serves.
+/// A peer with no iroh path degrades to the IP candidate alone — the
+/// "a failed/absent iroh dial degrades to the tailnet path" guarantee,
+/// proven end to end over real iroh QUIC + a real `IpTransport`.
+#[tokio::test]
+async fn routed_transport_prefers_iroh_then_falls_back_to_ip() {
+    use commonwealth_transport::{IpTransport, RoutedTransport};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    // A host reachable over iroh (internal ALPN, which Gossip selects).
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let http_addr = listener.local_addr().unwrap();
+    let router = axum::Router::new().route(
+        "/x",
+        axum::routing::get(|| async { axum::Json(serde_json::json!({"ok": true})) }),
+    );
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    let host_ep = bind_iroh_endpoint(31).await;
+    let host_pubkey = NodePubkey(*host_ep.id().as_bytes());
+    let host_socks = dialable_sockets(&host_ep);
+    let _acceptor = IrohAcceptor::spawn(host_ep.clone(), http_addr);
+
+    // RoutedTransport: Gossip → iroh (dialing from a client endpoint);
+    // default → IP.
+    let iroh_t: Arc<dyn PeerTransport> = Arc::new(IrohTransport::new(bind_iroh_endpoint(32).await));
+    let ip_t: Arc<dyn PeerTransport> = Arc::new(IpTransport::new(9742));
+    let mut per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>> = HashMap::new();
+    per_class.insert(TrafficClass::Gossip, iroh_t);
+    let routed = RoutedTransport::new(per_class, ip_t);
+
+    // Peer reachable BOTH ways: iroh (pubkey + direct addrs) and IP.
+    // Routed must list iroh first, IP as fallback.
+    let dual = PeerContact {
+        node_id: NodeId::from_u128(31),
+        addresses: vec!["100.64.0.9:9742".parse().unwrap()],
+        node_pubkey: Some(host_pubkey),
+        relay_url: None,
+        iroh_direct_addrs: host_socks,
+    };
+    let eps = routed.endpoints(&dual, TrafficClass::Gossip).await;
+    assert!(eps.len() >= 2, "iroh candidate + IP fallback, got {eps:?}");
+    assert!(
+        eps[0].label.starts_with("iroh:"),
+        "iroh candidate must be first, got {}",
+        eps[0].label
+    );
+    assert!(
+        eps.iter().any(|e| e.label.starts_with("ip:")),
+        "IP fallback candidate must be present"
+    );
+    // The iroh-first candidate actually serves a request.
+    let resp = reqwest::Client::new()
+        .get(format!("{}/x", eps[0].base_url))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("GET over the iroh-first routed candidate");
+    assert!(resp.status().is_success());
+    assert_eq!(resp.json::<serde_json::Value>().await.unwrap()["ok"], true);
+
+    // Peer with NO iroh path (no pubkey) but an IP address → iroh
+    // yields nothing, routed degrades to the IP candidate alone.
+    let ip_only = PeerContact {
+        node_id: NodeId::from_u128(99),
+        addresses: vec!["100.64.0.10:9742".parse().unwrap()],
+        node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: vec![],
+    };
+    let eps2 = routed.endpoints(&ip_only, TrafficClass::Gossip).await;
+    assert_eq!(eps2.len(), 1, "no iroh path → IP fallback only, got {eps2:?}");
+    assert!(
+        eps2[0].label.starts_with("ip:"),
+        "fallback candidate must be the IP one, got {}",
+        eps2[0].label
     );
 }

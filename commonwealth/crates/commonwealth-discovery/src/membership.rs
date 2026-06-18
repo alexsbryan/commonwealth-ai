@@ -93,6 +93,10 @@ pub fn init_mesh_with_identity(
 
     let founder = MemberRecord {
         node_pubkey,
+        // Dial info is self-stamped by gossip once the endpoint binds
+        // (W2); a fresh record carries none yet.
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
         node_id,
         name: node_name.to_string(),
         invited_by: node_id, // Founder invites themselves.
@@ -249,6 +253,9 @@ pub fn accept_join_with_identity(
 
     let member = MemberRecord {
         node_pubkey,
+        // Self-stamped by gossip once this node binds its endpoint (W2).
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
         node_id: new_node_id,
         name: new_node_name.to_string(),
         invited_by,

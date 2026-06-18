@@ -8,7 +8,14 @@ description = "Commonwealth mesh integration layer for Sovereign"
 [dependencies]
 # Commonwealth crates (embedded as library)
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
+# `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
+# TRANSPORT_MIGRATION.md) is compiled into the default build —
+# runtime-gated by `[iroh] enabled`, not cfg-gated — so the shipped
+# daemon actually binds an endpoint when configured. iroh is already
+# in the workspace's default build via sovereign-server, so this adds
+# no marginal compile cost. The heavier network e2e test stays behind
+# this crate's `iroh-experimental` feature.
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires

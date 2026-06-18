@@ -17,8 +17,7 @@
 use std::path::PathBuf;
 
 use commonwealth_transport::iroh::{
-    format_dial_string, presets, ring_crypto_provider, Endpoint, EndpointBuilder, IrohAcceptor,
-    CLIENT_ALPN,
+    build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, CLIENT_ALPN,
 };
 
 use crate::config::ServerConfig;
@@ -78,15 +77,10 @@ impl IrohAccess {
         let secret =
             commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
-        // presets::N0: n0 public relays + address lookup — the relay
-        // fleet self-hosting swap is W4 of the migration doc.
-        let endpoint = match EndpointBuilder::new(presets::N0)
-            .crypto_provider(ring_crypto_provider())
-            .secret_key(secret)
-            .alpns(vec![CLIENT_ALPN.to_vec()])
-            .bind()
-            .await
-        {
+        // Shared constructor (n0 public relays + address lookup; the
+        // relay-fleet self-hosting swap is W4 of the migration doc).
+        // The client serves only the client ALPN.
+        let endpoint = match build_relayed_endpoint(secret, vec![CLIENT_ALPN.to_vec()]).await {
             Ok(ep) => ep,
             Err(e) => {
                 tracing::error!(error = %e, "iroh: endpoint bind failed — dial-by-key access disabled");

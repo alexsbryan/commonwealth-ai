@@ -128,8 +128,105 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         }
     }
 
+    // Glass-box: surface the verbatim source passages retrieval actually fed
+    // this answer — post active-set filter, so only *current* law — each with
+    // a traceable section citation, resolved deterministically from the corpus
+    // index. The model's inline citation can garble a date or title; this
+    // footer can't, so the human always has the real rules to check the
+    // synthesis against rather than trusting the model's cite.
+    render_sources(&session, &conv_id, corpus_id).await;
     render_supersession_provenance(corpus_id, &answer);
     0
+}
+
+/// Deterministic "sources" footer: the verbatim passages retrieval actually
+/// fed the answer (recovered from the persisted assistant message metadata,
+/// mirroring the bench live-runner), resolved to full text + a human section
+/// title via the corpus index. Independent of the model's inline citation, so
+/// a garbled cite never hides the raw material the reviewer needs to judge the
+/// answer. One line per distinct section, in retrieval-rank order.
+async fn render_sources(
+    session: &crate::chat_cmd::bootstrap::ChatSession,
+    conv_id: &str,
+    corpus_id: &str,
+) {
+    let chunk_refs: Vec<serde_json::Value> = session
+        .store
+        .get_conversation(conv_id)
+        .await
+        .ok()
+        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()))
+        .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
+        .unwrap_or_default();
+    if chunk_refs.is_empty() {
+        return;
+    }
+    let index_root = crate::enrich_cmd::paths::index_root(corpus_id);
+    let chunk_to_section =
+        corpus_engine::enrichment::governance_view::chunk_to_section_map(&index_root);
+    let titles = corpus_engine::enrichment::governance_view::section_titles(&index_root);
+
+    // Distinct sections in retrieval-rank order. The persisted metadata is
+    // relevance-ranked — the rule most relevant to the question comes first —
+    // so the top entries are the ones the answer actually leans on. On a small
+    // corpus retrieval can surface half the rules; we show the top few and say
+    // how many more were retrieved (no silent truncation).
+    const TOP: usize = 6;
+    let mut seen = std::collections::HashSet::new();
+    let mut distinct: Vec<(String, String, u64)> = Vec::new();
+    for c in &chunk_refs {
+        let (Some(cid), Some(chid)) = (
+            c.get("corpus_id").and_then(|v| v.as_str()),
+            c.get("chunk_id").and_then(|v| v.as_u64()),
+        ) else {
+            continue;
+        };
+        let title = chunk_to_section
+            .get(&chid)
+            .and_then(|s| titles.get(s))
+            .cloned()
+            .unwrap_or_else(|| format!("chunk {chid}"));
+        if seen.insert(title.clone()) {
+            distinct.push((title, cid.to_string(), chid));
+        }
+    }
+    if distinct.is_empty() {
+        return;
+    }
+
+    eprintln!("\nsources — rules retrieved for this answer (most relevant first):");
+    for (title, cid, chid) in distinct.iter().take(TOP) {
+        eprintln!("  · {title}");
+        // FULL section text from the index (not the truncated metadata snippet),
+        // mirroring the bench live-runner's resolution. Strip the section's own
+        // title line so the body isn't printed twice.
+        let body = match session.corpus_engine.open_index_for_corpus(cid).await {
+            Ok(index) => index
+                .chunks_by_ids(&[*chid])
+                .await
+                .ok()
+                .and_then(|mut rows| rows.pop())
+                .map(|row| row.content),
+            Err(_) => None,
+        }
+        .unwrap_or_default();
+        let body = body.trim();
+        let body = body.strip_prefix(title.as_str()).unwrap_or(body).trim();
+        if !body.is_empty() {
+            let shown = if body.chars().count() > 240 {
+                format!("{}…", body.chars().take(240).collect::<String>())
+            } else {
+                body.to_string()
+            };
+            eprintln!("      {shown}");
+        }
+    }
+    if distinct.len() > TOP {
+        eprintln!(
+            "  … and {} more section(s) retrieved (not shown)",
+            distinct.len() - TOP
+        );
+    }
 }
 
 /// Render the lineage of any *superseding* rule the answer actually relied

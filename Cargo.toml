@@ -188,10 +188,15 @@ chrono = { version = "0.4", features = ["serde"] }
 # iroh SecretKey). Hoisted 2026-06-10 from sovereign-mesh's inline
 # decl so commonwealth-transport tracks the same version.
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
-# EXPERIMENTAL dial-by-key transport — only compiled behind
-# commonwealth-transport's `iroh` feature (off by default; spike
-# test via `cargo test -p sovereign-mesh --features iroh-experimental`).
-iroh = "1.0.0-rc.1"
+# Dial-by-key transport (QUIC by Ed25519 key, hole-punch + relays).
+# iroh 1.0 shipped 2026-06-15 with a committed, wire-stable protocol
+# (any v1 endpoint interops with any other v1 endpoint). Compiled
+# behind commonwealth-transport's `iroh` feature and sovereign-mesh's
+# `iroh-experimental`; all iroh symbol use is confined to
+# `commonwealth-transport/src/iroh.rs`, so a future minor bump is a
+# one-file change. Spike e2e: `cargo test -p sovereign-mesh
+# --features iroh-experimental`.
+iroh = "1.0"
 
 # Concurrency
 dashmap = "6"
