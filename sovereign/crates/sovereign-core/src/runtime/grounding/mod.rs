@@ -38,6 +38,7 @@
 //! OOD-caveat case must not be gated) — except on entity-anchored
 //! questions, where a GK caveat cannot exempt an in-world claim.
 
+mod citation;
 mod config;
 mod judge;
 mod search;
@@ -220,6 +221,44 @@ pub(crate) async fn gate_answer(
     let entity_anchored = evidence.entity_anchored;
     if draft.chars().count() > profile.longform_chars {
         return gate_longform(inference, question, draft, evidence, base_request, profile).await;
+    }
+    // Active citation-grounding (entity-anchored fact queries, flag-gated).
+    // Replaces generate-then-substring-verify with quote-then-answer: the model
+    // must copy a verbatim supporting sentence before it answers, which forces
+    // it to read the retrieved context (curing the measured A3B confabulations
+    // where the answer was present but unused — "blowpipe" for the carving
+    // knife) and grounds by quote-existence rather than value-substring (curing
+    // the STOP-list/paraphrase false-negatives that killed "Chief Inspector").
+    // Inconclusive (extraction error/unparseable) falls through to the legacy
+    // ladder — fail-open, never a refusal from a hiccup. Does not consume the
+    // draft, so the fall-through path is unchanged.
+    if entity_anchored && config::citation_grounding_enabled() {
+        if let citation::CitationOutcome::Grounded { answer, quote } =
+            citation::citation_grounded_answer(&**inference, question, chunks).await
+        {
+            dbg(&format!(
+                "citation: GROUNDED → release (answer={:?} quote_chars={})",
+                answer.chars().take(60).collect::<String>(),
+                quote.len()
+            ));
+            return GateOutcome {
+                text: answer,
+                meta: serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "citation_grounded",
+                    "retried": false,
+                    "mode": "citation",
+                    "quote_chars": quote.len(),
+                }),
+            };
+        }
+        // Not tightly grounded (no quote, quote not verbatim, or answer not
+        // supported by its own quote) → fall through to the legacy verify →
+        // retry → abstain ladder. Citation is purely ADDITIVE: it can only
+        // upgrade a legacy abstention into a grounded release — it never causes
+        // an abstention itself nor replaces a correct draft, so the legacy path
+        // stays the honesty floor (measured 1.00).
+        dbg("citation: not tightly grounded → fall through to legacy ladder");
     }
     let mut text = draft;
     let mut action = "released";

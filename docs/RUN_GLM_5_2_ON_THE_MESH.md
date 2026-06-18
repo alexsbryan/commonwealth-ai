@@ -1,76 +1,44 @@
 # Run GLM-5.2 on the mesh
 
-GLM-5.2 is a 744-billion-parameter open-weight model. No single machine most of
-us own can hold it — the Q4 quant is **436 GB** on disk. But only about **40
-billion** of those parameters do any work on a given token; the other ~700B sit
-resident, waiting their turn. That gap is the whole opportunity. You need enough
-*memory* across a group of machines to hold all 436 GB at once, but the *work*
-per token stays at roughly the speed of a 40B model. Pool four ordinary 128 GB
-machines and you can run, between you, a frontier model none of you could run
-alone.
+GLM-5.2 is a 744-billion-parameter open-weight model — one of the strongest you
+can run yourself, and far too big for any single machine most of us own (it's over
+400 GB). But here's the trick that makes it runnable: only about 40 billion of
+those parameters do any work on a given word. The rest sit in memory waiting their
+turn. So you don't need one impossible machine — you need enough *memory* spread
+across a few ordinary ones to hold the model all at once, while the actual work per
+word stays light. Pool four 128 GB machines with people you trust and, together,
+you can run a frontier model none of you could run alone.
 
-This is the same distributed-inference path described in
-[Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md): one host, a few
-workers, the model's layers split across them, and you talk to the host as if it
-were running locally. This page is the concrete version for GLM-5.2 — what to
-bring, what to type, and what's honestly true about it today, so you can hand it
-to the people you want to pool machines with.
-
-## Two things that are true today
-
-Worth knowing before you recruit anyone, because they shape what you're
-promising.
-
-**It loads on what we ship — but it runs dense.** GLM-5.2's architecture
-(`glm_moe_dsa`) has been in mainline llama.cpp since
-[PR #19460](https://github.com/ggml-org/llama.cpp/pull/19460) (merged February
-2026), and Sovereign's pinned build already includes it — so the model loads
-today, no llama.cpp bump required to start. What's *not* wired up yet is the
-sparse-attention "indexer," the part that makes GLM-5.2's 1M-token window cheap by
-attending to only part of the history. Until that lands upstream (no release has
-it as of mid-2026), llama.cpp runs attention the ordinary dense way: correct, but
-a long context costs what it would on any dense model. Size the KV cache for the
-context you actually use and **start modest — 32–64k, not the headline million.**
-Still worth doing before you recruit: confirm one host can `sovereign chat`
-against the model before you ask four people to clear 110 GB of disk.
-
-**For long context, build against current llama.cpp.** Running GLM-5 dense
-surfaced an overflow: past roughly 200k tokens the dense attention mask exceeds a
-2 GiB limit and you get a crash or gibberish
-([#23574](https://github.com/ggml-org/llama.cpp/issues/23574), fixed late May
-2026). The fix rides in `llama-cpp-4` 0.3.1; older builds — ours included at time
-of writing — can still trip it on very long prefills. At the modest context above
-you won't reach it, but if you mean to push the window, make sure the cluster is
-built against 0.3.1 or newer.
+This is the [Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md) path,
+made concrete for GLM-5.2: one host, a few workers lending memory, the model split
+across them, and you talk to the host as if it were all running on your own desk.
+Hand this page to the people you want to pool with.
 
 ## What the group needs to bring
 
-The model's 436 GB of weights have to be resident in memory across the machines,
-all at once, plus room on top for the KV cache and compute buffers — and, on the
-host, for the small fast/embed models it keeps running locally (those don't
-distribute). Budget around **480–500 GB of pooled memory**. In practice:
+The whole model has to live in memory across the machines at once, with a little
+room to spare for working space. Budget around **480–500 GB of memory pooled
+across everyone.** A few ways that adds up:
 
-- **Four 128 GB machines** (512 GB) is the clean target — Strix Halo boxes,
-  128 GB Macs, or a mix. It clears the weights with ~70 GB to spread across the
-  group for KV and buffers. If your host is busy or you want bigger contexts, a
-  **fifth** node buys breathing room.
-- **Five ~96–100 GB machines** gets you to the same place with smaller boxes.
-- A **512 GB Mac Studio** can nearly host alone; pair it with one more node and
-  you get the fewest network hops, which is the fastest this gets.
+- **Four 128 GB machines** — the clean target. Strix Halo boxes, 128 GB Macs, or
+  a mix. A fifth machine gives you breathing room for longer conversations.
+- **Five ~100 GB machines** — same place, smaller boxes.
+- **One very large machine** (say, a 512 GB Mac Studio) plus one more — the fewest
+  network hops, which is the fastest this gets.
 
-Memory is the pool; disk is per-machine. The **host** holds the whole GGUF —
-**436 GB of free disk**, all ten shards co-located. The **workers don't**: with
-byte-range fetch (below) each worker pulls only its own slice, about
-**`436 / N` GB** — roughly 110 GB each across four nodes.
+One machine is the **host** — the one you talk to. It holds the model file on disk
+(about **440 GB**, downloaded once) and is usually your largest box. Everyone else
+just lends memory; they don't need the file at all — the host hands each of them
+only their slice automatically.
 
-And a network path between the machines. On a LAN you have it. Across locations,
-[Tailscale](https://tailscale.com) gives them a private address space and the
-mesh rides on top; a direct LAN or wired link is meaningfully faster for the
-per-token traffic than Tailscale-over-Wi-Fi.
+And a network path between the machines. On a home or office network you already
+have it. Across locations, [Tailscale](https://tailscale.com) gives everyone a
+shared private address and the mesh rides on top — though a wired local network is
+noticeably snappier.
 
 ## Set it up
 
-**1. Get the model onto the host.** All ten shards, co-located:
+**1. Get the model onto the host.**
 
 ```bash
 huggingface-cli download unsloth/GLM-5.2-GGUF \
@@ -78,22 +46,21 @@ huggingface-cli download unsloth/GLM-5.2-GGUF \
   --local-dir ~/.sovereign/models/GLM-5.2
 ```
 
-**2. Point the host's primary slot at the first shard.** llama.cpp follows the
-rest of the split on its own, which is why they must sit in one directory. In
-`~/.sovereign/config.toml`:
+**2. Point the host at it.** The download is a set of numbered files; point at the
+first one and the rest come along automatically. In `~/.sovereign/config.toml`:
 
 ```toml
 [models]
 primary = "/home/you/.sovereign/models/GLM-5.2/UD-Q4_K_S/GLM-5.2-UD-Q4_K_S-00001-of-00010.gguf"
 ```
 
-**3. Put the machines on one mesh.** On the host:
+**3. Put everyone on one mesh.** On the host:
 
 ```bash
 sovereign mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
 ```
 
-On each other machine:
+On every other machine:
 
 ```bash
 sovereign mesh join cwth-a1b2-c3d4-e5f6
@@ -101,14 +68,13 @@ sovereign mesh join cwth-a1b2-c3d4-e5f6
 
 `sovereign mesh status` should list them all.
 
-**4. Start each lending machine as a worker.** It doesn't need the model on
-disk; it'll fetch its slice.
+**4. Start each lending machine as a worker.**
 
 ```bash
 SOVEREIGN_RPC_SERVE=0.0.0.0:50052 sovereign daemon run
 ```
 
-**5. Start the host with discovery and byte-range fetch on.**
+**5. Start the host.**
 
 ```bash
 SOVEREIGN_RPC_DISCOVER=1 \
@@ -116,114 +82,67 @@ SOVEREIGN_RPC_SHARD_FETCH=ranges \
   sovereign daemon run
 ```
 
-`SOVEREIGN_RPC_SHARD_FETCH=ranges` is the one that matters at this size: without
-it, any worker that doesn't already hold the model would try to fetch the entire
-436 GB GGUF. With it, each worker materializes only its own ~110 GB slice. The
-host finds the workers, computes one split weighted by each machine's memory,
-seeds every worker the shard it's responsible for, and loads. When it's ready,
-you query the host exactly as you always do.
+The host finds the workers, splits the model across everyone's memory by how much
+each one has, and hands each worker its slice. `SOVEREIGN_RPC_SHARD_FETCH=ranges`
+keeps that tidy at this size — each machine takes only its own slice (around 110 GB
+across four) instead of the whole file. When it's ready, you query the host the way
+you always do.
 
-**Peers on a metered connection?** Hand them the GGUF on a drive and have them
-warm their cache offline, so nothing crosses their ISP link at load time:
+**On a metered connection?** Hand a worker the file on a drive and prime it
+offline, so nothing crosses their internet link when the cluster starts:
 
 ```bash
-sovereign mesh warm-cache <model.gguf>     # builds the cache locally, no network
-```
-
-[RPC_DISTRIBUTED_INFERENCE.md](./RPC_DISTRIBUTED_INFERENCE.md) covers warming and
-the tuning knobs in full.
-
-## Optional: make it a first-class named model
-
-Setting `[models] primary` to the path is enough to run it. If you'd rather it
-carry proper metadata — capabilities, a display name, the right family — add a
-cluster profile to `sovereign/models.toml`, mirroring the existing distributed
-entries. There's no GLM family in Sovereign yet, so it loads like MiniMax does:
-`Unknown` family, with the chat template read from the GGUF and generic sampling.
-(A dedicated `Glm` family for tuned sampling defaults is a clean follow-up.)
-
-```toml
-# Distributed-only — too big for one node, never auto-selected by hardware
-# detection. Runs only across the mesh via RPC layer-distribution.
-[profiles.cluster_glm52.thoughtful]
-repo      = "unsloth/GLM-5.2-GGUF"
-file      = "UD-Q4_K_S/GLM-5.2-UD-Q4_K_S-00001-of-00010.gguf"
-family    = "Unknown"          # no Glm family yet; GGUF carries the chat template
-quant     = "UD-Q4_K_S"
-size_gb   = 436.0
-thinking  = true
-hf_url    = "https://huggingface.co/unsloth/GLM-5.2-GGUF"
-base_name = "GLM-5.2"
-[profiles.cluster_glm52.thoughtful.capabilities]
-general     = 4
-analysis    = 4
-code        = 4
-instruction = 4
-math        = 4
-creative    = 4
+sovereign mesh warm-cache <model-file>
 ```
 
 ## What to expect
 
-**The first load is the expensive part, once.** Each worker pulls its ~110 GB
-slice over the network the first time (or reads it from a pre-warmed cache, with
-no transfer at all). After that the slice stays resident; per answer, only a few
-kilobytes of intermediate state cross the wire between layers. The cost is paid
-up front and amortizes — which is exactly why this earns its keep on a model that
-can't fit one machine.
+**The first start is the slow part, once.** Each worker pulls its slice across the
+network the first time (or reads it from a drive you primed). After that it stays
+put — every answer afterward sends only a trickle between machines. The big cost is
+paid once, up front, which is exactly why this is worth it for a model that can't
+fit one machine and wouldn't be worth it for one that can.
 
-**It runs at a measured pace.** Layers are split across the machines in a
-pipeline, so a token walks from node to node and crosses the network at each
-boundary — that, not raw compute, is the ceiling. The 40B-active design keeps the
-arithmetic light; the network and the hop count set the speed. For a reference
-point from the same path: MiniMax-M2.7 (140 GB, ~10B active) runs around 17 tok/s
-on a two-node Strix cluster. GLM-5.2 is larger, spread over more nodes with more
-hops, and — until the sparse-attention path lands — pays full dense attention, so
-expect **single digits on a good local network, slower across the internet**. We
-haven't measured it on a real cluster yet; that's the first thing to do once the
-machines are pooled. A direct wired link or 10GbE between co-located boxes is the
-biggest lever you have on it.
+**It runs at a steady, readable pace** — an answer that arrives smoothly rather
+than instantly. The model is split into a relay across the machines, so each word
+makes a lap of the group; the network between them, more than any one machine's
+speed, sets the tempo. A wired local network is the single biggest thing you can do
+to make it quicker. You haven't really run it until you've tried it — so pool the
+machines and see.
 
-**To see the split is real,** watch a worker during a query — its memory holds
-roughly its share of the model for the length of the answer, and its daemon logs
-an accepted connection held for the duration. tok/s alone won't tell you;
-resident memory will.
+**Keep the context window modest to start.** There's an enormous number on the
+spec sheet, but very long conversations eat memory and slow the relay down. You
+don't need anywhere near the maximum to do something genuinely impressive.
+
+**Want to see it's real?** Watch a worker while you ask a question — its memory
+rises to hold its share of the model and stays there for the length of the answer.
 
 ## If a machine drops
 
-Workers come and go and the mesh expects it. If one leaves — a closed laptop, a
-dropped link — the host notices, sets it aside, and reloads on the machines still
-present; you get the model running on what's left rather than a hung process or a
-wrong answer, and the worker is folded back in once it's been steadily reachable
-again. One that keeps flapping is benched for a cooldown rather than trusted
-straight back in.
+Machines come and go, and the mesh expects it. If one leaves — a closed laptop, a
+dropped connection — the host notices, sets it aside, and brings the model back up
+on whatever's still there; you get an answer from the machines that remain, not a
+hang or a wrong reply. The one that left rejoins on its own once it's been steady
+again for a while.
 
-One sharp edge worth saying plainly to the people you recruit: a worker that
-crashes *mid-answer* can take the host process down with it — an upstream
-llama.cpp limitation, not something we paper over. The host restarts in seconds
-and the cluster re-forms on its own, but only if it's running under a supervisor.
-So run it as a service:
+One thing worth saying plainly to the people you recruit: if a machine crashes in
+the *middle* of an answer, it can briefly take the host down with it. The host
+comes right back and the group re-forms on its own — but only if it's running as a
+service, so set that up on the host:
 
 ```bash
 sovereign install-service
 ```
 
-That's the intended way to run a cluster unattended, and it's the difference
-between "a node rebooted" being a non-event and being a phone call.
+That's the difference between a machine rebooting being a non-event and being a
+phone call.
 
 ---
 
-Four machines, one mesh, and a model the size of a small data center's worth of
-weights answers from your own hardware.
+Four machines, one mesh, and a model you were never supposed to be able to run
+answers from your own hardware.
 
-*The mechanism, the warming workflow, and every tuning knob live in
-[RPC_DISTRIBUTED_INFERENCE.md](./RPC_DISTRIBUTED_INFERENCE.md). The plain,
-model-agnostic version of this story is
-[Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md).*
-
-### References
-
-- Model card and GGUF quants — [unsloth/GLM-5.2-GGUF](https://huggingface.co/unsloth/GLM-5.2-GGUF)
-- Architecture (744B / ~40B active, 256+1 experts, 78 layers, DSA, 1M ctx) — [vLLM recipe, zai-org/GLM-5.2](https://recipes.vllm.ai/zai-org/GLM-5.2)
-- llama.cpp `glm_moe_dsa` support (indexer not yet wired) — [ggml-org/llama.cpp #19460](https://github.com/ggml-org/llama.cpp/pull/19460)
-- GLM-5 long-context dense-mask overflow + fix — [#23574](https://github.com/ggml-org/llama.cpp/issues/23574) / [#23610](https://github.com/ggml-org/llama.cpp/pull/23610) (in `llama-cpp-4` 0.3.1)
+*The plain, any-model version of this is
+[Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md). The deeper
+knobs — priming caches, tuning the split — live in
+[RPC_DISTRIBUTED_INFERENCE.md](./RPC_DISTRIBUTED_INFERENCE.md).*

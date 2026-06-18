@@ -40,6 +40,16 @@ pub(crate) fn grounding_gate_threshold() -> f64 {
         .unwrap_or(0.9)
 }
 
+/// Citation-grounded answering on entity-anchored fact queries. OFF by default
+/// (clean A/B until the bank justifies a flip): when on, the gate replaces
+/// generate-then-substring-verify with active quoting — the model must copy the
+/// supporting sentence before it answers. See `citation::citation_grounded_answer`.
+pub(crate) fn citation_grounding_enabled() -> bool {
+    std::env::var("SOVEREIGN_CITATION_GROUNDING")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 /// The closed set of answer-producing surfaces the gate covers.
 /// Adding a surface = adding a variant + a profile + a bank — there
 /// is no open registration, by design: every gated surface must have
@@ -228,6 +238,14 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_AGENTIC_KQ_DEBUG",
                 default: "off",
                 purpose: "Mirror gate (and agentic-loop) trace lines to stderr for bench/CLI surfaces with no tracing subscriber.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_CITATION_GROUNDING",
+                default: "off",
+                purpose: "Active citation-grounding on entity-anchored fact queries: the model must copy a verbatim supporting sentence before answering, grounded by quote-existence (curing A3B context-under-utilisation + the substring verifier's title/paraphrase false-negatives). No findable quote → honest abstention.",
             },
         ),
     ]
