@@ -61,18 +61,57 @@ pub fn cmd_tensions(args: &[String]) -> i32 {
             println!("  no open tensions — current law is internally consistent (as detected).");
         }
     }
+    // Glass-box agenda. For each flagged conflict, surface the RAW material a
+    // human needs to *overrule the detector* — the verbatim source clause and
+    // a traceable citation (the Article / dated Decision it comes from) — set
+    // beside the model's paraphrase and reasoning, each labeled as the model's
+    // read. The verdict is only ~0.67-precise; the source clause is exact, so
+    // a reviewer adjudicates the real rules, and a paraphrase that drifted from
+    // its source (e.g. "the house" narrowed to "any bedroom") stays visible
+    // rather than hidden behind the verdict.
+    let rule_by_id = view
+        .rules
+        .iter()
+        .map(|r| (r.id.as_str(), r))
+        .collect::<std::collections::HashMap<_, _>>();
+    let titles = corpus_engine::enrichment::governance_view::section_titles(
+        crate::enrich_cmd::paths::index_root(&corpus_id),
+    );
+    // (section title, verbatim source clause) for a rule id, from its citation.
+    let cite = |rid: &str| -> (String, Option<String>) {
+        match rule_by_id.get(rid).and_then(|r| r.citation.as_ref()) {
+            Some(c) => (
+                titles
+                    .get(&c.chunk_id)
+                    .cloned()
+                    .unwrap_or_else(|| c.chunk_id.clone()),
+                c.passage_preview.clone(),
+            ),
+            None => ("(unmapped section)".to_string(), None),
+        }
+    };
+
     for t in &open {
         println!();
         println!(
-            "  tension {}  (confidence {:.2})",
+            "  conflict {}  (confidence {:.2})",
             t.id.as_str(),
             t.confidence
         );
-        if let Some(why) = &t.why {
-            println!("    why: {why}");
+        for (label, rid, paraphrase) in [
+            ("A", t.rule_a.as_str(), &t.text_a),
+            ("B", t.rule_b.as_str(), &t.text_b),
+        ] {
+            let (title, verbatim) = cite(rid);
+            println!("    {label} · {title}  [{rid}]");
+            if let Some(v) = verbatim {
+                println!("        source: \"{}\"", v.trim());
+            }
+            println!("        model read it as: {paraphrase}");
         }
-        println!("    A [{}]: {}", t.rule_a.as_str(), t.text_a);
-        println!("    B [{}]: {}", t.rule_b.as_str(), t.text_b);
+        if let Some(why) = &t.why {
+            println!("    model's reasoning: {why}");
+        }
         println!(
             "    → resolve: sovereign govern resolve {corpus_id} {} --keep <{}|{}>",
             t.id.as_str(),

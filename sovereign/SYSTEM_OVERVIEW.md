@@ -1024,14 +1024,42 @@ instance hangs off commonwealth-api's `AppState`
   Inference/StatusProbe rewrite to the (assumed-uniform) client
   port. Golden URL-vector tests pin byte-identical output vs the
   pre-seam inline `format!` strings.
-- **`IrohTransport`** (experimental, cargo feature
-  `commonwealth-transport/iroh`, pinned `iroh 1.0.0-rc.1`):
-  dial-by-Ed25519-pubkey QUIC, bridged to HTTP via localhost
-  byte-tunnels (client TCP bridge + `IrohAcceptor` → existing axum
-  listener). Spike proof:
+- **`IrohTransport`** (cargo feature `commonwealth-transport/iroh`,
+  pinned `iroh 1.0` stable since 2026-06-18): dial-by-Ed25519-pubkey
+  QUIC, bridged to HTTP via localhost byte-tunnels (client TCP bridge
+  + `IrohAcceptor` → existing axum listener). `IrohAcceptor` has two
+  forms: `spawn` (all streams → one local listener, Track M) and
+  `spawn_routed` (W1 — dispatch by negotiated ALPN to per-class local
+  listeners). Spike proof:
   `sovereign-mesh/tests/iroh_transport_e2e.rs` (run with
   `--features iroh-experimental`) drives a real gossip round dialed
-  by pubkey. Not used by any mesh traffic class yet.
+  by pubkey. `IrohTransport` resolves its dial target from the
+  gossiped `PeerContact` (relay + direct addrs, W2) and picks the ALPN
+  by `TrafficClass`; whether it carries a class is the W3 config flip.
+- **`RoutedTransport`** (`commonwealth-transport/src/routed.rs`, W3):
+  routes each `TrafficClass` to a chosen transport, concatenating its
+  candidates ahead of a default (`IpTransport`) — callers try in order,
+  so a failed/absent iroh dial degrades to the tailnet path on the same
+  request, automatically. `note_success` routes feedback to the
+  producing transport by label prefix. Empty `per_class` == its default.
+- **Track W1 (server half) + W2 (dial info in trust ring) + W3
+  mechanism are implemented** (2026-06-18): when `[iroh] enabled`,
+  `EmbeddedDaemon::start_daemon` binds one iroh endpoint from the
+  daemon's gossiped `node_key` and `spawn_routed`s it across both
+  ALPNs — `cwth/http/0` → internal router, `cwth/client/0` → client
+  router — so a peer/phone reaches this daemon by key with no VPN
+  (`sovereign-mesh/src/iroh_access.rs`, `MeshIrohAccess`; additive,
+  fail-soft, held in `DaemonState::Running`). W2: `MemberRecord` carries
+  `relay_url` + `iroh_direct_addrs` (serde-defaulted, MUTABLE
+  reachability — normal LWW, unlike `node_pubkey`'s anti-downgrade);
+  the daemon self-stamps its live dial info each gossip round via a
+  pull-provider on `AppState`; `IrohTransport` dials peers purely from
+  the gossiped contact (**membership = dialability**). W3: `[iroh.transport]
+  <class> = "iroh"` installs a `RoutedTransport` for the flipped
+  classes (IP fallback retained); **no class is flipped by default**,
+  so the daemon still routes its own traffic over `IpTransport` until
+  an operator flips one (recommended order: gossip first, then soak).
+  Join-over-iroh is W2b.
 - **Track M (mobile) is implemented**: `sovereign-server`'s
   `[iroh] enabled` block accepts dial-by-key clients on ALPN
   `cwth/client/0` (`src/iroh_access.rs`; pairing string at

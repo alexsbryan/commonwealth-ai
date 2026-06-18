@@ -36,6 +36,8 @@ const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcaf
 fn member(id: NodeId) -> MemberRecord {
     MemberRecord {
         node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
         node_id: id,
         name: "A".into(),
         invited_by: id,

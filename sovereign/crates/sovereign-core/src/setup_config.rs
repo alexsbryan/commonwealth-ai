@@ -50,6 +50,79 @@ pub struct SetupConfig {
     /// benches exist.
     #[serde(default)]
     pub memory: MemorySection,
+    /// Dial-by-key mesh access over iroh. Off by default; see below.
+    #[serde(default)]
+    pub iroh: IrohSection,
+}
+
+/// Dial-by-key mesh access over iroh (Track W of
+/// `sovereign/docs/specs/TRANSPORT_MIGRATION.md`). When `enabled`, the
+/// daemon binds an iroh endpoint from its `<data_dir>/node_key`
+/// identity — the SAME Ed25519 key it already gossips as
+/// `MemberRecord.node_pubkey`, so "known member" and "dialable by key"
+/// are one fact — and forwards accepted bi-streams to the local
+/// internal and client routers, chosen by negotiated ALPN
+/// (`cwth/http/0` → internal, `cwth/client/0` → client). A peer or
+/// phone can then reach this daemon with no VPN.
+///
+/// Off by default and **purely additive**: the tailnet/LAN
+/// (`IpTransport`) path is unaffected whether this is on or off — this
+/// only makes the daemon *also* reachable by key. Spec name for this
+/// block is `[mesh.iroh]`; in `~/.sovereign/config.toml` (the unified
+/// SetupConfig) it is the top-level `[iroh]` section, matching
+/// `sovereign-server`'s `[iroh]`.
+///
+/// ```toml
+/// [iroh]
+/// enabled = true
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct IrohSection {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Per-traffic-class transport routing (Track W3). Only consulted
+    /// when `enabled` — an iroh selection with iroh off is ignored
+    /// (and logged). Nested here (not a top-level `[transport]`)
+    /// because routing a class to iroh is meaningless without the
+    /// endpoint this section turns on, and nesting means existing
+    /// `SetupConfig` literals (which build `iroh` via `Default`) need
+    /// no change.
+    ///
+    /// ```toml
+    /// [iroh]
+    /// enabled = true
+    /// [iroh.transport]
+    /// gossip = "iroh"   # flip one class at a time; everything else stays "ip"
+    /// ```
+    #[serde(default)]
+    pub transport: TransportSection,
+    // W4 (self-hosted relays) will add an optional `relay_url` here;
+    // omitted until it is actually consumed, so there is no inert knob.
+}
+
+/// Per-traffic-class transport selection (Track W3 of
+/// TRANSPORT_MIGRATION.md). Each class is `"ip"` (default — the
+/// tailnet/LAN overlay) or `"iroh"` (dial-by-key QUIC). Unset = `"ip"`.
+/// The migration's recommended flip order, one class at a time with a
+/// soak between each: gossip → control_plane → knowledge_search →
+/// model_transfer → inference. (`status_probe` rides with inference in
+/// practice.) The interpretation (string → `TrafficClass`) lives in
+/// `sovereign-mesh`, which owns both this config and the transport
+/// types; this struct is intentionally just data.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TransportSection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gossip: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_plane: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knowledge_search: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_transfer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_probe: Option<String>,
 }
 
 /// `[memory]` top-level section. Currently only nests
@@ -767,6 +840,7 @@ embed = "/models/embed.gguf"
             data: DataSection::default(),
             watched_folders: WatchedFoldersSection::default(),
             memory: Default::default(),
+            iroh: Default::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");

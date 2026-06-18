@@ -470,6 +470,7 @@ impl DesktopConfig {
                     },
                     watched_folders: Default::default(),
                     memory: Default::default(),
+                    iroh: Default::default(),
                 });
                 setup.models.context_size = Some(desktop_ctx);
                 match setup.save() {

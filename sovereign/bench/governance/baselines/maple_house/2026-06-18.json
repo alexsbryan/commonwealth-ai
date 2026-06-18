@@ -1,15 +1,15 @@
 {
   "lane": "governance",
-  "captured_at": "2026-06-18T16:17:39.763395+00:00",
-  "note": "precision 0.62 · recall 1.00 · 4 planted found, 0 missed · 16 flagged pairs",
+  "captured_at": "2026-06-18T17:39:13.915443+00:00",
+  "note": "precision 0.67 · recall 1.00 · 4 planted found, 0 missed · 15 flagged pairs",
   "metrics": {
     "f1": {
-      "value": 0.7692307692307693,
+      "value": 0.8,
       "direction": "higher_is_better",
       "tolerance": 0.12
     },
     "precision": {
-      "value": 0.625,
+      "value": 0.6666666666666666,
       "direction": "higher_is_better",
       "tolerance": 0.15
     },

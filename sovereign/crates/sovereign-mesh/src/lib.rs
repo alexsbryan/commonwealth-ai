@@ -23,6 +23,10 @@ pub mod deep_link;
 pub mod gossip;
 pub mod http_response;
 pub mod inference_adapter;
+/// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds
+/// the daemon's identity endpoint and routes by ALPN to the local
+/// internal + client listeners. Runtime-gated by `[iroh] enabled`.
+pub mod iroh_access;
 pub mod join;
 pub mod knowledge_client;
 pub mod landscape_digest_client;

@@ -226,6 +226,17 @@ pub struct AppStateInner {
     /// Gossip stamps it into our own `MemberRecord` every round so
     /// in-place upgrades publish the key without a rejoin.
     pub self_node_pubkey: std::sync::RwLock<Option<commonwealth_core::ids::NodePubkey>>,
+    /// Provider yielding this node's CURRENT iroh dial info (relay URL
+    /// + direct addrs), pulled fresh each gossip round and stamped into
+    /// our own `MemberRecord` (Track W2). Type-erased so this crate
+    /// needs no iroh dependency; installed by the daemon, which owns the
+    /// iroh endpoint. `None` when iroh access is off. A pull-provider,
+    /// not a stored snapshot, because the relay and hole-punched addrs
+    /// appear and change over the endpoint's lifetime.
+    #[allow(clippy::type_complexity)]
+    pub self_iroh_dialinfo: std::sync::RwLock<
+        Option<std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>>,
+    >,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -538,6 +549,34 @@ impl AppState {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pubkey);
     }
 
+    /// This node's current iroh dial info, if a provider is installed
+    /// (iroh access enabled). Pulled live from the endpoint each call.
+    pub fn self_iroh_dialinfo(&self) -> Option<commonwealth_core::mesh::IrohDialInfo> {
+        self.inner
+            .self_iroh_dialinfo
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .map(|provider| provider())
+    }
+
+    /// Install the provider yielding this node's live iroh dial info.
+    /// The daemon calls this after binding its iroh endpoint (W2), so
+    /// gossip can stamp relay_url + iroh_direct_addrs into our own
+    /// `MemberRecord` every round.
+    pub fn install_self_iroh_dialinfo(
+        &self,
+        provider: std::sync::Arc<
+            dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync,
+        >,
+    ) {
+        *self
+            .inner
+            .self_iroh_dialinfo
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(provider);
+    }
+
     /// Install the client-API bearer token. The embedded daemon calls
     /// this at startup with the token from
     /// `commonwealth_transport::identity::load_or_create_client_token`
@@ -685,6 +724,7 @@ impl AppState {
                 slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 self_node_pubkey: std::sync::RwLock::new(None),
+                self_iroh_dialinfo: std::sync::RwLock::new(None),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),

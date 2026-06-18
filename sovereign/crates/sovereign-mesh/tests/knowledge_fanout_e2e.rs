@@ -172,6 +172,8 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         id_a,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,
@@ -214,6 +216,8 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         id_b,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -230,6 +234,8 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         id_a,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,
@@ -358,6 +364,8 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
         id_b,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -372,6 +380,8 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
         id_a,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_a,
             name: "Sleeper".into(),
             invited_by: id_a,
@@ -476,6 +486,8 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
         id_b,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -490,6 +502,8 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
         id_a,
         MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,

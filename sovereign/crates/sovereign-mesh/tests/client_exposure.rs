@@ -38,6 +38,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
         data: DataSection::default(),
         watched_folders: Default::default(),
         memory: Default::default(),
+        iroh: Default::default(),
     }
 }
 

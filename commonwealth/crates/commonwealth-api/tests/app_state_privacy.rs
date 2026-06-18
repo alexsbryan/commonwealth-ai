@@ -29,6 +29,8 @@ use tower::ServiceExt;
 fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
     MemberRecord {
         node_pubkey: None,
+        relay_url: None,
+        iroh_direct_addrs: Vec::new(),
         node_id: id,
         name: name.into(),
         invited_by: id,

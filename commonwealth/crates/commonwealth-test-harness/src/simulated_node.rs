@@ -130,6 +130,8 @@ impl SimulatedNodeBuilder {
 
         let member = MemberRecord {
             node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
             node_id,
             name: name.clone(),
             invited_by: node_id,

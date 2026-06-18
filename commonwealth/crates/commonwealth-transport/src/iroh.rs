@@ -70,6 +70,29 @@ pub fn ring_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
 }
 
+/// Build a relay-enabled iroh endpoint from a node identity, serving
+/// `alpns`. Uses n0's public relays + address lookup (`presets::N0`);
+/// the relay-fleet self-hosting swap (W4 of TRANSPORT_MIGRATION.md)
+/// changes only the preset here.
+///
+/// One constructor so every production caller — the mobile host
+/// ([`crate`] consumers like `sovereign-server::iroh_access`) and the
+/// mesh daemon — binds identically and any iroh-API churn in endpoint
+/// construction stays in this single function. Hermetic tests still
+/// use `EndpointBuilder::empty()` directly (no relays, deterministic).
+pub async fn build_relayed_endpoint(
+    secret_key: SecretKey,
+    alpns: Vec<Vec<u8>>,
+) -> Result<Endpoint, String> {
+    EndpointBuilder::new(presets::N0)
+        .crypto_provider(ring_crypto_provider())
+        .secret_key(secret_key)
+        .alpns(alpns)
+        .bind()
+        .await
+        .map_err(|e| format!("iroh endpoint bind failed: {e}"))
+}
+
 /// One client-side tunnel: a localhost `TcpListener` whose accepted
 /// connections each become an iroh bi-stream to a fixed peer. Point
 /// any plain-TCP client (reqwest, tungstenite) at
@@ -205,9 +228,15 @@ pub fn format_dial_string(addr: &EndpointAddr) -> Option<String> {
 pub struct IrohTransport {
     endpoint: iroh::Endpoint,
     /// Out-of-band dial hints: pubkey → iroh UDP socket addresses.
-    /// Spike-only surface (see module docs).
+    /// **Fallback only.** Production (W2) resolves dial info from the
+    /// `PeerContact` the mesh gossiped — relay URL + direct addrs.
+    /// Retained so hermetic tests can seed addresses directly; when a
+    /// contact carries its own addrs, both are merged.
     known_addrs: std::sync::Mutex<HashMap<[u8; 32], Vec<SocketAddr>>>,
-    bridges: tokio::sync::Mutex<HashMap<[u8; 32], Arc<HttpBridge>>>,
+    /// One localhost bridge per (peer, ALPN): a peer is reached on the
+    /// internal ALPN for most classes and the client ALPN for
+    /// inference/status, so the two ride separate tunnels.
+    bridges: tokio::sync::Mutex<HashMap<([u8; 32], &'static [u8]), Arc<HttpBridge>>>,
 }
 
 impl IrohTransport {
@@ -219,38 +248,81 @@ impl IrohTransport {
         }
     }
 
-    /// Seed dial hints for a peer (spike-only; production uses
-    /// relays/address lookup).
+    /// Seed dial hints for a peer. Test/fallback surface — production
+    /// reads them from the gossiped `PeerContact` instead.
     pub fn add_known_peer(&self, pubkey: NodePubkey, addrs: Vec<SocketAddr>) {
         if let Ok(mut map) = self.known_addrs.lock() {
             map.insert(*pubkey.as_bytes(), addrs);
         }
     }
 
-    fn endpoint_addr_for(&self, pubkey: &NodePubkey) -> Option<iroh::EndpointAddr> {
+    /// The ALPN a traffic class rides: client-port classes
+    /// (Inference/StatusProbe) reach the peer's client router, every
+    /// other class reaches its internal router. The *class chooses the
+    /// ALPN* — the iroh analogue of `IpTransport`'s per-class port
+    /// policy, and why there's no port rewrite here.
+    fn alpn_for_class(class: TrafficClass) -> &'static [u8] {
+        match class {
+            TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
+            _ => ALPN,
+        }
+    }
+
+    /// Build the dial target from the peer's gossiped iroh info (relay
+    /// URL + direct addrs), merging any test-seeded `known_addrs`.
+    /// `None` when there's no usable path (no relay AND no address) — a
+    /// bare key isn't dialable without one, so such a peer falls
+    /// through to the IP transport in a routed composition.
+    fn endpoint_addr_for(&self, pubkey: &NodePubkey, peer: &PeerContact) -> Option<iroh::EndpointAddr> {
         let id = iroh::PublicKey::from_bytes(pubkey.as_bytes()).ok()?;
-        let addrs = self
+        let mut ea = iroh::EndpointAddr::new(id);
+        let mut has_path = false;
+        if let Some(relay) = peer.relay_url.as_deref() {
+            match relay.parse::<RelayUrl>() {
+                Ok(url) => {
+                    ea = ea.with_relay_url(url);
+                    has_path = true;
+                }
+                Err(e) => tracing::warn!(
+                    target: "transport",
+                    transport = "iroh",
+                    relay = %relay,
+                    error = %e,
+                    "iroh: peer relay_url did not parse — ignoring"
+                ),
+            }
+        }
+        let seeded = self
             .known_addrs
             .lock()
             .ok()
             .and_then(|m| m.get(pubkey.as_bytes()).cloned())
             .unwrap_or_default();
-        let mut ea = iroh::EndpointAddr::new(id);
-        for a in addrs {
-            ea = ea.with_ip_addr(a);
+        let mut seen = std::collections::HashSet::new();
+        for a in peer.iroh_direct_addrs.iter().copied().chain(seeded) {
+            if seen.insert(a) {
+                ea = ea.with_ip_addr(a);
+                has_path = true;
+            }
         }
-        Some(ea)
+        has_path.then_some(ea)
     }
 
-    /// Get or create the localhost TCP bridge for `pubkey`.
-    async fn bridge_for(&self, pubkey: &NodePubkey) -> Option<SocketAddr> {
-        let key = *pubkey.as_bytes();
+    /// Get or create the localhost TCP bridge for `(pubkey, alpn)`,
+    /// dialing the target resolved from `peer`.
+    async fn bridge_for(
+        &self,
+        pubkey: &NodePubkey,
+        peer: &PeerContact,
+        alpn: &'static [u8],
+    ) -> Option<SocketAddr> {
+        let key = (*pubkey.as_bytes(), alpn);
         let mut bridges = self.bridges.lock().await;
         if let Some(b) = bridges.get(&key) {
             return Some(b.local_addr());
         }
-        let target = self.endpoint_addr_for(pubkey)?;
-        let bridge = HttpBridge::spawn(self.endpoint.clone(), target, ALPN)
+        let target = self.endpoint_addr_for(pubkey, peer)?;
+        let bridge = HttpBridge::spawn(self.endpoint.clone(), target, alpn)
             .await
             .ok()?;
         let local_addr = bridge.local_addr();
@@ -298,7 +370,16 @@ impl PeerTransport for IrohTransport {
             );
             return Vec::new();
         };
-        let Some(local) = self.bridge_for(&pubkey).await else {
+        let alpn = Self::alpn_for_class(class);
+        let Some(local) = self.bridge_for(&pubkey, peer, alpn).await else {
+            tracing::debug!(
+                target: "transport",
+                transport = "iroh",
+                class = class.as_str(),
+                peer = %peer.node_id,
+                "iroh: no dialable path in contact (no relay_url / iroh_direct_addrs) \
+                 — not dialable (routed composition falls back to IP)"
+            );
             return Vec::new();
         };
         let ep = PeerEndpoint {
@@ -335,11 +416,36 @@ impl Drop for IrohAcceptor {
 }
 
 impl IrohAcceptor {
-    /// Spawn the accept loop. `forward_to` is the daemon's local
-    /// listener (e.g. the internal-port axum router).
+    /// Spawn the accept loop forwarding EVERY accepted bi-stream to a
+    /// single local listener, regardless of negotiated ALPN. Right for
+    /// a single-ALPN endpoint (Track M: `sovereign-server` binds only
+    /// `cwth/client/0` → its HTTP listener).
     pub fn spawn(endpoint: iroh::Endpoint, forward_to: SocketAddr) -> Self {
+        Self::run(endpoint, move |_alpn| Some(forward_to))
+    }
+
+    /// Spawn the accept loop routing each connection to a local
+    /// listener chosen by its **negotiated ALPN** — the W1 capability
+    /// that lets one daemon endpoint serve both the internal router
+    /// (`cwth/http/0`) and the client router (`cwth/client/0`) without
+    /// a port (the class chose the ALPN). A connection whose ALPN is
+    /// not in `routes` is closed with a loud log, never misrouted.
+    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {
+        Self::run(endpoint, move |alpn| routes.get(alpn).copied())
+    }
+
+    /// Shared accept loop. `resolve` maps a connection's negotiated
+    /// ALPN to the local TCP target its bi-streams forward to; `None`
+    /// closes the connection. Each accepted connection's ALPN is read
+    /// once, then every bi-stream on it is pumped to that target.
+    fn run<F>(endpoint: iroh::Endpoint, resolve: F) -> Self
+    where
+        F: Fn(&[u8]) -> Option<SocketAddr> + Send + Sync + 'static,
+    {
+        let resolve = Arc::new(resolve);
         let task = tokio::spawn(async move {
             while let Some(incoming) = endpoint.accept().await {
+                let resolve = resolve.clone();
                 tokio::spawn(async move {
                     let conn = match incoming.await {
                         Ok(c) => c,
@@ -351,6 +457,17 @@ impl IrohAcceptor {
                             );
                             return;
                         }
+                    };
+                    // A fully-accepted connection has a negotiated
+                    // ALPN; route this connection's streams by it.
+                    let alpn = conn.alpn().to_vec();
+                    let Some(forward_to) = resolve(&alpn) else {
+                        tracing::warn!(
+                            target: "transport",
+                            alpn = %String::from_utf8_lossy(&alpn),
+                            "iroh acceptor: no local forward for negotiated ALPN — closing connection"
+                        );
+                        return;
                     };
                     loop {
                         match conn.accept_bi().await {
@@ -374,5 +491,159 @@ impl IrohAcceptor {
             }
         });
         Self { task }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// Bind an empty (no-relay, deterministic) endpoint serving `alpns`.
+    async fn hermetic_endpoint(seed: u8, alpns: Vec<Vec<u8>>) -> Endpoint {
+        EndpointBuilder::empty()
+            .crypto_provider(ring_crypto_provider())
+            .secret_key(SecretKey::from_bytes(&[seed; 32]))
+            .alpns(alpns)
+            .bind()
+            .await
+            .expect("hermetic endpoint bind")
+    }
+
+    /// iroh binds the wildcard; rewrite to loopback so the address is
+    /// dialable in-process (mirrors the spike e2e's `dialable_sockets`).
+    fn loopback_sockets(endpoint: &Endpoint) -> Vec<SocketAddr> {
+        endpoint
+            .bound_sockets()
+            .into_iter()
+            .map(|mut a| {
+                if a.ip().is_unspecified() {
+                    let ip = if a.is_ipv4() { "127.0.0.1" } else { "::1" };
+                    a.set_ip(ip.parse().unwrap());
+                }
+                a
+            })
+            .collect()
+    }
+
+    /// A trivial TCP "service": every accepted connection is answered
+    /// with a fixed marker, then closed. Stands in for one of the
+    /// daemon's two local HTTP listeners — the marker is the witness
+    /// that a stream reached THIS listener and not the other. It also
+    /// drains the client's bytes so the close is a clean FIN, not a
+    /// RST that could truncate the marker in flight on loopback.
+    async fn spawn_marker_listener(marker: &'static [u8]) -> SocketAddr {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let _ = sock.write_all(marker).await;
+                    let _ = sock.shutdown().await;
+                    let mut drain = Vec::new();
+                    let _ = sock.read_to_end(&mut drain).await;
+                });
+            }
+        });
+        addr
+    }
+
+    /// Dial the routed acceptor on `alpn` via an `HttpBridge` and read
+    /// back whatever local listener the acceptor forwarded us to. Each
+    /// call uses a FRESH client endpoint (seeded distinctly) so the two
+    /// ALPN dials are unambiguously separate QUIC connections — no risk
+    /// of a coalesced connection carrying the prior dial's ALPN.
+    async fn read_marker_over(seed: u8, server: &EndpointAddr, alpn: &'static [u8]) -> Vec<u8> {
+        let client_ep = hermetic_endpoint(seed, vec![]).await;
+        let bridge = HttpBridge::spawn(client_ep, server.clone(), alpn)
+            .await
+            .expect("bridge spawns");
+        let mut tcp = tokio::net::TcpStream::connect(bridge.local_addr())
+            .await
+            .expect("connect to bridge");
+        // Send a probe and half-close our write side. A QUIC bi-stream
+        // a client merely opens isn't surfaced to the server's
+        // `accept_bi()` until the client sends on it — so without this,
+        // the acceptor never sees the stream and never forwards. This
+        // mirrors real traffic (reqwest sends a request first); the FIN
+        // also lets the marker listener drain to a clean close.
+        let _ = tcp.write_all(b"ping").await;
+        let _ = tcp.shutdown().await;
+        let mut buf = Vec::new();
+        // Generous timeout: a routing miss closes the connection, which
+        // surfaces here as an empty read rather than a hang.
+        let read = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tcp.read_to_end(&mut buf),
+        )
+        .await;
+        read.expect("read did not time out").expect("read ok");
+        buf
+    }
+
+    /// W1 keystone: ONE iroh endpoint, bound with both the internal and
+    /// client ALPNs, dispatches each accepted connection to a different
+    /// local listener purely by its negotiated ALPN — the "class chose
+    /// the ALPN, not a port" property that lets the mesh daemon serve
+    /// its internal (`cwth/http/0`) and client (`cwth/client/0`)
+    /// routers over a single dial-by-key endpoint.
+    #[tokio::test]
+    async fn routed_acceptor_dispatches_by_alpn() {
+        let internal_addr = spawn_marker_listener(b"INTERNAL").await;
+        let client_addr = spawn_marker_listener(b"CLIENT").await;
+
+        let server_ep = hermetic_endpoint(11, vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()]).await;
+        let mut routes = HashMap::new();
+        routes.insert(ALPN.to_vec(), internal_addr);
+        routes.insert(CLIENT_ALPN.to_vec(), client_addr);
+        let _acceptor = IrohAcceptor::spawn_routed(server_ep.clone(), routes);
+
+        // The dialable target: the server's key + its loopback sockets.
+        let mut target = EndpointAddr::new(server_ep.id());
+        for s in loopback_sockets(&server_ep) {
+            target = target.with_ip_addr(s);
+        }
+
+        // Internal ALPN must land on the internal listener…
+        assert_eq!(
+            read_marker_over(21, &target, ALPN).await,
+            b"INTERNAL",
+            "cwth/http/0 must route to the internal listener"
+        );
+        // …and the client ALPN on the client listener — same endpoint,
+        // same key, routed solely by ALPN.
+        assert_eq!(
+            read_marker_over(22, &target, CLIENT_ALPN).await,
+            b"CLIENT",
+            "cwth/client/0 must route to the client listener"
+        );
+    }
+
+    /// A connection negotiating an ALPN with no route is closed, not
+    /// misrouted to whatever happens to be in the map.
+    #[tokio::test]
+    async fn routed_acceptor_drops_unknown_alpn() {
+        let internal_addr = spawn_marker_listener(b"INTERNAL").await;
+        // Server offers BOTH ALPNs (so the handshake succeeds) but the
+        // route table only knows the internal one.
+        let server_ep = hermetic_endpoint(13, vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()]).await;
+        let mut routes = HashMap::new();
+        routes.insert(ALPN.to_vec(), internal_addr);
+        let _acceptor = IrohAcceptor::spawn_routed(server_ep.clone(), routes);
+
+        let mut target = EndpointAddr::new(server_ep.id());
+        for s in loopback_sockets(&server_ep) {
+            target = target.with_ip_addr(s);
+        }
+        // Dialing the unrouted (but offered) client ALPN: the acceptor
+        // closes the connection, so we read zero bytes — never INTERNAL.
+        let got = read_marker_over(24, &target, CLIENT_ALPN).await;
+        assert!(
+            got.is_empty(),
+            "unrouted ALPN must be dropped, got {got:?}"
+        );
     }
 }
