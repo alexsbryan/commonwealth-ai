@@ -41,6 +41,13 @@
 mod config;
 mod judge;
 mod search;
+mod value_presence;
+
+// The gold-free groundedness primitive: the gate consumes it to DECIDE, the
+// chaos scorer consumes it to MEASURE `blatant_confab_rate`. Re-exported up to
+// `sovereign_core::runtime` (see runtime.rs) so the bench shares one
+// implementation rather than re-deriving the check.
+pub use value_presence::{assess_asserted_value, AssertedValue};
 
 pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfile};
 // Registry export: consumed by the config-module coverage test today;
@@ -112,17 +119,43 @@ struct FailedClaim {
 }
 
 /// The grounded abstention released when both drafts fail the gate.
-/// Names what was claimed and what was checked — glassbox, not a bare
-/// refusal.
-pub(crate) fn grounded_abstention(claim: &str, chunks_checked: usize) -> String {
+///
+/// Deliberately does NOT restate the rejected claim's value. The old wording
+/// ("The draft answer asserted that Heat's first name is Vernon …") re-uttered
+/// the fabrication even while disclaiming it: a strict judge reads the named
+/// value as an answer (measured — the primary judge scored these as "answered",
+/// so the gate's abstentions didn't count), and a skimming user sees the
+/// fabricated specific anyway. The failed claim is preserved in the gate's
+/// glassbox `meta` / trace, not in the user-facing text — observability without
+/// leakage.
+pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {
     format!(
-        "Your sources don't establish this. The draft answer asserted that {claim} \
-         but none of the {chunks_checked} retrieved passages support that, so I'm \
-         not presenting it as fact. If this is in your sources somewhere, try \
-         rephrasing with the specific names or terms involved; otherwise this may \
-         simply not be recorded there.",
-        claim = claim.trim_end_matches('.'),
+        "I can't answer this from your sources — none of the {chunks_checked} \
+         retrieved passages support an answer, so I'm not going to state one. If \
+         it's in your sources, try rephrasing with the specific names or terms \
+         involved; otherwise it may simply not be recorded there."
     )
+}
+
+/// Remove a leading general-knowledge caveat ("Not in your sources — from
+/// general knowledge: …") so the gate verifies the asserted CLAIM, not the
+/// hedge. Applied ONLY on entity-anchored questions: there a GK caveat can never
+/// legitimately answer an in-world question, so the value after it must be
+/// grounded or dropped. For genuinely out-of-domain questions (not
+/// entity-anchored) the caveat IS the honest move and is left intact — this is
+/// why the strip is gated on `entity_anchored`, not applied unconditionally.
+fn strip_gk_caveat(text: &str) -> String {
+    if let Some(rest) = text.strip_prefix(crate::runtime::prompts::GK_CAVEAT_PREFIX) {
+        return rest.trim_start().to_string();
+    }
+    // Robustness: the marker may not sit at the very start.
+    let low = text.to_lowercase();
+    if let Some(p) = low.find("from general knowledge:") {
+        if let Some(after) = text[p..].splitn(2, ':').nth(1) {
+            return after.trim().to_string();
+        }
+    }
+    text.to_string()
 }
 
 /// System-message suffix for the single gated retry. Quotes the failed
@@ -192,10 +225,20 @@ pub(crate) async fn gate_answer(
     let mut action = "released";
     let mut retried = false;
     let mut final_vp: Option<f64> = None;
+    dbg(&format!(
+        "gate_answer entity_anchored={entity_anchored} chunks={} draft={:?}",
+        chunks.len(),
+        text.chars().take(80).collect::<String>()
+    ));
+    // Structural exemption-closing: on an entity-anchored question, strip any GK
+    // caveat before extraction so the asserted claim is actually verified rather
+    // than exempted as NO_CLAIM. The released `text` is unchanged; only what the
+    // verifier reads is de-caveated.
+    let verify_text = if entity_anchored { strip_gk_caveat(&text) } else { text.clone() };
     match verify_grounding(
         inference,
         question,
-        &text,
+        &verify_text,
         chunks,
         entity_anchored,
         evidence.searcher.as_ref(),
@@ -204,6 +247,11 @@ pub(crate) async fn gate_answer(
     {
         Some(v) => {
             final_vp = Some(v.violation_prob);
+            dbg(&format!(
+                "  verify: vp={:.3} tau={tau} claim={:?}",
+                v.violation_prob,
+                v.claim.as_deref().map(|c| c.chars().take(70).collect::<String>())
+            ));
             if v.violation_prob >= tau {
                 if let Some(claim) = v.claim.clone() {
                     if !profile.retry {
@@ -236,10 +284,18 @@ pub(crate) async fn gate_answer(
                     match inference.complete(&retry_req).await {
                         Ok(resp) => {
                             let second = resp.text;
+                            // Same structural strip on the retry: the documented
+                            // leak is a retry that re-asserts the fabrication
+                            // wearing the GK caveat and slips the exemption.
+                            let verify_second = if entity_anchored {
+                                strip_gk_caveat(&second)
+                            } else {
+                                second.clone()
+                            };
                             match verify_grounding(
                                 inference,
                                 question,
-                                &second,
+                                &verify_second,
                                 chunks,
                                 entity_anchored,
                                 evidence.searcher.as_ref(),
@@ -669,7 +725,10 @@ mod tests {
             outcome.meta.get("action").and_then(|a| a.as_str()),
             Some("abstained_no_retry")
         );
-        assert!(outcome.text.starts_with("Your sources don't establish"));
+        // grounded_abstention was rewritten (2026-06-17) to stop restating the
+        // rejected claim verbatim (it leaked the fabrication + read as "answered"
+        // to the primary judge). The action is the invariant; the wording moved.
+        assert!(outcome.text.starts_with("I can't answer this from your sources"));
     }
 
     /// Supported claims release unchanged under verify-only.

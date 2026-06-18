@@ -135,7 +135,32 @@ fn question_is_entity_anchored(keywords: &[String], corpus_ids: &[String]) -> bo
                 .collect::<Vec<_>>()
         })
         .collect();
-    keywords.iter().any(|k| entity_toks.contains(k))
+    let hit = keywords.iter().any(|k| entity_toks.contains(k));
+    dbg(&format!(
+        "entity_match: kw={keywords:?} cids={corpus_ids:?} entity_toks_n={} hit={hit}",
+        entity_toks.len()
+    ));
+    hit
+}
+
+/// Deterministic entity-anchored verdict for the grounding gate — computed from
+/// the question + the conversation's corpora alone, with NO model call and
+/// independent of whether the (optional, fast-route-skipped) agentic evidence
+/// loop runs. Mirrors the `lookup_ids` derivation inside `agentic_evidence_round`
+/// so the gate's GK-caveat exemption closes on EVERY route, including the fast
+/// streaming/desktop path. Without this, `gate_entity_anchored` defaulted false
+/// off the agentic path and a "from general knowledge: …" fabrication about a
+/// corpus entity was released unverified.
+pub(crate) fn compute_entity_anchored(
+    message: &str,
+    enabled_corpora: Option<&[String]>,
+    chunks: &[corpus_engine::ScoredChunk],
+) -> bool {
+    let lookup_ids: Vec<String> = match enabled_corpora {
+        Some(ids) if !ids.is_empty() => ids.to_vec(),
+        _ => merged_corpora(chunks).into_iter().collect(),
+    };
+    question_is_entity_anchored(&question_keywords(message), &lookup_ids)
 }
 
 /// Corpus-DEICTIC question: it refers to the corpus's own material by
@@ -375,10 +400,29 @@ fn dbg(msg: &str) {
 
 const MAX_FORMULATED_QUERIES: usize = 6;
 const MAX_APPENDED_CHUNKS: usize = 12;
-/// Evidence excerpt budget for the sufficiency prompt: enough to judge
-/// coverage, small enough to stay prefill-cheap on the fast slot.
-const SUFFICIENCY_CHUNKS: usize = 6;
-const SUFFICIENCY_CHARS_PER_CHUNK: usize = 600;
+/// Evidence excerpt budget for the sufficiency prompt. Was 6×600 chars to stay
+/// prefill-cheap, but that truncated answers deep in a chunk: measured 2026-06-18,
+/// the science answer ("the sacrosanct fetish of to-day is science") sat at char
+/// 1902 of a 2023-char chunk ranked 7th, so the judge saw a 600-char slice of the
+/// top 6 chunks, never saw the answer, declared the evidence insufficient, and the
+/// abstain note fired — even though full synthesis answered it correctly. The
+/// judge must see the evidence it is judging. Defaults raised to 12×2000 (the full
+/// round-0 set, full chunks); env-tunable so the accuracy↔prefill-throughput trade
+/// can be swept without a rebuild. A more accurate verdict also avoids firing
+/// round-2 (formulation + extra retrieval) when round-0 was already sufficient, so
+/// the larger prefill is partly self-funding.
+fn sufficiency_chunks() -> usize {
+    std::env::var("SOVEREIGN_SUFFICIENCY_CHUNKS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(12)
+}
+fn sufficiency_chars_per_chunk() -> usize {
+    std::env::var("SOVEREIGN_SUFFICIENCY_CHARS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2000)
+}
 
 impl Runtime {
     /// Run the bounded agentic round over the round-0 evidence.
@@ -409,6 +453,10 @@ impl Runtime {
         intent: &Intent,
         scope: Option<&str>,
     ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool, bool) {
+        dbg(&format!(
+            "agentic loop ENTERED: round0_chunks={} (judge next)",
+            chunks.len()
+        ));
         // Empty round 0 is the strongest possible insufficiency signal
         // — skip the judge and go straight to formulation.
         let insufficiency = if chunks.is_empty() {
@@ -417,11 +465,17 @@ impl Runtime {
             match self.judge_evidence_sufficiency(message, &chunks).await {
                 Some(p) => p,
                 None => {
+                    // Fail-FORWARD: if we cannot confirm sufficiency, treat the
+                    // evidence as insufficient and run round-2 — which only ADDS
+                    // deduped evidence, never removes. The old default returned
+                    // round-0 unchanged, so ANY judge flakiness silently disabled
+                    // recall. Recall-safe default: when unsure, retrieve more.
                     tracing::warn!(
                         target: "agentic_kq",
-                        "sufficiency judge failed — keeping round-0 evidence unchanged"
+                        "sufficiency judge failed — treating as INSUFFICIENT (fail-forward to round-2)"
                     );
-                    return (chunks, false, false, true);
+                    dbg("agentic loop: sufficiency judge FAILED (None) → fail-forward, run round-2");
+                    1.0
                 }
             }
         };
@@ -689,8 +743,8 @@ impl Runtime {
     ) -> Option<f64> {
         let excerpts: Vec<String> = chunks
             .iter()
-            .take(SUFFICIENCY_CHUNKS)
-            .map(|c| c.content.chars().take(SUFFICIENCY_CHARS_PER_CHUNK).collect())
+            .take(sufficiency_chunks())
+            .map(|c| c.content.chars().take(sufficiency_chars_per_chunk()).collect())
             .collect();
         let prompt = format!(
             "PASSAGES retrieved for a question:\n\"\"\"\n{}\n\"\"\"\n\n\
@@ -707,7 +761,16 @@ impl Runtime {
         let req = CompletionRequest {
             prompt,
             system_message: Some("You are a careful evidence auditor. Answer with a single letter.".into()),
-            preferred_speed: Speed::Fast,
+            // PRIMARY tier, not Fast. The `x_forced_choice` logit-distribution
+            // sentinel is NOT honored on the fast slot — it returns a sampled
+            // token ("\"B") instead of the {A,B} distribution, so the parse below
+            // fails and the loop silently degrades to round-0. This is the
+            // documented "recall pinned at 2/8" failure: the judge never worked.
+            // The gate's `forced_choice_ab` runs on primary for the same reason
+            // (the fast slot's support distributions are squashed). One
+            // prefill-dominated forced-choice per KQ is affordable for recall.
+            preferred_speed: Speed::Medium,
+            model_id: Some("primary".into()),
             max_tokens: Some(1),
             temperature: Some(0.0),
             think_budget: Some(0),
@@ -717,13 +780,29 @@ impl Runtime {
             })),
             ..Default::default()
         };
-        let resp = self.inference.complete(&req).await.ok()?;
+        let resp = match self.inference.complete(&req).await {
+            Ok(r) => r,
+            Err(e) => {
+                dbg(&format!("sufficiency judge: complete() error: {e}"));
+                return None;
+            }
+        };
         let dist: std::collections::HashMap<String, f64> =
-            serde_json::from_str(resp.text.trim()).ok()?;
+            match serde_json::from_str(resp.text.trim()) {
+                Ok(d) => d,
+                Err(e) => {
+                    dbg(&format!(
+                        "sufficiency judge: parse error ({e}) on resp={:?}",
+                        resp.text.chars().take(80).collect::<String>()
+                    ));
+                    return None;
+                }
+            };
         let a = dist.get("A").copied().unwrap_or(0.0);
         let b = dist.get("B").copied().unwrap_or(0.0);
         let denom = a + b;
         if denom <= 0.0 {
+            dbg("sufficiency judge: A+B logprob mass is 0 → None");
             return None;
         }
         Some(b / denom)

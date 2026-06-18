@@ -62,12 +62,19 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
         query_text: &str,
         query_embedding: &[f32],
         limit: usize,
+        corpora: Option<&[String]>,
     ) -> Vec<MeshScoredChunk> {
         let body = KnowledgeSearchRequest {
             query_embedding: query_embedding.to_vec(),
             query_text: query_text.to_string(),
-            corpora: None, // Let Commonwealth decide — it knows the
-            // mesh's hosted corpora, we don't here.
+            // Seal the fan-out to the conversation's enabled corpora.
+            // `None` lets Commonwealth search every hosted corpus (the
+            // broad-research case); when the conversation is sealed
+            // (e.g. to a single novel) we pass the seal so the SOURCE
+            // search is scoped — the difference between a 316-row search
+            // and opening a 1.9M-row `wikipedia` index it would only
+            // discard, which OOM-kills the daemon.
+            corpora: corpora.map(|c| c.to_vec()),
             limit: Some(limit as u32),
         };
         let url = format!("{}/v1/knowledge/search", self.base_url);

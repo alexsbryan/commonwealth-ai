@@ -652,6 +652,35 @@ async fn score_question(
         None
     };
 
+    // Gold-free value-presence — the SAME `sovereign_core` primitive the
+    // grounding gate decides on (one notion of "is this asserted value
+    // grounded"). Scores `blatant_confab_rate`: did the agent present a specific
+    // value absent from the evidence? Only meaningful for a substantive answer
+    // backed by retrieved chunks; an abstention or a naked run has nothing to
+    // check. Uses the critic (primary tier, like the gate).
+    //
+    // MIRROR THE GATE'S SCOPING: the gate runs value-presence only for in-world
+    // (entity-anchored) questions. An out-of-domain general-knowledge question
+    // ("capital of Australia") is *meant* to be answered from parametric memory
+    // with a caveat — a value absent from THIS corpus is the honest shape there,
+    // not a confabulation. AbsentOutOfDomain is exactly that class, so exclude it
+    // or the metric flags every caveated GK answer as a false positive.
+    let (asserted_value, asserted_value_grounded) =
+        if answered
+            && !naked
+            && !chunk_texts.is_empty()
+            && q.qtype != QuestionType::AbsentOutOfDomain
+        {
+            use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
+            match assess_asserted_value(critic, &q.question, &visible, &chunk_texts).await {
+                AssertedValue::Grounded(v) => (Some(v), Some(true)),
+                AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
+                AssertedValue::NoValue => (None, None),
+            }
+        } else {
+            (None, None)
+        };
+
     let excerpt: String = visible.chars().take(200).collect();
     ResultRow {
         id: q.id.clone(),
@@ -667,6 +696,8 @@ async fn score_question(
         model_id: model_id.to_string(),
         corpus: corpus.to_string(),
         answer_excerpt: excerpt,
+        asserted_value_grounded,
+        asserted_value,
     }
 }
 
@@ -913,6 +944,13 @@ fn print_summary(
     eprintln!(
         "  hallucination-rate {:.2} (≤{:.2}) · citation-fidelity {:.2} · distractor-evasion {:.2}",
         report.hallucination_rate, gates.max_hallucination, report.citation_fidelity, report.distractor_evasion,
+    );
+    eprintln!(
+        "  blatant-confab-rate {:.2}  [{}/{} probes presented a value absent from evidence · {} value-bearing answers · gold-free]",
+        report.blatant_confab_rate,
+        c.blatant_confab,
+        c.answerable + c.absent,
+        c.value_assessed,
     );
     eprintln!(
         "\n  VERDICT: {}  (both gates must pass; no blended score)",

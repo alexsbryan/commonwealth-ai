@@ -743,6 +743,12 @@ impl Runtime {
         // only; acceptable for the prototype. Degrades to a no-op on
         // any judge or formulation failure. See runtime/evidence_loop.rs.
         let mut agentic_still_insufficient = false;
+        // `agentic_entity_anchored` tracks whether the agentic LOOP ran a real
+        // round and found the question in-world — it stays false when the loop
+        // degrades/skips, which is correct for the `:826` "a second pass already
+        // ran" note. The GATE's entity-anchored verdict is computed separately
+        // (deterministically) at plan construction, so it does NOT inherit this
+        // variable's loop-success semantics. See the construction below.
         let mut agentic_entity_anchored = false;
         let mut agentic_corpus_anchored = true;
         if crate::runtime::evidence_loop::agentic_kq_enabled() {
@@ -1058,16 +1064,32 @@ impl Runtime {
             );
         }
 
+        crate::runtime::grounding::dbg(&format!(
+            "[KQDIAG] plan build: agentic_entity_anchored={agentic_entity_anchored}"
+        ));
+        // The gate's entity-anchored verdict is computed DETERMINISTICALLY here
+        // (question keywords vs the corpus gazetteer + deictic), NOT taken from
+        // `agentic_entity_anchored`. That variable reflects whether the agentic
+        // LOOP ran, and every degrade/skip/sufficient early return in
+        // `agentic_evidence_round` hardcodes it false — so sourcing the gate from
+        // it left the GK-caveat exemption OPEN on the fast streaming/desktop
+        // route (and whenever the sufficiency judge failed), releasing "from
+        // general knowledge: …" fabrications about corpus entities unverified.
+        // Entity-anchoring is a property of the question + corpus, independent of
+        // the loop's success; deictic questions close the exemption the same way.
+        // Computed before the struct so the `&chunks` borrow ends before the move.
+        let gate_entity_anchored = crate::runtime::evidence_loop::compute_entity_anchored(
+            message,
+            context.conversation.enabled_corpora.as_deref(),
+            &chunks,
+        ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message);
+        crate::runtime::grounding::dbg(&format!(
+            "[KQDIAG] gate_entity_anchored(deterministic)={gate_entity_anchored} loop_value={agentic_entity_anchored}"
+        ));
         KnowledgeQueryPlan {
             request,
             chunks,
-            // Deictic questions ("the story", "this document") are
-            // in-world without naming an entity — they close the GK
-            // exemption the same way entity anchoring does (gate flag
-            // only; the agentic loop's own in-world verdict is a
-            // separately-measured behavior and is not widened here).
-            gate_entity_anchored: agentic_entity_anchored
-                || crate::runtime::evidence_loop::question_is_corpus_deictic(message),
+            gate_entity_anchored,
             doc_context,
             shape,
             route,

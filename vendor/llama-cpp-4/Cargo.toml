@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "llama-cpp-4"
-version = "0.2.57"
+version = "0.3.1"
 authors = ["Eugene Hauptmann"]
 build = false
 autolib = false
@@ -102,7 +102,7 @@ path = "tests/test_sampler.rs"
 version = "0.7.12"
 
 [dependencies.llama-cpp-sys-4]
-version = "0.2.57"
+version = "0.3.1"
 
 [dependencies.thiserror]
 version = "2.0.18"

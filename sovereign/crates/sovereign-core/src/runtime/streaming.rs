@@ -811,7 +811,7 @@ impl Runtime {
         let gate_question: String = message.to_string();
         if crate::runtime::grounding::grounding_gate_enabled() {
             crate::runtime::grounding::dbg(&format!(
-                "gate_on={gate_on} route={route:?} docs={documents_found}"
+                "gate_on={gate_on} route={route:?} docs={documents_found} gate_entity_anchored={gate_entity_anchored}"
             ));
         }
 
@@ -2093,11 +2093,40 @@ impl Runtime {
             declared_register,
             active_mode.as_deref(),
         );
-        let intent = intent_policy
+        let mut intent = intent_policy
             .effective_intent
             .clone()
             .unwrap_or_else(|| raw_intent.clone());
         context.intent_policy = Some(intent_policy);
+
+        // Evidence escalation. A query routed to a non-retrieval type but that
+        // is actually ABOUT the corpus's own facts — entity-anchored (names a
+        // corpus entity) or corpus-deictic ("the story", "your sources") — needs
+        // the evidence + agentic-formulation path, which lives only in
+        // KnowledgeQuery. Escalate it so it gets retrieval, the "what do I need
+        // to know to answer this" formulation round, and grounded synthesis (or
+        // an honest abstention) — instead of a metalingual deflection with zero
+        // retrieval. The router being imperfect is expected; this self-corrects
+        // when the query plainly needs grounding. Measured 2026-06-18:
+        // "According to Mr Vladimir, what 'sacrosanct fetish'…" routed
+        // Metalingual on the quoted phrase and returned 0 chunks, though it is a
+        // plain factual lookup. The deterministic checks are cheap (no
+        // retrieval); KnowledgeQuery's own ground-or-abstain handles the rest, so
+        // an over-escalation degrades to a normal grounded answer, never a leak.
+        if matches!(intent, Intent::MetalingualQuery)
+            && (crate::runtime::evidence_loop::compute_entity_anchored(
+                message,
+                context.conversation.enabled_corpora.as_deref(),
+                &[],
+            ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message))
+        {
+            tracing::info!(
+                from = ?intent,
+                "router: escalating Metalingual → KnowledgeQuery (corpus-anchored query needs the evidence/formulation path)"
+            );
+            intent = Intent::KnowledgeQuery;
+        }
+
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
         let scope = classification.scope.clone();

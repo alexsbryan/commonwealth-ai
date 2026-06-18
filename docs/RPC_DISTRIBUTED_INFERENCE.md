@@ -147,7 +147,8 @@ distributes the big primary → workers seed their shards → tokens.
 ## Notes & limits
 
 - **Protocol match:** host and worker must run the **same llama.cpp version**
-  (pinned b9180). Both built from this workspace ⇒ automatically matched. Distro/
+  (pinned 94a220cd6, via llama-cpp-4 0.3.1). Both built from this workspace ⇒
+  automatically matched. Distro/
   Homebrew llama.cpp usually lacks `-DGGML_RPC=ON` and won't work.
 - **Loopback on one machine:** a worker serving the *same physical GPU* the host
   uses (Metal↔Metal / Vulkan↔Vulkan on one box) aborts (buffer aliasing). Fine

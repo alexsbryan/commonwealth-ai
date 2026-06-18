@@ -51,10 +51,12 @@ llguidance = { workspace = true }
 # and bypasses the buggy ROCm+MoE path entirely. Revisit once #20176
 # lands a fix in a llama-cpp-2 release we can pin to.
 [target.'cfg(target_os = "macos")'.dependencies]
-# llama-cpp-4 0.2.57 bundles llama.cpp b9180 (commit 64b38b561) which
-# includes MTP (Multi-Token Prediction) via upstream PR #22673 — our
-# reason for moving off llama-cpp-2 0.1.146. See `crate::llama` for
-# the migration shim that absorbs the API shape changes.
+# llama-cpp-4 0.3.1 bundles llama.cpp 94a220cd6 (bumped from 0.2.57 / b9180
+# on 2026-06-18). Includes MTP (Multi-Token Prediction, upstream PR #22673 —
+# our original reason for moving off llama-cpp-2 0.1.146) plus the GLM-5
+# long-context dense-mask overflow fix (#23610), the first build that runs
+# glm_moe_dsa stably past ~200k tokens. See `crate::llama` for the migration
+# shim that absorbs the API shape changes.
 #
 # default-features = false drops the vendored default `openmp` on macOS.
 # Apple clang ships no OpenMP runtime, so the `openmp` feature makes
@@ -66,18 +68,18 @@ llguidance = { workspace = true }
 # does the real work. We re-add `mtmd` (the other half of the vendored
 # default). Linux keeps openmp below — libgomp is a standard system lib
 # there, so it's a packageable dep, not a bundling problem.
-llama-cpp-4 = { version = "0.2.57", default-features = false, features = ["metal", "mtmd"] }
+llama-cpp-4 = { version = "0.3.1", default-features = false, features = ["metal", "mtmd"] }
 # RPC distributed inference: enable the sys crate's `rpc` feature directly
 # (builds ggml with GGML_RPC=ON + binds ggml_backend_rpc_add_server) rather
 # than llama-cpp-4's `rpc` feature, whose binding module targets an older
 # llama.cpp API (ggml_backend_rpc_add_device / 1-arg init) that no longer
-# exists in the pinned b9180. We call the sys symbols directly from
+# exists in the pinned llama.cpp. We call the sys symbols directly from
 # embedded/model_slot.rs instead.
-llama-cpp-sys-4 = { version = "0.2.57", features = ["rpc"] }
+llama-cpp-sys-4 = { version = "0.3.1", features = ["rpc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-4 = { version = "0.2.57", features = ["vulkan"] }
-llama-cpp-sys-4 = { version = "0.2.57", features = ["rpc"] }
+llama-cpp-4 = { version = "0.3.1", features = ["vulkan"] }
+llama-cpp-sys-4 = { version = "0.3.1", features = ["rpc"] }
 
 [dev-dependencies]
 tempfile = "3"
