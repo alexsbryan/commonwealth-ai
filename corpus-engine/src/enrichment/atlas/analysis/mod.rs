@@ -46,4 +46,7 @@ pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response, phase6_classifier_response_schema,
     resolve_candidate_content, AtomIndex, AtomKind, CandidateContent, Phase6Classification,
 };
-pub use tensions::{select_candidates, CandidateSource, TensionCandidate, TensionCandidatesOutput};
+pub use tensions::{
+    select_candidates, select_embedding_topk, CandidateSource, TensionCandidate,
+    TensionCandidatesOutput, TensionStrategy,
+};

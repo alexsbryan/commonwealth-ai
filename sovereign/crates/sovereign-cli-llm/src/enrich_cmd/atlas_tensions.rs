@@ -13,21 +13,29 @@
 //! `edges.json`. Until then the candidates are a reviewable
 //! "what to look at next" list.
 //!
-//! Note: intra-cluster candidates (claim pairs within a Phase 2
-//! cluster) are implemented in `analysis::tensions` but not wired
-//! here yet — the runtime doesn't have a stable sketch → atom
-//! mapping to hand the selector. That's a follow-up; today's
-//! ship is entity-overlap-only, which is the highest-quality
-//! signal anyway.
+//! Candidate selection is strategy-driven (`Pipeline::tension_strategy`):
+//! the literary/philosophy atlas uses the deterministic graph signals
+//! (entity-overlap + cross-position; intra-cluster is implemented in
+//! `analysis::tensions` but still fed an empty cluster map here pending a
+//! stable sketch → atom mapping). Custom-ontology (`custom_atlas`)
+//! corpora — governance rule-sets, policy docs — instead use an embedding
+//! top-K net: each rule is embedded via the daemon embed slot and paired
+//! with its nearest neighbours, because their cross-document,
+//! uniformly-worded rules defeat the entity/cluster signals. See
+//! `TensionStrategy` for why.
 
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
-    analysis::tensions::{select_candidates, CandidateSelectionInput, TensionCandidatesOutput},
+    analysis::tensions::{
+        select_candidates, select_embedding_topk, CandidateSelectionInput, TensionCandidatesOutput,
+        TensionStrategy,
+    },
     read_atlas_atoms, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
 };
 
 use super::config::EnrichConfig;
+use super::inference_client::DaemonInferenceClient;
 use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -111,14 +119,59 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
         entities.len(),
     );
 
-    let candidates = select_candidates(CandidateSelectionInput {
-        claims: &claims,
-        states: &states,
-        // Intra-cluster candidates not wired here — see module-level
-        // comment in `tensions.rs`.
-        claim_clusters: &[],
-        entities: &entities,
-    });
+    // Candidate selection is strategy-driven (glassbox: the chosen
+    // strategy is logged). The literary/philosophy atlas uses the
+    // deterministic graph signals; custom-ontology corpora use an
+    // embedding top-K net (see `TensionStrategy`). Resolve the pipeline
+    // to read its strategy; fall back to the graph default if the
+    // pipeline can't be resolved (preserves legacy behaviour).
+    let strategy = super::pipeline_resolve::resolve_pipeline(&cfg)
+        .map(|p| p.tension_strategy())
+        .unwrap_or_default();
+
+    let candidates = match strategy {
+        TensionStrategy::Graph => {
+            println!("  · candidate strategy: graph (cluster + entity-overlap + co-occurrence)");
+            select_candidates(CandidateSelectionInput {
+                claims: &claims,
+                states: &states,
+                // Intra-cluster candidates not wired here — see module
+                // comment in `tensions.rs`.
+                claim_clusters: &[],
+                entities: &entities,
+            })
+        }
+        TensionStrategy::EmbeddingTopK { k, floor } => {
+            println!("  · candidate strategy: embedding top-K (k={k}, floor={floor})");
+            // Embed each rule's text via the daemon embed slot, then pair
+            // by cosine. The graph path needs no model; this path does —
+            // but a custom-ontology build already has the daemon up for
+            // the classifier that follows.
+            let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("error: building inference client for embeddings: {e}");
+                    return 1;
+                }
+            };
+            let (embed, _chat) = client.into_closures();
+            let mut embeddings = Vec::with_capacity(claims.len());
+            for (i, c) in claims.iter().enumerate() {
+                match embed(&c.content).await {
+                    Ok(v) => embeddings.push(v),
+                    Err(e) => {
+                        eprintln!("error: embedding claim {i} ({}): {e}", c.id.as_str());
+                        return 1;
+                    }
+                }
+            }
+            println!(
+                "  · embedded {} claim(s) for similarity selection",
+                embeddings.len()
+            );
+            select_embedding_topk(&claims, &embeddings, k, floor)
+        }
+    };
 
     if candidates.is_empty() {
         println!(

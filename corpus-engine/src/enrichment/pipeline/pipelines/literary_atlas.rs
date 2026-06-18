@@ -150,6 +150,21 @@ static PHASE6_CLASSIFIER_SYSTEM: ::std::sync::LazyLock<&'static str> =
         )
     });
 
+/// Ontology-driven Phase-6 `tension` classifier template for custom-atlas
+/// (recipe-ontology) corpora. The `{tension_term}`, `{position_term}`, and
+/// `{guidance}` placeholders are filled per-corpus from the recipe's
+/// `CustomOntology` at compose time, so the classifier judges conflicts in
+/// the domain's own terms instead of the literary frame (Macbeth/Heathcliff
+/// examples are the wrong unit of analysis for rule-sets and policies). See
+/// `compose_phase6_atlas_classifier`.
+static CUSTOM_PHASE6_CLASSIFIER_TEMPLATE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/custom_phase6_classifier_system.md",
+            include_str!("literary_atlas_prompts/custom_phase6_classifier_system.md"),
+        )
+    });
+
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "literary_atlas";
 
@@ -836,10 +851,56 @@ impl Pipeline for LiteraryAtlasPipeline {
         true
     }
 
+    fn tension_strategy(&self) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        use crate::enrichment::atlas::analysis::TensionStrategy;
+        if self.custom.is_some() {
+            // Recipe-ontology corpora (governance rule-sets, policy docs)
+            // are cross-document with uniformly-worded rules. The graph
+            // signals miss the real conflicts (a later decision often
+            // resolves with no `attributed_to`, so entity-overlap can't
+            // reach it) and over-pair claims sharing a broad scope entity.
+            // An embedding top-K net recalls same-topic pairs and lets the
+            // classifier judge conflict-vs-compatible. k/floor measured on
+            // the Maple House governance fixture: planted conflicts sit at
+            // cosine 0.60–0.76, so floor 0.5 keeps them while K bounds the
+            // per-claim fan-out.
+            TensionStrategy::EmbeddingTopK { k: 10, floor: 0.5 }
+        } else {
+            TensionStrategy::Graph
+        }
+    }
+
     fn compose_phase6_atlas_classifier(
         &self,
         content: &crate::enrichment::atlas::analysis::CandidateContent,
     ) -> Option<ChatPrompt> {
+        // Custom-ontology corpora judge conflicts in their domain's own
+        // terms: fill the ontology-driven template from the recipe's
+        // guidance + tension/position vocabulary. The literary frame
+        // (below) is the wrong unit of analysis for rule-sets / policies —
+        // it asks about narrative tension between characters.
+        if let Some(custom) = self.custom.as_ref() {
+            let system = custom_phase6_classifier_system(
+                custom.guidance,
+                &custom.vocabulary.tension_term,
+                &custom.vocabulary.position_term,
+            );
+            return Some(
+                ChatPrompt::new(
+                    system,
+                    render_custom_phase6_classifier_user_body(
+                        content,
+                        &custom.vocabulary.tension_term,
+                    ),
+                )
+                .with_response_schema(
+                    "phase6_classifier_response",
+                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
+                )
+                .with_phase_id("phase6_classifier")
+                .with_max_output_tokens(256),
+            );
+        }
         Some(
             ChatPrompt::new(
                 *PHASE6_CLASSIFIER_SYSTEM,
@@ -971,6 +1032,40 @@ fn render_phase6_classifier_user_body(
          No prose, no `<think>` block, no markdown fences. Begin with `{`.\n",
     );
     user
+}
+
+/// Fill the ontology-driven Phase-6 classifier template from a custom
+/// atlas's recipe data: the domain `guidance`, the `tension_term`, and the
+/// `position_term`. Extracted from `compose_phase6_atlas_classifier` so the
+/// "custom mode is ontology-driven, not literary" invariant is unit-testable
+/// without constructing a full candidate.
+fn custom_phase6_classifier_system(
+    guidance: &str,
+    tension_term: &str,
+    position_term: &str,
+) -> String {
+    CUSTOM_PHASE6_CLASSIFIER_TEMPLATE
+        .replace("{tension_term}", tension_term)
+        .replace("{position_term}", position_term)
+        .replace("{guidance}", guidance)
+}
+
+/// Neutral user body for the ontology-driven custom-atlas Phase-6
+/// classifier. Presents the two atoms plainly — no literary "shared
+/// participant" framing — and asks the domain-specific question. The
+/// system message (filled from the recipe ontology) carries the meaning
+/// of a `{tension_term}`.
+fn render_custom_phase6_classifier_user_body(
+    content: &crate::enrichment::atlas::analysis::CandidateContent,
+    tension_term: &str,
+) -> String {
+    format!(
+        "# Two atoms to compare\n\n**A:** {}\n\n**B:** {}\n\nDecide whether A and B are in a genuine {} per the system message. \
+         Return one JSON object. No prose, no `<think>` block, no markdown fences. Begin with `{{`.\n",
+        content.source_text.trim(),
+        content.target_text.trim(),
+        tension_term,
+    )
 }
 
 pub(super) fn render_phase1_user_body(
@@ -2218,6 +2313,29 @@ pub(crate) fn parse_phase8_configuration_tolerant(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn custom_phase6_classifier_is_ontology_driven_not_literary() {
+        let s = custom_phase6_classifier_system(
+            "Rules about overnight guests, quiet hours, and chores.",
+            "conflict",
+            "rule",
+        );
+        // The domain's own term + guidance are present…
+        assert!(s.contains("conflict"), "tension_term not filled");
+        assert!(
+            s.contains("Rules about overnight guests"),
+            "guidance not injected"
+        );
+        // …no unfilled placeholders…
+        assert!(!s.contains("{tension_term}"), "unfilled tension_term");
+        assert!(!s.contains("{guidance}"), "unfilled guidance");
+        // …and it is NOT the literary frame.
+        assert!(!s.contains("Macbeth"), "leaked the literary classifier");
+        // The literary classifier system, by contrast, IS character-framed —
+        // proving the two paths are genuinely different prompts.
+        assert!(PHASE6_CLASSIFIER_SYSTEM.contains("Macbeth"));
+    }
 
     fn sample_chapter() -> ChapterInput {
         ChapterInput {

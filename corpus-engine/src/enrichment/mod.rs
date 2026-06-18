@@ -16,6 +16,8 @@ pub mod entity_extraction;
 pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;
+pub mod governance;
+pub mod governance_view;
 pub mod investigation;
 pub mod open_questions;
 pub mod pipeline;
@@ -42,3 +44,14 @@ pub use skeleton::FieldSkeleton;
 // v2 enrichment pipeline (coexists with v1 during iteration; see
 // `pipeline::mod` for the migration plan).
 pub use pipeline::{Pipeline, PipelineRegistry};
+
+// Event-sourced governance oplog + active-set fold (Governance Atlas).
+pub use governance::{
+    derive_active, first_unattended_act, ActiveSet, GovernanceOp, GovernanceOpKind,
+    GovernanceOplog, OpId, RuleStatus, TensionStatus,
+};
+// Governance read-model — the atlas-graph + oplog join (Governance Atlas).
+pub use governance_view::{
+    build_view, GovernanceIssue, GovernanceView, RuleAtom, RuleTension, RuleView,
+    TensionDisposition, TensionView,
+};

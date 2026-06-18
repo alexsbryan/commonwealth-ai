@@ -47,9 +47,42 @@ pub enum CandidateSource {
     /// — this signal catches structural disagreement that doesn't
     /// surface via shared entity mentions in claim content.
     ChunkCooccurrence,
-    /// Nearest-neighbour match via embedding cosine. Reserved —
-    /// not produced by Landing 3's deterministic pass.
+    /// Nearest-neighbour match via embedding cosine. Produced by
+    /// [`select_embedding_topk`] under the
+    /// [`TensionStrategy::EmbeddingTopK`] strategy (custom-ontology
+    /// corpora); the deterministic graph pass does not emit it.
     EmbeddingTopK,
+}
+
+/// Which Phase-6 candidate-selection strategy a pipeline uses.
+///
+/// [`TensionStrategy::Graph`] is the literary/philosophy default — the
+/// cluster + entity-overlap + chunk-co-occurrence signals, tuned for
+/// *within-document* narrative tensions. Recipe-ontology (`custom_atlas`)
+/// corpora — governance rule-sets, policy docs — are *cross-document*
+/// and their rules are uniformly worded, so the graph signals both
+/// under-pair the real conflicts (a later decision often resolves with
+/// no `attributed_to` entity, so entity-overlap can't reach it) and
+/// over-pair claims that merely share a broad scope entity. They use
+/// [`TensionStrategy::EmbeddingTopK`]: pair each claim with its nearest
+/// neighbours by text embedding — a recall-oriented same-topic net that
+/// hands the conflict-vs-compatible judgement to the LLM classifier.
+/// (Embedding similarity tracks shared *topic*, not *conflict*: two
+/// compatible rules on one topic are as similar as two conflicting ones,
+/// so the selector cannot itself gate precision — that is the
+/// classifier's job. Measured on the Maple House governance fixture.)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TensionStrategy {
+    /// Cluster + entity-overlap + chunk-co-occurrence (the default).
+    Graph,
+    /// Top-K nearest claims by embedding cosine, floored at `floor`.
+    EmbeddingTopK { k: usize, floor: f32 },
+}
+
+impl Default for TensionStrategy {
+    fn default() -> Self {
+        Self::Graph
+    }
 }
 
 /// A pair of atoms flagged for LLM tension classification. The
@@ -145,6 +178,107 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
         c.id = format!("cand-{:04}", i + 1);
     }
     out
+}
+
+/// Select tension candidates by embedding similarity — the
+/// [`TensionStrategy::EmbeddingTopK`] strategy. For each claim, take its
+/// `k` nearest *other* claims by cosine similarity, keeping only pairs at
+/// or above `floor`, then dedup unordered pairs. `embeddings[i]` is the
+/// vector for `claims[i]`; a length mismatch (or fewer than two claims,
+/// or `k == 0`) yields no candidates.
+///
+/// Recall-oriented by design (see [`TensionStrategy`]): casts a
+/// same-topic net wide enough to include the genuine conflicts and
+/// leaves the conflict-vs-compatible decision to the classifier.
+/// Deterministic: stable pair order, deduped by unordered atom-id key,
+/// then `cand-NNNN` stamped — same inputs reproduce the same list.
+pub fn select_embedding_topk(
+    claims: &[Claim],
+    embeddings: &[Vec<f32>],
+    k: usize,
+    floor: f32,
+) -> Vec<TensionCandidate> {
+    if claims.len() != embeddings.len() || claims.len() < 2 || k == 0 {
+        return Vec::new();
+    }
+    // Per claim: its top-k neighbours at/above the floor. Collect both
+    // directions (i→j and j→i); the dedup below collapses them to one
+    // unordered pair, so a pair survives if it is a top-k neighbour of
+    // *either* endpoint.
+    let mut scored: Vec<(usize, usize, f32)> = Vec::new();
+    for i in 0..claims.len() {
+        let mut sims: Vec<(usize, f32)> = Vec::new();
+        for (j, emb_j) in embeddings.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+            let c = cosine_sim(&embeddings[i], emb_j);
+            if c >= floor {
+                sims.push((j, c));
+            }
+        }
+        // Highest similarity first; index tie-break keeps it deterministic.
+        sims.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        for (j, c) in sims.into_iter().take(k) {
+            let (a, b) = if i < j { (i, j) } else { (j, i) };
+            scored.push((a, b, c));
+        }
+    }
+    // Deterministic emit order by (a, b); higher similarity wins the
+    // dedup tie so the kept entry reflects the strongest signal.
+    scored.sort_by(|x, y| {
+        x.0.cmp(&y.0)
+            .then(x.1.cmp(&y.1))
+            .then(y.2.total_cmp(&x.2))
+    });
+    let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    let mut out: Vec<TensionCandidate> = Vec::new();
+    for (a, b, _sim) in scored {
+        if !seen.insert((a, b)) {
+            continue;
+        }
+        out.push(TensionCandidate {
+            id: String::new(),
+            source_atom: claims[a].id.clone(),
+            target_atom: claims[b].id.clone(),
+            discovery: CandidateSource::EmbeddingTopK,
+            cluster_id: None,
+            shared_entity: None,
+        });
+    }
+    for (i, c) in out.iter_mut().enumerate() {
+        c.id = format!("cand-{:04}", i + 1);
+    }
+    tracing::debug!(
+        target: "atlas.tensions",
+        claims = claims.len(),
+        k,
+        floor,
+        candidates = out.len(),
+        "select_embedding_topk: candidate pairs"
+    );
+    out
+}
+
+/// Cosine similarity of two equal-length vectors. Returns 0.0 for
+/// empty, length-mismatched, or zero-norm inputs (so a degenerate
+/// embedding can never spuriously clear the floor).
+fn cosine_sim(u: &[f32], v: &[f32]) -> f32 {
+    if u.len() != v.len() || u.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    let mut nu = 0.0f32;
+    let mut nv = 0.0f32;
+    for i in 0..u.len() {
+        dot += u[i] * v[i];
+        nu += u[i] * u[i];
+        nv += v[i] * v[i];
+    }
+    if nu == 0.0 || nv == 0.0 {
+        return 0.0;
+    }
+    dot / (nu.sqrt() * nv.sqrt())
 }
 
 fn select_intra_cluster(clusters: &[(String, Vec<AtomId>)]) -> Vec<TensionCandidate> {
@@ -691,6 +825,62 @@ mod tests {
             confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
         }
+    }
+
+    fn unordered(out: &[TensionCandidate]) -> std::collections::HashSet<(String, String)> {
+        out.iter()
+            .map(|c| {
+                let a = c.source_atom.as_str().to_string();
+                let b = c.target_atom.as_str().to_string();
+                if a < b { (a, b) } else { (b, a) }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn embedding_topk_pairs_nearest_neighbours_not_orthogonal() {
+        // Two topics: {0,1} similar, {2,3} similar, orthogonal across.
+        let claims = vec![claim(0, None), claim(1, None), claim(2, None), claim(3, None)];
+        let embs = vec![
+            vec![1.0, 0.0],
+            vec![0.96, 0.28], // ~cos 0.96 with claim 0
+            vec![0.0, 1.0],
+            vec![0.28, 0.96], // ~cos 0.96 with claim 2
+        ];
+        let out = select_embedding_topk(&claims, &embs, 1, 0.5);
+        let pairs = unordered(&out);
+        assert!(pairs.contains(&("claim-0000".into(), "claim-0001".into())));
+        assert!(pairs.contains(&("claim-0002".into(), "claim-0003".into())));
+        // Orthogonal cross-topic pairs are below the floor — not emitted.
+        assert!(!pairs.contains(&("claim-0000".into(), "claim-0002".into())));
+        assert!(out
+            .iter()
+            .all(|c| matches!(c.discovery, CandidateSource::EmbeddingTopK)));
+    }
+
+    #[test]
+    fn embedding_topk_floor_filters_weak_pairs() {
+        let claims = vec![claim(0, None), claim(1, None)];
+        let embs = vec![vec![1.0, 0.0], vec![0.0, 1.0]]; // cosine 0
+        assert!(select_embedding_topk(&claims, &embs, 5, 0.5).is_empty());
+    }
+
+    #[test]
+    fn embedding_topk_dedups_symmetric_pairs() {
+        let claims = vec![claim(0, None), claim(1, None)];
+        let embs = vec![vec![1.0, 0.0], vec![0.99, 0.14]];
+        // Each is the other's nearest neighbour; one undirected pair emitted.
+        let out = select_embedding_topk(&claims, &embs, 5, 0.5);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].id, "cand-0001");
+    }
+
+    #[test]
+    fn embedding_topk_length_mismatch_or_too_few_is_empty() {
+        let claims = vec![claim(0, None), claim(1, None)];
+        assert!(select_embedding_topk(&claims, &[vec![1.0, 0.0]], 5, 0.5).is_empty());
+        assert!(select_embedding_topk(&[claim(0, None)], &[vec![1.0]], 5, 0.5).is_empty());
+        assert!(select_embedding_topk(&claims, &[vec![1.0], vec![1.0]], 0, 0.5).is_empty());
     }
 
     #[test]
