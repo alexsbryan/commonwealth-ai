@@ -154,6 +154,61 @@ pub(crate) async fn verify_grounding(
         }
     };
 
+    // First-principles fix for entity-anchored (in-world) questions. The
+    // per-passage support loop below is CONFIRMATORY ("does this passage support
+    // claim X?"), and a small forced-choice judge has a yes-bias: it grounds a
+    // fabrication whose value is a real corpus token in a DIFFERENT role ("Mr
+    // Vladimir's first name is Vladimir") or a partly-true claim ("the Russian
+    // embassy"). A strict EXTRACTIVE check ("does the corpus STATE the answer?")
+    // over-corrects: it requires role-INFERENCE ("does the text state Yundt's
+    // first name is Karl?") and so abstains a CORRECT answer the corpus only
+    // implies — "Karl Yundt" names him but never says "his first name is Karl".
+    //
+    // The right bar is BLATANT confabulation, at the highest generalization: did
+    // the claim assert a specific (name/place/number) that appears NOWHERE in the
+    // evidence — invented from nothing (Heat's "Vernon", the "Russian" embassy,
+    // the Professor's "Stepanovich Haldin")? That, and only that, is the failure.
+    // A value-present-but-mis-roled answer ("Vladimir" for Mr Vladimir's first
+    // name) or an implied-but-correct one ("Karl" from "Karl Yundt") is the
+    // system's best effort, not a fabrication — release it. So we check TOKEN
+    // PRESENCE of the answer's specific value ("is 'Karl' anywhere in the
+    // passages?" — yes, inside "Karl Yundt"; "is 'Vernon'?" — no), NOT whether
+    // the text states the role, sidestepping the inference that makes extractive
+    // over-abstain. Two steps: an LLM extracts the answer's value (the one job a
+    // judge does reliably here), then a DETERMINISTIC substring test decides
+    // presence — measured more reliable than asking the judge to presence-check
+    // (a forced-choice judge false-positived an absent "Thomas"; substring can't)
+    // and than a gestalt "list the claim's absent specifics" (the frame drowns
+    // the one invented token: it missed "Russian" in "the Russian embassy").
+    if entity_anchored {
+        use super::value_presence::{assess_asserted_value, AssertedValue};
+        match assess_asserted_value(&**inference, question, answer, chunks).await {
+            AssertedValue::Grounded(value) => {
+                dbg(&format!(
+                    "value-presence: {value:?} present in corpus → vp=0.0 (release best-effort)"
+                ));
+                return Some(GateVerdict { violation_prob: 0.0, claim: Some(claim), claim_evidence: Vec::new() });
+            }
+            AssertedValue::Ungrounded(value) => {
+                tracing::info!(
+                    target: "grounding_gate",
+                    value = %value,
+                    claim = %claim.chars().take(90).collect::<String>(),
+                    "value-presence: the answer's specific is absent from the corpus → vp=1.0"
+                );
+                dbg(&format!(
+                    "value-presence: {value:?} absent from corpus → vp=1.0 (blatant confab)"
+                ));
+                return Some(GateVerdict { violation_prob: 1.0, claim: Some(claim), claim_evidence: Vec::new() });
+            }
+            // No checkable value (a decline, or extraction unavailable) — fall
+            // through to the confirmatory loop rather than fail the turn.
+            AssertedValue::NoValue => {
+                dbg("value-presence: no asserted value → confirmatory fallback");
+            }
+        }
+    }
+
     // Claim-conditioned widening (Phase 3): verify against the sealed
     // evidence UNIVERSE, not just the prompt snapshot. Hits go first
     // (most relevant to THIS claim) and the cap widens by their count,
@@ -240,7 +295,6 @@ pub(crate) async fn verify_grounding(
     dbg(&format!("chunks_checked={checked} max_support={max_support:.3} vp={vp:.3}"));
     Some(GateVerdict { violation_prob: vp, claim: Some(claim), claim_evidence: extra })
 }
-
 
 /// Extract up to 4 specific, checkable factual claims from a
 /// long-form answer. Empty vec = nothing checkable (essay of analysis

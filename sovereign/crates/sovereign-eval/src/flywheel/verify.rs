@@ -134,6 +134,10 @@ impl DeterministicVerifier {
             model_id: model_id.to_string(),
             corpus: corpus.to_string(),
             answer_excerpt: obs.answer.chars().take(200).collect(),
+            // The flywheel-verify path doesn't assess value-presence (no
+            // evidence handle here); the chaos runner populates it.
+            asserted_value_grounded: None,
+            asserted_value: None,
         };
 
         let failure = if row.is_pass() { None } else { Some(classify_failure(probe, &row)) };

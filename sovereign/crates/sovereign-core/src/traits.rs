@@ -939,11 +939,21 @@ pub trait MeshKnowledgeSource: Send + Sync {
     /// *never* propagates a network error up into query preparation,
     /// because a broken mesh should degrade gracefully to local-only
     /// search rather than fail the whole user request.
+    ///
+    /// `corpora` carries the conversation's `enabled_corpora` seal.
+    /// When `Some`, the fan-out (this node's local view **and** peers)
+    /// is scoped to those corpus ids at the SOURCE — not merely
+    /// filtered out of the result set afterwards. This is load-bearing
+    /// for memory safety: an unsealed fan-out opens every hosted index,
+    /// and on a node with a large corpus installed (e.g. a 1.9M-row
+    /// `wikipedia`) that search OOM-kills the daemon. `None` means
+    /// "search everything hosted" (the unsealed, broad-research case).
     async fn search(
         &self,
         query_text: &str,
         query_embedding: &[f32],
         limit: usize,
+        corpora: Option<&[String]>,
     ) -> Vec<MeshScoredChunk>;
 }
 

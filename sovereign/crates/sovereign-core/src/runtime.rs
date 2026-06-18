@@ -104,6 +104,11 @@ mod collaboration;
 mod evidence;
 mod evidence_loop;
 mod grounding;
+// The gold-free value-presence primitive — shared by the gate (decides) and the
+// chaos scorer (measures `blatant_confab_rate`). One implementation, one notion
+// of "is this asserted value grounded," reachable as
+// `sovereign_core::runtime::{assess_asserted_value, AssertedValue}`.
+pub use grounding::{assess_asserted_value, AssertedValue};
 mod formatters;
 mod handlers;
 mod intent_helpers;

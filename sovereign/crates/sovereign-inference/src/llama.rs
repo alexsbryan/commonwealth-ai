@@ -12,7 +12,7 @@
 //!
 //! On 2026-05-17 we migrated from `llama-cpp-2 0.1.146` to
 //! `llama-cpp-4 0.2.57` to pick up MTP (Multi-Token Prediction, upstream
-//! PR #22673 in llama.cpp release b9180) and a newer ggml backend. The
+//! PR #22673) and a newer ggml backend. The
 //! 0.2.x line broke:
 //!   * Renames: `token_to_piece` → `token_to_str`, `size` → `model_size`,
 //!     `chat_template` → `get_chat_template` (with shape change).

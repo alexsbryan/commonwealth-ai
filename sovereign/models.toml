@@ -312,7 +312,7 @@ thinking = true
 hf_url   = "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF"
 # Qwen3.5-35B-A3B at Q4_K_M (~22 GB): the ≥24 GB tier steps up from the
 # `high` profile's 30B-A3B to the larger 3.5-generation MoE. `qwen35moe`
-# arch — loads on the bundled llama.cpp (b9180), same family as the
+# arch — loads on the bundled llama.cpp, same family as the
 # cluster 122B-A10B. Still ~3B active params, so generation speed stays
 # in the 30B-A3B range while total knowledge grows. Q4_K_M (not Q5) keeps
 # it inside the 24 GB floor with KV headroom; higher-memory users can
@@ -471,7 +471,7 @@ creative    = 4
 # parts). 229B MoE / ~10B active — exceeds every single node here (Mac
 # 64 GB, Strix 128 GB), so it *requires* the distributed path (that's the
 # point). No MiniMax family yet → GGUF-embedded chat template + generic
-# sampling (follow-up: add a MiniMax family). The bundled llama.cpp (b9180)
+# sampling (follow-up: add a MiniMax family). The bundled llama.cpp
 # supports the `minimax-m2` arch. ~17 t/s on a 2-node Strix cluster.
 [profiles.cluster_minimax.thoughtful]
 repo      = "unsloth/MiniMax-M2.7-GGUF"

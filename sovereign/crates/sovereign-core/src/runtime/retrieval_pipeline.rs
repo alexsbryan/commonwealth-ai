@@ -1116,8 +1116,20 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         let mesh_fut = async {
             match &rt.mesh_knowledge {
                 Some(m) => {
-                    m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT)
-                        .await
+                    // Pass the conversation seal so the mesh fan-out's
+                    // local-view (and peer) search is scoped at the
+                    // source. The mesh-fold below (`st.enabled_corpora`
+                    // guard) only filters the *results*; without sealing
+                    // here, the fan-out still opens every hosted index
+                    // first — a 1.9M-row `wikipedia` search that
+                    // OOM-kills the daemon before the filter runs.
+                    m.search(
+                        st.message,
+                        &st.embedding,
+                        KQ_PER_CORPUS_LIMIT,
+                        st.enabled_corpora,
+                    )
+                    .await
                 }
                 None => Vec::new(),
             }

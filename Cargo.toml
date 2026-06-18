@@ -271,10 +271,24 @@ lto = "thin"
 codegen-units = 1
 
 # ── Patches ──────────────────────────────────────────────────────────────
-# Vendored `llama-cpp-4` re-introduces the `LlamaContextParams::with_n_seq_max`
-# builder method that upstream 0.2.x retired. The underlying C field is still
-# load-bearing — without it the FastShort continuous-batched decode fails
-# with "Decode Error -1: n_tokens == 0" the moment a batch carries seq_id > 0.
-# Forensically traced in the marathon bench, 2026-05-18.
+# Vendored `llama-cpp-4` (currently 0.3.1) carries THREE sovereign divergences
+# from the published crate. When re-vendoring a newer upstream version, re-apply
+# all three — `diff` stock-vs-vendored to confirm none were dropped (the upstream
+# deltas to these files have so far been doc-comment-only, so the patches port
+# cleanly, but verify rather than trust a fuzzy `patch`):
+#   1. `LlamaContextParams::with_n_seq_max` (+ `n_seq_max` getter) in
+#      src/context/params.rs. Upstream 0.2.x/0.3.x retired the builder but the C
+#      field is load-bearing — without it FastShort continuous-batched decode
+#      fails "Decode Error -1: n_tokens == 0" the moment a batch carries
+#      seq_id > 0 (forensically traced in the marathon bench, 2026-05-18).
+#   2. `LlamaModelParams::{with_tensor_split, with_devices,
+#      with_tensor_buft_overrides}` (+ their backing-storage fields) in
+#      src/model/params.rs — the explicit device list + `-ot` per-tensor
+#      placement the RPC distributed-inference path drives from
+#      embedded/model_slot.rs. Dropping these silently breaks distribution.
+#   3. `dynamic-link` removed from the crate's `default` features in Cargo.toml,
+#      so ggml/llama static-link and every sovereign binary is self-contained
+#      (the daemon's relocatability + the desktop .deb/.rpm/AppImage). See
+#      RELEASING.md and [[project_desktop_linux_build_deps]].
 [patch.crates-io]
 llama-cpp-4 = { path = "vendor/llama-cpp-4" }
