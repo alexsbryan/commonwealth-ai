@@ -16,7 +16,7 @@ use super::atoms::{AtomId, ChunkRef};
 
 // ── Typed identifier ─────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct EdgeId(String);
 
 impl EdgeId {

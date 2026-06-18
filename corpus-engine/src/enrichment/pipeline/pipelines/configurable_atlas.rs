@@ -86,6 +86,12 @@ pub struct CustomVocabulary {
 pub struct CustomOntology {
     pub(super) name: &'static str,
     pub(super) phase1_system: &'static str,
+    /// The raw domain guidance (trimmed), kept separately from
+    /// `phase1_system` (which wraps it in the neutral Phase-1 base) so
+    /// downstream phases — notably the Phase-6 `tension` classifier —
+    /// can compose their own ontology-driven prompts from the same
+    /// author-written guidance. Empty when the recipe gave none.
+    pub(super) guidance: &'static str,
     pub(super) vocabulary: Vocabulary,
 }
 
@@ -110,10 +116,12 @@ impl CustomOntology {
             format!("{NEUTRAL_PHASE1_SYSTEM}\n\n## Domain focus\n\n{guidance}")
         };
         let phase1_system: &'static str = Box::leak(combined.into_boxed_str());
+        let guidance_leaked: &'static str = Box::leak(guidance.to_string().into_boxed_str());
 
         Self {
             name,
             phase1_system,
+            guidance: guidance_leaked,
             vocabulary: build_vocabulary(spec.vocabulary.as_ref()),
         }
     }

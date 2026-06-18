@@ -432,6 +432,19 @@ pub trait Pipeline: Send + Sync + 'static {
         crate::enrichment::atlas::analysis::parse_holistic_response(response)
     }
 
+    /// Which Phase-6 candidate-selection strategy this pipeline uses
+    /// (see [`crate::enrichment::atlas::analysis::TensionStrategy`]).
+    /// Default `Graph` — the cluster + entity-overlap + co-occurrence
+    /// signals tuned for within-document narrative tensions. Custom-
+    /// ontology pipelines override to `EmbeddingTopK`: their
+    /// cross-document, uniformly-worded rule-sets need a recall-oriented
+    /// embedding net (the graph signals under-pair conflicts whose later
+    /// rule carries no `attributed_to`, and over-pair broad shared
+    /// entities). Only consulted when `runs_phase6_atlas_classifier`.
+    fn tension_strategy(&self) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        crate::enrichment::atlas::analysis::TensionStrategy::Graph
+    }
+
     // ── Selection tuning ──────────────────────────────────────
 
     /// How many exemplars to inject per call. Default 5 across all
