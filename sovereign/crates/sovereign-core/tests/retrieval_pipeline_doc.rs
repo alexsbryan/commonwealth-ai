@@ -27,7 +27,8 @@ ordered list of named steps run by one tracing runner (one\n\
 `chunks_before/after/delta`). The governing principle: **the intent\n\
 decides HOW to answer (model tier, expansion, synthesis shape) — never\n\
 WHERE knowledge lives.** Both pipelines share the same 3-step\n\
-evidence-gathering head and 12-step core; they differ only in their\n\
+evidence-gathering head and 13-step core (incl. the FR-9 governance\n\
+active-set filter); they differ only in their\n\
 tails. Step ORDER is bench-tuned data, pinned by golden tests — see\n\
 the module doc in `retrieval_pipeline.rs` for design rationale and the\n\
 dated convergence/divergence log.\n\

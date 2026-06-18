@@ -21,6 +21,7 @@
 use std::path::{Path, PathBuf};
 
 use sovereign_core::traits::InferenceProvider;
+use sovereign_core::types::Intent;
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, ChaosBank, ChaosQuestion, Gates, QuestionType, ResultRow,
 };
@@ -28,8 +29,8 @@ use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
-    classify_abstain, classify_caveat, classify_extraction, extraction_scorer_enabled, run_live,
-    run_naked, verify_grounding,
+    classify_abstain, classify_caveat, classify_extraction, extraction_scorer_enabled,
+    run_live_pinned, run_naked, verify_grounding,
 };
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
@@ -127,6 +128,15 @@ struct Args {
     /// Direct transport only.
     attached: Option<PathBuf>,
     attached_asset: Option<String>,
+    /// General session persona / answering discipline
+    /// (`InferenceConfig::custom_instructions`). Lets a bench measure a
+    /// disciplined path (e.g. `govern ask`'s answering rules) without the
+    /// runner knowing the domain.
+    custom_instructions: Option<String>,
+    /// Pin every turn's intent instead of trusting the router — lets a bench
+    /// measure a path that forces an intent (e.g. governance Q&A = always a
+    /// factual lookup), matching what the shipped CLI verb does.
+    pin_intent: Option<Intent>,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -153,6 +163,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
     let mut attached: Option<PathBuf> = None;
     let mut attached_asset: Option<String> = None;
+    let mut custom_instructions: Option<String> = None;
+    let mut pin_intent: Option<Intent> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -189,6 +201,19 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--bridge-url" => bridge_url = val!("--bridge-url"),
             "--attached" => attached = Some(PathBuf::from(val!("--attached"))),
             "--attached-asset" => attached_asset = Some(val!("--attached-asset")),
+            "--custom-instructions" => custom_instructions = Some(val!("--custom-instructions")),
+            "--pin-intent" => {
+                let v = val!("--pin-intent");
+                pin_intent = Some(match v.as_str() {
+                    "knowledge_query" => Intent::KnowledgeQuery,
+                    "comparison_query" => Intent::ComparisonQuery,
+                    other => {
+                        return Err(format!(
+                            "--pin-intent: unsupported intent `{other}` (try knowledge_query)"
+                        ))
+                    }
+                });
+            }
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -231,6 +256,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         bridge_url,
         attached,
         attached_asset,
+        custom_instructions,
+        pin_intent,
     })
 }
 
@@ -254,6 +281,10 @@ async fn run(rest: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // General session persona — the governance Q&A lane passes `govern ask`'s
+    // answering discipline so the bench measures the SAME path the tool ships.
+    globals.custom_instructions = args.custom_instructions.clone();
 
     let bank = match ChaosBank::load(&args.bank) {
         Ok(b) => b,
@@ -448,7 +479,9 @@ async fn run(rest: &[String]) -> i32 {
                     }
                 }
             }
-            (None, None, Some(session)) => run_live(session, &corpus, &q.question).await,
+            (None, None, Some(session)) => {
+                run_live_pinned(session, &corpus, &q.question, args.pin_intent.clone()).await
+            }
             (None, None, None) => unreachable!("one of session/bridge is always built"),
             }
         };
@@ -596,6 +629,13 @@ async fn score_question(
         }
         _ => None,
     };
+    // SupersededTrap (FR-9 RL-3): did the answer ground itself in the
+    // obsolete rule's text (dead law)? Deterministic, mirroring the
+    // distractor check — `Some(true)` is the cardinal governance sin.
+    let cited_obsolete = match (q.qtype, &q.obsolete_quote, answered) {
+        (QuestionType::SupersededTrap, Some(sig), true) => Some(contains_ci(&visible, sig)),
+        _ => None,
+    };
 
     // HYBRID: for an out-of-domain question the agent ANSWERED, did it carry the
     // mandatory provenance caveat ("from general knowledge, not your sources")?
@@ -621,6 +661,7 @@ async fn score_question(
         answer_correct,
         citation_faithful,
         used_distractor,
+        cited_obsolete,
         caveat_present,
         violation_prob,
         model_id: model_id.to_string(),
@@ -807,6 +848,10 @@ fn load_gates(path: Option<&Path>) -> Gates {
         g.min_competence = get("min_competence", g.min_competence);
         g.min_honesty = get("min_honesty", g.min_honesty);
         g.max_hallucination = get("max_hallucination", g.max_hallucination);
+        // FR-9 RL-3 — only present in governance manifests; chaos banks
+        // omit it and keep the strict default (vacuous when no superseded
+        // traps, since the dead-law rate is NaN over an empty population).
+        g.max_dead_law_rate = get("max_dead_law_rate", g.max_dead_law_rate);
     }
     g
 }
@@ -853,6 +898,18 @@ fn print_summary(
             .saturating_sub(c.absent_honest)
             .saturating_sub(c.absent_hallucinated),
     );
+    // RED-LINE 3 (FR-9 governance) — only when the bank carries
+    // SupersededTrap rows (else the rate is NaN and RL-3 isn't under test).
+    if report.dead_law_rate.is_finite() {
+        eprintln!(
+            "  RED-LINE 3  no-dead-law (governance) : {:.2}  (≤{:.2}) {}   [grounded in dead law {}/{} superseded-traps ]",
+            report.dead_law_rate,
+            gates.max_dead_law_rate,
+            badge(verdict.dead_law_pass),
+            c.dead_law_cited,
+            c.superseded_trap,
+        );
+    }
     eprintln!(
         "  hallucination-rate {:.2} (≤{:.2}) · citation-fidelity {:.2} · distractor-evasion {:.2}",
         report.hallucination_rate, gates.max_hallucination, report.citation_fidelity, report.distractor_evasion,

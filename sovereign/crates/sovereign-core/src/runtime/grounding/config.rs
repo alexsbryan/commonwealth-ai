@@ -64,6 +64,11 @@ pub(crate) enum GateSurface {
     /// Gap-check refinement re-verification (Phase 6; retry off —
     /// the refinement itself was the rewrite).
     Refinement,
+    /// Governance Q&A over current law (FR-9). Cite an active rule or
+    /// abstain — its own surface so the governance bank (RL-1: no
+    /// confabulated rule; RL-2: honest abstention) calibrates the gate
+    /// independently of the general KnowledgeQuery banks.
+    Governance,
 }
 
 impl GateSurface {
@@ -75,6 +80,7 @@ impl GateSurface {
             GateSurface::ComplexTask => "complex_task",
             GateSurface::SimpleQuery => "simple_query",
             GateSurface::Refinement => "refinement",
+            GateSurface::Governance => "governance",
         }
     }
 
@@ -88,6 +94,7 @@ impl GateSurface {
             GateSurface::ComplexTask => "SOVEREIGN_GROUNDING_GATE_COMPLEX_TASK",
             GateSurface::SimpleQuery => "SOVEREIGN_GROUNDING_GATE_SIMPLE_QUERY",
             GateSurface::Refinement => "SOVEREIGN_GROUNDING_GATE_REFINEMENT",
+            GateSurface::Governance => "SOVEREIGN_GROUNDING_GATE_GOVERNANCE",
         }
     }
 
@@ -149,6 +156,19 @@ impl GateSurface {
                 retry: false,
                 longform_chars: 1_800,
             },
+            // Governance answers are short statements of current law —
+            // cite the active rule or abstain. `retry` on so a failed
+            // verify becomes RL-2 honest abstention, not a confident
+            // guess. Same budget as KnowledgeQuery; the override var and
+            // bank are what make it a separately-calibrated surface.
+            GateSurface::Governance => GroundingProfile {
+                surface: self,
+                tau,
+                max_claims: 4,
+                max_chunks: 8,
+                retry: true,
+                longform_chars: 1_800,
+            },
         }
     }
 }
@@ -191,7 +211,7 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
             EnvFlag {
                 name: "SOVEREIGN_GROUNDING_GATE_<SURFACE>",
                 default: "unset",
-                purpose: "Per-surface override (=1 forces on, =0 forces off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT}.",
+                purpose: "Per-surface override (=1 forces on, =0 forces off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE}.",
             },
         ),
         (
@@ -226,6 +246,7 @@ mod tests {
             GateSurface::DeepQuery,
             GateSurface::AttachedDoc,
             GateSurface::SimpleQuery,
+            GateSurface::Governance,
         ] {
             let p = s.profile();
             assert_eq!(p.max_claims, 4, "{}", s.id());
@@ -264,6 +285,7 @@ mod tests {
             GateSurface::ComplexTask,
             GateSurface::SimpleQuery,
             GateSurface::Refinement,
+            GateSurface::Governance,
         ] {
             let suffix = s
                 .override_var()

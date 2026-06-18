@@ -14,9 +14,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// The five pressures the chaos monkey applies. The first three are
-/// *answerable* (a correct, grounded answer exists in the corpus); the last
-/// two are *absent* (the honest response is to decline).
+/// The pressures the chaos monkey applies. Present / Distractor /
+/// ProvenanceTrap / SupersededTrap are *answerable* (a correct, grounded
+/// answer exists in the corpus); AbsentAdjacent / AbsentOutOfDomain are
+/// *absent* (the honest response is to decline).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuestionType {
@@ -37,6 +38,12 @@ pub enum QuestionType {
     /// Correct citation requires the *actually-supporting* passage — tests
     /// whether the cited source genuinely supports the claim.
     ProvenanceTrap,
+    /// The naive/lexical hit is an *obsolete* rule; the live answer is a
+    /// later decision that superseded it. Answerable (the current rule
+    /// exists), but the cardinal governance sin is grounding the answer in
+    /// the dead law (FR-9 RL-3). Carries both the obsolete quote (must NOT
+    /// appear) and the active-successor quote (the correct ground).
+    SupersededTrap,
 }
 
 /// What a calibrated situated agent *should* do for a question type.
@@ -50,9 +57,10 @@ pub enum ExpectedAction {
 impl QuestionType {
     pub fn expected_action(&self) -> ExpectedAction {
         match self {
-            QuestionType::Present | QuestionType::Distractor | QuestionType::ProvenanceTrap => {
-                ExpectedAction::Answer
-            }
+            QuestionType::Present
+            | QuestionType::Distractor
+            | QuestionType::ProvenanceTrap
+            | QuestionType::SupersededTrap => ExpectedAction::Answer,
             QuestionType::AbsentAdjacent | QuestionType::AbsentOutOfDomain => ExpectedAction::Abstain,
         }
     }
@@ -74,6 +82,7 @@ impl QuestionType {
             QuestionType::AbsentOutOfDomain => "absent_out_of_domain",
             QuestionType::Distractor => "distractor",
             QuestionType::ProvenanceTrap => "provenance_trap",
+            QuestionType::SupersededTrap => "superseded_trap",
         }
     }
 }
@@ -100,6 +109,15 @@ pub struct ChaosQuestion {
     /// human side of the fairness contract, surfaced in the glassbox.
     #[serde(default)]
     pub rationale: String,
+    /// SupersededTrap: a signature of the *obsolete* rule's text — the
+    /// dead law that must NOT ground the answer (FR-9 RL-3). The
+    /// deterministic dead-law check is `contains_ci(answer, obsolete_quote)`.
+    #[serde(default)]
+    pub obsolete_quote: Option<String>,
+    /// SupersededTrap: a signature of the *active successor* rule's text —
+    /// the current law the answer should cite instead of the obsolete one.
+    #[serde(default)]
+    pub active_successor_quote: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -162,6 +180,15 @@ impl ChaosBank {
                             q.id
                         ));
                     }
+                    if q.qtype == QuestionType::SupersededTrap
+                        && (q.obsolete_quote.is_none() || q.active_successor_quote.is_none())
+                    {
+                        return Err(format!(
+                            "superseded_trap question `{}` must name both obsolete_quote (the dead law \
+                             that must not appear) and active_successor_quote (the current law)",
+                            q.id
+                        ));
+                    }
                 }
                 ExpectedAction::Abstain => {
                     if !q.gold_keywords.is_empty() || q.supporting_quote.is_some() {
@@ -208,6 +235,16 @@ mod tests {
                 None
             },
             rationale: "because".into(),
+            obsolete_quote: if matches!(t, QuestionType::SupersededTrap) {
+                Some("old".into())
+            } else {
+                None
+            },
+            active_successor_quote: if matches!(t, QuestionType::SupersededTrap) {
+                Some("new".into())
+            } else {
+                None
+            },
         }
     }
 

@@ -1140,7 +1140,15 @@ impl Runtime {
         // for short answers, per-claim audit→rewrite→annotate for
         // long-form). No hold needed here: nothing was sent yet.
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
-        let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
+        // Governance corpora take the FR-9 governance surface (own
+        // bank/override); else the general KnowledgeQuery gate.
+        let gate_surface = if self
+            .is_governance_turn(context.conversation.enabled_corpora.as_deref())
+        {
+            crate::runtime::grounding::GateSurface::Governance
+        } else {
+            crate::runtime::grounding::GateSurface::KnowledgeQuery
+        };
         let completion_text = if gate_surface.enabled() && !plan.chunks.is_empty() {
             // The turn's sealed evidence universe; claim search
             // sealed to the conversation's corpora.

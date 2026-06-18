@@ -10,7 +10,8 @@ ordered list of named steps run by one tracing runner (one
 `chunks_before/after/delta`). The governing principle: **the intent
 decides HOW to answer (model tier, expansion, synthesis shape) — never
 WHERE knowledge lives.** Both pipelines share the same 3-step
-evidence-gathering head and 12-step core; they differ only in their
+evidence-gathering head and 13-step core (incl. the FR-9 governance
+active-set filter); they differ only in their
 tails. Step ORDER is bench-tuned data, pinned by golden tests — see
 the module doc in `retrieval_pipeline.rs` for design rationale and the
 dated convergence/divergence log.
@@ -36,7 +37,8 @@ dated convergence/divergence log.
 | 13 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
 | 14 | `dedupe_merged` | — |
 | 15 | `cap_and_reserve` | — |
-| 16 | `truncate_merged` | — |
+| 16 | `governance_active_set` | — |
+| 17 | `truncate_merged` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -57,8 +59,9 @@ dated convergence/divergence log.
 | 13 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
 | 14 | `dedupe_merged` | — |
 | 15 | `cap_and_reserve` | — |
-| 16 | `truncate_merged` | — |
-| 17 | `top_sources_expand` | — |
+| 16 | `governance_active_set` | — |
+| 17 | `truncate_merged` | — |
+| 18 | `top_sources_expand` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -74,8 +77,9 @@ dated convergence/divergence log.
 | 8 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
 | 9 | `dedupe_merged` | — |
 | 10 | `cap_and_reserve` | — |
-| 11 | `truncate_merged` | — |
-| 12 | `top_sources_expand` | — |
+| 11 | `governance_active_set` | — |
+| 12 | `truncate_merged` | — |
+| 13 | `top_sources_expand` | — |
 
 ## Env-knob registry
 

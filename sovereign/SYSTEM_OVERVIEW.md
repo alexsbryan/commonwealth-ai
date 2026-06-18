@@ -253,6 +253,33 @@ installed by `scripts/setup-chaos-corpus.sh`) rather than a path-hashed
 `corpus watch`, so the gate is reproducible across boxes. See
 `sovereign/bench/chaos_monkey/README.md`.
 
+The **Governance** bench (`sovereign bench governance`, FR-9) gates the
+event-sourced common-law tool — the `govern` verbs (`seed`/`tensions`/`resolve`/
+`accept`/`ask`) over a corpus's `GovernanceView` + `GovernanceOplog`. Two lanes
+share the chaos tracked-run + gate pattern. **Lane A** (`run`/`diagnose`) is a
+precision/recall *detector* bench: it maps each `EdgeType::Tension` edge in the
+enriched atlas to a pair of source sections and scores against an exhaustive
+`truth.json` (pure scorer `sovereign-eval/src/governance_bench.rs`). **Lane B**
+(`qa`) reuses the chaos two-red-line scorer over the governance corpus: because
+the sealed corpus carries a `governance_oplog.jsonl`, the live turns become
+*governance turns* — the gated active-set step in `shared_core_steps()`
+(`runtime/retrieval_pipeline.rs`) drops the retrieved chunks of any *amended
+section* (`GovernanceView::dead_law_sections`, bridged to chunk row ids via
+`chunk_to_section_map` over `chapters.json`, since atoms cite section ids) and
+the cite-or-abstain gate runs as `GateSurface::Governance` — so the bank's
+`SupersededTrap` rows add a **third red line, RL-3 (no dead law)** alongside
+RL-1 (no confabulated rule = `hallucination_rate`) and RL-2 (honest abstention
+= `honesty`). Lane B drives the *same hardened turn* `govern ask` ships — intent
+pinned to a factual lookup + the governance answering discipline — via the
+general bench knobs `--pin-intent` / `--custom-instructions`, so the metric
+tracks the shipped tool, not a bare chat path. Dropping is section-level (a chunk holds a whole section's
+rules), so an amended section's co-located un-amended provisions go with it;
+sub-chunk filtering is the precise future refinement. The "Maple
+House" fixture installs under the machine-stable `maple-house` id via a
+committed recipe (`sovereign-recipes/maple-house/`), set up + seeded + resolved
+by `scripts/setup-governance-corpus.sh`; both lanes gate against committed
+baselines via `bench gate governance` / `governance-qa`.
+
 Finally, **`scripts/sovereign-ci-bench.sh`** is the single ≤2h core-regression
 gate a developer runs for confidence that chat + inference hasn't regressed. It
 *composes* the existing benches (each a visible, re-runnable command) rather
@@ -260,7 +287,8 @@ than reinventing them, with a clear gate policy: deterministic baseline-diffed
 lanes (retrieval recall, enrichment atom-F1, intent routing) are **hard**
 (build-breaking via `bench all`'s exit code); the synthesis answer-equiv judge
 lane is **soft** (judge variance shouldn't flake the build); chaos-monkey,
-mechanism-fidelity, and the multi-turn degradation thread run as **tracked**
+mechanism-fidelity, the multi-turn degradation thread, and the FR-9 governance
+lanes (detector + Q&A) run as **tracked**
 (advisory) lanes whose *absolute* verdict — a true finding for the current
 system, not a regression (chaos is built to break the present agent; mechanism
 returns NO-GO for any non-faithful model) — never gates, each paired with a

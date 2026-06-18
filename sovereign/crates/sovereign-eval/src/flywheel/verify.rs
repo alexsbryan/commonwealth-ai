@@ -128,6 +128,7 @@ impl DeterministicVerifier {
             answer_correct,
             citation_faithful,
             used_distractor,
+            cited_obsolete: None,
             caveat_present: obs.caveat_present,
             violation_prob: None,
             model_id: model_id.to_string(),

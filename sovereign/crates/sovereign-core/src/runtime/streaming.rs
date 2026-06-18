@@ -421,6 +421,35 @@ impl Runtime {
             .await
     }
 
+    /// Run a streaming turn with the intent PINNED, skipping the router's
+    /// classification. A general seam (same synthetic-classification path
+    /// as session resume/redirect): a caller that already knows the intent
+    /// — e.g. a single-purpose sealed corpus whose questions are always
+    /// factual lookups — uses this to bypass router misclassification. The
+    /// caller owns the choice of intent; this method has no domain
+    /// knowledge of why.
+    pub async fn handle_message_stream_as(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        intent: Intent,
+    ) -> Result<StreamHandle> {
+        let synthetic = RouterClassification {
+            primary: IntentCandidate {
+                intent,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: Some("caller-pinned intent".to_string()),
+            coarse_intent: None,
+            self_assessment: None,
+            timing: None,
+            scope: None,
+        };
+        self.handle_message_stream_with_classification(message, conversation_id, Some(synthetic))
+            .await
+    }
+
     /// Naked chat turn — raw model, none of the Sovereign affordances.
     ///
     /// Desktop "naked mode" (a user setting) routes here instead of
@@ -748,7 +777,16 @@ impl Runtime {
         // abstain. Long-form (PrimarySynthesis): hold → per-claim
         // audit → rewrite → annotate. Zero-chunk turns skip — the
         // structural GK caveat owns that path.
-        let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
+        // Governance corpora take the FR-9 governance surface (its own
+        // bank/override); everything else is the general KnowledgeQuery
+        // gate. Both run the identical cite-or-abstain ladder.
+        let gate_surface = if self
+            .is_governance_turn(context.conversation.enabled_corpora.as_deref())
+        {
+            crate::runtime::grounding::GateSurface::Governance
+        } else {
+            crate::runtime::grounding::GateSurface::KnowledgeQuery
+        };
         let gate_on = gate_surface.enabled() && documents_found > 0;
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is

@@ -140,6 +140,8 @@ mod tests {
             supporting_quote: Some("the shop".into()),
             distractor_quote: None,
             rationale: "in ch.1".into(),
+            obsolete_quote: None,
+            active_successor_quote: None,
         };
         let p = chaos_to_probe(&q);
         assert_eq!(p.id, "chaos:p1");
@@ -158,6 +160,8 @@ mod tests {
             supporting_quote: None,
             distractor_quote: None,
             rationale: "out of corpus".into(),
+            obsolete_quote: None,
+            active_successor_quote: None,
         };
         let p = chaos_to_probe(&q);
         assert!(matches!(

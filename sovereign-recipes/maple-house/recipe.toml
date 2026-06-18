@@ -1,0 +1,83 @@
+# Maple House — Governance Atlas keystone probe.
+#
+# A seeded coliving-house rule corpus: a founding Charter (Articles) plus
+# dated house-meeting Decisions that amend/override it over time. Authored
+# to test whether the recipe-only custom-ontology atlas path surfaces
+# governance tensions as `EdgeType::Tension` edges (the keystone of the
+# "one recipe + one pure fold + one UX panel" thesis).
+#
+# Planted ground truth (cross-section, same-topic conflicts):
+#   - Article II  (quiet hours 11 PM)        ×  Decision 2026-02-10 (10 PM weeknights)
+#   - Article I   (guests may stay 2 nights) ×  Decision 2026-03-14 (no overnight guests)
+#   - Article III (user cleans the kitchen)  ×  Decision 2026-04-02 (cook is excused)
+# Decoy (lexical overlap, NOT a conflict):
+#   - Article I / guest rules                ×  Decision 2026-04-20 (guest *parking*)
+#
+# Run:
+#   sovereign corpus install maple-house
+#   sovereign enrich init  maple-house --from-corpus maple-house   # auto → custom_atlas
+#   sovereign enrich build maple-house --full
+#   # inspect ~/.sovereign/indexes/maple-house/atlas/edges.json for Tension edges
+
+[corpus]
+id = "maple-house"
+name = "Maple House (Governance Probe)"
+description = "A seeded coliving-house rule corpus — a founding Charter plus dated house-meeting Decisions that amend it — for probing governance tension detection."
+license = "none"
+schema_version = 1
+
+[acquire]
+type = "local_file"
+# Repo-relative placeholder; scripts/setup-governance-corpus.sh rewrites this
+# to the absolute path of the committed markdown for the running daemon.
+path = "sovereign-recipes/maple-house/maple-house.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "governance"
+
+# Custom ontology — the recipe-only governance extraction this probe tests.
+# Models each rule as a claim attributed to the single topic it governs, so
+# rules about the same topic group together (the EntityOverlap / IntraCluster
+# candidate-selection signals Phase 6 pairs for tension classification).
+[enrichment.ontology]
+guidance = """
+This corpus is the governing rules of a shared cooperative household ("Maple House"): a founding Charter of numbered Articles plus a series of dated house-meeting Decisions that amend, extend, or override the Charter over time. Treat it as living common law — later Decisions can change earlier rules.
+
+Extract, as claims, every NORMATIVE STATEMENT — each thing that is required, forbidden, or permitted. For each such rule, capture:
+- its deontic force: whether it requires, forbids, or permits something;
+- the single topic it governs — for example: guests, quiet hours, kitchen, chores, common spaces, parking. Attribute each rule to that topic, so that all rules about the same topic are grouped together;
+- any conditions or exceptions it carries (times of day, days of the week, who it applies to).
+
+Identify the governed topics themselves as entities (guests, quiet hours, kitchen, common spaces, parking, chores).
+
+Surface TENSIONS between rules: a later Decision that contradicts, narrows, or overrides an earlier Charter Article, or any two rules that give incompatible guidance for the same situation. A tension is a genuine conflict in what is required, forbidden, or permitted for the same topic and situation — NOT merely two rules that happen to mention the same word. Two rules about different aspects of the same topic (for example, where a guest may park a car versus how many nights a guest may stay) are NOT in tension.
+
+In particular, these pairs are NOT conflicts even when they share a topic — do not flag them:
+- Two SEPARATE exemptions or exceptions to the same rule (one member excused from a chore for cooking, another excused for travelling): each stands alone, and honoring one never forces breaking the other.
+- A rule about one group of people versus a rule about a DIFFERENT group (overnight GUESTS versus resident MEMBERS staying up late): they do not bind the same person at the same moment.
+- Rules that govern DIFFERENT places or rooms (an outdoor backyard rule versus an indoor living-room activity; a dining-room rule versus a living-room rule).
+- An ADDITIVE rule that layers a step, label, or record on top of another (labelling food versus disposing of old food): both can be followed at once.
+Flag a conflict only when you can name one concrete moment in which a single member, in one place and at one time, would have to break one rule to follow the other.
+
+Reader questions worth surfacing: What is the current rule about guests? When do quiet hours begin now? Who is responsible for cleaning the kitchen? Which Charter Articles have been amended by a later Decision?
+"""
+
+[enrichment.ontology.vocabulary]
+position_term = "rule"
+tension_term = "conflict"
+concern_term = "house question"
+evidence_term = "passage"

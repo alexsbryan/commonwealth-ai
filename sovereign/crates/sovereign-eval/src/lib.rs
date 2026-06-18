@@ -27,6 +27,7 @@ pub mod entity_resolution_bench;
 pub mod entity_resolution_score;
 pub mod finalize;
 pub mod flywheel;
+pub mod governance_bench;
 pub mod judge;
 pub mod manifest;
 pub mod mechanical;

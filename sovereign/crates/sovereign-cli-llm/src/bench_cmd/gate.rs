@@ -47,6 +47,8 @@ const HELP: Help = Help {
             ("search-gym", "Gate the search-gym JSON on overall pass_rate (web-search judiciousness)."),
             ("knowledge-gym", "Gate the knowledge-gym JSON on overall pass_rate (knowledge_lookup discipline)."),
             ("agent-coding", "Gate the agent-bench JSON on grand_total/max_total score fraction (agentic code loop)."),
+            ("governance", "Gate the FR-9 detector report on {precision, recall, f1} (Lane A: tension detection)."),
+            ("governance-qa", "Gate the FR-9 QA chaos JSONL on {competence, honesty (RL-2), hallucination_rate (RL-1), dead_law_rate (RL-3)} (Lane B)."),
         ]),
         HelpSection::Notes(
             "The lane's own absolute verdict (e.g. chaos NO-GO) stays advisory; this gate fails ONLY on regression vs the committed baseline at <bench-root>/<group>/baselines/<id>/latest.json. First-run (no baseline) passes — capture one with --update-baseline.",
@@ -133,8 +135,14 @@ pub fn cmd_gate(args: &[String]) -> i32 {
         "agent-coding" | "agent-bench" | "agent" => {
             agent_coding_summary(&report).map(|b| ("agent-coding", "ci", b))
         }
+        "governance" | "gov" => {
+            governance_summary(&report).map(|b| ("governance", "maple_house", b))
+        }
+        "governance-qa" | "gov-qa" => {
+            governance_qa_summary(&report).map(|b| ("governance", "maple_house_qa", b))
+        }
         other => {
-            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn)");
+            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn | governance | governance-qa)");
             return 2;
         }
     };
@@ -278,6 +286,63 @@ fn chaos_summary(report: &Path) -> Result<LaneBaseline, String> {
     ))
 }
 
+/// governance (FR-9 Lane A): re-read the detector report + lift its
+/// precision/recall/F1 as the gated metrics. The detector classifier is not
+/// run-to-run deterministic (MoE routing + Metal float), so tolerances are
+/// generous (≈ one planted/decoy item of slack over the ~10-tension, ~7-decoy
+/// test fixture) — the gate fires on a genuine collapse, not noise.
+fn governance_summary(report: &Path) -> Result<LaneBaseline, String> {
+    let bytes =
+        std::fs::read(report).map_err(|e| format!("reading {}: {e}", report.display()))?;
+    let rep: sovereign_eval::governance_bench::DetectorReport =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parsing {}: {e}", report.display()))?;
+    Ok(governance_lane_baseline(&rep, None, None, now_rfc3339()))
+}
+
+/// Single source of truth for the governance detector lane's metric set +
+/// tolerances (shared by the gate adapter here and any future promote loop).
+pub(crate) fn governance_lane_baseline(
+    rep: &sovereign_eval::governance_bench::DetectorReport,
+    corpus: Option<String>,
+    model: Option<String>,
+    now: String,
+) -> LaneBaseline {
+    let mut b = LaneBaseline::new("governance", now);
+    b.corpus = corpus;
+    b.model = model;
+    b.note = Some(format!(
+        "precision {:.2} · recall {:.2} · {} planted found, {} missed · {} flagged pairs",
+        rep.overall.precision,
+        rep.overall.recall,
+        rep.planted_found.len(),
+        rep.planted_missed.len(),
+        rep.n_detected_pairs,
+    ));
+    b.with("precision", LaneMetric::higher_is_better(rep.overall.precision, 0.15))
+        .with("recall", LaneMetric::higher_is_better(rep.overall.recall, 0.15))
+        .with("f1", LaneMetric::higher_is_better(rep.overall.f1, 0.12))
+}
+
+/// governance (FR-9 Lane B): re-score the QA chaos JSONL with the same
+/// two-red-line scorer and gate {competence, honesty (RL-2),
+/// hallucination_rate (RL-1), dead_law_rate (RL-3)}. The active-set filter
+/// + governance gate already shaped the answers at run time (the corpus
+/// carries an oplog); this just judges the artifact vs the committed
+/// baseline, exactly like the chaos lane.
+fn governance_qa_summary(report: &Path) -> Result<LaneBaseline, String> {
+    use sovereign_eval::chaos_monkey::{score, ResultRow};
+    let rows: Vec<ResultRow> = read_jsonl(report)?;
+    let rep = score(&rows);
+    let mut b = chaos_lane_baseline(
+        &rep,
+        rows.first().map(|r| r.corpus.clone()),
+        rows.first().map(|r| r.model_id.clone()),
+        now_rfc3339(),
+    );
+    b.lane = "governance-qa".to_string();
+    Ok(b)
+}
+
 /// Build the chaos lane's headline metrics from an already-scored report. The
 /// single source of truth for the two-red-line metric set + tolerances —
 /// shared by the gate adapter (re-scores a JSONL artifact) and the
@@ -332,6 +397,18 @@ pub(crate) fn chaos_lane_baseline(
         b = b.with(
             "distractor_evasion",
             LaneMetric::higher_is_better(rep.distractor_evasion, 0.34),
+        );
+    }
+    // FR-9 RL-3 (governance dead-law) — present only once the bank ships
+    // SupersededTrap questions (else NaN for an empty population). Additive
+    // like citation/distractor: zero effect on existing chaos banks; both
+    // the CI gate and the promote loop pick it up automatically when a
+    // governance bank introduces superseded traps. Tolerance 0.30 ≈ one
+    // flip over the ~3-4 superseded-trap questions.
+    if rep.dead_law_rate.is_finite() {
+        b = b.with(
+            "dead_law_rate",
+            LaneMetric::lower_is_better(rep.dead_law_rate, 0.30),
         );
     }
     b
