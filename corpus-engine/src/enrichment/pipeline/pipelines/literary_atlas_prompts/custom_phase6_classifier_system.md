@@ -32,6 +32,16 @@ Decisive test: name a concrete situation in which honoring A would force
 violating B. If you cannot name one, it is NOT a {tension_term} — even when
 A and B are clearly about the same subject.
 
+That situation must arise in NORMAL, EXPECTED operation — not a contrived,
+extreme, or slippery-slope hypothetical. If your justification leans on "if
+enough … accumulate", "could eventually", "for years", "a person might", or
+any chain of unlikely steps, you are inventing a conflict the rules do not
+create — return false. A and B must issue DIRECTLY incompatible commands for
+the same ordinary moment AND bind the same actor: a rule about one group
+(e.g. guests) does not conflict with a rule about a different group (e.g.
+members), and a rule about one place or time does not conflict with one about
+a different place or time.
+
 ## Output
 
 Return exactly one JSON object. When the pair IS a {tension_term}:

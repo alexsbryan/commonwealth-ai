@@ -49,6 +49,12 @@ pub struct ChatGlobals {
     /// classifier, gap check, planner, etc.) keep their own
     /// hardcoded caps regardless of this override.
     pub max_tokens: Option<usize>,
+    /// Standing answering instructions for this session, threaded into
+    /// `InferenceConfig::custom_instructions` (the general persona layer —
+    /// the outermost system-prompt block). `None` for ordinary chat. A
+    /// single-purpose CLI (e.g. `govern ask`) sets this to supply its own
+    /// answering discipline without the runtime knowing the domain.
+    pub custom_instructions: Option<String>,
 }
 
 /// Public default factory for callers (currently `voice_eval`)
@@ -85,6 +91,7 @@ impl ChatGlobals {
             data_dir_explicit: false,
             temperature: None,
             max_tokens: None,
+            custom_instructions: None,
         }
     }
 }

@@ -36,6 +36,19 @@ pub struct LiveAnswer {
 /// Best-effort: a seeding/stream failure degrades to an empty answer (the
 /// caller scores it as an abstention / miss) rather than aborting the battery.
 pub async fn run_live(session: &ChatSession, corpus: &str, question: &str) -> LiveAnswer {
+    run_live_pinned(session, corpus, question, None).await
+}
+
+/// Like [`run_live`] but PINS the turn's intent (via
+/// `handle_message_stream_as`) instead of trusting the router — so a bench can
+/// measure a path that forces a specific intent (e.g. a governance Q&A, which
+/// is always a factual lookup). `None` is identical to [`run_live`].
+pub async fn run_live_pinned(
+    session: &ChatSession,
+    corpus: &str,
+    question: &str,
+    pin_intent: Option<sovereign_core::types::Intent>,
+) -> LiveAnswer {
     let conv_id = uuid::Uuid::new_v4().to_string();
     let created_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -49,7 +62,16 @@ pub async fn run_live(session: &ChatSession, corpus: &str, question: &str) -> Li
         .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
         .await;
 
-    let raw = match session.runtime.handle_message_stream(question, &conv_id).await {
+    let stream_start = match pin_intent {
+        Some(intent) => {
+            session
+                .runtime
+                .handle_message_stream_as(question, &conv_id, intent)
+                .await
+        }
+        None => session.runtime.handle_message_stream(question, &conv_id).await,
+    };
+    let raw = match stream_start {
         Ok(handle) => {
             let mut stream = handle.stream;
             let mut buf = String::new();

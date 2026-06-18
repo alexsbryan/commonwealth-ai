@@ -1,0 +1,29 @@
+{
+  "lane": "governance-qa",
+  "captured_at": "2026-06-18T13:57:40.984843+00:00",
+  "corpus": "maple-house",
+  "model": "primary",
+  "note": "competence 5/5 answerable correct · honesty 2/3 absent declined · 0 hallucinated",
+  "metrics": {
+    "competence": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    },
+    "dead_law_rate": {
+      "value": 0.0,
+      "direction": "lower_is_better",
+      "tolerance": 0.3
+    },
+    "hallucination_rate": {
+      "value": 0.0,
+      "direction": "lower_is_better",
+      "tolerance": 0.18
+    },
+    "honesty": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.18
+    }
+  }
+}

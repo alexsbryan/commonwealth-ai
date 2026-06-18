@@ -57,6 +57,14 @@ CHAOS_MANIFEST="$BENCH_ROOT/chaos_monkey/manifest.toml"
 # gives a machine-fixed id; override only if you watched the text instead (a
 # path-hash `watched-<hash>` id). Empty falls back to the bank's [meta].corpus.
 CHAOS_CORPUS="${CHAOS_CORPUS:-chaos-secret-agent}"
+# FR-9 governance lanes (A: tension detector; B: Q&A over current law). The
+# corpus is set up by `scripts/setup-governance-corpus.sh` (install + enrich +
+# seed + resolve), which pins the `maple-house` id. Lanes are skipped when the
+# enriched corpus isn't present so a box without it doesn't fail the suite.
+GOV_CORPUS="${GOV_CORPUS:-maple-house}"
+GOV_BANK="$BENCH_ROOT/governance/maple_house.toml"
+GOV_MANIFEST="$BENCH_ROOT/governance/manifest.toml"
+GOV_INDEX="${HOME}/.sovereign/indexes/${GOV_CORPUS}"
 MF_MODELS="${MF_MODELS:-primary}"
 # Fidelity-Flywheel promote lane (Lane 7) — OPT-IN. A normal CI run never turns
 # the loop; set FLYWHEEL_PARAM (e.g. "rerank.enabled=true") + FLYWHEEL_CORPUS to
@@ -226,6 +234,36 @@ if [[ -f "$CHAOS_BANK" ]]; then
   run_lane "chaos-gate" HARD \
     "$BIN" bench gate chaos-monkey --report "$REPORT_DIR/chaos.jsonl" \
       --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+fi
+
+# ── Lane 5b: FR-9 governance — detector (Lane A) + Q&A (Lane B) ──
+# Same TRACKED-run + HARD-gate pattern as chaos. Skipped when the enriched
+# maple-house corpus isn't present (set up via scripts/setup-governance-corpus.sh)
+# so a box without it doesn't fail the suite. Lane A (detector) is cheap — it
+# reads the committed atlas and scores tension precision/recall, so it always
+# runs. Lane B (Q&A) is a live model run, so it rides the --no-synth guard like
+# the synth lanes; it drives the chaos two-red-line path over the governance
+# corpus, where the active-set filter + GateSurface::Governance apply (the
+# corpus carries an oplog), so SupersededTrap rows measure RL-3 (no dead law).
+if [[ -f "$GOV_INDEX/atlas/atoms.json" ]]; then
+  run_lane "governance-detector" TRACKED \
+    "$BIN" bench governance run "$GOV_CORPUS" --split test \
+      --out "$REPORT_DIR/governance-a.json"
+  run_lane "governance-gate" HARD \
+    "$BIN" bench gate governance --report "$REPORT_DIR/governance-a.json" \
+      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+  if [[ -z "$NO_SYNTH" && -f "$GOV_BANK" ]]; then
+    run_lane "governance-qa" TRACKED \
+      "$BIN" bench governance qa "$GOV_CORPUS" --bank "$GOV_BANK" \
+        --manifest "$GOV_MANIFEST" --out "$REPORT_DIR/governance-b.jsonl"
+    run_lane "governance-qa-gate" HARD \
+      "$BIN" bench gate governance-qa --report "$REPORT_DIR/governance-b.jsonl" \
+        --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+  else
+    echo "── SKIP  [TRACKED] governance-qa (Lane B) — --no-synth or missing bank"
+  fi
+else
+  echo "── SKIP  [governance] maple-house atlas not present at $GOV_INDEX — run scripts/setup-governance-corpus.sh"
 fi
 
 # ── Lane 6: reasoning-fidelity witness — mechanism-fidelity (TRACKED run + HARD gate) ──

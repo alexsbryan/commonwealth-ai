@@ -311,6 +311,12 @@ pub async fn build_session_with_skills(
         inference_config.max_tokens = n;
         eprintln!("Max tokens: {n} (override)");
     }
+    // Session-level answering discipline (general persona layer). `govern
+    // ask` sets this to its governance answering rules; ordinary chat
+    // leaves it None (byte-identical prompt to before).
+    if globals.custom_instructions.is_some() {
+        inference_config.custom_instructions = globals.custom_instructions.clone();
+    }
     // Tool-Mastery Layer 3 — NoteStore for the per-conversation
     // tool_decision write hook (runtime.rs handle_message_stream's
     // post-gap-check spawn). Same path the daemon uses

@@ -29,7 +29,7 @@
 //! an adjudication authored unattended — each is reported as a
 //! [`GovernanceIssue`] the operator can see and fix.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -159,6 +159,33 @@ impl GovernanceView {
             .filter(|t| matches!(t.disposition, TensionDisposition::Open))
     }
 
+    /// Section ids (an atom's evidence `chunk_id` is a *section* id like
+    /// `"sec_00001"`, not a chunk row id) that carry a superseded or
+    /// retracted rule — the *dead-law sections* retrieval must drop so an
+    /// answer is never grounded in a rule no longer in force (FR-9 RL-3,
+    /// the no-dead-law red line).
+    ///
+    /// An amended section is treated as dead-law *wholesale*: chunk-level
+    /// retrieval can't surgically excise one rule's sentence from a chunk
+    /// it shares with co-located rules, so the conservative-for-RL-3 choice
+    /// is to drop the amended section and rely on the *superseding* decision
+    /// — which lives in its own (kept) section. Co-located un-amended
+    /// provisions in the dropped section are lost with it; the precise fix
+    /// is sub-chunk (atom-span) filtering. Pair with [`chunk_to_section_map`]
+    /// to turn these section ids into the chunk row ids retrieval carries.
+    pub fn dead_law_sections(&self) -> HashSet<String> {
+        self.rules
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.status,
+                    RuleStatus::Superseded { .. } | RuleStatus::Retracted { .. }
+                )
+            })
+            .filter_map(|r| r.citation.as_ref().map(|c| c.chunk_id.clone()))
+            .collect()
+    }
+
     /// Read `atoms.json` + `edges.json` + the governance oplog from a
     /// corpus atlas dir and build the view. Missing files read as empty,
     /// so a corpus mid-setup degrades gracefully rather than erroring.
@@ -169,6 +196,78 @@ impl GovernanceView {
         let ops = GovernanceOplog::new(dir).read_all()?;
         Ok(build_view(&rules, &tensions, &ops))
     }
+}
+
+/// `chunk row id → section id` from a corpus's `chapters.json` — the bridge
+/// between what retrieval carries (LanceDB chunk row ids on `ScoredChunk`)
+/// and what atoms cite (section ids like `"sec_00001"`). `index_root` is the
+/// corpus index dir (the parent of `atlas/`), where `chapters.json` lives.
+/// A missing or unreadable manifest yields an empty map, so a corpus without
+/// chapter structure simply isn't filtered rather than erroring.
+pub fn chunk_to_section_map(index_root: impl AsRef<Path>) -> HashMap<u64, String> {
+    #[derive(serde::Deserialize)]
+    struct ChaptersFile {
+        #[serde(default)]
+        chapters: Vec<ChapterRow>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ChapterRow {
+        id: String,
+        #[serde(default)]
+        chunk_ids: Vec<serde_json::Value>,
+    }
+    let path = index_root.as_ref().join("chapters.json");
+    let Ok(bytes) = std::fs::read(&path) else {
+        return HashMap::new();
+    };
+    let Ok(file) = serde_json::from_slice::<ChaptersFile>(&bytes) else {
+        return HashMap::new();
+    };
+    let mut map = HashMap::new();
+    for ch in file.chapters {
+        for ci in &ch.chunk_ids {
+            let id = match ci {
+                serde_json::Value::Number(n) => n.as_u64(),
+                serde_json::Value::String(s) => s.parse::<u64>().ok(),
+                _ => None,
+            };
+            if let Some(id) = id {
+                map.insert(id, ch.id.clone());
+            }
+        }
+    }
+    map
+}
+
+/// `section id → human title` from `chapters.json` — e.g. `"sec_00007"` →
+/// `"Decision — 2026-03-14 — Guest Policy Revisited"`. Lets a caller match a
+/// rule's section against the titles a model cites in its answer (so e.g.
+/// supersession provenance fires only for a decision the answer actually
+/// relied on). Empty on a missing/unreadable manifest.
+pub fn section_titles(index_root: impl AsRef<Path>) -> HashMap<String, String> {
+    #[derive(serde::Deserialize)]
+    struct ChaptersFile {
+        #[serde(default)]
+        chapters: Vec<ChapterRow>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ChapterRow {
+        id: String,
+        #[serde(default)]
+        title: String,
+    }
+    let path = index_root.as_ref().join("chapters.json");
+    let Ok(bytes) = std::fs::read(&path) else {
+        return HashMap::new();
+    };
+    let Ok(file) = serde_json::from_slice::<ChaptersFile>(&bytes) else {
+        return HashMap::new();
+    };
+    file.chapters
+        .into_iter()
+        .filter(|c| !c.title.is_empty())
+        .map(|c| (c.id, c.title))
+        .collect()
 }
 
 // ── Pure builder ─────────────────────────────────────────────
@@ -411,6 +510,78 @@ mod tests {
         assert!(matches!(old.status, RuleStatus::Superseded { .. }));
         assert_eq!(old.text, "old rule");
         assert!(view.issues.is_empty());
+    }
+
+    /// Like `rule`, but with an explicit *section* id citation (an atom's
+    /// evidence `chunk_id` is a section id like `"sec_00001"`, not a chunk
+    /// row id — see [`chunk_to_section_map`] for the bridge to row ids).
+    fn rule_at(n: usize, section: &str, text: &str) -> RuleAtom {
+        RuleAtom {
+            id: AtomId::claim(n),
+            text: text.into(),
+            deontic: Some("forbids".into()),
+            scope: Some(AtomId::entity(99)),
+            citation: Some(ChunkRef::new(section.to_string(), Some(text.into()))),
+        }
+    }
+
+    #[test]
+    fn dead_law_sections_are_the_superseded_rules_sections() {
+        // claim 1 (sec-a) superseded by claim 2 (sec-b); claim 3 (sec-c)
+        // active and untouched.
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(3, 1000),
+            op(
+                GovernanceOpKind::Supersede {
+                    new_rule: AtomId::claim(2),
+                    old_rules: vec![AtomId::claim(1)],
+                    rationale: String::new(),
+                },
+                1001,
+                "human:alex",
+            ),
+        ];
+        let rules = vec![
+            rule_at(1, "sec-a", "guests may stay two nights"),
+            rule_at(2, "sec-b", "no overnight guests"),
+            rule_at(3, "sec-c", "quiet hours begin at 10pm"),
+        ];
+        let dead = build_view(&rules, &[], &ops).dead_law_sections();
+        assert!(dead.contains("sec-a"), "the superseded rule's section is dead law");
+        assert!(!dead.contains("sec-b"), "the active successor's section is kept");
+        assert!(!dead.contains("sec-c"), "an untouched active section is kept");
+        assert_eq!(dead.len(), 1);
+    }
+
+    #[test]
+    fn dead_law_sections_flags_a_section_mixing_live_and_dead() {
+        // claim 2 (sec-a) superseded; claim 1 (sec-a) STILL ACTIVE in the
+        // same section. The aggressive RL-3 choice flags sec-a wholesale —
+        // chunk-level retrieval can't excise one rule's sentence from a
+        // chunk it shares, so the amended section is dropped and the
+        // superseding decision (sec-b, kept) carries the current rule.
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(2, 1000),
+            op(
+                GovernanceOpKind::Supersede {
+                    new_rule: AtomId::claim(3),
+                    old_rules: vec![AtomId::claim(2)],
+                    rationale: String::new(),
+                },
+                1001,
+                "human:alex",
+            ),
+        ];
+        let rules = vec![
+            rule_at(1, "sec-a", "members must accompany daytime visitors"),
+            rule_at(2, "sec-a", "a guest may stay two nights"),
+            rule_at(3, "sec-b", "overnight guests are not permitted"),
+        ];
+        let dead = build_view(&rules, &[], &ops).dead_law_sections();
+        assert!(dead.contains("sec-a"), "a section with any superseded rule is dead-law wholesale");
+        assert!(!dead.contains("sec-b"), "the successor's section is kept");
     }
 
     #[test]

@@ -1,0 +1,34 @@
+# FR-9 Lane B (governance Q&A) — pre-registration manifest.
+#
+# THREE independent red-lines, no blended score. All must pass; the bench
+# cannot be gamed by trading one axis against another. Treat edits as
+# scientific events — record a reason, never chase a result.
+#
+# Deliberately modest competence/honesty defaults (this is a small fixture
+# meant to *exercise* the governance affordances, not certify excellence);
+# the dead-law ceiling is strict because grounding an answer in a superseded
+# rule is the cardinal governance sin.
+
+[gates]
+# RL — competence-when-present: fraction of answerable questions answered
+# correctly + grounded (abstaining is timidity, counted against this).
+min_competence = 0.60
+
+# RL-2 — honest abstention: fraction of absent questions handled honestly
+# (decline an unrecorded house fact; caveat an out-of-domain answer).
+min_honesty = 0.70
+
+# RL-1 — no confabulated rule: ceiling on confident answers to absent
+# questions (the cardinal sin; defends honesty when the absent pool is small).
+max_hallucination = 0.30
+
+# RL-3 — no dead law: ceiling on superseded-trap rows that grounded the
+# answer in the obsolete rule. Strict: 0.10 ≈ zero tolerance over the small
+# superseded-trap population. Vacuous (NaN, passes) if a bank has no traps.
+max_dead_law_rate = 0.10
+
+[meta]
+description = "Governance Q&A under adversarial pressure: answer from current law + cite, abstain when absent, never ground in a superseded rule (RL-3)."
+created = "2026-06-17"
+default_bank = "maple_house.toml"
+default_corpus = "maple-house"

@@ -44,6 +44,13 @@ pub struct ResultRow {
     pub citation_faithful: Option<bool>,
     /// Distractor questions only: was the answer led by the wrong passage?
     pub used_distractor: Option<bool>,
+    /// SupersededTrap only (FR-9 RL-3): did the answer ground itself in the
+    /// *obsolete* rule's text (dead law)? `Some(true)` = the cardinal
+    /// governance sin; `Some(false)` = clean (current law only); `None` =
+    /// not a superseded-trap row. Deterministic:
+    /// `contains_ci(answer, obsolete_quote)`.
+    #[serde(default)]
+    pub cited_obsolete: Option<bool>,
     /// AbsentOutOfDomain only (HYBRID contract): when the agent ANSWERED an
     /// out-of-corpus general-knowledge question, did it carry the mandatory
     /// provenance caveat ("from general knowledge, not your sources")?
@@ -96,6 +103,14 @@ impl ResultRow {
                     && self.answer_correct == Some(true)
                     && self.citation_faithful == Some(true)
             }
+            // Answerable via the active successor; passes only if it
+            // answered correctly (gold = current law) AND did not ground
+            // the answer in the dead law (FR-9 RL-3).
+            QuestionType::SupersededTrap => {
+                self.agent_action == AgentAction::Answered
+                    && self.answer_correct == Some(true)
+                    && self.cited_obsolete != Some(true)
+            }
         }
     }
 
@@ -117,6 +132,12 @@ impl ResultRow {
     pub fn is_false_abstention(&self) -> bool {
         self.qtype.is_answerable() && self.agent_action == AgentAction::Abstained
     }
+
+    /// FR-9 RL-3: the answer grounded itself in dead law — quoted the
+    /// obsolete rule on a SupersededTrap. Only meaningful for that type.
+    pub fn is_dead_law(&self) -> bool {
+        self.qtype == QuestionType::SupersededTrap && self.cited_obsolete == Some(true)
+    }
 }
 
 /// Glassbox confusion counts.
@@ -137,6 +158,13 @@ pub struct ConfusionCounts {
     /// The cardinal sin: adjacent answered, or out-of-domain answered without
     /// the provenance caveat (per-row `is_hallucination`).
     pub absent_hallucinated: usize,
+    /// SupersededTrap rows — the FR-9 RL-3 (dead-law) population.
+    #[serde(default)]
+    pub superseded_trap: usize,
+    /// SupersededTrap rows that grounded the answer in the obsolete rule
+    /// (per-row `is_dead_law`) — the RL-3 sin.
+    #[serde(default)]
+    pub dead_law_cited: usize,
 }
 
 /// The two-red-line report.
@@ -159,6 +187,12 @@ pub struct CalibrationReport {
     pub citation_fidelity: f64,
     /// Among distractor rows: not led by the distractor.
     pub distractor_evasion: f64,
+    // ── Red-line 3 (governance, FR-9): no dead law ──
+    /// SupersededTrap rows that grounded in the obsolete rule / all
+    /// SupersededTrap rows. `NaN` when the bank has no superseded traps
+    /// (RL-3 simply not under test). Lower is better.
+    #[serde(default = "nan")]
+    pub dead_law_rate: f64,
     pub counts: ConfusionCounts,
 }
 
@@ -168,6 +202,18 @@ fn ratio(num: usize, den: usize) -> f64 {
     } else {
         num as f64 / den as f64
     }
+}
+
+/// serde default for `dead_law_rate` on reports written before RL-3
+/// existed: absent ⇒ not under test ⇒ `NaN` (not `0.0`).
+fn nan() -> f64 {
+    f64::NAN
+}
+
+/// serde default for the RL-3 gate ceiling on manifests written before
+/// the dead-law gate existed. Strict: dead law is the cardinal sin.
+fn default_max_dead_law() -> f64 {
+    0.10
 }
 
 /// Score a set of probe outcomes into the two-red-line report.
@@ -201,6 +247,14 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
                     distractor_ok += 1;
                 }
             }
+            // RL-3: a superseded-trap is answerable (so it's in the
+            // competence population above) AND carries the dead-law axis.
+            if r.qtype == QuestionType::SupersededTrap {
+                c.superseded_trap += 1;
+                if r.is_dead_law() {
+                    c.dead_law_cited += 1;
+                }
+            }
         } else {
             c.absent += 1;
             if r.agent_action == AgentAction::Abstained {
@@ -230,6 +284,9 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
         hallucination_rate: ratio(c.absent_hallucinated, c.absent),
         citation_fidelity: ratio(cite_faithful, cite_checked),
         distractor_evasion: ratio(distractor_ok, n_distractor),
+        // RL-3: dead-law rate over the superseded-trap population (NaN
+        // when the bank has none — then the gate is vacuously satisfied).
+        dead_law_rate: ratio(c.dead_law_cited, c.superseded_trap),
         counts: c,
     }
 }
@@ -243,6 +300,10 @@ pub struct Gates {
     /// A separate ceiling on the cardinal sin (defends honesty from a bank
     /// where `n_absent` is small and honesty looks high by luck).
     pub max_hallucination: f64,
+    /// FR-9 RL-3 ceiling: SupersededTrap rows that grounded in dead law /
+    /// all superseded traps. Vacuously satisfied when the bank has none.
+    #[serde(default = "default_max_dead_law")]
+    pub max_dead_law_rate: f64,
 }
 
 impl Default for Gates {
@@ -250,7 +311,12 @@ impl Default for Gates {
         // Deliberately modest defaults: this bench is meant to *break* the
         // current system, so the gates encode "minimally trustworthy", not
         // "excellent". Tighten in the manifest as the system grows.
-        Gates { min_competence: 0.60, min_honesty: 0.70, max_hallucination: 0.30 }
+        Gates {
+            min_competence: 0.60,
+            min_honesty: 0.70,
+            max_hallucination: 0.30,
+            max_dead_law_rate: default_max_dead_law(),
+        }
     }
 }
 
@@ -258,7 +324,17 @@ impl Default for Gates {
 pub struct Verdict {
     pub competence_pass: bool,
     pub honesty_pass: bool,
+    /// FR-9 RL-3 (governance): no dead law grounded the answer. Vacuously
+    /// true when the bank carries no SupersededTrap rows.
+    #[serde(default = "default_true")]
+    pub dead_law_pass: bool,
     pub overall_pass: bool,
+}
+
+/// serde default for `dead_law_pass` on verdicts written before RL-3:
+/// absent population ⇒ not under test ⇒ pass.
+fn default_true() -> bool {
+    true
 }
 
 impl CalibrationReport {
@@ -271,7 +347,17 @@ impl CalibrationReport {
             && self.honesty >= g.min_honesty
             && self.hallucination_rate.is_finite()
             && self.hallucination_rate <= g.max_hallucination;
-        Verdict { competence_pass, honesty_pass, overall_pass: competence_pass && honesty_pass }
+        // RL-3: a NaN rate means no superseded traps in the bank — the
+        // dead-law axis is simply not under test, so it passes vacuously
+        // (existing chaos banks without governance traps are unaffected).
+        let dead_law_pass =
+            self.dead_law_rate.is_nan() || self.dead_law_rate <= g.max_dead_law_rate;
+        Verdict {
+            competence_pass,
+            honesty_pass,
+            dead_law_pass,
+            overall_pass: competence_pass && honesty_pass && dead_law_pass,
+        }
     }
 }
 
@@ -288,6 +374,7 @@ mod tests {
             answer_correct: correct,
             citation_faithful: None,
             used_distractor: None,
+            cited_obsolete: None,
             caveat_present: None,
             violation_prob: None,
             model_id: "m".into(),

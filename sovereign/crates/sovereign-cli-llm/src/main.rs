@@ -22,6 +22,7 @@ mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
 mod enrich_cmd;
 mod eval_cmd;
+mod govern_cmd;
 mod gym_judge;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
@@ -83,6 +84,7 @@ async fn async_main() {
     let code: i32 = match cmd {
         "bench" => bench_cmd::run_bench(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
+        "govern" => govern_cmd::run_govern(rest).await,
         "claim" => claim_cmd::run(rest).await,
         "eval" => eval_cmd::run_eval(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,

@@ -374,6 +374,133 @@ impl RetrievalPipeline {
 ///   entity-boost / title-expand fan-outs can return chunks the main
 ///   retrieval already found; duplicates waste merge slots and inflate
 ///   `top_source_repeat_count` in the evidence shape.
+impl Runtime {
+    /// Atlas dirs of the sealed corpora that are governance-managed —
+    /// those carrying a `governance_oplog.jsonl`. Empty for an ordinary
+    /// (non-governance) turn, which is exactly what keeps the active-set
+    /// filter and the governance gate inert outside governance corpora.
+    pub(crate) fn governance_atlas_dirs(
+        &self,
+        enabled_corpora: Option<&[String]>,
+    ) -> Vec<std::path::PathBuf> {
+        let Some(engine) = self.corpus_engine.as_ref() else {
+            return Vec::new();
+        };
+        let Some(corpora) = enabled_corpora else {
+            return Vec::new();
+        };
+        corpora
+            .iter()
+            .filter_map(|cid| {
+                let atlas = engine
+                    .index_dir()
+                    .join(cid)
+                    .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+                atlas
+                    .join("governance_oplog.jsonl")
+                    .exists()
+                    .then_some(atlas)
+            })
+            .collect()
+    }
+
+    /// True if any sealed corpus is governance-managed. Such turns take
+    /// the `GateSurface::Governance` calibration so the cite-or-abstain
+    /// gate is judged against the governance bank, not the general one.
+    pub(crate) fn is_governance_turn(&self, enabled_corpora: Option<&[String]>) -> bool {
+        !self.governance_atlas_dirs(enabled_corpora).is_empty()
+    }
+}
+
+/// Active-set governance filter (FR-9 RL-3, the no-dead-law red line):
+/// for a sealed governance corpus, drop the retrieved chunks of any
+/// *amended section* — a section carrying a superseded/retracted rule —
+/// so synthesis can only ground its answer in *current law* (the
+/// superseding decision lives in its own, kept, section). A strict no-op
+/// for every non-governance corpus (no `governance_oplog.jsonl` ⇒ empty
+/// dead-law set), so it rides inertly in the shared core. Section-level
+/// is aggressive by design: a chunk holds a whole section's rules and we
+/// can't excise one rule's sentence, so an amended section's co-located
+/// un-amended provisions are dropped too — the precise fix is sub-chunk
+/// (atom-span) filtering. Glass-box: logs the drop.
+///
+/// Positioned after `cap_and_reserve` (post-grounding, pre-truncate): the
+/// grounding steps run on the full pool first; dead law is trimmed before
+/// the final truncate. NOTE: on the deep path `top_sources_expand` runs
+/// after this and could in principle re-introduce a dead-law section;
+/// governance questions route KQ/simple in practice, and the FR-9 Lane-B
+/// bench is the instrument that would catch any deep-path leak.
+fn step_governance_active_set<'a, 'ctx>(
+    rt: &'a Runtime,
+    st: &'a mut PipelineState<'ctx>,
+) -> StepFuture<'a> {
+    Box::pin(async move {
+        use corpus_engine::enrichment::governance_view::{chunk_to_section_map, GovernanceView};
+        let atlas_dirs = rt.governance_atlas_dirs(st.enabled_corpora);
+        if atlas_dirs.is_empty() {
+            return StepOutcome::default();
+        }
+        // A rule's evidence is a *section* id ("sec_00001"), so bridge
+        // section → chunk row ids via chapters.json and drop the chunks of
+        // every amended (dead-law) section.
+        let mut dead_chunks: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        let mut dead_section_total = 0usize;
+        for atlas in &atlas_dirs {
+            let index_root = atlas.parent().unwrap_or(atlas);
+            let view = match GovernanceView::from_atlas_dir(atlas) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(
+                        atlas = %atlas.display(),
+                        error = %e,
+                        "governance active-set: could not load view; leaving chunks unfiltered"
+                    );
+                    continue;
+                }
+            };
+            let dead_sections = view.dead_law_sections();
+            if dead_sections.is_empty() {
+                continue;
+            }
+            dead_section_total += dead_sections.len();
+            for (chunk_id, section) in chunk_to_section_map(index_root) {
+                if dead_sections.contains(&section) {
+                    dead_chunks.insert(chunk_id);
+                }
+            }
+        }
+        if dead_chunks.is_empty() {
+            // Glass-box: a governance turn with dead-law sections but no
+            // matching retrieved chunks is worth a trace (missing chapters.json
+            // bridge, or the dead sections simply weren't retrieved this turn).
+            if dead_section_total > 0 {
+                tracing::info!(
+                    dead_sections = dead_section_total,
+                    "{}: governance active-set found dead-law sections but mapped no chunk ids",
+                    st.label
+                );
+            }
+            return StepOutcome::default();
+        }
+        let before = st.chunks.len();
+        st.chunks
+            .retain(|c| c.chunk_id.map(|id| !dead_chunks.contains(&id)).unwrap_or(true));
+        let dropped = before - st.chunks.len();
+        if dropped > 0 {
+            tracing::info!(
+                dropped,
+                dead_law_chunks = dead_chunks.len(),
+                dead_sections = dead_section_total,
+                "{}: governance active-set dropped dead-law chunks (amended sections)",
+                st.label
+            );
+        }
+        StepOutcome {
+            note: (dropped > 0).then(|| format!("dropped {dropped} dead-law chunk(s)")),
+        }
+    })
+}
+
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
         step("entity_boost", None, step_entity_boost),
@@ -388,6 +515,9 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         step("graph_neighbor_expand", Some(FLAG_GRAPH_NEIGHBOR_EXPAND), step_graph_neighbor_expand),
         step("dedupe_merged", None, step_dedupe_merged),
         step("cap_and_reserve", None, step_cap_and_reserve),
+        // FR-9: drop dead-law chunks for governance corpora; inert
+        // elsewhere. After the cap, before truncate (see fn doc).
+        step("governance_active_set", None, step_governance_active_set),
     ]
 }
 
@@ -1254,8 +1384,9 @@ mod tests {
     /// The step order is bench-tuned DATA — a change to either golden
     /// list is a behavior change and needs a bench A/B, not a drive-by
     /// edit. These lists pin the POST-Phase-2 sequences (2026-06-09):
-    /// the shared 12-step core, deep grounding at the KQ (post-floor)
-    /// position, and dedupe on both paths.
+    /// the shared 13-step core (incl. the FR-9 governance active-set
+    /// filter), deep grounding at the KQ (post-floor) position, and
+    /// dedupe on both paths.
     #[test]
     fn kq_step_sequence_is_pinned() {
         assert_eq!(
@@ -1276,6 +1407,7 @@ mod tests {
                 "graph_neighbor_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
+                "governance_active_set",
                 "truncate_merged",
             ]
         );
@@ -1301,6 +1433,7 @@ mod tests {
                 "graph_neighbor_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
+                "governance_active_set",
                 "truncate_merged",
                 "top_sources_expand",
             ]
@@ -1314,14 +1447,14 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 12-step core; the pipelines
+        // Shared 3-step head + shared 13-step core; the pipelines
         // differ ONLY in their tails (KQ: audited truncate; deep:
         // plain truncate + strategy-driven top-sources expansion).
-        assert_eq!(&kq[..15], &deep[..15]);
-        assert_eq!(kq.len(), 16);
-        assert_eq!(deep.len(), 17);
-        assert_eq!(kq[15], "truncate_merged");
-        assert_eq!(&deep[15..], &["truncate_merged", "top_sources_expand"]);
+        assert_eq!(&kq[..16], &deep[..16]);
+        assert_eq!(kq.len(), 17);
+        assert_eq!(deep.len(), 18);
+        assert_eq!(kq[16], "truncate_merged");
+        assert_eq!(&deep[16..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but
