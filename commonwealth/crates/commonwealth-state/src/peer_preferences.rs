@@ -200,6 +200,14 @@ impl PeerPreferenceStore {
 ///   guarantee: what work your daemon did *for you* is yours and
 ///   never gossips. Contrast `contributions` (what you provided to
 ///   peers), which *does* gossip.
+/// - `portfolio-private` — A user's Proxy Voting portfolio: the named
+///   set of company/fund `corpus_id`s they hold (and, later, their
+///   read-only holdings + authored voting policy). WHICH companies a
+///   user owns reveals the user and is among the most sensitive data
+///   in the system; it is local-first and must never gossip, even
+///   though the per-issuer `proxy-cik…` corpora it references are
+///   freely replicable public EDGAR data. Same structural guarantee as
+///   the others (FR-11 / AC-7).
 ///
 /// Each entry is pinned by a test that asserts `is_gossip_excluded`
 /// returns `true` for it.
@@ -208,7 +216,13 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
     "work-atlas-private",
     "notes-private",
     "activity-private",
+    "portfolio-private",
 ];
+
+/// `app_id` namespace for a user's Proxy Voting portfolios — the named
+/// sets of corpus_ids they hold. Reserved + gossip-excluded (FR-11):
+/// writes here never leave the local machine.
+pub const PORTFOLIO_PRIVATE_APP_ID: &str = "portfolio-private";
 
 /// Returns true when the given `app_id` is excluded from gossip
 /// replication. Centralized helper so the gossip path doesn't have
@@ -339,6 +353,20 @@ mod tests {
     fn gossip_excludes_notes_private_app_id() {
         assert!(is_gossip_excluded("notes-private"));
         assert!(!is_gossip_excluded("notes"));
+    }
+
+    /// **Structural invariant pin** for the Proxy Voting portfolio
+    /// (FR-11 / AC-7). Which companies/funds a user holds reveals the
+    /// user and must never gossip, even though the per-issuer
+    /// `proxy-cik…` corpora it references are freely-replicable public
+    /// EDGAR data. The const + the helper are pinned to the same
+    /// literal so a drift fails here.
+    #[test]
+    fn gossip_excludes_portfolio_private_app_id() {
+        assert!(is_gossip_excluded("portfolio-private"));
+        assert!(is_gossip_excluded(PORTFOLIO_PRIVATE_APP_ID));
+        // The public per-issuer corpora are NOT excluded — they replicate.
+        assert!(!is_gossip_excluded("proxy-cik0000034088"));
     }
 
     /// **Structural invariant pin** for the local Activity ledger

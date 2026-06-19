@@ -1,0 +1,127 @@
+# Proxy Voting Corpus — single issuer (SEC DEF 14A).
+#
+# The "legibility corpus": for one public company, a typed view of what is on
+# the shareholder ballot and what the sides are — the proponent's verbatim
+# Rule 14a-8 statement and the board's statement in opposition, never a
+# manufactured opposing case the filing does not contain.
+#
+# This is a TEMPLATE recipe (on_demand = true): it is never installed directly
+# under the id `proxy-company`. `scripts/setup-proxy-corpus.sh <ticker-or-cik>`
+# resolves the ticker to a CIK, discovers + downloads the issuer's DEF 14A from
+# SEC EDGAR into a local directory, and materializes a per-issuer override at
+# `~/.sovereign/recipes/proxy-cik<10-digit>/recipe.toml` (id + acquire.path
+# rewritten, on_demand flipped off), mirroring the Maple House governance setup.
+#
+# Why local_file rather than the http_api acquirer: EDGAR full-text search
+# (EFTS) hits carry only `_id = accession:filename` + `adsh` + `ciks` — no ready
+# document URL — and http_api JSON-parses every response, so it cannot fetch the
+# HTML proxy document except via the `follow` step, which extracts verbatim URL
+# strings EFTS does not provide. The primary-doc URL must be SYNTHESIZED
+# (https://www.sec.gov/Archives/edgar/data/<cik>/<accession_nodash>/<doc>); the
+# setup script does that synthesis with jq (which joins the submissions API's
+# parallel arrays trivially) exactly where ticker -> CIK resolution already
+# lives. See the setup script header for the full rationale.
+
+[corpus]
+id = "proxy-company"
+name = "Proxy Statement — Single Issuer (template)"
+description = "Template for a single public company's SEC DEF 14A proxy statement. Installed per-issuer under proxy-cik<10-digit> by scripts/setup-proxy-corpus.sh."
+license = "Public Domain (17 USC §105 — SEC filing)"
+on_demand = true
+mesh_sharing = true
+query_sharing = true
+schema_version = 1
+
+[display]
+category = "Governance"
+icon = "ballot"
+
+# Repo-relative placeholder; setup-proxy-corpus.sh rewrites this to the absolute
+# path of the per-issuer download directory (a folder of DEF 14A .html files).
+[acquire]
+type = "local_file"
+path = "sovereign-recipes/proxy-company/_no_default_filing"
+
+# Whole-document, pre-cleaned plain text (one .txt per filing).
+#
+# Why NOT html_sections per-proposal regexes: the four reference filers use four
+# incompatible heading conventions for the SAME proposals — Exxon "Item N - "
+# (en-dash), Microsoft "Proposal N: " (colon), Amazon "ITEM N—" (em-dash),
+# Boeing "ITEM N. " (period) and a mix where management items are not numbered
+# "Item N" at all — and every filer triplicates each heading across the table of
+# contents, a voting roadmap, and the body. Per-section regexes tuned to that
+# heterogeneity are exactly the per-filer whack-a-mole this project avoids; they
+# silently drop or over-capture proposals as conventions drift. Instead we ride
+# the Maple House governance rail: ingest the whole document and let the atlas
+# custom-ontology enrichment (see [enrichment], added in Increment 2) read the
+# prose and type each ballot item + its sides regardless of heading format —
+# which is what LLM atom extraction is for. Nothing is dropped, so every
+# numbered proposal is represented (AC-2's intent) by construction.
+#
+# Why `plaintext` (not the `html` extractor): SEC proxy HTML is laden with
+# inline-XBRL compensation tables and link cruft that surface as long space-less
+# garbage tokens (URLs, dash-rules, XBRL ids). Those defeat word-boundary chunk
+# splitting and pollute both FTS and the atlas. setup-proxy-corpus.sh pre-cleans
+# each filing to plain text (strip tags + drop runs of >=50 non-space chars +
+# collapse whitespace) and writes one .txt here — keeping that EDGAR/format-
+# specific cleaning out of the shared engine `strip_html` (which serves code /
+# StackExchange corpora that legitimately contain long tokens).
+#
+# (The engine's html_sections extractor gained a generic `repeating` section
+# flag during this work; it remains available for documents with a single
+# uniform repeating heading, but proxy filings are too heterogeneous for it.)
+[extract]
+type = "plaintext"
+
+# Fixed-size chunking is bounded by construction: each chunk runs to a word
+# boundary <= max_chars, and overlap only moves the next start backward, never
+# grows a chunk (chunkers/fixed.rs). The `paragraph` chunker, by contrast, seeds
+# the next buffer with overlap_chars of tail and then appends the overflowing
+# segment without re-checking, so a chunk can reach max_chars + overlap_chars —
+# which trips `recipe test`'s strict size gate on long newline-free legal prose.
+# Overlap (300) repeats the boundary region so a proposal's claim that straddles
+# a cut still appears whole in one chunk; the atlas coalesces a proposal's
+# proponent and board positions across its chunks by ballot-item identity (the
+# Maple House cross-chunk topic-grouping precedent).
+[chunk]
+type = "fixed"
+max_chars = 3000
+overlap_chars = 300
+
+[index]
+fts = true
+vector = true
+
+# Atlas custom-ontology enrichment — the "sides" as typed atoms, riding the
+# Maple House governance rail. The configurable atlas does NOT emit
+# Position/Opposition atoms; it emits Entity + Claim atoms (+ Tension edges),
+# so a proposal's two sides are modeled as two Claims attributed to their
+# source (proponent vs board), and a contested item as a Tension between them.
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "governance"
+
+[enrichment.ontology]
+guidance = """
+This corpus is a public company's SEC proxy statement (Form DEF 14A): the matters shareholders vote on at the annual meeting, and the case for and against each one. Treat it as a ballot with its supporting record.
+
+Identify each numbered MATTER TO BE VOTED ON as an entity — for example "Item 1 - Election of Directors", "Item 3 - Advisory Vote to Approve Executive Compensation", "Item 5 - Shareholder Proposal on independent board chair". For each matter, state in its description (a) whether it is a MANAGEMENT proposal put forward by the company's own board, or a SHAREHOLDER proposal submitted by an outside proponent under SEC Rule 14a-8, and (b) the board's voting recommendation on it (FOR or AGAINST).
+
+Extract, as claims, the ARGUMENTS made about each matter, and attribute every argument to the side that makes it:
+- the PROPONENT's case — for a shareholder proposal, the proponent's supporting statement; attribute it to the proponent (the person or organization that submitted the proposal);
+- the BOARD's case — the board of directors' recommendation and its statement in support or in opposition; attribute it to the board of directors.
+Every argument claim must be grounded in a verbatim passage from the filing.
+
+CRITICAL HONESTY RULE — never manufacture a side the filing does not contain. A management proposal carries ONLY the board's recommendation (almost always FOR) and the filing prints NO opposing statement against it; do not invent, infer, or steelman a case against a management proposal. Extract a board "statement in opposition" only when the filing actually contains one (which happens for shareholder proposals the board recommends against). When a side is absent from the text, it is absent from the atoms.
+
+Surface a TENSION for each contested matter where the proponent's case and the board's opposing case give shareholders incompatible guidance on how to vote — this is the normal shape of a shareholder proposal the board recommends against. Two arguments that merely mention the same topic are NOT in tension unless they actually conflict on the vote; a management proposal with only a board recommendation has no tension.
+
+Reader questions worth surfacing: What is being voted on in each item? Who submitted each shareholder proposal? What does the board recommend on each item, and why? What is the proponent's case, and what is the board's response?
+"""
+
+[enrichment.ontology.vocabulary]
+concern_term = "voting matter"
+position_term = "argument"
+tension_term = "contested item"
+evidence_term = "passage from the filing"

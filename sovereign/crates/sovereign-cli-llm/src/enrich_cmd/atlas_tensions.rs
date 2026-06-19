@@ -28,8 +28,8 @@ use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
     analysis::tensions::{
-        select_candidates, select_embedding_topk, CandidateSelectionInput, TensionCandidatesOutput,
-        TensionStrategy,
+        drop_same_named_speaker_pairs, select_candidates, select_embedding_topk,
+        CandidateSelectionInput, TensionCandidatesOutput, TensionStrategy,
     },
     read_atlas_atoms, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
 };
@@ -129,7 +129,7 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
         .map(|p| p.tension_strategy())
         .unwrap_or_default();
 
-    let candidates = match strategy {
+    let mut candidates = match strategy {
         TensionStrategy::Graph => {
             println!("  · candidate strategy: graph (cluster + entity-overlap + co-occurrence)");
             select_candidates(CandidateSelectionInput {
@@ -172,6 +172,22 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
             select_embedding_topk(&claims, &embeddings, k, floor)
         }
     };
+
+    // Strategy-agnostic de-noise: drop pairs where both claims are by the
+    // same named speaker (Person/Institution). Critical for the embedding
+    // top-K net, which otherwise pairs a speaker's many mutually-consistent
+    // claims by topic similarity. (No-op for Concept/topic attributions —
+    // see `drop_same_named_speaker_pairs`.)
+    let before = candidates.len();
+    drop_same_named_speaker_pairs(&mut candidates, &claims, &entities);
+    if candidates.len() < before {
+        println!(
+            "  · same-speaker filter: {} -> {} candidates (dropped {} same-speaker pair(s))",
+            before,
+            candidates.len(),
+            before - candidates.len()
+        );
+    }
 
     if candidates.is_empty() {
         println!(

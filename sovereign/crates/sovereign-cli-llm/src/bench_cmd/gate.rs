@@ -49,6 +49,7 @@ const HELP: Help = Help {
             ("agent-coding", "Gate the agent-bench JSON on grand_total/max_total score fraction (agentic code loop)."),
             ("governance", "Gate the FR-9 detector report on {precision, recall, f1} (Lane A: tension detection)."),
             ("governance-qa", "Gate the FR-9 QA chaos JSONL on {competence, honesty (RL-2), hallucination_rate (RL-1), dead_law_rate (RL-3)} (Lane B)."),
+            ("proxy-qa", "Gate the Proxy Voting QA chaos JSONL on {competence (RL-2: both sides cited), honesty + hallucination_rate (RL-1: no confabulated opposition)} (AC-4/AC-5)."),
         ]),
         HelpSection::Notes(
             "The lane's own absolute verdict (e.g. chaos NO-GO) stays advisory; this gate fails ONLY on regression vs the committed baseline at <bench-root>/<group>/baselines/<id>/latest.json. First-run (no baseline) passes — capture one with --update-baseline.",
@@ -141,8 +142,9 @@ pub fn cmd_gate(args: &[String]) -> i32 {
         "governance-qa" | "gov-qa" => {
             governance_qa_summary(&report).map(|b| ("governance", "maple_house_qa", b))
         }
+        "proxy-qa" | "proxy" => proxy_qa_summary(&report).map(|b| ("proxy", "exxon_qa", b)),
         other => {
-            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn | governance | governance-qa)");
+            eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn | governance | governance-qa | proxy-qa)");
             return 2;
         }
     };
@@ -340,6 +342,25 @@ fn governance_qa_summary(report: &Path) -> Result<LaneBaseline, String> {
         now_rfc3339(),
     );
     b.lane = "governance-qa".to_string();
+    Ok(b)
+}
+
+/// Proxy Lane B (AC-4/AC-5): re-score the chaos ResultRow JSONL with the
+/// pure two-red-line scorer — competence (RL-2: both sides cited), honesty
+/// + hallucination_rate (RL-1: no confabulated opposition on a management
+/// item), citation fidelity (AC-5). Identical metric set + tolerances as
+/// chaos/governance; only the lane name + fixture differ.
+fn proxy_qa_summary(report: &Path) -> Result<LaneBaseline, String> {
+    use sovereign_eval::chaos_monkey::{score, ResultRow};
+    let rows: Vec<ResultRow> = read_jsonl(report)?;
+    let rep = score(&rows);
+    let mut b = chaos_lane_baseline(
+        &rep,
+        rows.first().map(|r| r.corpus.clone()),
+        rows.first().map(|r| r.model_id.clone()),
+        now_rfc3339(),
+    );
+    b.lane = "proxy-qa".to_string();
     Ok(b)
 }
 

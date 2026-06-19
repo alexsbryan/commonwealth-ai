@@ -35,6 +35,7 @@ mod enron;
 mod flywheel;
 mod gate;
 mod governance;
+mod proxy_bench;
 mod lane_baseline;
 mod live_runner;
 mod mechanism_fidelity;
@@ -133,6 +134,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "enron" => enron::cmd_enron(&args[1..]).await,
         "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
         "governance" => governance::cmd_governance(&args[1..]).await,
+        "proxy" => proxy_bench::cmd_proxy_bench(&args[1..]).await,
         "promote" => promote::cmd_promote(&args[1..]).await,
         "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,

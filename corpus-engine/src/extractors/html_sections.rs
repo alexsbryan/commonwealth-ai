@@ -43,6 +43,7 @@ struct CompiledRule {
     description: String,
     start: Regex,
     end: Regex,
+    repeating: bool,
 }
 
 impl HtmlSectionsExtractor {
@@ -74,6 +75,7 @@ impl HtmlSectionsExtractor {
                 description: r.description.clone(),
                 start,
                 end,
+                repeating: r.repeating,
             });
         }
         Ok(Self {
@@ -151,33 +153,46 @@ fn process_one_file(
     let mut any_matched = false;
 
     for rule in rules {
-        match find_section(&stripped, rule) {
-            Some(section_text) if !section_text.trim().is_empty() => {
-                any_matched = true;
-                let source_id = slug(&format!("{}-{}", file_label, rule.name));
-                let combined_title = format!("{} — {}", title, rule.name);
-                docs.push(ExtractedDoc {
-                    title: Some(combined_title),
-                    content: section_text,
-                    url: None,
-                    source_id,
-                    metadata: Some(serde_json::json!({
-                        "section_name": rule.name,
-                        "section_description": rule.description,
-                        "source_file": file_label,
-                    })),
-                    source_file: Some(file_label.to_string()),
-                    embed_text: None,
-                });
-            }
-            _ => {
-                misses.push(MissReport {
-                    file: file_label.to_string(),
-                    section: rule.name.clone(),
-                    description: rule.description.clone(),
-                    nearby_text: nearby_text_hint(&stripped, &rule.description),
-                });
-            }
+        let sections = find_sections(&stripped, rule);
+        if sections.is_empty() {
+            misses.push(MissReport {
+                file: file_label.to_string(),
+                section: rule.name.clone(),
+                description: rule.description.clone(),
+                nearby_text: nearby_text_hint(&stripped, &rule.description),
+            });
+            continue;
+        }
+        any_matched = true;
+        let multiple = sections.len() > 1;
+        for (idx, section_text) in sections.into_iter().enumerate() {
+            // Stable, unique source_id. Single-match rules keep the
+            // historical 2-part slug (delta-update + chunk-id stability);
+            // repeating rules append the occurrence index.
+            let source_id = if multiple {
+                slug(&format!("{}-{}-{}", file_label, rule.name, idx + 1))
+            } else {
+                slug(&format!("{}-{}", file_label, rule.name))
+            };
+            let combined_title = if multiple {
+                format!("{} — {} #{}", title, rule.name, idx + 1)
+            } else {
+                format!("{} — {}", title, rule.name)
+            };
+            docs.push(ExtractedDoc {
+                title: Some(combined_title),
+                content: section_text,
+                url: None,
+                source_id,
+                metadata: Some(serde_json::json!({
+                    "section_name": rule.name,
+                    "section_description": rule.description,
+                    "section_index": idx + 1,
+                    "source_file": file_label,
+                })),
+                source_file: Some(file_label.to_string()),
+                embed_text: None,
+            });
         }
     }
 
@@ -205,6 +220,40 @@ fn process_one_file(
         }
     }
     Ok(())
+}
+
+/// Find all sections a rule matches in `stripped`. A non-repeating
+/// rule yields at most one (the first start→end span). A repeating
+/// rule yields one per start match, each running to the next start
+/// match and bounded earlier by `end_pattern` within that window — so
+/// consecutive items never bleed and the final item can terminate on a
+/// trailing anchor. Empty/whitespace-only spans are dropped.
+fn find_sections(stripped: &str, rule: &CompiledRule) -> Vec<String> {
+    if !rule.repeating {
+        return find_section(stripped, rule)
+            .filter(|s| !s.trim().is_empty())
+            .into_iter()
+            .collect();
+    }
+    let bounds: Vec<(usize, usize)> = rule
+        .start
+        .find_iter(stripped)
+        .map(|m| (m.start(), m.end()))
+        .collect();
+    let mut out = Vec::with_capacity(bounds.len());
+    for (i, &(from, start_end)) in bounds.iter().enumerate() {
+        let next_start = bounds.get(i + 1).map(|&(s, _)| s).unwrap_or(stripped.len());
+        // Look for an end anchor strictly after this start, but never
+        // past the next start match (which always terminates the item).
+        let window = &stripped[start_end..next_start];
+        let end_rel = rule.end.find(window).map(|m| m.start()).unwrap_or(window.len());
+        let to = start_end + end_rel;
+        let segment = stripped[from..to].trim();
+        if !segment.is_empty() {
+            out.push(segment.to_string());
+        }
+    }
+    out
 }
 
 fn find_section(stripped: &str, rule: &CompiledRule) -> Option<String> {
@@ -328,7 +377,57 @@ mod tests {
             description: format!("description of {name}"),
             start_pattern: start.into(),
             end_pattern: end.into(),
+            repeating: false,
         }
+    }
+
+    fn repeating_rule(name: &str, start: &str, end: &str) -> SectionRule {
+        SectionRule {
+            repeating: true,
+            ..rule(name, start, end)
+        }
+    }
+
+    #[test]
+    fn repeating_rule_emits_one_doc_per_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("filing.html");
+        // Three numbered proposals followed by a trailing anchor. A
+        // non-repeating rule would capture only the first; repeating
+        // must yield three, each bounded by the next item (and the
+        // last by the end anchor).
+        std::fs::write(
+            &f,
+            "<html><body>\
+             <p>Item 4 - Alpha proposal. RESOLVED: do alpha.</p>\
+             <p>Item 5 - Beta proposal. RESOLVED: do beta.</p>\
+             <p>Item 6 - Gamma proposal. RESOLVED: do gamma.</p>\
+             <p>ADDITIONAL INFORMATION other business</p>\
+             </body></html>",
+        )
+        .unwrap();
+        let r = repeating_rule(
+            "proposal",
+            r"(?i)item\s+\d+\s*[-–]",
+            r"(?i)additional\s+information",
+        );
+        let docs: Vec<_> = HtmlSectionsExtractor::new(&[r], None)
+            .unwrap()
+            .extract(dir.path())
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect();
+        assert_eq!(docs.len(), 3, "one doc per Item match");
+        assert!(docs[0].content.contains("Alpha"));
+        assert!(!docs[0].content.contains("Beta"), "items must not bleed");
+        assert!(docs[1].content.contains("Beta"));
+        assert!(docs[2].content.contains("Gamma"));
+        // The last item terminates on the end anchor, not EOF.
+        assert!(!docs[2].content.contains("ADDITIONAL INFORMATION"));
+        // Distinct, index-suffixed source ids.
+        let ids: std::collections::HashSet<_> =
+            docs.iter().map(|d| d.source_id.clone()).collect();
+        assert_eq!(ids.len(), 3, "source ids must be unique per occurrence");
     }
 
     #[test]

@@ -416,6 +416,39 @@ impl Runtime {
     pub(crate) fn is_governance_turn(&self, enabled_corpora: Option<&[String]>) -> bool {
         !self.governance_atlas_dirs(enabled_corpora).is_empty()
     }
+
+    /// True if any sealed corpus belongs to the proxy-voting family
+    /// (`proxy-cik…`). Such turns take the `GateSurface::ProxyArgument`
+    /// calibration (its own bank/override) so the cite-or-abstain gate is
+    /// judged on the proxy red lines (RL-1: no confabulated opposition for
+    /// a management item; RL-2: both sides cited for a shareholder
+    /// proposal), not the general KnowledgeQuery bank. Keyed on the
+    /// machine-stable `proxy-cik` corpus-id family (FR-2) — the same
+    /// load-bearing convention the recipe + setup script install under.
+    pub(crate) fn is_proxy_turn(&self, enabled_corpora: Option<&[String]>) -> bool {
+        enabled_corpora
+            .map(|cs| cs.iter().any(|c| c.starts_with("proxy-cik")))
+            .unwrap_or(false)
+    }
+
+    /// The cite-or-abstain gate surface for a KnowledgeQuery turn: a
+    /// domain surface (Governance / ProxyArgument) when the sealed corpus
+    /// is domain-managed, else the general KnowledgeQuery surface. Defined
+    /// once so the streaming and non-streaming KQ paths can't diverge on
+    /// which bank calibrates the gate.
+    pub(crate) fn kq_gate_surface(
+        &self,
+        enabled_corpora: Option<&[String]>,
+    ) -> crate::runtime::grounding::GateSurface {
+        use crate::runtime::grounding::GateSurface;
+        if self.is_governance_turn(enabled_corpora) {
+            GateSurface::Governance
+        } else if self.is_proxy_turn(enabled_corpora) {
+            GateSurface::ProxyArgument
+        } else {
+            GateSurface::KnowledgeQuery
+        }
+    }
 }
 
 /// Active-set governance filter (FR-9 RL-3, the no-dead-law red line):

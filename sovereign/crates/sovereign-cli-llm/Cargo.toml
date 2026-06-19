@@ -39,6 +39,7 @@ sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-archaeology = { workspace = true }
 corpus-engine-notes = { workspace = true }

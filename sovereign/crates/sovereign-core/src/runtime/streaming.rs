@@ -780,13 +780,8 @@ impl Runtime {
         // Governance corpora take the FR-9 governance surface (its own
         // bank/override); everything else is the general KnowledgeQuery
         // gate. Both run the identical cite-or-abstain ladder.
-        let gate_surface = if self
-            .is_governance_turn(context.conversation.enabled_corpora.as_deref())
-        {
-            crate::runtime::grounding::GateSurface::Governance
-        } else {
-            crate::runtime::grounding::GateSurface::KnowledgeQuery
-        };
+        let gate_surface =
+            self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
         let gate_on = gate_surface.enabled() && documents_found > 0;
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is
