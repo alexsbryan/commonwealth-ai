@@ -169,6 +169,8 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
         input.claims,
         input.entities,
     ));
+    // Same-named-speaker exclusion (see `drop_same_named_speaker_pairs`).
+    drop_same_named_speaker_pairs(&mut out, input.claims, input.entities);
     // Dedup pairs across signal sources — prefer IntraCluster >
     // EntityOverlap when the same (a, b) appears under both tags,
     // since the cluster pre-filter is a stronger prior.
@@ -178,6 +180,53 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
         c.id = format!("cand-{:04}", i + 1);
     }
     out
+}
+
+/// Drop tension candidate pairs whose two claims are attributed to the
+/// SAME *named speaker* (a Person or Institution). A speaker's own claims
+/// are one side of a debate, not two, so they cannot be in tension with
+/// each other. This removes the dominant false-positive class on dense
+/// corpora: an SEC proxy where the board authors dozens of mutually-
+/// consistent claims, all near each other in embedding space and sharing
+/// the "Board"/"directors" entities, otherwise yields hundreds of
+/// board-vs-board candidate pairs the classifier must reject one by one.
+///
+/// CRUCIAL: `attributed_to` is overloaded across pipelines. In the
+/// philosophy atlas it points at a *Concept* (a position); in governance
+/// at a *topic* (also a Concept). There, two claims sharing an
+/// `attributed_to` — a position contradicting itself, or a charter rule
+/// vs a later decision on the same topic — ARE the real tensions. So this
+/// excludes a same-`attributed_to` pair ONLY when the shared entity is a
+/// Person/Institution (a named speaker). Concept/topic/unknown
+/// attributions are left untouched, preserving philosophy + governance
+/// recall. Applied strategy-agnostically (graph signals AND embedding
+/// top-K) so the dense-corpus de-noising is uniform.
+pub fn drop_same_named_speaker_pairs(
+    candidates: &mut Vec<TensionCandidate>,
+    claims: &[Claim],
+    entities: &[Entity],
+) {
+    use crate::enrichment::pipeline::atlas::EntityType;
+    let speaker: std::collections::HashMap<&AtomId, &AtomId> = claims
+        .iter()
+        .filter_map(|c| c.attributed_to.as_ref().map(|a| (&c.id, a)))
+        .collect();
+    let ent_type: std::collections::HashMap<&AtomId, &EntityType> =
+        entities.iter().map(|e| (&e.id, &e.entity_type)).collect();
+    candidates.retain(|cand| {
+        if let (Some(a), Some(b)) =
+            (speaker.get(&cand.source_atom), speaker.get(&cand.target_atom))
+        {
+            if a == b {
+                let is_named_speaker = matches!(
+                    ent_type.get(a),
+                    Some(EntityType::Person) | Some(EntityType::Institution)
+                );
+                return !is_named_speaker;
+            }
+        }
+        true
+    });
 }
 
 /// Select tension candidates by embedding similarity — the
@@ -835,6 +884,49 @@ mod tests {
                 if a < b { (a, b) } else { (b, a) }
             })
             .collect()
+    }
+
+    #[test]
+    fn same_named_speaker_claims_are_not_paired() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        // Two claims authored by the SAME Institution (the board), sharing
+        // that attributed_to entity. Entity-overlap would pair them, but a
+        // speaker's own claims are one side, not two — the same-speaker
+        // filter must drop the pair.
+        let entities = vec![entity(1, "Board of Directors", EntityType::Institution)];
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[claim(1, Some(1)), claim(2, Some(1))],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        assert!(
+            out.is_empty(),
+            "same-Institution-speaker claims must not be tension candidates, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn same_concept_position_claims_still_pair() {
+        use crate::enrichment::pipeline::atlas::EntityType;
+        // attributed_to here is a Concept (a philosophy position / a
+        // governance topic). Two conflicting claims under it ARE a real
+        // tension, so the same-speaker filter must NOT drop them.
+        let entities = vec![entity(1, "SharedPosition", EntityType::Concept)];
+        let mut a = claim(1, Some(1));
+        a.content = "SharedPosition argues the thesis holds.".into();
+        let mut b = claim(2, Some(1));
+        b.content = "SharedPosition denies the thesis holds.".into();
+        let out = select_candidates(CandidateSelectionInput {
+            claims: &[a, b],
+            states: &[],
+            claim_clusters: &[],
+            entities: &entities,
+        });
+        assert!(
+            !out.is_empty(),
+            "same-Concept-position conflicting claims must remain candidates"
+        );
     }
 
     #[test]

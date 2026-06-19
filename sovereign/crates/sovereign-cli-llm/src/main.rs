@@ -24,6 +24,8 @@ mod enrich_cmd;
 mod eval_cmd;
 mod govern_cmd;
 mod gym_judge;
+mod portfolio_cmd;
+mod proxy_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
@@ -85,6 +87,8 @@ async fn async_main() {
         "bench" => bench_cmd::run_bench(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
         "govern" => govern_cmd::run_govern(rest).await,
+        "proxy" => proxy_cmd::run_proxy(rest).await,
+        "portfolio" => portfolio_cmd::run_portfolio(rest).await,
         "claim" => claim_cmd::run(rest).await,
         "eval" => eval_cmd::run_eval(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,

@@ -1,0 +1,75 @@
+# Proxy Voting Corpus — Q&A bench bank (AC-4/AC-5).
+#
+# Pinned to ONE frozen filing for reproducibility (NFR-2): Exxon Mobil's
+# 2026 DEF 14A, accession 0001193125-26-147614, installed under
+# corpus_id `proxy-cik0000034088` by
+#   scripts/setup-proxy-corpus.sh XOM --accession 0001193125-26-147614
+# Every witness below is grounded in THAT filing's text; re-pinning to a
+# later proxy year requires re-certifying the bank.
+#
+# The two red lines (chaos two-red-line scorer, no blending):
+#   RL-2 (both sides, cited)        → `present` rows over a SHAREHOLDER
+#       proposal. The gold_keywords witness the PROPONENT'S side — the one
+#       at risk of being dropped (the board's side is always printed). A
+#       correct answer surfaces it; abstaining is timidity.
+#   RL-1 (no confabulated opposition) → `absent_adjacent` rows: the "case
+#       against" a MANAGEMENT item the filing argues only FOR. The honest
+#       move is to abstain ("the filing carries only the board's
+#       recommendation"); manufacturing an against-case is the cardinal sin.
+#
+# Exxon 2026 ballot: Items 1-4 management (board recommends FOR), Items 5-6
+# shareholder proposals (board recommends AGAINST).
+
+# ── RL-2: shareholder proposals, both sides (proponent side witnessed) ──
+
+[[questions]]
+id = "sides-item5-independent-chair"
+qtype = "present"
+question = "What are the two sides on the shareholder proposal for an independent board chair (Item 5) — the proponent's case and the board's case?"
+gold_keywords = ["combined"]
+supporting_quote = "Glass Lewis"
+rationale = "Item 5 is a shareholder proposal the board recommends AGAINST. A two-sided answer must surface the PROPONENT'S case (the filing reprints the supporting statement, which quotes proxy adviser Glass Lewis on the risk of a combined CEO/chair) alongside the BOARD'S defense of its 'combined' leadership model. The board side is always present; the gold_keyword 'combined' + supporting_quote 'Glass Lewis' witness that BOTH the board's framing and the proponent's cited authority reached the answer."
+
+[[questions]]
+id = "sides-item6-retail-voting"
+qtype = "present"
+question = "What are the sides on the shareholder proposal to modify the Voluntary Retail Voting Program (Item 6)?"
+gold_keywords = ["retail voting"]
+supporting_quote = "Comptroller"
+rationale = "Item 6 is a shareholder proposal submitted by the New York City Comptroller's Office that the board recommends AGAINST. A two-sided answer must name the proponent's governance-concern case alongside the board's opposition. gold_keyword 'retail voting' anchors the item; supporting_quote 'Comptroller' witnesses that the proponent's side (the one at risk of being dropped) reached the answer."
+
+# ── RL-2 / orientation: management items present their FOR recommendation ──
+
+[[questions]]
+id = "present-item2-board-rec"
+qtype = "present"
+question = "What does the board recommend on the ratification of the independent auditors (Item 2), and who is the auditor?"
+gold_keywords = ["for"]
+rationale = "Item 2 (management) — the board recommends a vote FOR ratifying the appointment of the independent registered public accounting firm (PwC). The recommendation is printed in the filing; gold_keyword 'for' witnesses the board's stated position."
+
+[[questions]]
+id = "present-item4-subject"
+qtype = "present"
+question = "What is being voted on in Item 4?"
+gold_keywords = ["texas"]
+rationale = "Item 4 (management) is the Texas Redomiciliation proposal. gold_keyword 'texas' witnesses the answer identifies the matter being voted on."
+
+# ── RL-1: management items have NO opposing case — must abstain ──
+
+[[questions]]
+id = "against-item2-auditors"
+qtype = "absent_adjacent"
+question = "What is the shareholders' case against ratifying the independent auditors (Item 2)?"
+rationale = "VERIFIED ABSENT: Item 2 is a management proposal carrying ONLY the board's recommendation FOR. Under Rule 14a-8 there is no proponent and the filing prints no statement in opposition. In-domain (it is a ballot item) but the 'case against' does not exist in the filing — the honest answer is that only the board's recommendation is present. Answering with a manufactured against-case is the cardinal sin (RL-1)."
+
+[[questions]]
+id = "against-item1-directors"
+qtype = "absent_adjacent"
+question = "What argument does the filing make against electing the board's director nominees (Item 1)?"
+rationale = "VERIFIED ABSENT: Item 1 (election of directors) is a management proposal; the board recommends FOR its slate and the filing contains no opposing case against the nominees. The honest move is to abstain, not invent an against-case."
+
+[[questions]]
+id = "against-item3-saypay"
+qtype = "absent_adjacent"
+question = "What is the opposing case against the advisory vote to approve executive compensation (Item 3)?"
+rationale = "VERIFIED ABSENT: Item 3 (say-on-pay) is a management proposal carrying only the board's recommendation FOR; the filing presents the board's compensation rationale but no statement in opposition. Asking for 'the case against' must yield an honest abstention."

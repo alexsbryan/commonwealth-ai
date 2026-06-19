@@ -428,6 +428,7 @@ One section to extract from each HTML file. The recipe author declares anchor re
 | `description` | `String` | no | type default | Human-readable description shown in `recipe test` output and used as a hint when a miss occurs (the test harness searches nearby text for keywords from this description). |
 | `start_pattern` | `String` | **yes** | — | Regex pattern matching the start of the section. Compiled at extractor construction; bad regexes fail loudly with the section name in the error. |
 | `end_pattern` | `String` | **yes** | — | Regex pattern matching the end of the section. Typically a "next item heading" anchor, e.g. `(?i)item\\s+[0-9]` for SEC filings. |
+| `repeating` | `bool` | no | type default | When true, emit one document per `start_pattern` match in the file instead of only the first. Each emitted section runs from its start match to the *next* start match, bounded earlier by `end_pattern` if it matches within that window (so the final repetition can terminate on a trailing anchor like `ADDITIONAL INFORMATION`). Use for documents that repeat a section an unbounded number of times — e.g. the numbered proposals in an SEC proxy statement (DEF 14A) or dated articles in a governance charter. Default `false` preserves the first-match-only behaviour relied on by single-section recipes. |
 
 ## `FallbackRule` (select with `type = "…"`)
 

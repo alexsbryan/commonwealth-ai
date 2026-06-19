@@ -1276,6 +1276,18 @@ pub struct SectionRule {
     /// "next item heading" anchor, e.g.
     /// `(?i)item\\s+[0-9]` for SEC filings.
     pub end_pattern: String,
+    /// When true, emit one document per `start_pattern` match in the
+    /// file instead of only the first. Each emitted section runs from
+    /// its start match to the *next* start match, bounded earlier by
+    /// `end_pattern` if it matches within that window (so the final
+    /// repetition can terminate on a trailing anchor like
+    /// `ADDITIONAL INFORMATION`). Use for documents that repeat a
+    /// section an unbounded number of times — e.g. the numbered
+    /// proposals in an SEC proxy statement (DEF 14A) or dated articles
+    /// in a governance charter. Default `false` preserves the
+    /// first-match-only behaviour relied on by single-section recipes.
+    #[serde(default)]
+    pub repeating: bool,
 }
 
 /// Fallback for files where no section pattern matched. Without a

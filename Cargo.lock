@@ -11924,6 +11924,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
+ "bytes",
  "chrono",
  "commonwealth-core",
  "commonwealth-state",

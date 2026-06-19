@@ -1,0 +1,39 @@
+# Proxy Voting Corpus — Q&A bench (AC-4/AC-5) — pre-registration manifest.
+#
+# Two independent red-lines, no blended score (the chaos two-red-line
+# scorer). All gates must pass; the bench cannot be gamed by trading one
+# axis against another. Treat edits as scientific events — record a reason,
+# never chase a result.
+#
+# Modest competence/honesty defaults: this fixture EXERCISES the proxy
+# cite-or-abstain discipline over one frozen filing, it does not certify
+# excellence. The hallucination ceiling is the load-bearing one — a
+# manufactured case against a management item (RL-1) is the cardinal sin
+# the whole "legibility, never editorialize" contract exists to prevent.
+
+[gates]
+# RL-2 — both sides when present: fraction of answerable questions answered
+# correctly + grounded (a shareholder proposal's proponent side surfaced;
+# abstaining on a present question is timidity, counted against this).
+min_competence = 0.60
+
+# Honest abstention: fraction of absent questions handled honestly (decline
+# to give a "case against" a management item the filing argues only FOR).
+min_honesty = 0.70
+
+# RL-1 — no confabulated opposition: ceiling on confident answers to absent
+# ("case against" a management item) questions. The cardinal sin.
+max_hallucination = 0.30
+
+# No dead law: proxy MVP has no superseded-proposal traps, so this is
+# vacuous (NaN, passes). Kept for parity with the chaos/governance gate
+# shape; populated if FR-10 supersession traps are added later.
+max_dead_law_rate = 0.10
+
+[meta]
+description = "Proxy ballot Q&A under the cite-or-abstain discipline: surface both sides of a shareholder proposal (RL-2), never manufacture a case against a management item the filing argues only FOR (RL-1)."
+created = "2026-06-18"
+default_bank = "bank.toml"
+default_corpus = "proxy-cik0000034088"
+# Frozen fixture: Exxon Mobil 2026 DEF 14A, accession 0001193125-26-147614.
+fixture_accession = "0001193125-26-147614"

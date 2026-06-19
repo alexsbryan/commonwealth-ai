@@ -93,6 +93,14 @@ pub(crate) enum GateSurface {
     /// confabulated rule; RL-2: honest abstention) calibrates the gate
     /// independently of the general KnowledgeQuery banks.
     Governance,
+    /// Proxy-voting Q&A over a company's ballot (SEC DEF 14A). State the
+    /// sides of a proposal from the filing's verbatim text or abstain —
+    /// its own surface so the proxy bank (RL-1: no confabulated
+    /// opposition for a management item; RL-2: both sides cited for a
+    /// shareholder proposal) calibrates the gate independently. Mirrors
+    /// the Governance discipline; the bank and override var are what make
+    /// it separately measured.
+    ProxyArgument,
 }
 
 impl GateSurface {
@@ -105,6 +113,7 @@ impl GateSurface {
             GateSurface::SimpleQuery => "simple_query",
             GateSurface::Refinement => "refinement",
             GateSurface::Governance => "governance",
+            GateSurface::ProxyArgument => "proxy_argument",
         }
     }
 
@@ -119,6 +128,7 @@ impl GateSurface {
             GateSurface::SimpleQuery => "SOVEREIGN_GROUNDING_GATE_SIMPLE_QUERY",
             GateSurface::Refinement => "SOVEREIGN_GROUNDING_GATE_REFINEMENT",
             GateSurface::Governance => "SOVEREIGN_GROUNDING_GATE_GOVERNANCE",
+            GateSurface::ProxyArgument => "SOVEREIGN_GROUNDING_GATE_PROXY_ARGUMENT",
         }
     }
 
@@ -193,6 +203,20 @@ impl GateSurface {
                 retry: true,
                 longform_chars: 1_800,
             },
+            // Proxy answers are short statements of a ballot item's sides
+            // grounded in the filing's verbatim text — cite both sides
+            // (or the single side present) or abstain. Same budget +
+            // discipline as Governance; `retry` on so a failed verify
+            // becomes an honest abstention ("the filing carries only the
+            // board's recommendation"), never a fabricated against-case.
+            GateSurface::ProxyArgument => GroundingProfile {
+                surface: self,
+                tau,
+                max_claims: 4,
+                max_chunks: 8,
+                retry: true,
+                longform_chars: 1_800,
+            },
         }
     }
 }
@@ -237,7 +261,7 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
             EnvFlag {
                 name: "SOVEREIGN_GROUNDING_GATE_<SURFACE>",
                 default: "unset",
-                purpose: "Per-surface override (=1 forces on, =0 forces off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE}.",
+                purpose: "Per-surface override (=1 forces on, =0 forces off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE, PROXY_ARGUMENT}.",
             },
         ),
         (
@@ -281,6 +305,7 @@ mod tests {
             GateSurface::AttachedDoc,
             GateSurface::SimpleQuery,
             GateSurface::Governance,
+            GateSurface::ProxyArgument,
         ] {
             let p = s.profile();
             assert_eq!(p.max_claims, 4, "{}", s.id());
@@ -320,6 +345,7 @@ mod tests {
             GateSurface::SimpleQuery,
             GateSurface::Refinement,
             GateSurface::Governance,
+            GateSurface::ProxyArgument,
         ] {
             let suffix = s
                 .override_var()
