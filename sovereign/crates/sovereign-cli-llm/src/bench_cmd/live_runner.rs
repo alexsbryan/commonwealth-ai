@@ -30,6 +30,18 @@ pub struct LiveAnswer {
     pub visible: String,
     /// Retrieved chunk text recovered from the persisted assistant message.
     pub retrieved_chunk_texts: Vec<String>,
+    /// The grounding gate's OWN action for this turn, recovered from the
+    /// persisted `grounding_gate.action` metadata (`released` / `retry_released`
+    /// / `citation_grounded` / `abstained*` / …). This is the gate's *actual*
+    /// decision — the trustworthy answer/abstain signal — not a re-derivation of
+    /// it from the visible text. `None` when the gate didn't run (naked, attached
+    /// doc) or the metadata was unavailable.
+    pub gate_action: Option<String>,
+    /// The pre-gate draft the gate acted on, recovered from
+    /// `grounding_gate.draft`. Present only when the gate recorded it
+    /// (`SOVEREIGN_AGENTIC_KQ_DEBUG=1`); `None` otherwise. Lets the scorer tell a
+    /// gate-killed-CORRECT answer from a confabulation the gate caught.
+    pub draft: Option<String>,
 }
 
 /// Drive the desktop chat path, sealed to `corpus` via `enabled_corpora`.
@@ -113,14 +125,32 @@ pub async fn run_live_pinned(
     // behaviour (2026-06-10 transport-delta finding). Resolve each
     // (corpus_id, chunk_id) through the corpus index, mirroring the
     // bridge; fall back to the snippet only when resolution fails.
-    let chunk_refs: Vec<serde_json::Value> = session
+    let last_meta: Option<serde_json::Value> = session
         .store
         .get_conversation(&conv_id)
         .await
         .ok()
-        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()))
+        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()));
+    let chunk_refs: Vec<serde_json::Value> = last_meta
+        .as_ref()
         .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
         .unwrap_or_default();
+    // The gate's own decision + the draft it acted on, from the SAME persisted
+    // metadata. The production gate ran in-process during this turn; its action
+    // is the trustworthy answer/abstain signal (no re-judging the visible text),
+    // and the draft — present only under SOVEREIGN_AGENTIC_KQ_DEBUG — splits
+    // gate-killed-correct from caught-confabulation. See
+    // docs/CHAOS_MEASUREMENT_REDESIGN.md.
+    let (gate_action, draft): (Option<String>, Option<String>) = last_meta
+        .as_ref()
+        .and_then(|m| m.get("grounding_gate"))
+        .map(|g| {
+            (
+                g.get("action").and_then(|v| v.as_str()).map(str::to_string),
+                g.get("draft").and_then(|v| v.as_str()).map(str::to_string),
+            )
+        })
+        .unwrap_or((None, None));
     let mut retrieved_chunk_texts = Vec::with_capacity(chunk_refs.len());
     for c in &chunk_refs {
         let resolved = match (
@@ -151,7 +181,7 @@ pub async fn run_live_pinned(
     }
 
     let visible = strip_think(&raw);
-    LiveAnswer { visible, retrieved_chunk_texts }
+    LiveAnswer { visible, retrieved_chunk_texts, gate_action, draft }
 }
 
 /// Drive the ATTACHED-DOCUMENT surface: fresh conversation + minted
@@ -222,6 +252,8 @@ pub async fn run_attached(
         return LiveAnswer {
             visible: String::new(),
             retrieved_chunk_texts: doc_chunk_texts.clone(),
+            gate_action: None,
+            draft: None,
         };
     }
     let doc_session = DocumentSession {
@@ -243,6 +275,8 @@ pub async fn run_attached(
         return LiveAnswer {
             visible: String::new(),
             retrieved_chunk_texts: doc_chunk_texts.clone(),
+            gate_action: None,
+            draft: None,
         };
     }
     let visible = match session.runtime.handle_turn(question, &conversation_id).await {
@@ -255,6 +289,8 @@ pub async fn run_attached(
     LiveAnswer {
         visible,
         retrieved_chunk_texts: doc_chunk_texts,
+        gate_action: None,
+        draft: None,
     }
 }
 
@@ -310,6 +346,8 @@ pub async fn run_naked(
     LiveAnswer {
         visible: strip_think(&raw),
         retrieved_chunk_texts: Vec::new(),
+        gate_action: None,
+        draft: None,
     }
 }
 
@@ -456,6 +494,35 @@ pub async fn classify_caveat(judge: &dyn InferenceProvider, model: &str, answer:
          NOT drawn from the provided passages or corpus?\n\n\
          Answer with exactly one letter — A = yes, it flagged the answer as general knowledge / not from the sources, B = no, it gave the answer with no such provenance caveat.",
         answer.chars().take(1200).collect::<String>()
+    );
+    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| a > b)
+}
+
+/// Forced-choice CORRECTNESS judge — the escalation used when the deterministic
+/// gold-forms miss but the answer is non-empty (forms-first; this fires rarely).
+/// Asks whether the answer correctly conveys the required fact, paraphrase
+/// counting. `Some(true)` = correct. The caller logs every escalation so the
+/// judge's footprint on the correctness signal stays auditable and small.
+pub async fn judge_correctness(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    question: &str,
+    gold_keywords: &[String],
+    answer: &str,
+) -> Option<bool> {
+    if answer.trim().is_empty() {
+        return Some(false);
+    }
+    let gold = gold_keywords.join("; ");
+    let prompt = format!(
+        "QUESTION: {q}\n\nThe correct answer must convey: {gold}\n\n\
+         An assistant answered:\n\"\"\"\n{a}\n\"\"\"\n\n\
+         Does the assistant's answer correctly convey the required fact? A paraphrase \
+         or an equivalent surface form counts; a wrong or missing fact does not.\n\n\
+         Answer with exactly one letter — A = yes, it conveys the correct fact, \
+         B = no, it does not.",
+        q = question.chars().take(300).collect::<String>(),
+        a = answer.chars().take(800).collect::<String>(),
     );
     forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| a > b)
 }

@@ -238,10 +238,15 @@ pub async fn run_bridge_live(
         }
     }
 
+    let gate = &complete["metadata"]["grounding_gate"];
     Ok(BridgeTurn {
         answer: super::live_runner::LiveAnswer {
             visible: super::live_runner::strip_think(raw),
             retrieved_chunk_texts: chunk_texts,
+            // The gate's own decision (+ debug-gated draft), recovered from the
+            // bridge response metadata — the same signal as the in-process path.
+            gate_action: gate["action"].as_str().map(str::to_string),
+            draft: gate["draft"].as_str().map(str::to_string),
         },
         metadata: complete["metadata"].clone(),
     })

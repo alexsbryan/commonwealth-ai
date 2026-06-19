@@ -1492,14 +1492,16 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 13-step core; the pipelines
-        // differ ONLY in their tails (KQ: audited truncate; deep:
-        // plain truncate + strategy-driven top-sources expansion).
-        assert_eq!(&kq[..16], &deep[..16]);
-        assert_eq!(kq.len(), 17);
-        assert_eq!(deep.len(), 18);
-        assert_eq!(kq[16], "truncate_merged");
-        assert_eq!(&deep[16..], &["truncate_merged", "top_sources_expand"]);
+        // Shared 3-step head + shared 14-step core (the 14th is the gated-off
+        // `bridge_boost` meta-atlas step added with FLAG_META_BRIDGE; present in
+        // the step list, no-op at runtime when the flag is off); the pipelines
+        // differ ONLY in their tails (KQ: audited truncate; deep: plain truncate
+        // + strategy-driven top-sources expansion).
+        assert_eq!(&kq[..17], &deep[..17]);
+        assert_eq!(kq.len(), 18);
+        assert_eq!(deep.len(), 19);
+        assert_eq!(kq[17], "truncate_merged");
+        assert_eq!(&deep[17..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but

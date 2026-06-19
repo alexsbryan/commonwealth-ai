@@ -62,12 +62,31 @@ This trips everyone up:
 ### Observability
 | Var | Default | Effect |
 |---|---|---|
-| `SOVEREIGN_AGENTIC_KQ_DEBUG` | **off** | `=1` mirrors the gate + agentic-loop `dbg()` lines (`[gate] …`, `[agentic_kq] …` — draft, extracted claim, value-presence verdict, action) to **stderr** (in-process bench) **and** `tracing::info!` (deployed daemon → `daemon.err`). This is *the* switch for seeing why a probe abstained. Named `_AGENTIC_KQ_` for historical reasons; it gates **all** grounding `dbg()`, not just the loop. |
+| `SOVEREIGN_AGENTIC_KQ_DEBUG` | **off** | `=1` mirrors the gate + agentic-loop `dbg()` lines (`[gate] …`, `[agentic_kq] …` — draft, extracted claim, value-presence verdict, action) to **stderr** (in-process bench) **and** `tracing::info!` (deployed daemon → `daemon.err`). This is *the* switch for seeing why a probe abstained. Named `_AGENTIC_KQ_` for historical reasons; it gates **all** grounding `dbg()`, not just the loop. **Also records the pre-gate draft** into the message's `grounding_gate.draft` metadata — the measurement layer uses it to split *gate-killed-correct* from *caught-confabulation*. Default off ⇒ a production message never carries the rejected draft (which can be the very confab the gate suppressed). |
 
 ### Bench routing
 | Var | Default | Effect |
 |---|---|---|
 | `SOVEREIGN_DISABLE_PEER_INFERENCE` | off | `=1` keeps all inference local instead of load-balancing to mesh peers. Set it for solo bench runs so results aren't perturbed by peer availability. |
+
+### Determinism (the measurement mode)
+| Var | Default | Effect |
+|---|---|---|
+| `SOVEREIGN_MTP_DISABLE` | off | `=1` disables multi-token-prediction (speculative) decode. Set it for the **deterministic eval mode**: it removes the main run-to-run flip source so a single bench run is reproducible. *Verify, don't assume* — run a bank twice and diff the per-probe verdicts; investigate any residual flip (MoE routing / batching) rather than tolerating it. An inference-layer flag (`sovereign-inference`), listed here because reproducibility is part of the trustworthy-measurement contract. |
+
+## The measurement: partition + forms
+
+As of the measurement redesign, the chaos scorer derives its answer/abstain
+signal from the gate's OWN persisted `grounding_gate.action` (not a re-judge of
+the visible text — that re-derivation was the main noise source), classifies every
+probe into a causal **partition** cell (`gate_killed_correct` / `synth_wrong_caught`
+/ `retrieval_miss` / `leaked_wrong` / `confab_leaked` / …), and prints an
+attribution histogram (`misses attributed → gate / model / retrieval`) — the
+diagnostic that says *where* to work. Correctness is forms-aware: a gold keyword
+may be a `|`-separated OR-group of equivalent correct surface forms
+(`"Winnie|Mrs Verloc"`), with an LLM correctness judge escalated only when the
+forms miss (each escalation logged). Full design + rationale:
+`sovereign/docs/CHAOS_MEASUREMENT_REDESIGN.md`.
 
 ## Canonical chaos-bench invocation
 

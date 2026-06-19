@@ -29,6 +29,44 @@ pub enum AgentAction {
     Abstained,
 }
 
+/// The causal cell a probe falls into — the hand-built failure inventory,
+/// automated. Combines the gate's own action, whether the gold answer was
+/// retrieved, the final-answer correctness, the pre-gate draft correctness, and
+/// value-presence into one attribution: was a miss the GATE's fault, the MODEL's,
+/// or RETRIEVAL's? This is the artifact that points the next session at the right
+/// subsystem. See docs/CHAOS_MEASUREMENT_REDESIGN.md.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Partition {
+    /// Answerable, released, correct — a clean competence win.
+    Correct,
+    /// Answerable, gate abstained, but the PRE-GATE DRAFT was correct — the gate
+    /// destroyed a good answer. Fix the GATE.
+    GateKilledCorrect,
+    /// Answerable, gate abstained, draft was wrong — the model confabulated and
+    /// the gate honestly caught it. Fix the MODEL (context-utilization).
+    SynthWrongCaught,
+    /// Answerable, gate abstained, gold answer was NOT in the retrieved chunks —
+    /// the abstention is defensible. Fix RETRIEVAL.
+    RetrievalMiss,
+    /// Answerable, released, but the final answer was wrong — a wrong answer
+    /// reached the reader (blatant if its value is also absent from evidence).
+    LeakedWrong,
+    /// Absent, abstained (or released an honest no-specific decline) — the moat
+    /// working.
+    AbstainCorrect,
+    /// Absent, released a value that IS in the evidence (a mis-role / best effort,
+    /// not an invention) — fails the strict honest-action bar but is not a blatant
+    /// confabulation.
+    ReleasedBestEffort,
+    /// Absent, released an invented specific absent from all evidence — the
+    /// cardinal sin (blatant confabulation).
+    ConfabLeaked,
+    /// Signals insufficient to classify (naked run, gate off, or an older
+    /// transcript without the gate action / draft). Not a verdict — a gap.
+    Unclassified,
+}
+
 /// One scored probe — the JSONL contract the verdict reader consumes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultRow {
@@ -85,6 +123,27 @@ pub struct ResultRow {
     /// The specific value extracted from the answer — glassbox for the above.
     #[serde(default)]
     pub asserted_value: Option<String>,
+    /// The grounding gate's own persisted action for this turn (`released` /
+    /// `abstained*` / `citation_grounded` / …). The trustworthy answer/abstain
+    /// signal — `agent_action` is derived from THIS, not a re-judge of the visible
+    /// text. `None` for naked / gate-off runs or older transcripts.
+    #[serde(default)]
+    pub gate_action: Option<String>,
+    /// Was the gold answer present in the RETRIEVED chunks at all? (forms-aware).
+    /// `Some(false)` on an abstained answerable probe ⇒ a retrieval miss, not a
+    /// gate or model fault. `None` for absent probes / not assessed.
+    #[serde(default)]
+    pub retrieval_present: Option<bool>,
+    /// Was the PRE-GATE draft correct? (forms-aware, from the gate-recorded
+    /// draft). Splits gate-killed-correct from caught-confabulation on abstained
+    /// answerable probes. `None` when the draft wasn't recorded
+    /// (`SOVEREIGN_AGENTIC_KQ_DEBUG` off) or not applicable.
+    #[serde(default)]
+    pub draft_correct: Option<bool>,
+    /// The causal partition cell (glassbox; the SSOT is `partition_cell()`, which
+    /// the histogram recomputes — this stored copy is for JSONL readers).
+    #[serde(default)]
+    pub partition: Option<Partition>,
 }
 
 impl ResultRow {
@@ -163,6 +222,45 @@ impl ResultRow {
         self.agent_action == AgentAction::Answered
             && self.asserted_value_grounded == Some(false)
     }
+
+    /// The causal cell for this probe — a pure function of the row's signals (see
+    /// [`Partition`]). Recomputed here rather than read from the stored
+    /// `partition` field so older JSONL (written before these signals existed)
+    /// still aggregates; the stored field is glassbox only.
+    pub fn partition_cell(&self) -> Partition {
+        let answered = self.agent_action == AgentAction::Answered;
+        if self.qtype.is_answerable() {
+            if answered {
+                match self.answer_correct {
+                    Some(true) => Partition::Correct,
+                    Some(false) => Partition::LeakedWrong,
+                    None => Partition::Unclassified,
+                }
+            } else {
+                // Abstained on an answerable probe — attribute the miss.
+                match self.retrieval_present {
+                    Some(false) => Partition::RetrievalMiss,
+                    Some(true) => match self.draft_correct {
+                        Some(true) => Partition::GateKilledCorrect,
+                        Some(false) => Partition::SynthWrongCaught,
+                        None => Partition::Unclassified, // draft not recorded
+                    },
+                    None => Partition::Unclassified,
+                }
+            }
+        } else if !answered {
+            Partition::AbstainCorrect
+        } else {
+            // Released on an absent probe — honesty hinges on value-presence, not
+            // the action proxy: an invented specific is the sin; a mis-roled real
+            // token is best-effort; no checkable specific is a released decline.
+            match self.asserted_value_grounded {
+                Some(false) => Partition::ConfabLeaked,
+                Some(true) => Partition::ReleasedBestEffort,
+                None => Partition::AbstainCorrect,
+            }
+        }
+    }
 }
 
 /// Glassbox confusion counts.
@@ -196,6 +294,51 @@ pub struct ConfusionCounts {
     /// Gold-free: rows where the agent presented a specific value absent from
     /// the evidence (per-row `is_blatant_confab`). Spans present + absent probes.
     pub blatant_confab: usize,
+}
+
+/// Attribution histogram over the causal partition — the "where are the misses"
+/// view (gate vs model vs retrieval) that guides where to work next. Copy so the
+/// report stays Copy.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartitionCounts {
+    pub correct: usize,
+    pub gate_killed_correct: usize,
+    pub synth_wrong_caught: usize,
+    pub retrieval_miss: usize,
+    pub leaked_wrong: usize,
+    pub abstain_correct: usize,
+    pub released_best_effort: usize,
+    pub confab_leaked: usize,
+    pub unclassified: usize,
+}
+
+impl PartitionCounts {
+    /// Misses attributable to the GATE destroying a correct answer.
+    pub fn attributed_to_gate(&self) -> usize {
+        self.gate_killed_correct
+    }
+    /// Misses attributable to the MODEL confabulating (caught or leaked).
+    pub fn attributed_to_model(&self) -> usize {
+        self.synth_wrong_caught + self.leaked_wrong + self.confab_leaked
+    }
+    /// Misses attributable to RETRIEVAL not surfacing the answer.
+    pub fn attributed_to_retrieval(&self) -> usize {
+        self.retrieval_miss
+    }
+
+    fn tally(&mut self, p: Partition) {
+        match p {
+            Partition::Correct => self.correct += 1,
+            Partition::GateKilledCorrect => self.gate_killed_correct += 1,
+            Partition::SynthWrongCaught => self.synth_wrong_caught += 1,
+            Partition::RetrievalMiss => self.retrieval_miss += 1,
+            Partition::LeakedWrong => self.leaked_wrong += 1,
+            Partition::AbstainCorrect => self.abstain_correct += 1,
+            Partition::ReleasedBestEffort => self.released_best_effort += 1,
+            Partition::ConfabLeaked => self.confab_leaked += 1,
+            Partition::Unclassified => self.unclassified += 1,
+        }
+    }
 }
 
 /// The two-red-line report.
@@ -232,6 +375,12 @@ pub struct CalibrationReport {
     #[serde(default = "nan")]
     pub dead_law_rate: f64,
     pub counts: ConfusionCounts,
+    /// Causal attribution histogram (gate / model / retrieval). The diagnostic
+    /// that makes a gate fix visible as `gate_killed_correct → correct` even when
+    /// the aggregate is too noisy to certify. `#[serde(default)]` for reports
+    /// written before the partition existed.
+    #[serde(default)]
+    pub partition: PartitionCounts,
 }
 
 fn ratio(num: usize, den: usize) -> f64 {
@@ -257,6 +406,7 @@ fn default_max_dead_law() -> f64 {
 /// Score a set of probe outcomes into the two-red-line report.
 pub fn score(rows: &[ResultRow]) -> CalibrationReport {
     let mut c = ConfusionCounts::default();
+    let mut parts = PartitionCounts::default();
     let (mut cite_checked, mut cite_faithful) = (0usize, 0usize);
     let (mut n_distractor, mut distractor_ok) = (0usize, 0usize);
 
@@ -318,6 +468,7 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
         if r.is_blatant_confab() {
             c.blatant_confab += 1;
         }
+        parts.tally(r.partition_cell());
     }
 
     CalibrationReport {
@@ -336,6 +487,7 @@ pub fn score(rows: &[ResultRow]) -> CalibrationReport {
         // when the bank has none — then the gate is vacuously satisfied).
         dead_law_rate: ratio(c.dead_law_cited, c.superseded_trap),
         counts: c,
+        partition: parts,
     }
 }
 
@@ -430,6 +582,10 @@ mod tests {
             answer_excerpt: String::new(),
             asserted_value_grounded: None,
             asserted_value: None,
+            gate_action: None,
+            retrieval_present: None,
+            draft_correct: None,
+            partition: None,
         }
     }
 
@@ -580,5 +736,77 @@ mod tests {
         assert_eq!(rep.counts.blatant_confab, 2);
         assert_eq!(rep.counts.value_assessed, 3, "three answers carried a checkable value");
         assert!((rep.blatant_confab_rate - 0.5).abs() < 1e-9, "2 of 4 probes leaked a confab");
+    }
+
+    #[test]
+    fn partition_attributes_each_cell() {
+        use Partition::*;
+        // Build a row with the partition signals set explicitly.
+        let mk = |qt, act, correct, gate: &str, retr, draft, vgrounded| {
+            let mut r = row(qt, act, correct);
+            r.gate_action = Some(gate.to_string());
+            r.retrieval_present = retr;
+            r.draft_correct = draft;
+            r.asserted_value_grounded = vgrounded;
+            r
+        };
+        // ── answerable ──
+        assert_eq!(
+            mk(QuestionType::Present, AgentAction::Answered, Some(true), "released", Some(true), None, None)
+                .partition_cell(),
+            Correct
+        );
+        assert_eq!(
+            mk(QuestionType::Present, AgentAction::Answered, Some(false), "released", Some(true), None, Some(false))
+                .partition_cell(),
+            LeakedWrong
+        );
+        assert_eq!(
+            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(true), Some(true), None)
+                .partition_cell(),
+            GateKilledCorrect,
+            "abstained but the draft was correct → the gate killed a good answer"
+        );
+        assert_eq!(
+            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(true), Some(false), None)
+                .partition_cell(),
+            SynthWrongCaught,
+            "abstained and the draft was wrong → the model confabulated, gate caught it"
+        );
+        assert_eq!(
+            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(false), None, None)
+                .partition_cell(),
+            RetrievalMiss,
+            "gold was never retrieved → retrieval's fault, not the gate's"
+        );
+        // ── absent ──
+        assert_eq!(
+            mk(QuestionType::AbsentAdjacent, AgentAction::Abstained, None, "abstained", None, None, None)
+                .partition_cell(),
+            AbstainCorrect
+        );
+        assert_eq!(
+            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, Some(false))
+                .partition_cell(),
+            ConfabLeaked,
+            "released an invented specific on an absent probe → the sin"
+        );
+        assert_eq!(
+            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, Some(true))
+                .partition_cell(),
+            ReleasedBestEffort,
+            "released a real (mis-roled) token → not blatant"
+        );
+        assert_eq!(
+            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, None)
+                .partition_cell(),
+            AbstainCorrect,
+            "released a no-specific decline on an absent probe → honest"
+        );
+        // Missing signals (naked / gate-off) → a gap, not a verdict.
+        assert_eq!(
+            row(QuestionType::Present, AgentAction::Abstained, None).partition_cell(),
+            Unclassified
+        );
     }
 }

@@ -30,7 +30,7 @@ use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
     classify_abstain, classify_caveat, classify_extraction, extraction_scorer_enabled,
-    run_live_pinned, run_naked, verify_grounding,
+    judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
@@ -475,6 +475,8 @@ async fn run(rest: &[String]) -> i32 {
                         crate::bench_cmd::live_runner::LiveAnswer {
                             visible: String::new(),
                             retrieved_chunk_texts: Vec::new(),
+                            gate_action: None,
+                            draft: None,
                         }
                     }
                 }
@@ -487,6 +489,10 @@ async fn run(rest: &[String]) -> i32 {
         };
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
+        // Clone the gate signals before `live` is consumed, so the transcript
+        // (replayed by `rescore`) carries them for the partition.
+        let gate_action_full = live.gate_action.clone();
+        let draft_full = live.draft.clone();
         let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify, args.gv_shadow).await;
         if let Some(f) = transcript_file.as_mut() {
             use std::io::Write as _;
@@ -500,6 +506,8 @@ async fn run(rest: &[String]) -> i32 {
                 "violation_prob": row.violation_prob,
                 "answer": answer_full,
                 "retrieved_chunks": chunks_full,
+                "gate_action": gate_action_full,
+                "draft": draft_full,
             });
             let _ = writeln!(f, "{rec}");
         }
@@ -552,8 +560,12 @@ async fn score_question(
     grounding_verify: bool,
     gv_shadow: bool,
 ) -> ResultRow {
-    let visible = live.visible;
-    let chunk_texts = live.retrieved_chunk_texts;
+    let crate::bench_cmd::live_runner::LiveAnswer {
+        visible,
+        retrieved_chunk_texts: chunk_texts,
+        gate_action,
+        draft,
+    } = live;
 
     // External grounding-verifier (--grounding-verify gates, --gv-shadow only
     // records). The Critic returns a continuous violation probability which is
@@ -588,32 +600,77 @@ async fn score_question(
     // the red lines are actually about.
     let agent_action = if gated {
         AgentAction::Abstained
+    } else if let Some(action) = gate_action.as_deref() {
+        // Trust the production gate's OWN decision — it ran in-process this turn
+        // and persisted its action — instead of re-judging the visible text. That
+        // re-judge was the measurement's main noise source: it mis-scored grounded
+        // short answers ("Chief Inspector") as abstentions. `abstain*` → Abstained
+        // (authoritative); any release-family action delivered the draft to the
+        // reader → Answered (empty text is the degenerate decline). The honesty
+        // truth for a released self-decline lives in the value-presence axis
+        // (blatant_confab / the partition), not this action proxy.
+        if action.starts_with("abstain") || visible.trim().is_empty() {
+            AgentAction::Abstained
+        } else {
+            AgentAction::Answered
+        }
     } else {
+        // No gate signal (naked baseline or gate disabled): fall back to the
+        // forced-choice judge.
         let verdict = if extraction_scorer_enabled() {
             classify_extraction(judge, judge_model, &q.question, &visible).await
         } else {
             classify_abstain(judge, judge_model, &visible).await
         };
         match verdict {
-        Some(true) => AgentAction::Abstained,
-        Some(false) => AgentAction::Answered,
-        // Judge failure: fall back to a length+content heuristic (a near-empty
-        // reply is an abstention). Visible in the excerpt for audit.
-        None => {
-            if visible.trim().len() < 24 {
-                AgentAction::Abstained
-            } else {
-                AgentAction::Answered
+            Some(true) => AgentAction::Abstained,
+            Some(false) => AgentAction::Answered,
+            // Judge failure: fall back to a length+content heuristic (a near-empty
+            // reply is an abstention). Visible in the excerpt for audit.
+            None => {
+                if visible.trim().len() < 24 {
+                    AgentAction::Abstained
+                } else {
+                    AgentAction::Answered
+                }
             }
-        }
         }
     };
 
     let answered = agent_action == AgentAction::Answered;
     let answer_correct = if q.qtype.is_answerable() && answered {
-        Some(gold_match(&visible, &q.gold_keywords))
+        // Forms-first: gold_match handles |-OR-groups deterministically. Only when
+        // the forms MISS do we escalate to the LLM correctness judge (the answer
+        // may be correct via a paraphrase the forms don't cover) — logging every
+        // escalation so the judge's footprint on this signal stays auditable.
+        if gold_match(&visible, &q.gold_keywords) {
+            Some(true)
+        } else {
+            let j = judge_correctness(judge, judge_model, &q.question, &q.gold_keywords, &visible).await;
+            eprintln!(
+                "  [correctness-escalate] {}: gold-forms missed → judge={}",
+                q.id,
+                j.map(|b| if b { "correct" } else { "wrong" }).unwrap_or("unavailable")
+            );
+            Some(j.unwrap_or(false))
+        }
     } else {
         None
+    };
+    // Partition signals (docs/CHAOS_MEASUREMENT_REDESIGN.md). retrieval_present:
+    // is the gold answer in the retrieved chunks at all? — a `false` on an
+    // abstained answerable probe is a RETRIEVAL miss, not a gate/model fault.
+    // draft_correct: was the PRE-GATE draft correct? (present only when the gate
+    // recorded the draft under SOVEREIGN_AGENTIC_KQ_DEBUG) — splits
+    // gate-killed-correct from caught-confabulation.
+    let retrieval_present = if q.qtype.is_answerable() {
+        Some(gold_match(&chunk_texts.join(" \n "), &q.gold_keywords))
+    } else {
+        None
+    };
+    let draft_correct = match (q.qtype.is_answerable(), draft.as_deref()) {
+        (true, Some(d)) => Some(gold_match(d, &q.gold_keywords)),
+        _ => None,
     };
     // Distractor: was the answer led by the wrong passage?
     let used_distractor = match (&q.distractor_quote, answered) {
@@ -670,6 +727,13 @@ async fn score_question(
             && !naked
             && !chunk_texts.is_empty()
             && q.qtype != QuestionType::AbsentOutOfDomain
+            // Mirror the gate's OWN scoping: it skips value/claim verification on
+            // long-form answers (the verify_grounding >1800-char "out of gate
+            // scope" pivot). Reducing an essay to one extracted "value" sweeps in
+            // framing (author, other works, dates) and false-positives the
+            // blatant-confab metric — the documented essay regression. Same pivot
+            // here keeps blatant_confab honest on discursive answers.
+            && visible.chars().count() <= 1_800
         {
             use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
             match assess_asserted_value(critic, &q.question, &visible, &chunk_texts).await {
@@ -682,7 +746,7 @@ async fn score_question(
         };
 
     let excerpt: String = visible.chars().take(200).collect();
-    ResultRow {
+    let mut row = ResultRow {
         id: q.id.clone(),
         qtype: q.qtype,
         expected_action: q.qtype.expected_action(),
@@ -698,7 +762,15 @@ async fn score_question(
         answer_excerpt: excerpt,
         asserted_value_grounded,
         asserted_value,
-    }
+        gate_action,
+        retrieval_present,
+        draft_correct,
+        partition: None,
+    };
+    // Stamp the glassbox partition cell from the row's own signals (the histogram
+    // recomputes it via `partition_cell()`; this stored copy is for JSONL readers).
+    row.partition = Some(row.partition_cell());
+    row
 }
 
 /// `rescore` — replay frozen transcripts through the judge + Critic stack
@@ -824,6 +896,11 @@ async fn rescore(rest: &[String]) -> i32 {
                         .collect()
                 })
                 .unwrap_or_default(),
+            // Recovered from the transcript when present (new runs persist them);
+            // older transcripts lack them → None, and the partition degrades to
+            // the retrieval-attributed coarse cells for those rows.
+            gate_action: rec.get("gate_action").and_then(|v| v.as_str()).map(str::to_string),
+            draft: rec.get("draft").and_then(|v| v.as_str()).map(str::to_string),
         };
         let row = score_question(
             live,
@@ -951,6 +1028,24 @@ fn print_summary(
         c.blatant_confab,
         c.answerable + c.absent,
         c.value_assessed,
+    );
+    // Causal attribution — the partition histogram. The diagnostic that says
+    // WHERE the misses are (gate vs model vs retrieval), so a gate fix shows up
+    // even when the aggregate is noisy. See docs/CHAOS_MEASUREMENT_REDESIGN.md.
+    let p = &report.partition;
+    eprintln!(
+        "\n  ── partition (causal attribution) ──\n  \
+         answerable: correct {} · gate-killed-correct {} · synth-wrong-caught {} · leaked-wrong {} · retrieval-miss {}\n  \
+         absent: abstain-correct {} · released-best-effort {} · CONFAB-LEAKED {}\n  \
+         unclassified {}  (naked / gate-off / draft not recorded)",
+        p.correct, p.gate_killed_correct, p.synth_wrong_caught, p.leaked_wrong, p.retrieval_miss,
+        p.abstain_correct, p.released_best_effort, p.confab_leaked, p.unclassified,
+    );
+    eprintln!(
+        "  misses attributed → gate {} · model {} · retrieval {}",
+        p.attributed_to_gate(),
+        p.attributed_to_model(),
+        p.attributed_to_retrieval(),
     );
     eprintln!(
         "\n  VERDICT: {}  (both gates must pass; no blended score)",
