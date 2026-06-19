@@ -64,7 +64,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.17"
 edition = "2021"
 # Single license across the monorepo: GNU AGPL-3.0-or-later. Sovereign is
 # source-available for audit; the AGPL network-use clause is the point for a
