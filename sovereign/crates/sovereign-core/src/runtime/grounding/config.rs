@@ -5,17 +5,25 @@
 
 use crate::runtime::retrieval_pipeline::EnvFlag;
 
+/// Whether `SOVEREIGN_AGENTIC_KQ_DEBUG` is set — the opt-in switch for the
+/// gate's glassbox extras: the `dbg()` stderr/tracing mirror AND recording the
+/// pre-gate draft into message metadata (see `gate_answer`). Default off, so a
+/// production message never carries the rejected draft, which can be the very
+/// confabulation the gate just suppressed. Cached once.
+pub(crate) fn debug_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("SOVEREIGN_AGENTIC_KQ_DEBUG")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
 /// Stderr mirror for bench/CLI surfaces that install no tracing
 /// subscriber — same pattern (and same env var) as the agentic
 /// loop's dbg().
 pub(crate) fn dbg(msg: &str) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let on = *ON.get_or_init(|| {
-        std::env::var("SOVEREIGN_AGENTIC_KQ_DEBUG")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
-    });
-    if on {
+    if debug_enabled() {
         eprintln!("    [gate] {msg}");
         // Also emit via tracing: a DETACHED daemon discards stderr, so eprintln
         // never reaches daemon.err — the gate was invisible in the deployed path.

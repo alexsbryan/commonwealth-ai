@@ -222,6 +222,14 @@ pub(crate) async fn gate_answer(
     if draft.chars().count() > profile.longform_chars {
         return gate_longform(inference, question, draft, evidence, base_request, profile).await;
     }
+    // Glassbox (debug-gated): record the pre-gate draft into the message meta so
+    // the measurement layer can tell a gate-killed-CORRECT answer from a
+    // confabulation the gate correctly caught — the partition's gate-vs-model
+    // split (docs/CHAOS_MEASUREMENT_REDESIGN.md). `None` (→ null) in production:
+    // the rejected draft can be the very confab the gate suppressed. Short-path
+    // only — gate_longform never produces a clean abstention, so the split there
+    // is vacuous. Moved into each diverging return below.
+    let draft_for_meta: Option<String> = config::debug_enabled().then(|| draft.clone());
     // Active citation-grounding (entity-anchored fact queries, flag-gated).
     // Replaces generate-then-substring-verify with quote-then-answer: the model
     // must copy a verbatim supporting sentence before it answers, which forces
@@ -259,6 +267,7 @@ pub(crate) async fn gate_answer(
                     "retried": false,
                     "mode": "citation",
                     "quote_chars": quote.len(),
+                    "draft": draft_for_meta,
                 }),
             };
         }
@@ -319,6 +328,7 @@ pub(crate) async fn gate_answer(
                                 "violation_prob": final_vp,
                                 "threshold": tau,
                                 "mode": "single_claim",
+                                "draft": draft_for_meta,
                             }),
                         };
                     }
@@ -406,6 +416,7 @@ pub(crate) async fn gate_answer(
             "violation_prob": final_vp,
             "threshold": tau,
             "mode": "single_claim",
+            "draft": draft_for_meta,
         }),
     }
 }

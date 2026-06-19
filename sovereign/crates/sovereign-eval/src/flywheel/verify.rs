@@ -135,9 +135,15 @@ impl DeterministicVerifier {
             corpus: corpus.to_string(),
             answer_excerpt: obs.answer.chars().take(200).collect(),
             // The flywheel-verify path doesn't assess value-presence (no
-            // evidence handle here); the chaos runner populates it.
+            // evidence handle here); the chaos runner populates it. Likewise the
+            // gate-action / partition signals are chaos-runner-only for now, so
+            // the partition degrades to Unclassified for flywheel rows.
             asserted_value_grounded: None,
             asserted_value: None,
+            gate_action: None,
+            retrieval_present: None,
+            draft_correct: None,
+            partition: None,
         };
 
         let failure = if row.is_pass() { None } else { Some(classify_failure(probe, &row)) };
