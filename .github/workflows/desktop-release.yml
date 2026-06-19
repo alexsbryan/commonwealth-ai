@@ -42,18 +42,31 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - name: macos-arm64
-            runner: macos-14
-            target: aarch64-apple-darwin
-          - name: macos-x86_64
-            runner: macos-13
-            target: x86_64-apple-darwin
+          # 2026-06-19: Linux is the ONLY platform validated by a local
+          # rehearsal (native toolbox build of the .deb + .AppImage from
+          # current HEAD), so it is the only matrix leg we trigger on a tag
+          # push. macOS + Windows are commented out until each is built and
+          # verified locally — pushing untested legs previously drained the
+          # Actions budget.
+          #
+          # In particular `macos-13` is RETIRED by GitHub: that job hangs
+          # forever on "Waiting for a runner to pick up this job" and silently
+          # burns minutes. Before re-enabling macOS, keep arm64 on macos-14 and
+          # choose a CURRENT Intel runner (or drop Intel). Then validate each
+          # locally first. See project_desktop_release_ci_deps.
+          #
+          # - name: macos-arm64
+          #   runner: macos-14
+          #   target: aarch64-apple-darwin
+          # - name: macos-x86_64
+          #   runner: macos-13          # RETIRED runner — hangs on pickup
+          #   target: x86_64-apple-darwin
           - name: linux-x86_64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          - name: windows-x86_64
-            runner: windows-2022
-            target: x86_64-pc-windows-msvc
+          # - name: windows-x86_64
+          #   runner: windows-2022
+          #   target: x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -126,6 +139,7 @@ jobs:
             librsvg2-dev \
             patchelf \
             libfuse2 \
+            squashfs-tools \
             mold \
             protobuf-compiler libprotobuf-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
@@ -207,6 +221,14 @@ jobs:
         working-directory: sovereign/crates/sovereign-desktop
         shell: bash
         env:
+          # AppImage tooling (linuxdeploy + its appimage plugin) ship as
+          # AppImages themselves; force extract-and-run so they never depend on
+          # a FUSE mount. Harmless on a FUSE-capable runner, and it was the
+          # proven fix when the nested appimage plugin couldn't mount during a
+          # local container rehearsal (2026-06-19). No effect on non-Linux jobs.
+          # (Paired with squashfs-tools in the Linux deps step, which provides
+          # the mksquashfs appimagetool calls to pack the final image.)
+          APPIMAGE_EXTRACT_AND_RUN: "1"
           # macOS deployment target floor for ggml's std::filesystem use
           # (ggml-backend-dl.cpp needs 10.15). Setting it on this step's env
           # puts it in the cargo-tauri → cargo → build-script process tree, so
