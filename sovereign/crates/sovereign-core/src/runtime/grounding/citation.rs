@@ -105,32 +105,31 @@ pub async fn citation_grounded_answer(
     let (quote, answer) = match parse_quote_answer(&resp) {
         Some(qa) => qa,
         None => {
-            dbg("citation: no QUOTE:/ANSWER: in extraction → inconclusive (fall through)");
+            dbg(&format!(
+                "citation: unparseable extraction (raw={:?}) → inconclusive (fall through)",
+                resp.chars().take(90).collect::<String>()
+            ));
             return CitationOutcome::Inconclusive;
         }
     };
+    // Anti-confabulation: the quote must (a) be verbatim in the passages and
+    // (b) actually SUPPORT the answer — the model can copy a real-but-
+    // insufficient sentence and still confabulate the value (measured: quoted an
+    // embassy sentence, answered "Russian embassy" — a country the text
+    // withholds). Glassbox via tracing (a detached daemon's eprintln is lost —
+    // only the tracing subscriber reaches daemon.err and the desktop panel).
+    let none = is_none(&quote) || is_none(&answer);
+    let quote_present = !none && quote_present_in_chunks(&quote, chunks);
+    let answer_in_quote = quote_present && answer_supported_by_quote(&answer, &quote);
     dbg(&format!(
-        "citation: quote={:?} answer={:?}",
-        quote.chars().take(60).collect::<String>(),
-        answer.chars().take(60).collect::<String>()
+        "citation: quote={:?} answer={:?} | present={} answer_in_quote={} → {}",
+        quote.chars().take(100).collect::<String>(),
+        answer.chars().take(50).collect::<String>(),
+        quote_present,
+        answer_in_quote,
+        if !none && quote_present && answer_in_quote { "GROUNDED" } else { "abstain (fall through to legacy)" }
     ));
-    if is_none(&quote) || is_none(&answer) {
-        return CitationOutcome::Abstain;
-    }
-    if !quote_present_in_chunks(&quote, chunks) {
-        dbg("citation: quote NOT verbatim in passages → not grounded");
-        return CitationOutcome::Abstain;
-    }
-    // Anti-confabulation: the quote must actually SUPPORT the answer, not merely
-    // exist. The model can copy a real-but-insufficient sentence and still
-    // confabulate the value (measured: quoted an embassy sentence, answered
-    // "Russian embassy" — a country the text withholds). Require the answer's
-    // content to be present in its own cited quote.
-    if !answer_supported_by_quote(&answer, &quote) {
-        dbg(&format!(
-            "citation: answer {:?} not supported by its own quote → not grounded (anti-confab)",
-            answer.chars().take(40).collect::<String>()
-        ));
+    if none || !quote_present || !answer_in_quote {
         return CitationOutcome::Abstain;
     }
     CitationOutcome::Grounded { answer, quote }

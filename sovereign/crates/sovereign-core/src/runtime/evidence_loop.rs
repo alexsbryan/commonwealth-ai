@@ -395,6 +395,10 @@ fn dbg(msg: &str) {
     });
     if on {
         eprintln!("    [agentic_kq] {msg}");
+        // Mirror to tracing too: a detached daemon discards stderr, so the loop
+        // was invisible in daemon.err. Default target (`sovereign_core::…`)
+        // matches the daemon's crate-scoped filter. (2026-06-18 glassbox fix.)
+        tracing::info!("[agentic_kq] {msg}");
     }
 }
 
