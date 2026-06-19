@@ -241,8 +241,18 @@ pub(crate) async fn gate_answer(
                 answer.chars().take(60).collect::<String>(),
                 quote.len()
             ));
+            // Release the grounded value WITH its supporting quote as a
+            // citation: glassbox (the user sees the exact sentence that grounds
+            // the answer) AND a bare value ("the Doctor") is otherwise mis-read
+            // as an abstention by the downstream answer/abstain classifier, which
+            // wants a fuller response. The terse `answer` is what was verified
+            // against the quote.
+            let cited = format!(
+                "{answer}\n\nGrounded in the source: \"{}\"",
+                quote.chars().take(220).collect::<String>()
+            );
             return GateOutcome {
-                text: answer,
+                text: cited,
                 meta: serde_json::json!({
                     "surface": profile.surface.id(),
                     "action": "citation_grounded",
@@ -267,7 +277,7 @@ pub(crate) async fn gate_answer(
     dbg(&format!(
         "gate_answer entity_anchored={entity_anchored} chunks={} draft={:?}",
         chunks.len(),
-        text.chars().take(80).collect::<String>()
+        text.chars().take(240).collect::<String>()
     ));
     // Structural exemption-closing: on an entity-anchored question, strip any GK
     // caveat before extraction so the asserted claim is actually verified rather

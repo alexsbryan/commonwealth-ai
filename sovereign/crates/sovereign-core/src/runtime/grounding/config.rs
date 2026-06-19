@@ -17,6 +17,12 @@ pub(crate) fn dbg(msg: &str) {
     });
     if on {
         eprintln!("    [gate] {msg}");
+        // Also emit via tracing: a DETACHED daemon discards stderr, so eprintln
+        // never reaches daemon.err — the gate was invisible in the deployed path.
+        // Use the DEFAULT target (this module = `sovereign_core::…`), which
+        // matches the daemon's crate-scoped filter (`sovereign_core=info`); a
+        // custom `target:` would be filtered out. (2026-06-18 glassbox fix.)
+        tracing::info!("[gate] {msg}");
     }
 }
 
@@ -206,6 +212,8 @@ pub(crate) struct GroundingProfile {
 
 /// Every env knob the grounding gate reads — registry-test consumed,
 /// doc-table renderable; same pattern as `retrieval_pipeline_flags()`.
+/// Human reference (gate + agentic-loop + observability flags, with the
+/// canonical chaos-bench invocation): `sovereign/docs/GROUNDING_GATE_ENV.md`.
 pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
     vec![
         (

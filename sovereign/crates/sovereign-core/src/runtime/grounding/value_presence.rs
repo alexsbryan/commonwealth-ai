@@ -147,7 +147,23 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
         "mr", "mrs", "miss", "ms", "the", "of", "a", "an", "and", "sir", "dr",
         "comrade", "chief", "inspector", "lady", "lord", "saint", "st",
     ];
-    let hay: String = chunks.join(" ").to_lowercase();
+    let hay: String = chunks
+        .join(" ")
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    // A multi-word value that appears VERBATIM (a contiguous phrase) in the
+    // evidence is grounded by definition — it is literally in the corpus. This
+    // is the principled grounding case, and it catches correct answers that ARE
+    // titles/ranks ("Chief Inspector" appears inside "Chief Inspector Heat"),
+    // which the significant-word path below would otherwise drop to an empty set
+    // (every word a stop-word) and mis-flag as a confabulation. Gated on ≥2
+    // words so a bare honorific ("Mr") cannot self-ground.
+    let nval: String = value.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ");
+    if nval.split(' ').filter(|w| !w.is_empty()).count() >= 2 && hay.contains(&nval) {
+        return true;
+    }
     let sig: Vec<String> = value
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| w.chars().count() >= 2 && !STOP.contains(&w.to_lowercase().as_str()))
@@ -207,5 +223,21 @@ mod tests {
     fn honorifics_alone_do_not_count_as_present() {
         // A value that reduces to only stop-words must not be treated as grounded.
         assert!(!value_present_in_chunks("Mr.", &chunks()));
+    }
+
+    #[test]
+    fn verbatim_multiword_value_is_grounded() {
+        // B1: a correct answer that IS a title/rank ("Chief Inspector") appears
+        // verbatim inside the corpus ("Chief Inspector Heat") → grounded, even
+        // though every word is a stop-word and the significant-word path would
+        // drop it to empty. The ≥2-word guard keeps a bare honorific out.
+        let c = vec![
+            "Chief Inspector Heat of the Special Crimes Department changed his tone.".to_string(),
+        ];
+        assert!(value_present_in_chunks("Chief Inspector", &c));
+        // Not present verbatim AND a significant word ("russian") is absent → still caught.
+        assert!(!value_present_in_chunks("Russian embassy", &c));
+        // The ≥2-word guard: a bare honorific still does not self-ground.
+        assert!(!value_present_in_chunks("Mr.", &c));
     }
 }
