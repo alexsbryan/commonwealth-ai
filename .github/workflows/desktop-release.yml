@@ -53,31 +53,37 @@ jobs:
           # verified locally — pushing untested legs previously drained the
           # Actions budget.
           #
-          # `macos-13` is RETIRED by GitHub: that job hangs forever on "Waiting
-          # for a runner to pick up this job" and silently burns minutes. arm64
-          # stays on macos-14; if Intel coverage is needed, pick a CURRENT Intel
-          # runner (or drop Intel) and validate locally first. See
-          # project_desktop_release_ci_deps.
+          # macOS Intel (x86_64) is DROPPED — arm64-only (decided 2026-06-20).
+          # `macos-13` (NATIVE Intel) is RETIRED by GitHub: the job hung forever
+          # on "Waiting for a runner to pick up this job: macos-13", and (publish
+          # is `needs: build`) blocked the whole release. The only alternative —
+          # CROSS-compiling x86_64 on a macos-14 (arm64) runner — proved too
+          # fragile: this native-heavy stack hits a chain of cross-compile-ONLY
+          # link blockers a native Intel build never would (llama.cpp
+          # cpp-httplib→OpenSSL; lance AVX-512 SIMD kernels; likely more). Not
+          # worth the yak-shave. Revisit only with a NATIVE Intel build path (a
+          # self-hosted Intel-Mac runner). No macos-x86_64 leg.
           #
-          # WINDOWS: the code is now wired — sovereign-inference has a
-          # cfg(target_os="windows") llama-cpp arm (CPU baseline; vulkan/cuda are
-          # feature-selected per leg) and the Windows-readiness fixes have landed.
-          # The leg below stays COMMENTED until `scripts/windows-crosscheck.sh`
-          # (cargo-xwin, x86_64-pc-windows-msvc) is green LOCALLY — uncomment is
-          # then one line. Backend roadmap: ship `windows-x64` (CPU) first; add a
-          # `windows-x64-vulkan` leg (`--features windows-vulkan` + Vulkan SDK)
-          # covering NVIDIA+AMD+Intel; a `windows-x64-cuda` leg (CUDA Toolkit,
-          # untestable on free runners) only when benchmarks justify it.
+          # WINDOWS: code is wired (sovereign-inference cfg(target_os="windows")
+          # llama arm, CPU baseline + feature-selected vulkan/cuda; readiness
+          # fixes landed) and the Rust/cfg layer cross-checks clean via
+          # scripts/windows-crosscheck.sh (cargo-xwin). IMPORTANT: windows-2022 is
+          # a NATIVE x86_64 runner — that build is NOT cross-compiled, so the
+          # OpenSSL/lance cross-link failures above are cargo-xwin (cross)
+          # ARTIFACTS that should not occur there. cargo-xwin cannot prove the
+          # native-dep build; the leg stays COMMENTED until the NATIVE build is
+          # validated on a Windows VM or one windows-2022 run. If native Windows
+          # DOES hit the llama OpenSSL link, the minimal fix is dropping `mtmd`
+          # from the desktop (no common → no cpp-httplib → no OpenSSL), not a
+          # vendored fork. Backend roadmap: CPU first, then windows-x64-vulkan
+          # (--features windows-vulkan + Vulkan SDK).
           - name: macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin
-          # - name: macos-x86_64
-          #   runner: macos-13          # RETIRED runner — hangs on pickup
-          #   target: x86_64-apple-darwin
           - name: linux-x86_64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          # - name: windows-x86_64           # CPU; uncomment after the local cargo-xwin gate is green
+          # - name: windows-x86_64           # CPU; uncomment after NATIVE validation (VM or one windows-2022 run)
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
           # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step + features: windows-vulkan
