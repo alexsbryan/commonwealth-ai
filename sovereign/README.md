@@ -56,10 +56,21 @@ A friend runs `sovereign mesh join cwth-a1b2-c3d4-e5f6`, and from then on your m
 
 ## Install
 
-Pre-release means building from source. You'll need 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models — along with a Rust toolchain and CMake. On macOS, run `xcode-select --install`, then export `SDKROOT="$(xcrun --show-sdk-path)"`, which bindgen needs to find the system headers. On Linux, `sudo apt install cmake build-essential` covers it.
+Pre-release, but there's a prebuilt binary for macOS (Apple Silicon) and Linux (x86_64) — one line to install, one to set up:
 
 ```sh
-cargo build --release -p sovereign-cli
+curl -fsSL https://svrnme.sh/install.sh | sh
+sovereign setup
+```
+
+That drops the `sovereign` CLI into `~/.local/bin`, and `setup` finds models that fit your hardware and downloads them. You'll want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models.
+
+### Or build from source
+
+A Rust toolchain and CMake. On macOS, run `xcode-select --install`, then export `SDKROOT="$(xcrun --show-sdk-path)"`, which bindgen needs to find the system headers. On Linux, `sudo apt install cmake build-essential protobuf-compiler` covers it.
+
+```sh
+cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
 ln -sf "$(pwd)/target/release/sovereign-cli" ~/.local/bin/sovereign
 sovereign setup
 ```

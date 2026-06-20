@@ -24,5 +24,8 @@ postgres-types = { version = "0.2", features = ["derive"], optional = true }
 default = []
 postgres = ["tokio-postgres", "deadpool-postgres", "postgres-types"]
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true

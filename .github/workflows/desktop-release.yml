@@ -42,22 +42,25 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          # 2026-06-19: Linux is the ONLY platform validated by a local
-          # rehearsal (native toolbox build of the .deb + .AppImage from
-          # current HEAD), so it is the only matrix leg we trigger on a tag
-          # push. macOS + Windows are commented out until each is built and
+          # 2026-06-19: Linux + macOS-arm64 are both validated by local
+          # rehearsals from current HEAD — Linux via a native toolbox build of
+          # the .deb + .AppImage; macOS-arm64 via scripts/build-desktop-macos.sh
+          # producing the deep-ad-hoc-signed .app + a verified .dmg. The Tauri
+          # build step below now self-heals the one local-vs-CI difference: when
+          # create-dmg's Finder/osascript cosmetic step is unavailable it
+          # packages the DMG from the signed .app via hdiutil (see that step).
+          # macOS-x86_64 + Windows stay commented until each is built and
           # verified locally — pushing untested legs previously drained the
           # Actions budget.
           #
-          # In particular `macos-13` is RETIRED by GitHub: that job hangs
-          # forever on "Waiting for a runner to pick up this job" and silently
-          # burns minutes. Before re-enabling macOS, keep arm64 on macos-14 and
-          # choose a CURRENT Intel runner (or drop Intel). Then validate each
-          # locally first. See project_desktop_release_ci_deps.
-          #
-          # - name: macos-arm64
-          #   runner: macos-14
-          #   target: aarch64-apple-darwin
+          # `macos-13` is RETIRED by GitHub: that job hangs forever on "Waiting
+          # for a runner to pick up this job" and silently burns minutes. arm64
+          # stays on macos-14; if Intel coverage is needed, pick a CURRENT Intel
+          # runner (or drop Intel) and validate locally first. See
+          # project_desktop_release_ci_deps.
+          - name: macos-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
           # - name: macos-x86_64
           #   runner: macos-13          # RETIRED runner — hangs on pickup
           #   target: x86_64-apple-darwin
@@ -250,9 +253,45 @@ jobs:
           # locate or co-package, and linuxdeploy's AppImage dependency walk
           # only sees packageable system libs (libvulkan.so.1, GTK, …). A
           # single build pass produces all installers.
+          #
+          # Capture the real exit code (don't pipe — a pipeline's status is the
+          # last stage's, which would mask a failed build as success).
+          set +e
           cargo tauri build \
             --target ${{ matrix.platform.target }} \
             --config src-tauri/tauri.release.conf.json
+          BUILD_RC=$?
+          set -e
+          if (( BUILD_RC == 0 )); then exit 0; fi
+          # The one local-vs-CI difference we tolerate: macOS create-dmg's
+          # osascript step needs to drive Finder (Apple Events); if the runner
+          # can't, bundle_dmg.sh exits 64 with the .app already built + signed.
+          # Package the DMG from that .app via hdiutil — functionally identical,
+          # minus the background image. Mirrors scripts/build-desktop-macos.sh.
+          # ANY other failure (or non-macOS) re-raises the original exit code.
+          BUNDLE="$GITHUB_WORKSPACE/target/${{ matrix.platform.target }}/release/bundle"
+          APP="$BUNDLE/macos/Sovereign.app"
+          if [[ "${RUNNER_OS:-}" == "macOS" && -d "$APP" ]] && ! ls "$BUNDLE"/dmg/*.dmg >/dev/null 2>&1; then
+            echo "Tauri DMG step failed but the signed .app exists — packaging via hdiutil (create-dmg's Finder step was unavailable)."
+            VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+            case "${{ matrix.platform.target }}" in
+              aarch64-apple-darwin) ARCH_SUFFIX=aarch64 ;;
+              x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
+              *)                    ARCH_SUFFIX="$(uname -m)" ;;
+            esac
+            DMG_OUT="$BUNDLE/dmg/Sovereign_${VERSION}_${ARCH_SUFFIX}.dmg"
+            rm -f "$BUNDLE"/macos/rw.*.dmg
+            STAGE="$(mktemp -d)"
+            ditto "$APP" "$STAGE/Sovereign.app"        # preserves the ad-hoc signature
+            ln -s /Applications "$STAGE/Applications"   # drag-to-install target
+            mkdir -p "$BUNDLE/dmg"
+            hdiutil create -volname "Sovereign" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
+            rm -rf "$STAGE"
+            echo "DMG built via hdiutil fallback: $DMG_OUT"
+          else
+            echo "::error::Build failed (exit $BUILD_RC) and it is not the macOS Finder/TCC DMG cosmetic case — see the cargo output above." >&2
+            exit "$BUILD_RC"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

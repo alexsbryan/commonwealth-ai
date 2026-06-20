@@ -161,19 +161,6 @@ sha256 = ""
 catalog_status = "preview"
 
 [[recipes]]
-id = "alignment"
-name = "Alignment workspace"
-description = "Mutable-merge replication of the user's ~/.claude/ plans + auto-memory entries + plan template across the user's own mesh peers. Newest-mtime-wins per file. Pairs with the post-merge projector so a fresh machine reaches parity in one corpus install."
-license = "private"
-size_compressed_gb = 0.001
-size_indexed_gb = 0.005
-enrichment_enabled = false
-mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
-sha256 = ""
-catalog_status = "hidden"
-
-[[recipes]]
 id = "us-code"
 name = "United States Code"
 description = "The codification of federal statutes — every active title of the U.S. Code as a citable annual edition. Sourced from govinfo's USCODE bulk data (USLM XML). Public domain under 17 USC §105. Default `--param year=2024`; install side-by-side editions for historical citation work. No `[prebuilt]` snapshot yet — first install runs the full bulk pull (~30–60 min)."

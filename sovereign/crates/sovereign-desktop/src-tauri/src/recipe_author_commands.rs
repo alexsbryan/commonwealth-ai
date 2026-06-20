@@ -13,7 +13,7 @@
 //! Chat send/receive reuses the existing `send_message_stream`
 //! command + `message-chunk` / `message-complete` events.
 //!
-//! Backend handles (`Arc<NoteStore>`, `Arc<FeatureStore>`) live on
+//! Backend handles (`Arc<NoteStore>`, `Arc<RecipeProjectStore>`) live on
 //! `AppState` and are populated during bootstrap. When either is
 //! missing (early boot, IO failure on `notes.db` / `features.db`),
 //! every command in this module returns a structured error string
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use corpus_engine::Recipe;
-use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, CheckpointMeta, ProjectSummary,
@@ -37,7 +37,7 @@ use crate::state::AppState;
 /// Pull `notes` + `features` handles off `AppState`. Returns a
 /// stringified error suitable for direct `.map_err(...)?` in the
 /// command bodies — the frontend renders these as toast text.
-async fn handles(state: &Arc<AppState>) -> Result<(Arc<NoteStore>, Arc<FeatureStore>), String> {
+async fn handles(state: &Arc<AppState>) -> Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), String> {
     let notes = state
         .notes
         .read()
@@ -81,7 +81,7 @@ pub struct RecipeProjectListEntry {
 }
 
 impl RecipeProjectListEntry {
-    fn from_row_and_summary(row: &FeatureRow, summary: ProjectSummary) -> Self {
+    fn from_row_and_summary(row: &RecipeProjectRow, summary: ProjectSummary) -> Self {
         // Take first ~200 chars of the charter for the sidebar tooltip
         // — full charter is in the dashboard CharterSummary card.
         let mut excerpt = row.charter_md.chars().take(200).collect::<String>();
@@ -119,9 +119,6 @@ pub async fn recipe_author_list_projects(
 
     let mut out = Vec::new();
     for row in all {
-        if FeatureState::parse(&row.state) != Some(FeatureState::RecipeAuthoring) {
-            continue;
-        }
         // Try to load the project's sidecar summary. A failure here is
         // not fatal — the row exists, surface it with a default
         // summary so the user can still pick it.
@@ -137,7 +134,7 @@ pub async fn recipe_author_list_projects(
     Ok(out)
 }
 
-fn default_summary(row: &FeatureRow) -> ProjectSummary {
+fn default_summary(row: &RecipeProjectRow) -> ProjectSummary {
     ProjectSummary {
         feature_id: row.id.clone(),
         title: row.title.clone(),
@@ -177,14 +174,14 @@ pub async fn recipe_author_new_project(
     .await
     .map_err(|e| format!("recipe_author_new_project: {e}"))?;
 
-    // Re-read the FeatureRow + summary so the sidebar entry mirrors
+    // Re-read the RecipeProjectRow + summary so the sidebar entry mirrors
     // exactly what `list_projects` would render after a refresh.
     let row = features
         .get(project.feature_id())
         .await
         .map_err(|e| format!("recipe_author_new_project: get row: {e}"))?
         .ok_or_else(|| {
-            "recipe_author_new_project: project FeatureRow vanished after creation".to_string()
+            "recipe_author_new_project: project RecipeProjectRow vanished after creation".to_string()
         })?;
     let summary = project
         .read_summary()

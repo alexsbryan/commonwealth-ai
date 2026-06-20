@@ -249,7 +249,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use corpus_engine_atos::FeatureStore;
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
     use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
@@ -258,7 +258,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         let project = RecipeProject::new(
             "Federal case law (CourtListener)",
             "Build a corpus of federal published opinions over CourtListener \

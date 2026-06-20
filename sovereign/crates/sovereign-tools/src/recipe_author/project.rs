@@ -4,8 +4,8 @@
 //! A project is the unit of work the partner builds end to end —
 //! one corpus + (optionally) one investigation schema. Spec §4.1
 //! says project state should reuse the existing `NoteStore` and
-//! `FeatureStore` "with extended kinds," so this data layer is
-//! deliberately thin: a `FeatureRow` (state = `RecipeAuthoring`)
+//! `RecipeProjectStore` "with extended kinds," so this data layer is
+//! deliberately thin: a `RecipeProjectRow` (state = `RecipeAuthoring`)
 //! holds the charter and gives every feature-scoped note a stable
 //! `feature_id` to anchor to, and a sidecar directory under
 //! `~/.sovereign/recipe-projects/<feature_id>/` carries the
@@ -37,7 +37,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use sovereign_store::recipe_project_store::{RecipeProjectError, RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_core::error::{Error, Result};
 
@@ -57,11 +57,14 @@ fn ce_err(e: corpus_engine::Error) -> Error {
     Error::Storage(e.to_string())
 }
 
-/// Same shape for `corpus-engine-atos::Error` (FeatureStore + plan_items
-/// + design_signals carved out 2026-05-23). FeatureStore call sites
-/// bubble the atos error type now.
-fn ce_atos_err(e: corpus_engine_atos::Error) -> Error {
-    Error::Storage(e.to_string())
+/// Bridge a `RecipeProjectStore` error into a `sovereign_core::Error`.
+/// Empty/duplicate-id preconditions surface as `InvalidInput` so the agent
+/// can react; everything else surfaces as `Storage`.
+fn ce_rps_err(e: RecipeProjectError) -> Error {
+    match e {
+        RecipeProjectError::InvalidInput(s) => Error::InvalidInput(s),
+        other => Error::Storage(other.to_string()),
+    }
 }
 
 /// Same shape for `corpus-engine-notes::Error` (NoteStore carved out
@@ -179,24 +182,24 @@ pub struct RecipeProject {
     title: String,
     project_dir: PathBuf,
     notes: Arc<NoteStore>,
-    features: Arc<FeatureStore>,
+    features: Arc<RecipeProjectStore>,
 }
 
 impl RecipeProject {
     /// Provision a fresh project. Allocates a v4 UUID feature_id,
-    /// writes the FeatureRow at state=`RecipeAuthoring`, lays down
+    /// writes the RecipeProjectRow at state=`RecipeAuthoring`, lays down
     /// the on-disk directory + summary, and returns the live handle.
     pub async fn new(
         title: &str,
         charter_md: &str,
         notes: Arc<NoteStore>,
-        features: Arc<FeatureStore>,
+        features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
         let feature_id = uuid::Uuid::new_v4().to_string();
         features
             .provision_recipe_project(&feature_id, title, charter_md)
             .await
-            .map_err(ce_atos_err)?;
+            .map_err(ce_rps_err)?;
 
         let project_dir = Self::project_dir_for(&feature_id)?;
         std::fs::create_dir_all(&project_dir)
@@ -235,28 +238,22 @@ impl RecipeProject {
     }
 
     /// Load an existing project by feature_id. Returns
-    /// [`Error::InvalidInput`] if no FeatureRow exists or the row
+    /// [`Error::InvalidInput`] if no RecipeProjectRow exists or the row
     /// isn't in the `RecipeAuthoring` state.
     pub async fn load(
         feature_id: &str,
         notes: Arc<NoteStore>,
-        features: Arc<FeatureStore>,
+        features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
         let row = features
             .get(feature_id)
             .await
-            .map_err(ce_atos_err)?
+            .map_err(ce_rps_err)?
             .ok_or_else(|| {
                 Error::InvalidInput(format!(
                     "no recipe-author project with feature_id `{feature_id}`"
                 ))
             })?;
-        if FeatureState::parse(&row.state) != Some(FeatureState::RecipeAuthoring) {
-            return Err(Error::InvalidInput(format!(
-                "feature `{feature_id}` is not a recipe-author project (state = {})",
-                row.state
-            )));
-        }
         let project_dir = Self::project_dir_for(feature_id)?;
         // `load` is also used right after a fresh provision in tests
         // that want to round-trip through disk — be tolerant of a
@@ -423,9 +420,9 @@ impl RecipeProject {
             .map_err(ce_notes_err)
     }
 
-    /// FeatureStore handle access for sibling tools that need to
+    /// RecipeProjectStore handle access for sibling tools that need to
     /// re-read state (e.g. checkpoint restore touching the title).
-    pub fn features(&self) -> &Arc<FeatureStore> {
+    pub fn features(&self) -> &Arc<RecipeProjectStore> {
         &self.features
     }
 
@@ -443,13 +440,13 @@ impl RecipeProject {
 }
 
 /// Convenience helper for tools that have a feature_id and need to
-/// fetch the underlying FeatureRow without going through the full
+/// fetch the underlying RecipeProjectRow without going through the full
 /// `RecipeProject::load` (which also enforces state validation —
 /// that's the right behaviour for tool entry points but the wrong
 /// shape for read-only situated-context renders).
 pub async fn feature_row_for(
     feature_id: &str,
-    features: &FeatureStore,
-) -> Result<Option<FeatureRow>> {
-    features.get(feature_id).await.map_err(ce_atos_err)
+    features: &RecipeProjectStore,
+) -> Result<Option<RecipeProjectRow>> {
+    features.get(feature_id).await.map_err(ce_rps_err)
 }

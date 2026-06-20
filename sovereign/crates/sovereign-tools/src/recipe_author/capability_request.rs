@@ -52,7 +52,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine_atos::FeatureStore;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
@@ -85,7 +85,7 @@ pub struct CapabilityRequest {
 #[derive(Default)]
 pub struct CapabilityRequestTool {
     notes: Option<Arc<NoteStore>>,
-    features: Option<Arc<FeatureStore>>,
+    features: Option<Arc<RecipeProjectStore>>,
     /// Test-only override for the maintainer inbox directory. None
     /// in production (resolves to `~/.sovereign/capability-requests/inbox/`).
     inbox_dir: Option<PathBuf>,
@@ -96,7 +96,7 @@ impl CapabilityRequestTool {
         Self::default()
     }
 
-    pub fn with_stores(notes: Arc<NoteStore>, features: Arc<FeatureStore>) -> Self {
+    pub fn with_stores(notes: Arc<NoteStore>, features: Arc<RecipeProjectStore>) -> Self {
         Self {
             notes: Some(notes),
             features: Some(features),
@@ -248,7 +248,7 @@ impl Tool for CapabilityRequestTool {
         })?;
         let features = self.features.as_ref().ok_or_else(|| {
             Error::InvalidInput(
-                "CapabilityRequestTool was constructed without a FeatureStore".into(),
+                "CapabilityRequestTool was constructed without a RecipeProjectStore".into(),
             )
         })?;
 
@@ -419,7 +419,7 @@ mod tests {
 
     async fn fresh() -> (
         Arc<NoteStore>,
-        Arc<FeatureStore>,
+        Arc<RecipeProjectStore>,
         RecipeProject,
         tempfile::TempDir,
         std::sync::MutexGuard<'static, ()>,
@@ -427,7 +427,7 @@ mod tests {
         let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         std::env::set_var("HOME", dir.path());
         let project = RecipeProject::new(
             "trial",

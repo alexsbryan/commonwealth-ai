@@ -476,7 +476,7 @@ async fn main() {
             tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(notes))));
             tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(notes))));
             let features_db = home.join(".sovereign").join("features.db");
-            match corpus_engine_atos::FeatureStore::open(&features_db) {
+            match sovereign_store::recipe_project_store::RecipeProjectStore::open(&features_db) {
                 Ok(features) => {
                     let features = Arc::new(features);
                     tools.register(Box::new(CheckpointTool::with_stores(

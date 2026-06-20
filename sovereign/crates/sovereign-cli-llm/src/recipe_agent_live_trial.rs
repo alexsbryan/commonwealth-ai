@@ -21,7 +21,7 @@
 //!   RegistryBrowseTool / DecisionLogTool / CheckpointTool /
 //!   CapabilityRequestTool / WebFetchTool / WebSearchTool` registered
 //!   in `sovereign-cli/src/main.rs`.
-//! - **Persistence** — `NoteStore` + `FeatureStore` at the user's
+//! - **Persistence** — `NoteStore` + `RecipeProjectStore` at the user's
 //!   real `~/.sovereign/{notes,features}.db`. Capability requests
 //!   land in the user's real maintainer inbox.
 //! - **Project model** — `RecipeProject` provisioned via
@@ -61,7 +61,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_atos::FeatureStore;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
@@ -1295,7 +1295,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let features = match FeatureStore::open(&dotsovereign.join("features.db")) {
+    let features = match RecipeProjectStore::open(&dotsovereign.join("features.db")) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("live-trial: feature store: {e}");
