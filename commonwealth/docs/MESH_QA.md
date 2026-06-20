@@ -34,28 +34,44 @@ A failing scenario prints its `seed`; re-run with that seed to reproduce.
 
 ## Layer 2 — Multi-process soak (real bytes)
 
-Real `sovereign daemon` processes under real OS-level faults (SIGKILL, network
-partition, clock skew, memory pressure) — the failure modes only visible across
-actual process + network boundaries. The assertions are Rust; the orchestration
-is a shell.
+Real `sovereign daemon` processes forming one mesh over real TCP gossip, driven
+through real faults — a genuine `kill -9` crash, real wall-clock offline-decay,
+and churn (restart + rejoin) — in repeated cycles, asserting the invariant pack
+at every checkpoint. This is the layer that proves the fix-A decay path holds
+under an actual process kill, not a simulated `down` flag. The assertions are
+Rust (`check-invariants`); the orchestration is a shell.
 
 ```
-# local subprocess backend (runnable on a dev box / toolbox; real multi-process)
-scripts/mesh-soak.sh --nodes 3 --minutes 30 --seed 42
+# local backend — VALIDATED. Real subprocesses, fully isolated (see below).
+scripts/mesh-soak.sh --nodes 3 --minutes 30 --seed 42 --gate
 
-# podman backend (nightly/CI target — adds real partitions + cgroup OOM)
+# podman backend — the nightly/CI scaling target. Adds the OS-fault catalog that
+# needs containers: real network partitions (network disconnect), cgroup memory
+# limits (the real OOM path), tc/netem. Mirrors the local mechanics; needs an
+# image carrying sovereign-cli. Not yet exercised on this host.
 MESH_SOAK_BACKEND=podman scripts/mesh-soak.sh --nodes 5 --minutes 60 --seed 42
 ```
 
-- Assertion engine: `sovereign mesh check-invariants --nodes <a:port,...> [--expect-live <id,...>] [--json]`
-  polls `GET /v1/mesh/status` and evaluates convergence / no-ghost / liveness;
-  exits non-zero on violation. Pure eval is unit-tested in
-  `sovereign-cli-llm/src/mesh_soak.rs`.
-- Findings stream to `mesh-soak-findings.jsonl` (one line per tick, seed-stamped).
-- The podman backend needs an image carrying `sovereign-cli`; see the script
-  header. The local backend needs only a `cargo build --bins`.
+**Isolation (load-bearing).** The local backend re-execs the whole soak inside a
+rootless network namespace (`unshare -rn`, loopback-only). The daemon has no
+mDNS-disable knob and the CLI `mesh join` is hardcoded to `:9741`, so on the bare
+host the test nodes would advertise into — and try to join — the operator's *real
+production mesh*. The netns seals them to `lo`: they self-advertise `127.0.0.1`,
+join each other over a localhost relay (`POST /v1/mesh/join` directly, never the
+CLI), and never touch the host mesh. Verified: the host's real mesh member count
+is unchanged across a full soak.
 
-This is the layer that reproduces the real OOM path and the clock-skew flap.
+**Tiny model by design.** A mesh soak needs daemons that boot + gossip, not infer;
+the eager model load just has to succeed. `primary` points at a small embedding
+GGUF (~600 MB/node, override with `MESH_SOAK_MODEL`), so N nodes fit in RAM.
+
+- Assertion engine: `sovereign mesh check-invariants --nodes <a:port,...> [--expect-live <id,...>] [--json]`
+  polls `GET /v1/mesh/status` (the **client** port — the internal port 404s) and
+  evaluates convergence / no-ghost / liveness; exits non-zero on violation. Pure
+  eval is unit-tested in `sovereign-cli-llm/src/mesh_soak.rs`.
+- Findings stream to `mesh-soak-findings.jsonl`; `--gate` runs Layer 3 at the end.
+- The local backend needs only a `cargo build --bins` plus `ip` + `unshare`. The
+  podman backend's OOM / partition / netem faults are its reason to exist in CI.
 
 ## Layer 3 — Load / SLO regression gate
 
@@ -112,8 +128,10 @@ ceiling), giant unsealed corpus (mock 1M-row / real corpus + cgroup mem).
   (the immortal-ghost fix), while a genuine rejoin still wins.
   (`tombstone_is_not_resurrected_by_stale_live_record`)
 
-Remaining operational step: graceful self-`leave` gossiping a self-tombstone
-(today a left node is removed via `revoke_member` or decays to offline).
+Graceful self-`leave` now gossips a self-tombstone before shutdown
+(`gossip::announce_departure`, wired into `daemon::leave`) so a clean exit
+propagates immediately instead of waiting on decay; `revoke_member` and
+offline-decay remain the fallbacks for an unannounced drop.
 
 ## Go / no-go before going wide
 
