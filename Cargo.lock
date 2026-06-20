@@ -11945,7 +11945,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-agent-bench",
  "sovereign-cli-shared",
  "sovereign-core",
  "sovereign-eval",

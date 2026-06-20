@@ -29,7 +29,7 @@ sovereign-atos = { workspace = true, optional = true }
 # not depend on sovereign-tools.
 sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
-corpus-engine-archaeology = { workspace = true }
+corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # SCIP call graph types — carved out of corpus-engine 2026-05-23.
 # Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
@@ -197,6 +197,11 @@ treesitter = ["corpus-engine/treesitter"]
 # DesignSignalsExtract) and the KnowledgeView strategic ATOS splice. Orthogonal
 # to `treesitter` — the code-intel ATOS tools need both axes.
 atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
+# `dev-tools` is the developer workbench surface. Today it gates the
+# git-archaeology rendering in BriefTool (principles-as-inquiries + recent
+# commit activity). OFF by default so product builds (server/desktop/daemon)
+# drop `corpus-engine-archaeology`; the `sovereign-cli-dev` workbench enables it.
+dev-tools = ["dep:corpus-engine-archaeology"]
 gliner-ner = ["dep:gline-rs", "dep:orp"]
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the

@@ -46,9 +46,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
+#[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::archaeology_eval::{
     inquiries_matching_files, load_inquiries_from_dir,
 };
+#[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
 use corpus_engine_notes::{NoteRow, NoteStore};
 use serde::Deserialize;
@@ -357,6 +359,11 @@ fn humanize_age(seconds: u64) -> String {
 /// Surface architectural commitments (inquiries) that target a file
 /// in the working set. Reuses the eval framework's inquiry loader +
 /// glob matcher so principles-as-inquiries stays one source of truth.
+#[cfg(not(feature = "dev-tools"))]
+fn render_principles(_inquiries_dir: &Path, _working_set: &[PathBuf], _remaining: usize) -> String {
+    String::new()
+}
+#[cfg(feature = "dev-tools")]
 fn render_principles(inquiries_dir: &Path, working_set: &[PathBuf], remaining: usize) -> String {
     let inquiries = match load_inquiries_from_dir(inquiries_dir) {
         Ok(i) => i,
@@ -508,6 +515,16 @@ fn render_structural(
     Ok(out)
 }
 
+#[cfg(not(feature = "dev-tools"))]
+fn render_recent_activity(
+    _repo_root: &Path,
+    _working_set: &[PathBuf],
+    _days: i64,
+    _remaining: usize,
+) -> Result<String, BriefError> {
+    Ok(String::new())
+}
+#[cfg(feature = "dev-tools")]
 fn render_recent_activity(
     repo_root: &Path,
     working_set: &[PathBuf],
