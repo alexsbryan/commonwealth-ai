@@ -92,6 +92,7 @@ pub fn init_mesh_with_identity(
     let now = now_secs();
 
     let founder = MemberRecord {
+        removed_at: None,
         node_pubkey,
         // Dial info is self-stamped by gossip once the endpoint binds
         // (W2); a fresh record carries none yet.
@@ -252,6 +253,7 @@ pub fn accept_join_with_identity(
     };
 
     let member = MemberRecord {
+        removed_at: None,
         node_pubkey,
         // Self-stamped by gossip once this node binds its endpoint (W2).
         relay_url: None,
@@ -330,14 +332,25 @@ impl RevocationProposal {
     }
 }
 
-/// Apply a confirmed revocation to the mesh.
-pub fn revoke_member(mesh: &mut Mesh, target_node: NodeId) -> Result<()> {
-    if mesh.members.remove(&target_node).is_none() {
-        return Err(Error::Membership(format!(
+/// Apply a confirmed revocation to the mesh by **tombstoning** the member
+/// (stamping `removed_at`), not deleting it.
+///
+/// A bare `members.remove` is the immortal-ghost bug: the next gossip round
+/// re-learns the node from any peer still holding its record, since the
+/// union-only merge has no removal signal. A tombstone instead rides the
+/// event-time LWW in [`Mesh::merge_from`] and out-competes those stale live
+/// copies mesh-wide. Read paths filter tombstoned members out of active views.
+pub fn revoke_member(mesh: &mut Mesh, target_node: NodeId, now_secs: u64) -> Result<()> {
+    match mesh.members.get_mut(&target_node) {
+        Some(m) => {
+            m.removed_at = Some(now_secs);
+            m.status = NodeStatus::Offline;
+            Ok(())
+        }
+        None => Err(Error::Membership(format!(
             "node {target_node} is not a member"
-        )));
+        ))),
     }
-    Ok(())
 }
 
 /// Update a node's status (e.g., going offline gracefully).
@@ -441,22 +454,26 @@ mod tests {
     }
 
     #[test]
-    fn revoke_member_removes_from_mesh() {
+    fn revoke_member_tombstones_instead_of_deleting() {
         let (mut mesh, key) = init_mesh("Test", "Alice", vec![]);
         let founder_id = *mesh.members.keys().next().unwrap();
 
         let bob_id = accept_join(&mut mesh, &key, "Bob", vec![], founder_id).unwrap();
         assert_eq!(mesh.members.len(), 2);
 
-        revoke_member(&mut mesh, bob_id).unwrap();
-        assert_eq!(mesh.members.len(), 1);
-        assert!(!mesh.members.contains_key(&bob_id));
+        revoke_member(&mut mesh, bob_id, 1_000).unwrap();
+        // Tombstoned, NOT deleted — the record stays so the removal can
+        // out-compete stale live copies via gossip (the immortal-ghost fix).
+        let bob = mesh.members.get(&bob_id).expect("tombstone record retained");
+        assert_eq!(bob.removed_at, Some(1_000));
+        assert!(!bob.is_active());
+        assert_eq!(bob.status, NodeStatus::Offline);
     }
 
     #[test]
     fn revoke_nonexistent_member_fails() {
         let (mut mesh, _) = init_mesh("Test", "Alice", vec![]);
-        let result = revoke_member(&mut mesh, NodeId::from_u128(999));
+        let result = revoke_member(&mut mesh, NodeId::from_u128(999), 1_000);
         assert!(result.is_err());
     }
 

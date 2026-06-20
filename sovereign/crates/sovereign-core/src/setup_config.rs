@@ -395,6 +395,16 @@ pub struct DaemonSection {
     #[serde(default = "default_yield_to_foreground_secs")]
     pub yield_to_foreground_secs: u64,
 
+    /// Maximum concurrent peer (mesh) inference requests this node admits
+    /// before returning `503 + Retry-After`. A headless contributor MUST be
+    /// bounded — an unbounded peer fan-out is what OOM-killed the daemon (see
+    /// `commonwealth-api::admission`). The desktop sets this from the
+    /// "share GPU" consent instead; a CLI daemon relies on this default.
+    /// `0` opts out of contributing entirely; raise it on capable hardware.
+    /// Default `1`: serve peers, never stampede.
+    #[serde(default = "default_max_peer_inflight")]
+    pub max_peer_inflight: usize,
+
     /// Enable background freshness watchers (currently:
     /// `wikipedia-newsworthy`'s daily portal-ingest + article-refresh
     /// loop; future entries will share this gate). When true, the
@@ -492,6 +502,7 @@ impl Default for DaemonSection {
             primary_idle_secs: default_primary_idle_secs(),
             extras_idle_secs: default_extras_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
+            max_peer_inflight: default_max_peer_inflight(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
@@ -595,6 +606,11 @@ fn default_extras_idle_secs() -> u64 {
 /// where ingest throughput trumps interactive latency.
 fn default_yield_to_foreground_secs() -> u64 {
     60
+}
+/// Headless contributor default: serve peers, but one at a time. Bounded by
+/// construction so a CLI daemon is never an unbounded peer fan-out target.
+fn default_max_peer_inflight() -> usize {
+    1
 }
 fn default_freshness_watchers_enabled() -> bool {
     true
@@ -890,6 +906,22 @@ embed = "/m/e.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.daemon.yield_to_foreground_secs, 60);
+    }
+
+    #[test]
+    fn max_peer_inflight_defaults_to_1() {
+        // A config that omits the field must come back bounded (1), NOT
+        // unbounded — a headless contributor with no ceiling is the
+        // resource-exhaustion hole this default closes. Lock it so a future
+        // change is intentional and reviewed.
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.max_peer_inflight, 1);
     }
 
     #[test]

@@ -1,0 +1,396 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Mesh soak invariant checker — the assertion engine behind
+//! `sovereign mesh check-invariants` and `scripts/mesh-soak.sh`.
+//!
+//! It polls each node's `GET /v1/mesh/status` and evaluates the mesh-level
+//! invariants a multi-process soak must hold — the HTTP-observable subset of
+//! the in-process DST invariant pack (`sovereign_mesh::dst`): **convergence**
+//! (all reachable nodes agree on the member set), **no-ghost** (no node shows
+//! a deliberately-downed peer as live), and **liveness** (every reachable node
+//! is seen as live by every other reachable node).
+//!
+//! The pure evaluation here is unit-tested over mock snapshots; the HTTP
+//! polling lives in `mesh_cmd::cmd_check_invariants`. Admission-safety and
+//! bounded-fan-out are not HTTP-observable from `/v1/mesh/status` and stay with
+//! the DST suite / glassbox endpoints.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde::Deserialize;
+
+/// Minimal projection of `GET /v1/mesh/status`
+/// (`sovereign_mesh::mesh_http::StatusResponse`). We deserialize only the
+/// fields the invariants need, so the checker is decoupled from the full DTO
+/// and tolerant of additions.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NodeStatusView {
+    #[serde(default)]
+    pub members_total: usize,
+    #[serde(default)]
+    pub members: Vec<MemberView>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemberView {
+    pub node_id: String,
+    /// `"online" | "busy" | "away" | "offline"`.
+    pub status: String,
+    #[serde(default)]
+    pub is_self: bool,
+}
+
+impl MemberView {
+    /// Live = not formally offline. (Tombstoned members are filtered out of the
+    /// status view server-side; an offline member is decayed-but-present.)
+    fn is_live(&self) -> bool {
+        self.status != "offline"
+    }
+}
+
+/// One soak node: the address we polled and the status it reported (or an error
+/// string if unreachable — itself a signal, not necessarily a violation when the
+/// scenario crashed it on purpose).
+pub struct NodeSnapshot {
+    pub addr: String,
+    pub status: Option<NodeStatusView>,
+    pub error: Option<String>,
+}
+
+/// A violated mesh invariant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Violation {
+    pub invariant: &'static str,
+    pub detail: String,
+}
+
+/// Evaluate the HTTP-observable mesh invariants over the reachable nodes'
+/// snapshots.
+///
+/// `expected_live`, when supplied, is the set of node_ids the caller knows
+/// should be up — so a deliberately-crashed node isn't flagged as a ghost and
+/// the no-ghost check has a reference. When `None`, only convergence + pairwise
+/// liveness among the reachable nodes are checked.
+pub fn evaluate_invariants(
+    snapshots: &[NodeSnapshot],
+    expected_live: Option<&BTreeSet<String>>,
+) -> Vec<Violation> {
+    let mut violations = Vec::new();
+
+    let reachable: Vec<(&String, &NodeStatusView)> = snapshots
+        .iter()
+        .filter_map(|s| s.status.as_ref().map(|v| (&s.addr, v)))
+        .collect();
+    if reachable.is_empty() {
+        violations.push(Violation {
+            invariant: "liveness",
+            detail: "no polled node was reachable".into(),
+        });
+        return violations;
+    }
+
+    let member_set =
+        |v: &NodeStatusView| -> BTreeSet<String> { v.members.iter().map(|m| m.node_id.clone()).collect() };
+
+    // Convergence: every reachable node reports the same member-id set.
+    let (first_addr, first_view) = reachable[0];
+    let base = member_set(first_view);
+    for (addr, view) in &reachable[1..] {
+        let set = member_set(view);
+        if set != base {
+            violations.push(Violation {
+                invariant: "convergence",
+                detail: format!("node {first_addr} knows {base:?}; node {addr} knows {set:?}"),
+            });
+        }
+    }
+
+    // No-ghost: no reachable node shows a member as live that the caller knows
+    // is down (the deliberately-crashed set). Only checked when a reference set
+    // is supplied.
+    if let Some(live) = expected_live {
+        for (addr, view) in &reachable {
+            for m in &view.members {
+                if m.is_live() && !m.is_self && !live.contains(&m.node_id) {
+                    violations.push(Violation {
+                        invariant: "no_ghost_members",
+                        detail: format!(
+                            "node {addr} still shows {} as {} (expected down)",
+                            m.node_id, m.status
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    // Liveness: every reachable node (identified by its own self-record id) must
+    // be seen as live by every other reachable node.
+    let self_ids: BTreeSet<String> = reachable
+        .iter()
+        .filter_map(|(_, v)| v.members.iter().find(|m| m.is_self).map(|m| m.node_id.clone()))
+        .collect();
+    for (addr, view) in &reachable {
+        for live_id in &self_ids {
+            match view.members.iter().find(|m| &m.node_id == live_id) {
+                Some(m) if m.is_live() => {}
+                _ => violations.push(Violation {
+                    invariant: "liveness",
+                    detail: format!("node {addr} does not see reachable node {live_id} as live"),
+                }),
+            }
+        }
+    }
+
+    violations
+}
+
+// ── Layer 3: load / SLO regression gate ──────────────────────────────────────
+//
+// The soak streams findings to `mesh-soak-findings.jsonl`; `mesh soak-gate`
+// distils them into a few SLIs and gates each against a committed baseline
+// (direction + tolerance), the same shape as the `lane_baseline` quality gate.
+
+/// Extract soak SLIs from the parsed findings lines. Pure + testable.
+/// Recognised line shapes (others — fault markers — are ignored):
+///   - invariant check: `{ "ok": bool, "violations": [...] }`
+///   - load sample:     `{ "kind": "load", "latency_ms": N, "ok": bool }`
+pub fn soak_slis(lines: &[serde_json::Value]) -> BTreeMap<String, f64> {
+    let (mut checks, mut check_fail, mut loads, mut load_ok) = (0u64, 0u64, 0u64, 0u64);
+    let mut latencies: Vec<f64> = Vec::new();
+    for v in lines {
+        if v.get("kind").and_then(|k| k.as_str()) == Some("load") {
+            loads += 1;
+            if v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false) {
+                load_ok += 1;
+            }
+            if let Some(ms) = v.get("latency_ms").and_then(|m| m.as_f64()) {
+                latencies.push(ms);
+            }
+        } else if v.get("violations").is_some() {
+            checks += 1;
+            if !v.get("ok").and_then(|b| b.as_bool()).unwrap_or(true) {
+                check_fail += 1;
+            }
+        }
+    }
+    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let pct = |p: f64| -> f64 {
+        if latencies.is_empty() {
+            return 0.0;
+        }
+        let idx = ((p / 100.0) * (latencies.len() as f64 - 1.0)).round() as usize;
+        latencies[idx.min(latencies.len() - 1)]
+    };
+    let mut m = BTreeMap::new();
+    m.insert(
+        "invariant_violation_rate".into(),
+        if checks == 0 { 0.0 } else { check_fail as f64 / checks as f64 },
+    );
+    m.insert(
+        "load_success_rate".into(),
+        if loads == 0 { 1.0 } else { load_ok as f64 / loads as f64 },
+    );
+    m.insert("load_p50_ms".into(), pct(50.0));
+    m.insert("load_p99_ms".into(), pct(99.0));
+    m
+}
+
+/// Which way is worse for an SLI.
+#[derive(Clone, Copy)]
+pub enum SliDir {
+    HigherIsBetter,
+    LowerIsBetter,
+}
+
+/// One gated SLI: which way is worse + the noise tolerance below which movement
+/// isn't a regression.
+pub struct SliSpec {
+    pub name: &'static str,
+    pub dir: SliDir,
+    pub tolerance: f64,
+}
+
+/// The mesh-soak SLO specs. Establish a baseline, then ratchet — the tolerances
+/// are starting points to tune once a real baseline exists.
+pub fn soak_slo_specs() -> &'static [SliSpec] {
+    &[
+        SliSpec { name: "invariant_violation_rate", dir: SliDir::LowerIsBetter, tolerance: 0.02 },
+        SliSpec { name: "load_success_rate", dir: SliDir::HigherIsBetter, tolerance: 0.05 },
+        SliSpec { name: "load_p50_ms", dir: SliDir::LowerIsBetter, tolerance: 50.0 },
+        SliSpec { name: "load_p99_ms", dir: SliDir::LowerIsBetter, tolerance: 200.0 },
+    ]
+}
+
+/// One row of the gate verdict.
+pub struct GateRow {
+    pub name: String,
+    pub baseline: Option<f64>,
+    pub current: f64,
+    pub regressed: bool,
+}
+
+/// Gate current SLIs against an optional baseline per [`soak_slo_specs`].
+/// Returns `(rows, first_run)`; `first_run` is true when there is no baseline.
+/// A current value regresses if it moved past tolerance in the worse direction
+/// (a non-finite current value always regresses — an undefined SLI can't be
+/// certified no-worse).
+pub fn gate_slis(
+    current: &BTreeMap<String, f64>,
+    baseline: Option<&BTreeMap<String, f64>>,
+) -> (Vec<GateRow>, bool) {
+    let first_run = baseline.is_none();
+    let rows = soak_slo_specs()
+        .iter()
+        .map(|spec| {
+            let cur = *current.get(spec.name).unwrap_or(&f64::NAN);
+            let base = baseline.and_then(|b| b.get(spec.name).copied());
+            let regressed = match base {
+                None => false, // first run / new metric — informational only
+                Some(_) if !cur.is_finite() => true,
+                Some(prev) => match spec.dir {
+                    SliDir::HigherIsBetter => cur < prev - spec.tolerance,
+                    SliDir::LowerIsBetter => cur > prev + spec.tolerance,
+                },
+            };
+            GateRow {
+                name: spec.name.to_string(),
+                baseline: base,
+                current: cur,
+                regressed,
+            }
+        })
+        .collect();
+    (rows, first_run)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(members: &[(&str, &str, bool)], total: usize) -> NodeStatusView {
+        NodeStatusView {
+            members_total: total,
+            members: members
+                .iter()
+                .map(|(id, st, slf)| MemberView {
+                    node_id: (*id).to_string(),
+                    status: (*st).to_string(),
+                    is_self: *slf,
+                })
+                .collect(),
+        }
+    }
+    fn snap(addr: &str, v: NodeStatusView) -> NodeSnapshot {
+        NodeSnapshot {
+            addr: addr.into(),
+            status: Some(v),
+            error: None,
+        }
+    }
+    fn live_set(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn converged_healthy_mesh_has_no_violations() {
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        assert!(evaluate_invariants(&[a, b], None).is_empty());
+    }
+
+    #[test]
+    fn divergent_member_sets_flag_convergence() {
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let b = snap("b", view(&[("n2", "online", true)], 1)); // missing n1
+        let vs = evaluate_invariants(&[a, b], None);
+        assert!(vs.iter().any(|v| v.invariant == "convergence"), "{vs:?}");
+    }
+
+    #[test]
+    fn ghost_member_flagged_when_expected_down() {
+        // n2 was crashed (not in expected_live) but `a` still shows it online.
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let vs = evaluate_invariants(&[a], Some(&live_set(&["n1"])));
+        assert!(vs.iter().any(|v| v.invariant == "no_ghost_members"), "{vs:?}");
+    }
+
+    #[test]
+    fn decayed_offline_member_is_not_a_ghost_or_liveness_failure() {
+        // `a` sees n2 as offline (decayed) and we didn't poll n2. With no
+        // expected set, that's neither a ghost nor a liveness violation.
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "offline", false)], 2));
+        let vs = evaluate_invariants(&[a], None);
+        assert!(vs.is_empty(), "offline-but-unexpected is not a violation: {vs:?}");
+    }
+
+    #[test]
+    fn liveness_flagged_when_a_reachable_node_is_seen_offline_by_a_peer() {
+        // Both reachable, but `a` shows `b` (n2) offline — a real liveness gap.
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "offline", false)], 2));
+        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let vs = evaluate_invariants(&[a, b], None);
+        assert!(vs.iter().any(|v| v.invariant == "liveness"), "{vs:?}");
+    }
+
+    #[test]
+    fn slis_from_mixed_findings() {
+        let lines: Vec<serde_json::Value> = vec![
+            serde_json::json!({"ok": true, "violations": [], "unreachable": []}),
+            serde_json::json!({"ok": false, "violations": [{"invariant":"liveness"}]}),
+            serde_json::json!({"kind":"load","latency_ms": 10.0, "ok": true}),
+            serde_json::json!({"kind":"load","latency_ms": 30.0, "ok": true}),
+            serde_json::json!({"kind":"load","latency_ms": 50.0, "ok": false}),
+            serde_json::json!({"kind":"fault","action":"kill"}), // ignored
+        ];
+        let m = soak_slis(&lines);
+        assert!((m["invariant_violation_rate"] - 0.5).abs() < 1e-9);
+        assert!((m["load_success_rate"] - 2.0 / 3.0).abs() < 1e-9);
+        assert!(m["load_p99_ms"] >= m["load_p50_ms"]);
+    }
+
+    #[test]
+    fn empty_findings_are_clean() {
+        let m = soak_slis(&[]);
+        assert_eq!(m["invariant_violation_rate"], 0.0);
+        assert_eq!(m["load_success_rate"], 1.0);
+    }
+
+    #[test]
+    fn gate_flags_regression_past_tolerance() {
+        let base: BTreeMap<String, f64> = [
+            ("invariant_violation_rate".to_string(), 0.0),
+            ("load_success_rate".to_string(), 1.0),
+            ("load_p50_ms".to_string(), 20.0),
+            ("load_p99_ms".to_string(), 80.0),
+        ]
+        .into_iter()
+        .collect();
+        // p99 jumps 80 → 400 (> 200 tol) and violation_rate 0 → 0.3 (> 0.02 tol);
+        // p50 +5ms stays within its 50ms tolerance.
+        let cur: BTreeMap<String, f64> = [
+            ("invariant_violation_rate".to_string(), 0.3),
+            ("load_success_rate".to_string(), 1.0),
+            ("load_p50_ms".to_string(), 25.0),
+            ("load_p99_ms".to_string(), 400.0),
+        ]
+        .into_iter()
+        .collect();
+        let (rows, first_run) = gate_slis(&cur, Some(&base));
+        assert!(!first_run);
+        let regressed: Vec<&str> = rows
+            .iter()
+            .filter(|r| r.regressed)
+            .map(|r| r.name.as_str())
+            .collect();
+        assert!(regressed.contains(&"invariant_violation_rate"), "{regressed:?}");
+        assert!(regressed.contains(&"load_p99_ms"), "{regressed:?}");
+        assert!(!regressed.contains(&"load_p50_ms"), "{regressed:?}");
+    }
+
+    #[test]
+    fn gate_first_run_has_no_regressions() {
+        let (rows, first_run) = gate_slis(&soak_slis(&[]), None);
+        assert!(first_run);
+        assert!(rows.iter().all(|r| !r.regressed));
+    }
+}

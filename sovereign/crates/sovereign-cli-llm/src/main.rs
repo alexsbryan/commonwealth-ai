@@ -29,6 +29,7 @@ mod proxy_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
+mod mesh_soak;
 mod meshapp_cmd;
 mod meshapp_registry;
 mod meta_atlas_cmd;

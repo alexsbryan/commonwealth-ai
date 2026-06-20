@@ -129,6 +129,7 @@ impl SimulatedNodeBuilder {
         };
 
         let member = MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),

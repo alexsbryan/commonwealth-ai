@@ -158,6 +158,15 @@ pub struct AppState {
     pub inner: Arc<AppStateInner>,
 }
 
+/// Peer-inflight ceiling a freshly-constructed [`AppState`] starts with:
+/// unbounded. This is the *pre-configuration* value only — the daemon ALWAYS
+/// applies a finite ceiling at boot from `DaemonSection.max_peer_inflight`
+/// (default 1, see `sovereign-mesh::daemon::start_daemon`), so a headless
+/// contributor is never actually unbounded in production. Tests that build an
+/// `AppState` directly inherit this and don't admit peer traffic, so the lack
+/// of a bound is harmless there.
+pub const DEFAULT_PEER_INFLIGHT_CEILING: usize = usize::MAX;
+
 pub struct AppStateInner {
     /// Internal storage. Use [`AppStateInner::self_node_id`] to read
     /// (returns `NodeId` by value) — direct field access is hidden
@@ -256,6 +265,18 @@ pub struct AppStateInner {
     /// [`AppState::install_peer_transport`] at startup. Set-once-
     /// read-many: a plain `std::sync::RwLock` read per resolution.
     pub peer_transport: std::sync::RwLock<Arc<dyn commonwealth_transport::PeerTransport>>,
+    /// Wall-clock source. Defaults to [`commonwealth_core::SystemClock`]; the
+    /// test harness installs a per-node [`commonwealth_core::TestClock`] to
+    /// drive skew scenarios deterministically. Read per timestamp (RwLock read
+    /// + Arc clone), same set-once-read-many pattern as `peer_transport`.
+    pub clock: std::sync::RwLock<Arc<dyn commonwealth_core::Clock>>,
+    /// Local-observation liveness map: `node_id -> local-clock seconds at which
+    /// we last observed this peer's gossiped record advance (or reached it
+    /// directly). Offline-decay measures staleness against THIS, never the
+    /// peer's own gossiped `last_seen` — so a clock-skewed peer can't flap
+    /// Offline (the "~9 min flap"). Ephemeral; rebuilt after restart as gossip
+    /// re-observes peers.
+    pub peer_last_contact: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
     /// ATOS middleware registry. Holds one instance of each
     /// middleware the pipelines can reference by id.
     pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
@@ -629,6 +650,53 @@ impl AppState {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = transport;
     }
 
+    /// Snapshot of the active [`commonwealth_core::Clock`]. Cheap (one RwLock
+    /// read + Arc clone); call per timestamp, don't cache across awaits.
+    pub fn clock(&self) -> Arc<dyn commonwealth_core::Clock> {
+        self.inner
+            .clock
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Replace the clock. The test harness calls this with a per-node
+    /// `TestClock` to drive skew; production leaves the `SystemClock` default.
+    pub fn install_clock(&self, clock: Arc<dyn commonwealth_core::Clock>) {
+        *self
+            .inner
+            .clock
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = clock;
+    }
+
+    /// Record that we just observed `peer`'s liveness — its gossiped record
+    /// advanced (added or LWW-updated, possibly via transitive gossip) or we
+    /// reached it directly — at local time `now_secs`. The stamp is always
+    /// OUR clock, so a peer's skewed `last_seen` can't drive offline-decay.
+    pub fn observe_peer_contact(&self, peer: NodeId, now_secs: u64) {
+        self.inner
+            .peer_last_contact
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(peer, now_secs);
+    }
+
+    /// Local-observation time for `peer`, initializing it to `now_secs` (and
+    /// returning that) when we have no record yet. The lazy init gives a
+    /// freshly-seen peer a full threshold grace window before it can decay, so
+    /// a peer learned at startup isn't decayed before we've had a chance to
+    /// gossip with it.
+    pub fn peer_contact_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
+        *self
+            .inner
+            .peer_last_contact
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(peer)
+            .or_insert(now_secs)
+    }
+
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness);
         // in-memory MeshStore creation is infallible — fail-fast is correct.
@@ -729,6 +797,8 @@ impl AppState {
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),
                 )),
+                clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
+                peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
                 middleware_registry: Arc::new(middleware_registry),
                 session_store,
                 repo_root: std::env::current_dir().ok(),
@@ -764,7 +834,9 @@ impl AppState {
                 // matched to their consent-dialog choice in W4);
                 // headless / CLI daemons leave it unlimited so they
                 // don't surprise their operators.
-                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(usize::MAX),
+                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(
+                    DEFAULT_PEER_INFLIGHT_CEILING,
+                ),
                 peer_inflight_count: std::sync::atomic::AtomicUsize::new(0),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.
@@ -1345,14 +1417,17 @@ impl AppState {
         let mesh = self.inner.mesh.read().await;
         mesh.members
             .values()
-            .filter(|m| m.status == NodeStatus::Online || m.status == NodeStatus::Busy)
+            .filter(|m| {
+                m.is_active() && (m.status == NodeStatus::Online || m.status == NodeStatus::Busy)
+            })
             .count()
     }
 
-    /// Total member count.
+    /// Total member count (active members only — a tombstoned/departed node
+    /// still circulates for convergence but is not counted).
     pub async fn total_member_count(&self) -> usize {
         let mesh = self.inner.mesh.read().await;
-        mesh.members.len()
+        mesh.members.values().filter(|m| m.is_active()).count()
     }
 }
 

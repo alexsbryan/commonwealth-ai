@@ -99,6 +99,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     // that's the "bug" we're proving the fix addresses.
     let self_id = NodeId::from_u128(1);
     let self_record = MemberRecord {
+        removed_at: None,
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),

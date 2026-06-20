@@ -53,6 +53,35 @@ pub struct MemberRecord {
     /// trip; iroh still verifies the key on connect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iroh_direct_addrs: Vec<SocketAddr>,
+    /// Tombstone: unix-seconds at which this member was removed (graceful
+    /// `leave` or `revoke_member`). `None` = active member. Gossiped
+    /// (wire-compatible like `node_pubkey`): a tombstone propagates mesh-wide
+    /// and, via the event-time LWW in [`Mesh::merge_from`], out-competes any
+    /// stale *live* record so a departed node can't be resurrected by a peer
+    /// still holding its old record — while a genuine rejoin (activity newer
+    /// than the removal) still wins. Read paths filter `removed_at.is_some()`
+    /// out of active / online views.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removed_at: Option<u64>,
+}
+
+impl MemberRecord {
+    /// Whether this member is active (not tombstoned). Read paths
+    /// (online counts, gossip targets, knowledge fan-out roster) filter on
+    /// this so a departed node is invisible to scheduling while its tombstone
+    /// still circulates for convergence.
+    pub fn is_active(&self) -> bool {
+        self.removed_at.is_none()
+    }
+
+    /// The timestamp of this record's latest lifecycle event — the later of
+    /// its self-stamped `last_seen` and its `removed_at` tombstone. This is the
+    /// LWW key in [`Mesh::merge_from`]: a removal stamped after the node's last
+    /// heartbeat out-competes stale live copies, but a rejoin whose `last_seen`
+    /// post-dates the removal out-competes the tombstone.
+    fn event_time(&self) -> u64 {
+        self.last_seen.max(self.removed_at.unwrap_or(0))
+    }
 }
 
 /// This node's current iroh dial info, pulled fresh each gossip round
@@ -104,7 +133,7 @@ pub enum PeerTrustLevel {
 
 /// Summary of what a `Mesh::merge_from` call did. Used for tracing
 /// ("we learned about 1 new member") and test assertions.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MergeReport {
     /// Members that were absent locally and got added from `other`.
     pub added: usize,
@@ -115,6 +144,12 @@ pub struct MergeReport {
     /// described a different mesh (mismatching `id` or
     /// `join_key_hash`). When set, nothing was mutated.
     pub rejected: bool,
+    /// Node IDs whose records we just observed advance (added or
+    /// LWW-updated) in this merge. The caller stamps these in its local
+    /// liveness map (`AppState::observe_peer_contact`) so offline-decay
+    /// measures *local observation staleness*, not the peer's own
+    /// (possibly clock-skewed) `last_seen`. Empty on a rejected merge.
+    pub observed: Vec<NodeId>,
 }
 
 impl Mesh {
@@ -140,6 +175,7 @@ impl Mesh {
                 added: 0,
                 updated: 0,
                 rejected: true,
+                observed: Vec::new(),
             };
         }
 
@@ -155,10 +191,16 @@ impl Mesh {
             }
             match self.members.get(id) {
                 None => {
+                    let active = incoming.is_active();
                     self.members.insert(*id, incoming.clone());
                     report.added += 1;
+                    // A tombstone we've never seen is still added (so it
+                    // converges mesh-wide), but it is not "observed alive".
+                    if active {
+                        report.observed.push(*id);
+                    }
                 }
-                Some(existing) if incoming.last_seen > existing.last_seen => {
+                Some(existing) if incoming.event_time() > existing.event_time() => {
                     // Anti-downgrade: a newer record relayed by a
                     // pre-identity build carries `node_pubkey: None`.
                     // Without this preservation, ONE old peer in the
@@ -173,8 +215,12 @@ impl Mesh {
                     };
                     let mut record = incoming.clone();
                     record.node_pubkey = preserved_pubkey;
+                    let active = record.is_active();
                     self.members.insert(*id, record);
                     report.updated += 1;
+                    if active {
+                        report.observed.push(*id);
+                    }
                 }
                 Some(_) => {
                     // Existing is equal or newer — keep ours.
@@ -236,6 +282,7 @@ mod tests {
 
     fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -358,6 +405,7 @@ mod tests {
         assert_eq!(report.added, 1);
         assert_eq!(report.updated, 0);
         assert!(!report.rejected);
+        assert_eq!(report.observed, vec![b], "added member is observed");
         assert_eq!(local.members.len(), 2);
         assert!(local.members.contains_key(&b));
     }
@@ -379,6 +427,7 @@ mod tests {
         let report = local.merge_from(a, &remote);
         assert_eq!(report.added, 0);
         assert_eq!(report.updated, 1);
+        assert_eq!(report.observed, vec![b], "LWW-updated member is observed");
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
         assert_eq!(local.members.get(&b).unwrap().last_seen, 50);
     }
@@ -400,7 +449,64 @@ mod tests {
         let report = local.merge_from(a, &remote);
         assert_eq!(report.added, 0);
         assert_eq!(report.updated, 0);
+        assert!(
+            report.observed.is_empty(),
+            "no advance => nothing observed"
+        );
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
+    }
+
+    #[test]
+    fn tombstone_is_not_resurrected_by_stale_live_record() {
+        // The immortal-ghost fix: a tombstoned member must out-compete a stale
+        // live copy that a lagging peer still gossips. B was removed at t=50;
+        // a peer relays B's old live record (last_seen=20 < 50) → must NOT win.
+        let mesh_id = MeshId::from_u128(1);
+        let hash = [7u8; 32];
+        let a = NodeId::from_u128(100);
+        let b = NodeId::from_u128(200);
+
+        let b_tombstone = {
+            let mut m = member(b, "B", 10);
+            m.removed_at = Some(50);
+            m
+        };
+        let mut local = mesh_with(vec![member(a, "A", 10), b_tombstone], mesh_id, hash);
+        let remote = mesh_with(vec![member(b, "B-live-stale", 20)], mesh_id, hash);
+
+        let report = local.merge_from(a, &remote);
+        assert_eq!(report.updated, 0, "stale live record must not resurrect");
+        assert!(
+            report.observed.is_empty(),
+            "a non-event must not stamp liveness"
+        );
+        let merged = local.members.get(&b).unwrap();
+        assert_eq!(merged.removed_at, Some(50), "B stays tombstoned");
+        assert!(!merged.is_active());
+    }
+
+    #[test]
+    fn genuine_rejoin_resurrects_a_tombstone() {
+        // A live record whose last_seen post-dates the removal IS a real
+        // rejoin — event-time LWW lets it win and clear the tombstone.
+        let mesh_id = MeshId::from_u128(1);
+        let hash = [7u8; 32];
+        let a = NodeId::from_u128(100);
+        let b = NodeId::from_u128(200);
+
+        let b_tombstone = {
+            let mut m = member(b, "B", 10);
+            m.removed_at = Some(50);
+            m
+        };
+        let mut local = mesh_with(vec![member(a, "A", 10), b_tombstone], mesh_id, hash);
+        let remote = mesh_with(vec![member(b, "B-rejoined", 100)], mesh_id, hash);
+
+        let report = local.merge_from(a, &remote);
+        assert_eq!(report.updated, 1, "rejoin (last_seen 100 > removed_at 50) wins");
+        let merged = local.members.get(&b).unwrap();
+        assert!(merged.is_active(), "rejoin clears the tombstone");
+        assert_eq!(merged.last_seen, 100);
     }
 
     #[test]

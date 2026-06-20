@@ -32,6 +32,9 @@ sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }
 sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools" }
 sovereign-core  = { path = "../../../sovereign/crates/sovereign-core" }
 axum = { workspace = true }
+# Frontdoor hardening: `RequestBodyTimeoutLayer` (slow-loris guard on the
+# request-body read). The `DefaultBodyLimit` size cap is in axum core.
+tower-http = { workspace = true, features = ["timeout"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }

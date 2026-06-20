@@ -13,6 +13,7 @@ commonwealth-inference = { workspace = true }
 commonwealth-api = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
+commonwealth-transport = { workspace = true }
 tokio = { workspace = true }
 bytes = { workspace = true }
 tracing = { workspace = true }
@@ -21,6 +22,7 @@ serde_json = { workspace = true }
 axum = { workspace = true }
 tower = "0.5"
 http-body-util = "0.1"
+async-trait = { workspace = true }
 
 [[test]]
 name = "integration"

@@ -171,6 +171,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_a.insert(
         id_a,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -215,6 +216,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_b.insert(
         id_b,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -233,6 +235,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_b.insert(
         id_a,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -363,6 +366,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     members_b.insert(
         id_b,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -379,6 +383,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     members_b.insert(
         id_a,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -485,6 +490,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     members_b.insert(
         id_b,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
@@ -501,6 +507,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     members_b.insert(
         id_a,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),

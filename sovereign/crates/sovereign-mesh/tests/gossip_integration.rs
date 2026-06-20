@@ -24,6 +24,7 @@ use sovereign_mesh::gossip;
 
 fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
     MemberRecord {
+        removed_at: None,
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
@@ -172,43 +173,55 @@ async fn two_peers_converge_via_one_gossip_round() {
 }
 
 #[tokio::test]
-async fn gossip_decays_stale_peer_to_offline() {
-    // Single AppState that knows about a peer whose `last_seen` is
-    // far in the past. No HTTP server for the peer — gossip to them
-    // will fail. After a round with a small offline_threshold, the
-    // peer's status should flip to Offline.
-    let mesh_id = MeshId::from_u128(7);
-    let hash = [1u8; 32];
+async fn gossip_decays_peer_after_local_contact_goes_stale() {
+    // New model: offline-decay measures LOCAL-observation staleness, not the
+    // peer's gossiped `last_seen`. A ghost with no HTTP server is never
+    // re-observed; it gets one grace window (lazy-init to now), then decays
+    // once OUR clock advances past the threshold without re-observing it.
     let me = NodeId::from_u128(1);
     let ghost = NodeId::from_u128(2);
 
     let mut members = HashMap::new();
-    // `now() - 10000 secs` — reliably older than any reasonable
-    // threshold. Using `ReportedAt` keeps the test time-independent.
-    let ancient = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        .saturating_sub(10_000);
     members.insert(
         me,
-        member_at(me, "Me", ancient, "127.0.0.1:9000".parse().unwrap()),
+        member_at(me, "Me", 1_000, "127.0.0.1:9000".parse().unwrap()),
     );
     members.insert(
         ghost,
-        member_at(ghost, "Ghost", ancient, "127.0.0.1:9001".parse().unwrap()),
+        member_at(ghost, "Ghost", 1_000, "127.0.0.1:9001".parse().unwrap()),
     );
-
     let mesh = Mesh {
-        id: mesh_id,
+        id: MeshId::from_u128(7),
         name: "Test".into(),
-        join_key_hash: hash,
+        join_key_hash: [1u8; 32],
         members,
         peers: vec![],
     };
     let state = Arc::new(AppState::new(me, mesh));
+    let clock = commonwealth_core::TestClock::new(1_000);
+    state.install_clock(Arc::new(clock.clone()));
 
-    // Threshold of 60s — ghost's last_seen is far older than that.
+    // Round 1: ghost is lazy-init'd to now (grace window) — NOT decayed yet.
+    gossip::run_one_round(&state, Duration::from_secs(60))
+        .await
+        .expect("gossip round should not error even when peer unreachable");
+    assert_eq!(
+        state
+            .inner
+            .mesh
+            .read()
+            .await
+            .members
+            .get(&ghost)
+            .unwrap()
+            .status,
+        NodeStatus::Online,
+        "a freshly-seen ghost gets a grace window before decay"
+    );
+
+    // Advance OUR clock past the threshold; the ghost has no server so it is
+    // never re-observed → its local-contact stamp goes stale → decay.
+    clock.advance(120);
     gossip::run_one_round(&state, Duration::from_secs(60))
         .await
         .expect("gossip round should not error even when peer unreachable");
@@ -217,9 +230,53 @@ async fn gossip_decays_stale_peer_to_offline() {
     assert_eq!(
         after.members.get(&ghost).unwrap().status,
         NodeStatus::Offline,
-        "ghost should have been decayed to Offline"
+        "ghost should decay once local contact is older than the threshold"
     );
-    // Own record must still be Online — we refresh self's
-    // last_seen before the decay scan.
+    // Own record stays Online — self is exempt from decay and refreshes each round.
     assert_eq!(after.members.get(&me).unwrap().status, NodeStatus::Online);
+}
+
+#[tokio::test]
+async fn gossip_skewed_last_seen_does_not_false_decay() {
+    // Regression for the "~9 min flap": a peer whose gossiped `last_seen` is
+    // wildly skewed (here, ≈epoch — a clock far behind ours) must NOT decay as
+    // long as we observed it locally within the threshold. Under the old
+    // `now - last_seen` decay it flipped Offline immediately; under
+    // local-observation decay it stays Online.
+    let me = NodeId::from_u128(1);
+    let peer = NodeId::from_u128(2);
+
+    let mut members = HashMap::new();
+    members.insert(
+        me,
+        member_at(me, "Me", 1_000, "127.0.0.1:9000".parse().unwrap()),
+    );
+    members.insert(
+        peer,
+        member_at(peer, "Skewed", 1, "127.0.0.1:9001".parse().unwrap()),
+    );
+    let mesh = Mesh {
+        id: MeshId::from_u128(7),
+        name: "Test".into(),
+        join_key_hash: [1u8; 32],
+        members,
+        peers: vec![],
+    };
+    let state = Arc::new(AppState::new(me, mesh));
+    state.install_clock(Arc::new(commonwealth_core::TestClock::new(1_000)));
+
+    // We observed the peer locally at now (1_000) — a recent exchange — even
+    // though its self-stamped last_seen is ancient (skewed clock).
+    state.observe_peer_contact(peer, 1_000);
+
+    gossip::run_one_round(&state, Duration::from_secs(60))
+        .await
+        .expect("gossip round should not error");
+
+    let after = state.inner.mesh.read().await;
+    assert_eq!(
+        after.members.get(&peer).unwrap().status,
+        NodeStatus::Online,
+        "a skewed last_seen must not flap an observed peer Offline"
+    );
 }
