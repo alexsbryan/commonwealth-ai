@@ -15,6 +15,11 @@
 /.cargo-container/
 /.npm-container/
 
+# Windows cross-compile gate (scripts/windows-crosscheck.sh) uses a separate
+# CARGO_TARGET_DIR so the windows-msvc build doesn't stomp the host target/.
+# Unanchored so it's ignored wherever it lands. All regenerable build output.
+target-xwin/
+
 # ── Per-host runtime state ────────────────────────────────────────────────
 # .sovereign/sovereign.toml is workspace config (tracked); every other
 # entry in .sovereign/ is per-host bookkeeping or alignment-corpus

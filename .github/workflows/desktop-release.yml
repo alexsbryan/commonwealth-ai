@@ -58,6 +58,16 @@ jobs:
           # stays on macos-14; if Intel coverage is needed, pick a CURRENT Intel
           # runner (or drop Intel) and validate locally first. See
           # project_desktop_release_ci_deps.
+          #
+          # WINDOWS: the code is now wired — sovereign-inference has a
+          # cfg(target_os="windows") llama-cpp arm (CPU baseline; vulkan/cuda are
+          # feature-selected per leg) and the Windows-readiness fixes have landed.
+          # The leg below stays COMMENTED until `scripts/windows-crosscheck.sh`
+          # (cargo-xwin, x86_64-pc-windows-msvc) is green LOCALLY — uncomment is
+          # then one line. Backend roadmap: ship `windows-x64` (CPU) first; add a
+          # `windows-x64-vulkan` leg (`--features windows-vulkan` + Vulkan SDK)
+          # covering NVIDIA+AMD+Intel; a `windows-x64-cuda` leg (CUDA Toolkit,
+          # untestable on free runners) only when benchmarks justify it.
           - name: macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin
@@ -67,9 +77,13 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          # - name: windows-x86_64
+          # - name: windows-x86_64           # CPU; uncomment after the local cargo-xwin gate is green
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
+          # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step + features: windows-vulkan
+          #   runner: windows-2022
+          #   target: x86_64-pc-windows-msvc
+          #   features: windows-vulkan
 
     steps:
       - name: Checkout

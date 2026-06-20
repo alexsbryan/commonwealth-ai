@@ -499,11 +499,25 @@ pub(crate) fn gpu_backend_label() -> &'static str {
     {
         "gpu+metal"
     }
-    #[cfg(not(target_os = "macos"))]
+    // Windows backend is feature-selected (see sovereign-inference/Cargo.toml):
+    // the matrix builds CPU / vulkan / cuda variants, and those features ARE
+    // visible as rustc cfgs here, so the label can name the actual backend.
+    #[cfg(all(target_os = "windows", feature = "windows-cuda"))]
     {
-        // llama-cpp-2's `rocm` vs `vulkan` feature is selected at
-        // the workspace level (see crates/sovereign-inference/Cargo.toml)
-        // and not re-exposed as a rustc cfg here, so we just say "gpu".
+        "gpu+cuda"
+    }
+    #[cfg(all(target_os = "windows", feature = "windows-vulkan", not(feature = "windows-cuda")))]
+    {
+        "gpu+vulkan"
+    }
+    #[cfg(all(target_os = "windows", not(feature = "windows-vulkan"), not(feature = "windows-cuda")))]
+    {
+        "cpu"
+    }
+    // Linux: vulkan is selected at the workspace level and not re-exposed as a
+    // cfg here, so we just say "gpu".
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
         "gpu"
     }
 }

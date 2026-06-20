@@ -6,7 +6,9 @@ name: CLI release
 # behind --features dev-tools).
 #
 # Trigger:
-#   git tag cli-v0.1.0 && git push origin cli-v0.1.0
+#   git tag cli-v$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2) && git push --tags
+#   (the tag version MUST match the workspace [workspace.package] version —
+#    the "Verify version matches the tag" step enforces it. Today: cli-v0.1.18.)
 #
 # What it does:
 #   1. Build the 3 binaries per platform, with `cargo build --release --locked`.
@@ -63,6 +65,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify version matches the tag
+        # The CLI binaries report the workspace version (root Cargo.toml
+        # [workspace.package]). Refuse to spend a build on a cli-vX.Y.Z tag
+        # whose version disagrees, so `sovereign --version` matches the release
+        # name. Mirrors desktop-release.yml's check-desktop-version.sh discipline.
+        shell: bash
+        run: |
+          ref="${{ github.event.inputs.tag }}"
+          [ -n "$ref" ] || ref="${GITHUB_REF#refs/tags/}"
+          case "$ref" in
+            cli-v*)
+              expected="${ref#cli-v}"
+              actual="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+              if [ "$expected" != "$actual" ]; then
+                echo "::error::tag $ref expects version $expected but Cargo.toml [workspace.package] is $actual" >&2
+                exit 1
+              fi
+              echo "version check ok: $actual" ;;
+            *) echo "not a cli-v* tag ($ref) — skipping version check" ;;
+          esac
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

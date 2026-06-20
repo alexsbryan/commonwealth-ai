@@ -51,10 +51,16 @@ command -v tar  >/dev/null 2>&1 || err "tar is required"
 # ── Resolve the download base ────────────────────────────────────────────
 ver="${SOVEREIGN_VERSION:-latest}"
 if [ "$ver" = "latest" ]; then
-  base="https://github.com/$REPO/releases/latest/download"
-else
-  base="https://github.com/$REPO/releases/download/$ver"
+  # Resolve the newest cli-v* release explicitly. GitHub's
+  # /releases/latest is a single repo-global pointer shared with the
+  # desktop-v* release stream, so it can resolve to a desktop release that
+  # carries no CLI tarball. The unauthenticated /releases list excludes
+  # drafts, so this picks the latest *published* CLI release.
+  ver="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
+    | grep '"tag_name"' | grep -oE 'cli-v[0-9][^"]*' | head -n1)"
+  [ -n "$ver" ] || err "no published cli-v* release found for $REPO (set SOVEREIGN_VERSION=cli-vX.Y.Z to pin one)"
 fi
+base="https://github.com/$REPO/releases/download/$ver"
 tarball="sovereign-$target.tar.gz"
 
 tmp="$(mktemp -d)"
