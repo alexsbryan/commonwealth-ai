@@ -132,14 +132,22 @@ async fn partition_then_heal_reconverges() {
 /// A failing seed reproduces the exact schedule. The standing fuzz target.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn seeded_chaos_soak() {
-    for seed in [1u64, 7, 42] {
-        let dst = DstMesh::start(5).await;
+    // Env-tunable for an on-demand heavy fuzz; defaults keep CI fast.
+    //   SOVEREIGN_DST_CHAOS_SEEDS=50 SOVEREIGN_DST_CHAOS_NODES=7 SOVEREIGN_DST_CHAOS_ROUNDS=30
+    let envn = |k: &str, d: u64| -> u64 {
+        std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
+    };
+    let n_seeds = envn("SOVEREIGN_DST_CHAOS_SEEDS", 3);
+    let n_nodes = envn("SOVEREIGN_DST_CHAOS_NODES", 5) as usize;
+    let n_rounds = envn("SOVEREIGN_DST_CHAOS_ROUNDS", 16) as usize;
+    for seed in 0..n_seeds {
+        let dst = DstMesh::start(n_nodes).await;
         let ids = dst.node_ids();
         assert!(matches!(
             dst.gossip_until_quiescent(8).await,
             Quiescence::Converged { .. }
         ));
-        let schedule = FaultSchedule::generate(seed, &ids, 16);
+        let schedule = FaultSchedule::generate(seed, &ids, n_rounds);
         for round in 0..schedule.rounds {
             dst.apply_schedule_round(&schedule, round);
             dst.sweep().await;
