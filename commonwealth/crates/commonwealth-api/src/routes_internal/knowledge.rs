@@ -18,6 +18,81 @@ use commonwealth_inference::oicp::{
 
 use crate::state::AppState;
 
+/// Hard ceiling on how many corpora a single knowledge search opens, on either
+/// the explicit-filter or the unsealed (no-filter) path. Bounds the
+/// many-corpora amplification regardless of the caller's argument.
+const MAX_FANOUT_CORPORA: usize = 16;
+
+/// On the *unsealed* path (caller sent no `corpora` filter), refuse to open any
+/// single corpus larger than this many chunks. Opening a giant corpus on an
+/// unscoped "search everything" is the documented OOM vector (a 1.88M-row
+/// wikipedia took the daemon down twice). An EXPLICIT request for a large
+/// corpus bypasses this — the caller scoped the search on purpose. Conservative:
+/// a properly-indexed corpus this size searches fine, but the ceiling protects
+/// mid-ingest / unindexed giants from a flat scan on an unscoped query.
+const MAX_UNSEALED_CORPUS_CHUNKS: u64 = 100_000;
+
+/// Result of bounding the fan-out target set ([`select_fanout_corpora`]).
+struct FanoutSelection {
+    /// Corpora to actually open + search (already count-capped + size-filtered).
+    searched: Vec<String>,
+    /// Corpora skipped on the unsealed path for exceeding the per-corpus chunk
+    /// ceiling — surfaced in the glassbox log so an operator can see why a
+    /// broad search didn't include the big corpus.
+    skipped_oversize: Vec<String>,
+    /// Total chunks across the searched corpora (the scan scope).
+    total_chunks: u64,
+    /// True if the corpora-count cap truncated the set.
+    capped: bool,
+}
+
+/// Choose the bounded set of corpora to search. `installed` is
+/// `(corpus_id, chunk_count)` for every locally-hosted index; `filter` is the
+/// caller's requested corpora (empty = unsealed "search everything").
+///
+/// The bound is **asymmetric**: an explicit filter is honored (the caller took
+/// responsibility for scope, subject only to the hard count cap); an absent
+/// filter is bounded aggressively — count-capped AND size-filtered so a single
+/// giant corpus can't be opened on an unscoped query. Pure + deterministic
+/// (sorted by corpus_id) so the cap is reproducible and unit-testable without a
+/// corpus engine. This is the server-side structural bound that a missing
+/// client-side `corpora` argument cannot bypass (defence behind the client seal).
+fn select_fanout_corpora(installed: &[(String, u64)], filter: &[String]) -> FanoutSelection {
+    let explicit = !filter.is_empty();
+    let filter_set: std::collections::HashSet<&str> =
+        filter.iter().map(|s| s.as_str()).collect();
+
+    let mut candidates: Vec<(String, u64)> = installed
+        .iter()
+        .filter(|(cid, _)| !explicit || filter_set.contains(cid.as_str()))
+        .cloned()
+        .collect();
+    candidates.sort_by(|a, b| a.0.cmp(&b.0)); // deterministic ordering for the cap
+
+    let mut searched = Vec::new();
+    let mut skipped_oversize = Vec::new();
+    let mut total_chunks = 0u64;
+    let mut capped = false;
+    for (cid, chunks) in candidates {
+        if searched.len() >= MAX_FANOUT_CORPORA {
+            capped = true;
+            break;
+        }
+        if !explicit && chunks > MAX_UNSEALED_CORPUS_CHUNKS {
+            skipped_oversize.push(cid);
+            continue;
+        }
+        total_chunks += chunks;
+        searched.push(cid);
+    }
+    FanoutSelection {
+        searched,
+        skipped_oversize,
+        total_chunks,
+        capped,
+    }
+}
+
 /// POST /internal/knowledge/search — inter-node shard query (fan-out target).
 ///
 /// Peer nodes call this to search corpus shards hosted on this node.
@@ -53,33 +128,35 @@ pub async fn knowledge_search(
     let corpora = request.corpora.as_deref().unwrap_or(&[]);
     let limit = request.effective_limit() as usize;
 
-    // Resolve the target corpora: either the caller's explicit list
-    // (which MAY include corpora we don't host — we just skip those)
-    // or all locally-installed corpora when the caller sent no
-    // filter. Either way, we filter against what `installed_indexes`
-    // actually reports so we never try to open an index we don't
-    // have.
-    let installed: std::collections::HashSet<String> = engine
+    // Resolve the target corpora and BOUND the fan-out structurally. An absent
+    // `corpora` filter (broad research) previously meant "search every
+    // installed index" — which OOM-killed the daemon when a 1.88M-row corpus
+    // was hosted. `select_fanout_corpora` caps the fan-out by corpus count and,
+    // on the unsealed path, refuses to open any single oversized corpus. The
+    // bound lives here, server-side, so a missing client-side `corpora`
+    // argument cannot bypass it (defence in depth behind the client-side seal).
+    // We still filter against what `installed_indexes` reports so we never try
+    // to open an index we don't have.
+    let installed: Vec<(String, u64)> = engine
         .installed_indexes()
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|i| i.corpus_id)
+        .map(|i| (i.corpus_id, i.chunk_count))
         .collect();
-    let search_corpora: Vec<String> = if corpora.is_empty() {
-        installed.iter().cloned().collect()
-    } else {
-        corpora
-            .iter()
-            .filter(|c| installed.contains(*c))
-            .cloned()
-            .collect()
-    };
+    let installed_ids: std::collections::HashSet<String> =
+        installed.iter().map(|(c, _)| c.clone()).collect();
     let corpora_unavailable: Vec<String> = corpora
         .iter()
-        .filter(|c| !installed.contains(*c))
+        .filter(|c| !installed_ids.contains(*c))
         .cloned()
         .collect();
+    let FanoutSelection {
+        searched: search_corpora,
+        skipped_oversize,
+        total_chunks,
+        capped,
+    } = select_fanout_corpora(&installed, corpora);
 
     let mut all_results: Vec<KnowledgeResult> = Vec::new();
     // Per-corpus chunk counts: one ledger event per corpus this
@@ -142,9 +219,12 @@ pub async fn knowledge_search(
 
     let hit_count = all_results.len();
     tracing::info!(
-        corpora = ?search_corpora,
+        opened = ?search_corpora,
+        skipped_oversize = ?skipped_oversize,
+        capped,
+        total_chunks_in_scope = total_chunks,
         hits = hit_count,
-        "internal knowledge_search: served"
+        "internal knowledge_search: served (fan-out bounded)"
     );
 
     // Emit one `KnowledgeQueryServed` per corpus that contributed
@@ -167,7 +247,7 @@ pub async fn knowledge_search(
             results: all_results,
             corpora_searched: search_corpora,
             corpora_unavailable,
-            total_chunks_searched: None,
+            total_chunks_searched: Some(total_chunks),
         }),
     )
 }
@@ -175,4 +255,54 @@ pub async fn knowledge_search(
 /// GET /internal/latency/probe — RTT measurement endpoint.
 pub async fn latency_probe() -> StatusCode {
     StatusCode::OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn installed() -> Vec<(String, u64)> {
+        vec![
+            ("personal".into(), 300),
+            ("sep".into(), 50_000),
+            ("wikipedia".into(), 1_880_000),
+        ]
+    }
+
+    #[test]
+    fn unsealed_search_skips_the_giant_corpus() {
+        // No filter => "search everything", but wikipedia (1.88M chunks) must
+        // NOT be opened — that is the documented OOM vector. The small/medium
+        // corpora ARE searched, and the scan scope excludes the giant.
+        let sel = select_fanout_corpora(&installed(), &[]);
+        assert!(sel.searched.contains(&"personal".to_string()));
+        assert!(sel.searched.contains(&"sep".to_string()));
+        assert!(!sel.searched.contains(&"wikipedia".to_string()));
+        assert_eq!(sel.skipped_oversize, vec!["wikipedia".to_string()]);
+        assert_eq!(sel.total_chunks, 50_300);
+    }
+
+    #[test]
+    fn explicit_request_for_a_giant_is_honored() {
+        // The caller scoped the search to wikipedia deliberately — honor it,
+        // even though it exceeds the unsealed per-corpus ceiling.
+        let sel = select_fanout_corpora(&installed(), &["wikipedia".to_string()]);
+        assert_eq!(sel.searched, vec!["wikipedia".to_string()]);
+        assert!(sel.skipped_oversize.is_empty());
+    }
+
+    #[test]
+    fn corpora_count_is_hard_capped() {
+        let many: Vec<(String, u64)> = (0..40).map(|i| (format!("c{i:02}"), 10)).collect();
+        let sel = select_fanout_corpora(&many, &[]);
+        assert_eq!(sel.searched.len(), MAX_FANOUT_CORPORA);
+        assert!(sel.capped);
+    }
+
+    #[test]
+    fn unavailable_corpus_is_not_searched() {
+        let sel = select_fanout_corpora(&installed(), &["does-not-exist".to_string()]);
+        assert!(sel.searched.is_empty());
+        assert!(!sel.capped);
+    }
 }

@@ -66,6 +66,7 @@ async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
         mesh.members.insert(
             peer_id,
             MemberRecord {
+                removed_at: None,
                 node_pubkey: None,
                 relay_url: None,
                 iroh_direct_addrs: Vec::new(),

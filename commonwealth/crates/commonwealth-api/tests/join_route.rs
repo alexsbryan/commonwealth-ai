@@ -49,6 +49,7 @@ fn mesh_with_known_key() -> (AppState, String) {
     };
 
     let founder = MemberRecord {
+        removed_at: None,
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),

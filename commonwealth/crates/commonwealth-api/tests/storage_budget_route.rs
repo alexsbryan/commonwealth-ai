@@ -183,6 +183,7 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
     };
     use commonwealth_core::mesh::NodeStatus;
     MemberRecord {
+        removed_at: None,
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),

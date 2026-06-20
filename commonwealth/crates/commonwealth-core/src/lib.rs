@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod activity;
 pub mod capabilities;
+pub mod clock;
 pub mod config;
 pub mod contributions;
 pub mod error;
@@ -19,5 +20,6 @@ pub mod oicp_registry;
 pub mod partition;
 pub mod scheduler;
 
+pub use clock::{Clock, SystemClock, TestClock};
 pub use error::{Error, Result};
 pub use ids::{HandoffId, MeshId, ModelId, NodeId, PlanId, ProcessId};

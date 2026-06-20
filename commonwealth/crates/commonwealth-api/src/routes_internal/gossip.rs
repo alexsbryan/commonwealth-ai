@@ -47,6 +47,14 @@ pub async fn gossip(
         ));
     }
 
+    // Stamp local-observation time for every peer whose record advanced, so
+    // offline-decay measures staleness against our own clock (not the peer's
+    // gossiped `last_seen`). See `AppState::observe_peer_contact`.
+    let now_local = state.clock().now_unix_secs();
+    for observed_id in &report.observed {
+        state.observe_peer_contact(*observed_id, now_local);
+    }
+
     if report.added > 0 || report.updated > 0 {
         // Info only when a NEW member was added. `updated > 0`
         // alone is the routine last_seen refresh that fires every

@@ -14,8 +14,9 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         .members
         .values()
         .filter(|m| {
-            m.status == commonwealth_core::mesh::NodeStatus::Online
-                || m.status == commonwealth_core::mesh::NodeStatus::Busy
+            m.is_active()
+                && (m.status == commonwealth_core::mesh::NodeStatus::Online
+                    || m.status == commonwealth_core::mesh::NodeStatus::Busy)
         })
         .count();
 
@@ -80,7 +81,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         mesh: MeshStatus {
             name: mesh.name.clone(),
             members_online,
-            members_total: mesh.members.len(),
+            members_total: mesh.members.values().filter(|m| m.is_active()).count(),
             pooled_vram_gb,
             pooled_storage_gb,
         },

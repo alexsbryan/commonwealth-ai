@@ -1,0 +1,54 @@
+# Nightly multi-process mesh soak — Layer 2 of the mesh QA plan
+# (commonwealth/docs/MESH_QA.md). Spins real `sovereign daemon` subprocesses,
+# forms a mesh, and drives a seeded fault+load schedule while asserting the mesh
+# invariants via `sovereign mesh check-invariants`. Advisory until proven stable
+# on the runner; flip `continue-on-error` off once it's reliably green.
+#
+# Uses the LOCAL-subprocess backend (no podman/GPU needed) for CI. The podman
+# backend (real partitions + cgroup OOM) is for the operator's nightly box —
+# see scripts/mesh-soak.sh.
+name: Mesh Soak (nightly)
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC nightly
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Soak duration (minutes)"
+        default: "10"
+      nodes:
+        description: "Node count"
+        default: "3"
+
+jobs:
+  soak:
+    name: Multi-process mesh soak (local backend)
+    runs-on: ubuntu-latest
+    continue-on-error: true # advisory until reliably green
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      - name: Build CLI
+        run: cargo build --bins
+      - name: Soak
+        run: |
+          scripts/mesh-soak.sh \
+            --nodes "${{ github.event.inputs.nodes || '3' }}" \
+            --minutes "${{ github.event.inputs.minutes || '10' }}" \
+            --seed "${{ github.run_number }}"
+      - name: SLO gate (advisory until a baseline is committed)
+        if: always()
+        run: |
+          ./target/debug/sovereign-cli mesh soak-gate mesh-soak-findings.jsonl \
+            --baseline .github/mesh-slo-baseline.json || true
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesh-soak-findings
+          path: mesh-soak-findings.jsonl

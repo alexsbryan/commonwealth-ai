@@ -72,6 +72,7 @@ pub fn member_with_last_seen(
     addr: SocketAddr,
 ) -> MemberRecord {
     MemberRecord {
+        removed_at: None,
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),

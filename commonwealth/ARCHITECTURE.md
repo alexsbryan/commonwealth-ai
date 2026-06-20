@@ -150,13 +150,17 @@ They run: commonwealth join cwth-7f3a-9b2e-4d1c
 
 The join key is shared out-of-band — spoken aloud, sent via Signal, printed on a card. The join process requires a human social interaction. You cannot join a Commonwealth mesh by scanning the network.
 
-When a new node joins, an existing member verifies the join key, adds the new node to its member list, and the record propagates via gossip. The join key is verified once and discarded. Ongoing authentication uses per-session TLS certificates exchanged during the join handshake — mutual TLS with pinned certs.
+When a new node joins, an existing member verifies the join key, adds the new node to its member list, and the record propagates via gossip. The join key is verified once and discarded.
+
+> **Implementation note — drifted from this design doc (see `sovereign/SYSTEM_OVERVIEW.md` for the authoritative current state).** Ongoing inter-node auth was *designed* as per-session mutual TLS with pinned certs; **the shipped system does not implement that** — the TLS scaffolding was removed rather than left as a security façade. In practice: the client port (`:9741`) gates non-loopback callers with a bearer token; the internal port (`:9742`) is perimeter-trusted (operators run a WireGuard/Tailscale underlay) plus the join-key/`join_key_hash` check in `Mesh::merge_from` that rejects foreign-mesh gossip; iroh's QUIC handshake verifies node keys when enabled (default off).
 
 The join key is mandatory. This is an architectural constraint that prevents anonymous open meshes, which would require Byzantine fault tolerance and introduce the coordination complexity the project explicitly avoids.
 
 ### Revoking Membership
 
-Any member can propose removal. The proposal propagates via gossip. Simple majority of online members confirms. This handles "Bob moved away" and "Dave's machine got compromised."
+Any member can revoke another — this handles "Bob moved away" and "Dave's machine got compromised."
+
+> **Implementation note.** The shipped mechanism (mesh-hardening pass) is a gossiped **tombstone**: `revoke_member` stamps a `removed_at` timestamp on the member rather than deleting it, and the tombstone propagates via gossip. Through the event-time LWW in `Mesh::merge_from` (the merge compares `max(last_seen, removed_at)`), the tombstone out-competes any stale *live* copy a lagging peer still holds — so a revoked node can't be re-added on the next round (the prior "immortal ghost" bug), while a genuine rejoin whose activity post-dates the removal still wins. The *majority-vote confirmation* described here (one member proposes, a simple majority of online members confirms) is scaffolding (`RevocationProposal`) and is **not yet wired** to a gossip-vote protocol — today revocation is single-actor (any join-key holder). Graceful self-`leave` clears the departing node's local state; gossiping a self-tombstone on leave is the remaining operational step.
 
 ### Mesh Peering
 

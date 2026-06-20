@@ -17,6 +17,21 @@ use crate::routes_responses;
 use crate::routes_status;
 use crate::state::AppState;
 
+/// Explicit request-body ceiling for both API surfaces. Makes the bound
+/// intentional and tunable instead of relying on axum's implicit ~2 MB default
+/// (which a framework bump could silently change). 8 MB gives headroom for
+/// long-context chat bodies and gossip/app-state snapshots on a low-double-digit
+/// mesh while still hard-bounding per-request memory. Large model/index
+/// distribution streams over GET *responses*, not these request bodies, so it
+/// is unaffected by this cap.
+const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
+
+/// Slow-loris guard: cap how long a client may take to deliver a request body.
+/// Bounds a connection that dribbles bytes to hold resources open. Applies to
+/// the REQUEST body only — streaming chat *responses* are unaffected, and an
+/// 8 MB body uploads well within this on any real link.
+const REQUEST_BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Build the client-facing API router (port 9741).
 pub fn client_router(state: AppState) -> Router {
     // Per-route admission gate applied to peer-reachable inference
@@ -84,6 +99,12 @@ pub fn client_router(state: AppState) -> Router {
             state.clone(),
             crate::client_auth::client_auth_layer,
         ))
+        // Outermost frontdoor: bound request-body size + slow-dribble time
+        // before any handler or auth work runs.
+        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+            REQUEST_BODY_READ_TIMEOUT,
+        ))
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }
 
@@ -342,6 +363,13 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/storage/budget",
             get(routes_internal::storage_budget_get).post(routes_internal::storage_budget_set),
         )
+        // Frontdoor bound on the perimeter-trusted internal port too — its
+        // routes (gossip, app-state, knowledge) carry no auth gate, so this is
+        // their resource ceiling.
+        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+            REQUEST_BODY_READ_TIMEOUT,
+        ))
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }
 

@@ -23,6 +23,11 @@ commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # variants of each when `EmbeddedDaemon` builds its state.
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
+# DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
+# deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.
+# Optional: only the `dst` feature (the CI fault-injection gate) pulls it in,
+# so default builds don't drag the test harness into the dependency graph.
+commonwealth-test-harness = { path = "../../../commonwealth/crates/commonwealth-test-harness", optional = true }
 # KnowledgeSearchRequest / KnowledgeSearchResponse live in oicp-types,
 # re-exported via commonwealth-inference::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
@@ -155,6 +160,11 @@ bytes = "1"
 
 [features]
 default = []
+# Deterministic-simulation mesh tests: compiles `dst.rs` (the `DstMesh` gossip
+# driver + invariant pack) and `tests/dst_scenarios.rs`. Pulls the test
+# harness. CI runs a fixed-seed set behind this flag; off by default so the
+# production build never links the harness.
+dst = ["dep:commonwealth-test-harness"]
 # Enables `reindexer` + `project_http` — the SCIP-graph-hosting
 # modules. Off by default so binaries that only use the mesh
 # primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't

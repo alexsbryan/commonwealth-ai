@@ -147,6 +147,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
     members.insert(
         self_id,
         MemberRecord {
+            removed_at: None,
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),

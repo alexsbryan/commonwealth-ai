@@ -1528,6 +1528,21 @@ impl EmbeddedDaemon {
             info!("foreground-yield: hook installed on corpus engine");
         }
 
+        // Bound peer-inference admission for headless contributors. The desktop
+        // sets this from the GPU-share consent; a CLI daemon would otherwise
+        // leave the AppState default (unbounded) in place — and an unbounded
+        // peer fan-out is what OOM-killed the daemon. Apply the configured
+        // ceiling (default 1) regardless of whether a corpus engine is present,
+        // so a storage-only or inference-only node is still bounded.
+        if let Some(cfg) = self.setup_config.read().await.as_ref() {
+            let max = cfg.daemon.max_peer_inflight;
+            app_state.set_contribution_max_peer_inflight(max);
+            info!(
+                max_peer_inflight = max,
+                "admission: peer-inflight ceiling configured"
+            );
+        }
+
         // Publish embed model info so the collaborative ingestion planner
         // can compare this node's embedding model against candidates'.
         // Without this, `get_local_embed_model()` returns None and the

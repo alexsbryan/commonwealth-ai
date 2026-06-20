@@ -32,6 +32,8 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "logs" => cmd_logs().await,
         "fetch-model" => cmd_fetch_model(&args[1..]).await,
         "warm-cache" => cmd_warm_cache(&args[1..]).await,
+        "check-invariants" => cmd_check_invariants(&args[1..]).await,
+        "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {
             eprintln!("Unknown mesh subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP_MESH);
@@ -114,6 +116,255 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
     }
 }
 
+/// `sovereign mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]`
+///
+/// The assertion engine for the multi-process soak (`scripts/mesh-soak.sh`):
+/// polls each node's `GET /v1/mesh/status` and evaluates the HTTP-observable
+/// mesh invariants (convergence / no-ghost / liveness — see [`crate::mesh_soak`]).
+/// Exits non-zero if any invariant is violated, so a soak loop can `||` on it.
+/// `--json` emits one machine-readable line for `mesh-soak-findings.jsonl`.
+async fn cmd_check_invariants(args: &[String]) -> i32 {
+    use crate::mesh_soak::{evaluate_invariants, NodeSnapshot, NodeStatusView};
+
+    let mut nodes: Vec<String> = Vec::new();
+    let mut json = false;
+    let mut expect_live: Option<std::collections::BTreeSet<String>> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--nodes" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    nodes = v
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                }
+            }
+            "--expect-live" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    expect_live = Some(
+                        v.split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect(),
+                    );
+                }
+            }
+            "--json" => json = true,
+            "--help" | "-h" => {
+                eprintln!("Usage: sovereign mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]");
+                eprintln!();
+                eprintln!("  Polls GET /v1/mesh/status on each node and asserts the mesh");
+                eprintln!("  invariants: convergence (all agree on the member set), no-ghost");
+                eprintln!("  (no deliberately-downed node shown live; pair with --expect-live),");
+                eprintln!("  and liveness (every reachable node seen live by its peers).");
+                eprintln!("  Exit 0 if all hold, 1 on violation. The assertion engine for");
+                eprintln!("  scripts/mesh-soak.sh.");
+                return 0;
+            }
+            other => {
+                eprintln!("Unknown arg: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    if nodes.is_empty() {
+        eprintln!("--nodes is required (comma-separated host:port list)");
+        return 2;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+
+    let mut snapshots = Vec::with_capacity(nodes.len());
+    for addr in &nodes {
+        let url = format!("http://{addr}/v1/mesh/status");
+        let snap = match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => match resp.json::<NodeStatusView>().await {
+                Ok(v) => NodeSnapshot {
+                    addr: addr.clone(),
+                    status: Some(v),
+                    error: None,
+                },
+                Err(e) => NodeSnapshot {
+                    addr: addr.clone(),
+                    status: None,
+                    error: Some(format!("bad status json: {e}")),
+                },
+            },
+            Ok(resp) => NodeSnapshot {
+                addr: addr.clone(),
+                status: None,
+                error: Some(format!("http {}", resp.status())),
+            },
+            Err(e) => NodeSnapshot {
+                addr: addr.clone(),
+                status: None,
+                error: Some(format!("unreachable: {e}")),
+            },
+        };
+        snapshots.push(snap);
+    }
+
+    let violations = evaluate_invariants(&snapshots, expect_live.as_ref());
+
+    if json {
+        let unreachable: Vec<&str> = snapshots
+            .iter()
+            .filter(|s| s.status.is_none())
+            .map(|s| s.addr.as_str())
+            .collect();
+        let line = serde_json::json!({
+            "nodes": nodes,
+            "unreachable": unreachable,
+            "violations": violations
+                .iter()
+                .map(|v| serde_json::json!({ "invariant": v.invariant, "detail": v.detail }))
+                .collect::<Vec<_>>(),
+            "ok": violations.is_empty(),
+        });
+        println!("{line}");
+    } else {
+        for s in &snapshots {
+            match &s.status {
+                Some(v) => println!("  {} — {} members", s.addr, v.members_total),
+                None => println!(
+                    "  {} — UNREACHABLE ({})",
+                    s.addr,
+                    s.error.as_deref().unwrap_or("?")
+                ),
+            }
+        }
+        if violations.is_empty() {
+            println!("✓ mesh invariants hold across {} node(s)", nodes.len());
+        } else {
+            eprintln!("✘ {} invariant violation(s):", violations.len());
+            for v in &violations {
+                eprintln!("  [{}] {}", v.invariant, v.detail);
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        0
+    } else {
+        1
+    }
+}
+
+/// `sovereign mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]`
+///
+/// Layer 3 of the mesh QA plan: distils `mesh-soak-findings.jsonl` into SLIs
+/// (invariant violation rate, load success rate, load p50/p99) and gates each
+/// against a committed baseline (direction + tolerance — the `lane_baseline`
+/// pattern). Exit 1 on regression so CI can gate. `--update-baseline` captures
+/// the current SLIs as the new baseline (establish-then-ratchet).
+async fn cmd_soak_gate(args: &[String]) -> i32 {
+    use crate::mesh_soak::{gate_slis, soak_slis};
+
+    let mut findings: Option<String> = None;
+    let mut baseline_path: Option<String> = None;
+    let mut update = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--baseline" => {
+                i += 1;
+                baseline_path = args.get(i).cloned();
+            }
+            "--update-baseline" => update = true,
+            "--help" | "-h" => {
+                eprintln!("Usage: sovereign mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]");
+                eprintln!();
+                eprintln!("  Distils mesh-soak-findings.jsonl into SLIs (invariant violation");
+                eprintln!("  rate, load success rate, load p50/p99) and gates each against a");
+                eprintln!("  committed baseline. Exit 1 on regression past tolerance.");
+                eprintln!("  --update-baseline writes the current SLIs as the new baseline.");
+                return 0;
+            }
+            s if findings.is_none() && !s.starts_with('-') => findings = Some(s.to_string()),
+            other => {
+                eprintln!("Unknown arg: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let Some(findings) = findings else {
+        eprintln!("findings.jsonl path required");
+        return 2;
+    };
+    let text = match std::fs::read_to_string(&findings) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("read {findings}: {e}");
+            return 1;
+        }
+    };
+    let lines: Vec<serde_json::Value> = text
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    let current = soak_slis(&lines);
+
+    if update {
+        let Some(bp) = &baseline_path else {
+            eprintln!("--update-baseline requires --baseline <file>");
+            return 2;
+        };
+        return match serde_json::to_string_pretty(&current)
+            .map_err(|e| e.to_string())
+            .and_then(|s| std::fs::write(bp, s).map_err(|e| e.to_string()))
+        {
+            Ok(()) => {
+                println!("✓ wrote mesh-soak baseline → {bp}");
+                0
+            }
+            Err(e) => {
+                eprintln!("write baseline {bp}: {e}");
+                1
+            }
+        };
+    }
+
+    let baseline: Option<std::collections::BTreeMap<String, f64>> = baseline_path
+        .as_ref()
+        .and_then(|bp| std::fs::read_to_string(bp).ok())
+        .and_then(|s| serde_json::from_str(&s).ok());
+    let (rows, first_run) = gate_slis(&current, baseline.as_ref());
+
+    eprintln!("── mesh-soak SLO gate (baseline-relative) ──");
+    for r in &rows {
+        let base = r
+            .baseline
+            .map(|b| format!("{b:.4}"))
+            .unwrap_or_else(|| "—".into());
+        let status = if r.regressed { "REGRESSED" } else { "ok" };
+        eprintln!(
+            "  {:<28} base={:>10} cur={:>10.4}  {status}",
+            r.name, base, r.current
+        );
+    }
+    if first_run {
+        eprintln!("  no baseline yet — first run. Capture one with --update-baseline.");
+        return 0;
+    }
+    let n = rows.iter().filter(|r| r.regressed).count();
+    if n == 0 {
+        eprintln!("  VERDICT: PASS ✓ — no SLI regressed past tolerance.");
+        0
+    } else {
+        eprintln!("  VERDICT: FAIL ✗ — {n} SLI(s) regressed vs baseline.");
+        1
+    }
+}
+
 /// Run a corpus subcommand. Returns the exit code.
 const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign mesh",
@@ -147,6 +398,14 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             (
                 "warm-cache <gguf>",
                 "Pre-seed the RPC tensor cache from a local GGUF (offline; later serves with zero weight transfer)",
+            ),
+            (
+                "check-invariants --nodes <a,b,..>",
+                "Poll /v1/mesh/status across nodes and assert convergence/no-ghost/liveness (soak harness)",
+            ),
+            (
+                "soak-gate <findings.jsonl>",
+                "Gate mesh-soak SLIs (violation rate, load latency) against a committed baseline",
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(

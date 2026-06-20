@@ -18,7 +18,7 @@
 //!
 //! Reuses `Mesh::merge_from` for the actual last-writer-wins
 //! reconciliation. This module is just the network plumbing on top.
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::MeshId;
@@ -146,7 +146,7 @@ pub async fn run_one_round(
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
     let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-    let now = now_secs();
+    let now = app_state.clock().now_unix_secs();
     let threshold = offline_threshold.as_secs();
 
     // Build a fresh snapshot of our own capabilities BEFORE we take
@@ -238,32 +238,31 @@ pub async fn run_one_round(
             if *id == self_id {
                 continue;
             }
-            let prior_status = m.status;
-            // Only decay if the record is actually stale AND not
-            // already Offline (avoid unnecessary writes).
-            if now.saturating_sub(m.last_seen) > threshold && m.status != NodeStatus::Offline {
+            // Decay measures LOCAL-observation staleness — the local-clock
+            // time at which we last saw this peer's record advance (set via
+            // `observe_peer_contact` in the merge paths below + the receive
+            // handler) — NOT the peer's own gossiped `last_seen`. Comparing a
+            // remote clock against ours is what caused the "~9 min flap" (todo
+            // `f152dfe7` #4): a clock-skewed-but-live peer looked stale.
+            // `peer_contact_or_init` lazy-inits a freshly-seen peer to `now`, a
+            // full grace window, so we never decay a peer we just learned of.
+            let last_contact = app_state.peer_contact_or_init(*id, now);
+            if now.saturating_sub(last_contact) > threshold && m.status != NodeStatus::Offline {
                 m.status = NodeStatus::Offline;
-                // Extra diagnostic fields for the ~9 min flap
-                // (see todo `f152dfe7` #4). `threshold_secs` +
-                // `last_seen` makes each transition reproducible
-                // without having to cross-reference elsewhere.
                 info!(
                     peer = %m.node_id,
                     name = %m.name,
-                    staleness_secs = now.saturating_sub(m.last_seen),
+                    staleness_secs = now.saturating_sub(last_contact),
                     threshold_secs = threshold,
-                    last_seen_unix = m.last_seen,
+                    last_contact_unix = last_contact,
                     addrs = ?m.addresses,
-                    "gossip: peer marked Offline (stale last_seen)"
+                    "gossip: peer marked Offline (no local contact within threshold)"
                 );
             }
-            // The symmetric offline→online transition is logged at
-            // the actual point of transition, further down in this
-            // round where `merge_from` receives a peer's heartbeat
-            // and/or we successfully reach the peer ourselves.
-            // Here in the decay pass `m.status` can only move
-            // Online→Offline, so no online-transition log to emit.
-            let _ = prior_status; // reserved for future use
+            // The symmetric offline→online transition is observed where we
+            // merge a peer's heartbeat (below) — that refreshes `last_contact`
+            // and flips status back to Online. The decay pass only moves
+            // Online→Offline, so no online-transition log here.
         }
         mesh.members
             .values()
@@ -339,6 +338,12 @@ pub async fn run_one_round(
                     transport.note_success(peer_id, TrafficClass::Gossip, ep);
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
+                    // Stamp local-observation time for every peer whose record
+                    // advanced in this merge (incl. transitively-relayed ones),
+                    // so offline-decay sees them as freshly-observed.
+                    for observed_id in &report.observed {
+                        app_state.observe_peer_contact(*observed_id, now);
+                    }
                     if report.added > 0 {
                         info!(
                             peer = %peer_id,
@@ -365,7 +370,7 @@ pub async fn run_one_round(
                     // offline-decay log in the pass above.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
                         let was_offline = peer.status == NodeStatus::Offline;
-                        peer.last_seen = now_secs();
+                        peer.last_seen = app_state.clock().now_unix_secs();
                         peer.status = NodeStatus::Online;
                         if was_offline {
                             info!(
@@ -656,13 +661,6 @@ pub enum GossipError {
     Transport(String),
     #[error("malformed peer response: {0}")]
     BadResponse(String),
-}
-
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 // ── Wire types ───────────────────────────────────────────────

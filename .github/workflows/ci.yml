@@ -54,6 +54,20 @@ jobs:
       # ARCH_PRINCIPLES §12.4): DeterministicInference + in-memory SQLite + FTS5.
       - run: cargo test --workspace
 
+  mesh-dst:
+    name: Mesh DST (fault-injection / invariants)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      # Deterministic-simulation mesh suite (Layer 1 of commonwealth/docs/MESH_QA.md):
+      # drives REAL gossip under a per-node FaultTransport + seeded fault schedule
+      # and asserts the invariant pack. In-process — no GPU/network/weights, CI-safe.
+      - run: cargo test -p sovereign-mesh --features dst --test dst_scenarios
+
   arch-gate:
     name: Arch-gate (file-size ratchet + §1 doc-contract)
     runs-on: ubuntu-latest
