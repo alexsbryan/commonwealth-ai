@@ -27,6 +27,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
+# Separate, ABSOLUTE target dir so the windows-msvc build neither stomps the
+# host target/ (watcher cargo-lock contention) nor lands inside the crate dir.
+# Absolute is load-bearing: this script cd's into the crate before invoking
+# cargo, so a RELATIVE CARGO_TARGET_DIR would resolve there and leak ~11k build
+# files into source control. Gitignored as `target-xwin/`.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target-xwin}"
+
 log() { printf '\n[windows-crosscheck] %s\n' "$*"; }
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
