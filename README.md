@@ -41,7 +41,7 @@ cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-
 ./target/release/sovereign-cli --help
 ```
 
-The developer toolchain — project lifecycle, ATOS, code intelligence — is gated out of the default build behind `--features dev-tools`. The full setup, including platform build dependencies, is in [sovereign/README.md](./sovereign/README.md).
+Code intelligence — symbol search, call graphs, and the MCP tools the assistant calls — is part of the default build. Two developer surfaces are opt-in and off by default, so the shipped binaries carry neither: **`--features dev-tools`** (git archaeology in the code brief, the agent-coding bench, and the `sovereign-cli-dev` workbench verbs — `project`, `code`, `tools`) and **`--features atos`** (the experimental agent feature-lifecycle subsystem). The default `sovereign` dispatcher refuses a workbench verb with a pointer to rebuild, rather than silently shipping it. The full setup, including platform build dependencies, is in [sovereign/README.md](./sovereign/README.md).
 
 ## Reading it
 

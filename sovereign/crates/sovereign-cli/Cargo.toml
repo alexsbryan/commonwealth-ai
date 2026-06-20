@@ -23,7 +23,7 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-agent-bench = { workspace = true }
+sovereign-agent-bench = { workspace = true, optional = true }
 # `awareness_cmd` (the `awareness` feature only) needs the heavy
 # `knowledge_view` surface from sovereign-tools. Default + `dev-tools`
 # builds skip this; only `--features awareness` pulls it in.
@@ -32,7 +32,7 @@ sovereign-cli-shared = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true }
-corpus-engine-archaeology = { workspace = true }
+corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # Only the opt-in `awareness` diagnostic CLI reads the ATOS FeatureStore
 # (corpus_engine_atos). Optional + pulled by the `awareness` feature so the
@@ -73,7 +73,7 @@ tempfile = { workspace = true }
 # lifecycle, ATOS, code intelligence, archaeology) that the default
 # (end-user) build gates out. Lightweight — pure dispatch/help; the
 # gated verbs exec the `sovereign-cli-dev` sibling at runtime.
-dev-tools = []
+dev-tools = ["dep:corpus-engine-archaeology", "dep:sovereign-agent-bench"]
 # `awareness` builds the heavy `sovereign awareness` knowledge-view
 # diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent
 # of `dev-tools` so the common developer build stays light.

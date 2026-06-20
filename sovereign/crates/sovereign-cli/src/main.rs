@@ -26,6 +26,7 @@
 //   corpus_watch_cmd, worker_pod_provider, REPL Runtime construction.
 
 mod amend_cmd;
+#[cfg(feature = "dev-tools")]
 mod archaeology_eval_cmd;
 mod audit_cmd;
 #[cfg(feature = "awareness")]
@@ -35,6 +36,7 @@ mod daemon_bin;
 mod design_cmd;
 mod dev_bin;
 mod drift_cmd;
+#[cfg(feature = "dev-tools")]
 mod git_archaeology_cmd;
 mod init;
 mod llm_bin;
@@ -45,6 +47,7 @@ mod notes_cmd;
 mod plan_cmd;
 mod reflect_cmd;
 mod refresh_cmd;
+#[cfg(feature = "dev-tools")]
 mod rough_edges_cmd;
 mod serve_cmd;
 mod status_cmd;
@@ -601,14 +604,17 @@ async fn async_main() {
                 let code = drift_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            #[cfg(feature = "dev-tools")]
             "rough-edges" => {
                 let code = rough_edges_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            #[cfg(feature = "dev-tools")]
             "git-archaeology" => {
                 let code = git_archaeology_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            #[cfg(feature = "dev-tools")]
             "archaeology-eval" => {
                 let code = archaeology_eval_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
@@ -704,11 +710,11 @@ async fn async_main() {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
+            #[cfg(feature = "dev-tools")]
             "agent-bench" => {
                 // Eight-problem coding battery; subprocess-driven
                 // pi / opencode / codex runners. See SYSTEM_OVERVIEW §11
                 // and `sovereign/crates/sovereign-agent-bench/`.
-                // Stays in sovereign-cli for now — light dep surface.
                 let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
                 std::process::exit(code as i32);
             }

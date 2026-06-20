@@ -27,7 +27,7 @@ sovereign-store = { workspace = true }
 # The dev workbench drives the ATOS code-intel tools (project_context,
 # provision/archive/record-atos-event, design-signals, drift), so it enables
 # the `atos` feature; product builds (daemon/desktop/server) leave it off.
-sovereign-tools = { workspace = true, features = ["treesitter", "atos"] }
+sovereign-tools = { workspace = true, features = ["treesitter", "atos", "dev-tools"] }
 sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }

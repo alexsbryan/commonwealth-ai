@@ -19,6 +19,14 @@
 //! a date, we backdate the underlying git commits to a fixed value
 //! so the rendered output is deterministic across machines.
 
+// The brief's principles + recent-activity sections come from
+// `corpus-engine-archaeology`, gated behind sovereign-tools' `dev-tools`
+// feature. The snapshots capture the full (dev-tools) output, so the suite
+// only runs when that feature is on (always true under `--workspace`/CI via
+// the `sovereign-cli-dev` workbench; skipped in a bare `--features treesitter`
+// build where archaeology is stubbed to empty).
+#![cfg(feature = "dev-tools")]
+
 use std::path::{Path, PathBuf};
 use std::process::Command as Cmd;
 
