@@ -23,7 +23,7 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # detect_drift, current_spec_hash}` so its verdict matches the
 # daemon's approval_gate middleware exactly. The dep is one-way
 # (sovereign-atos depends on sovereign-core only); no cycle.
-sovereign-atos = { workspace = true }
+sovereign-atos = { workspace = true, optional = true }
 # Work atlas — `blast` queries it to surface concurrent claims in
 # the same response (§8 of the spec). One-way dep: work-atlas does
 # not depend on sovereign-tools.
@@ -34,7 +34,7 @@ corpus-engine-notes = { workspace = true }
 # SCIP call graph types — carved out of corpus-engine 2026-05-23.
 # Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
 corpus-engine-scip = { workspace = true }
-corpus-engine-atos = { workspace = true }
+corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -190,6 +190,13 @@ i_overlay = { version = "4", optional = true }
 default = []
 email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
+# `atos` is the experimental agent feature-lifecycle subsystem (charter →
+# milestones → approval-gate → drift). It is OFF by default so product builds
+# carry zero ATOS; it pulls the two ATOS crates and unlocks the ATOS code-intel
+# tools (DriftTool, Provision/Archive/RecordAtosEvent/ProjectContext/
+# DesignSignalsExtract) and the KnowledgeView strategic ATOS splice. Orthogonal
+# to `treesitter` — the code-intel ATOS tools need both axes.
+atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
 gliner-ner = ["dep:gline-rs", "dep:orp"]
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the

@@ -17,6 +17,7 @@ use commonwealth_inference::oicp::{
 use std::collections::HashSet;
 use std::time::Instant;
 
+#[cfg(feature = "atos")]
 use crate::middleware::{
     MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
 };
@@ -125,8 +126,15 @@ pub async fn chat_completions(
         );
     }
 
+    // ATOS served-middleware pipeline (feature `atos`, off by default). Only
+    // pipeline-alias requests (e.g. `commonwealth/sovereign-coder`) enter it;
+    // plain `primary`/`fast`/concrete-model chat — the harness-protocol product
+    // path — never resolves a pipeline and is unaffected when atos is off.
+    #[cfg(feature = "atos")]
     let requested_model = request.model.clone().unwrap_or_default();
+    #[cfg(feature = "atos")]
     let _post_guard: Option<PostPathGuard>;
+    #[cfg(feature = "atos")]
     if let Some(pipeline_res) = state
         .inner
         .pipeline_aliases
@@ -1074,6 +1082,7 @@ async fn serve_local_stream(
 /// prerequisites (no session_store, no X-Feature-Id) degrade the
 /// call to a no-op — the handler then proceeds to legacy routing
 /// with the unmodified request.
+#[cfg(feature = "atos")]
 async fn run_atos_pipeline(
     state: &AppState,
     headers: &HeaderMap,
@@ -1190,6 +1199,7 @@ async fn run_atos_pipeline(
 /// if the next request's pre-path arrives before post-path
 /// completes, the pre-path waits. That's the desired ordering —
 /// post-path mutations are visible to the next turn.
+#[cfg(feature = "atos")]
 pub(crate) struct PostPathGuard {
     pipeline: std::sync::Arc<Pipeline>,
     ctx: std::sync::Arc<PipelineContext>,
@@ -1197,6 +1207,7 @@ pub(crate) struct PostPathGuard {
     session_id: String,
 }
 
+#[cfg(feature = "atos")]
 impl Drop for PostPathGuard {
     fn drop(&mut self) {
         let pipeline = self.pipeline.clone();
@@ -1246,6 +1257,7 @@ impl Drop for PostPathGuard {
 /// send an `X-Session-Id` header. Ephemeral; not persisted beyond
 /// the in-memory mutex lifetime because the next request without a
 /// header makes a new one.
+#[cfg(feature = "atos")]
 fn uuid_like_for_sessionless() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
@@ -1255,6 +1267,7 @@ fn uuid_like_for_sessionless() -> String {
     format!("sessionless-{nanos:x}")
 }
 
+#[cfg(feature = "atos")]
 fn middleware_error_to_response(err: MiddlewareError) -> Response {
     match err {
         MiddlewareError::ApprovalRequired { feature_id, hint } => atos_error_response(
@@ -1273,6 +1286,7 @@ fn middleware_error_to_response(err: MiddlewareError) -> Response {
     }
 }
 
+#[cfg(feature = "atos")]
 fn atos_error_response(status: StatusCode, code: &str, message: &str) -> Response {
     let envelope = serde_json::json!({
         "error": {

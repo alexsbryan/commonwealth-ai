@@ -23,7 +23,6 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-authoring-harness.workspace = true
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
-corpus-engine-atos = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }

@@ -46,17 +46,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::openai_types::ChatCompletionRequest;
 
+#[cfg(feature = "atos")]
 pub mod approval_gate;
+#[cfg(feature = "atos")]
 pub mod artifact_surface;
+#[cfg(feature = "atos")]
 pub mod context_injector;
 pub mod decision_extractor;
+#[cfg(feature = "atos")]
 pub mod session_briefing;
 pub mod tool_injector;
 
+#[cfg(feature = "atos")]
 pub use approval_gate::ApprovalGate;
+#[cfg(feature = "atos")]
 pub use artifact_surface::ArtifactSurface;
+#[cfg(feature = "atos")]
 pub use context_injector::ContextInjector;
 pub use decision_extractor::DecisionExtractor;
+#[cfg(feature = "atos")]
 pub use session_briefing::SessionBriefing;
 pub use tool_injector::ToolInjector;
 
@@ -102,7 +110,8 @@ pub struct MiddlewareSession {
     pub deviation_note_id: Option<String>,
     /// Populated by `ArtifactSurface.post_process` on turn N;
     /// consumed by `ContextInjector.process` on turn N+1. Optional
-    /// so fresh sessions don't have to seed an empty delta.
+    /// so fresh sessions don't have to seed an empty delta. ATOS-only.
+    #[cfg(feature = "atos")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_artifact_delta: Option<sovereign_atos::session::ArtifactDelta>,
     /// Unix-second timestamp of the *previous* turn. Post-path
@@ -502,6 +511,7 @@ mod tests {
     /// resolve cleanly through that registry. A typo on either
     /// side fails this test loud — without it the wiring could
     /// silently drift again.
+    #[cfg(feature = "atos")]
     #[tokio::test]
     async fn sovereign_coder_default_pipeline_resolves_decision_extractor() {
         // Mirror the production registry from

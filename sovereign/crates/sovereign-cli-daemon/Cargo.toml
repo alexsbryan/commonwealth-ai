@@ -28,7 +28,6 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
-sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
@@ -60,6 +59,13 @@ tempfile = "3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[features]
+# OFF by default so the product daemon carries zero ATOS. When on, the daemon
+# registers the ATOS code-intel tools (project_context, design_signals) on its
+# MCP surface. The experimental ATOS subsystem is otherwise reached via the
+# `sovereign-cli-dev` workbench (`sovereign atos …`).
+atos = ["sovereign-tools/atos", "sovereign-mesh/atos"]
 
 [lints]
 workspace = true

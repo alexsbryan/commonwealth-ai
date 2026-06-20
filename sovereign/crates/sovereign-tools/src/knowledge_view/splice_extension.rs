@@ -29,19 +29,25 @@
 #![cfg(feature = "treesitter")]
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "atos")]
+use std::path::PathBuf;
+#[cfg(feature = "atos")]
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
+#[cfg(feature = "atos")]
 use corpus_engine_atos::features::FeatureStore;
 use corpus_engine_notes::notes::NoteStore;
 use rusqlite::{Connection, OpenFlags};
+#[cfg(feature = "atos")]
 use sha2::{Digest, Sha256};
 use sovereign_core::memory::EntityInventory;
 
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
+#[cfg(feature = "atos")]
 use crate::knowledge_view::timeline::{AtosLink, AtosLinkKind, AtosLookup, CharterStatus};
 
 // ── Chunk-timestamp resolver ────────────────────────────────────
@@ -178,6 +184,7 @@ fn shorten_summary(content: &str) -> String {
 
 // ── ATOS lookup composition ─────────────────────────────────────
 
+#[cfg(feature = "atos")]
 /// Concrete `AtosLookup` built from a snapshot of the local
 /// `FeatureStore` + `project.toml` lifecycle state.
 ///
@@ -191,12 +198,14 @@ pub struct AtosSnapshot {
     features: Vec<FeatureMatch>,
 }
 
+#[cfg(feature = "atos")]
 struct ProjectMatch {
     folded_name: String,
     current_phase: Option<u32>,
     charter_status: CharterStatus,
 }
 
+#[cfg(feature = "atos")]
 struct FeatureMatch {
     id: String,
     folded_keys: Vec<String>,
@@ -204,6 +213,7 @@ struct FeatureMatch {
     total_phases: Option<u32>,
 }
 
+#[cfg(feature = "atos")]
 impl AtosSnapshot {
     /// Empty snapshot — yields no matches. Used when the caller has
     /// no `project.toml` or no `features.db` configured.
@@ -262,6 +272,7 @@ impl AtosSnapshot {
     }
 }
 
+#[cfg(feature = "atos")]
 impl AtosLookup for AtosSnapshot {
     fn lookup(&self, name: &str) -> Option<AtosLink> {
         if let Some(p) = &self.project {
@@ -290,6 +301,7 @@ impl AtosLookup for AtosSnapshot {
     }
 }
 
+#[cfg(feature = "atos")]
 /// Read project.toml; return a `ProjectMatch` when the file is
 /// present and the lifecycle section carries enough to render an
 /// AtosLink. Drift status compares the current `CHARTER.md` SHA-256
@@ -361,6 +373,7 @@ fn load_project_match(project_toml_path: &Path) -> Option<ProjectMatch> {
     })
 }
 
+#[cfg(feature = "atos")]
 fn fold_name(s: &str) -> String {
     s.trim().to_lowercase()
 }
@@ -488,6 +501,7 @@ mod tests {
         assert_eq!(shorten_summary("first\nsecond\nthird"), "first");
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn fold_name_lowers_and_trims() {
         assert_eq!(fold_name("  API Migration  "), "api migration");
@@ -513,12 +527,14 @@ mod tests {
         assert!(!contains_whole_word("oversaraherror", "sarah"));
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn atos_snapshot_empty_returns_no_matches() {
         let snap = AtosSnapshot::empty();
         assert!(snap.lookup("anything").is_none());
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn atos_snapshot_matches_project_name_after_folding() {
         let snap = AtosSnapshot {
@@ -537,6 +553,7 @@ mod tests {
         assert!(snap.lookup("unrelated").is_none());
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn atos_snapshot_matches_feature_id_or_title() {
         let snap = AtosSnapshot {
@@ -561,6 +578,7 @@ mod tests {
         assert_eq!(by_title.id, "knowledge-view-relational");
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn load_project_match_returns_unapproved_when_charter_hash_empty() {
         let tmp = tempfile::tempdir().unwrap();
@@ -578,6 +596,7 @@ mod tests {
         assert_eq!(m.charter_status, CharterStatus::Unapproved);
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn load_project_match_drift_when_charter_changed() {
         let tmp = tempfile::tempdir().unwrap();
@@ -606,6 +625,7 @@ mod tests {
         assert_eq!(m.charter_status, CharterStatus::Drifted);
     }
 
+    #[cfg(feature = "atos")]
     #[test]
     fn load_project_match_clean_when_hash_matches() {
         let tmp = tempfile::tempdir().unwrap();

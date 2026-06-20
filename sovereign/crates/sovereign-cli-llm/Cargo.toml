@@ -28,7 +28,6 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
-sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
@@ -43,7 +42,6 @@ bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-archaeology = { workspace = true }
 corpus-engine-notes = { workspace = true }
-corpus-engine-atos = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }

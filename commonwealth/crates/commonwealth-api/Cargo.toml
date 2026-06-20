@@ -15,10 +15,15 @@ commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
-corpus-engine-atos = { workspace = true }
+# ATOS feature-lifecycle subsystem (the served middleware pipeline:
+# approval-gate / artifact-surface / session-briefing + the session store).
+# OFF by default behind the `atos` feature so the product mesh daemon carries
+# zero ATOS; the harness-protocol chat path (plain `primary`/`fast`/concrete
+# models) does not route through this pipeline.
+corpus-engine-atos = { workspace = true, optional = true }
 # ATOS orchestrator library — middleware stack references it for
 # session state, approval lookups, and note-store access.
-sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }
+sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos", optional = true }
 # Shared tool manifest — the tool_injector middleware pulls the
 # canonical ATOS tool descriptors from here so schemas can't drift
 # from the tool implementations.
@@ -80,6 +85,15 @@ tokio-stream = "0.1"
 # and corpus_sync. Already a transitive dep via sovereign-cli; pulling
 # it in directly here avoids reaching across crates for a single call.
 dirs = "5"
+
+[features]
+default = []
+# The ATOS served-middleware pipeline (approval-gate, artifact-surface,
+# session-briefing, context-injector spec/charter/artifact injection) + the
+# session store. Reached only by pipeline-alias requests (e.g.
+# `commonwealth/sovereign-coder`); plain chat bypasses it. Enabled in an
+# atos build via `sovereign-cli-daemon --features atos` → `sovereign-mesh/atos`.
+atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
 
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }
