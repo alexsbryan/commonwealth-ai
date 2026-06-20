@@ -82,6 +82,13 @@ tower-http = { workspace = true }
 default = ["paddle-ocr"]
 paddle-ocr = ["sovereign-tools/paddle-ocr"]
 
+# Windows GPU backend selectors — forwarded to sovereign-inference, passed by
+# the release matrix's Windows GPU legs (`cargo tauri build --features ...`).
+# No-op on macOS/Linux (which hardcode their backend per-OS). See
+# sovereign-inference/Cargo.toml for the backend matrix.
+windows-vulkan = ["sovereign-inference/windows-vulkan"]
+windows-cuda = ["sovereign-inference/windows-cuda"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

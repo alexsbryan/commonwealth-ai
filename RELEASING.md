@@ -1,0 +1,134 @@
+# Releasing Commonwealth AI
+
+This repo ships **two** user-facing artifacts from **two independent**
+tag-triggered GitHub Actions workflows. They do not bundle — tagging one does
+not build the other.
+
+| Artifact | Tag prefix | Workflow | Output | How users get it |
+|---|---|---|---|---|
+| **CLI** (`sovereign`) | `cli-v*` | `.github/workflows/cli-release.yml` | `sovereign-<target>.tar.gz` (3 binaries) + `SHA256SUMS` | `curl -fsSL https://svrnme.sh/install.sh \| sh` |
+| **Desktop app** | `desktop-v*` | `.github/workflows/desktop-release.yml` | `.dmg` / `.AppImage` / `.deb` (/ `.msi`) | download + double-click |
+
+Each workflow creates its **own draft GitHub Release** keyed to its tag, so
+`cli-v0.1.18` and `desktop-v0.1.18` are separate release pages with separate
+assets. Different tag prefixes mean they never fire together.
+
+The CLI tarball contains all three product binaries the dispatcher needs —
+`sovereign-cli` (the `sovereign` dispatcher), `sovereign-cli-daemon`, and
+`sovereign-cli-llm`. There is **no separate daemon release**; the daemon ships
+inside the CLI tarball.
+
+---
+
+## Versioning — one workspace version for both
+
+There is a single repo-wide version: `[workspace.package].version` in the root
+`Cargo.toml` (every crate inherits it via `version.workspace = true`). Both tag
+prefixes should carry that same number, cut from the same commit — e.g. release
+`0.1.18` as **both** `cli-v0.1.18` and `desktop-v0.1.18`.
+
+Bump it with the desktop script (it also moves the desktop's `tauri.conf.json`
++ `package.json`, which must agree, and verifies all three):
+
+```sh
+scripts/bump-desktop-version.sh 0.2.0     # or: patch | minor | major
+```
+
+Both release workflows **verify the tag matches the workspace version** before
+spending a build (`check-desktop-version.sh` for desktop; an inline step in
+`cli-release.yml`), so a mistyped tag fails in seconds, not after a long build.
+
+---
+
+## Releasing the CLI
+
+### 1. Pre-flight
+
+- [ ] `./scripts/sovereign-test.sh --human` green (the full workspace gate).
+- [ ] Version bumped (above) and committed.
+
+### 2. Tag + push
+
+```sh
+v="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"   # e.g. 0.1.18
+git tag "cli-v$v"
+git push origin main "cli-v$v"
+```
+
+The tag push triggers `cli-release.yml`. It builds the three binaries per
+platform (`cargo build --release -p sovereign-cli -p sovereign-cli-daemon
+-p sovereign-cli-llm`), packages `sovereign-<target>.tar.gz` + a per-file
+`.sha256`, and uploads them to a **draft** release named `cli-v$v` along with a
+combined `SHA256SUMS`.
+
+**Platform matrix:** Linux x86_64 is the only leg enabled on a tag today.
+macOS arm64 is ready to uncomment in `cli-release.yml` once a local
+`cargo build --release --target aarch64-apple-darwin` of the three binaries is
+validated — this mirrors the desktop workflow's hard-won lesson that pushing
+untested macOS legs (especially the retired Intel `macos-13` runner) hangs and
+drains the Actions budget.
+
+### 3. Promote
+
+1. Watch `https://github.com/<owner>/<repo>/actions/workflows/cli-release.yml`.
+2. When green, a draft release appears with `sovereign-<target>.tar.gz`,
+   its `.sha256`, and `SHA256SUMS`.
+3. Smoke it before publishing — download the tarball for your platform, verify
+   the checksum, extract, and run `./sovereign-cli --version` (it should report
+   the workspace version, matching the tag).
+4. Click **Publish release** in the GitHub UI.
+
+### 4. The installer
+
+`landing/install.sh` (served at `https://svrnme.sh/install.sh`) is the
+`curl | sh` target. On `latest` it resolves the **newest `cli-v*` release** via
+the GitHub API:
+
+```sh
+curl -fsSL "https://api.github.com/repos/<owner>/<repo>/releases" \
+  | grep '"tag_name"' | grep -oE 'cli-v[0-9][^"]*' | head -n1
+```
+
+This is deliberate: GitHub's `/releases/latest` is a single repo-global pointer
+**shared with the `desktop-v*` stream**, so it can resolve to a desktop release
+that has no CLI tarball. Resolving `cli-v*` by name keeps the one-liner correct
+regardless of which stream published most recently. The unauthenticated
+`/releases` list excludes drafts, so the installer only ever picks a *published*
+CLI release. To pin a specific version: `SOVEREIGN_VERSION=cli-v0.1.18`.
+
+The installer downloads the three binaries into `~/.local/bin` (override with
+`SOVEREIGN_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
+checksum against `SHA256SUMS`, and prints `sovereign setup` as the next step.
+
+---
+
+## Releasing the desktop app
+
+Same shape (bump → tag `desktop-v$v` → CI → promote draft), but with more
+moving parts: a four-platform Tauri matrix, bundled OCR/PDFium assets, ad-hoc
+code signing, and the auto-updater keypair. **The authoritative checklist is
+[`sovereign/crates/sovereign-desktop/RELEASING.md`](./sovereign/crates/sovereign-desktop/RELEASING.md)** —
+follow it for desktop releases. The one-line version:
+
+```sh
+scripts/bump-desktop-version.sh 0.2.0
+git commit -am "chore(desktop): release v0.2.0"
+git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
+# → desktop-release.yml → promote the draft after smoke-testing an installer
+```
+
+---
+
+## How the two coexist on GitHub Releases
+
+Both workflows publish **drafts** (a tag push *stages* a release; you publish it
+manually after smoke-testing). Once published, GitHub's global "latest release"
+pointer flips to whichever stream published most recently — which is exactly why
+the CLI installer resolves `cli-v*` by name rather than trusting `latest`. The
+desktop auto-updater similarly queries for the latest `desktop-v*` tag (via the
+`svrnme.sh` manifest endpoint), so neither consumer depends on the shared
+`latest` pointer.
+
+To cut a coordinated release of both at version `X.Y.Z`: bump once, commit, then
+push both tags (`cli-vX.Y.Z` and `desktop-vX.Y.Z`) — two workflows run in
+parallel and produce two independent draft releases.

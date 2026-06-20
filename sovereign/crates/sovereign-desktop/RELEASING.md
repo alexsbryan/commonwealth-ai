@@ -69,9 +69,11 @@ scripts/check-desktop-version.sh 0.2.0      # also require an exact value
 step, so a tag whose three files disagree fails in seconds instead of
 after a 30-minute build matrix.
 
-Tag format: `desktop-v<MAJOR>.<MINOR>.<PATCH>`. The CLI and daemon use
-their own tag prefixes (`cli-vX.Y.Z`, `daemon-vX.Y.Z`) so all three can
-release independently from one repo.
+Tag format: `desktop-v<MAJOR>.<MINOR>.<PATCH>`. The CLI ships under its own
+prefix (`cli-vX.Y.Z`, whose tarball bundles the dispatcher + daemon + llm
+binaries) so it releases independently from the desktop app — see the
+top-level [`RELEASING.md`](../../../RELEASING.md). There is no separate
+`daemon-v*` stream; the daemon binary ships inside the CLI tarball.
 
 `v0.x.y` while pre-1.0 — minor version bumps may include breaking
 changes during this window. After 1.0, follow strict semver.
@@ -751,8 +753,10 @@ the per-arch matrix entries on macOS. Bigger DMG, simpler matrix.
 
 ## What's NOT covered here
 
-- **CLI / daemon releases**: separate flow, same pattern, separate doc
-  (TBD when needed).
+- **CLI / daemon releases**: documented in the top-level
+  [`RELEASING.md`](../../../RELEASING.md) — the `cli-v*` stream bundles the
+  dispatcher + daemon + llm binaries and is consumed by the `curl | sh`
+  installer.
 - **Internal pre-release dogfooding builds**: the CI workflow only
   fires on `desktop-v*` tags. For nightly-style internal builds, use
   `workflow_dispatch` from the Actions UI.

@@ -12083,6 +12083,7 @@ name = "sovereign-inference"
 version = "0.1.18"
 dependencies = [
  "async-trait",
+ "dirs 5.0.1",
  "encoding_rs",
  "futures",
  "llama-cpp-4",

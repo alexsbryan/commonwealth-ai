@@ -918,9 +918,7 @@ fn rpc_cache_dir() -> Option<std::path::PathBuf> {
             }
             std::path::PathBuf::from(v)
         }
-        Err(_) => std::path::Path::new(&std::env::var("HOME").ok()?)
-            .join(".sovereign")
-            .join("rpc-cache"),
+        Err(_) => dirs::home_dir()?.join(".sovereign").join("rpc-cache"),
     };
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!(dir = %dir.display(), error = %e, "could not create RPC cache dir — caching disabled");

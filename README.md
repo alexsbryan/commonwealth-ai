@@ -56,6 +56,10 @@ Start with [sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md): every
 
 The tests run on a CI box with no GPU, no network, and no model weights; mocks stand in for inference and embeddings. Adapter logs land under `target/sovereign-test/latest/` for triage.
 
+## Releasing
+
+[RELEASING.md](./RELEASING.md) is the map: the CLI (`cli-v*` tags → `curl | sh` installer) and the desktop app (`desktop-v*` tags → installers) release independently from this one repo. Desktop specifics — the four-platform Tauri matrix, code signing, and the auto-updater — are in [sovereign/crates/sovereign-desktop/RELEASING.md](./sovereign/crates/sovereign-desktop/RELEASING.md).
+
 ## License
 
 [AGPL-3.0-or-later](./LICENSE). Copyright © the Commonwealth AI authors.

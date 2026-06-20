@@ -14,6 +14,9 @@ futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 sysinfo = "0.34"
+# Cross-platform home-dir resolution (USERPROFILE on Windows, HOME on unix) for
+# the RPC tensor-cache path. Matches sovereign-core's `dirs::home_dir()` usage.
+dirs = "5"
 encoding_rs = "0.8"
 tracing = { workspace = true }
 tokio-stream = "0.1"
@@ -80,6 +83,29 @@ llama-cpp-sys-4 = { version = "0.3.1", features = ["rpc"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 llama-cpp-4 = { version = "0.3.1", features = ["vulkan"] }
 llama-cpp-sys-4 = { version = "0.3.1", features = ["rpc"] }
+
+# Windows is the first OS that wants more than one backend, so unlike macOS
+# (metal) / Linux (vulkan) — which hardcode their single backend above — the
+# Windows backend is a CPU BASELINE plus feature-selected GPU layers (see the
+# `[features]` block). CPU is the portable, SDK-free default that builds on the
+# stock windows-2022 runner (preinstalled MSVC + CMake). Mirrors macOS's
+# default-features=false + mtmd (CPU via ggml's pthread pool, no openmp dylib
+# hunt); keeps the sys `rpc` feature so embedded/model_slot.rs's direct
+# ggml_backend_rpc_add_server FFI links here too.
+[target.'cfg(target_os = "windows")'.dependencies]
+llama-cpp-4 = { version = "0.3.1", default-features = false, features = ["mtmd"] }
+llama-cpp-sys-4 = { version = "0.3.1", features = ["rpc"] }
+
+# Windows GPU backends layer onto the CPU baseline; the release matrix builds
+# one variant per leg via `--features`. No-ops on macOS/Linux (which never pass
+# them). `vulkan-1.dll` ships with the user's GPU driver, so the GPU loader is
+# not bundled — only the BUILD needs the matching SDK (Vulkan SDK / CUDA Toolkit).
+#   (default)                 -> CPU, universal
+#   --features windows-vulkan -> NVIDIA + AMD + Intel GPU
+#   --features windows-cuda   -> NVIDIA-optimized (deferred until benchmarks justify)
+[features]
+windows-vulkan = ["llama-cpp-4/vulkan"]
+windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
 tempfile = "3"
