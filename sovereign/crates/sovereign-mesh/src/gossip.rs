@@ -503,6 +503,55 @@ pub async fn run_one_round(
     Ok(())
 }
 
+/// Announce graceful departure: tombstone our own `MemberRecord` and push the
+/// snapshot to every online peer once, so they remove us mesh-wide instead of
+/// re-gossiping our stale live record forever (the immortal-ghost bug). The
+/// event-time LWW in `Mesh::merge_from` makes the tombstone out-compete a peer's
+/// live copy of us — our `removed_at`/`last_seen` are stamped at departure,
+/// strictly later than any peer's last-seen-of-us — and peers that receive it
+/// re-gossip it onward, so it converges even to peers we couldn't reach
+/// directly. Best-effort; called from `EmbeddedDaemon::leave` before teardown.
+pub async fn announce_departure(app_state: &AppState) {
+    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+    let now = app_state.clock().now_unix_secs();
+    let (snapshot, targets) = {
+        let mut mesh = app_state.inner.mesh.write().await;
+        if let Some(me) = mesh.members.get_mut(&self_id) {
+            me.removed_at = Some(now);
+            me.status = NodeStatus::Offline;
+            me.last_seen = now; // event_time(self) = now, beating peers' stale copies
+        }
+        let targets: Vec<PeerContact> = mesh
+            .members
+            .values()
+            .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online && m.is_active())
+            .map(peer_contact)
+            .collect();
+        (mesh.clone(), targets)
+    };
+    let http = match reqwest::Client::builder().timeout(PEER_TIMEOUT).build() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let transport = app_state.peer_transport();
+    let mut announced = 0usize;
+    for contact in &targets {
+        let eps = transport.endpoints(contact, TrafficClass::Gossip).await;
+        for ep in &eps {
+            if gossip_with_peer(&http, &ep.base_url, &snapshot).await.is_ok() {
+                announced += 1;
+                break;
+            }
+        }
+    }
+    info!(
+        self_id = %self_id,
+        peers = targets.len(),
+        announced,
+        "gossip: announced departure (self-tombstone pushed to online peers)"
+    );
+}
+
 /// Fire-and-forget broadcast of a single mesh_store entry to every
 /// online peer. Used by latency-sensitive writers (e.g. the work
 /// atlas's `declare_scope`) that need a claim visible across the

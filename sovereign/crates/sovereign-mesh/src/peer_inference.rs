@@ -850,12 +850,26 @@ impl MeshInferenceProvider {
     /// caller uses the model id for attribution on the response /
     /// stream — there's only one place that decision gets made, so
     /// "which peer" and "which model" can't drift.
+    /// OICP peer selection: the single best peer that strictly beats local, or
+    /// `None`. Thin wrapper over [`Self::select_peers_ranked`] for callers (the
+    /// non-streaming `complete`, tests) that only want the top pick.
     async fn select_peer(
         &self,
         request: &CompletionRequest,
     ) -> Option<(PeerInferenceEndpoint, ModelCandidate)> {
+        self.select_peers_ranked(request).await.into_iter().next()
+    }
+
+    /// OICP peer selection, ranked best-first. Every peer that strictly beats
+    /// local is a candidate; the routing cascade tries them in order before
+    /// falling back to local, so a 503 from the best peer fails over to the
+    /// next-best peer instead of collapsing straight to local.
+    async fn select_peers_ranked(
+        &self,
+        request: &CompletionRequest,
+    ) -> Vec<(PeerInferenceEndpoint, ModelCandidate)> {
         if !Self::has_routing_signal(request) {
-            return None;
+            return Vec::new();
         }
         // Operator override: short-circuit all outbound peer
         // routing. Set `SOVEREIGN_DISABLE_PEER_INFERENCE=1` in the
@@ -869,11 +883,11 @@ impl MeshInferenceProvider {
                 "mesh-inference: peer routing disabled via \
                  SOVEREIGN_DISABLE_PEER_INFERENCE — staying local"
             );
-            return None;
+            return Vec::new();
         }
         if let Some(oicp) = &request.oicp {
             if oicp.sharding() == ShardingPrivacy::LocalOnly {
-                return None;
+                return Vec::new();
             }
         }
         // Also: if this isn't a synthesis-class request, keep it
@@ -881,7 +895,7 @@ impl MeshInferenceProvider {
         // are latency-critical (router, compression, title gen)
         // and peer round-trip costs dominate the inference time.
         if request.preferred_speed != Speed::Slow {
-            return None;
+            return Vec::new();
         }
 
         // Local is always a candidate. `None` means no loaded
@@ -890,7 +904,9 @@ impl MeshInferenceProvider {
         // v0.3 §7 operational adjustments so a hot local slot can
         // lose to an idle peer on load, and a reliable peer can
         // beat a failure-prone local.
-        let req_oicp = request.oicp.as_ref()?;
+        let Some(req_oicp) = request.oicp.as_ref() else {
+            return Vec::new();
+        };
         // v0.3 §4.3 governance tap: record the requested hint if
         // it's an `x:*` extension. Standardized hints are skipped
         // inside the registry itself. No routing impact — this is
@@ -945,7 +961,7 @@ impl MeshInferenceProvider {
 
         let peers = self.mesh.peer_inference_endpoints().await;
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
-        let mut best_peer: Option<(PeerInferenceEndpoint, ModelCandidate)> = None;
+        let mut scored: Vec<(PeerInferenceEndpoint, ModelCandidate)> = Vec::new();
         for peer in peers {
             // Drop quarantined peers from the candidate set. They'll
             // re-enter automatically once their cooldown expires.
@@ -1048,85 +1064,51 @@ impl MeshInferenceProvider {
                 peer_size_gb = ?cand.size_gb,
                 "mesh-inference: scored peer"
             );
-            best_peer = Some(match best_peer.take() {
-                None => (peer, cand),
-                Some((cur_peer, cur_cand)) => {
-                    // pick_better returns the winner, but we also
-                    // need to know which peer owned it — so compare
-                    // model_ids post-hoc. Model ids are unique per
-                    // peer (each manifest's best model), and across
-                    // peers they might collide (two nodes both
-                    // running Qwen3.5-9B). In a collision the
-                    // incumbent wins by stable ordering — acceptable
-                    // since either serves equally well.
-                    let winner = pick_better(cur_cand.clone(), cand.clone());
-                    if winner.model_id == cand.model_id
-                        && winner.score == cand.score
-                        && winner.size_gb == cand.size_gb
-                        && winner.model_id != cur_cand.model_id
-                    {
-                        (peer, cand)
-                    } else {
-                        (cur_peer, cur_cand)
-                    }
-                }
-            });
+            scored.push((peer, cand));
         }
 
-        match best_peer {
-            // Only cross the network when a peer is STRICTLY
-            // better than local on (score, then size). `pick_better`
-            // encodes the tie-break policy; if local's candidate
-            // isn't strictly beaten by peer's, we stay home. Local
-            // wins ties — no round-trip cost, no attribution churn.
-            Some((peer, peer_cand)) => {
-                let local_for_cmp = local_cand.clone().unwrap_or(ModelCandidate {
-                    score: f32::NEG_INFINITY,
-                    size_gb: None,
-                    model_id: "<local-insufficient>".into(),
-                    claim_affinity: 0.0,
-                });
-                let winner = pick_better(local_for_cmp.clone(), peer_cand.clone());
-                // "Peer strictly wins" iff pick_better returned the
-                // peer candidate AND the local candidate is not
-                // identical to it (handles the `None` local case
-                // cleanly too).
-                let peer_wins = winner.model_id == peer_cand.model_id
-                    && winner.score == peer_cand.score
-                    && winner.size_gb == peer_cand.size_gb
-                    && !candidates_equal(&local_for_cmp, &peer_cand);
-                if peer_wins {
-                    tracing::info!(
-                        peer = %peer.name,
-                        peer_pick = %peer_cand.model_id,
-                        peer_score = peer_cand.score,
-                        peer_size_gb = ?peer_cand.size_gb,
-                        local_pick = %local_for_cmp.model_id,
-                        local_score = local_for_cmp.score,
-                        local_size_gb = ?local_for_cmp.size_gb,
-                        "mesh-inference: peer selected by OICP (score, then size_gb)"
-                    );
-                    Some((peer, peer_cand))
-                } else {
-                    tracing::debug!(
-                        local_pick = %local_for_cmp.model_id,
-                        local_score = local_for_cmp.score,
-                        "mesh-inference: local wins on OICP (score, then size_gb)"
-                    );
-                    None
-                }
+        // Keep only peers that strictly beat local — same tie-break as before
+        // (local wins ties: no round-trip cost, no attribution churn) — ranked
+        // best-first. The cascade tries them in order; local is the final
+        // fallback step.
+        let local_for_cmp = local_cand.clone().unwrap_or(ModelCandidate {
+            score: f32::NEG_INFINITY,
+            size_gb: None,
+            model_id: "<local-insufficient>".into(),
+            claim_affinity: 0.0,
+        });
+        let mut winners: Vec<(PeerInferenceEndpoint, ModelCandidate)> = scored
+            .into_iter()
+            .filter(|(_, cand)| {
+                let winner = pick_better(local_for_cmp.clone(), cand.clone());
+                winner.model_id == cand.model_id
+                    && winner.score == cand.score
+                    && winner.size_gb == cand.size_gb
+                    && !candidates_equal(&local_for_cmp, cand)
+            })
+            .collect();
+        // Best-first per `pick_better` (score desc, then size asc — a total
+        // order), so the cascade tries the strongest peer first.
+        winners.sort_by(|(_, a), (_, b)| {
+            let w = pick_better(a.clone(), b.clone());
+            if w.model_id == a.model_id && w.score == a.score && w.size_gb == a.size_gb {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
             }
+        });
+        match winners.first() {
+            Some((peer, cand)) => tracing::info!(
+                peer = %peer.name,
+                peer_pick = %cand.model_id,
+                ranked = winners.len(),
+                "mesh-inference: peer(s) selected by OICP (ranked, best-first)"
+            ),
             None => {
-                tracing::debug!(
-                    local_pick = local_cand
-                        .as_ref()
-                        .map(|c| c.model_id.as_str())
-                        .unwrap_or("<none>"),
-                    "mesh-inference: no peer manifests scored, staying local"
-                );
-                None
+                tracing::debug!("mesh-inference: no peer strictly beats local, staying local")
             }
         }
+        winners
     }
 
     /// Stamp the response's `model_id` with a peer-attribution
@@ -1426,36 +1408,39 @@ impl MeshInferenceProvider {
                     )))
                 }
             }
-        } else if let Some((peer, peer_cand)) = self.select_peer(request).await {
-            tracing::info!(
-                peer = %peer.name,
-                addrs = peer.base_urls.len(),
-                peer_pick = %peer_cand.model_id,
-                "mesh-inference: routing to peer by OICP selection"
-            );
-            let ledger = self
-                .mesh
-                .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
-                .await;
-            // Soft-fail cascade: try peer first, fall through to
-            // local. `enter_local_total` runs eagerly so the gossip
-            // publisher sees the (possible) local load before the
-            // peer round-trip even decides — matches the prior
-            // behaviour where local-fallback always bumped the
-            // counter regardless of whether peer routing was tried.
-            let total = self.enter_local_total();
-            Ok(vec![
-                RouteDecision::Peer {
-                    peer,
-                    peer_cand,
-                    ledger,
-                    disposition: PeerFailureDisposition::Soft,
-                },
-                RouteDecision::LocalFallback { total },
-            ])
         } else {
+            // Ranked OICP failover: one Soft `Peer` step per peer that beats
+            // local, best-first, then `LocalFallback`. The cascade loop tries
+            // each in order — a 503 / transport failure on the best peer now
+            // fails over to the NEXT peer (Soft `continue`) instead of
+            // collapsing straight to local. `enter_local_total` stays eager so
+            // the gossip publisher sees the (possible) local load on the same
+            // timing it always did, before any peer round-trip decides.
+            let ranked = self.select_peers_ranked(request).await;
             let total = self.enter_local_total();
-            Ok(vec![RouteDecision::LocalFallback { total }])
+            if ranked.is_empty() {
+                Ok(vec![RouteDecision::LocalFallback { total }])
+            } else {
+                tracing::info!(
+                    peers = ranked.len(),
+                    "mesh-inference: routing to peer(s) by OICP selection (ranked failover)"
+                );
+                let mut steps = Vec::with_capacity(ranked.len() + 1);
+                for (peer, peer_cand) in ranked {
+                    let ledger = self
+                        .mesh
+                        .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
+                        .await;
+                    steps.push(RouteDecision::Peer {
+                        peer,
+                        peer_cand,
+                        ledger,
+                        disposition: PeerFailureDisposition::Soft,
+                    });
+                }
+                steps.push(RouteDecision::LocalFallback { total });
+                Ok(steps)
+            }
         }
     }
 
@@ -1899,6 +1884,16 @@ impl InferenceProvider for MeshInferenceProvider {
                                 let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
                                     Box::pin(wrapper);
                                 self.peer_health.record_success(&peer.name);
+                                // INVARIANT (no double-emit): once we return the
+                                // peer's LIVE stream here, the routing cascade is
+                                // over. A failure that surfaces *mid-stream* (the
+                                // peer dies after ≥1 token) must NOT re-enter the
+                                // cascade or restart locally — the client would
+                                // then see duplicated / garbled output. The
+                                // ranked failover below only retries from the
+                                // pre-`Ok` `Err` arm (connect / headers / 503),
+                                // never from a stream already handed out. Pinned
+                                // by `peer_dies_mid_stream_does_not_duplicate`.
                                 return Ok((observed, attribution));
                             }
                             Err(e) => {
@@ -2020,6 +2015,16 @@ impl InferenceProvider for MeshInferenceProvider {
                                 let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
                                     Box::pin(wrapper);
                                 self.peer_health.record_success(&peer.name);
+                                // INVARIANT (no double-emit): once we return the
+                                // peer's LIVE stream here, the routing cascade is
+                                // over. A failure that surfaces *mid-stream* (the
+                                // peer dies after ≥1 token) must NOT re-enter the
+                                // cascade or restart locally — the client would
+                                // then see duplicated / garbled output. The
+                                // ranked failover below only retries from the
+                                // pre-`Ok` `Err` arm (connect / headers / 503),
+                                // never from a stream already handed out. Pinned
+                                // by `peer_dies_mid_stream_does_not_duplicate`.
                                 return Ok((observed, attribution));
                             }
                             Err(e) => {

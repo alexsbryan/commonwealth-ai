@@ -280,3 +280,63 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
         "a skewed last_seen must not flap an observed peer Offline"
     );
 }
+
+#[tokio::test]
+async fn departure_tombstones_self_on_peers() {
+    // B calls announce_departure → it pushes its own tombstoned record to A's
+    // /internal/gossip → A removes B mesh-wide (event-time LWW), instead of
+    // keeping B as a live ghost.
+    let mesh_id = MeshId::from_u128(42);
+    let hash = [11u8; 32];
+    let a_id = NodeId::from_u128(100);
+    let b_id = NodeId::from_u128(200);
+
+    // A starts knowing only itself; its server must be up so B can reach it.
+    let mesh_a = Mesh {
+        id: mesh_id,
+        name: "T".into(),
+        join_key_hash: hash,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(a_id, member_at(a_id, "A", 100, "127.0.0.1:1".parse().unwrap()));
+            m
+        },
+        peers: vec![],
+    };
+    let state_a = AppState::new(a_id, mesh_a);
+    let addr_a = spawn_internal_router(state_a.clone()).await;
+
+    // B knows A (at A's real addr) + itself.
+    let mesh_b = Mesh {
+        id: mesh_id,
+        name: "T".into(),
+        join_key_hash: hash,
+        members: {
+            let mut m = HashMap::new();
+            m.insert(a_id, member_at(a_id, "A", 100, addr_a));
+            m.insert(b_id, member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()));
+            m
+        },
+        peers: vec![],
+    };
+    let state_b = AppState::new(b_id, mesh_b);
+
+    // A learns B (so it has a record to tombstone).
+    {
+        let mut mesh = state_a.inner.mesh.write().await;
+        mesh.members
+            .insert(b_id, member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()));
+    }
+    assert!(state_a.inner.mesh.read().await.members[&b_id].is_active());
+
+    // B departs — pushes its self-tombstone to A.
+    gossip::announce_departure(&state_b).await;
+
+    let a = state_a.inner.mesh.read().await;
+    let b_rec = a.members.get(&b_id).expect("A retains a record for B");
+    assert!(
+        b_rec.removed_at.is_some(),
+        "A should have tombstoned B after B's departure"
+    );
+    assert!(!b_rec.is_active(), "B should be inactive (tombstoned) on A");
+}

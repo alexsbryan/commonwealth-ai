@@ -169,6 +169,31 @@ impl DstMesh {
         self.down.insert(id);
     }
 
+    /// Node ids in index order (for authoring partition / fault events).
+    pub fn node_ids(&self) -> Vec<NodeId> {
+        self.sim.node_ids()
+    }
+
+    /// Skew node `idx`'s clock by `offset_secs` vs the shared base (positive =
+    /// that node's wall-clock runs ahead). Proves offline-decay is skew-immune.
+    pub fn skew_node(&self, idx: usize, offset_secs: i64) {
+        self.sim.nodes[idx]
+            .state
+            .install_clock(Arc::new(self.clock.with_offset(offset_secs)));
+    }
+
+    /// Clear every injected fault (heal all partitions / wire faults / downs).
+    /// Used to settle a chaos schedule before the final quiesce-and-assert.
+    /// (Does not un-crash a node stopped via [`DstMesh::crash`] — that server
+    /// is really gone.)
+    pub fn clear_faults(&self) {
+        *self
+            .policy
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            commonwealth_test_harness::fault::FaultPolicy::default();
+    }
+
     /// Write a mesh_store key on node `idx` (origin = that node).
     pub fn store_set(&self, idx: usize, app_id: &str, key: &str, value: &[u8]) {
         let node = &self.sim.nodes[idx];

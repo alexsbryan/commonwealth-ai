@@ -1026,6 +1026,12 @@ impl EmbeddedDaemon {
     /// mesh — the regression that left Machine A creating a fresh
     /// solo mesh on every restart.
     pub async fn leave(&self) -> Result<(), MeshError> {
+        // Best-effort: announce departure so online peers tombstone us mesh-wide
+        // (gossiped `removed_at`) instead of re-learning our stale live record on
+        // their next round. Then tear down + clear local state.
+        if let Some(app_state) = self.app_state().await {
+            crate::gossip::announce_departure(&app_state).await;
+        }
         self.stop_inner(StopMode::Leave).await
     }
 

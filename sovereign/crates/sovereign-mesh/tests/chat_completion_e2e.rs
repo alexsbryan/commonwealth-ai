@@ -286,6 +286,199 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     assert_eq!(collected, PEER_RESPONSE_TEXT);
 }
 
+/// Defect 1: structured-503 → alternate-peer failover. The best peer 503s on
+/// dispatch; the ranked cascade must fail over to the next-best peer instead of
+/// collapsing straight to local (which errors here). Pre-fix (single-peer
+/// `select_peer`) this routed Busy → LocalFallback → local error.
+#[tokio::test]
+async fn oicp_503_fails_over_to_next_peer() {
+    async fn caps_strong() -> impl IntoResponse {
+        // Higher affinity than the plain peer (0.80) so this peer ranks FIRST.
+        let manifest = ProviderManifest {
+            oicp_version: OICP_VERSION.into(),
+            provider: None,
+            models: vec![ProviderModel {
+                id: "Qwen3.5-9B.strong".into(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb: Some(5.5),
+                claims: vec![CapabilityClaim::new(
+                    CapabilityHint::general(),
+                    LatencyClass::Normal,
+                    32_768,
+                    4_000,
+                    0.92,
+                )],
+            }],
+            knowledge: None,
+            federation: None,
+        };
+        Json(manifest)
+    }
+    async fn chat_503() -> impl IntoResponse {
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "busy",
+                "reason": "ceiling_exceeded",
+                "retry_after_secs": 2
+            })),
+        )
+    }
+
+    // Busy peer: ranks first (0.92) but 503s on chat dispatch.
+    let busy_addr = {
+        let app = Router::new()
+            .route("/oicp/v1/capabilities", get(caps_strong))
+            .route("/v1/chat/completions", post(chat_503));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        addr
+    };
+    // Good peer: plain manifest (0.80) + real SSE.
+    let good_addr = spawn_mock_peer().await;
+
+    let peers = vec![
+        PeerInferenceEndpoint {
+            node_id: NodeId::from_u128(1),
+            name: "Busy".into(),
+            base_urls: vec![format!("http://{busy_addr}/v1")],
+            system_ram_gb: 64,
+            benchmark: None,
+            current_in_flight: None,
+            inference_availability: None,
+            transport: None,
+        },
+        PeerInferenceEndpoint {
+            node_id: NodeId::from_u128(2),
+            name: "Good".into(),
+            base_urls: vec![format!("http://{good_addr}/v1")],
+            system_ram_gb: 64,
+            benchmark: None,
+            current_in_flight: None,
+            inference_availability: None,
+            transport: None,
+        },
+    ];
+    let wrapper =
+        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+    let request = CompletionRequest::new("Is free will compatible with determinism?")
+        .with_speed(Speed::Slow)
+        .with_oicp(
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Extended)
+                .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed),
+        );
+
+    let (mut stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("the 503 from the best peer should fail over to the next peer");
+
+    assert!(
+        model_id.contains("@ peer Good"),
+        "must fail over to the Good peer; got {model_id:?}"
+    );
+    assert!(
+        !model_id.contains("Busy"),
+        "must not attribute the 503 peer; got {model_id:?}"
+    );
+    let mut collected = String::new();
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.expect("stream chunk should be Ok"));
+    }
+    assert_eq!(
+        collected, PEER_RESPONSE_TEXT,
+        "should stream the Good peer's body"
+    );
+}
+
+/// Defect 2: mid-stream peer death must NOT duplicate tokens. A peer returns
+/// 200 + one delta, then the stream ends abruptly (no `[DONE]`). The consumer
+/// must see that partial text exactly ONCE — no local re-run, no duplication.
+/// Pins the no-double-emit invariant the ranked-failover cascade preserves.
+#[tokio::test]
+async fn peer_dies_mid_stream_does_not_duplicate() {
+    async fn chat_truncated(
+        Query(_q): Query<StreamQuery>,
+        Json(_b): Json<serde_json::Value>,
+    ) -> impl IntoResponse {
+        let delta = |s: &str| {
+            serde_json::json!({
+                "choices": [{ "index": 0, "delta": { "content": s }, "finish_reason": null }]
+            })
+            .to_string()
+        };
+        // ONE delta, then the stream ends — no second delta, no [DONE].
+        let events = vec![Ok::<_, std::convert::Infallible>(
+            Event::default().data(delta("partial-")),
+        )];
+        Sse::new(futures::stream::iter(events)).into_response()
+    }
+
+    let peer_addr = {
+        let app = Router::new()
+            .route("/oicp/v1/capabilities", get(capabilities_handler))
+            .route("/v1/chat/completions", post(chat_truncated));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        addr
+    };
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(7),
+        name: "Truncator".into(),
+        base_urls: vec![format!("http://{peer_addr}/v1")],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let wrapper =
+        MeshInferenceProvider::with_peer_source(local_byom(), Arc::new(StubPeerSource { peers }));
+    let request = CompletionRequest::new("Q")
+        .with_speed(Speed::Slow)
+        .with_oicp(
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Extended)
+                .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed),
+        );
+
+    let (mut stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("peer stream should start (200)");
+    assert!(model_id.contains("@ peer Truncator"), "got {model_id:?}");
+
+    let mut collected = String::new();
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.unwrap_or_default());
+    }
+    // Exactly the one partial delta — no duplication, no local re-run appended.
+    assert_eq!(
+        collected, "partial-",
+        "mid-stream death must yield the partial token ONCE, not duplicated"
+    );
+}
+
 /// Mirror of the above but with `ShardingPrivacy::LocalOnly` — the
 /// `inner-work`-class skills set this flag to forbid crossing the
 /// network. Wrapper must fall back to `local.complete_stream`,
