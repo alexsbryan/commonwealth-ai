@@ -519,13 +519,14 @@ mod tests {
         let registry = RecipeRegistry::from_bundled(None);
         let entries = registry.list_entries();
         // Original 9 + wikipedia-catalog + wikipedia-article
-        // (chat-with-everything surface) + alignment (mesh-replicated
-        // workspace) + wikipedia-newsworthy (Portal:Current_events
-        // freshness daemon) + the 2026-05 conversations-anthropic
-        // recipe (private threaded-turn ingest) + the uap-blue-book trio
-        // (hero / scans / metadata index) + the 2026-06
-        // conversations-chatgpt recipe (private ChatGPT import).
-        assert_eq!(entries.len(), 27, "snapshot should have 27 entries");
+        // (chat-with-everything surface) + wikipedia-newsworthy
+        // (Portal:Current_events freshness daemon) + the 2026-05
+        // conversations-anthropic recipe (private threaded-turn ingest) +
+        // the uap-blue-book trio (hero / scans / metadata index) + the
+        // 2026-06 conversations-chatgpt recipe (private ChatGPT import).
+        // (`alignment` removed 2026-06-19 — it synced the author's
+        // ~/.claude and is not part of the open-source recipe set.)
+        assert_eq!(entries.len(), 26, "snapshot should have 26 entries");
     }
 
     #[test]
@@ -633,12 +634,12 @@ sha256 = ""
         let registry = RecipeRegistry::from_bundled(None);
         let catalog = registry.catalog();
         // 9 originals + wikipedia-catalog / wikipedia-article
-        //   (chat-with-everything) + alignment (mesh-replicated
-        //   workspace) + wikipedia-newsworthy (Portal:Current_events
-        //   daemon) + conversations-anthropic (2026-05 threaded-turn
-        //   ingest) + the uap-blue-book trio (hero / scans / index) +
-        //   conversations-chatgpt (2026-06 ChatGPT import).
-        assert_eq!(catalog.len(), 27);
+        //   (chat-with-everything) + wikipedia-newsworthy
+        //   (Portal:Current_events daemon) + conversations-anthropic
+        //   (2026-05 threaded-turn ingest) + the uap-blue-book trio
+        //   (hero / scans / index) + conversations-chatgpt (2026-06
+        //   ChatGPT import). (`alignment` removed 2026-06-19.)
+        assert_eq!(catalog.len(), 26);
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));
         assert!(catalog.iter().any(|c| c.id == "conversations-chatgpt"));

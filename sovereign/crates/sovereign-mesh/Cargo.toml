@@ -165,6 +165,9 @@ default = []
 # harness. CI runs a fixed-seed set behind this flag; off by default so the
 # production build never links the harness.
 dst = ["dep:commonwealth-test-harness"]
+# Forward the ATOS served-middleware pipeline through to commonwealth-api.
+# OFF by default; an atos daemon build turns it on via the feature chain.
+atos = ["commonwealth-api/atos"]
 # Enables `reindexer` + `project_http` — the SCIP-graph-hosting
 # modules. Off by default so binaries that only use the mesh
 # primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't

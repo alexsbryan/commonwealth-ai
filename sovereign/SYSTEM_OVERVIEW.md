@@ -19,7 +19,7 @@ commonwealth-ai/
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
-├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out)
+├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
@@ -34,7 +34,7 @@ commonwealth-ai/
 | `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
-| `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out) | `rusqlite` |
+| `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
@@ -136,7 +136,7 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator)
+├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process Commonwealth embed
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals

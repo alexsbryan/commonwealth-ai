@@ -145,15 +145,9 @@ async fn pause_local_drivers(recipe_id: &str, force: bool) -> NodePauseResult {
         };
     }
 
-    let signum = if force { libc::SIGKILL } else { libc::SIGTERM };
     for pid in &pids {
-        // Safety: libc::kill is a thin syscall wrapper. We read errno
-        // out separately rather than unwrap so a stale PID doesn't
-        // panic the daemon.
-        let rc = unsafe { libc::kill(*pid as libc::pid_t, signum) };
-        if rc != 0 {
-            let err = std::io::Error::last_os_error();
-            tracing::warn!(pid, signal = signum, %err, "pipeline_pause: kill failed");
+        if let Err(err) = signal_pipeline_pid(*pid, force) {
+            tracing::warn!(pid, force, %err, "pipeline_pause: signal failed");
         }
     }
 
@@ -192,6 +186,44 @@ async fn pause_local_drivers(recipe_id: &str, force: bool) -> NodePauseResult {
         drained,
         error: None,
     }
+}
+
+/// Ask a pipeline driver process to stop. `force` = hard kill; otherwise a
+/// graceful request the caller follows with a bounded drain wait.
+///
+/// Unix sends SIGKILL/SIGTERM via `libc::kill`. On Windows there is no
+/// per-pid SIGTERM; `find_pipeline_driver_pids` is `/proc`-based and returns
+/// empty there, so this never actually runs — but it must still COMPILE, and
+/// `taskkill` is the dependency-free analogue (`/F` force-terminates; without
+/// it Windows asks GUI apps to close) so the Windows arm is also correct if
+/// the pid source ever grows a Windows implementation.
+#[cfg(unix)]
+fn signal_pipeline_pid(pid: u32, force: bool) -> std::io::Result<()> {
+    let signum = if force { libc::SIGKILL } else { libc::SIGTERM };
+    // Safety: libc::kill is a thin syscall wrapper. We surface errno rather
+    // than unwrap so a stale PID can't panic the daemon.
+    let rc = unsafe { libc::kill(pid as libc::pid_t, signum) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn signal_pipeline_pid(pid: u32, force: bool) -> std::io::Result<()> {
+    let mut cmd = std::process::Command::new("taskkill");
+    cmd.arg("/PID").arg(pid.to_string());
+    if force {
+        cmd.arg("/F");
+    }
+    let out = cmd.output()?;
+    if !out.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("taskkill /PID {pid} exited {}", out.status),
+        ));
+    }
+    Ok(())
 }
 
 /// Find every `sovereign pipeline run` PID on this machine whose

@@ -181,10 +181,13 @@ fn new_tools_advertise_canonical_ids() {
     assert_eq!(spec.descriptor().id, "spec");
     assert!(MCP_TOOLS_SPEC_GATED.contains(&"spec"));
 
-    // drift → SPEC_GATED tier.
-    let drift = sovereign_tools::DriftTool::new();
-    assert_eq!(drift.descriptor().id, "drift");
-    assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
+    // drift → SPEC_GATED tier (atos-gated tool).
+    #[cfg(feature = "atos")]
+    {
+        let drift = sovereign_tools::DriftTool::new();
+        assert_eq!(drift.descriptor().id, "drift");
+        assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
+    }
 
     // Phase 2 unconditionally unions the two tiers, so all three
     // are exposed today; Phase 5 will gate spec/drift on

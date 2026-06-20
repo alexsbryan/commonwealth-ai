@@ -283,7 +283,8 @@ pub struct AppStateInner {
     /// ATOS session-state store. `None` until a M4.4+ daemon wires
     /// it (tests without a MeshStore handle leave this empty; the
     /// handler skips ATOS pipeline processing when the store is
-    /// absent).
+    /// absent). ATOS-only — absent entirely in product builds.
+    #[cfg(feature = "atos")]
     pub session_store: Option<sovereign_atos::session::SessionStore>,
     /// Repository root the Commonwealth daemon is anchored to —
     /// the directory that contains `.sovereign/features/`. Used by
@@ -741,6 +742,7 @@ impl AppState {
         // get the full stack without extra config; tests that want a
         // bare daemon can build a minimal registry themselves.
         let mut middleware_registry = crate::middleware::MiddlewareRegistry::new();
+        #[cfg(feature = "atos")]
         middleware_registry.register(Arc::new(crate::middleware::ApprovalGate::new()));
         // 2026-05-22: ContextInjector + ToolInjector descriptor lists
         // were previously pulled from `sovereign_tools::manifest`, a
@@ -752,9 +754,12 @@ impl AppState {
         // sovereign-desktop, sovereign-server) — those wire the real
         // descriptors via the `with_tool_descriptors` shim below the
         // platform constructors.
+        #[cfg(feature = "atos")]
         middleware_registry.register(Arc::new(crate::middleware::ContextInjector::empty()));
         middleware_registry.register(Arc::new(crate::middleware::ToolInjector::empty()));
+        #[cfg(feature = "atos")]
         middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
+        #[cfg(feature = "atos")]
         middleware_registry.register(Arc::new(crate::middleware::SessionBriefing::new()));
         // Phase 7.2: per-turn DecisionExtractor mines assistant
         // responses for decision-shaped phrases on `post_process`,
@@ -769,12 +774,16 @@ impl AppState {
         // `read_only_enforcer` is the red-team alias's gate. For M4
         // it shares the ApprovalGate implementation under a distinct
         // id — M5 splits them if the behavior actually diverges.
-        let read_only = Arc::new(crate::middleware::ApprovalGate::new());
-        middleware_registry.register(read_only);
+        #[cfg(feature = "atos")]
+        {
+            let read_only = Arc::new(crate::middleware::ApprovalGate::new());
+            middleware_registry.register(read_only);
+        }
 
         // Session store is wired up when the daemon has a MeshStore
         // in hand. The handler falls back to legacy routing when
-        // this is None.
+        // this is None. ATOS-only.
+        #[cfg(feature = "atos")]
         let session_store = Some(sovereign_atos::session::SessionStore::new(
             (*mesh_store).clone(),
             self_node_id,
@@ -800,6 +809,7 @@ impl AppState {
                 clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
                 peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
                 middleware_registry: Arc::new(middleware_registry),
+                #[cfg(feature = "atos")]
                 session_store,
                 repo_root: std::env::current_dir().ok(),
                 corpus_engine,

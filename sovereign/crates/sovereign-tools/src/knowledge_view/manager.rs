@@ -49,14 +49,16 @@ use super::view_kind::ViewKind;
 use super::relational::{format_relational, RelationalNote};
 #[cfg(feature = "treesitter")]
 use super::splice_extension::{
-    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity, AtosSnapshot,
+    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
     ConversationCorpus,
 };
+#[cfg(all(feature = "treesitter", feature = "atos"))]
+use super::splice_extension::AtosSnapshot;
 #[cfg(feature = "treesitter")]
 use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]
 use super::timeline::assemble_timelines_from_atlas;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 use corpus_engine_atos::features::FeatureStore;
 #[cfg(feature = "treesitter")]
 use corpus_engine_notes::notes::NoteStore;
@@ -114,7 +116,9 @@ pub struct KnowledgeViewManager {
     notes_db_path: PathBuf,
     /// ATOS feature DB path (typically `~/.sovereign/features.db`).
     /// `None` = no feature lookup; the strategic block falls back to
-    /// initiative names without phase / drift annotation.
+    /// initiative names without phase / drift annotation. Only read when
+    /// the `atos` feature is on (the strategic ATOS splice).
+    #[cfg_attr(not(feature = "atos"), allow(dead_code))]
     features_db_path: Option<PathBuf>,
     /// `.sovereign/project.toml` path. `None` = no project name in
     /// scope; initiatives can still surface from atoms but they
@@ -126,7 +130,7 @@ pub struct KnowledgeViewManager {
     notes_handle: Arc<tokio::sync::Mutex<Option<Arc<NoteStore>>>>,
     /// Lazy FeatureStore handle, opened on first splice when
     /// `features_db_path` is set.
-    #[cfg(feature = "treesitter")]
+    #[cfg(all(feature = "treesitter", feature = "atos"))]
     features_handle: Arc<tokio::sync::Mutex<Option<Arc<FeatureStore>>>>,
 }
 
@@ -225,7 +229,7 @@ impl KnowledgeViewManager {
             project_toml_path: None,
             #[cfg(feature = "treesitter")]
             notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
-            #[cfg(feature = "treesitter")]
+            #[cfg(all(feature = "treesitter", feature = "atos"))]
             features_handle: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
@@ -587,11 +591,17 @@ impl KnowledgeViewManager {
         let timestamps = load_chunk_timestamps(&self.db_path);
         let chunk_ts = |id: &str| timestamps.get(id).copied();
 
-        // 2. Build the ATOS snapshot. Always-build, even when paths
-        //    aren't configured — `AtosSnapshot::empty()` returns no
-        //    matches so the strategic block degrades gracefully.
-        let features = self.features_store_handle().await;
-        let atos = AtosSnapshot::build(features.as_ref(), self.project_toml_path.as_deref()).await;
+        // 2. Build the ATOS snapshot (feature `atos`, off by default). When
+        //    on, timelines get phase/drift annotation from the FeatureStore +
+        //    project.toml. When off, a `NoAtosLookup` means no annotation —
+        //    the strategic block still renders from NoteStore-backed goals.
+        #[cfg(feature = "atos")]
+        let atos = {
+            let features = self.features_store_handle().await;
+            AtosSnapshot::build(features.as_ref(), self.project_toml_path.as_deref()).await
+        };
+        #[cfg(not(feature = "atos"))]
+        let atos = super::timeline::NoAtosLookup;
 
         // 3. Pull timelines from both atlas sources. We compute the
         //    per-corpus index directory directly (engine.index_dir +
@@ -742,7 +752,7 @@ impl KnowledgeViewManager {
 
     /// Lazy FeatureStore opener. Returns `None` when no
     /// `features_db_path` is configured or the file can't be opened.
-    #[cfg(feature = "treesitter")]
+    #[cfg(all(feature = "treesitter", feature = "atos"))]
     async fn features_store_handle(&self) -> Option<Arc<FeatureStore>> {
         let path = self.features_db_path.as_ref()?;
         let mut guard = self.features_handle.lock().await;

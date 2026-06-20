@@ -59,9 +59,9 @@ pub use code::BlastRadiusTool;
 pub use code::BuildTool;
 #[cfg(feature = "treesitter")]
 pub use code::CheckDocPathsTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::DesignSignalsExtractTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use code::SessionReflectionTool;
@@ -74,14 +74,17 @@ pub use code::{
 };
 #[cfg(feature = "treesitter")]
 pub use code::{
-    ArchiveFeatureTool, AtosPlanEmitTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
-    ReadNoteDigestTool, RecordAtosEventTool, WriteRedteamFindingTool,
+    AtosPlanEmitTool, PromoteNoteTool, ReadNoteByIdTool, ReadNoteDigestTool, WriteRedteamFindingTool,
 };
+#[cfg(all(feature = "treesitter", feature = "atos"))]
+pub use code::{ArchiveFeatureTool, ProvisionFeatureTool, RecordAtosEventTool};
 pub use code::{CodeSearchTool, RecentChangesTool};
 #[cfg(feature = "treesitter")]
 pub use code::{DeleteNoteTool, ReadNotesTool, WriteNoteTool};
 #[cfg(feature = "treesitter")]
-pub use code::{DriftTool, SpecTool};
+pub use code::SpecTool;
+#[cfg(all(feature = "treesitter", feature = "atos"))]
+pub use code::DriftTool;
 #[cfg(feature = "treesitter")]
 pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]

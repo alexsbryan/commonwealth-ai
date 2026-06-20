@@ -85,7 +85,7 @@ pub mod spec;
 // so the verdict matches the daemon's approval_gate middleware
 // exactly: a feature this tool calls "drifted" is the same
 // feature the gate would write a deviation note for.
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod drift;
 
 // Architectural-drift freshness gate — sibling to lint_status /
@@ -124,7 +124,7 @@ pub mod index_health;
 pub mod blast_radius;
 
 // Project documentation search.
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod project_context;
 
 // Session reflection & feedback loop.
@@ -136,20 +136,20 @@ pub mod session_reflection;
 pub mod check_doc_paths;
 
 // ATOS feature management.
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod archive_feature;
 pub mod atos_plan_emit;
 pub mod atos_utils;
 pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod promote_note;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod provision_feature;
 #[cfg(feature = "treesitter")]
 pub mod read_note_by_id;
 #[cfg(feature = "treesitter")]
 pub mod read_note_digest;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod record_atos_event;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
@@ -158,7 +158,7 @@ pub mod write_redteam_finding;
 // so the agent-collaborative design session (and any MCP client) can
 // audit a DESIGN.md's gaps and keywords without round-tripping through
 // the CLI.
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod design_signals_extract;
 
 pub use code_search::CodeSearchTool;
@@ -180,7 +180,7 @@ pub use test_status::TestStatusTool;
 
 #[cfg(feature = "treesitter")]
 pub use build::BuildTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use drift::DriftTool;
 #[cfg(feature = "treesitter")]
 pub use drift_posture::{
@@ -194,7 +194,7 @@ pub use lint_status::LintStatusTool;
 #[cfg(feature = "treesitter")]
 pub use spec::SpecTool;
 
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use archive_feature::ArchiveFeatureTool;
 #[cfg(feature = "treesitter")]
 pub use atos_plan_emit::AtosPlanEmitTool;
@@ -205,15 +205,15 @@ pub use blast_radius::BlastRadiusTool;
 pub use check_doc_paths::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use delete_note::DeleteNoteTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use design_signals_extract::DesignSignalsExtractTool;
 #[cfg(feature = "treesitter")]
 pub use index_health::{IndexHealth, IndexHealthChecker, StalenessLevel};
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use project_context::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use promote_note::PromoteNoteTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use provision_feature::ProvisionFeatureTool;
 #[cfg(feature = "treesitter")]
 pub use read_note_by_id::ReadNoteByIdTool;
@@ -221,7 +221,7 @@ pub use read_note_by_id::ReadNoteByIdTool;
 pub use read_note_digest::ReadNoteDigestTool;
 #[cfg(feature = "treesitter")]
 pub use read_notes::ReadNotesTool;
-#[cfg(feature = "treesitter")]
+#[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use record_atos_event::RecordAtosEventTool;
 #[cfg(feature = "treesitter")]
 pub use session_reflection::SessionReflectionTool;
