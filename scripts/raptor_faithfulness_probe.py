@@ -29,7 +29,7 @@ model, max_tokens=500) are reproduced. Run with --model matching the slot whose
 fabrication you care about; the LEVER conclusions (does temp/prompt move the
 rate?) hold regardless of absolute model tendency.
 """
-import argparse, json, re, sys, time, urllib.request, urllib.error
+import argparse, json, os, re, sys, time, urllib.request, urllib.error
 
 # ── The VERBATIM summarizer prompt (raptor_atlas.rs:668-679, Narrative cue). ──
 # Kept byte-faithful so the experiment exercises the real task framing.
@@ -173,7 +173,7 @@ def main():
     ap.add_argument("--base-url", default="http://localhost:9741")
     ap.add_argument("--model", default="primary", help="summarizer slot under test")
     ap.add_argument("--judge-model", default="fast", help="held-constant faithfulness judge")
-    ap.add_argument("--source", default="/Users/alexsbryan/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt")
+    ap.add_argument("--source", default=os.path.expanduser("~/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"))
     ap.add_argument("--n", type=int, default=5, help="samples per cell")
     ap.add_argument("--clusters", type=int, default=8)
     ap.add_argument("--paras-per-cluster", type=int, default=5)

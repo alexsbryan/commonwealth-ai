@@ -186,10 +186,64 @@ if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
 fi
 
 # ─── Build ───────────────────────────────────────────────────────────
+# Capture cargo's real exit code. Do NOT pipe this through `tee`/`| …`
+# or chain it with `; echo` — a pipeline's status is the LAST stage's, so
+# either masks a failed build as success (observed 2026-06-18: a failed
+# DMG bundling reported exit 0 because of `| tee`).
 log "Running cargo tauri build $TARGET_ARG ..."
+set +e
 (cd sovereign/crates/sovereign-desktop && cargo tauri build \
     $TARGET_ARG \
     --config src-tauri/tauri.release.conf.json)
+BUILD_RC=$?
+set -e
+
+APP="$OUT_DIR/macos/Sovereign.app"
+
+if (( BUILD_RC != 0 )); then
+    # The most common LOCAL failure is the DMG cosmetic step, NOT the build.
+    # Tauri's bundle_dmg.sh runs an osascript that asks Finder to set the DMG
+    # window's background/icon layout; that needs permission to send Apple
+    # Events to Finder, which any process outside an interactive Aqua/GUI
+    # session (SSH, CI agent, an automation tool's shell) is denied —
+    # `Not authorized to send Apple events to Finder. (-1743)`. create-dmg
+    # then exits 64 and Tauri reports a generic "error running bundle_dmg.sh",
+    # swallowing the real cause. The .app itself is already built + deep
+    # ad-hoc signed; only the DMG packaging failed.
+    #
+    # Detect that exact shape — .app present, no .dmg — and finish the job with
+    # a plain hdiutil-built DMG (functionally identical: a compressed,
+    # drag-to-install image; it just lacks the background picture). A genuine
+    # compile/link failure leaves no .app, and we re-raise the original exit
+    # code instead of masking it.
+    if [[ -d "$APP" ]] && ! ls "$OUT_DIR"/dmg/*.dmg >/dev/null 2>&1; then
+        if osascript -e 'tell application "Finder" to count windows' >/dev/null 2>&1; then
+            log "Tauri DMG step failed though Finder IS scriptable here — packaging via hdiutil anyway. Check the cargo output above for the underlying cause."
+        else
+            log "DMG cosmetic step needs Finder Apple-Events, denied in this non-GUI context (-1743). The .app built fine; packaging the DMG via hdiutil (needs no Finder)."
+        fi
+        VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+        case "$TARGET" in
+            aarch64-apple-darwin) ARCH_SUFFIX=aarch64 ;;
+            x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
+            *)                    ARCH_SUFFIX="$(uname -m)" ;;
+        esac
+        (( UNIVERSAL )) && ARCH_SUFFIX=universal
+        DMG_OUT="$OUT_DIR/dmg/Sovereign_${VERSION}_${ARCH_SUFFIX}.dmg"
+        rm -f "$OUT_DIR"/macos/rw.*.dmg   # create-dmg's leftover read-write scratch image
+        STAGE="$(mktemp -d /tmp/sovereign-dmg.XXXXXX)"
+        ditto "$APP" "$STAGE/Sovereign.app"        # ditto preserves the ad-hoc signature
+        ln -s /Applications "$STAGE/Applications"   # drag-to-install target
+        mkdir -p "$OUT_DIR/dmg"
+        rm -f "$DMG_OUT"
+        hdiutil create -volname "Sovereign" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
+        rm -rf "$STAGE"
+        log "DMG built via hdiutil fallback: $DMG_OUT"
+    else
+        log "Build failed before the DMG step (no .app bundle produced) — this is a real build error, not the Finder/TCC cosmetic issue. See the cargo output above."
+        exit "$BUILD_RC"
+    fi
+fi
 
 # ─── Surface results ─────────────────────────────────────────────────
 log "Build complete. Bundles:"

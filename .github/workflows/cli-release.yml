@@ -1,0 +1,155 @@
+name: CLI release
+
+# Tag-driven release for the Sovereign CLI — the three product binaries a user
+# installs (`sovereign-cli` dispatcher + `sovereign-cli-daemon` +
+# `sovereign-cli-llm`). NOT `sovereign-cli-dev` (the developer workbench, gated
+# behind --features dev-tools).
+#
+# Trigger:
+#   git tag cli-v0.1.0 && git push origin cli-v0.1.0
+#
+# What it does:
+#   1. Build the 3 binaries per platform, with `cargo build --release --locked`.
+#   2. Package them as sovereign-<target>.tar.gz + a .sha256 sidecar.
+#   3. Upload everything to a DRAFT GitHub Release (+ a combined SHA256SUMS),
+#      which `landing/install.sh` downloads and verifies.
+#
+# Code signing / notarization are OFF in v1. A CLI tarball downloaded with curl
+# and run from the terminal is NOT quarantined by Gatekeeper, so notarization
+# isn't needed for this path (the desktop .app is a separate, signed path).
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to attach the release to (e.g. cli-v0.1.0). Blank = workflow ref."
+        required: false
+
+permissions:
+  contents: write # create / upload to a GitHub Release
+
+jobs:
+  build:
+    name: build / ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Linux x86_64 is the only leg triggered on a tag, mirroring
+          # desktop-release.yml: pushing untested legs previously drained the
+          # Actions budget, and `macos-13` (Intel) hangs forever on "Waiting
+          # for a runner to pick up this job".
+          #
+          # macOS arm64 is ready to enable below — uncomment it once a local
+          # `cargo build --release --target aarch64-apple-darwin` of the three
+          # binaries is validated (most current Macs are Apple Silicon, so this
+          # is the high-value second leg). Keep arm64 on macos-14.
+          - name: linux-x86_64
+            runner: ubuntu-22.04 # older glibc → runs on newer distros too
+            target: x86_64-unknown-linux-gnu
+          # - name: macos-arm64
+          #   runner: macos-14
+          #   target: aarch64-apple-darwin
+          # - name: macos-x86_64
+          #   runner: macos-13        # RETIRED — hangs on pickup; pick a current Intel runner or drop
+          #   target: x86_64-apple-darwin
+          # - name: windows-x86_64
+          #   runner: windows-2022
+          #   target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "." # single workspace at the repo root
+          key: cli-release-${{ matrix.platform.target }}
+
+      - name: Linux build deps
+        if: runner.os == 'Linux'
+        # protoc: LanceDB (lance-table). cmake: llama.cpp (sovereign-inference).
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+
+      - name: macOS build deps
+        if: runner.os == 'macOS'
+        # cmake is preinstalled on the macOS runners; protobuf is not. SDKROOT
+        # lets llama-cpp-sys-4's bindgen step resolve the system headers.
+        run: |
+          brew install protobuf || true
+          echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
+
+      - name: Build CLI binaries
+        run: >
+          cargo build --release --locked --target ${{ matrix.platform.target }}
+          -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
+
+      - name: Package tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          triple="${{ matrix.platform.target }}"
+          bindir="target/$triple/release"
+          stage="dist/sovereign-$triple"
+          mkdir -p "$stage"
+          for b in sovereign-cli sovereign-cli-daemon sovereign-cli-llm; do
+            cp "$bindir/$b" "$stage/"
+            strip "$stage/$b" || true   # best-effort; trims the llama.cpp debug info
+          done
+          tar -czf "dist/sovereign-$triple.tar.gz" -C dist "sovereign-$triple"
+          ( cd dist && shasum -a 256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sovereign-${{ matrix.platform.target }}
+          path: |
+            dist/sovereign-${{ matrix.platform.target }}.tar.gz
+            dist/sovereign-${{ matrix.platform.target }}.tar.gz.sha256
+
+  release:
+    name: publish draft release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true # flatten all platform artifacts into dist/
+
+      - name: Combine checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          cat ./*.sha256 > SHA256SUMS
+          echo "--- SHA256SUMS ---"; cat SHA256SUMS
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          t="${{ github.event.inputs.tag }}"
+          [ -n "$t" ] || t="${GITHUB_REF#refs/tags/}"
+          echo "tag=$t" >> "$GITHUB_OUTPUT"
+
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true # publish manually after a smoke test, per desktop-release
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS

@@ -259,12 +259,12 @@ fn required_str<'a>(params: &'a serde_json::Value, key: &str) -> Result<&'a str>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_atos::FeatureStore;
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
 
-    async fn fresh_stores() -> (Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
+    async fn fresh_stores() -> (Arc<NoteStore>, Arc<RecipeProjectStore>, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         (notes, features, dir)
     }
 

@@ -37,7 +37,6 @@ pub enum RecipeId {
     WikipediaCatalog,
     WikipediaArticle,
     WikipediaNewsworthy,
-    Alignment,
     Sep,
     CrsReports,
     FederalRegisterPresidential,
@@ -112,7 +111,6 @@ impl RecipeId {
             Self::WikipediaCatalog => "wikipedia-catalog",
             Self::WikipediaArticle => "wikipedia-article",
             Self::WikipediaNewsworthy => "wikipedia-newsworthy",
-            Self::Alignment => "alignment",
             Self::Sep => "sep",
             Self::CrsReports => "crs_reports",
             Self::FederalRegisterPresidential => "federal-register-presidential",
@@ -146,7 +144,6 @@ impl RecipeId {
             "wikipedia-catalog" => Some(Self::WikipediaCatalog),
             "wikipedia-article" => Some(Self::WikipediaArticle),
             "wikipedia-newsworthy" => Some(Self::WikipediaNewsworthy),
-            "alignment" => Some(Self::Alignment),
             "sep" => Some(Self::Sep),
             "crs_reports" => Some(Self::CrsReports),
             "federal-register-presidential" => Some(Self::FederalRegisterPresidential),
@@ -225,9 +222,6 @@ impl RecipeId {
                     env!("OUT_DIR"),
                     "/recipes/wikipedia-newsworthy/recipe.toml"
                 ))
-            }
-            Self::Alignment => {
-                include_str!(concat!(env!("OUT_DIR"), "/recipes/alignment/recipe.toml"))
             }
             Self::Sep => include_str!(concat!(env!("OUT_DIR"), "/recipes/sep/recipe.toml")),
             Self::CrsReports => {
@@ -326,7 +320,6 @@ impl RecipeId {
         Self::WikipediaCatalog,
         Self::WikipediaArticle,
         Self::WikipediaNewsworthy,
-        Self::Alignment,
         Self::Sep,
         Self::CrsReports,
         Self::FederalRegisterPresidential,

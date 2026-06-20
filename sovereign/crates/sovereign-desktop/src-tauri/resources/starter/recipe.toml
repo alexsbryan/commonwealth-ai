@@ -30,8 +30,9 @@ schema_version = 1
 
 [acquire]
 type = "local_file"
-# Absolute path to the in-repo content file, set at build time.
-path = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/resources/starter/federalist/federalist-starter.md"
+# Staging path (the local_file acquirer expands `~`); the rebuild steps above
+# copy the content file here before `corpus install`. No machine-specific paths.
+path = "~/.sovereign/recipes/federalist-starter/federalist-starter.md"
 
 [extract]
 type = "markdown"

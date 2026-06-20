@@ -239,7 +239,7 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use std::sync::Arc;
 
-    use corpus_engine_atos::FeatureStore;
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
     use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
@@ -255,7 +255,7 @@ async fn recipe_author_project_lifecycle_end_to_end() {
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
     let notes = Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
-    let features = Arc::new(FeatureStore::open(&home.path().join("features.db")).unwrap());
+    let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(
         "Federal case law (CourtListener)",

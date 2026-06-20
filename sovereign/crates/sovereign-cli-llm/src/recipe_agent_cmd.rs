@@ -27,7 +27,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::NoteStore;
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
@@ -169,9 +169,8 @@ async fn run_list(_args: &[String]) -> i32 {
             return 2;
         }
     };
-    let rows: Vec<FeatureRow> = all
+    let rows: Vec<RecipeProjectRow> = all
         .into_iter()
-        .filter(|r| FeatureState::parse(&r.state) == Some(FeatureState::RecipeAuthoring))
         .collect();
     if rows.is_empty() {
         println!("(no recipe-author projects)");
@@ -183,7 +182,7 @@ async fn run_list(_args: &[String]) -> i32 {
     0
 }
 
-fn print_row(r: &FeatureRow) {
+fn print_row(r: &RecipeProjectRow) {
     println!("{}\t{}", r.id, r.title);
 }
 
@@ -280,7 +279,7 @@ async fn run_inbox() -> i32 {
     0
 }
 
-fn open_stores() -> std::result::Result<(Arc<NoteStore>, Arc<FeatureStore>), i32> {
+fn open_stores() -> std::result::Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), i32> {
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => {
@@ -301,11 +300,11 @@ fn open_stores() -> std::result::Result<(Arc<NoteStore>, Arc<FeatureStore>), i32
             return Err(2);
         }
     };
-    let features = match FeatureStore::open(&features_path) {
+    let features = match RecipeProjectStore::open(&features_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!(
-                "recipe-agent: failed to open FeatureStore at {}: {e}",
+                "recipe-agent: failed to open RecipeProjectStore at {}: {e}",
                 features_path.display()
             );
             return Err(2);

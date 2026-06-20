@@ -28,7 +28,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use corpus_engine_atos::FeatureStore;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore, ScopeFilter};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
@@ -48,7 +48,7 @@ pub struct CheckpointOutcome {
 #[derive(Default)]
 pub struct CheckpointTool {
     notes: Option<Arc<NoteStore>>,
-    features: Option<Arc<FeatureStore>>,
+    features: Option<Arc<RecipeProjectStore>>,
     /// Test-only override for the recipes directory so tests don't
     /// have to touch process-global `HOME`. None in production.
     recipes_dir: Option<PathBuf>,
@@ -59,7 +59,7 @@ impl CheckpointTool {
         Self::default()
     }
 
-    pub fn with_stores(notes: Arc<NoteStore>, features: Arc<FeatureStore>) -> Self {
+    pub fn with_stores(notes: Arc<NoteStore>, features: Arc<RecipeProjectStore>) -> Self {
         Self {
             notes: Some(notes),
             features: Some(features),
@@ -164,7 +164,7 @@ impl Tool for CheckpointTool {
             Error::InvalidInput("CheckpointTool was constructed without a NoteStore".into())
         })?;
         let features = self.features.as_ref().ok_or_else(|| {
-            Error::InvalidInput("CheckpointTool was constructed without a FeatureStore".into())
+            Error::InvalidInput("CheckpointTool was constructed without a RecipeProjectStore".into())
         })?;
         let feature_id = params
             .get("feature_id")
@@ -466,7 +466,7 @@ pub async fn restore_checkpoint(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_atos::FeatureStore;
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
 
     /// Per-test-module HOME mutex. `HOME` is process-global, so two
     /// `fresh_project` callers running in parallel under `cargo test`
@@ -487,12 +487,12 @@ mod tests {
     ) -> (
         RecipeProject,
         Arc<NoteStore>,
-        Arc<FeatureStore>,
+        Arc<RecipeProjectStore>,
         tempfile::TempDir,
     ) {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         // Per-test HOME so `RecipeProject::new` writes its sidecar dir
         // into the tempdir rather than the user's real home. Caller
         // holds `home_test_lock()` for the lifetime of the assignment

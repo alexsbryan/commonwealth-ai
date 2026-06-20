@@ -35,9 +35,9 @@ npm install
 cargo tauri dev                               # or cargo tauri build for a bundle
 ```
 
-The CLI:
+The CLI — the `sovereign-cli` dispatcher plus the `sovereign-cli-daemon` and `sovereign-cli-llm` siblings it `exec`s:
 ```bash
-cargo build --release -p sovereign-cli
+cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
 ./target/release/sovereign-cli --help
 ```
 

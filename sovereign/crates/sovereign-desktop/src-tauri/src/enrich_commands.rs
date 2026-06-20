@@ -511,26 +511,39 @@ pub struct StarterInstallResult {
     pub already_installed: bool,
 }
 
-/// Install the bundled "Federalist Papers" starter corpus by restoring its
-/// pre-enriched snapshot — offline, no inference, no network, ~1s.
+/// Install the "Federalist Papers" starter corpus by downloading and restoring
+/// its pre-enriched snapshot — no inference, ~162 KB, a few seconds.
 ///
-/// The snapshot ships as a Tauri resource (`starter/federalist-starter.tar.zst`,
-/// ~162 KB), embedded with `qwen-embedding-0.6b` (the app's embed model), and is
-/// restored into `~/.sovereign/indexes` via the shared snapshot-restore primitive
-/// — the SAME root the daemon + desktop read corpora from. NO hardcoded paths:
-/// the archive resolves via `app.path().resource_dir()` and the data root via
-/// `sovereign_root()` (`dirs::home_dir()`). The restore gates on the snapshot's
-/// sha256 and refuses on an embedding-dimension mismatch. Idempotent — returns
-/// early if the corpus is already present.
+/// The snapshot is distributed like every other corpus: a `.tar.zst` on
+/// HuggingFace (`svrnmesh/federalist-starter`), embedded with
+/// `qwen-embedding-0.6b` (the app's embed model), fetched via the shared
+/// `BulkDownloader` and restored into `~/.sovereign/indexes` via the shared
+/// snapshot-restore primitive — the SAME root the daemon + desktop read corpora
+/// from. NO hardcoded paths: the data root resolves via `sovereign_root()`
+/// (`dirs::home_dir()`). The restore gates on the snapshot's sha256 and refuses
+/// on an embedding-dimension mismatch. Idempotent — returns early if the corpus
+/// is already present.
 ///
-/// Dev override: `SOVEREIGN_STARTER_SNAPSHOT=<path>` points at an unbundled
-/// archive (e.g. `~/.sovereign/snapshots/…`) when running `tauri dev` before the
-/// resource is staged into the dev resource dir.
+/// HF-only as of 2026-06-19: the snapshot is no longer bundled into the app. It
+/// used to ship as a Tauri resource, but `tauri.release.conf.json`'s `resources`
+/// ARRAY overrode the base config's resource MAP, silently dropping it from every
+/// release build. Rather than re-bundle (and re-fight that clobber), it now rides
+/// the same registry/HF rails as the rest of the catalog. First run needs network
+/// — already true for the multi-GB model download that precedes it.
+///
+/// Dev override: `SOVEREIGN_STARTER_SNAPSHOT=<path>` points at a local archive
+/// (e.g. the in-repo `resources/starter/federalist-starter.tar.zst`) for an
+/// offline / no-network dev loop.
 #[tauri::command]
 pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResult, String> {
-    use tauri::Manager;
+    let _ = &app; // AppHandle no longer needed to resolve the bundled resource (HF download); kept for command signature stability.
     const STARTER_ID: &str = "federalist-starter";
-    // sha256 of resources/starter/federalist-starter.tar.zst (gates restore).
+    // The snapshot lives at
+    // https://huggingface.co/datasets/svrnmesh/federalist-starter/resolve/main/federalist-starter.tar.zst
+    const STARTER_HF_REPO: &str = "svrnmesh/federalist-starter";
+    const STARTER_HF_FILENAME: &str = "federalist-starter.tar.zst";
+    // sha256 of federalist-starter.tar.zst (gates restore against a corrupt or
+    // tampered download — same value verified on the HF artifact).
     const STARTER_SHA256: &str =
         "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
 
@@ -546,23 +559,40 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
         });
     }
 
-    // Resolve the bundled snapshot: dev escape hatch first, then the bundled
-    // resource. No hardcoded paths on the shipping path.
-    let archive: PathBuf = match std::env::var("SOVEREIGN_STARTER_SNAPSHOT") {
-        Ok(p) if !p.is_empty() => PathBuf::from(p),
-        _ => app
-            .path()
-            .resource_dir()
-            .map_err(|e| format!("resolve resource dir: {e}"))?
-            .join("starter")
-            .join("federalist-starter.tar.zst"),
+    // Resolve the snapshot archive. Dev escape hatch first (a local path for an
+    // offline loop); otherwise download it from HuggingFace exactly like every
+    // other corpus. The sha256 gate lives in restore_snapshot_archive below.
+    let dev_override = std::env::var("SOVEREIGN_STARTER_SNAPSHOT")
+        .ok()
+        .filter(|p| !p.is_empty());
+    let archive: PathBuf = match &dev_override {
+        Some(p) => {
+            let p = PathBuf::from(p);
+            if !p.exists() {
+                return Err(format!(
+                    "SOVEREIGN_STARTER_SNAPSHOT points at {} which does not exist",
+                    p.display()
+                ));
+            }
+            tracing::info!(path = %p.display(), "starter corpus: using local snapshot (dev override)");
+            p
+        }
+        None => {
+            let url = format!(
+                "https://huggingface.co/datasets/{STARTER_HF_REPO}/resolve/main/{STARTER_HF_FILENAME}"
+            );
+            // Conventional download cache, mirroring CorpusEngine::try_restore_prebuilt.
+            let download_dir = sovereign_root().join("indexes").join("_downloads");
+            std::fs::create_dir_all(&download_dir).map_err(|e| {
+                format!("create starter download dir {}: {e}", download_dir.display())
+            })?;
+            tracing::info!(url = %url, "starter corpus: downloading snapshot from HuggingFace");
+            corpus_engine::acquirers::bulk_download::BulkDownloader::new(&url, true)
+                .download(&download_dir, STARTER_ID, &None)
+                .await
+                .map_err(|e| format!("download starter snapshot from {url}: {e}"))?
+        }
     };
-    if !archive.exists() {
-        return Err(format!(
-            "starter snapshot not found at {} (set SOVEREIGN_STARTER_SNAPSHOT for dev)",
-            archive.display()
-        ));
-    }
 
     // restore_snapshot_archive is blocking (tar extract + streaming sha) — run it
     // off the async runtime. ~162 KB ⇒ milliseconds, but keep the hot path clean.
@@ -582,10 +612,17 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
     .map_err(|e| format!("starter restore task join: {e}"))?
     .map_err(|e| format!("restore starter snapshot from {}: {e}", archive.display()))?;
 
+    // Tidy the download cache (skip the dev override — we don't own that path).
+    // Removing it forces a fresh, sha-gated re-download on any future reinstall,
+    // so a stale cached archive can never mask an updated snapshot.
+    if dev_override.is_none() {
+        let _ = std::fs::remove_file(&archive);
+    }
+
     tracing::info!(
         corpus_id = %STARTER_ID,
         index_dir = %outcome.index_dir.display(),
-        "starter corpus restored from bundled snapshot (offline, no inference)"
+        "starter corpus restored from HuggingFace snapshot (no inference)"
     );
     Ok(StarterInstallResult {
         corpus_id: STARTER_ID.to_string(),

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_atos::FeatureStore;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::NoteStore;
 
 use sovereign_core::health_monitor::HealthMonitor;
@@ -103,7 +103,7 @@ pub struct AppState {
     /// `<data_dir>/features.db`; `None` until bootstrap completes
     /// or when those DBs failed to open.
     pub notes: RwLock<Option<Arc<NoteStore>>>,
-    pub features: RwLock<Option<Arc<FeatureStore>>>,
+    pub features: RwLock<Option<Arc<RecipeProjectStore>>>,
     /// Child-process daemon supervisor. Populated only when
     /// `SOVEREIGN_USE_SUPERVISOR=1` and `supervisor_setup::maybe_start`
     /// successfully spawned a daemon. `None` for the in-process Local
@@ -332,15 +332,15 @@ pub async fn bootstrap_with_progress(
     }
     if state.features.read().await.is_none() {
         let features_path = config.data_dir.join("features.db");
-        match FeatureStore::open(&features_path) {
+        match RecipeProjectStore::open(&features_path) {
             Ok(s) => {
                 *state.features.write().await = Some(Arc::new(s));
-                tracing::info!(path = %features_path.display(), "recipe-author: FeatureStore opened");
+                tracing::info!(path = %features_path.display(), "recipe-author: RecipeProjectStore opened");
             }
             Err(e) => tracing::warn!(
                 path = %features_path.display(),
                 error = %e,
-                "recipe-author: FeatureStore open failed; recipe-author workspace will be disabled",
+                "recipe-author: RecipeProjectStore open failed; recipe-author workspace will be disabled",
             ),
         }
     }
@@ -1179,7 +1179,7 @@ pub async fn bootstrap_with_progress(
             tools.register(Box::new(cap_tool));
         } else {
             tracing::warn!(
-                "recipe-author: NoteStore / FeatureStore not both available; checkpoint \
+                "recipe-author: NoteStore / RecipeProjectStore not both available; checkpoint \
                  and capability_request tools are not registered."
             );
         }
