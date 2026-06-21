@@ -741,6 +741,16 @@ impl ModelSlot {
                     .with_devices(&dist.devs)
                     .with_tensor_buft_overrides(&dist.overrides);
             }
+            LoadPlacement::InsufficientCluster { eligible, quorum } => {
+                // Shared-model host can't form the cluster yet — do NOT load (a
+                // too-big primary loaded locally would OOM the host). Stay
+                // unavailable; the discovery loop's reload-on-worker-change retries
+                // as anchors join, and the model reports "forming" meanwhile.
+                return Err(Error::Inference(format!(
+                    "shared-model cluster forming: {eligible} eligible anchor(s), need {quorum} \
+                     (or pooled memory short) — not loading; retries as anchors join"
+                )));
+            }
         }
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)

@@ -43,6 +43,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         watched_folders: Default::default(),
         memory: Default::default(),
         iroh: Default::default(),
+        shared_model: Default::default(),
     };
 
     let config_path = match cfg.save() {

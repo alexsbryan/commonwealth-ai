@@ -127,6 +127,15 @@ impl ProviderFactory for LlamaCppFactory {
                 mesh_provider.set_slot_aliases(map);
             }
         }
+        // Route this node's primary turns into the mesh-hosted shared model, if
+        // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
+        // model_id). Survives reload — the env is set once at daemon entry.
+        if let Some(id) = std::env::var("SOVEREIGN_SHARED_MODEL_ID")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+        {
+            mesh_provider.set_shared_model_id(Some(id));
+        }
         let routed: Arc<dyn InferenceProvider> = mesh_provider;
         Ok(routed)
     }
