@@ -182,6 +182,17 @@ impl EmbedRouter {
         })
     }
 
+    /// Parse-only: the exemplar texts this router embeds, in file order,
+    /// WITHOUT running inference. SSOT for the boot-cache freshness gate —
+    /// shares the exact `ExemplarFile` parse + `query` field that
+    /// `from_toml_str_cached` embeds above (`embed_query_cached`, the `q:`
+    /// space), so the gate can never drift from what actually gets cached.
+    pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {
+        let parsed: ExemplarFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse exemplars: {e}")))?;
+        Ok(parsed.example.into_iter().map(|r| r.query).collect())
+    }
+
     /// Override the default thresholds. Useful for tests + tuning.
     pub fn with_thresholds(mut self, min_top_sim: f32, min_margin: f32) -> Self {
         self.min_top_sim = min_top_sim;

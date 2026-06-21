@@ -36,6 +36,49 @@ pub const BAKED_EFFORT_EXAMPLES: &str = include_str!("../../../router/effort_exa
 pub const BAKED_CURRENT_INFO_EXAMPLES: &str =
     include_str!("../../../router/current_info_examples.toml");
 
+/// Every `(method, text)` pair the four boot classifiers embed, in boot order.
+/// `method` is the embed-cache key space: `"q"` (instruction-prefixed
+/// `embed_query`) for the embed-router / scope / current-info classifiers,
+/// `"d"` (unprefixed `embed`) for the effort classifier (see
+/// `effort_classifier::compute_centroid` for why effort is unprefixed). This is
+/// the SSOT for the router-embed cache freshness gate: each text comes from the
+/// classifier's own parse-only `exemplar_texts`, so the gate can never drift
+/// from what `build_llm_router` actually caches. Takes the four TOML bodies so
+/// one code path serves both the binary-baked exemplars and an on-disk working
+/// tree (the release/bump hook checking uncommitted edits).
+pub fn exemplar_specs(
+    router: &str,
+    scope: &str,
+    effort: &str,
+    current_info: &str,
+) -> Result<Vec<(&'static str, String)>> {
+    let mut specs = Vec::new();
+    for t in EmbedRouter::exemplar_texts(router)? {
+        specs.push(("q", t));
+    }
+    for t in PersonalScopeClassifier::exemplar_texts(scope)? {
+        specs.push(("q", t));
+    }
+    for t in EffortClassifier::exemplar_texts(effort)? {
+        specs.push(("d", t));
+    }
+    for t in CurrentInfoClassifier::exemplar_texts(current_info)? {
+        specs.push(("q", t));
+    }
+    Ok(specs)
+}
+
+/// [`exemplar_specs`] over the binary-baked exemplar TOMLs — the set the shipped
+/// runtime serves and the CI freshness test gates against.
+pub fn baked_exemplar_specs() -> Result<Vec<(&'static str, String)>> {
+    exemplar_specs(
+        BAKED_ROUTER_EXEMPLARS,
+        BAKED_SCOPE_EXAMPLES,
+        BAKED_EFFORT_EXAMPLES,
+        BAKED_CURRENT_INFO_EXAMPLES,
+    )
+}
+
 /// Optional on-disk overrides for each exemplar set. `None` → use the baked
 /// default. [`Self::from_env_and_repo`] is the standard resolver and works for
 /// every surface: a missing repo-relative file (a packaged app) simply falls

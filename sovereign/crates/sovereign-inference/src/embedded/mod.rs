@@ -4,6 +4,7 @@
 //! re-exported flat so `crate::embedded::<Item>` paths are unchanged.
 #![allow(unused_imports)]
 
+mod embed_only;
 mod embed_slot;
 mod engine;
 pub mod ffi_trace;
@@ -16,6 +17,7 @@ mod rpc_distribution;
 mod rpc_warm_cache;
 mod sampler;
 
+pub use embed_only::*;
 pub use embed_slot::*;
 pub use engine::*;
 pub(crate) use gates::*;
