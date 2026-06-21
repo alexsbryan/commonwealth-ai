@@ -295,6 +295,13 @@ async fn run_daemon(args: &[String]) -> i32 {
         },
     };
 
+    // Shared-model cluster role → RPC env contract. The desktop fleet
+    // sets `[shared_model] role` instead of SOVEREIGN_RPC_* by hand;
+    // translate it here, once, before any RPC consumer reads the env
+    // (the inference serve call_once, the discovery loop below, and
+    // commonwealth-api's /status advertise). An explicit env var wins.
+    bootstrap::apply_shared_model_role_to_env(&config.shared_model);
+
     // Route llama.cpp's internal log into our tracing layer. Without
     // this, gguf load failures and ggml backend diagnostics print to a
     // dropped stderr (the daemon's child-style stdio capture swallows

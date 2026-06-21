@@ -317,6 +317,11 @@ pub struct MeshInferenceProvider {
     /// against gemma-* came back "no node in this mesh advertises
     /// model". Pre-refresh self_manifest was the source.
     self_manifest: arc_swap::ArcSwap<ProviderManifest>,
+    /// The mesh-hosted shared model this node routes its primary (Slow) turns
+    /// into (`[shared_model] model_id`), when set. `None` = ordinary local-first
+    /// routing. Set post-construction by the daemon via `set_shared_model_id`;
+    /// `ArcSwapOption` so the read path is lock-free like `self_manifest`.
+    shared_model_id: arc_swap::ArcSwapOption<String>,
     /// Per-peer manifest cache keyed by peer `node_id` (as string
     /// — `NodeId` doesn't impl `Hash` across crate boundaries
     /// cleanly in all our versions, and the string form is stable).
@@ -470,6 +475,7 @@ impl MeshInferenceProvider {
             local,
             mesh,
             self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
+            shared_model_id: arc_swap::ArcSwapOption::empty(),
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             http,
             peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
@@ -538,6 +544,13 @@ impl MeshInferenceProvider {
     /// new mapping without restarting the daemon.
     pub fn set_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
         self.slot_aliases.store(Arc::new(aliases));
+    }
+
+    /// Install (or clear) the mesh-hosted shared model this node routes its
+    /// primary turns into — `[shared_model] model_id`. `None` reverts to ordinary
+    /// local-first routing. Atomic swap, safe to call at runtime / on reload.
+    pub fn set_shared_model_id(&self, model_id: Option<String>) {
+        self.shared_model_id.store(model_id.map(Arc::new));
     }
 
     /// Snapshot of per-peer health for diagnostics surfaces.
@@ -1366,17 +1379,32 @@ impl MeshInferenceProvider {
     /// follow-up of "if peer failed, try local" has to be expressible
     /// in one return value so the caller can iterate without
     /// re-running `select_peer` (which is non-idempotent).
+    /// The shared-model id this request should route into, if any. Only a
+    /// primary (`Speed::Slow`) turn with no explicit `model_id` targets the
+    /// configured shared model; everything else routes as before.
+    fn shared_primary_id(&self, request: &CompletionRequest) -> Option<String> {
+        if request.preferred_speed != Speed::Slow {
+            return None;
+        }
+        self.shared_model_id.load_full().map(|s| (*s).clone())
+    }
+
     async fn select_route(&self, request: &CompletionRequest) -> Result<Vec<RouteDecision>> {
-        if let Some(model_id) = explicit_model_id(request) {
-            match self.locate_named_model(model_id).await {
+        // Effective named target: an explicit `model_id` (Hard — fail loud if no
+        // node advertises it) takes priority; otherwise a configured shared-model
+        // primary (Soft — degrade to the local model when the cluster is forming
+        // or the host is unreachable).
+        let (named, soft) = match explicit_model_id(request) {
+            Some(id) => (Some(id.to_string()), false),
+            None => (self.shared_primary_id(request), true),
+        };
+        if let Some(model_id) = named {
+            match self.locate_named_model(&model_id).await {
                 NamedModelLocation::Local => {
-                    tracing::info!(
-                        model = %model_id,
-                        "mesh-inference: routing locally by explicit model name"
-                    );
-                    let guard = self.enter_local_inflight(model_id);
+                    tracing::info!(model = %model_id, soft, "mesh-inference: routing locally by model name");
+                    let guard = self.enter_local_inflight(&model_id);
                     Ok(vec![RouteDecision::LocalNamed {
-                        attribution: model_id.to_string(),
+                        attribution: model_id,
                         guard,
                     }])
                 }
@@ -1385,27 +1413,51 @@ impl MeshInferenceProvider {
                         peer = %peer.name,
                         addrs = peer.base_urls.len(),
                         model = %peer_cand.model_id,
-                        "mesh-inference: routing to peer by explicit model name"
+                        soft,
+                        "mesh-inference: routing to peer by model name"
                     );
                     let ledger = self
                         .mesh
                         .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
                         .await;
-                    Ok(vec![RouteDecision::Peer {
-                        peer,
-                        peer_cand,
-                        ledger,
-                        disposition: PeerFailureDisposition::Hard {
-                            model_id: model_id.to_string(),
-                        },
-                    }])
+                    if soft {
+                        // Shared-model primary: prefer the host, but fall back to
+                        // the local model if every address fails — the cascade's
+                        // existing LocalFallback step (degraded, not an error).
+                        let total = self.enter_local_total();
+                        Ok(vec![
+                            RouteDecision::Peer {
+                                peer,
+                                peer_cand,
+                                ledger,
+                                disposition: PeerFailureDisposition::Soft,
+                            },
+                            RouteDecision::LocalFallback { total },
+                        ])
+                    } else {
+                        Ok(vec![RouteDecision::Peer {
+                            peer,
+                            peer_cand,
+                            ledger,
+                            disposition: PeerFailureDisposition::Hard { model_id },
+                        }])
+                    }
                 }
                 NamedModelLocation::Unknown => {
-                    Err(sovereign_core::error::Error::ModelNotLoaded(format!(
-                        "no node in this mesh advertises model '{}' — \
-                         check `/v1/models` for available names",
-                        model_id
-                    )))
+                    if soft {
+                        tracing::info!(
+                            shared = %model_id,
+                            "mesh-inference: shared model forming/unavailable — falling back to local primary"
+                        );
+                        let total = self.enter_local_total();
+                        Ok(vec![RouteDecision::LocalFallback { total }])
+                    } else {
+                        Err(sovereign_core::error::Error::ModelNotLoaded(format!(
+                            "no node in this mesh advertises model '{}' — \
+                             check `/v1/models` for available names",
+                            model_id
+                        )))
+                    }
                 }
             }
         } else {
@@ -1651,6 +1703,37 @@ fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvid
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        // Shared-model primary: a node configured to use a mesh-hosted shared
+        // model routes its primary (Slow) turn into it, resolved to a `model_id`
+        // so the named path below routes there; degrade to the local model when
+        // the cluster is forming. (The streaming path, `select_route`, adds full
+        // soft peer-failure fallback; this non-streaming path degrades on
+        // unavailability and otherwise routes by name.)
+        let _shared_owned;
+        let request = if explicit_model_id(request).is_none() {
+            match self.shared_primary_id(request) {
+                Some(shared_id) => match self.locate_named_model(&shared_id).await {
+                    NamedModelLocation::Unknown => {
+                        tracing::info!(
+                            shared = %shared_id,
+                            "mesh-inference: shared model forming — local fallback (complete)"
+                        );
+                        let _total = self.enter_local_total();
+                        return self.local.complete(request).await;
+                    }
+                    _ => {
+                        _shared_owned = CompletionRequest {
+                            model_id: Some(shared_id),
+                            ..request.clone()
+                        };
+                        &_shared_owned
+                    }
+                },
+                None => request,
+            }
+        } else {
+            request
+        };
         // Priority: when the caller names a specific model_id, that
         // name is the routing signal — even when the request has no
         // OICP envelope and no Speed::Slow signal. Silent

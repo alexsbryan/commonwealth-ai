@@ -172,6 +172,7 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         watched_folders: Default::default(),
         memory: Default::default(),
         iroh: Default::default(),
+        shared_model: Default::default(),
     });
 
     let cli_primary_before = cli.models.primary.clone();
@@ -215,6 +216,16 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         cli.data.dir = desktop.data_dir.clone();
         changed = true;
         changed_fields.push("data_dir");
+    }
+    // Shared-model cluster role + id. A change must trigger a daemon reload so
+    // the role→RPC-env translation (apply_shared_model_role_to_env) re-runs.
+    if cli.shared_model.role != desktop.shared_model_role
+        || cli.shared_model.model_id != desktop.shared_model_id
+    {
+        cli.shared_model.role = desktop.shared_model_role;
+        cli.shared_model.model_id = desktop.shared_model_id.clone();
+        changed = true;
+        changed_fields.push("shared_model");
     }
 
     if changed {
@@ -463,6 +474,7 @@ pub async fn set_setup_context_size(
                 watched_folders: Default::default(),
                 memory: Default::default(),
                 iroh: Default::default(),
+                shared_model: Default::default(),
             }
         }
     };

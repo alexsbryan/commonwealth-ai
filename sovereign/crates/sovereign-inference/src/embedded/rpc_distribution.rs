@@ -413,6 +413,13 @@ pub(crate) struct DistributionPlan {
     pub(crate) overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)>,
     pub(crate) plan: Vec<NodeShard>,
     pub(crate) assignments: Vec<RpcWarmAssignment>,
+    /// Eligible RPC worker peers (anchors lending memory) this plan
+    /// distributes onto — the quorum-count input for the shared-model gate.
+    pub(crate) eligible_workers: usize,
+    /// Total pooled device memory (bytes) across every device this plan places
+    /// weights on (RPC workers + local GPU) — the memory the model must fit
+    /// into. The gate checks this against `model_size × 1.2`.
+    pub(crate) pooled_vram_bytes: u64,
 }
 
 /// Process-wide cache of the shard plan, keyed by `(model_id, sorted RPC
@@ -523,6 +530,19 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         eligible_rpc.into_iter().map(|(d, _)| d).collect();
     devs.extend(local);
 
+    // Pooled device memory across every placed device (workers + local) — the
+    // memory the model must fit into. Summed unconditionally (cheap FFI) so it is
+    // available regardless of the plan-cache hit/miss below.
+    let pooled_vram_bytes: u64 = devs
+        .iter()
+        .map(|&d| {
+            let (mut free, mut total): (usize, usize) = (0, 0);
+            unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
+            (if free > 0 { free } else { total }) as u64
+        })
+        .sum();
+    let eligible_workers = assignments.len();
+
     // ONE stable shard plan per (model, worker set). Reuse the cached plan across
     // reloads with the same workers so each worker's warm cache stays valid; only
     // recompute when the model or the eligible worker set actually changes. VRAM is
@@ -574,6 +594,8 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         overrides,
         plan,
         assignments,
+        eligible_workers,
+        pooled_vram_bytes,
     })
 }
 
@@ -591,6 +613,12 @@ pub(crate) enum LoadPlacement {
     /// Owned per-block placement: the workers hold their shards warm, so the host
     /// loads with `-ot` overrides and sends only tensor hashes (cache hits).
     OwnedOverrides(DistributionPlan),
+    /// Wanted to distribute a large primary, but the cluster can't hold it yet —
+    /// too few eligible anchors or insufficient pooled memory. The host does NOT
+    /// load (a too-big primary loaded locally would OOM); it stays unavailable and
+    /// a later reload (on the next worker-set change) retries. The shared model
+    /// reports "forming" until quorum + memory are met.
+    InsufficientCluster { eligible: usize, quorum: u32 },
 }
 
 /// The placement decision as a PURE function of its inputs — split out so the
@@ -603,6 +631,27 @@ enum PlacementDecision {
     /// Distribute via owned `-ot` overrides. `auto_warm` = seed the workers'
     /// caches first (false means the operator asserted they're already warm).
     OwnedOverrides { auto_warm: bool },
+}
+
+/// Minimum eligible anchor workers before the host distributes a shared model —
+/// the quorum gate. From `SOVEREIGN_RPC_QUORUM_ANCHORS` (set by the daemon from
+/// `[shared_model] quorum_anchors`); default 1.
+fn rpc_quorum_anchors() -> u32 {
+    std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(1)
+}
+
+/// Optional explicit floor (bytes) on pooled cluster memory, from
+/// `SOVEREIGN_RPC_MIN_POOLED_GB` (set from `[shared_model] min_pooled_gb`). `0`
+/// when unset — the computed `model_size × 1.2` floor then governs alone.
+fn rpc_min_pooled_bytes() -> u64 {
+    std::env::var("SOVEREIGN_RPC_MIN_POOLED_GB")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .map(|gb| (gb * 1024.0 * 1024.0 * 1024.0) as u64)
+        .unwrap_or(0)
 }
 
 /// The never-wedge decision tree. Distribute ONLY a distributable (primary) slot,
@@ -677,6 +726,26 @@ pub(crate) fn resolve_placement(model_path: &Path, model_bytes: u64, distributab
         );
         return LoadPlacement::LocalOnly;
     };
+
+    // Quorum + pooled-memory gate (shared-model host): never attempt a load the
+    // cluster can't hold. A too-big primary loaded locally would OOM; instead stay
+    // unavailable and let the next worker-set-change reload retry as anchors join.
+    let quorum = rpc_quorum_anchors();
+    let needed = (model_bytes.saturating_mul(6) / 5).max(rpc_min_pooled_bytes()); // ×1.2 headroom
+    if (dist.eligible_workers as u32) < quorum || dist.pooled_vram_bytes < needed {
+        tracing::warn!(
+            eligible_anchors = dist.eligible_workers,
+            quorum,
+            pooled_gb = dist.pooled_vram_bytes / (1024 * 1024 * 1024),
+            need_gb = needed / (1024 * 1024 * 1024),
+            "shared-model cluster forming — quorum or pooled memory not met; not loading \
+             (retries on the next worker-set change)"
+        );
+        return LoadPlacement::InsufficientCluster {
+            eligible: dist.eligible_workers,
+            quorum,
+        };
+    }
 
     if !auto_warm {
         tracing::info!(

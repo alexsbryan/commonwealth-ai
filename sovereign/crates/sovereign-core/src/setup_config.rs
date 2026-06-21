@@ -53,6 +53,10 @@ pub struct SetupConfig {
     /// Dial-by-key mesh access over iroh. Off by default; see below.
     #[serde(default)]
     pub iroh: IrohSection,
+    /// Opt-in participation in a mesh-hosted shared primary model.
+    /// Off by default; see [`SharedModelSection`].
+    #[serde(default)]
+    pub shared_model: SharedModelSection,
 }
 
 /// Dial-by-key mesh access over iroh (Track W of
@@ -123,6 +127,64 @@ pub struct TransportSection {
     pub inference: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_probe: Option<String>,
+}
+
+/// `[shared_model]` — opt-in participation in a mesh-hosted shared
+/// primary model (e.g. a desktop fleet collectively running one big
+/// model across an RPC layer-split, like GLM-5.2). Off by default: the
+/// zero value is `role = "consumer"` with no `model_id`, which is
+/// inert. The node's `[models] primary` stays its LOCAL model and the
+/// always-available fallback; this section is an overlay that, when a
+/// shared model is actually available on the mesh, routes the primary
+/// turn into it instead (see the desktop-fleet plan).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SharedModelSection {
+    /// This node's role in the shared-model cluster.
+    #[serde(default)]
+    pub role: SharedModelRole,
+    /// The shared model's id, as advertised in peers' `loaded_models`.
+    /// `None` ⇒ not participating (the section is inert).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    /// The designated host — the node that owns the loaded distributed
+    /// instance. `None` ⇒ discover from the mesh; set explicitly to
+    /// pin the always-on anchor as host (the v1 recommendation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_node_id: Option<String>,
+    /// Minimum eligible anchors before the host attempts the distributed
+    /// load and advertises the model available — the quorum gate. Below
+    /// it the cluster reports "forming (k/N)".
+    #[serde(default = "default_quorum_anchors")]
+    pub quorum_anchors: u32,
+    /// Optional explicit floor (GB) on pooled anchor memory. The host
+    /// always gates on the computed `sum(anchor_vram) >= model_size × 1.2`;
+    /// set this to require headroom beyond that. `None` ⇒ computed check
+    /// only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_pooled_gb: Option<f64>,
+}
+
+/// A node's role in a shared-model cluster (`[shared_model] role`). The
+/// fleet stratifies into a small memory-holding anchor core and a larger
+/// query-only consumer ring (see the desktop-fleet plan).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedModelRole {
+    /// Query the shared model; contribute no memory to holding it. The
+    /// default — a node opts into anchoring explicitly.
+    #[default]
+    Consumer,
+    /// Lend memory to the RPC layer-split that holds the model.
+    Anchor,
+    /// Own the loaded distributed instance and serve it to the fleet.
+    /// Implies `Anchor` (the host also holds a shard).
+    Host,
+}
+
+/// Default quorum: a single anchor (the assumed always-on 128 GB+ box)
+/// is enough to attempt a load; raise for larger cores.
+fn default_quorum_anchors() -> u32 {
+    1
 }
 
 /// `[memory]` top-level section. Currently only nests
@@ -857,6 +919,7 @@ embed = "/models/embed.gguf"
             watched_folders: WatchedFoldersSection::default(),
             memory: Default::default(),
             iroh: Default::default(),
+            shared_model: Default::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");

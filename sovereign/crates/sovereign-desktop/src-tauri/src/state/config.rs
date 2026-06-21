@@ -128,6 +128,16 @@ pub struct DesktopConfig {
     #[serde(default = "default_naked_mode")]
     pub naked_mode: bool,
 
+    /// Shared-model cluster role: `consumer` (use a mesh-hosted shared model as
+    /// primary), `anchor` (lend memory to hold it), or `host` (own the loaded
+    /// instance). Default `consumer`. Mirrored to `[shared_model] role`.
+    #[serde(default)]
+    pub shared_model_role: sovereign_core::setup_config::SharedModelRole,
+    /// The shared model id to use/host (as advertised in the mesh). `None` = not
+    /// participating. Mirrored to `[shared_model] model_id`.
+    #[serde(default)]
+    pub shared_model_id: Option<String>,
+
     /// User-authored "custom instructions" / persona — global standing
     /// guidance appended as the outermost layer of every system prompt
     /// (see `sovereign_core::types::InferenceConfig::custom_instructions`).
@@ -366,6 +376,8 @@ impl Default for DesktopConfig {
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
             naked_mode: default_naked_mode(),
+            shared_model_role: sovereign_core::setup_config::SharedModelRole::default(),
+            shared_model_id: None,
             custom_instructions: None,
             primary_idle_secs: default_primary_idle_secs(),
             embed_family: ModelFamily::Unknown,
@@ -471,6 +483,7 @@ impl DesktopConfig {
                     watched_folders: Default::default(),
                     memory: Default::default(),
                     iroh: Default::default(),
+                    shared_model: Default::default(),
                 });
                 setup.models.context_size = Some(desktop_ctx);
                 match setup.save() {

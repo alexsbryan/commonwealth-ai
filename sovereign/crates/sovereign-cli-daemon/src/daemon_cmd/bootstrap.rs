@@ -389,6 +389,64 @@ pub(super) fn build_folder_tiered_deps(
     folder_tiered_deps
 }
 
+/// Default bind for an anchor's in-process RPC worker — the value the
+/// distributed-inference docs use. Applied only when a `[shared_model]`
+/// role asks to serve but no explicit `SOVEREIGN_RPC_SERVE` is set.
+const DEFAULT_RPC_BIND: &str = "0.0.0.0:50052";
+
+/// Translate `[shared_model] role` into the RPC env contract that the
+/// three decoupled RPC consumers already read — the inference serve
+/// (`serve_rpc_worker_if_configured`), this module's discovery loop, and
+/// commonwealth-api's `/status` advertise. This is the desktop-friendly
+/// source of the role (the app writes the config; no hand-set env vars);
+/// an explicitly-set env var always wins, so CLI/power users are
+/// unaffected. One traceable place where role → RPC wiring happens.
+///
+/// - `Host`   → discover peers' workers AND serve (a host also anchors).
+/// - `Anchor` → serve this node's GPU into the layer-split.
+/// - `Consumer` (default) → neither; the node only queries the shared
+///   model (that routing is wired separately, not via these env vars).
+pub(super) fn apply_shared_model_role_to_env(
+    cfg: &sovereign_core::setup_config::SharedModelSection,
+) {
+    use sovereign_core::setup_config::SharedModelRole;
+    // The shared model this node routes its primary turns into (any role that
+    // names one — consumers query it, anchors/host also serve it). Read by the
+    // mesh inference provider via SOVEREIGN_SHARED_MODEL_ID.
+    if let Some(id) = cfg.model_id.as_deref() {
+        if !id.is_empty() && std::env::var_os("SOVEREIGN_SHARED_MODEL_ID").is_none() {
+            std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", id);
+            tracing::info!(model_id = id, "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID");
+        }
+    }
+    let serve = matches!(cfg.role, SharedModelRole::Anchor | SharedModelRole::Host);
+    let discover = matches!(cfg.role, SharedModelRole::Host);
+    if serve && std::env::var_os("SOVEREIGN_RPC_SERVE").is_none() {
+        std::env::set_var("SOVEREIGN_RPC_SERVE", DEFAULT_RPC_BIND);
+        tracing::info!(
+            role = ?cfg.role,
+            bind = DEFAULT_RPC_BIND,
+            "shared-model: anchor role → SOVEREIGN_RPC_SERVE"
+        );
+    }
+    if discover && std::env::var_os("SOVEREIGN_RPC_DISCOVER").is_none() {
+        std::env::set_var("SOVEREIGN_RPC_DISCOVER", "1");
+        tracing::info!("shared-model: host role → SOVEREIGN_RPC_DISCOVER=1");
+    }
+    // The host enforces the quorum + pooled-memory gate before distributing, so it
+    // carries those knobs into the RPC env contract too (env wins if already set).
+    if discover {
+        if std::env::var_os("SOVEREIGN_RPC_QUORUM_ANCHORS").is_none() {
+            std::env::set_var("SOVEREIGN_RPC_QUORUM_ANCHORS", cfg.quorum_anchors.to_string());
+        }
+        if let Some(gb) = cfg.min_pooled_gb {
+            if std::env::var_os("SOVEREIGN_RPC_MIN_POOLED_GB").is_none() {
+                std::env::set_var("SOVEREIGN_RPC_MIN_POOLED_GB", gb.to_string());
+            }
+        }
+    }
+}
+
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub(super) fn spawn_rpc_worker_discovery(
     daemon: Arc<EmbeddedDaemon>,

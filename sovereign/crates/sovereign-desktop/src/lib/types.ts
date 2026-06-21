@@ -159,6 +159,13 @@ export interface DesktopConfig {
    *  check). Chat history → model → reply, with only a minimal assistant
    *  preamble + custom_instructions. Default off. */
   naked_mode: boolean;
+  /** Shared-model cluster role: "consumer" (use a mesh-hosted shared model as
+   *  primary), "anchor" (lend memory to hold it), or "host" (own the loaded
+   *  instance). Default "consumer". */
+  shared_model_role?: "consumer" | "anchor" | "host";
+  /** The shared model id to use/host (as advertised in the mesh). Null = not
+   *  participating in a shared model. */
+  shared_model_id?: string | null;
   /** User-authored "custom instructions" / persona. Global standing
    *  guidance appended as the outermost layer of every system prompt —
    *  append-only, never replacing the situated context. Null/empty is a

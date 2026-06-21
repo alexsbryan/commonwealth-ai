@@ -2669,6 +2669,7 @@ mod tests {
             watched_folders: Default::default(),
             memory: Default::default(),
             iroh: Default::default(),
+            shared_model: Default::default(),
         };
 
         register_local_model_slots(&app_state, &cfg, node_id);

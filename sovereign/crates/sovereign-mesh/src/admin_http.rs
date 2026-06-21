@@ -263,6 +263,7 @@ mod tests {
             watched_folders: Default::default(),
             memory: Default::default(),
             iroh: Default::default(),
+            shared_model: Default::default(),
         };
         cfg.save_to(&path).unwrap();
         path
