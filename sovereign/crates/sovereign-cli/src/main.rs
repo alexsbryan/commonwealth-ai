@@ -706,7 +706,7 @@ async fn async_main() {
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
             "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
-            | "chat" | "reading-diag" | "newsworthy" | "govern" => {
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

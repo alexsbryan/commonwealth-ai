@@ -68,9 +68,12 @@ pub(crate) struct EmbedSlot {
     /// Upper bound on distinct sequences per packed batch, matching
     /// the value passed to `LlamaContextParams::with_n_seq_max`.
     pub(crate) n_seq_max: usize,
-    /// Family-specific embedding configuration: pooling strategy,
-    /// instruction prefixes, EOS appending. None = Qwen3-Embedding and similar
-    /// defaults (mean pooling, no instructions, no EOS).
+    /// Family-specific embedding configuration: instruction prefixes + EOS
+    /// appending (pooling itself is gguf-driven — see `load`). `None` = an
+    /// unknown/BYOM embedder with no family card: no prefix, no EOS. NB this is
+    /// NOT Qwen3-Embedding — that family carries Last pooling + a query
+    /// instruction-prefix + EOS (`model_family::Qwen3Embedding`), which `load`
+    /// auto-detects from the gguf when the caller passes `None`.
     pub(crate) embed_quirks: Option<EmbedQuirks>,
 }
 
@@ -134,6 +137,32 @@ impl EmbedSlot {
         // GPU memory pressure and we can restore the original value.
         let n_seq_max: u32 = 16;
         let model = Arc::new(model);
+
+        // ── Embed-family auto-detect (gguf-driven) ──────────────────────────
+        // The caller resolves `embed_quirks` from the model's family, which the
+        // manifest derives by FILENAME (`embed_family_for_file`). A prescribed
+        // Qwen3-Embedding gguf stored under a non-default name (e.g.
+        // `qwen-embedding-0.6b.gguf`) fails that match → family=Unknown →
+        // `embed_quirks=None`, which silently DROPS Qwen3-Embedding's query
+        // instruction-prefix + EOS. That degrades retrieval AND makes the
+        // embeddings diverge from the pre-built router cache (the sentinel probe
+        // then rejects it → a multi-minute re-embed). Recover from the gguf
+        // itself: a `qwen3`-family embedding model gets Qwen3-Embedding's quirks
+        // regardless of how the file is named. Only runs when the caller didn't
+        // already resolve a family, so it's free on the common path.
+        let embed_quirks = embed_quirks.or_else(|| {
+            let arch = super::prompt_helpers::read_gguf_arch(&model);
+            if arch.to_ascii_lowercase().starts_with("qwen3") {
+                tracing::info!(
+                    arch = %arch,
+                    "embed family auto-detected from gguf: Qwen3Embedding \
+                     (filename did not match a manifest embed slot)"
+                );
+                ModelFamily::Qwen3Embedding.default_quirks().embed
+            } else {
+                None
+            }
+        });
 
         // **Pooling: gguf-driven.** We deliberately do NOT call
         // `with_pooling_type(...)` here. The context default is

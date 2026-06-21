@@ -28,9 +28,38 @@ permissions:
   contents: write  # needed to create / upload to a GitHub Release
 
 jobs:
+  # Pure, no-inference freshness gate for the pre-built router-embed cache
+  # (sovereign/router/router-embed-cache.json), baked into the desktop binary so
+  # first launch hits the cache instead of re-embedding ~310 router exemplars
+  # (minutes on a CPU-only embed slot). `build` needs this, so a stale cache
+  # fails the whole release fast — the suspenders to bump-desktop-version.sh's
+  # belt (which regenerates on bump). Cheap: compiles sovereign-core (no llama)
+  # and runs one test; no model download, no inference.
+  router-cache-gate:
+    name: router-cache freshness gate
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+          key: router-cache-gate
+      - name: Router embed cache is fresh
+        run: cargo test -p sovereign-core --test router_cache_fresh
+
   build:
     name: build / ${{ matrix.platform.name }}
+    needs: router-cache-gate
     runs-on: ${{ matrix.platform.runner }}
+    # Execution backstop. A native build here runs ~40 min; 120 bounds a wedged
+    # job (esp. the self-hosted Intel leg) so it can't sit for the 6h default.
+    # NB: this caps RUN time, not queue wait — a self-hosted leg with its runner
+    # offline still queues (manual-start model: start ./run.sh before tagging).
+    timeout-minutes: 120
     # Updater signing secrets (TAURI_UPDATER_PRIVATE_KEY +
     # TAURI_UPDATER_PRIVATE_KEY_PASSWORD) are scoped to the `prod`
     # environment, so the job must claim it to access them. Without
@@ -53,16 +82,21 @@ jobs:
           # verified locally — pushing untested legs previously drained the
           # Actions budget.
           #
-          # macOS Intel (x86_64) is DROPPED — arm64-only (decided 2026-06-20).
-          # `macos-13` (NATIVE Intel) is RETIRED by GitHub: the job hung forever
-          # on "Waiting for a runner to pick up this job: macos-13", and (publish
-          # is `needs: build`) blocked the whole release. The only alternative —
-          # CROSS-compiling x86_64 on a macos-14 (arm64) runner — proved too
-          # fragile: this native-heavy stack hits a chain of cross-compile-ONLY
-          # link blockers a native Intel build never would (llama.cpp
-          # cpp-httplib→OpenSSL; lance AVX-512 SIMD kernels; likely more). Not
-          # worth the yak-shave. Revisit only with a NATIVE Intel build path (a
-          # self-hosted Intel-Mac runner). No macos-x86_64 leg.
+          # macOS Intel (x86_64): NATIVE self-hosted runner — labels
+          # [self-hosted, macOS, X64] (decided 2026-06-20, superseding the brief
+          # arm64-only drop). GitHub's hosted `macos-13` Intel runner is RETIRED:
+          # the job hung forever on "Waiting for a runner to pick up this job:
+          # macos-13" and, since publish is `needs: build`, blocked the whole
+          # release. CROSS-compiling x86_64 on a macos-14 (arm64) runner proved
+          # too fragile — cross-only link blockers a native build never hits
+          # (llama.cpp cpp-httplib→OpenSSL; lance AVX-512 SIMD kernels). So the
+          # leg targets a real Intel Mac, which built + ran clean from this HEAD
+          # on 2026-06-20 (signed x64 .dmg, dyld-verified). MANUAL-start model:
+          # start the runner (`./run.sh`) BEFORE pushing a desktop-v* tag, or
+          # this leg queues waiting for it. publish is now decoupled
+          # (`if: !cancelled()`), so a FAILED/absent Intel build no longer sinks
+          # the arm64 + Linux artifacts the way macos-13 did. See RELEASING.md
+          # §"macOS Intel (x86_64) — self-hosted runner" for the per-release flow.
           #
           # WINDOWS: code is wired (sovereign-inference cfg(target_os="windows")
           # llama arm, CPU baseline + feature-selected vulkan/cuda; readiness
@@ -80,6 +114,12 @@ jobs:
           - name: macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin
+          - name: macos-x86_64
+            # NATIVE Intel via a self-hosted runner (see the matrix note above).
+            # runs-on accepts this label array; the registered Intel Mac matches
+            # all three. Start `./run.sh` before tagging — manual-start model.
+            runner: [self-hosted, macOS, X64]
+            target: x86_64-apple-darwin
           - name: linux-x86_64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -185,23 +225,47 @@ jobs:
           # libgdk-pixbuf2.0-bin, librsvg2-bin). The minimal build container
           # installs them explicitly — see the Containerfile.
 
-      - name: macOS build deps (lld, protobuf, SDKROOT)
-        if: startsWith(matrix.platform.runner, 'macos')
+      - name: macOS build deps (lld, protobuf, cmake, SDKROOT)
+        # Match on the TARGET, not the runner: the self-hosted Intel leg's
+        # `runner` is a label ARRAY ([self-hosted, macOS, X64]), so the old
+        # `startsWith(runner, 'macos')` was false for it and silently skipped
+        # this step. Both macOS legs carry a `*-apple-darwin` target.
+        if: contains(matrix.platform.target, 'apple-darwin')
+        env:
+          # Stop brew's 30-day auto-cleanup from firing mid-install. On a
+          # self-hosted Mac it can trip over pre-existing root-owned files under
+          # /usr/local (observed 2026-06-20: a python pycache perm-denied aborted
+          # the whole `brew install` even though the formula installed fine).
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: |
+          # Self-hosted runners launched via ./run.sh inherit a MINIMAL PATH that
+          # may lack Homebrew. Source its shellenv so `brew` + its installed
+          # tools (lld, protoc) resolve, and persist the bin dir to later steps
+          # via $GITHUB_PATH. Intel Macs use /usr/local; the /opt/homebrew branch
+          # is the Apple-Silicon fallback. No-op on GitHub-hosted runners (brew
+          # is already global there).
+          if [ -x /usr/local/bin/brew ]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+            echo "/usr/local/sbin" >> "$GITHUB_PATH"
+          elif [ -x /opt/homebrew/bin/brew ]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+            echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          fi
           # lld: .cargo/config.toml's *-apple-darwin rustflags pass
-          # `-fuse-ld=lld`, which clang routes to LLVM's lld. macos-14
-          # and macos-13 runners don't ship lld; the Homebrew LLVM
-          # formula provides it.
+          # `-fuse-ld=lld`, which clang routes to LLVM's lld. The hosted macos-14
+          # runner doesn't ship lld; the Homebrew LLVM formula provides it.
           #
           # protobuf: lance-encoding's build script runs prost-build, which
           # shells out to `protoc`. None of the runners ship it (the Linux
           # job installs protobuf-compiler explicitly via apt) — without this
           # the build dies in lance-encoding with "Could not find `protoc`".
           #
-          # cmake is already preinstalled on the macOS runners (llama-cpp-sys-4
-          # needs it to compile llama.cpp's Metal backend); add `cmake` to this
-          # brew line if that ever regresses.
-          brew install lld protobuf
+          # cmake: llama-cpp-sys-4 needs it to compile llama.cpp's Metal backend.
+          # Preinstalled on the hosted macOS runner, but NOT guaranteed on a
+          # self-hosted Mac — install it explicitly (brew skips it if present).
+          brew install lld protobuf cmake
           # SDKROOT: llama-cpp-sys-4's bindgen step resolves system headers via
           # the macOS SDK; without an explicit SDKROOT it fails with
           # "'memory' file not found". $GITHUB_ENV persists it to every later
@@ -337,6 +401,14 @@ jobs:
   publish:
     name: publish to GitHub Release
     needs: build
+    # Decoupled from per-leg success: run as long as the workflow wasn't
+    # cancelled, so a FAILED build leg (e.g. the self-hosted Intel runner is
+    # down, or x86_64 hits a compile error) still ships the arm64 + Linux
+    # artifacts instead of blocking the entire release — the exact footgun
+    # macos-13 created when publish was `needs: build` with implicit success().
+    # The flatten step below hard-fails if NO artifacts arrived at all, so a
+    # total build failure can't silently publish an empty draft.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -385,6 +457,13 @@ jobs:
                -o -name "*.sig" \) \
             -exec cp {} release-assets/ \;
           ls -la release-assets
+          # Since publish now runs even when a build leg failed (if: !cancelled()),
+          # guard against the degenerate case where EVERY leg failed and we'd
+          # otherwise publish an empty draft. At least one installer must exist.
+          if [ -z "$(ls -A release-assets 2>/dev/null)" ]; then
+            echo "::error::No build artifacts arrived — every build leg failed or uploaded nothing. Refusing to publish an empty release." >&2
+            exit 1
+          fi
 
       - name: Publish draft release
         uses: softprops/action-gh-release@v2
