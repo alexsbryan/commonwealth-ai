@@ -772,6 +772,19 @@ export interface NodeContributionsDto {
   bytes_received: number;
 }
 
+/** Cluster health of a shared-model fleet (the "Shared model" settings chip +
+ * degraded banner). `configured` is false when this node isn't in a fleet. */
+export interface SharedModelStatus {
+  configured: boolean;
+  model_id: string | null;
+  eligible_anchors: number;
+  quorum_anchors: number;
+  /** Quorum met — a proxy for "the shared model is serveable". Below it the
+   * cluster is "forming" and consumers fall back to their local model. */
+  available: boolean;
+  is_host: boolean;
+}
+
 export interface PeerPreferenceDto {
   node_id: string;
   /** Multiplier in (0.0, 1.0] applied to every claim affinity in
