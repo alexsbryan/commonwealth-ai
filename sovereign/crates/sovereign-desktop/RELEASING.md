@@ -6,8 +6,9 @@ with installers for all four targets. v1 is ad-hoc signed on macOS
 (runs, but Gatekeeper still warns) and unsigned on Windows; Developer
 ID / Authenticode signing + notarization and auto-updates are deferred
 (see "Code signing" / "Auto-updates" below). NOTE: GitHub retired the
-Intel `macos-13` runner — the `macos-x86_64` matrix leg currently hangs;
-see "Build matrix" for the Intel-coverage options.
+Intel `macos-13` runner, so the `macos-x86_64` leg now runs on a NATIVE
+self-hosted Intel Mac (manual-start) — see "macOS Intel (x86_64) —
+self-hosted runner" under "Build matrix".
 
 If something here is wrong or unclear, fix it in the same PR as the
 release that revealed the gap. This doc is the authoritative checklist.
@@ -240,7 +241,7 @@ Four platforms in parallel:
 | Platform | Runner | Target triple |
 |----------|--------|---------------|
 | macOS arm64 | `macos-14` | `aarch64-apple-darwin` |
-| macOS x86_64 | `macos-13` | `x86_64-apple-darwin` |
+| macOS x86_64 | **self-hosted** (Intel Mac: `[self-hosted, macOS, X64]`) | `x86_64-apple-darwin` |
 | Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` |
 | Windows x86_64 | `windows-2022` | `x86_64-pc-windows-msvc` |
 
@@ -252,23 +253,55 @@ Tauri produces these bundle types per platform:
 | Linux | `.AppImage`, `.deb` |
 | Windows | `.msi`, NSIS `-setup.exe` |
 
-> **⚠️ `macos-13` (Intel) is being retired by GitHub.** Symptom: the
-> `macos-x86_64` job sits on *"Waiting for a runner to pick up this job…
-> Requested labels: macos-13"* indefinitely — it never gets a runner, so
-> the matrix leg hangs (and, because `publish` is `needs: build`, no draft
-> release is created even when the other legs are green). This is
-> infrastructure, not a build bug. **Intel-coverage options (undecided as
-> of 2026-05-25, currently building arm64-only):**
-> - **arm64-only** — drop the `macos-13` row; ship Apple Silicon only.
-> - **decoupled x86_64** — add a separate `x86_64-apple-darwin` job that
->   *cross-compiles* on a `macos-14` (Apple-Silicon) runner. `fail-fast:
->   false` keeps an x86 failure from sinking arm64. Needs an x86_64
->   `tesseract` sidecar (Rosetta + x86 Homebrew) for the OCR externalBin.
-> - **universal2** — one `macos-14` job builds `universal-apple-darwin`
->   (arm64 + x86_64 lipo'd into one `.dmg`). Simplest for users but
->   **couples** arm64's success to the x86 slice: if x86 fails, *no* Mac
->   DMG is produced at all. Also needs the x86 `tesseract` + a fat
->   `pdfium` (`lipo` the two arch dylibs).
+### macOS Intel (x86_64) — self-hosted runner
+
+GitHub's hosted `macos-13` Intel runner is **retired** — the job sat on
+*"Waiting for a runner to pick up this job… Requested labels: macos-13"*
+forever and, because `publish` was `needs: build`, blocked the whole release
+even when the other legs were green. Cross-compiling x86_64 on a `macos-14`
+(arm64) runner proved too fragile (cross-only link blockers a native build
+never hits: llama.cpp `cpp-httplib`→OpenSSL, lance AVX-512). So Intel coverage
+comes from a **native self-hosted runner** — a real Intel Mac registered with
+labels `self-hosted, macOS, X64`. It built and ran clean from HEAD on
+2026-06-20 (signed `x64.dmg`, dyld-verified).
+
+**One-time registration** (on the Intel Mac):
+
+1. Repo → **Settings → Actions → Runners → New self-hosted runner →
+   macOS → x64**. GitHub shows a download + `./config.sh` command carrying a
+   one-time registration token.
+2. Run those commands. Accept the default labels (auto-adds
+   `self-hosted` / `macOS` / `X64`). **Do not** install the launchd service —
+   this is the manual-start model.
+
+The runner inherits the Mac's existing toolchain (rustup, Homebrew
+`lld`/`protobuf`/`cmake`, Node, Xcode CLT). The workflow's macOS-deps step
+sources Homebrew's `shellenv` and pins `HOMEBREW_NO_INSTALL_CLEANUP`, so it
+works from `./run.sh`'s minimal environment too.
+
+**Per-release (manual-start):**
+
+- **Before** pushing the `desktop-v*` tag, start the runner on the Intel Mac:
+  ```sh
+  cd ~/actions-runner && ./run.sh        # leave running until the build finishes
+  ```
+  Confirm it shows **Idle** under Settings → Actions → Runners, then tag.
+- Forgot to start it? The `macos-x86_64` leg queues *"Waiting for a runner"* —
+  start `./run.sh` and it picks up immediately. Or cancel just that job in the
+  Actions UI; `publish` (now `if: !cancelled()`) still ships the arm64 + Linux
+  artifacts.
+- When the Intel build finishes, `Ctrl-C` the runner.
+
+**Why manual, not a service:** avoids an always-on runner process + its
+security surface (the workflow only triggers on `desktop-v*` tags / dispatch,
+never PRs, so the surface is already narrow). Switch later with
+`./svc.sh install && ./svc.sh start` if the start-before-tag step becomes toil.
+
+**Alternatives considered (rejected):** *universal2* (one `macos-14` job builds
+`universal-apple-darwin`, arm64 + x86_64 lipo'd into one `.dmg`) couples arm64's
+success to the x86 slice — if x86 fails, *no* Mac DMG is produced; *cross-compile
+on arm64* hits the cross-only link blockers above. A native self-hosted build
+sidesteps both.
 
 Linux runners need: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`,
 `librsvg2-dev`, `patchelf`, `libfuse2`, `tesseract-ocr`, `mold`,

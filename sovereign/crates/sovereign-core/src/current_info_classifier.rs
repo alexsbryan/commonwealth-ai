@@ -157,6 +157,22 @@ impl CurrentInfoClassifier {
         })
     }
 
+    /// Parse-only: the exemplar texts this classifier embeds (`current` then
+    /// `evergreen`), WITHOUT running inference. SSOT for the boot-cache
+    /// freshness gate — shares the exact `CurrentInfoExamplesFile` parse the
+    /// `embed_query_cached` (`q:`) centroid path uses, so the gate can never
+    /// drift from what actually gets cached.
+    pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {
+        let parsed: CurrentInfoExamplesFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse current-info examples: {e}")))?;
+        Ok(parsed
+            .current
+            .examples
+            .into_iter()
+            .chain(parsed.evergreen.examples)
+            .collect())
+    }
+
     /// Override the default thresholds. Useful for tests + tuning.
     pub fn with_thresholds(mut self, min_current_sim: f32, min_margin: f32) -> Self {
         self.min_current_sim = min_current_sim;

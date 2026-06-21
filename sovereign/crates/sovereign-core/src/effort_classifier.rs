@@ -136,6 +136,21 @@ impl EffortClassifier {
         })
     }
 
+    /// Parse-only: the exemplar texts this classifier embeds (`high` then
+    /// `low`), WITHOUT running inference. SSOT for the boot-cache freshness
+    /// gate. NB effort embeds via the UNPREFIXED `embed_cached` (`d:` space) —
+    /// the gate keys these under `d`, not `q`, matching `compute_centroid`.
+    pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {
+        let parsed: EffortExamplesFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse effort examples: {e}")))?;
+        Ok(parsed
+            .high
+            .examples
+            .into_iter()
+            .chain(parsed.low.examples)
+            .collect())
+    }
+
     /// Override the default gates. Useful for tuning + tests.
     pub fn with_thresholds(mut self, min_high_sim: f32, min_margin: f32) -> Self {
         self.min_high_sim = min_high_sim;
