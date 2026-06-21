@@ -215,6 +215,7 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
             embed_model: Some(embed()),
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         },
         addresses: vec!["192.168.1.10:9742".parse().unwrap()],
     }

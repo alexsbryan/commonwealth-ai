@@ -51,6 +51,7 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         },
         addresses: vec!["192.168.1.1:9742".parse::<SocketAddr>().unwrap()],
     }

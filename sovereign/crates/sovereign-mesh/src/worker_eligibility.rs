@@ -69,6 +69,29 @@ impl Default for EligibilityConfig {
     }
 }
 
+/// Stricter settle for shared-model anchors: holding a shard of the shared
+/// model is a commitment, not casual help. An anchor must prove ~5 min of
+/// stability before we re-plan the layer-split across it (a freshly-joined
+/// anchor that's about to leave again would thrash the whole cluster).
+pub const ANCHOR_SETTLE_SECS: u64 = 300;
+/// Quarantine an anchor on its FIRST flap. A casual RPC worker that crashes is
+/// merely unhelpful; a flapping *anchor* can `GGML_ABORT` the entire host
+/// mid-decode, so one strike is enough to exclude it until it recovers.
+pub const ANCHOR_FLAP_THRESHOLD: u32 = 1;
+
+impl EligibilityConfig {
+    /// The stricter eligibility profile for shared-model anchors. Same flap
+    /// window + cooldown backoff as the casual-worker [`default`](Self::default),
+    /// but a longer settle and a one-strike flap threshold (see the consts).
+    pub fn anchor() -> Self {
+        Self {
+            settle: Duration::from_secs(ANCHOR_SETTLE_SECS),
+            flap_threshold: ANCHOR_FLAP_THRESHOLD,
+            ..Self::default()
+        }
+    }
+}
+
 impl EligibilityConfig {
     /// Override any field from the environment; otherwise the robust default.
     pub fn from_env() -> Self {
@@ -340,6 +363,19 @@ mod tests {
         } else {
             vec![s.to_string()]
         }
+    }
+
+    #[test]
+    fn anchor_profile_is_stricter_than_default() {
+        let a = EligibilityConfig::anchor();
+        let d = EligibilityConfig::default();
+        assert_eq!(a.settle, Duration::from_secs(ANCHOR_SETTLE_SECS));
+        assert!(a.settle > d.settle, "anchor settles slower");
+        assert_eq!(a.flap_threshold, 1, "anchor quarantines on first flap");
+        assert!(a.flap_threshold < d.flap_threshold);
+        // Only settle + flap threshold tighten; the backoff knobs are unchanged.
+        assert_eq!(a.flap_window, d.flap_window);
+        assert_eq!(a.max_cooldown, d.max_cooldown);
     }
 
     #[test]

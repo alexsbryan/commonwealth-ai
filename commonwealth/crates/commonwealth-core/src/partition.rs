@@ -32,6 +32,25 @@ pub fn is_leader(self_id: NodeId, online_nodes: &[NodeId]) -> bool {
     elect_leader(online_nodes) == Some(self_id)
 }
 
+/// Decide whether `self_id` runs the shared-model HOST role, given an optional
+/// operator-designated pin (`[shared_model] host_node_id`) and the current
+/// eligible-anchor set.
+///
+/// A pin wins ONLY while it is actually an eligible anchor — so when the pinned
+/// host drops out, the role fails over to the elected leader (min `NodeId`) of
+/// the survivors instead of stranding the cluster. With no pin (or a pin that
+/// isn't currently eligible) it is pure election. Like [`elect_leader`] it is
+/// pure-functional over the gossiped set, so every anchor converges on the same
+/// host without coordination — the property that makes leaderless failover safe
+/// (a minority that can't see the pin still can't distribute: the quorum gate
+/// keeps it in "forming").
+pub fn should_host(self_id: NodeId, pin: Option<NodeId>, eligible_anchors: &[NodeId]) -> bool {
+    match pin {
+        Some(p) if eligible_anchors.contains(&p) => self_id == p,
+        _ => is_leader(self_id, eligible_anchors),
+    }
+}
+
 /// Highest-random-weight (rendezvous) owner assignment for `key`.
 ///
 /// Returns the candidate node that owns `key`. When a candidate is added
@@ -88,6 +107,40 @@ mod tests {
         assert!(is_leader(NodeId::from_u128(1), &n));
         assert!(!is_leader(NodeId::from_u128(3), &n));
         assert!(!is_leader(NodeId::from_u128(5), &n));
+    }
+
+    #[test]
+    fn should_host_pin_wins_when_eligible() {
+        // The operator pinned node 5 as host. While 5 is an eligible anchor it
+        // hosts — even though 2 is the lower NodeId that election would pick.
+        let anchors = nodes(&[2, 5, 8]);
+        let pin = Some(NodeId::from_u128(5));
+        assert!(should_host(NodeId::from_u128(5), pin, &anchors), "pin hosts");
+        assert!(!should_host(NodeId::from_u128(2), pin, &anchors), "low id yields to pin");
+        assert!(!should_host(NodeId::from_u128(8), pin, &anchors));
+    }
+
+    #[test]
+    fn should_host_fails_over_to_election_when_pin_absent() {
+        // The pinned node 5 dropped out (not in the eligible set) → the role
+        // fails over to the elected leader (min) of the survivors, here node 2.
+        let survivors = nodes(&[2, 8]);
+        let pin = Some(NodeId::from_u128(5));
+        assert!(should_host(NodeId::from_u128(2), pin, &survivors), "elected leader hosts");
+        assert!(!should_host(NodeId::from_u128(8), pin, &survivors));
+    }
+
+    #[test]
+    fn should_host_pure_election_when_no_pin() {
+        let anchors = nodes(&[2, 8]);
+        assert!(should_host(NodeId::from_u128(2), None, &anchors));
+        assert!(!should_host(NodeId::from_u128(8), None, &anchors));
+    }
+
+    #[test]
+    fn should_host_nobody_when_no_anchors() {
+        assert!(!should_host(NodeId::from_u128(2), None, &[]));
+        assert!(!should_host(NodeId::from_u128(2), Some(NodeId::from_u128(2)), &[]));
     }
 
     #[test]

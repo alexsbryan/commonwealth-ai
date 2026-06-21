@@ -420,7 +420,13 @@ pub(super) fn apply_shared_model_role_to_env(
         }
     }
     let serve = matches!(cfg.role, SharedModelRole::Anchor | SharedModelRole::Host);
-    let discover = matches!(cfg.role, SharedModelRole::Host);
+    // Host failover: EVERY anchor spawns the discovery loop, not just the
+    // statically-designated host — so any anchor can take over the host role the
+    // instant it is elected leader (`partition::should_host`). The loop stays
+    // dormant (it discovers + keeps worker eligibility warm but does NOT
+    // distribute) until this node is the host. So "discover" now means
+    // "participates in the host election", which every anchor does.
+    let discover = serve;
     if serve && std::env::var_os("SOVEREIGN_RPC_SERVE").is_none() {
         std::env::set_var("SOVEREIGN_RPC_SERVE", DEFAULT_RPC_BIND);
         tracing::info!(
@@ -429,9 +435,38 @@ pub(super) fn apply_shared_model_role_to_env(
             "shared-model: anchor role → SOVEREIGN_RPC_SERVE"
         );
     }
+    // Anchor-tier worker eligibility: a host treats its fellow anchors with the
+    // stricter `EligibilityConfig::anchor` profile (slower settle, quarantine on
+    // first flap), since a flapping anchor can GGML_ABORT the host mid-decode.
+    // Set the env knobs the eligibility gate reads; an explicit env always wins.
+    // Applied for any serving role so a future failover host (an anchor that
+    // becomes leader) already carries the right profile.
+    if serve {
+        if std::env::var_os("SOVEREIGN_RPC_WORKER_SETTLE_SECS").is_none() {
+            std::env::set_var(
+                "SOVEREIGN_RPC_WORKER_SETTLE_SECS",
+                sovereign_mesh::worker_eligibility::ANCHOR_SETTLE_SECS.to_string(),
+            );
+        }
+        if std::env::var_os("SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD").is_none() {
+            std::env::set_var(
+                "SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD",
+                sovereign_mesh::worker_eligibility::ANCHOR_FLAP_THRESHOLD.to_string(),
+            );
+        }
+    }
     if discover && std::env::var_os("SOVEREIGN_RPC_DISCOVER").is_none() {
         std::env::set_var("SOVEREIGN_RPC_DISCOVER", "1");
-        tracing::info!("shared-model: host role → SOVEREIGN_RPC_DISCOVER=1");
+        tracing::info!(role = ?cfg.role, "shared-model: anchor spawns the host-election discovery loop");
+    }
+    // The operator's optional designated-host pin. Published so every anchor's
+    // `should_host` check honours it while it's an eligible anchor, and fails
+    // over to election (min NodeId) when it drops out.
+    if let Some(pin) = cfg.host_node_id.as_deref() {
+        if !pin.is_empty() && std::env::var_os("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID").is_none() {
+            std::env::set_var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID", pin);
+            tracing::info!(pin, "shared-model: designated-host pin published");
+        }
     }
     // The host enforces the quorum + pooled-memory gate before distributing, so it
     // carries those knobs into the RPC env contract too (env wins if already set).
@@ -480,6 +515,12 @@ pub(super) fn spawn_rpc_worker_discovery(
             let mut current: Vec<String> = Vec::new();
             let mut stable_since = std::time::Instant::now();
             const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
+            // Designated-host pin (parsed once). When present + eligible it wins;
+            // otherwise the host role is the elected leader of the anchors.
+            let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
+                .ok()
+                .and_then(|s| commonwealth_core::ids::NodeId::from_hex(&s));
+            let mut was_host = false;
             loop {
                 // Raw discovery → eligibility gate → only PROVEN-STABLE workers
                 // reach the provider + the reload decision. A flapping worker stays
@@ -502,11 +543,55 @@ pub(super) fn spawn_rpc_worker_discovery(
                     current = workers.clone();
                     stable_since = std::time::Instant::now();
                 }
+                // Host-role decision, re-evaluated every tick over gossiped
+                // membership — this is the failover mechanism. A non-host anchor
+                // still discovers + keeps its eligibility warm above, but does NOT
+                // distribute below, so at most the elected leader assembles the
+                // split. `should_host` is deterministic over the anchor set, so
+                // all anchors converge without coordination; a minority that can't
+                // see quorum still won't load (the quorum gate holds it "forming").
+                let anchors = daemon_for_disco.eligible_anchors().await;
+                let am_host = match daemon_for_disco.self_node_id().await {
+                    Some(me) => commonwealth_core::partition::should_host(me, host_pin, &anchors),
+                    None => false, // identity not ready yet → don't host
+                };
+                if am_host != was_host {
+                    tracing::info!(
+                        am_host,
+                        anchors = anchors.len(),
+                        pinned = host_pin.is_some(),
+                        "shared-model: host-role transition"
+                    );
+                    // Publish for `/v1/mesh/status` so the mesh soak can assert
+                    // the no-split-brain invariant (≤1 host across the fleet).
+                    sovereign_mesh::mesh_http::set_shared_model_host(am_host);
+                    was_host = am_host;
+                }
+
                 // Reload when the worker set CHANGES (grow or shrink) vs what's
                 // loaded, once it's been stable briefly. A shrink prunes the dead
                 // worker's device on reload (live_device_list_if_pruning_needed).
                 let changed = current != last_loaded;
-                if changed && stable_since.elapsed() >= STABLE {
+                // Shrink-fast-prune: if a worker the resident primary is loaded
+                // ACROSS dropped out of the eligible set, reload IMMEDIATELY — the
+                // dead worker must be pruned (live_device_list_if_pruning_needed)
+                // before it GGML_ABORTs the host mid-compute, and survivors' warm
+                // caches make the re-plan fast. A pure grow (new workers, all loaded
+                // ones still present) keeps the anti-thrash STABLE debounce.
+                let shrank = last_loaded.iter().any(|w| !current.contains(w));
+                // Only the host distributes. A non-host anchor keeps its worker
+                // discovery + eligibility warm (above) so that, the moment it's
+                // elected host, `changed` vs its empty `last_loaded` triggers an
+                // immediate assemble on the already-settled survivors.
+                if am_host && changed && (shrank || stable_since.elapsed() >= STABLE) {
+                    if shrank {
+                        let lost: Vec<&String> =
+                            last_loaded.iter().filter(|w| !current.contains(*w)).collect();
+                        tracing::info!(
+                            ?lost,
+                            "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
+                        );
+                    }
                     match &engine_for_reload {
                         Some(engine) => {
                             tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");

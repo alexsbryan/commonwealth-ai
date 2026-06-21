@@ -86,6 +86,33 @@ pub struct NodeCapabilities {
     /// behavior, which was wrong but at least never worse than now.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_in_flight: Option<u32>,
+
+    /// Shared-model anchor-tier profile, when this node participates in a
+    /// distributed shared primary (`[shared_model] role = anchor | host`).
+    /// `None` for consumers, storage-only nodes, and older peers (the serde
+    /// default). Lets the host's discovery + quorum logic distinguish stable
+    /// anchors (which hold the RPC layer-split) from casual peers, and plan
+    /// the pooled-memory gate against gossiped anchor VRAM rather than only
+    /// live ggml-device VRAM. See `docs/RUN_GLM_5_2_ON_THE_MESH.md`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<AnchorProfile>,
+}
+
+/// A node's shared-model anchor-tier advertisement. Gossiped so the host (and
+/// any anchor that may become host on failover) can build the eligible-anchor
+/// set and sum pooled VRAM without probing every peer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnchorProfile {
+    /// True when this node is configured to hold a shard of the shared model
+    /// (role anchor or host). Discovery filters RPC-worker candidates on this
+    /// so a casual peer that happens to RPC-serve never joins the split.
+    pub can_anchor: bool,
+    /// Total GPU VRAM (GB) this node can lend to the layer-split — the sum of
+    /// its device VRAM. `0` for CPU-only anchors.
+    pub vram_gb: u32,
+    /// The shared-model id this anchor is configured to hold, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_resident: Option<String>,
 }
 
 fn default_inference_availability() -> f32 {
@@ -327,6 +354,7 @@ mod tests {
             }),
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
@@ -373,6 +401,38 @@ mod tests {
             !json.contains("current_in_flight"),
             "current_in_flight: None must be skipped: {json}"
         );
+    }
+
+    #[test]
+    fn anchor_defaults_to_none_when_absent() {
+        // Old peers (pre-field) don't include `anchor`; must deserialize to
+        // None so discovery treats them as non-anchors until they upgrade.
+        let caps: NodeCapabilities =
+            serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
+        assert!(caps.anchor.is_none(), "absent anchor must default to None");
+    }
+
+    #[test]
+    fn anchor_round_trips() {
+        let mut caps: NodeCapabilities =
+            serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
+        caps.anchor = Some(AnchorProfile {
+            can_anchor: true,
+            vram_gb: 128,
+            model_resident: Some("glm-5.2".to_string()),
+        });
+        let json = serde_json::to_string(&caps).unwrap();
+        let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.anchor, caps.anchor, "anchor profile must survive JSON");
+        assert_eq!(back.anchor.unwrap().vram_gb, 128);
+    }
+
+    #[test]
+    fn anchor_none_skipped_on_serialize() {
+        let caps: NodeCapabilities =
+            serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
+        let json = serde_json::to_string(&caps).unwrap();
+        assert!(!json.contains("\"anchor\""), "anchor: None must be skipped: {json}");
     }
 
     #[test]

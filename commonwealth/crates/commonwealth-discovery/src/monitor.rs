@@ -84,6 +84,7 @@ impl ResourceMonitor {
                 embed_model: None,
                 benchmark: None,
                 current_in_flight: None,
+                anchor: None,
             },
             version: 0,
         };

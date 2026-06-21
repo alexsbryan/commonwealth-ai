@@ -22,6 +22,20 @@ macro_rules! define_id {
             pub fn as_bytes(&self) -> &[u8; 16] {
                 &self.0
             }
+
+            /// Full 32-char lowercase hex of all 16 bytes — the wire form used
+            /// for `X-Node-Id` and `[shared_model] host_node_id`. (NOT the
+            /// truncated `Display`/`Debug` form, which is for humans.)
+            pub fn to_hex(&self) -> String {
+                hex::encode(self.0)
+            }
+
+            /// Inverse of [`to_hex`](Self::to_hex). `None` on malformed input
+            /// (non-hex, or not exactly 16 bytes).
+            pub fn from_hex(s: &str) -> Option<Self> {
+                let arr: [u8; 16] = hex::decode(s.trim()).ok()?.try_into().ok()?;
+                Some(Self(arr))
+            }
         }
 
         impl fmt::Display for $name {
@@ -117,6 +131,23 @@ mod tests {
         let json = serde_json::to_string(&id).unwrap();
         let back: MeshId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, back);
+    }
+
+    #[test]
+    fn hex_round_trips_full_16_bytes() {
+        let id = NodeId::generate();
+        let hex = id.to_hex();
+        assert_eq!(hex.len(), 32, "full 16-byte hex, not the short Display form");
+        assert_eq!(NodeId::from_hex(&hex), Some(id));
+        // Tolerates surrounding whitespace (config values often have it).
+        assert_eq!(NodeId::from_hex(&format!("  {hex}\n")), Some(id));
+    }
+
+    #[test]
+    fn from_hex_rejects_malformed() {
+        assert_eq!(NodeId::from_hex("not-hex"), None);
+        assert_eq!(NodeId::from_hex("abcd"), None, "wrong length");
+        assert_eq!(NodeId::from_hex(""), None);
     }
 
     #[test]

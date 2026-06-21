@@ -28,6 +28,11 @@ pub struct NodeStatusView {
     pub members_total: usize,
     #[serde(default)]
     pub members: Vec<MemberView>,
+    /// True when the polled node is the current shared-model host. Drives the
+    /// `shared_model_single_host` invariant (no split-brain). Absent / `false`
+    /// on non-shared-model meshes, where the invariant is then a no-op.
+    #[serde(default)]
+    pub shared_model_host: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -121,6 +126,26 @@ pub fn evaluate_invariants(
                 }
             }
         }
+    }
+
+    // Shared-model no-split-brain: at most one reachable node may report itself
+    // as the host. Two hosts means a partition/convergence bug let the RPC
+    // layer-split assemble twice — `partition::should_host` must elect exactly
+    // one. A non-shared-model mesh reports `false` everywhere → 0 hosts → no
+    // violation, so this is inert unless the fleet is actually running a shared
+    // model. This is the HTTP-observable half of the failover invariant (the
+    // "a new host appears after the old one drops" half is a scenario assertion
+    // in the soak script, driven by the `host-role transition` log + this flag).
+    let hosts: Vec<&String> = reachable
+        .iter()
+        .filter(|(_, v)| v.shared_model_host)
+        .map(|(addr, _)| *addr)
+        .collect();
+    if hosts.len() > 1 {
+        violations.push(Violation {
+            invariant: "shared_model_single_host",
+            detail: format!("multiple shared-model hosts reachable: {hosts:?}"),
+        });
     }
 
     // Liveness: every reachable node (identified by its own self-record id) must
@@ -278,6 +303,7 @@ mod tests {
                     is_self: *slf,
                 })
                 .collect(),
+            shared_model_host: false,
         }
     }
     fn snap(addr: &str, v: NodeStatusView) -> NodeSnapshot {
@@ -296,6 +322,29 @@ mod tests {
         let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
         let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
         assert!(evaluate_invariants(&[a, b], None).is_empty());
+    }
+
+    #[test]
+    fn two_shared_model_hosts_flag_split_brain() {
+        // Converged member set on both nodes, but BOTH claim the host role.
+        let mut va = view(&[("n1", "online", true), ("n2", "online", false)], 2);
+        va.shared_model_host = true;
+        let mut vb = view(&[("n1", "online", false), ("n2", "online", true)], 2);
+        vb.shared_model_host = true;
+        let vs = evaluate_invariants(&[snap("a", va), snap("b", vb)], None);
+        assert!(
+            vs.iter().any(|v| v.invariant == "shared_model_single_host"),
+            "two hosts must flag split-brain: {vs:?}"
+        );
+    }
+
+    #[test]
+    fn single_shared_model_host_is_clean() {
+        let mut va = view(&[("n1", "online", true), ("n2", "online", false)], 2);
+        va.shared_model_host = true; // a hosts
+        let vb = view(&[("n1", "online", false), ("n2", "online", true)], 2); // b does not
+        let vs = evaluate_invariants(&[snap("a", va), snap("b", vb)], None);
+        assert!(vs.is_empty(), "exactly one host is healthy: {vs:?}");
     }
 
     #[test]

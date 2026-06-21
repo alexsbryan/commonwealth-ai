@@ -134,6 +134,29 @@ pub struct StatusResponse {
     /// See `crate::worker_eligibility`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub rpc_workers: Vec<crate::worker_eligibility::WorkerStatusView>,
+    /// True when THIS node is the current shared-model host (it assembles +
+    /// distributes the RPC layer-split). Published by the daemon's discovery
+    /// loop via [`set_shared_model_host`]; lets a mesh soak assert the
+    /// no-split-brain invariant — at most one host across the fleet.
+    #[serde(default)]
+    pub shared_model_host: bool,
+}
+
+/// Runtime "am I the shared-model host" flag. Published by the daemon's
+/// RPC-discovery loop (`daemon_cmd::bootstrap`) each tick the elected host role
+/// changes, and surfaced on `GET /v1/mesh/status` so the mesh soak can assert
+/// at-most-one-host. A process-global atomic — there is exactly one daemon per
+/// process and one host role per daemon.
+static SHARED_MODEL_HOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Publish whether this node is currently the shared-model host.
+pub fn set_shared_model_host(is_host: bool) {
+    SHARED_MODEL_HOST.store(is_host, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the published shared-model host flag (for `/v1/mesh/status`).
+pub fn is_shared_model_host() -> bool {
+    SHARED_MODEL_HOST.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -197,6 +220,7 @@ async fn mesh_status(
                     join_link: None,
                     client_token: daemon.running_client_token().await,
                     rpc_workers,
+                    shared_model_host: is_shared_model_host(),
                 })
                 .unwrap(),
             ),
@@ -243,6 +267,7 @@ async fn mesh_status(
                 join_link,
                 client_token: daemon.running_client_token().await,
                 rpc_workers,
+                shared_model_host: is_shared_model_host(),
             })
             .unwrap(),
         ),
