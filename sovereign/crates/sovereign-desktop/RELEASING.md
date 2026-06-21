@@ -283,7 +283,7 @@ works from `./run.sh`'s minimal environment too.
 
 - **Before** pushing the `desktop-v*` tag, start the runner on the Intel Mac:
   ```sh
-  cd ~/actions-runner && ./run.sh        # leave running until the build finishes
+  cd ~/dev/actions-runner && ./run.sh    # leave running until the build finishes
   ```
   Confirm it shows **Idle** under Settings → Actions → Runners, then tag.
 - Forgot to start it? The `macos-x86_64` leg queues *"Waiting for a runner"* —

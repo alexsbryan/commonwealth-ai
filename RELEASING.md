@@ -61,12 +61,17 @@ platform (`cargo build --release -p sovereign-cli -p sovereign-cli-daemon
 `.sha256`, and uploads them to a **draft** release named `cli-v$v` along with a
 combined `SHA256SUMS`.
 
-**Platform matrix:** Linux x86_64 is the only leg enabled on a tag today.
-macOS arm64 is ready to uncomment in `cli-release.yml` once a local
+**Platform matrix:** Linux x86_64 and **native macOS Intel (x86_64)** are
+enabled on a tag. Intel builds on the **self-hosted Intel-Mac runner** (labels
+`self-hosted, macOS, X64`) — the same box + runner the desktop release uses, so
+**start `./run.sh` before tagging** (manual-start). Runner setup lives in the
+desktop [`RELEASING.md`](sovereign/crates/sovereign-desktop/RELEASING.md) under
+*"macOS Intel (x86_64) — self-hosted runner"*. The `release` job is decoupled
+(`if: !cancelled()`), so a down runner can't block the Linux tarball. macOS
+arm64 is ready to uncomment in `cli-release.yml` once a local
 `cargo build --release --target aarch64-apple-darwin` of the three binaries is
-validated — this mirrors the desktop workflow's hard-won lesson that pushing
-untested macOS legs (especially the retired Intel `macos-13` runner) hangs and
-drains the Actions budget.
+validated. (GitHub's hosted Intel `macos-13` runner stays avoided — it hangs on
+"Waiting for a runner" and drains the Actions budget.)
 
 ### 3. Promote
 
