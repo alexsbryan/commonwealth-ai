@@ -164,12 +164,10 @@ fn main() -> ExitCode {
             let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
-            // If `SOVEREIGN_USE_SUPERVISOR=1`, try to bring the daemon
-            // up as a child process and switch to Attach against it.
-            // Returns the original mode + None when the feature is off
-            // or supervision fails to come up healthy. This is the
-            // PR-2 dogfood path; PR-3 will flip the default. See
-            // supervisor_setup.rs.
+            // When supervised mode is opted into (`SOVEREIGN_USE_SUPERVISOR=1`),
+            // bring the daemon up as a supervised child and switch to Attach
+            // against it. Returns the original mode + None when not supervised
+            // or startup fails (→ in-process fall-back). See supervisor_setup.rs.
             let (bootstrap_mode, supervisor) = tauri::async_runtime::block_on(
                 supervisor_setup::maybe_start(bootstrap_mode, handle.clone()),
             );
@@ -507,7 +505,6 @@ fn main() -> ExitCode {
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,
             mesh_commands::mesh_get_state,
-            mesh_commands::get_shared_model_status,
             mesh_commands::mesh_is_running,
             mesh_commands::mesh_leave,
             mesh_commands::mesh_rotate_invite,

@@ -162,6 +162,40 @@ pub struct SharedModelSection {
     /// only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_pooled_gb: Option<f64>,
+    /// How anchors fetch their shard of the model — the host emits this as
+    /// `SOVEREIGN_RPC_SHARD_FETCH`. Defaults to [`ShardFetch::Ranges`] (each
+    /// node pulls only its slice), which is required whenever no single node
+    /// can hold the whole GGUF — the desktop-fleet case (e.g. a 440 GB model on
+    /// 64 GB nodes).
+    #[serde(default)]
+    pub shard_fetch: ShardFetch,
+}
+
+/// How a shared-model anchor obtains its shard of the GGUF.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShardFetch {
+    /// Range-GET only this node's tensors (`O(model/N)` disk). Required when no
+    /// node can hold the whole GGUF; the desktop-fleet default. NOTE: this is
+    /// the least-validated distributed path — built + unit-tested, not yet
+    /// proven cross-machine at scale.
+    #[default]
+    Ranges,
+    /// Fetch the whole GGUF to disk, then warm this node's shard from it. Needs
+    /// full-model disk per anchor; simpler, and the path closest to what's been
+    /// validated cross-machine.
+    Whole,
+}
+
+impl ShardFetch {
+    /// The `SOVEREIGN_RPC_SHARD_FETCH` value the host advertises to the RPC
+    /// warm/load path.
+    pub fn as_env(self) -> &'static str {
+        match self {
+            ShardFetch::Ranges => "ranges",
+            ShardFetch::Whole => "whole",
+        }
+    }
 }
 
 /// A node's role in a shared-model cluster (`[shared_model] role`). The
