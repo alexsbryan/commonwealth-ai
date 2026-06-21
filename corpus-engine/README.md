@@ -157,7 +157,7 @@ overlap_chars = 256
 
 [index]
 embedding_model = "qwen3-embedding-0.6b"
-embedding_dimensions = 768
+embedding_dimensions = 1024
 ```
 
 Built-in recipes ship for Wikipedia, OpenAlex, Stack Exchange, Project Gutenberg, the Stanford Encyclopedia of Philosophy, and CRS Reports. Recipe TOML files live in the [`sovereign-recipes`](../sovereign-recipes) repository and are consumed via `RecipeRegistry`.
@@ -250,7 +250,7 @@ The `_corpus_meta.json` file is the authoritative source for corpus metadata. Fi
 
 Every index records its embedding model and dimensions in `_corpus_meta.json`. `CorpusEngine::open_index()` validates that an index was built with the same model as the engine is configured for, and returns `Error::IncompatibleEmbedding` on mismatch. This prevents you from searching an index built with one model using a query vector from a different model.
 
-All indexes in a shared directory must use the same embedding model. The default is `qwen3-embedding-0.6b` (768 dimensions).
+All indexes in a shared directory must use the same embedding model. The default is `qwen3-embedding-0.6b` (1024 dimensions).
 
 ## Safety
 

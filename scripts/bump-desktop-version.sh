@@ -171,6 +171,39 @@ echo
 # ── Verify with the existing consistency checker ──
 "$SCRIPT_DIR/check-desktop-version.sh" "$NEW_VERSION"
 
+# ── Router embed cache: regenerate if stale ──────────────────────────
+# The desktop ships sovereign/router/router-embed-cache.json baked into the
+# binary so first launch HITS the cache instead of re-embedding ~310 router
+# exemplars (minutes on a CPU-only embed slot). It's a pure function of the
+# exemplars × the prescribed embed model, so it only needs regenerating when
+# one of those changed. `router-cache check` is a no-inference tripwire
+# (exit 3 = stale); on stale we regenerate so this release commit carries a
+# fresh cache. The CI gate (`cargo test -p sovereign-core --test
+# router_cache_fresh`, mirrored as a desktop-release.yml pre-flight) is the
+# backstop that fails any release shipping a stale one — so even a hand-cut
+# release can't slip through.
+echo
+echo "Checking router embed cache freshness (sovereign router-cache check)..."
+set +e
+( cd "$REPO_ROOT" && cargo run --quiet --release -p sovereign-cli-llm -- router-cache check )
+ROUTER_CACHE_RC=$?
+set -e
+case "$ROUTER_CACHE_RC" in
+    0) ;;  # fresh — nothing to do
+    3)
+        echo "Router cache is STALE — regenerating (one-time embed; minutes on a CPU-only embed slot)..."
+        ( cd "$REPO_ROOT" && cargo run --quiet --release -p sovereign-cli-llm -- router-cache rebuild ) || {
+            echo "bump-desktop-version: router-cache rebuild failed — fix before releasing." >&2
+            exit 1
+        }
+        echo "  → commit sovereign/router/router-embed-cache.json with this release (added to the git-add line below)."
+        ;;
+    *)
+        echo "bump-desktop-version: router-cache check errored (exit $ROUTER_CACHE_RC) — fix before releasing." >&2
+        exit 1
+        ;;
+esac
+
 # ── Suggested follow-up ──
 cat <<EOF
 
@@ -178,7 +211,8 @@ Next:
   git diff                                                              # review
   git add Cargo.toml \\
           sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \\
-          sovereign/crates/sovereign-desktop/package.json
+          sovereign/crates/sovereign-desktop/package.json \\
+          sovereign/router/router-embed-cache.json
   git commit -m 'chore(desktop): release v$NEW_VERSION'
   git tag desktop-v$NEW_VERSION
   git push origin main desktop-v$NEW_VERSION                            # kicks CI

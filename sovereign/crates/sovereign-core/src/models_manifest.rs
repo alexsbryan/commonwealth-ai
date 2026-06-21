@@ -391,6 +391,29 @@ impl ModelsManifest {
             .map(|eq| eq.query_instruction)
             .unwrap_or_default()
     }
+
+    /// The canonical prescribed embed slot — the `default` profile's embed
+    /// model (Qwen3-Embedding-0.6B today). The router-embed cache is pre-built
+    /// for this model: `router-cache rebuild` loads it, and the freshness gate
+    /// fingerprints against it. Falls back to any declared embed slot if the
+    /// `default` profile somehow lacks one.
+    pub fn prescribed_embed_slot(&self) -> Option<&SlotConfig> {
+        self.profiles
+            .get("default")
+            .and_then(|p| p.embed.as_ref())
+            .or_else(|| self.profiles.values().find_map(|p| p.embed.as_ref()))
+    }
+
+    /// Quant-independent identity of the prescribed embed model — `family|hf_url`.
+    /// Stable across quantisations (every quant of one model shares its `hf_url`
+    /// repo), so the freshness gate does NOT churn on a Q4↔Q8 swap — the runtime
+    /// sentinel probe owns cross-quant matching. It changes when the embed model,
+    /// its size, or its family changes, which is exactly when the pre-built cache
+    /// must be regenerated. `None` only if the manifest declares no embed slot.
+    pub fn prescribed_embed_fingerprint(&self) -> Option<String> {
+        let s = self.prescribed_embed_slot()?;
+        Some(format!("{}|{}", s.family, s.hf_url))
+    }
 }
 
 /// Parse the TOML `family = "..."` string into a [`ModelFamily`]

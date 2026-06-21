@@ -55,9 +55,29 @@ const PROBE_TEXT: &str = "sovereign router embed cache — sentinel probe v1";
 /// needs to accept the *identical* model).
 const PROBE_MIN_COSINE: f32 = 0.98;
 
+/// The committed/baked exemplar embedding cache (`sovereign/router/
+/// router-embed-cache.json`), vendored into the binary so a shipped `.app` —
+/// or any first launch with an empty `~/.sovereign` — validates it against the
+/// live embed model (the sentinel probe) and HITS instead of re-embedding
+/// ~310 strings sequentially (minutes on a CPU-only embed slot). Regenerated
+/// offline by `sovereign router-cache rebuild` and freshness-gated in CI. The
+/// committed placeholder (empty `entries`, `built_for: null`) degrades
+/// gracefully: the probe rejects it and the classifiers embed exactly as they
+/// did before this existed.
+pub const BAKED_ROUTER_EMBED_CACHE: &str =
+    include_str!("../../../router/router-embed-cache.json");
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CacheFile {
     schema_version: u32,
+    /// Identity of the embed model these vectors were built for. Set ONLY by
+    /// the offline `router-cache rebuild` when it stamps the committed/baked
+    /// artifact — the freshness gate compares it against the prescribed model.
+    /// The runtime never stamps it (the cache is model-agnostic by design; the
+    /// sentinel probe owns runtime validity), so a user-written on-disk cache
+    /// carries `None`.
+    #[serde(default)]
+    built_for: Option<String>,
     /// `embed_query(PROBE_TEXT)` at write time.
     probe: Vec<f32>,
     /// `"q:<sha256>"` / `"d:<sha256>"` → embedding.
@@ -139,9 +159,22 @@ impl BootEmbedCache {
             }
         };
 
-        let parsed: Option<CacheFile> = std::fs::read(p)
+        // Prefer a user-written on-disk cache (it can carry exemplars from a
+        // newer release than the binary's baked copy); otherwise fall back to
+        // the binary-baked artifact so a shipped `.app` — or a cleared
+        // ~/.sovereign — still hits. Either source is validated by the SAME
+        // sentinel probe below, so a baked cache built for a different embed
+        // model is correctly discarded rather than trusted.
+        let (parsed, source): (Option<CacheFile>, &'static str) = match std::fs::read(p)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+            .and_then(|bytes| serde_json::from_slice::<CacheFile>(&bytes).ok())
+        {
+            Some(f) => (Some(f), "disk"),
+            None => (
+                serde_json::from_str::<CacheFile>(BAKED_ROUTER_EMBED_CACHE).ok(),
+                "baked",
+            ),
+        };
         match parsed {
             Some(f) if f.schema_version == SCHEMA_VERSION => {
                 let sim = cosine(&probe, &f.probe);
@@ -150,6 +183,7 @@ impl BootEmbedCache {
                         target: "router.bootstrap",
                         entries = f.entries.len(),
                         probe_cosine = sim,
+                        source,
                         "exemplar embed cache validated"
                     );
                     Self {
@@ -165,6 +199,7 @@ impl BootEmbedCache {
                     tracing::info!(
                         target: "router.bootstrap",
                         probe_cosine = sim,
+                        source,
                         "exemplar embed cache: embed model changed; discarding stale cache"
                     );
                     Self::empty(path, probe)
@@ -179,6 +214,13 @@ impl BootEmbedCache {
             }
             None => Self::empty(path, probe),
         }
+    }
+
+    /// True if the cache loaded a validated, non-empty embedding set — i.e.
+    /// this boot will HIT instead of re-embedding. The desktop checks this to
+    /// surface the `RebuildingRouterEmbeddings` phase honestly when it's false.
+    pub fn is_populated(&self) -> bool {
+        !self.entries.is_empty()
     }
 
     fn empty(path: Option<PathBuf>, probe: Vec<f32>) -> Self {
@@ -253,6 +295,10 @@ impl BootEmbedCache {
         let Some(ref p) = self.path else { return };
         let file = CacheFile {
             schema_version: SCHEMA_VERSION,
+            // Runtime caches are model-agnostic (the probe owns validity), so
+            // they carry no fingerprint. `router-cache rebuild` stamps the
+            // committed/baked artifact's `built_for` separately after this.
+            built_for: None,
             probe: self.probe.clone(),
             entries: self
                 .entries
@@ -286,6 +332,105 @@ impl BootEmbedCache {
             ),
         }
     }
+}
+
+/// Why a committed/baked router-embed cache is stale — surfaced by the
+/// freshness gate (`router-cache check`, the CI test, and the bump hook) with
+/// an actionable message. Pure: never runs inference — text-key coverage plus
+/// a model-identity fingerprint compare.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CacheStaleReason {
+    /// The artifact didn't parse, or declares a different `schema_version`.
+    Unreadable,
+    /// The cache wasn't built for the currently-prescribed embed model — or it
+    /// is the empty committed placeholder (`built_for: null`).
+    ModelMismatch {
+        committed: Option<String>,
+        expected: String,
+    },
+    /// Exemplars exist with no entry in the cache — it predates an exemplar
+    /// edit. `example` is one missing text (truncated) for context.
+    MissingCoverage {
+        missing: usize,
+        total: usize,
+        example: String,
+    },
+}
+
+impl std::fmt::Display for CacheStaleReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreadable => write!(
+                f,
+                "router-embed-cache.json is unreadable or has an unexpected schema_version"
+            ),
+            Self::ModelMismatch {
+                committed,
+                expected,
+            } => write!(
+                f,
+                "router-embed cache was built for {} but the prescribed embed model is {expected}",
+                committed.as_deref().unwrap_or("<none/placeholder>")
+            ),
+            Self::MissingCoverage {
+                missing,
+                total,
+                example,
+            } => write!(
+                f,
+                "router-embed cache is missing {missing}/{total} exemplar embeddings \
+                 (e.g. {example:?}) — exemplars changed since it was generated"
+            ),
+        }
+    }
+}
+
+/// Pure, no-inference freshness check of a committed/baked router-embed cache.
+/// Verifies (1) it was stamped for `expected_fingerprint` and (2) it carries an
+/// entry for every `(method, text)` the four boot classifiers embed. The CI
+/// gate test, the `router-cache check` verb, and the bump hook ALL call this
+/// one function, so the gate can never disagree across surfaces.
+///
+/// `specs` are `(method, text)` pairs where `method` is `"q"` (instruction-
+/// prefixed) or `"d"` (unprefixed) — build them with
+/// [`crate::router_bootstrap::exemplar_specs`].
+pub fn check_cache_fresh(
+    cache_json: &str,
+    specs: &[(&str, String)],
+    expected_fingerprint: &str,
+) -> std::result::Result<(), CacheStaleReason> {
+    let parsed: CacheFile =
+        serde_json::from_str(cache_json).map_err(|_| CacheStaleReason::Unreadable)?;
+    if parsed.schema_version != SCHEMA_VERSION {
+        return Err(CacheStaleReason::Unreadable);
+    }
+    match parsed.built_for.as_deref() {
+        Some(fp) if fp == expected_fingerprint => {}
+        other => {
+            return Err(CacheStaleReason::ModelMismatch {
+                committed: other.map(str::to_string),
+                expected: expected_fingerprint.to_string(),
+            });
+        }
+    }
+    let mut missing = 0usize;
+    let mut example = String::new();
+    for (method, text) in specs {
+        if !parsed.entries.contains_key(&key(method, text)) {
+            if missing == 0 {
+                example = text.chars().take(60).collect();
+            }
+            missing += 1;
+        }
+    }
+    if missing > 0 {
+        return Err(CacheStaleReason::MissingCoverage {
+            missing,
+            total: specs.len(),
+            example,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -337,12 +482,17 @@ mod tests {
         entries.insert(key("q", "hello"), vec![0.5f32, 0.25]);
         let f = CacheFile {
             schema_version: SCHEMA_VERSION,
+            built_for: Some("Qwen3Embedding|https://example/repo".into()),
             probe: vec![1.0, 0.0],
             entries,
         };
         let bytes = serde_json::to_vec(&f).unwrap();
         let back: CacheFile = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(back.schema_version, SCHEMA_VERSION);
+        assert_eq!(
+            back.built_for.as_deref(),
+            Some("Qwen3Embedding|https://example/repo")
+        );
         assert_eq!(back.entries.len(), 1);
         assert_eq!(back.probe, vec![1.0, 0.0]);
     }

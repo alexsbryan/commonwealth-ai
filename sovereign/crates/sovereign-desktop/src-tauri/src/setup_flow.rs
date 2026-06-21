@@ -252,6 +252,10 @@ pub async fn run(
             BootstrapPhase::AssemblingRouter => {
                 (SetupPhase::OpeningDatabase, "Tuning the router.")
             }
+            BootstrapPhase::RebuildingRouterEmbeddings => (
+                SetupPhase::OpeningDatabase,
+                "Adapting to your embedding model — one-time, this can take a few minutes.",
+            ),
             BootstrapPhase::WiringKnowledge => {
                 (SetupPhase::OpeningDatabase, "Connecting knowledge.")
             }
