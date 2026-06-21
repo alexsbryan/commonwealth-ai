@@ -1410,6 +1410,35 @@ impl EmbeddedDaemon {
     /// `ip:port` RPC endpoints. Fed to the embedded engine's worker provider so
     /// a host needs no manual `SOVEREIGN_RPC_WORKERS`. Best-effort — peers that
     /// don't respond or aren't serving a worker are simply omitted.
+    /// The current eligible shared-model anchors, by `NodeId`: online mesh
+    /// members (including self, when self is an online anchor) that advertise
+    /// `anchor.can_anchor`. This is the input to leader election for the host
+    /// role — see `commonwealth_core::partition::should_host`. Pure read of the
+    /// gossiped membership, so every anchor computes the same set and converges
+    /// on the same host without coordination.
+    pub async fn eligible_anchors(&self) -> Vec<commonwealth_core::ids::NodeId> {
+        let app_state = {
+            let state = self.state.read().await;
+            match &*state {
+                DaemonState::Running { app_state, .. } => app_state.clone(),
+                DaemonState::Stopped => return Vec::new(),
+            }
+        };
+        let mesh = app_state.inner.mesh.read().await;
+        mesh.members
+            .values()
+            .filter(|m| {
+                matches!(
+                    m.status,
+                    commonwealth_core::mesh::NodeStatus::Online
+                        | commonwealth_core::mesh::NodeStatus::Busy
+                )
+            })
+            .filter(|m| m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor))
+            .map(|m| m.node_id)
+            .collect()
+    }
+
     pub async fn discover_rpc_workers(&self) -> Vec<String> {
         let app_state = {
             let state = self.state.read().await;
@@ -1433,6 +1462,13 @@ impl EmbeddedDaemon {
                     )
                 })
                 .filter(|m| !m.addresses.is_empty())
+                // Anchor-tier gate: only pull peers that declare themselves
+                // shared-model anchors into the RPC layer-split. A peer that
+                // explicitly advertises `can_anchor = false` is a consumer and
+                // is excluded; legacy peers (no `anchor` field) get the benefit
+                // of the doubt — they're still gated downstream by whether they
+                // actually advertise an `rpc_worker` port.
+                .filter(|m| m.capabilities.anchor.as_ref().is_none_or(|a| a.can_anchor))
                 .cloned()
                 .collect()
         };

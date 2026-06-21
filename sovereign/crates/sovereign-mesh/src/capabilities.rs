@@ -37,7 +37,9 @@
 use std::sync::Arc;
 
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use commonwealth_core::capabilities::{
+    AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
+};
 use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
 use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::hardware;
@@ -123,6 +125,21 @@ pub async fn build_local_capabilities(
     }
     let available = live_available_resources(&hardware, budget_remaining);
 
+    // Shared-model anchor tier. `SOVEREIGN_RPC_SERVE` is the role-derived
+    // signal that this node lends a GPU shard to the layer-split — set by
+    // `apply_shared_model_role_to_env` for the anchor/host roles (and by CLI
+    // power users directly). Reading it here keeps the gossiped profile in
+    // lock-step with what the RPC serve path actually does, without threading
+    // `[shared_model]` config across the mesh boundary. Consumers (no serve
+    // bind) advertise `None`. VRAM is the sum of detected device VRAM.
+    let anchor = std::env::var_os("SOVEREIGN_RPC_SERVE").map(|_| AnchorProfile {
+        can_anchor: true,
+        vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
+        model_resident: std::env::var("SOVEREIGN_SHARED_MODEL_ID")
+            .ok()
+            .filter(|s| !s.is_empty()),
+    });
+
     NodeCapabilities {
         hardware,
         available,
@@ -155,6 +172,7 @@ pub async fn build_local_capabilities(
         // way the founder learns mac-peer is busy serving local
         // traffic the founder never dispatched.
         current_in_flight: app_state.and_then(|s| s.current_local_in_flight()),
+        anchor,
     }
 }
 

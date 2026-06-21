@@ -131,6 +131,7 @@ pub fn init_mesh_with_identity(
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         },
         addresses,
     };
@@ -294,6 +295,7 @@ pub fn accept_join_with_identity(
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         },
         addresses: new_node_addresses,
     };

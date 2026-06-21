@@ -56,6 +56,7 @@ fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> Member
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         },
         addresses: vec![addr],
     }

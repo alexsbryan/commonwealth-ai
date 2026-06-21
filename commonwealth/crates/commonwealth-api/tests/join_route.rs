@@ -46,6 +46,7 @@ fn mesh_with_known_key() -> (AppState, String) {
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
+        anchor: None,
     };
 
     let founder = MemberRecord {

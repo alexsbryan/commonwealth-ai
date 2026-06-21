@@ -126,6 +126,7 @@ impl SimulatedNodeBuilder {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         };
 
         let member = MemberRecord {
@@ -244,6 +245,7 @@ impl SimulatedNode {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
+            anchor: None,
         }
     }
 }

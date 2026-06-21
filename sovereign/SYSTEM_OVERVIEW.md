@@ -1140,6 +1140,26 @@ rationalization) and is consumed by sovereign-mesh and
 sovereign-inference; leader election lives in
 `commonwealth_core::partition::elect_leader`.
 
+**Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
+distributed primary stratifies into anchors (hold the RPC layer-split) + a
+consumer ring. Anchors advertise `NodeCapabilities.anchor` (`AnchorProfile{
+can_anchor, vram_gb, model_resident }`, populated env-derived in
+`build_local_capabilities`); `discover_rpc_workers` filters candidates to
+`can_anchor` so a casual peer never joins the split, and anchors get the
+stricter `worker_eligibility::EligibilityConfig::anchor` profile (settle 300s,
+quarantine on first flap). The RPC reload loop (`daemon_cmd::bootstrap`) does
+**shrink-fast-prune** — an anchor dropping out of the loaded set reloads
+immediately (prune before `GGML_ABORT`) while pure grows keep the 20s debounce.
+**Host failover:** every anchor runs the discovery loop but only the elected
+host distributes — `partition::should_host(self, host_node_id_pin, eligible_anchors)`
+(pin wins while eligible, else `elect_leader`), re-evaluated each tick over
+gossiped membership, published to `GET /v1/mesh/status` (`shared_model_host`) so
+the mesh soak asserts the `shared_model_single_host` no-split-brain invariant.
+Split-brain during convergence is bounded by the eligibility settle + the
+quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
+local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
+multi-box-only to validate (run `scripts/mesh-soak.sh`).
+
 The strong-peer-topology roadmap (latency-class hierarchy: cascade
 routing, draft-on-spoke/verify-on-hub speculation, hub queue
 discipline — each reality-checked against this codebase) is
