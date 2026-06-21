@@ -12204,6 +12204,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "commonwealth-core",
  "commonwealth-tdd",
  "commonwealth-transport",
  "corpus-engine",

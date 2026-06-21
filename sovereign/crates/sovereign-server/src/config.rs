@@ -63,14 +63,28 @@ pub struct RetrievalSection {
 pub struct ServerSection {
     #[serde(default = "default_bind")]
     pub bind: String,
-    /// Max concurrent inference turns before the host returns
-    /// `503 + Retry-After` (REST) / a busy stream frame (WS). See
-    /// `crate::busy::BusyGuard`. Clamped to >= 1.
+    /// Max concurrent inference turns — the real slot budget. Past it,
+    /// turns queue (WS) or shed with `503 + Retry-After` (REST). See
+    /// `crate::scheduler::FairScheduler`. Clamped to >= 1.
     #[serde(default = "default_max_concurrent_turns")]
     pub max_concurrent_turns: usize,
-    /// Seconds advertised in `Retry-After` when busy.
+    /// Seconds advertised in `Retry-After` / the busy stream frame on shed.
     #[serde(default = "default_retry_after_secs")]
     pub retry_after_secs: u64,
+    /// Per-origin concurrency cap — at most this many in-flight turns per
+    /// tenant/peer, so one chatty origin can't hold every slot even when
+    /// slots are free. The fairness floor. Clamped to >= 1.
+    #[serde(default = "default_max_per_user")]
+    pub max_per_user: u32,
+    /// Max *waiting* turns before the scheduler sheds rather than growing
+    /// the queue unboundedly — preserves the never-hang property.
+    #[serde(default = "default_max_queue_depth")]
+    pub max_queue_depth: usize,
+    /// Reciprocity gain: queue weight = `1.0 + k · normalize(contribution)`.
+    /// `0.0` disables reciprocity (pure FIFO within the per-origin cap);
+    /// higher values let contributors jump the line further.
+    #[serde(default = "default_reciprocity_k")]
+    pub reciprocity_k: f64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -200,6 +214,15 @@ fn default_max_concurrent_turns() -> usize {
 fn default_retry_after_secs() -> u64 {
     2
 }
+fn default_max_per_user() -> u32 {
+    1
+}
+fn default_max_queue_depth() -> usize {
+    32
+}
+fn default_reciprocity_k() -> f64 {
+    0.5
+}
 fn default_auth_mode() -> String {
     "none".to_string()
 }
@@ -220,6 +243,9 @@ fn default_server() -> ServerSection {
         bind: default_bind(),
         max_concurrent_turns: default_max_concurrent_turns(),
         retry_after_secs: default_retry_after_secs(),
+        max_per_user: default_max_per_user(),
+        max_queue_depth: default_max_queue_depth(),
+        reciprocity_k: default_reciprocity_k(),
     }
 }
 fn default_store() -> StoreSection {

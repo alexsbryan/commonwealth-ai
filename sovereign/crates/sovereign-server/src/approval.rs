@@ -88,6 +88,17 @@ pub enum ServerEvent {
         /// Wall-clock milliseconds since the turn began.
         elapsed_ms: u64,
     },
+    /// The host is at capacity and this turn is queued behind others.
+    /// Emitted on the WS path before the turn starts streaming, and again
+    /// each time it moves up the line, so the client can render "#k · ~Ns".
+    /// The turn still runs to completion once a slot frees — this is *not* a
+    /// terminal frame (unlike `StreamError`, which is the shed outcome).
+    QueuePosition {
+        /// 1-based place in line (1 = next to be served).
+        position: u32,
+        /// Rough wait estimate (ms), accounting for the parallel decode slots.
+        estimated_wait_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

@@ -6,6 +6,7 @@ pub mod config;
 pub mod contributions;
 pub mod dial_sig;
 pub mod error;
+pub mod fair_sched;
 pub mod glob;
 pub mod ids;
 pub mod knowledge;

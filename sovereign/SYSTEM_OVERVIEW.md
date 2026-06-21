@@ -869,7 +869,7 @@ capture.
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `busy.rs` concurrency guard returns `503 + Retry-After` when saturated. |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `ServerEvent::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray. Reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); scaffold pending a Tauri-mobile-toolchain build. See `docs/specs/MOBILE.md`. |
 
@@ -1339,9 +1339,20 @@ work pins the GPU while the user is chatting. Components:
   `/v1/chat/completions` + internal-port
   `/v1/knowledge/search`. Local requests admit unconditionally;
   peer requests are rejected with 503 + `Retry-After` when paused,
-  yielding to a recent local foreground request, or above the
-  configured ceiling. `PeerInflightGuard` is RAII so the count
-  stays accurate under panic unwind.
+  yielding to a recent local foreground request, or refused by the
+  fair scheduler. The flat ceiling became a **`commonwealth_core::fair_sched::SchedCore<NodeId>`**
+  (`AppStateInner.peer_sched`): a runtime-mutable global ceiling
+  (`set_slots`, `0` = reject all) **plus a per-node concurrency cap**
+  so one peer can't hog the pool, **reciprocity-scaled** — a
+  contributor's effective cap rises toward the ceiling, read from a
+  cached per-node weight table (`reciprocity_weights`, refreshed
+  ~30 s by a daemon loop from the contribution ledger). This is the
+  host-side convergence point for a shared-model fleet (every
+  consumer's turn lands here as a peer request keyed on `X-Node-Id`).
+  `PeerInflightGuard` is RAII (`release`s the node's slot on drop,
+  accurate under panic unwind). The **same `SchedCore` policy** backs
+  the chat server's turn scheduler (`sovereign-server/scheduler.rs`),
+  so both admission gates are fair by identical rules.
 - **W3 — tray status chip + pause submenu**
   (`sovereign-desktop/src-tauri/src/tray.rs`).
 - **W4 — first-mesh-join consent** —

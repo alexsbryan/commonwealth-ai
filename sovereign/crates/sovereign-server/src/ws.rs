@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Extension, Path, WebSocketUpgrade};
+use axum::http::HeaderMap;
 use axum::response::Response;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::broadcast::{self, error::RecvError};
@@ -13,7 +14,8 @@ use sovereign_core::types::TurnNarration;
 
 use crate::approval::{ServerApprovalChannel, ServerEvent};
 use crate::auth::TenantId;
-use crate::busy::BusyGuard;
+use crate::reciprocity::{user_key, ReciprocityTable};
+use crate::scheduler::{FairScheduler, UserKey};
 use crate::projection::project_message_metadata;
 use crate::tenant::TenantRuntime;
 
@@ -42,21 +44,39 @@ pub async fn ws_handler(
     Extension(runtime): Extension<Arc<Runtime>>,
     Extension(tenant): Extension<TenantId>,
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
-    Extension(busy): Extension<BusyGuard>,
+    Extension(sched): Extension<FairScheduler>,
+    Extension(reciprocity): Extension<Arc<ReciprocityTable>>,
     Extension(narration_tx): Extension<broadcast::Sender<TurnNarration>>,
+    headers: HeaderMap,
     Path(conversation_id): Path<String>,
 ) -> Response {
+    // Resolve the fairness/reciprocity key once for the socket's lifetime
+    // (mesh-routed sockets carry `X-Node-Id`; local ones key on tenant).
+    let key = user_key(&tenant, &headers);
     ws.on_upgrade(move |socket| {
-        handle_ws(socket, runtime, tenant, approval, busy, narration_tx, conversation_id)
+        handle_ws(
+            socket,
+            runtime,
+            tenant,
+            approval,
+            sched,
+            reciprocity,
+            key,
+            narration_tx,
+            conversation_id,
+        )
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_ws(
     socket: WebSocket,
     runtime: Arc<Runtime>,
     tenant: TenantId,
     approval: Arc<ServerApprovalChannel>,
-    busy: BusyGuard,
+    sched: FairScheduler,
+    reciprocity: Arc<ReciprocityTable>,
+    key: UserKey,
     narration_tx: broadcast::Sender<TurnNarration>,
     conversation_id: String,
 ) {
@@ -113,26 +133,42 @@ async fn handle_ws(
 
         match event {
             ClientEvent::Message { content } => {
-                // Busy guard — same semantics as the REST path. The
-                // permit is held for the duration of the streamed turn
-                // and dropped at the end of this arm.
-                let Some(_permit) = busy.try_enter() else {
-                    tracing::warn!(
-                        conversation_id = %conversation_id,
-                        available = busy.available(),
-                        "host_busy: rejecting WS turn"
-                    );
-                    let _ = out_tx.send(ServerEvent::StreamError {
-                        message: "host busy".to_string(),
-                        retry_after_secs: Some(busy.retry_after_secs()),
-                    });
-                    continue;
+                // Fair scheduler — admit this turn, streaming live queue
+                // position to the client while it waits. The permit is held
+                // for the streamed turn and dropped at the end of this arm
+                // (one in-flight turn per socket). On shed, surface the busy
+                // state and skip the turn (never an unbounded hang).
+                let weight = reciprocity.weight_for(&key);
+                let pos_tx = out_tx.clone();
+                let admit = sched
+                    .admit(key.clone(), weight, move |status| {
+                        let _ = pos_tx.send(ServerEvent::QueuePosition {
+                            position: status.position,
+                            estimated_wait_ms: status.estimated_wait_ms,
+                        });
+                    })
+                    .await;
+                let _permit = match admit {
+                    Ok(permit) => permit,
+                    Err(shed) => {
+                        tracing::warn!(
+                            conversation_id = %conversation_id,
+                            available = sched.available(),
+                            would_be_position = shed.would_be_position,
+                            "host_busy: shedding WS turn"
+                        );
+                        let _ = out_tx.send(ServerEvent::StreamError {
+                            message: "host busy".to_string(),
+                            retry_after_secs: Some(shed.retry_after_secs),
+                        });
+                        continue;
+                    }
                 };
                 approval.set_task_id(&conversation_id).await;
-                // Inline (not spawned): a chat turn streams to completion
-                // and v1 has no mid-turn client input (approvals are out
-                // of scope). Holding the receive loop here also keeps the
-                // busy permit scoped to exactly one in-flight turn.
+                // Inline (not spawned): a chat turn streams to completion and
+                // v1 has no mid-turn client input (approvals are out of
+                // scope). Holding the receive loop here also keeps the permit
+                // scoped to exactly one in-flight turn.
                 stream_turn(&tr, &conversation_id, &content, &out_tx, &narration_tx).await;
             }
             ClientEvent::Approve {

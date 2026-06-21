@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
@@ -10,6 +10,7 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use commonwealth_app::proxy::AppPortMap;
 use commonwealth_app::registry::AppRegistry;
+use commonwealth_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
@@ -166,6 +167,35 @@ pub struct AppState {
 /// `AppState` directly inherit this and don't admit peer traffic, so the lack
 /// of a bound is harmless there.
 pub const DEFAULT_PEER_INFLIGHT_CEILING: usize = usize::MAX;
+
+/// Reciprocity gain for the peer-admission per-node cap. A top contributor's
+/// effective cap reaches the full ceiling; a pure consumer's stays at the
+/// base. `0` would disable reciprocity (uniform cap = ceiling). Matches the
+/// chat server's `[server] reciprocity_k` default.
+pub const PEER_RECIPROCITY_K: f64 = 0.5;
+
+/// Base per-node concurrency cap when rationing — a pure consumer (no
+/// contribution) may hold this many peer slots at once.
+const PEER_BASE_CAP: u32 = 1;
+
+/// Derive a peer node's effective concurrency cap from the global ceiling and
+/// its reciprocity weight. Not rationing (`ceiling` unbounded) → no per-node
+/// limit, so the pool is shared freely (preserves the pre-existing default).
+/// Rationing → a pure consumer holds [`PEER_BASE_CAP`]; a top contributor
+/// (`weight → 1 + k`) may hold up to the whole ceiling.
+fn effective_peer_cap(ceiling: usize, weight: f64) -> u32 {
+    if ceiling >= usize::MAX {
+        return u32::MAX;
+    }
+    let ceiling = ceiling.min(u32::MAX as usize) as u32;
+    if ceiling <= PEER_BASE_CAP || PEER_RECIPROCITY_K <= 0.0 {
+        return ceiling.max(PEER_BASE_CAP);
+    }
+    // weight ∈ [1.0, 1.0 + k] → bonus ∈ [0, ceiling − base].
+    let frac = ((weight - 1.0) / PEER_RECIPROCITY_K).clamp(0.0, 1.0);
+    let bonus = (frac * f64::from(ceiling - PEER_BASE_CAP)).round() as u32;
+    (PEER_BASE_CAP + bonus).clamp(PEER_BASE_CAP, ceiling)
+}
 
 pub struct AppStateInner {
     /// Internal storage. Use [`AppStateInner::self_node_id`] to read
@@ -407,22 +437,24 @@ pub struct AppStateInner {
     /// relaxed atomic load.
     pub mesh_quiesced: std::sync::atomic::AtomicBool,
 
-    /// Maximum concurrent peer-served inference requests this node
-    /// admits at once. The admission middleware (see `crate::admission`)
-    /// reads this on every peer request and 503s when the count is
-    /// at-or-above the cap. `usize::MAX` (default) disables the cap;
-    /// `0` rejects all peer work (equivalent to
-    /// `SOVEREIGN_DISABLE_PEER_INFERENCE=1`, but with a runtime
-    /// toggle). Set via `POST /internal/contribution/ceiling`.
-    pub contribution_max_peer_inflight: std::sync::atomic::AtomicUsize,
+    /// Fair admission for peer-served inference — one accounting authority
+    /// (the same `SchedCore` policy the chat server uses) holding the
+    /// runtime-mutable global ceiling (`slots`) AND a per-node concurrency
+    /// cap, so one peer can't hog the pool even under the ceiling. `slots =
+    /// usize::MAX` (default) disables the ceiling ("share freely"); `0`
+    /// rejects all peer work (equivalent to `SOVEREIGN_DISABLE_PEER_INFERENCE=1`).
+    /// Set via `POST /internal/contribution/ceiling`. The middleware
+    /// (`crate::admission`) calls `try_grant` per peer request and 503s on
+    /// refusal; the per-request `PeerInflightGuard` `release`s on drop.
+    pub peer_sched: Mutex<SchedCore<NodeId>>,
 
-    /// Currently in-flight peer requests gated by the admission
-    /// middleware. Incremented at admit time, decremented when the
-    /// response future drops (RAII via `PeerInflightGuard`). Reads
-    /// are relaxed: the count is approximate under contention but
-    /// monotonically converges and the worst-case race is one extra
-    /// peer request admitted past the cap — acceptable.
-    pub peer_inflight_count: std::sync::atomic::AtomicUsize,
+    /// Cached reciprocity weight per peer node (`1.0 + k·norm(contribution)`),
+    /// refreshed out-of-band from the contribution ledger by a daemon loop.
+    /// Scales each node's effective concurrency cap when the operator is
+    /// rationing (a finite ceiling) — a contributor may hold more slots at
+    /// once. Absent nodes are neutral (`1.0`). `ArcSwap` for lock-free reads
+    /// on the admission hot path.
+    pub reciprocity_weights: ArcSwap<HashMap<NodeId, f64>>,
 
     /// Unix-seconds expiry for a runtime contribution pause. `0`
     /// means not paused. `now >= paused_until` means the pause has
@@ -922,10 +954,12 @@ impl AppState {
                 // matched to their consent-dialog choice in W4);
                 // headless / CLI daemons leave it unlimited so they
                 // don't surprise their operators.
-                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(
-                    DEFAULT_PEER_INFLIGHT_CEILING,
-                ),
-                peer_inflight_count: std::sync::atomic::AtomicUsize::new(0),
+                // Peer-admission fair scheduler: global ceiling = the boot
+                // value above; queue depth is unused on this shed-only gate
+                // (`try_grant` never queues). Reciprocity weights start empty
+                // (every node neutral) until the daemon's refresh loop runs.
+                peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
+                reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.
                 contribution_paused_until: std::sync::atomic::AtomicI64::new(0),
@@ -1277,24 +1311,77 @@ impl AppState {
     /// node will admit. `usize::MAX` disables the cap. `0` rejects all
     /// peer work. Settings UI / `/internal/contribution/ceiling`.
     pub fn set_contribution_max_peer_inflight(&self, max: usize) {
-        self.inner
-            .contribution_max_peer_inflight
-            .store(max, std::sync::atomic::Ordering::Relaxed);
+        self.lock_peer_sched().set_slots(max);
     }
 
-    /// Read the configured peer-inflight ceiling.
+    /// Read the configured peer-inflight ceiling (the global slot budget).
     pub fn contribution_max_peer_inflight(&self) -> usize {
-        self.inner
-            .contribution_max_peer_inflight
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.lock_peer_sched().slots()
     }
 
-    /// Read the current in-flight peer request count (approximate
-    /// under contention — see field docs).
+    /// Read the current in-flight peer request count.
     pub fn peer_inflight_count(&self) -> usize {
+        self.lock_peer_sched().in_flight()
+    }
+
+    /// Lock the peer scheduler, recovering from poison rather than cascading a
+    /// panic into every future admission.
+    fn lock_peer_sched(&self) -> std::sync::MutexGuard<'_, SchedCore<NodeId>> {
         self.inner
-            .peer_inflight_count
-            .load(std::sync::atomic::Ordering::Relaxed)
+            .peer_sched
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Reciprocity weight for a peer node (`1.0` = neutral / unknown). A
+    /// lock-free `ArcSwap` read — safe on the admission hot path.
+    fn peer_reciprocity_weight(&self, node: &NodeId) -> f64 {
+        self.inner
+            .reciprocity_weights
+            .load()
+            .get(node)
+            .copied()
+            .unwrap_or(1.0)
+    }
+
+    /// Recompute the cached per-node reciprocity weights from the contribution
+    /// ledger. Called off the hot path (a daemon loop, ~30 s cadence); never
+    /// per request. `k` is the reciprocity gain (`0` disables it). On error
+    /// the previous weights are kept — a transient ledger hiccup must not flap
+    /// everyone to neutral mid-contention.
+    pub async fn refresh_reciprocity_weights(&self, k: f64) {
+        let caps: HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities> = {
+            let view = self.inner.mesh.read().await;
+            view.members
+                .iter()
+                .map(|(id, m)| (*id, m.capabilities.clone()))
+                .collect()
+        };
+        let contributions = match commonwealth_state::current_contributions(
+            &self.inner.mesh_store,
+            &caps,
+            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+        ) {
+            Ok(map) => map,
+            Err(e) => {
+                tracing::warn!(error = %e, "reciprocity: aggregate failed; keeping last weights");
+                return;
+            }
+        };
+        let max = contributions
+            .values()
+            .map(|c| c.inference_served.wall_seconds)
+            .fold(0.0_f64, f64::max);
+        let weights: HashMap<NodeId, f64> = contributions
+            .into_iter()
+            .filter_map(|(id, c)| {
+                let w = reciprocity_weight(c.inference_served.wall_seconds, max, k);
+                (w > 1.0).then_some((id, w))
+            })
+            .collect();
+        let n = weights.len();
+        self.inner.reciprocity_weights.store(Arc::new(weights));
+        tracing::debug!(contributors = n, "reciprocity: peer weights refreshed");
     }
 
     /// Set a runtime contribution pause that expires at the given
@@ -1352,23 +1439,22 @@ impl AppState {
             .store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Try to admit a peer-served request. Returns a `PeerInflightGuard`
-    /// that increments `peer_inflight_count` for the caller and
-    /// decrements it on drop. Returns an `AdmissionRejection` (mapped
-    /// to 503 by the middleware) when the request shouldn't be served
-    /// right now — pause active, foreground yield, or ceiling reached.
+    /// Try to admit a peer-served request from `node`. Returns a
+    /// `PeerInflightGuard` (RAII: `release`s the node's slot on drop), or an
+    /// `AdmissionRejection` (mapped to 503 by the middleware) when the request
+    /// shouldn't be served right now.
     ///
-    /// Order matters: pause checked first (the most explicit "no"),
-    /// then yield (user is actively using their machine), then
-    /// ceiling (we're already serving as much as configured). The
-    /// `retry_after_secs` field is the requester's hint for how long
-    /// to wait before trying another peer; the load balancer will
-    /// usually pick a different peer immediately anyway.
+    /// Order matters: pause checked first (the most explicit "no"), then yield
+    /// (the user is actively using their machine), then the fair scheduler — a
+    /// per-node cap (anti-hog) scaled by the node's reciprocity weight, under
+    /// the global ceiling. The scheduler is shed-only here (the peer load
+    /// balancer routes elsewhere on refusal), so a refusal is immediate.
+    /// `retry_after_secs` hints how long to wait before retrying.
     pub fn admit_peer_request(
         &self,
+        node: NodeId,
     ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
         use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
-        use std::sync::atomic::Ordering;
 
         if let Some(remaining) = self.seconds_until_unpaused() {
             return Err(AdmissionRejection {
@@ -1386,27 +1472,25 @@ impl AppState {
                 });
             }
         }
-        let cap = self.contribution_max_peer_inflight();
-        // Pre-increment then check — atomic-correct against
-        // concurrent admit calls. Overshoot is bounded by the number
-        // of racers and corrected by the saturating decrement below.
-        let previous = self
-            .inner
-            .peer_inflight_count
-            .fetch_add(1, Ordering::Relaxed);
-        if previous >= cap {
-            self.inner
-                .peer_inflight_count
-                .fetch_sub(1, Ordering::Relaxed);
-            return Err(AdmissionRejection {
+
+        // Fair admission: a per-node cap (reciprocity-scaled) under the global
+        // ceiling, enforced by the shared `SchedCore`. `node` is `Copy`, so we
+        // reuse it for the guard after the (consuming) `try_grant`.
+        let weight = self.peer_reciprocity_weight(&node);
+        let mut sched = self.lock_peer_sched();
+        let cap = effective_peer_cap(sched.slots(), weight);
+        match sched.try_grant(node, weight, cap) {
+            TryGrant::Granted => {
+                drop(sched);
+                Ok(PeerInflightGuard::new(std::sync::Arc::clone(&self.inner), node))
+            }
+            // Both outcomes mean "at capacity now" on this shed-only gate.
+            TryGrant::WouldQueue { .. } | TryGrant::Shed { .. } => Err(AdmissionRejection {
                 error: "peer concurrency ceiling reached".into(),
                 reason: AdmissionReason::CeilingExceeded,
-                // Short backoff; capacity may free as soon as one
-                // in-flight request completes.
                 retry_after_secs: 2,
-            });
+            }),
         }
-        Ok(PeerInflightGuard::new(std::sync::Arc::clone(&self.inner)))
     }
 
     /// Read the per-batch ingest throttle factor as a normalised
@@ -1533,4 +1617,40 @@ pub fn test_app_state() -> AppState {
         peers: vec![],
     };
     AppState::new(NodeId::from_u128(1), mesh)
+}
+
+#[cfg(test)]
+mod fair_admission_tests {
+    use super::effective_peer_cap;
+
+    #[test]
+    fn unlimited_ceiling_means_no_per_node_cap() {
+        // Not rationing → share freely (preserves the pre-existing default:
+        // the only bound is the global ceiling, which is unbounded here).
+        assert_eq!(effective_peer_cap(usize::MAX, 1.0), u32::MAX);
+        assert_eq!(effective_peer_cap(usize::MAX, 1.5), u32::MAX);
+    }
+
+    #[test]
+    fn rationing_caps_a_pure_consumer_at_base() {
+        // ceiling 4, neutral weight → base cap of 1 (anti-hog: one consumer
+        // can't grab all four slots).
+        assert_eq!(effective_peer_cap(4, 1.0), 1);
+    }
+
+    #[test]
+    fn rationing_lifts_a_top_contributor_to_the_ceiling() {
+        // weight 1.0 + k (= 1.5 at k=0.5) → may hold the whole ceiling.
+        assert_eq!(effective_peer_cap(4, 1.5), 4);
+        // A mid contributor lands between base and ceiling.
+        let mid = effective_peer_cap(4, 1.25);
+        assert!((2..=3).contains(&mid), "mid contributor: {mid}");
+    }
+
+    #[test]
+    fn zero_ceiling_caps_at_base_slots_do_the_rejecting() {
+        // The cap clamps to ≥ base even at ceiling 0; it's the 0-slot budget
+        // in `SchedCore` that actually rejects, not this cap.
+        assert_eq!(effective_peer_cap(0, 1.5), 1);
+    }
 }
