@@ -41,24 +41,26 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          # Linux x86_64 is the only leg triggered on a tag, mirroring
-          # desktop-release.yml: pushing untested legs previously drained the
-          # Actions budget, and `macos-13` (Intel) hangs forever on "Waiting
-          # for a runner to pick up this job".
+          # Linux x86_64 + native macOS Intel (self-hosted) are enabled. GitHub's
+          # hosted `macos-13` (Intel) hangs forever on "Waiting for a runner", so
+          # Intel runs on the SAME self-hosted Intel Mac as desktop-release.yml
+          # (labels self-hosted/macOS/X64). Manual-start: `./run.sh` before
+          # tagging. `release` is decoupled (`if: !cancelled()`) so a down runner
+          # can't block the Linux tarball. Runner setup lives in the desktop
+          # RELEASING.md "macOS Intel (x86_64) — self-hosted runner" section.
           #
-          # macOS arm64 is ready to enable below — uncomment it once a local
+          # macOS arm64 is ready to enable — uncomment once a local
           # `cargo build --release --target aarch64-apple-darwin` of the three
-          # binaries is validated (most current Macs are Apple Silicon, so this
-          # is the high-value second leg). Keep arm64 on macos-14.
+          # binaries is validated (keep arm64 on macos-14).
           - name: linux-x86_64
             runner: ubuntu-22.04 # older glibc → runs on newer distros too
             target: x86_64-unknown-linux-gnu
+          - name: macos-x86_64
+            runner: [self-hosted, macOS, X64] # native Intel; start ./run.sh before tagging
+            target: x86_64-apple-darwin
           # - name: macos-arm64
           #   runner: macos-14
           #   target: aarch64-apple-darwin
-          # - name: macos-x86_64
-          #   runner: macos-13        # RETIRED — hangs on pickup; pick a current Intel runner or drop
-          #   target: x86_64-apple-darwin
           # - name: windows-x86_64
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
@@ -105,10 +107,29 @@ jobs:
 
       - name: macOS build deps
         if: runner.os == 'macOS'
-        # cmake is preinstalled on the macOS runners; protobuf is not. SDKROOT
-        # lets llama-cpp-sys-4's bindgen step resolve the system headers.
+        env:
+          # Don't let brew's 30-day auto-cleanup fire mid-install — on a
+          # self-hosted Mac it can trip over pre-existing root-owned files under
+          # /usr/local (observed 2026-06-20).
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: |
-          brew install protobuf || true
+          # Self-hosted runners launched via ./run.sh inherit a minimal PATH that
+          # may lack Homebrew. Source its shellenv and persist the bin dir to
+          # later steps. No-op on a hosted runner (brew already global).
+          if [ -x /usr/local/bin/brew ]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+            echo "/usr/local/sbin" >> "$GITHUB_PATH"
+          elif [ -x /opt/homebrew/bin/brew ]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+            echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          fi
+          # lld: .cargo/config.toml's *-apple-darwin rustflags pass `-fuse-ld=lld`
+          # (the CLI binaries link llama-cpp-sys-4 the same as the desktop does).
+          # protobuf: lance-encoding's prost-build. cmake: llama.cpp's build.
+          brew install lld protobuf cmake
+          # SDKROOT: llama-cpp-sys-4's bindgen resolves system headers via the SDK.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
 
       - name: Build CLI binaries
@@ -142,6 +163,12 @@ jobs:
   release:
     name: publish draft release
     needs: build
+    # Decoupled from per-leg success: a FAILED leg (e.g. the self-hosted Intel
+    # runner is down) still ships the platforms that built, instead of blocking
+    # the whole release. The "Combine checksums" step fails loudly (set -e on an
+    # empty `*.sha256` glob) if NO leg produced a tarball, so a total failure
+    # can't publish an empty draft.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
