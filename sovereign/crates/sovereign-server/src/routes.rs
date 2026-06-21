@@ -2,15 +2,17 @@
 use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 
 use sovereign_core::runtime::Runtime;
 
 use crate::approval::ServerApprovalChannel;
 use crate::auth::TenantId;
-use crate::busy::{busy_response, BusyGuard};
+use crate::busy::busy_response_hint;
 use crate::projection::{project_message_metadata, Citation, Provenance};
+use crate::reciprocity::{user_key, ReciprocityTable};
+use crate::scheduler::FairScheduler;
 use crate::tenant::TenantRuntime;
 
 // ─── Request/Response Types ───────────────────────────────────
@@ -214,18 +216,28 @@ pub async fn send_message(
     Extension(runtime): Extension<Arc<Runtime>>,
     Extension(tenant): Extension<TenantId>,
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
-    Extension(busy): Extension<BusyGuard>,
+    Extension(sched): Extension<FairScheduler>,
+    Extension(reciprocity): Extension<Arc<ReciprocityTable>>,
+    headers: HeaderMap,
     Path(conversation_id): Path<String>,
     Json(body): Json<SendMessageRequest>,
 ) -> Response {
-    // Busy guard — held for the turn, dropped when this fn returns.
-    let Some(_permit) = busy.try_enter() else {
-        tracing::warn!(
-            conversation_id = %conversation_id,
-            available = busy.available(),
-            "host_busy: rejecting send_message"
-        );
-        return busy_response(busy.retry_after_secs());
+    // Fair scheduler — REST is one-shot: grant if a slot is free, else shed
+    // immediately with a queue-position hint (no long-poll). The permit is
+    // held for the turn and dropped when this fn returns.
+    let key = user_key(&tenant, &headers);
+    let weight = reciprocity.weight_for(&key);
+    let _permit = match sched.try_grant(key, weight) {
+        Ok(permit) => permit,
+        Err(shed) => {
+            tracing::warn!(
+                conversation_id = %conversation_id,
+                available = sched.available(),
+                would_be_position = shed.would_be_position,
+                "host_busy: shedding send_message"
+            );
+            return busy_response_hint(shed.retry_after_secs, shed.would_be_position);
+        }
     };
 
     let tr = tenant_runtime(&runtime, &tenant);

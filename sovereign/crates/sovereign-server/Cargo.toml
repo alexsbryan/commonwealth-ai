@@ -9,6 +9,10 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
+# Shared fair-scheduling policy (SchedCore) — backs both this server's
+# turn scheduler and the commonwealth-api peer-admission gate, so both
+# share identical fairness rules. Light crate (oicp-types only).
+commonwealth-core = { workspace = true }
 # TDD-machine backend — HTTP + MCP transports dispatch through this
 # crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
 # phase 7e.

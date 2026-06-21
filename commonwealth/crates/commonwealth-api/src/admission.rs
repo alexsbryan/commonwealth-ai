@@ -39,6 +39,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use commonwealth_core::ids::NodeId;
 use serde::Serialize;
 
 use crate::state::{AppState, AppStateInner};
@@ -69,44 +70,41 @@ pub struct AdmissionRejection {
     pub retry_after_secs: u64,
 }
 
-/// RAII guard returned by `AppState::admit_peer_request`.
-/// Decrements `peer_inflight_count` on drop so callers can't forget
-/// to release. The drop happens automatically at the end of the
-/// middleware's response future — including on unwind, which keeps
-/// the counter accurate when a downstream handler panics.
+/// RAII guard returned by `AppState::admit_peer_request`. Holds one slot in
+/// the peer fair scheduler for `node`; `release`s it on drop so callers can't
+/// forget. The drop happens at the end of the middleware's response future —
+/// including on unwind, which keeps the scheduler accurate when a downstream
+/// handler panics.
 #[must_use = "drop the guard when the peer request completes — \
-              the inflight counter only decrements on drop"]
+              the scheduler slot only releases on drop"]
 pub struct PeerInflightGuard {
     inner: Arc<AppStateInner>,
+    node: NodeId,
 }
 
 impl std::fmt::Debug for PeerInflightGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "PeerInflightGuard {{ in_flight: {} }}",
-            self.inner
-                .peer_inflight_count
-                .load(std::sync::atomic::Ordering::Relaxed)
-        )
+        let in_flight = self.inner.peer_sched.lock().map_or(0, |s| s.in_flight());
+        write!(f, "PeerInflightGuard {{ in_flight: {in_flight} }}")
     }
 }
 
 impl PeerInflightGuard {
-    pub(crate) fn new(inner: Arc<AppStateInner>) -> Self {
-        Self { inner }
+    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId) -> Self {
+        Self { inner, node }
     }
 }
 
 impl Drop for PeerInflightGuard {
     fn drop(&mut self) {
-        // Saturating sub so a second drop (shouldn't happen given
-        // the move semantics, but defensively) doesn't wrap u32::MAX.
-        let _ = self.inner.peer_inflight_count.fetch_update(
-            std::sync::atomic::Ordering::Relaxed,
-            std::sync::atomic::Ordering::Relaxed,
-            |c| Some(c.saturating_sub(1)),
-        );
+        // Release this node's slot back to the scheduler (promoting any
+        // waiter — none on this shed-only gate). Recover from a poisoned lock
+        // rather than cascade the panic.
+        self.inner
+            .peer_sched
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .release(&self.node);
     }
 }
 
@@ -128,7 +126,11 @@ pub async fn peer_admission_layer(
     if !is_peer {
         return next.run(req).await;
     }
-    match state.admit_peer_request() {
+    // Peer request: key the fair scheduler on the origin node. A present-but-
+    // unparseable id buckets under the zero node, so it's still gated and
+    // never silently bypasses the ceiling.
+    let node = crate::headers::parse_x_node_id(&headers).unwrap_or(NodeId::from_u128(0));
+    match state.admit_peer_request(node) {
         Ok(_guard) => {
             // _guard binds the inflight counter to this future's
             // lifetime; the saturating decrement fires when the
@@ -181,14 +183,18 @@ mod tests {
             .unwrap_or(0)
     }
 
+    fn nid(n: u128) -> NodeId {
+        NodeId::from_u128(n)
+    }
+
     #[test]
     fn admits_when_unrestricted() {
         let s = fresh_state();
-        let g = s.admit_peer_request();
+        let g = s.admit_peer_request(nid(1));
         assert!(g.is_ok());
         assert_eq!(s.peer_inflight_count(), 1);
         drop(g);
-        // After drop, count is back to 0.
+        // After drop, the slot is released.
         assert_eq!(s.peer_inflight_count(), 0);
     }
 
@@ -196,11 +202,11 @@ mod tests {
     fn rejects_when_paused() {
         let s = fresh_state();
         s.set_contribution_paused_until(unix_now() + 60);
-        let g = s.admit_peer_request();
+        let g = s.admit_peer_request(nid(1));
         let err = g.expect_err("expected pause rejection");
         assert!(matches!(err.reason, AdmissionReason::Paused));
         assert!(err.retry_after_secs >= 1);
-        // No inflight slot was taken.
+        // No slot was taken.
         assert_eq!(s.peer_inflight_count(), 0);
     }
 
@@ -209,20 +215,36 @@ mod tests {
         let s = fresh_state();
         // Pause that expired 1s ago.
         s.set_contribution_paused_until(unix_now() - 1);
-        assert!(s.admit_peer_request().is_ok());
+        assert!(s.admit_peer_request(nid(1)).is_ok());
     }
 
     #[test]
-    fn rejects_when_ceiling_reached() {
+    fn rejects_when_global_ceiling_reached() {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(2);
-        let _g1 = s.admit_peer_request().unwrap();
-        let _g2 = s.admit_peer_request().unwrap();
+        // Two DISTINCT nodes fill the 2 global slots (each capped at 1 when
+        // rationing). A third node is shed — the global ceiling is reached.
+        let _g1 = s.admit_peer_request(nid(1)).unwrap();
+        let _g2 = s.admit_peer_request(nid(2)).unwrap();
         let err = s
-            .admit_peer_request()
+            .admit_peer_request(nid(3))
             .expect_err("expected ceiling rejection");
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
         assert_eq!(s.peer_inflight_count(), 2);
+    }
+
+    #[test]
+    fn per_node_cap_stops_one_node_from_hogging() {
+        let s = fresh_state();
+        s.set_contribution_max_peer_inflight(4); // rationing, 4 slots
+        // A neutral node's cap is 1 even with 3 slots free — anti-hog.
+        let _g1 = s.admit_peer_request(nid(1)).unwrap();
+        let err = s
+            .admit_peer_request(nid(1))
+            .expect_err("same node is capped despite free slots");
+        assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
+        // A different node still gets in.
+        assert!(s.admit_peer_request(nid(2)).is_ok());
     }
 
     #[test]
@@ -230,7 +252,7 @@ mod tests {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(0);
         let err = s
-            .admit_peer_request()
+            .admit_peer_request(nid(1))
             .expect_err("expected ceiling rejection at 0");
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
     }
@@ -241,7 +263,7 @@ mod tests {
         s.set_yield_window_secs(60);
         s.bump_foreground_active();
         let err = s
-            .admit_peer_request()
+            .admit_peer_request(nid(1))
             .expect_err("expected foreground-yield rejection");
         assert!(matches!(err.reason, AdmissionReason::YieldedToLocal));
         assert!(err.retry_after_secs >= 1);
@@ -253,7 +275,7 @@ mod tests {
         s.set_yield_window_secs(60);
         s.bump_foreground_active();
         s.set_yield_peers_to_foreground(false);
-        assert!(s.admit_peer_request().is_ok());
+        assert!(s.admit_peer_request(nid(1)).is_ok());
     }
 
     #[test]
@@ -261,7 +283,7 @@ mod tests {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(0); // would reject too
         s.set_contribution_paused_until(unix_now() + 60);
-        let err = s.admit_peer_request().expect_err("expected pause");
+        let err = s.admit_peer_request(nid(1)).expect_err("expected pause");
         assert!(matches!(err.reason, AdmissionReason::Paused));
     }
 }

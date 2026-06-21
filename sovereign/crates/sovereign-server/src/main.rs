@@ -7,10 +7,12 @@ mod config;
 mod iroh_access;
 mod narration;
 mod projection;
+mod reciprocity;
 mod routes;
 mod routes_documents;
 mod routes_mcp;
 mod routes_tdd;
+mod scheduler;
 mod startup;
 mod tenant;
 mod ws;
@@ -657,16 +659,32 @@ async fn main() {
         AuthState::disabled()
     };
 
-    // Busy guard — bounds concurrent inference turns; saturation surfaces
-    // as `503 + Retry-After` (REST) / a busy stream frame (WS).
-    let busy_guard = busy::BusyGuard::new(
+    // Fair turn scheduler — bounds concurrent inference turns with a
+    // weighted-fair queue + per-origin cap. Saturation surfaces as a live
+    // queue position (WS) or `503 + Retry-After` (REST). Replaces the flat
+    // busy semaphore and shares its policy core with the mesh peer-admission
+    // gate (`commonwealth-api`), so both gates are fair by identical rules.
+    let scheduler = scheduler::FairScheduler::new(
         config.server.max_concurrent_turns,
+        config.server.max_per_user,
+        config.server.max_queue_depth,
         config.server.retry_after_secs,
     );
     tracing::info!(
         max_concurrent_turns = config.server.max_concurrent_turns,
-        retry_after_secs = config.server.retry_after_secs,
-        "Busy guard configured"
+        max_per_user = config.server.max_per_user,
+        max_queue_depth = config.server.max_queue_depth,
+        reciprocity_k = config.server.reciprocity_k,
+        "Fair scheduler configured"
+    );
+    // Reciprocity weights — a contributing peer's turns rank up. Populated
+    // out-of-band from the Commonwealth ledger (`/internal/contribution/view`);
+    // neutral until the first refresh, and if the mesh is absent.
+    let reciprocity = reciprocity::ReciprocityTable::new();
+    reciprocity::spawn_refresh(
+        config.commonwealth.url.clone(),
+        config.server.reciprocity_k,
+        Arc::clone(&reciprocity),
     );
 
     // Build Axum router. The `/v1/*` API goes through the auth
@@ -758,7 +776,8 @@ async fn main() {
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(Extension(tdd_state))
-        .layer(Extension(busy_guard))
+        .layer(Extension(scheduler))
+        .layer(Extension(reciprocity))
         .layer(Extension(narration_tx))
         .layer(CorsLayer::permissive());
 

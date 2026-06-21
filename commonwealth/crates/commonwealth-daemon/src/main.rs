@@ -970,6 +970,29 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         );
         info!("StorageSnapshot loop started");
 
+        // Reciprocity weight refresh for peer admission. Recomputes the
+        // per-node contribution weights (which scale each peer's concurrency
+        // cap) off the admission hot path, ~every 30 s. Degrades to neutral if
+        // the ledger read fails; shuts down with the daemon.
+        let recip_state = state.clone();
+        let mut recip_shutdown = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                tokio::select! {
+                    _ = ticker.tick() => {
+                        recip_state
+                            .refresh_reciprocity_weights(
+                                commonwealth_api::state::PEER_RECIPROCITY_K,
+                            )
+                            .await;
+                    }
+                    _ = recip_shutdown.changed() => break,
+                }
+            }
+        });
+        info!("Reciprocity weight refresh loop started");
+
         // 7. Start both API servers.
         let client_addr: SocketAddr = format!("0.0.0.0:{api_port}").parse()?;
         let internal_addr: SocketAddr = format!("0.0.0.0:{internal_port}").parse()?;

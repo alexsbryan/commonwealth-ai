@@ -34,7 +34,8 @@ use sovereign_store::sqlite::SqliteStateStore;
 
 use crate::approval::ServerApprovalChannel;
 use crate::auth::AuthState;
-use crate::busy::BusyGuard;
+use crate::reciprocity::ReciprocityTable;
+use crate::scheduler::{FairScheduler, UserKey};
 
 const MOCK_BACKEND: &str = "MockLlama.Q8_0 @ peer TestNode";
 const MOCK_DELTAS: &[&str] = &["Hello", ", ", "world", "."];
@@ -127,11 +128,11 @@ fn build_runtime(
 
 /// Build the authed router mirroring `main.rs` (auth disabled → the
 /// middleware injects the `default` tenant), with the runtime, approval,
-/// and busy-guard extensions every handler under test needs.
+/// scheduler, and reciprocity extensions every handler under test needs.
 fn build_app(
     runtime: Arc<Runtime>,
     approval: Arc<ServerApprovalChannel>,
-    busy: BusyGuard,
+    sched: FairScheduler,
 ) -> Router {
     let authed = Router::new()
         .route("/v1/conversations", post(crate::routes::create_conversation))
@@ -167,7 +168,8 @@ fn build_app(
     authed
         .layer(Extension(runtime))
         .layer(Extension(approval))
-        .layer(Extension(busy))
+        .layer(Extension(sched))
+        .layer(Extension(ReciprocityTable::new()))
         .layer(Extension(narration_tx))
 }
 
@@ -184,7 +186,7 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
 async fn rest_send_message_surfaces_provenance() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
     let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, BusyGuard::new(4, 2));
+    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
 
     let body = serde_json::json!({ "content": "hello there" }).to_string();
     let req = axum::http::Request::builder()
@@ -239,7 +241,7 @@ async fn rest_get_conversation_projects_citations() {
     };
     store.save_message(&msg).await.unwrap();
 
-    let app = build_app(runtime, approval, BusyGuard::new(4, 2));
+    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
     let req = axum::http::Request::builder()
         .method("GET")
         .uri("/v1/conversations/convX")
@@ -270,7 +272,7 @@ async fn corpora_empty_without_engine() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
     // No corpus engine wired → endpoint must return an empty list, not error.
     let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, BusyGuard::new(4, 2));
+    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
 
     let req = axum::http::Request::builder()
         .method("GET")
@@ -287,19 +289,22 @@ async fn corpora_empty_without_engine() {
     );
 }
 
-// ─── REST: busy guard → 503 + Retry-After ─────────────────────
+// ─── REST: scheduler shed → 503 + Retry-After ─────────────────
 
 #[tokio::test]
 async fn busy_guard_returns_503_with_retry_after() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
     let (runtime, _store, approval) = build_runtime(inference);
 
-    let busy = BusyGuard::new(1, 7);
-    // Occupy the only slot (shares the inner Arc<Semaphore> with the
-    // guard moved into the app), so the handler's try_enter() fails.
-    let _held = busy.try_enter().expect("first permit granted");
+    // 1 slot, retry-after 7. Occupy the only slot via a held permit on a
+    // distinct origin (the scheduler is Clone — same inner state), so the
+    // handler's `try_grant` finds no free slot and sheds.
+    let sched = FairScheduler::new(1, 1, 32, 7);
+    let _held = sched
+        .try_grant(UserKey::Tenant("occupier".into()), 1.0)
+        .expect("first permit granted");
 
-    let app = build_app(runtime, approval, busy);
+    let app = build_app(runtime, approval, sched.clone());
     let body = serde_json::json!({ "content": "hi" }).to_string();
     let req = axum::http::Request::builder()
         .method("POST")
@@ -328,7 +333,7 @@ async fn ws_streams_tokens_then_complete() {
 
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
     let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, BusyGuard::new(4, 2));
+    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
 
     // Bind an ephemeral port and serve in the background.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
