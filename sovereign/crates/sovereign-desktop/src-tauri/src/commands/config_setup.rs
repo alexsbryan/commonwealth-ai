@@ -217,8 +217,14 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         changed = true;
         changed_fields.push("data_dir");
     }
-    // Shared-model cluster role + id. A change must trigger a daemon reload so
-    // the role→RPC-env translation (apply_shared_model_role_to_env) re-runs.
+    // Shared-model cluster role + id. Dormant backbone: the desktop ships no
+    // shared-model UI in the alpha (the feature lives on the CLI path — see
+    // docs/RUN_GLM_5_2_ON_THE_MESH.md), so these fields stay at their defaults
+    // unless hand-edited. The mirror still writes them to SetupConfig so a
+    // `sovereign daemon run` started from this config picks them up at startup
+    // (apply_shared_model_role_to_env). The desktop in-process daemon and the
+    // live `/v1/admin/reload` path do NOT apply them — `ConfigDiff` ignores
+    // shared-model. Kept so re-adding the UI later needs no config plumbing.
     if cli.shared_model.role != desktop.shared_model_role
         || cli.shared_model.model_id != desktop.shared_model_id
     {

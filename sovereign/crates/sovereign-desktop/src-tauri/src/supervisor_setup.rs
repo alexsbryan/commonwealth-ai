@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri-side wiring for the daemon supervisor (see `crate::supervisor`).
 //!
-//! Opt-in via `SOVEREIGN_USE_SUPERVISOR=1`. When set, the desktop's
-//! Local-mode boot does NOT construct an in-process `EmbeddedDaemon`
-//! — it spawns `sovereign-cli daemon run` as a child and talks to it
-//! over HTTP using the existing Attach-mode plumbing. This protects
-//! the Tauri UI from process-level ggml/llama.cpp crashes: when the
-//! daemon dies, the supervisor surfaces a `supervisor-state` event
-//! the frontend can render as a Reconnect banner.
+//! Engaged when [`is_enabled`] returns true (`SOVEREIGN_USE_SUPERVISOR=1`) — an
+//! opt-in dogfood path, default off. When engaged, the desktop's Local-mode
+//! boot does NOT construct an in-process `EmbeddedDaemon` — it spawns
+//! `sovereign-cli daemon run` as a child and talks to it over HTTP using the
+//! existing Attach-mode plumbing. This also protects the Tauri UI from
+//! process-level ggml/llama.cpp crashes: when the daemon dies, the supervisor
+//! surfaces a `supervisor-state` event the frontend can render as a Reconnect
+//! banner.
 //!
 //! This module owns the Tauri-side surface — binary-path resolution,
 //! event forwarding, the startup wait — so `supervisor.rs` itself
@@ -33,10 +34,10 @@ pub fn is_enabled() -> bool {
 
 /// Locate the `sovereign-cli` binary. Probes in order:
 /// 1. `SOVEREIGN_CLI_PATH` env override.
-/// 2. Next to the running desktop binary — covers both the production
-///    Tauri sidecar layout AND `tauri dev`'s target/{debug,release}
-///    layout, since `tauri dev` puts the cli binary alongside the
-///    desktop binary under the same workspace target dir.
+/// 2. Next to the running desktop binary — `tauri dev` puts the cli
+///    binary alongside the desktop binary under the same workspace
+///    target dir. (A packaged build would need the cli bundled as a
+///    Tauri sidecar — not wired; this path is dev/opt-in only.)
 fn resolve_sovereign_cli() -> Option<PathBuf> {
     if let Ok(env_path) = std::env::var("SOVEREIGN_CLI_PATH") {
         let p = PathBuf::from(env_path);
@@ -75,18 +76,18 @@ pub async fn maybe_start(
 ) -> (crate::bootstrap::BootstrapMode, Option<Arc<Supervisor>>) {
     use crate::bootstrap::{BootstrapMode, ConfigSource};
 
-    if !is_enabled() {
-        return (mode, None);
-    }
-    // Only intercept Local mode with a real `SetupConfig`. Fresh /
-    // DesktopLegacy boots fall through to the existing wizard — we
-    // don't have ports or paths to feed the supervisor yet.
+    // Only intercept Local mode with a real `SetupConfig` — we need its
+    // ports/paths to feed the supervisor. Fresh / DesktopLegacy boots fall
+    // through to the existing wizard.
     let cli_setup = match &mode {
         BootstrapMode::Local {
             source: ConfigSource::CliSetup(cfg),
         } => cfg.clone(),
         _ => return (mode, None),
     };
+    if !is_enabled() {
+        return (mode, None);
+    }
 
     let binary = match resolve_sovereign_cli() {
         Some(p) => p,
