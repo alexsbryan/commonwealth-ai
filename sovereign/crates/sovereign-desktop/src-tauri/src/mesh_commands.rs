@@ -271,6 +271,85 @@ pub async fn mesh_get_state(
     Ok(Some(resp))
 }
 
+/// Cluster-health snapshot for the desktop "Shared model" chip + degraded
+/// banner. Mirrors `mesh_get_state`'s dual reach: Attach reads the daemon's
+/// `/v1/mesh/status` DTO; Local reads the in-process daemon + desktop config.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SharedModelStatus {
+    /// True when this node is in a shared-model fleet (a model id is set).
+    pub configured: bool,
+    pub model_id: Option<String>,
+    /// Eligible anchors currently gossiped (online + `can_anchor`).
+    pub eligible_anchors: usize,
+    /// Quorum target — the host won't distribute below this many anchors.
+    pub quorum_anchors: u32,
+    /// Quorum met — a proxy for "the shared model is serveable". Below it the
+    /// cluster is "forming" and consumers fall back to their local model.
+    pub available: bool,
+    /// This node currently holds the host role (assembles + distributes).
+    pub is_host: bool,
+}
+
+#[tauri::command]
+pub async fn get_shared_model_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<SharedModelStatus, String> {
+    if let Some(port) = attached_port(&state) {
+        // Attach — read the daemon's status DTO over HTTP.
+        let client = http_client()?;
+        let resp = client
+            .get(format!("http://localhost:{port}/v1/mesh/status"))
+            .send()
+            .await
+            .map_err(|e| format!("shared-model status: {e}"))?;
+        if !resp.status().is_success() {
+            return Ok(SharedModelStatus::default());
+        }
+        let remote: sovereign_mesh::mesh_http::StatusResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("parse mesh/status: {e}"))?;
+        return Ok(match remote.shared_model {
+            Some(sm) => SharedModelStatus {
+                configured: true,
+                model_id: Some(sm.model_id),
+                eligible_anchors: sm.eligible_anchors,
+                quorum_anchors: sm.quorum_anchors,
+                available: sm.available,
+                is_host: remote.shared_model_host,
+            },
+            None => SharedModelStatus::default(),
+        });
+    }
+
+    // Local — in-process daemon + desktop config. The eligible-anchor count is
+    // read from gossiped membership (real regardless of who runs discovery);
+    // the model id comes from this node's own config.
+    let model_id = {
+        let cfg = state.config.read().await;
+        cfg.shared_model_id.clone().filter(|s| !s.is_empty())
+    };
+    let Some(model_id) = model_id else {
+        return Ok(SharedModelStatus::default());
+    };
+    let eligible_anchors = match state.mesh.as_ref() {
+        Some(mesh) => mesh.eligible_anchors().await.len(),
+        None => 0,
+    };
+    let quorum_anchors = std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1);
+    Ok(SharedModelStatus {
+        configured: true,
+        model_id: Some(model_id),
+        eligible_anchors,
+        quorum_anchors,
+        available: eligible_anchors >= quorum_anchors as usize,
+        is_host: sovereign_mesh::mesh_http::is_shared_model_host(),
+    })
+}
+
 /// Check if the mesh daemon is currently running. In Attach mode we
 /// always report `true` — the CLI daemon is by definition running or
 /// we wouldn't have detected Attach in the first place.

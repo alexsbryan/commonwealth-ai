@@ -39,6 +39,7 @@
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import MeshAppsSection from "./MeshAppsSection.svelte";
+  import SharedModelSettings from "./SharedModelSettings.svelte";
   import SharingSection from "./SharingSection.svelte";
   import ConnectSection from "./ConnectSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
@@ -60,6 +61,7 @@
     | "imports"
     | "enrichment"
     | "mesh"
+    | "shared_model"
     | "sharing"
     | "tools"
     | "connect"
@@ -529,6 +531,7 @@
     { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
+    { id: "shared_model",    label: "Shared model",     keywords: ["shared", "model", "fleet", "anchor", "host", "glm", "collective", "primary", "quorum", "distributed", "layer split", "use", "lend"] },
     { id: "sharing",         label: "Activity & Sharing", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
     { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
@@ -1415,6 +1418,15 @@
           <p class="doc-intro">Pool compute and knowledge with people you trust. Spare cycles and shared libraries — no central server, no broker.</p>
           <MeshSettings />
           <MeshAppsSection />
+        </section>
+      {/if}
+
+      <!-- ──────────── SHARED MODEL ──────────── -->
+      {#if activeTab === "shared_model"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Shared model</h2>
+          <p class="doc-intro">Pool machines to run one model none of you could run alone — a shared, fairly-scheduled primary. Pick how this machine takes part and watch the cluster form.</p>
+          <SharedModelSettings />
         </section>
       {/if}
 

@@ -140,6 +140,48 @@ pub struct StatusResponse {
     /// no-split-brain invariant — at most one host across the fleet.
     #[serde(default)]
     pub shared_model_host: bool,
+    /// Cluster-health summary when this node is in a shared-model fleet
+    /// (`SOVEREIGN_SHARED_MODEL_ID` set); `None` otherwise. Powers the desktop
+    /// "Shared model" chip (`k/N anchors · available|forming`).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub shared_model: Option<SharedModelStatusDto>,
+}
+
+/// Cluster-health snapshot of a shared-model fleet, surfaced on
+/// `GET /v1/mesh/status` for the desktop chip + degraded banner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedModelStatusDto {
+    /// The shared model this fleet runs (e.g. `glm-5.2`).
+    pub model_id: String,
+    /// Eligible anchors currently gossiped (online + `can_anchor`).
+    pub eligible_anchors: usize,
+    /// Quorum target — the host won't distribute below this many anchors.
+    pub quorum_anchors: u32,
+    /// `true` once the anchor quorum is met — a proxy for "the shared model is
+    /// serveable" (the exact engine load state isn't HTTP-observable). Below
+    /// quorum the cluster is "forming" and consumers fall back to local.
+    pub available: bool,
+}
+
+/// Build the shared-model cluster-health summary, or `None` when this node
+/// isn't in a shared-model fleet. Reads the eligible-anchor count from the
+/// daemon and the fleet's model id / quorum from the RPC env the role
+/// translation set (`apply_shared_model_role_to_env`).
+async fn shared_model_status(daemon: &EmbeddedDaemon) -> Option<SharedModelStatusDto> {
+    let model_id = std::env::var("SOVEREIGN_SHARED_MODEL_ID")
+        .ok()
+        .filter(|s| !s.is_empty())?;
+    let eligible_anchors = daemon.eligible_anchors().await.len();
+    let quorum_anchors = std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1);
+    Some(SharedModelStatusDto {
+        model_id,
+        eligible_anchors,
+        quorum_anchors,
+        available: eligible_anchors >= quorum_anchors as usize,
+    })
 }
 
 /// Runtime "am I the shared-model host" flag. Published by the daemon's
@@ -203,6 +245,9 @@ async fn mesh_status(
     let rpc_workers = crate::worker_eligibility::global()
         .map(|e| e.status_views(std::time::Instant::now()))
         .unwrap_or_default();
+    // Shared-model cluster health (None unless this node is in a shared-model
+    // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
+    let shared_model = shared_model_status(&daemon).await;
     let Some(s) = daemon.mesh_state().await else {
         // Running but no mesh — e.g. the daemon started solo and the
         // user hasn't run `mesh create` yet. Empty but valid payload
@@ -221,6 +266,7 @@ async fn mesh_status(
                     client_token: daemon.running_client_token().await,
                     rpc_workers,
                     shared_model_host: is_shared_model_host(),
+                    shared_model: shared_model.clone(),
                 })
                 .unwrap(),
             ),
@@ -268,6 +314,7 @@ async fn mesh_status(
                 client_token: daemon.running_client_token().await,
                 rpc_workers,
                 shared_model_host: is_shared_model_host(),
+                shared_model,
             })
             .unwrap(),
         ),

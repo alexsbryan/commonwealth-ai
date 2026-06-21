@@ -894,6 +894,12 @@ export async function meshGetState(): Promise<MeshStateResponse | null> {
   return invoke("mesh_get_state");
 }
 
+export async function getSharedModelStatus(): Promise<
+  import("./types").SharedModelStatus
+> {
+  return invoke("get_shared_model_status");
+}
+
 export async function meshIsRunning(): Promise<boolean> {
   return invoke("mesh_is_running");
 }
