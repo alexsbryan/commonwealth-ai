@@ -352,6 +352,14 @@ pub struct AppStateInner {
     pub app_registry: Arc<AppRegistry>,
     /// Map of locally running app ports for the proxy layer.
     pub app_port_map: AppPortMap,
+    /// Concurrent **outbound** peer knowledge fan-out requests in flight from
+    /// this node (one per peer a knowledge search is currently querying). The
+    /// glassbox companion to the inbound `peer_sched` admission gauge: it makes
+    /// `BoundedFanOut` a live runtime signal, not just a source-unit-tested
+    /// property of `select_fanout_corpora`. 0 when no fan-out is in progress.
+    /// Maintained by `FanoutGuard` (routes_knowledge.rs), read via
+    /// [`AppState::fanout_inflight_count`].
+    pub fanout_inflight: std::sync::atomic::AtomicUsize,
     /// Corpus IDs currently being actively ingested on this node.
     /// Prevents the auto-collaborate loop from firing a second
     /// `collaborate` call while a live ingest task is writing chunks.
@@ -926,6 +934,7 @@ impl AppState {
                 mesh_store,
                 app_registry,
                 app_port_map: AppPortMap::new(),
+                fanout_inflight: std::sync::atomic::AtomicUsize::new(0),
                 active_ingests: RwLock::new(HashSet::new()),
                 corpus_progress: RwLock::new(HashMap::new()),
                 newsworthy_force_tick: RwLock::new(None),
@@ -1322,6 +1331,14 @@ impl AppState {
     /// Read the current in-flight peer request count.
     pub fn peer_inflight_count(&self) -> usize {
         self.lock_peer_sched().in_flight()
+    }
+
+    /// Read the current count of **outbound** peer fan-out requests in flight
+    /// (the `fanout_inflight` gauge). Drives the `BoundedFanOut` glassbox check.
+    pub fn fanout_inflight_count(&self) -> usize {
+        self.inner
+            .fanout_inflight
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Lock the peer scheduler, recovering from poison rather than cascading a
