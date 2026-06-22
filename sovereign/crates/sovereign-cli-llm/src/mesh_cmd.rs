@@ -522,7 +522,7 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// Prints both the https share URL and the CLI form so the inviter
 /// can pick whichever suits the invitee's environment.
 fn print_mesh_share(mesh_name: &str, join_key: &str, client_token: Option<&str>) {
-    let app_link = build_https_join_link(join_key, None, Some(mesh_name));
+    let app_link = build_https_join_link(join_key, None, Some(mesh_name), None, None);
     println!();
     println!("Mesh created.");
     println!();

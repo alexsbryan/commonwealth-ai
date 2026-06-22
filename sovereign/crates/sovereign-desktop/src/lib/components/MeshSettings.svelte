@@ -101,6 +101,7 @@
   // Create-mesh form state
   let showCreateForm = $state(false);
   let meshNameInput = $state("");
+  let encryptMesh = $state(false);
   let creating = $state(false);
   let createResult = $state<CreateMeshResponse | null>(null);
   let copyFeedback = $state("");
@@ -291,6 +292,7 @@
   function openCreateForm() {
     showCreateForm = true;
     meshNameInput = "";
+    encryptMesh = false;
     createResult = null;
   }
 
@@ -325,7 +327,7 @@
     creating = true;
     error = null;
     try {
-      createResult = await meshCreate(name);
+      createResult = await meshCreate(name, encryptMesh);
       // Daemon is now running. Refresh state so the success view shows
       // the live members + share link.
       await refresh();
@@ -461,6 +463,18 @@
           bind:value={meshNameInput}
           onkeydown={(e) => e.key === "Enter" && submitCreate()}
         />
+      </label>
+      <label class="encrypt-toggle">
+        <input type="checkbox" bind:checked={encryptMesh} />
+        <span>
+          <strong>Encrypt this mesh</strong>
+          <small class="muted">
+            All members talk over an encrypted, key-verified connection and
+            join over an encrypted channel. Slower than a trusted-LAN mesh;
+            distributed-inference tensor traffic is not covered. Set once at
+            creation — it can't be changed later.
+          </small>
+        </span>
       </label>
       <div class="form-actions">
         <button class="secondary" onclick={cancelCreate} disabled={creating}>

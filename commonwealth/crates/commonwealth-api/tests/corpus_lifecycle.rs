@@ -176,6 +176,7 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppStat
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
     };
@@ -709,6 +710,7 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
     };

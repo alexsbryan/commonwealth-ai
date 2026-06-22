@@ -151,6 +151,8 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
+            dial_info_version: 0,
+            dial_info_sig: None,
             node_id: self_id,
             name: "Self".into(),
             invited_by: self_id,
@@ -165,6 +167,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
         id: MeshId::from_u128(1),
         name: "locality-test".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

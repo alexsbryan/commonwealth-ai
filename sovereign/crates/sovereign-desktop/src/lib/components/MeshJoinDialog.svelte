@@ -138,6 +138,13 @@
         </p>
       {/if}
 
+      {#if confirmation.iroh_dial}
+        <p class="encrypted-note small">
+          <strong>Encrypted mesh.</strong> Your join runs over an encrypted,
+          key-verified connection to the founder.
+        </p>
+      {/if}
+
       {#if joinError}
         <p class="error">Failed to join: {joinError}</p>
       {/if}

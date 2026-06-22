@@ -103,6 +103,8 @@ async fn gossip_round_publishes_live_hosted_corpora() {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: self_id,
         name: "Host".into(),
         invited_by: self_id,
@@ -118,6 +120,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
         id: MeshId::from_u128(42),
         name: "Test".into(),
         join_key_hash: [1u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

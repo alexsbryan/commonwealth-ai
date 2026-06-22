@@ -246,6 +246,25 @@ pub struct AppStateInner {
     pub self_iroh_dialinfo: std::sync::RwLock<
         Option<std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>>,
     >,
+    /// Unix-seconds TTL on the active mesh's join key, for an ENCRYPTED
+    /// mesh whose invite is short-lived. Set by the founder when it
+    /// mints the invite; the `/internal/join` handler rejects a join
+    /// once `now >= this`. `None` (default) = no expiry (plaintext /
+    /// legacy mesh).
+    pub join_key_expires_at: std::sync::RwLock<Option<u64>>,
+    /// Closure that signs this node's dial info (relay_url + direct addrs)
+    /// for the gossip self-stamp — `(version, relay, addrs) -> hex sig`.
+    /// The daemon installs it from the node `SigningKey`, so `AppState`
+    /// never holds raw key material and `commonwealth-api` needs no crypto
+    /// dependency. `None` until the daemon binds iroh. See [`crate::state::AppState::sign_dial_info`].
+    #[allow(clippy::type_complexity)]
+    pub self_dial_signer: std::sync::RwLock<
+        Option<
+            std::sync::Arc<
+                dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync,
+            >,
+        >,
+    >,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -582,6 +601,63 @@ impl AppState {
             .map(|provider| provider())
     }
 
+    /// Set (or clear) the active join key's TTL. The founder calls this
+    /// when it mints an encrypted-mesh invite; the join handler reads it
+    /// to reject an expired join.
+    pub fn set_join_key_expiry(&self, expires_at: Option<u64>) {
+        *self
+            .inner
+            .join_key_expires_at
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = expires_at;
+    }
+
+    /// The active join key's expiry (unix-seconds), if any.
+    pub fn join_key_expiry(&self) -> Option<u64> {
+        *self
+            .inner
+            .join_key_expires_at
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Install the dial-info signing closure (daemon builds it from the
+    /// node SigningKey after binding iroh).
+    #[allow(clippy::type_complexity)]
+    pub fn install_self_dial_signer(
+        &self,
+        signer: std::sync::Arc<
+            dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync,
+        >,
+    ) {
+        *self
+            .inner
+            .self_dial_signer
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(signer);
+    }
+
+    /// Sign this node's dial info (hex), or `None` if no signer is
+    /// installed (iroh disabled / pre-identity build).
+    pub fn sign_dial_info(
+        &self,
+        version: u64,
+        relay_url: Option<&str>,
+        direct_addrs: &[std::net::SocketAddr],
+    ) -> Option<String> {
+        let signer = self
+            .inner
+            .self_dial_signer
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()?;
+        Some(signer(
+            version,
+            relay_url.map(|s| s.to_string()),
+            direct_addrs.to_vec(),
+        ))
+    }
+
     /// Install the provider yielding this node's live iroh dial info.
     /// The daemon calls this after binding its iroh endpoint (W2), so
     /// gossip can stamp relay_url + iroh_direct_addrs into our own
@@ -802,6 +878,8 @@ impl AppState {
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 self_node_pubkey: std::sync::RwLock::new(None),
                 self_iroh_dialinfo: std::sync::RwLock::new(None),
+                join_key_expires_at: std::sync::RwLock::new(None),
+                self_dial_signer: std::sync::RwLock::new(None),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),
@@ -1450,6 +1528,7 @@ pub fn test_app_state() -> AppState {
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
     };

@@ -99,6 +99,7 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
         id: MeshId::from_u128(1),
         name: "Canonical Sync Test".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: Default::default(),
         peers: vec![],
     };

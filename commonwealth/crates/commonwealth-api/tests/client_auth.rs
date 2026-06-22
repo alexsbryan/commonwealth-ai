@@ -39,6 +39,8 @@ fn member(id: NodeId) -> MemberRecord {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: "A".into(),
         invited_by: id,
@@ -79,6 +81,7 @@ fn state_with_token(token: Option<&str>) -> AppState {
         id: MeshId::from_u128(7),
         name: "Test".into(),
         join_key_hash: [3u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

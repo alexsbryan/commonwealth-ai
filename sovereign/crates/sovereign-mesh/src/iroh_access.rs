@@ -189,6 +189,14 @@ impl MeshIrohAccess {
         dial
     }
 
+    /// This node's current dial-by-key string (`<hex-id>@<relay-or-addr>[,…]`)
+    /// for embedding in an encrypted-mesh invite, so a joiner can dial
+    /// this founder by key over iroh. `None` before any reachable
+    /// address is known (no relay connected and no direct addr yet).
+    pub fn dial_string(&self) -> Option<String> {
+        Self::dial_for(&self.endpoint)
+    }
+
     /// Live glassbox status — endpoint id + the current dial string.
     /// The daemon surfaces this so "is this node dialable by key?" is
     /// a one-read question.

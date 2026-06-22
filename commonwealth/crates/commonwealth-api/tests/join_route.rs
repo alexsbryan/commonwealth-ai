@@ -53,6 +53,8 @@ fn mesh_with_known_key() -> (AppState, String) {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: founder_id,
         name: "Founder".into(),
         invited_by: founder_id,
@@ -70,6 +72,7 @@ fn mesh_with_known_key() -> (AppState, String) {
         id: MeshId::generate(),
         name: "Test Mesh".into(),
         join_key_hash,
+        require_encryption: false,
         members,
         peers: vec![],
     };
@@ -164,4 +167,58 @@ async fn join_with_malformed_key_returns_401() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn join_with_expired_invite_is_rejected() {
+    // An encrypted mesh's invite is short-lived. Once the founder-stamped
+    // TTL passes, the founder rejects the join even with the correct key —
+    // a leaked link is useless after it expires.
+    let (state, join_key) = mesh_with_known_key();
+    state.set_join_key_expiry(Some(1)); // unix-second 1 == far in the past
+    let app = internal_router(state.clone());
+
+    let response = app
+        .oneshot(post(serde_json::json!({
+            "join_key": join_key,
+            "joining_node_name": "LateJoiner",
+            "joining_node_addresses": ["192.168.1.20:9742"],
+        })))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        json["reason"].as_str().unwrap().contains("expired"),
+        "reason should name expiry, got: {}",
+        json["reason"]
+    );
+    assert_eq!(
+        state.inner.mesh.read().await.members.len(),
+        1,
+        "expired join must not add a member"
+    );
+}
+
+#[tokio::test]
+async fn join_with_unexpired_invite_is_accepted() {
+    // A TTL in the future admits normally — the check only fences off
+    // expired links, not live ones.
+    let (state, join_key) = mesh_with_known_key();
+    state.set_join_key_expiry(Some(u64::MAX));
+    let app = internal_router(state.clone());
+
+    let response = app
+        .oneshot(post(serde_json::json!({
+            "join_key": join_key,
+            "joining_node_name": "Joiner",
+            "joining_node_addresses": ["192.168.1.20:9742"],
+        })))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(state.inner.mesh.read().await.members.len(), 2);
 }

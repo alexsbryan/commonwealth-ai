@@ -79,6 +79,7 @@ fn empty_mesh() -> Mesh {
         id: MeshId::from_u128(1),
         name: "injection-test".into(),
         join_key_hash: [9u8; 32],
+        require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
     }

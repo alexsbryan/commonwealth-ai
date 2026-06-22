@@ -55,6 +55,7 @@ fn build_founder(mesh_id: MeshId, join_key_hash: [u8; 32]) -> (AppState, NodeId,
         id: mesh_id,
         name: "Auth Test".into(),
         join_key_hash,
+        require_encryption: false,
         members,
         peers: vec![],
     };

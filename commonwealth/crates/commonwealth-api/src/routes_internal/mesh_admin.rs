@@ -621,6 +621,11 @@ pub struct MeshWire {
     pub id: commonwealth_core::ids::MeshId,
     pub name: String,
     pub join_key_hash: [u8; 32],
+    /// Mesh-wide encryption policy carried in the join snapshot so a
+    /// joiner inherits it atomically with membership. `#[serde(default)]`
+    /// keeps wire bytes identical for pre-policy peers.
+    #[serde(default)]
+    pub require_encryption: bool,
     pub members: Vec<commonwealth_core::mesh::MemberRecord>,
     pub peers: Vec<commonwealth_core::mesh::MeshPeering>,
 }
@@ -631,6 +636,7 @@ impl From<&Mesh> for MeshWire {
             id: m.id,
             name: m.name.clone(),
             join_key_hash: m.join_key_hash,
+            require_encryption: m.require_encryption,
             members: m.members.values().cloned().collect(),
             peers: m.peers.clone(),
         }
@@ -651,6 +657,7 @@ impl MeshWire {
             id: self.id,
             name: self.name,
             join_key_hash: self.join_key_hash,
+            require_encryption: self.require_encryption,
             members,
             peers: self.peers,
         }
@@ -708,6 +715,32 @@ pub async fn join(
                 StatusCode::UNAUTHORIZED,
                 Json(JoinRejection {
                     reason: "node_pubkey proof of possession missing or invalid".into(),
+                }),
+            ));
+        }
+    }
+
+    // Encrypted-mesh invites are short-lived: reject a join once the
+    // founder-stamped TTL has passed. Plaintext meshes set no expiry, so
+    // this is a no-op for them. The founder is the authority — the joiner
+    // cannot forge the expiry (it lives in the founder's AppState, never
+    // on the wire).
+    if let Some(expires_at) = state.join_key_expiry() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        if now >= expires_at {
+            tracing::warn!(
+                joining_name = %req.joining_node_name,
+                expires_at,
+                now,
+                "handshake_rejected: invite link has expired"
+            );
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(JoinRejection {
+                    reason: "invite link has expired".into(),
                 }),
             ));
         }

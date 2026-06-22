@@ -14,6 +14,18 @@ pub struct Mesh {
     pub name: String,
     /// BLAKE3 hash of the join key; raw key is never persisted.
     pub join_key_hash: [u8; 32],
+    /// Mesh-wide encryption policy, set by the founder at creation and
+    /// inherited by every joiner (it rides the same live gossip + join
+    /// snapshot as [`Self::join_key_hash`]). When `true`, every member
+    /// enforces dial-by-key iroh transport for all traffic classes with
+    /// no plaintext fallback, closes its plaintext ingress, and requires
+    /// an encrypted join. Founder-set and **monotonic**: [`Self::merge_from`]
+    /// only ever turns this ON (stricter-wins), so no peer — stale or
+    /// hostile — can demote an encrypted mesh to plaintext. `#[serde(default)]`
+    /// keeps wire/persist bytes identical for pre-policy nodes (they
+    /// read and write `false`).
+    #[serde(default)]
+    pub require_encryption: bool,
     pub members: HashMap<NodeId, MemberRecord>,
     pub peers: Vec<MeshPeering>,
 }
@@ -53,6 +65,22 @@ pub struct MemberRecord {
     /// trip; iroh still verifies the key on connect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iroh_direct_addrs: Vec<SocketAddr>,
+    /// Monotonic counter for this node's SIGNED dial info (relay_url +
+    /// iroh_direct_addrs). Bumped by the OWNER each time its reachability
+    /// changes; the anti-rollback key in [`Mesh::merge_from`] — a merge
+    /// adopts dial info only if its version is `>=` the version we hold,
+    /// so a replayed older signed record can't roll a node back. `0` =
+    /// legacy / unsigned. See [`crate::dial_sig`].
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub dial_info_version: u64,
+    /// Hex-encoded Ed25519 signature by this node's `node_pubkey` over the
+    /// canonical dial-info message (`crate::dial_sig::dial_info_message`).
+    /// When present and valid, the dial info is tamper-evident: only the
+    /// key-holder can change its own reachability, so a gossip-strip
+    /// attacker past the join-key gate cannot force a peer unreachable or
+    /// (on a non-required class) downgrade it. `None` = legacy / unsigned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dial_info_sig: Option<String>,
     /// Tombstone: unix-seconds at which this member was removed (graceful
     /// `leave` or `revoke_member`). `None` = active member. Gossiped
     /// (wire-compatible like `node_pubkey`): a tombstone propagates mesh-wide
@@ -63,6 +91,12 @@ pub struct MemberRecord {
     /// out of active / online views.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub removed_at: Option<u64>,
+}
+
+/// `skip_serializing_if` predicate for the dial-info version, so an
+/// unsigned/legacy record (version 0) stays byte-identical on the wire.
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
 }
 
 impl MemberRecord {
@@ -179,6 +213,21 @@ impl Mesh {
             };
         }
 
+        // Mesh-wide encryption policy is monotonic: stricter wins. A peer
+        // (stale or hostile, but past the join_key_hash auth boundary
+        // above) advertising `require_encryption = false` can never relax
+        // a local `true`. Once a node learns the mesh is encrypted, no
+        // gossip round demotes it to plaintext — this only ever turns ON.
+        if other.require_encryption {
+            self.require_encryption = true;
+        }
+        // Whether to REJECT unsigned dial info outright (WS-D). An
+        // encrypted mesh trusts only signed reachability; a plaintext
+        // mesh accepts unsigned dial info where there is no already-trusted
+        // signed path to protect (legacy LWW). Captured after the
+        // monotonic policy OR-in above.
+        let enforce_signed = self.require_encryption;
+
         let mut report = MergeReport::default();
         for (id, incoming) in &other.members {
             if *id == self_node_id {
@@ -191,8 +240,14 @@ impl Mesh {
             }
             match self.members.get(id) {
                 None => {
-                    let active = incoming.is_active();
-                    self.members.insert(*id, incoming.clone());
+                    // First sight of this member: trust its dial info only
+                    // if it is validly signed, else clear it (a new member
+                    // can't be poisoned with attacker-supplied reachability
+                    // on first contact). The member is still added.
+                    let mut record = incoming.clone();
+                    Self::reconcile_dial_info(&mut record, None, enforce_signed);
+                    let active = record.is_active();
+                    self.members.insert(*id, record);
                     report.added += 1;
                     // A tombstone we've never seen is still added (so it
                     // converges mesh-wide), but it is not "observed alive".
@@ -215,6 +270,12 @@ impl Mesh {
                     };
                     let mut record = incoming.clone();
                     record.node_pubkey = preserved_pubkey;
+                    // The non-security fields (last_seen, status, …) take
+                    // the LWW win, but dial info travels only if signed +
+                    // fresh; otherwise it is pinned to the value we already
+                    // trust. So a forged-newer record advances liveness but
+                    // cannot move a peer's reachability (WS-D).
+                    Self::reconcile_dial_info(&mut record, Some(existing), enforce_signed);
                     let active = record.is_active();
                     self.members.insert(*id, record);
                     report.updated += 1;
@@ -228,6 +289,73 @@ impl Mesh {
             }
         }
         report
+    }
+
+    /// WS-D dial-info reconciliation. `record` already has its
+    /// `node_pubkey` preserved by the caller. Trust `record`'s dial info
+    /// (relay + addrs) only if it is signed, verifies under that pubkey,
+    /// and — versus an `existing` record — is not a version rollback.
+    /// Otherwise pin the dial info to `existing`'s already-trusted value,
+    /// or clear it on first sight, so a gossip-strip attacker past the
+    /// join-key gate cannot move a peer's reachability.
+    ///
+    /// `enforce_signed` (the mesh's `require_encryption`) rejects ALL
+    /// unsigned dial info. A plaintext mesh accepts unsigned dial info
+    /// only when there is no already-trusted signed path to protect —
+    /// preserving legacy last-writer-wins for an all-unsigned fleet while
+    /// a signed path, once learned, can never be downgraded by an
+    /// unsigned record.
+    fn reconcile_dial_info(
+        record: &mut MemberRecord,
+        existing: Option<&MemberRecord>,
+        enforce_signed: bool,
+    ) {
+        let signed_ok = match (record.node_pubkey, record.dial_info_sig.as_deref()) {
+            (Some(pk), Some(sig)) => {
+                let version_ok = match existing {
+                    Some(e) => record.dial_info_version >= e.dial_info_version,
+                    None => true,
+                };
+                version_ok
+                    && crate::dial_sig::verify_dial_info_hex(
+                        &pk,
+                        record.dial_info_version,
+                        record.relay_url.as_deref(),
+                        &record.iroh_direct_addrs,
+                        sig,
+                    )
+            }
+            _ => false,
+        };
+        if signed_ok {
+            return;
+        }
+        let existing_unsigned = match existing {
+            Some(e) => e.dial_info_sig.is_none(),
+            None => true,
+        };
+        let accept_unsigned =
+            !enforce_signed && record.dial_info_sig.is_none() && existing_unsigned;
+        if accept_unsigned {
+            return;
+        }
+        // Reject: pin to the dial info we already trust, or clear on first
+        // sight. The member is still added/updated — it just isn't
+        // dialable-by-key until a verified record arrives.
+        match existing {
+            Some(e) => {
+                record.relay_url = e.relay_url.clone();
+                record.iroh_direct_addrs = e.iroh_direct_addrs.clone();
+                record.dial_info_version = e.dial_info_version;
+                record.dial_info_sig = e.dial_info_sig.clone();
+            }
+            None => {
+                record.relay_url = None;
+                record.iroh_direct_addrs = Vec::new();
+                record.dial_info_version = 0;
+                record.dial_info_sig = None;
+            }
+        }
     }
 }
 
@@ -286,6 +414,8 @@ mod tests {
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
+            dial_info_version: 0,
+            dial_info_sig: None,
             node_id: id,
             name: name.into(),
             invited_by: id,
@@ -326,6 +456,7 @@ mod tests {
             id,
             name: "test".into(),
             join_key_hash: hash,
+            require_encryption: false,
             members: map,
             peers: vec![],
         }
@@ -388,6 +519,160 @@ mod tests {
             merged.node_pubkey,
             Some(NodePubkey([0xAB; 32])),
             "node_pubkey anti-downgrade still preserves the known identity key"
+        );
+    }
+
+    // ── WS-D: signed dial-info anti-downgrade ─────────────────
+
+    fn signed_member(
+        id: NodeId,
+        last_seen: u64,
+        key: &ed25519_dalek::SigningKey,
+        version: u64,
+        relay: Option<&str>,
+        addrs: &[std::net::SocketAddr],
+    ) -> MemberRecord {
+        use ed25519_dalek::Signer;
+        let pk = NodePubkey(key.verifying_key().to_bytes());
+        let mut m = member(id, "signed", last_seen);
+        m.node_pubkey = Some(pk);
+        m.relay_url = relay.map(|s| s.to_string());
+        m.iroh_direct_addrs = addrs.to_vec();
+        m.dial_info_version = version;
+        let sig = key.sign(&crate::dial_sig::dial_info_message(&pk, version, relay, addrs));
+        m.dial_info_sig = Some(hex::encode(sig.to_bytes()));
+        m
+    }
+
+    #[test]
+    fn dial_info_strip_attack_is_rejected_and_pinned() {
+        let mesh_id = MeshId::from_u128(11);
+        let hash = [4u8; 32];
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let b = NodeId::from_u128(7);
+        let addrs: Vec<std::net::SocketAddr> = vec!["10.0.0.5:9742".parse().unwrap()];
+
+        // Local holds B's SIGNED dial info at version 3.
+        let trusted = signed_member(b, 100, &key, 3, Some("https://relay.example./"), &addrs);
+        let mut local = mesh_with(
+            vec![member(NodeId::from_u128(1), "self", 100), trusted],
+            mesh_id,
+            hash,
+        );
+
+        // Attacker (past the join-key gate) publishes a forged-NEWER record
+        // (higher last_seen) with the dial info STRIPPED and unsigned.
+        let mut stripped = member(b, "signed", 200);
+        stripped.node_pubkey = Some(NodePubkey(key.verifying_key().to_bytes()));
+        let incoming = mesh_with(vec![stripped], mesh_id, hash);
+
+        local.merge_from(NodeId::from_u128(1), &incoming);
+        let merged = local.members.get(&b).unwrap();
+        assert_eq!(
+            merged.relay_url.as_deref(),
+            Some("https://relay.example./"),
+            "stripped dial info rejected — pinned to the signed value"
+        );
+        assert_eq!(merged.iroh_direct_addrs, addrs);
+        assert_eq!(merged.dial_info_version, 3);
+        assert_eq!(
+            merged.last_seen, 200,
+            "non-security fields (last_seen) still take the LWW win"
+        );
+    }
+
+    #[test]
+    fn dial_info_substitution_with_foreign_sig_is_rejected() {
+        let mesh_id = MeshId::from_u128(12);
+        let hash = [4u8; 32];
+        let owner = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let attacker = ed25519_dalek::SigningKey::from_bytes(&[9u8; 32]);
+        let b = NodeId::from_u128(7);
+        let real: Vec<std::net::SocketAddr> = vec!["10.0.0.5:9742".parse().unwrap()];
+
+        let trusted = signed_member(b, 100, &owner, 3, Some("https://relay.example./"), &real);
+        let mut local = mesh_with(
+            vec![member(NodeId::from_u128(1), "self", 100), trusted],
+            mesh_id,
+            hash,
+        );
+
+        // Attacker substitutes their OWN addrs, signed with the ATTACKER's
+        // key (version bumped) — but B's preserved pubkey won't verify it.
+        let evil: Vec<std::net::SocketAddr> = vec!["10.0.0.99:9742".parse().unwrap()];
+        let mut sub = signed_member(b, 200, &attacker, 9, Some("https://evil./"), &evil);
+        // Carry B's real pubkey so preserved_pubkey resolves to B (the sig
+        // is the attacker's, so verification under B's key must fail).
+        sub.node_pubkey = Some(NodePubkey(owner.verifying_key().to_bytes()));
+        let incoming = mesh_with(vec![sub], mesh_id, hash);
+
+        local.merge_from(NodeId::from_u128(1), &incoming);
+        let merged = local.members.get(&b).unwrap();
+        assert_eq!(
+            merged.iroh_direct_addrs, real,
+            "attacker-signed substitution rejected — pinned to B's real addrs"
+        );
+        assert_eq!(merged.dial_info_version, 3);
+    }
+
+    #[test]
+    fn replayed_older_signed_dial_info_loses_version_check() {
+        let mesh_id = MeshId::from_u128(13);
+        let hash = [4u8; 32];
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let b = NodeId::from_u128(7);
+        let a5: Vec<std::net::SocketAddr> = vec!["10.0.0.5:9742".parse().unwrap()];
+
+        let v5 = signed_member(b, 100, &key, 5, Some("relay-v5"), &a5);
+        let mut local = mesh_with(
+            vec![member(NodeId::from_u128(1), "self", 100), v5],
+            mesh_id,
+            hash,
+        );
+
+        // A genuine OLDER signed record (version 2, valid sig) replayed with
+        // a forged-newer last_seen must not roll the dial info back.
+        let a2: Vec<std::net::SocketAddr> = vec!["10.0.0.2:9742".parse().unwrap()];
+        let older = signed_member(b, 999, &key, 2, Some("relay-v2"), &a2);
+        let incoming = mesh_with(vec![older], mesh_id, hash);
+
+        local.merge_from(NodeId::from_u128(1), &incoming);
+        let merged = local.members.get(&b).unwrap();
+        assert_eq!(
+            merged.dial_info_version, 5,
+            "version rollback rejected — kept version 5"
+        );
+        assert_eq!(merged.relay_url.as_deref(), Some("relay-v5"));
+        assert_eq!(merged.last_seen, 999, "liveness still advances");
+    }
+
+    #[test]
+    fn encrypted_mesh_rejects_unsigned_dial_info() {
+        let mesh_id = MeshId::from_u128(14);
+        let hash = [4u8; 32];
+        let b = NodeId::from_u128(7);
+
+        let mut local = mesh_with(
+            vec![
+                member(NodeId::from_u128(1), "self", 100),
+                member(b, "b", 100),
+            ],
+            mesh_id,
+            hash,
+        );
+        local.require_encryption = true; // encrypted mesh enforces signed dial info
+
+        // Newer record with UNSIGNED attacker dial info.
+        let mut unsigned = member(b, "b", 200);
+        unsigned.relay_url = Some("https://attacker./".into());
+        let incoming = mesh_with(vec![unsigned], mesh_id, hash);
+
+        local.merge_from(NodeId::from_u128(1), &incoming);
+        let merged = local.members.get(&b).unwrap();
+        assert!(
+            merged.relay_url.is_none(),
+            "encrypted mesh must reject unsigned dial info (cleared), got {:?}",
+            merged.relay_url
         );
     }
 

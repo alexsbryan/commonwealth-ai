@@ -1016,12 +1016,28 @@ the plan healthy as nodes come and go.
   EWMA α=0.3. `LatencyMatrix` shared via gossip.
 - **Hardware detection** — `discovery/hardware.rs` tries
   `nvidia-smi`, then `rocm-smi`, then Metal.
-- **TLS** — not wired on the LAN mesh today: the internal API
-  (:9742) is served plaintext. The unused per-session-cert /
-  `TrustStore` scaffolding (`discovery/tls.rs`) was removed
-  (2026-06-15) rather than left as a security façade. TLS *is* used
-  on the separate worker-pod path
-  (`sovereign-mesh/worker_daemon.rs`, `axum_server::bind_rustls`).
+- **TLS / mesh encryption** — A plaintext mesh (the default) serves
+  the internal API (:9742) in the clear; the unused per-session-cert /
+  `TrustStore` scaffolding (`discovery/tls.rs`) was removed (2026-06-15)
+  rather than left as a security façade. TLS *is* used on the separate
+  worker-pod path (`sovereign-mesh/worker_daemon.rs`,
+  `axum_server::bind_rustls`).
+  - **Encrypted mesh (opt-in, founder-set at creation).** A mesh created
+    with `require_encryption` flips every node to the iroh dial-by-key
+    transport (QUIC/TLS) in REQUIRE mode — no plaintext fallback
+    (`RoutedTransport::with_required`, fail-closed) — binds its internal +
+    client listeners loopback-only (the iroh acceptor is the sole network
+    ingress), and admits joiners only over an encrypted, founder-key-dialed
+    channel with a short-lived (24h) TTL invite. The policy lives on the
+    gossiped `Mesh` struct (`require_encryption`, monotonic stricter-wins
+    in `merge_from`), is inherited at join, and persists. Dial info
+    (`relay_url` + `iroh_direct_addrs`) is signed per-node
+    (`commonwealth-core::dial_sig`, monotonic `dial_info_version`) so a
+    gossip-strip attacker past the join-key gate cannot force a peer
+    unreachable or downgrade it. **NOT covered:** the multi-host
+    tensor-split RPC between `llama-server`/`rpc-server` (raw TCP, out of
+    the transport seam) — the sole residual plaintext on an encrypted
+    mesh. Never claim blanket end-to-end encryption.
 - **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
   `ModelAndKnowledgeSharing`, `Full`.
 

@@ -32,6 +32,8 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: name.into(),
         invited_by: id,
@@ -69,6 +71,7 @@ fn single_node_mesh(node_a: NodeId) -> Mesh {
         id: MeshId::from_u128(7),
         name: "Test".into(),
         join_key_hash: [3u8; 32],
+        require_encryption: false,
         members: map,
         peers: vec![],
     }

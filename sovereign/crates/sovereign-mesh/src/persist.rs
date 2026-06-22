@@ -68,6 +68,11 @@ pub struct PersistedMesh {
     pub mesh_id: MeshId,
     pub name: String,
     pub join_key_hash: [u8; 32],
+    /// Mesh-wide encryption policy ([`Mesh::require_encryption`]),
+    /// persisted so the daemon re-derives its enforcement posture on
+    /// boot. `#[serde(default)]` keeps existing mesh.json files readable.
+    #[serde(default)]
+    pub require_encryption: bool,
     pub members: Vec<MemberRecord>,
     pub peers: Vec<MeshPeering>,
 }
@@ -79,6 +84,7 @@ impl PersistedMesh {
             mesh_id: mesh.id,
             name: mesh.name.clone(),
             join_key_hash: mesh.join_key_hash,
+            require_encryption: mesh.require_encryption,
             members: mesh.members.values().cloned().collect(),
             peers: mesh.peers.clone(),
         }
@@ -95,6 +101,7 @@ impl PersistedMesh {
             id: self.mesh_id,
             name: self.name,
             join_key_hash: self.join_key_hash,
+            require_encryption: self.require_encryption,
             members,
             peers: self.peers,
         };
@@ -395,6 +402,8 @@ mod tests {
             node_pubkey: None,
             relay_url: None,
             iroh_direct_addrs: Vec::new(),
+            dial_info_version: 0,
+            dial_info_sig: None,
             node_id,
             name: "Alice".into(),
             invited_by: node_id,
@@ -430,6 +439,7 @@ mod tests {
             id: MeshId::generate(),
             name: "Persisted Mesh".into(),
             join_key_hash: [42u8; 32],
+            require_encryption: false,
             members,
             peers: vec![],
         };

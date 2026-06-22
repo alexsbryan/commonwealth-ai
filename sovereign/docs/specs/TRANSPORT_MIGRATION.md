@@ -259,13 +259,18 @@ Until W3 the daemon is reachable by key (W1) and *can* dial by key
   `iroh_transport_dials_from_contact_dial_info` (dials a host purely
   from `PeerContact` direct addrs, no seeding).
 
-**Remaining (W2b — not yet done): join over iroh.** The join deep link
-should gain `&peer=<endpoint-id>@<relay>` alongside the existing
-`?relay=<ip>` hint, and `perform_join` try the iroh hint first — the
-moment the `?relay=` Tailscale-IP wart becomes legacy and joining from
-a hostile network needs no shared overlay. This is bootstrap
-(pre-membership) and independent of the steady-state dialing above, so
-it's split out as its own step.
+**W2b — join over iroh: DONE for encrypted meshes (2026-06-22).** The
+join deep link now carries `&iroh=<endpoint-id>@<relay-or-addr>[,…]`
+(the founder's `format_dial_string`, percent-encoded) plus an `&exp=`
+TTL. When present, `join::perform_encrypted_join` builds a one-shot iroh
+endpoint, `HttpBridge`-dials the founder BY KEY, and tunnels
+`/internal/join` over the QUIC channel — fail-closed, no plaintext
+fallback — so the join secret never crosses the wire in clear and the
+joiner authenticates the founder. This shipped as part of the
+encrypted-mesh feature (a mesh created with `require_encryption`); a
+plaintext mesh still joins over the legacy IP path with the `?relay=`
+hint. Remaining nicety: a `--encrypt`-less mesh has no `iroh=` in its
+invite, so the `?relay=` wart persists for plaintext meshes only.
 
 ### W3 — per-class flips via `RoutedTransport`
 

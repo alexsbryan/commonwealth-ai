@@ -671,6 +671,11 @@ export interface JoinConfirmation {
   invited_by: string | null;
   join_key: string;
   relay_hint: string | null;
+  /** Founder's iroh dial string — present iff this is an ENCRYPTED mesh
+   *  invite (the join runs over an encrypted, key-verified channel). */
+  iroh_dial: string | null;
+  /** Unix-seconds TTL after which the invite is rejected (display). */
+  expires_at: number | null;
 }
 
 export type MemberStatus = "online" | "busy" | "away" | "offline";
