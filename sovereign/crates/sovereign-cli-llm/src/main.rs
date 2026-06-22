@@ -30,6 +30,7 @@ mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;
 mod mesh_cmd;
+mod workflow_cmd;
 mod mesh_soak;
 mod meshapp_cmd;
 mod meshapp_registry;
@@ -108,6 +109,7 @@ async fn async_main() {
         "maintainer" => recipe_agent_cmd::run_maintainer(rest).await,
         "router-cache" => router_cache_cmd::run(rest).await,
         "pipeline" => pipeline_cmd::run_pipeline(rest).await,
+        "workflow" => workflow_cmd::run_workflow(rest).await,
         "mcp" => mcp_cmd::run_mcp(rest).await,
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mesh" => mesh_cmd::run_mesh(rest).await,

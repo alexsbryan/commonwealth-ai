@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-workflow"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Step · Artifact · Runner — a typed dataflow substrate for local-model workflows"
+
+[dependencies]
+# Core-only by design: the substrate defines the Step/Artifact/Runner shapes
+# and consumes sovereign-core's Tool / InferenceProvider / StepOutput traits.
+# Inference + tool *implementations* are injected by the caller (the
+# corpus-engine EmbedFn/InferenceFn discipline) — no heavy deps here.
+sovereign-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+regex = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

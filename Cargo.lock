@@ -11956,6 +11956,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
+ "sovereign-workflow",
  "tar",
  "tempfile",
  "tokio",
@@ -12339,6 +12340,22 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-workflow"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "regex",
+ "serde",
+ "serde_json",
+ "sovereign-core",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]

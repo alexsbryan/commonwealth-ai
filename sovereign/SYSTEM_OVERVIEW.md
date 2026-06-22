@@ -136,6 +136,7 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
+├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1; `sovereign workflow run`)
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process Commonwealth embed
