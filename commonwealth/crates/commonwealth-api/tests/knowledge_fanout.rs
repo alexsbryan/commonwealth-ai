@@ -108,6 +108,8 @@ fn member(
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: name.into(),
         invited_by: id,
@@ -176,6 +178,7 @@ fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngi
         id: mesh_id,
         name: "Test".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members,
         peers: vec![],
     };

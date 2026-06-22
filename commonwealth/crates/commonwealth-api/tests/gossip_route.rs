@@ -23,6 +23,8 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: name.into(),
         invited_by: id,
@@ -63,6 +65,7 @@ fn mesh_with(mesh_id: MeshId, hash: [u8; 32], members: Vec<MemberRecord>) -> Mes
         id: mesh_id,
         name: "Test".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members: map,
         peers: vec![],
     }
@@ -76,6 +79,7 @@ struct MeshWireBody<'a> {
     id: MeshId,
     name: &'a str,
     join_key_hash: [u8; 32],
+    require_encryption: bool,
     members: Vec<MemberRecord>,
     peers: Vec<commonwealth_core::mesh::MeshPeering>,
 }
@@ -85,6 +89,7 @@ fn gossip_request_body(mesh: &Mesh) -> serde_json::Value {
         id: mesh.id,
         name: &mesh.name,
         join_key_hash: mesh.join_key_hash,
+        require_encryption: false,
         members: mesh.members.values().cloned().collect(),
         peers: mesh.peers.clone(),
     };

@@ -27,6 +27,7 @@ fn fresh_state() -> AppState {
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
     };
@@ -187,6 +188,8 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: NodeId::from_u128(id),
         name: format!("node-{id}"),
         invited_by: NodeId::from_u128(1),

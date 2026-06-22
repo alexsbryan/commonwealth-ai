@@ -55,6 +55,7 @@ fn build_state(self_id: NodeId) -> AppState {
         id: MeshId::from_u128(1),
         name: "preference-test".into(),
         join_key_hash: [9u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

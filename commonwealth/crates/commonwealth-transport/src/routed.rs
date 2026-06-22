@@ -17,27 +17,62 @@
 //! identical to its default — the daemon only installs one once at
 //! least one class is flipped.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use commonwealth_core::ids::NodeId;
 
 use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 
 /// Routes each [`TrafficClass`] to a transport, falling back to
-/// `default` (the IP overlay) per dial.
+/// `default` (the IP overlay) per dial — UNLESS the class is in
+/// [`Self::required`], in which case it fails CLOSED (no plaintext
+/// fallback). The mesh-wide encryption policy drives the required set:
+/// when `Mesh::require_encryption` is on, the daemon puts every class
+/// in it, so an encrypted mesh never degrades a dial to plaintext.
 #[derive(Debug)]
 pub struct RoutedTransport {
     per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>>,
     default: Arc<dyn PeerTransport>,
+    /// Classes that MUST resolve through their primary (encrypted)
+    /// transport with NO fallback to `default`. A class here whose
+    /// primary yields zero candidates returns an empty list — the dial
+    /// fails rather than silently downgrading to the plaintext IP path.
+    /// Empty = the historical opportunistic behaviour (prefer-iroh,
+    /// fall back to IP).
+    required: HashSet<TrafficClass>,
+    /// One-shot throttle for the "REQUIRE unsatisfiable" warning, keyed
+    /// by `(peer, class)`. The gossip loop re-resolves every ~10s, so
+    /// without this an unreachable required peer would log on every
+    /// round; we warn once, then drop to `debug` until it recovers
+    /// (recovery clears the entry, re-arming the warning).
+    warned: Mutex<HashSet<(NodeId, TrafficClass)>>,
 }
 
 impl RoutedTransport {
+    /// Opportunistic routing: flipped classes prefer their primary and
+    /// fall back to the default per dial. No class is required.
     pub fn new(
         per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>>,
         default: Arc<dyn PeerTransport>,
     ) -> Self {
-        Self { per_class, default }
+        Self::with_required(per_class, default, HashSet::new())
+    }
+
+    /// As [`Self::new`], but `required` classes have NO plaintext
+    /// fallback — they fail closed when their primary can't reach the
+    /// peer. Used to enforce the mesh-wide encryption policy.
+    pub fn with_required(
+        per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>>,
+        default: Arc<dyn PeerTransport>,
+        required: HashSet<TrafficClass>,
+    ) -> Self {
+        Self {
+            per_class,
+            default,
+            required,
+            warned: Mutex::new(HashSet::new()),
+        }
     }
 
     /// The primary transport for a class: the per-class override, else
@@ -51,6 +86,45 @@ impl RoutedTransport {
     fn transports(&self) -> impl Iterator<Item = &Arc<dyn PeerTransport>> {
         std::iter::once(&self.default).chain(self.per_class.values())
     }
+
+    /// Glassbox for a REQUIRED class: when its encrypted primary
+    /// produces no candidates we refuse the plaintext fallback, so the
+    /// dial fails closed. Surface WHY once per `(peer, class)` at WARN
+    /// (then DEBUG until recovery), with the three booleans an operator
+    /// needs to triage: no pubkey ⇒ a pre-iroh peer; pubkey but no
+    /// relay/addrs ⇒ iroh on but not yet reachable; transient otherwise.
+    /// A later non-empty resolution clears the entry so a fresh outage
+    /// re-warns.
+    fn note_required_resolution(&self, peer: &PeerContact, class: TrafficClass, unsatisfiable: bool) {
+        let key = (peer.node_id, class);
+        if !unsatisfiable {
+            // Reachable again — re-arm the one-shot warning.
+            self.warned.lock().unwrap().remove(&key);
+            return;
+        }
+        let first = self.warned.lock().unwrap().insert(key);
+        if first {
+            tracing::warn!(
+                target: "transport",
+                transport = "iroh-required",
+                peer = %peer.node_id,
+                class = class.as_str(),
+                has_pubkey = peer.node_pubkey.is_some(),
+                relay = peer.relay_url.is_some(),
+                direct_addrs = peer.iroh_direct_addrs.len(),
+                "encryption REQUIRED but peer has no encrypted path — refusing \
+                 plaintext fallback; peer is UNREACHABLE for this class",
+            );
+        } else {
+            tracing::debug!(
+                target: "transport",
+                transport = "iroh-required",
+                peer = %peer.node_id,
+                class = class.as_str(),
+                "encryption REQUIRED, peer still has no encrypted path",
+            );
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -62,13 +136,18 @@ impl PeerTransport for RoutedTransport {
     async fn endpoints(&self, peer: &PeerContact, class: TrafficClass) -> Vec<PeerEndpoint> {
         let primary = self.primary(class);
         let mut out = primary.endpoints(peer, class).await;
+        let is_required = self.required.contains(&class);
         // Fallback: for a class routed to a non-default transport,
         // append the default's candidates AFTER the primary's, so a
         // caller trying in order degrades to IP automatically when the
         // primary dial fails. Skipped when primary IS the default
-        // (Arc identity) to avoid double-listing.
-        if !Arc::ptr_eq(primary, &self.default) {
+        // (Arc identity) to avoid double-listing, and skipped for
+        // REQUIRED classes — those must not degrade to plaintext.
+        if !Arc::ptr_eq(primary, &self.default) && !is_required {
             out.extend(self.default.endpoints(peer, class).await);
+        }
+        if is_required {
+            self.note_required_resolution(peer, class, out.is_empty());
         }
         out
     }
@@ -173,6 +252,73 @@ mod tests {
         // Inference is NOT flipped → IP only, no iroh.
         let i = routed.endpoints(&contact(), TrafficClass::Inference).await;
         assert_eq!(labels(i), vec!["ip:y"]);
+    }
+
+    fn required(classes: &[TrafficClass]) -> HashSet<TrafficClass> {
+        classes.iter().copied().collect()
+    }
+
+    #[tokio::test]
+    async fn required_class_with_iroh_path_uses_iroh_only() {
+        // Peer reachable over iroh; class required → iroh candidate
+        // ONLY, no IP fallback appended (the inverse of the
+        // opportunistic `routed_class_lists_primary_then_default_fallback`).
+        let iroh = Mock::new("iroh", &["iroh:x"]);
+        let ip = Mock::new("ip", &["ip:y"]);
+        let mut per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>> = HashMap::new();
+        per_class.insert(TrafficClass::Gossip, iroh);
+        let routed =
+            RoutedTransport::with_required(per_class, ip, required(&[TrafficClass::Gossip]));
+
+        let g = routed.endpoints(&contact(), TrafficClass::Gossip).await;
+        assert_eq!(labels(g), vec!["iroh:x"]);
+    }
+
+    #[tokio::test]
+    async fn required_class_with_no_iroh_path_returns_empty_not_plaintext() {
+        // THE KEYSTONE: peer has no iroh path (iroh primary yields
+        // nothing) and the class is required → empty candidate list,
+        // NOT the IP fallback. The dial fails closed rather than
+        // silently downgrading to plaintext.
+        let iroh = Mock::new("iroh", &[]); // no encrypted path
+        let ip = Mock::new("ip", &["ip:y"]);
+        let mut per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>> = HashMap::new();
+        per_class.insert(TrafficClass::Gossip, iroh);
+        let routed =
+            RoutedTransport::with_required(per_class, ip, required(&[TrafficClass::Gossip]));
+
+        let g = routed.endpoints(&contact(), TrafficClass::Gossip).await;
+        assert!(
+            g.is_empty(),
+            "required class must NOT fall back to plaintext IP — got {:?}",
+            labels(g)
+        );
+    }
+
+    #[tokio::test]
+    async fn required_is_per_class_not_global() {
+        // A flipped-but-not-required class STILL falls back, proving
+        // `required` is per-class. Gossip is required (no iroh path →
+        // empty); Inference is flipped but not required (no iroh path →
+        // IP fallback).
+        let iroh_gossip = Mock::new("iroh", &[]);
+        let iroh_inf = Mock::new("iroh", &[]);
+        let ip = Mock::new("ip", &["ip:y"]);
+        let mut per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>> = HashMap::new();
+        per_class.insert(TrafficClass::Gossip, iroh_gossip);
+        per_class.insert(TrafficClass::Inference, iroh_inf);
+        let routed =
+            RoutedTransport::with_required(per_class, ip, required(&[TrafficClass::Gossip]));
+
+        let g = routed.endpoints(&contact(), TrafficClass::Gossip).await;
+        assert!(g.is_empty(), "required Gossip fails closed");
+
+        let i = routed.endpoints(&contact(), TrafficClass::Inference).await;
+        assert_eq!(
+            labels(i),
+            vec!["ip:y"],
+            "non-required Inference still degrades to IP"
+        );
     }
 
     #[tokio::test]

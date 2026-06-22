@@ -76,6 +76,8 @@ struct MeshWire {
     id: commonwealth_core::ids::MeshId,
     name: String,
     join_key_hash: [u8; 32],
+    #[serde(default)]
+    require_encryption: bool,
     members: Vec<commonwealth_core::mesh::MemberRecord>,
     peers: Vec<commonwealth_core::mesh::MeshPeering>,
 }
@@ -92,6 +94,7 @@ impl MeshWire {
             id: self.id,
             name: self.name,
             join_key_hash: self.join_key_hash,
+            require_encryption: self.require_encryption,
             members,
             peers: self.peers,
         }
@@ -108,6 +111,7 @@ struct JoinResponseWire {
 /// Outcome of a successful handshake. The caller replaces its local
 /// placeholder mesh with `mesh` and records `assigned_node_id` as
 /// "this node's id in the joined mesh".
+#[derive(Debug)]
 pub struct JoinHandshakeResult {
     pub mesh: Mesh,
     pub assigned_node_id: NodeId,
@@ -242,6 +246,104 @@ async fn try_single_peer(
     } else {
         warn!(peer = %authority, %status, "handshake: unexpected status");
         None
+    }
+}
+
+/// ENCRYPTED join: dial the founder by key over iroh and tunnel
+/// `/internal/join` through the key-verified QUIC bridge, so the join
+/// secret never crosses the wire in plaintext and the joiner
+/// cryptographically verifies it reached the real founder. **Fail
+/// closed** — there is NO mDNS / plaintext fallback; an encrypted mesh
+/// refuses to join over plaintext.
+///
+/// `founder_dial` is the `<hex-pubkey>@<relay-or-addr>[,…]` string the
+/// founder embedded in the invite (`format_dial_string`). `joiner_seed`
+/// is this node's `node_key` seed — a valid iroh `SecretKey` — used to
+/// build the one-shot dialing endpoint (dropped with the bridge on
+/// return).
+///
+/// NOTE: the on-wire QUIC handshake is validated on two real machines
+/// (multi-box-only); the in-process tests cover the surrounding logic
+/// (dial-string parse, fail-closed on unreachable founder).
+#[allow(clippy::too_many_arguments)]
+pub async fn perform_encrypted_join(
+    founder_dial: &str,
+    join_key: &str,
+    joining_node_name: &str,
+    joining_node_addresses: Vec<SocketAddr>,
+    joiner_seed: [u8; 32],
+    proposed_node_id: Option<NodeId>,
+    identity: Option<(commonwealth_core::ids::NodePubkey, String)>,
+) -> Result<JoinHandshakeResult, JoinError> {
+    use commonwealth_transport::iroh::{
+        build_relayed_endpoint, parse_dial_string, HttpBridge, SecretKey, ALPN,
+    };
+
+    let dummy_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
+
+    let (node_pubkey, pubkey_proof) = match identity {
+        Some((pk, proof)) => (Some(pk), Some(proof)),
+        None => (None, None),
+    };
+    let body = JoinRequestWire {
+        join_key: join_key.to_string(),
+        joining_node_name: joining_node_name.to_string(),
+        joining_node_addresses,
+        proposed_node_id,
+        node_pubkey,
+        pubkey_proof,
+    };
+
+    // Parse the founder's dial-by-key target from the invite.
+    let target = parse_dial_string(founder_dial).map_err(|e| JoinError::BadResponse {
+        address: dummy_addr,
+        reason: format!("invite has a malformed iroh dial string: {e}"),
+    })?;
+
+    // One-shot dialing endpoint from this node's identity seed (the
+    // node_key seed IS a valid iroh SecretKey).
+    let secret = SecretKey::from_bytes(&joiner_seed);
+    let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()])
+        .await
+        .map_err(|e| JoinError::BadResponse {
+            address: dummy_addr,
+            reason: format!("failed to build iroh endpoint for encrypted join: {e}"),
+        })?;
+
+    // Localhost bridge: the QUIC handshake to the founder IS the key
+    // verification — it fails unless the responder holds the private key
+    // for the founder pubkey embedded in the dial string.
+    let bridge = HttpBridge::spawn(endpoint, target, ALPN)
+        .await
+        .map_err(|e| JoinError::BadResponse {
+            address: dummy_addr,
+            reason: format!("failed to open iroh tunnel to founder: {e}"),
+        })?;
+    let authority = bridge.local_addr().to_string();
+
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .expect("reqwest client build");
+
+    info!(
+        founder = %founder_dial,
+        "handshake_sent: encrypted join over iroh, POST /internal/join"
+    );
+    // `_bridge`/endpoint stay alive until this fn returns (the POST
+    // rides the tunnel they own).
+    match try_single_peer(&http, &authority, &body).await {
+        Some(parsed) => Ok(JoinHandshakeResult {
+            mesh: parsed.mesh.into_mesh(),
+            assigned_node_id: parsed.assigned_node_id,
+        }),
+        None => Err(JoinError::NoPeerFound {
+            mesh_name: "(encrypted mesh)".to_string(),
+            direct_hint_msg:
+                " — the founder did not accept the encrypted join (expired invite, \
+                 wrong key, or unreachable over iroh)"
+                    .to_string(),
+        }),
     }
 }
 
@@ -520,5 +622,31 @@ mod tests {
     fn normalise_rejects_empty() {
         assert!(normalise_peer_hint("").is_none());
         assert!(normalise_peer_hint("   ").is_none());
+    }
+
+    #[tokio::test]
+    async fn encrypted_join_rejects_malformed_dial_string() {
+        // A malformed founder dial string fails fast (before any iroh
+        // endpoint is built or the network is touched) with a clear
+        // BadResponse — the fail-closed guard on the encrypted path.
+        let result = perform_encrypted_join(
+            "this-is-not-a-valid-dial-string", // no `@`, no targets
+            "cwth-0000-0000-0000",
+            "joiner",
+            vec![],
+            [0u8; 32],
+            None,
+            None,
+        )
+        .await;
+        match result {
+            Err(JoinError::BadResponse { reason, .. }) => {
+                assert!(
+                    reason.contains("malformed iroh dial string"),
+                    "got: {reason}"
+                );
+            }
+            other => panic!("expected BadResponse for malformed dial, got {other:?}"),
+        }
     }
 }

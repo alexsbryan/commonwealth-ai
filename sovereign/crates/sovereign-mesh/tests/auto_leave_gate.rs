@@ -70,6 +70,8 @@ async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
                 node_pubkey: None,
                 relay_url: None,
                 iroh_direct_addrs: Vec::new(),
+                dial_info_version: 0,
+                dial_info_sig: None,
                 node_id: peer_id,
                 name: "synthetic-peer".into(),
                 invited_by: peer_id,
@@ -111,6 +113,8 @@ async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
         join_key: foreign_key,
         mesh_name: Some("hypothetical-other-mesh".into()),
         relay_hint: None,
+        iroh_dial: None,
+        expires_at: None,
     };
 
     let result = daemon.join_mesh(&foreign_link, "new-node-name").await;
@@ -221,6 +225,8 @@ async fn join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake() {
         join_key: foreign_key,
         mesh_name: Some("hypothetical-target".into()),
         relay_hint: None,
+        iroh_dial: None,
+        expires_at: None,
     };
 
     // We expect an error (the join handshake has no peer to talk to),

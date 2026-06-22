@@ -230,8 +230,32 @@ pub async fn run_one_round(
             // provider (iroh disabled) leaves these fields at their
             // default empty, so a non-iroh node publishes nothing here.
             if let Some(info) = app_state.self_iroh_dialinfo() {
+                let changed =
+                    me.relay_url != info.relay_url || me.iroh_direct_addrs != info.direct_addrs;
                 me.relay_url = info.relay_url;
                 me.iroh_direct_addrs = info.direct_addrs;
+                // WS-D anti-downgrade: SIGN our dial info so peers can
+                // verify only we changed it (a gossip-strip attacker past
+                // the join-key gate can't force us unreachable / downgrade
+                // us). Bump the monotonic version on a real content change
+                // so a replayed older signed record loses the merge
+                // version check. Only commit version + sig together when a
+                // signer is installed (iroh on); else stay unsigned.
+                if changed || me.dial_info_sig.is_none() {
+                    let next_version = if changed {
+                        me.dial_info_version.saturating_add(1).max(1)
+                    } else {
+                        me.dial_info_version.max(1)
+                    };
+                    if let Some(sig) = app_state.sign_dial_info(
+                        next_version,
+                        me.relay_url.as_deref(),
+                        &me.iroh_direct_addrs,
+                    ) {
+                        me.dial_info_version = next_version;
+                        me.dial_info_sig = Some(sig);
+                    }
+                }
             }
         }
         for (id, m) in mesh.members.iter_mut() {
@@ -735,6 +759,8 @@ struct MeshWire {
     id: MeshId,
     name: String,
     join_key_hash: [u8; 32],
+    #[serde(default)]
+    require_encryption: bool,
     members: Vec<MemberRecord>,
     peers: Vec<MeshPeering>,
 }
@@ -745,6 +771,7 @@ impl From<&Mesh> for MeshWire {
             id: m.id,
             name: m.name.clone(),
             join_key_hash: m.join_key_hash,
+            require_encryption: m.require_encryption,
             members: m.members.values().cloned().collect(),
             peers: m.peers.clone(),
         }
@@ -763,6 +790,7 @@ impl MeshWire {
             id: self.id,
             name: self.name,
             join_key_hash: self.join_key_hash,
+            require_encryption: self.require_encryption,
             members,
             peers: self.peers,
         }

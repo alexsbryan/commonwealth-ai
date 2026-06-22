@@ -52,6 +52,7 @@ fn build_app_state(with_embed: bool) -> AppState {
         id: commonwealth_core::ids::MeshId::from_u128(7),
         name: "embeddings-test".into(),
         join_key_hash: [3u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

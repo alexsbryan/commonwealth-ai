@@ -57,6 +57,7 @@ fn build_state() -> AppState {
         id: MeshId::from_u128(1),
         name: "responses-test".into(),
         join_key_hash: [0x55; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

@@ -438,6 +438,7 @@ mod tests {
             id: MeshId::generate(),
             name: "test".into(),
             join_key_hash: [0u8; 32],
+            require_encryption: false,
             members: Default::default(),
             peers: vec![],
         };

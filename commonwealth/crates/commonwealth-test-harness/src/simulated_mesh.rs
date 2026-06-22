@@ -25,6 +25,7 @@ impl SimulatedMesh {
             id: MeshId::from_u128(1),
             name: name.into(),
             join_key_hash: [0u8; 32],
+            require_encryption: false,
             members: HashMap::new(),
             peers: vec![],
         };

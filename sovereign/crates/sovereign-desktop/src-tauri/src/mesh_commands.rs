@@ -66,7 +66,9 @@ pub struct JoinMeshResponse {
 pub async fn mesh_create(
     state: State<'_, Arc<AppState>>,
     mesh_name: String,
+    encrypt: Option<bool>,
 ) -> Result<CreateMeshResponse, String> {
+    let encrypt = encrypt.unwrap_or(false);
     let node_name = {
         let config = state.config.read().await;
         resolve_node_name(&config.node_name)
@@ -75,7 +77,11 @@ pub async fn mesh_create(
     if let Some(port) = attached_port(&state) {
         // Attach mode — route through the daemon's HTTP API.
         let client = http_client()?;
-        let body = serde_json::json!({ "name": mesh_name, "node_name": node_name });
+        let body = serde_json::json!({
+            "name": mesh_name,
+            "node_name": node_name,
+            "encrypt": encrypt,
+        });
         let resp = client
             .post(format!("http://localhost:{port}/v1/mesh/create"))
             .json(&body)
@@ -101,7 +107,7 @@ pub async fn mesh_create(
     // start_daemon, so it binds wide on first start with no restart.
     mesh.expose_client_api();
     let result = mesh
-        .create_mesh(&mesh_name, &node_name)
+        .create_mesh_with(&mesh_name, &node_name, encrypt)
         .await
         .map_err(|e| e.to_string())?;
     Ok(CreateMeshResponse {

@@ -34,6 +34,7 @@ fn empty_mesh() -> Mesh {
         id: MeshId::from_u128(1),
         name: "test".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members: std::collections::HashMap::new(),
         peers: vec![],
     }

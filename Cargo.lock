@@ -1910,6 +1910,7 @@ dependencies = [
 name = "commonwealth-core"
 version = "0.1.18"
 dependencies = [
+ "ed25519-dalek 2.2.0",
  "getrandom 0.3.4",
  "hex",
  "oicp-types",

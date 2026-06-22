@@ -73,6 +73,7 @@ fn build_state(provider: Arc<dyn InferenceProvider>) -> AppState {
         id: MeshId::from_u128(1),
         name: "finish-reason-test".into(),
         join_key_hash: [4u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

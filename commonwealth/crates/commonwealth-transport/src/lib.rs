@@ -25,13 +25,20 @@
 //! into the same `Arc<dyn PeerTransport>` with zero call-site churn.
 //! Until there are two transports, no such registry exists.
 //!
-//! Out of scope, by design: the join handshake (pre-membership
-//! bootstrap — there is no `PeerContact` yet when joining), the
-//! loopback self-probe, worker-pod pinned-TLS endpoints (separate
-//! trust model, already seamed via `PinnedTransport`), and the raw
-//! TCP that spawned `llama-server`/`rpc-server` processes speak to
-//! each other (third-party binaries; they stay on the IP overlay
-//! until a tunnel-proxy is worth building).
+//! Out of scope, by design: the loopback self-probe, worker-pod
+//! pinned-TLS endpoints (separate trust model, already seamed via
+//! `PinnedTransport`), and the raw TCP that spawned
+//! `llama-server`/`rpc-server` processes speak to each other
+//! (third-party binaries; they stay on the IP overlay until a
+//! tunnel-proxy is worth building) — that tensor-split RPC is the sole
+//! residual plaintext on an ENCRYPTED mesh.
+//!
+//! The join handshake was historically out of scope (pre-membership —
+//! no `PeerContact` yet), but an encrypted mesh now joins over iroh:
+//! the invite carries the founder's dial string and
+//! `sovereign-mesh::join::perform_encrypted_join` dials by key, so the
+//! join secret never crosses plaintext. A plaintext mesh still joins
+//! over the IP overlay.
 
 pub mod identity;
 mod ip;
@@ -71,6 +78,18 @@ pub enum TrafficClass {
 }
 
 impl TrafficClass {
+    /// Every traffic class, in flip order. Callers that must apply a
+    /// policy to all peer traffic — e.g. routing every class over iroh
+    /// when the mesh-wide encryption policy is on — enumerate this.
+    pub const ALL: [TrafficClass; 6] = [
+        TrafficClass::Gossip,
+        TrafficClass::ControlPlane,
+        TrafficClass::KnowledgeSearch,
+        TrafficClass::ModelTransfer,
+        TrafficClass::Inference,
+        TrafficClass::StatusProbe,
+    ];
+
     /// Stable lowercase name for tracing fields.
     pub fn as_str(&self) -> &'static str {
         match self {

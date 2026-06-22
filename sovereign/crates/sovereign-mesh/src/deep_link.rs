@@ -23,11 +23,23 @@ const DEFAULT_HTTPS_HOST: &str = "sovereign.dev";
 /// A parsed deep link.
 #[derive(Debug, Clone)]
 pub enum DeepLink {
-    /// Join a mesh: `sovereign://join/<join-key>[?relay=<host>&name=<mesh-name>]`
+    /// Join a mesh: `sovereign://join/<join-key>[?relay=<host>&name=<mesh-name>&iroh=<dial>&exp=<unix>]`
     Join {
         join_key: String,
         relay_hint: Option<String>,
         mesh_name: Option<String>,
+        /// Founder's iroh dial string (`<hex-pubkey>@<relay-or-addr>[,…]`,
+        /// see `commonwealth_transport::iroh::format_dial_string`). Present
+        /// only for an ENCRYPTED mesh: the joiner dials the founder by key
+        /// over iroh and tunnels `/internal/join` through it, so the join
+        /// secret never crosses the wire in plaintext. `None` ⇒ legacy /
+        /// plaintext mesh, joined over plain HTTP as before.
+        iroh_dial: Option<String>,
+        /// Unix-seconds after which this invite is no longer accepted
+        /// (short-lived TTL). Display-only on the joiner; the founder is
+        /// the authority and rejects an expired key at the join handler.
+        /// `None` ⇒ no expiry (legacy / plaintext mesh).
+        expires_at: Option<u64>,
     },
 }
 
@@ -59,11 +71,18 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
             let params = parse_query_params(query);
             let relay_hint = params.get("relay").cloned();
             let mesh_name = params.get("name").map(|n| n.replace('+', " "));
+            // `iroh` / `exp` are already percent-decoded by
+            // `parse_query_params`, so the dial string's `@ , : /` come
+            // back verbatim. A non-numeric `exp` is treated as absent.
+            let iroh_dial = params.get("iroh").cloned();
+            let expires_at = params.get("exp").and_then(|s| s.parse::<u64>().ok());
 
             Some(DeepLink::Join {
                 join_key,
                 relay_hint,
                 mesh_name,
+                iroh_dial,
+                expires_at,
             })
         }
         _ => None,
@@ -101,6 +120,8 @@ pub fn parse_https_join(url: &str) -> Option<DeepLink> {
         join_key: join_key.to_string(),
         relay_hint: params.get("relay").cloned(),
         mesh_name: params.get("name").map(|n| n.replace('+', " ")),
+        iroh_dial: params.get("iroh").cloned(),
+        expires_at: params.get("exp").and_then(|s| s.parse::<u64>().ok()),
     })
 }
 
@@ -132,6 +153,8 @@ pub fn parse_join_argument(arg: &str) -> Option<DeepLink> {
             join_key: trimmed.to_string(),
             relay_hint: None,
             mesh_name: None,
+            iroh_dial: None,
+            expires_at: None,
         });
     }
     None
@@ -143,18 +166,13 @@ pub fn build_https_join_link(
     join_key: &str,
     relay_hint: Option<&str>,
     mesh_name: Option<&str>,
+    iroh_dial: Option<&str>,
+    expires_at: Option<u64>,
 ) -> String {
     let host =
         std::env::var("SOVEREIGN_JOIN_HOST").unwrap_or_else(|_| DEFAULT_HTTPS_HOST.to_string());
     let mut url = format!("https://{host}/join/{join_key}");
-    let mut params = Vec::new();
-    if let Some(relay) = relay_hint {
-        params.push(format!("relay={relay}"));
-    }
-    if let Some(name) = mesh_name {
-        let encoded = name.replace(' ', "+");
-        params.push(format!("name={encoded}"));
-    }
+    let params = join_query_params(relay_hint, mesh_name, iroh_dial, expires_at);
     if !params.is_empty() {
         url.push('?');
         url.push_str(&params.join("&"));
@@ -162,29 +180,51 @@ pub fn build_https_join_link(
     url
 }
 
-/// Build a deep link URL for joining a mesh.
+/// Build a deep link URL for joining a mesh. `iroh_dial` (the founder's
+/// dial-by-key string) and `expires_at` (TTL) are emitted only for an
+/// encrypted mesh; plaintext callers pass `None, None` and get the
+/// historical URL byte-for-byte.
 pub fn build_join_link(
     join_key: &str,
     relay_hint: Option<&str>,
     mesh_name: Option<&str>,
+    iroh_dial: Option<&str>,
+    expires_at: Option<u64>,
 ) -> String {
     let mut url = format!("sovereign://join/{join_key}");
-    let mut params = Vec::new();
-
-    if let Some(relay) = relay_hint {
-        params.push(format!("relay={relay}"));
-    }
-    if let Some(name) = mesh_name {
-        let encoded = name.replace(' ', "+");
-        params.push(format!("name={encoded}"));
-    }
-
+    let params = join_query_params(relay_hint, mesh_name, iroh_dial, expires_at);
     if !params.is_empty() {
         url.push('?');
         url.push_str(&params.join("&"));
     }
-
     url
+}
+
+/// Shared query-param builder for both link forms. The dial string
+/// carries `@ , : /` which a clipboard round-trip through `URL`
+/// percent-escapes, so we encode it on the way out; `parse_query_params`
+/// percent-decodes it back. `mesh_name` keeps the historical
+/// space-as-`+` minimal encoding for backward-compatible URLs.
+fn join_query_params(
+    relay_hint: Option<&str>,
+    mesh_name: Option<&str>,
+    iroh_dial: Option<&str>,
+    expires_at: Option<u64>,
+) -> Vec<String> {
+    let mut params = Vec::new();
+    if let Some(relay) = relay_hint {
+        params.push(format!("relay={relay}"));
+    }
+    if let Some(name) = mesh_name {
+        params.push(format!("name={}", name.replace(' ', "+")));
+    }
+    if let Some(dial) = iroh_dial {
+        params.push(format!("iroh={}", percent_encode(dial)));
+    }
+    if let Some(exp) = expires_at {
+        params.push(format!("exp={exp}"));
+    }
+    params
 }
 
 /// Build a join confirmation from a parsed deep link.
@@ -194,6 +234,8 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
             join_key,
             relay_hint,
             mesh_name,
+            iroh_dial,
+            expires_at,
         } => Some(JoinConfirmation {
             mesh_name: mesh_name
                 .clone()
@@ -201,6 +243,8 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
             invited_by: None,
             join_key: join_key.clone(),
             relay_hint: relay_hint.clone(),
+            iroh_dial: iroh_dial.clone(),
+            expires_at: *expires_at,
         }),
     }
 }
@@ -267,6 +311,23 @@ fn percent_decode(input: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }
 
+/// Percent-encode a query value — the inverse of [`percent_decode`].
+/// Encodes everything outside the unreserved set (`ALPHA DIGIT - . _ ~`),
+/// so the iroh dial string's `@ , : /` are escaped on the way out and
+/// `parse_query_params` decodes them back verbatim.
+fn percent_encode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for &b in input.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +340,7 @@ mod tests {
                 join_key,
                 relay_hint,
                 mesh_name,
+                ..
             } => {
                 assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
                 assert!(relay_hint.is_none());
@@ -298,6 +360,7 @@ mod tests {
                 join_key,
                 relay_hint,
                 mesh_name,
+                ..
             } => {
                 assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
                 assert_eq!(relay_hint.as_deref(), Some("192.168.1.100"));
@@ -315,7 +378,13 @@ mod tests {
 
     #[test]
     fn build_and_parse_round_trip() {
-        let url = build_join_link("cwth-abcd-efgh-ijkl", Some("10.0.0.5"), Some("My Mesh"));
+        let url = build_join_link(
+            "cwth-abcd-efgh-ijkl",
+            Some("10.0.0.5"),
+            Some("My Mesh"),
+            None,
+            None,
+        );
         assert_eq!(
             url,
             "sovereign://join/cwth-abcd-efgh-ijkl?relay=10.0.0.5&name=My+Mesh"
@@ -327,6 +396,7 @@ mod tests {
                 join_key,
                 relay_hint,
                 mesh_name,
+                ..
             } => {
                 assert_eq!(join_key, "cwth-abcd-efgh-ijkl");
                 assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
@@ -342,6 +412,7 @@ mod tests {
             join_key,
             relay_hint,
             mesh_name,
+            ..
         } = link;
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert!(relay_hint.is_none());
@@ -358,6 +429,7 @@ mod tests {
             join_key,
             relay_hint,
             mesh_name,
+            ..
         } = link;
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
@@ -401,7 +473,13 @@ mod tests {
 
     #[test]
     fn build_https_join_link_round_trip() {
-        let url = build_https_join_link("cwth-abcd-ef01-2345", Some("10.0.0.5"), Some("My Mesh"));
+        let url = build_https_join_link(
+            "cwth-abcd-ef01-2345",
+            Some("10.0.0.5"),
+            Some("My Mesh"),
+            None,
+            None,
+        );
         assert_eq!(
             url,
             "https://sovereign.dev/join/cwth-abcd-ef01-2345?relay=10.0.0.5&name=My+Mesh"
@@ -411,6 +489,7 @@ mod tests {
             join_key,
             relay_hint,
             mesh_name,
+            ..
         } = link;
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
@@ -431,6 +510,7 @@ mod tests {
             join_key,
             relay_hint,
             mesh_name,
+            ..
         } = link;
         assert_eq!(join_key, "cwth-4d5f-6211-64d6");
         assert_eq!(relay_hint.as_deref(), Some("100.64.0.2:9742"));
@@ -469,10 +549,91 @@ mod tests {
             join_key: "cwth-test".into(),
             relay_hint: Some("relay.example.com".into()),
             mesh_name: Some("Test Mesh".into()),
+            iroh_dial: None,
+            expires_at: None,
         };
         let confirm = join_confirmation_from_link(&link).unwrap();
         assert_eq!(confirm.mesh_name, "Test Mesh");
         assert_eq!(confirm.join_key, "cwth-test");
         assert_eq!(confirm.relay_hint.as_deref(), Some("relay.example.com"));
+        assert!(confirm.iroh_dial.is_none());
+        assert!(confirm.expires_at.is_none());
+    }
+
+    #[test]
+    fn percent_encode_round_trips_dial_string() {
+        // The dial string carries every reserved char that breaks a
+        // naive query value: `@ : / , .`. Encode → decode must be
+        // identity, or the joiner dials a corrupt founder address.
+        let dial = "aabbccddeeff00112233@https://relay.example./,10.0.0.5:9742,[fd7a::1]:9742";
+        assert_eq!(percent_decode(&percent_encode(dial)), dial);
+    }
+
+    #[test]
+    fn build_and_parse_round_trip_with_iroh_and_ttl() {
+        // An encrypted-mesh invite carries the founder's dial string
+        // and a TTL. Both must survive a build → (clipboard-style
+        // percent round-trip) → parse cycle verbatim.
+        let dial = "aabbccddeeff00112233@https://relay.example./,10.0.0.5:9742";
+        let url = build_join_link(
+            "cwth-abcd-efgh-ijkl",
+            None,
+            Some("Secure Mesh"),
+            Some(dial),
+            Some(1_900_000_000),
+        );
+        // The dial string is percent-encoded in the URL (no bare `@`/`/`).
+        assert!(url.contains("iroh=aabbcc"));
+        assert!(url.contains("%40")); // '@' encoded
+        assert!(url.contains("exp=1900000000"));
+
+        let link = parse_deep_link(&url).unwrap();
+        let DeepLink::Join {
+            join_key,
+            iroh_dial,
+            expires_at,
+            mesh_name,
+            ..
+        } = link;
+        assert_eq!(join_key, "cwth-abcd-efgh-ijkl");
+        assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert_eq!(expires_at, Some(1_900_000_000));
+        assert_eq!(mesh_name.as_deref(), Some("Secure Mesh"));
+
+        // And the same fields reach the JoinConfirmation the UI shows.
+        let confirm = join_confirmation_from_link(&parse_deep_link(&url).unwrap()).unwrap();
+        assert_eq!(confirm.iroh_dial.as_deref(), Some(dial));
+        assert_eq!(confirm.expires_at, Some(1_900_000_000));
+    }
+
+    #[test]
+    fn https_form_round_trips_iroh_and_ttl() {
+        let dial = "aabbccddeeff00112233@10.0.0.5:9742";
+        let url = build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), Some(42));
+        let DeepLink::Join {
+            iroh_dial,
+            expires_at,
+            ..
+        } = parse_https_join(&url).unwrap();
+        assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert_eq!(expires_at, Some(42));
+    }
+
+    #[test]
+    fn plaintext_invite_has_no_iroh_or_exp() {
+        // Back-compat: a plaintext invite (None, None) is byte-identical
+        // to before and parses with iroh_dial/expires_at absent.
+        let url = build_join_link("cwth-abcd-efgh-ijkl", Some("10.0.0.5"), Some("My Mesh"), None, None);
+        assert_eq!(
+            url,
+            "sovereign://join/cwth-abcd-efgh-ijkl?relay=10.0.0.5&name=My+Mesh"
+        );
+        let DeepLink::Join {
+            iroh_dial,
+            expires_at,
+            ..
+        } = parse_deep_link(&url).unwrap();
+        assert!(iroh_dial.is_none());
+        assert!(expires_at.is_none());
     }
 }

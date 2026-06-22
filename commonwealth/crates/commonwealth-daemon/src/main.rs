@@ -882,6 +882,7 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
             id: MeshId::from_u128(0),
             name: "commonwealth".into(),
             join_key_hash: [0u8; 32],
+            require_encryption: false,
             members: HashMap::new(),
             peers: vec![],
         };

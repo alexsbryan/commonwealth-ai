@@ -28,6 +28,8 @@ fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> Member
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: name.into(),
         invited_by: id,
@@ -91,6 +93,7 @@ async fn two_peers_converge_via_one_gossip_round() {
         id: mesh_id,
         name: "Test".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members: {
             let mut m = HashMap::new();
             // Peer A starts knowing only about themselves — the
@@ -110,6 +113,7 @@ async fn two_peers_converge_via_one_gossip_round() {
         id: mesh_id,
         name: "Test".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members: {
             let mut m = HashMap::new();
             // Peer B already knows about both themselves and A —
@@ -194,6 +198,7 @@ async fn gossip_decays_peer_after_local_contact_goes_stale() {
         id: MeshId::from_u128(7),
         name: "Test".into(),
         join_key_hash: [1u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };
@@ -259,6 +264,7 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
         id: MeshId::from_u128(7),
         name: "Test".into(),
         join_key_hash: [1u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };
@@ -296,6 +302,7 @@ async fn departure_tombstones_self_on_peers() {
         id: mesh_id,
         name: "T".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members: {
             let mut m = HashMap::new();
             m.insert(a_id, member_at(a_id, "A", 100, "127.0.0.1:1".parse().unwrap()));
@@ -311,6 +318,7 @@ async fn departure_tombstones_self_on_peers() {
         id: mesh_id,
         name: "T".into(),
         join_key_hash: hash,
+        require_encryption: false,
         members: {
             let mut m = HashMap::new();
             m.insert(a_id, member_at(a_id, "A", 100, addr_a));

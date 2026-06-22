@@ -76,6 +76,8 @@ pub fn member_with_last_seen(
         node_pubkey: None,
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: id,
         name: name.into(),
         invited_by: id,
@@ -107,6 +109,7 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
         id: MeshId::from_u128(1),
         name: name.into(),
         join_key_hash: [0x77u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     }

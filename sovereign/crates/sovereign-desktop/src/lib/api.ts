@@ -873,8 +873,11 @@ export async function retryEnrichmentFailures(
 
 // ─── Community Mesh ─────────────────────────────────────────
 
-export async function meshCreate(meshName: string): Promise<CreateMeshResponse> {
-  return invoke("mesh_create", { meshName });
+export async function meshCreate(
+  meshName: string,
+  encrypt = false,
+): Promise<CreateMeshResponse> {
+  return invoke("mesh_create", { meshName, encrypt });
 }
 
 export async function meshJoin(link: string): Promise<JoinMeshResponse> {

@@ -79,6 +79,7 @@ fn build_state(self_id: NodeId) -> AppState {
         id: MeshId::from_u128(1),
         name: "models-http test".into(),
         join_key_hash: [0u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

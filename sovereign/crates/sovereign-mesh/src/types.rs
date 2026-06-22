@@ -92,4 +92,13 @@ pub struct JoinConfirmation {
     pub invited_by: Option<String>,
     pub join_key: String,
     pub relay_hint: Option<String>,
+    /// Founder's iroh dial string — present iff this is an ENCRYPTED
+    /// mesh invite. Its presence tells the joiner (and the desktop
+    /// preview) "this join will be encrypted, dialed by the founder's
+    /// key." `None` ⇒ legacy/plaintext join.
+    #[serde(default)]
+    pub iroh_dial: Option<String>,
+    /// Unix-seconds TTL after which the invite is rejected (display).
+    #[serde(default)]
+    pub expires_at: Option<u64>,
 }

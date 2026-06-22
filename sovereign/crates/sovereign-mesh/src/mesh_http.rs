@@ -60,6 +60,10 @@ pub struct CreateRequest {
     /// Node display name. Defaults to the machine's hostname.
     #[serde(default)]
     pub node_name: Option<String>,
+    /// Create an ENCRYPTED mesh (founder-set policy: all peers enforce
+    /// iroh dial-by-key + encrypted join). Defaults to plaintext.
+    #[serde(default)]
+    pub encrypt: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -259,6 +263,7 @@ async fn mesh_create(
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let node_name = default_node_name(req.node_name);
     let mesh_name = req.name.unwrap_or_else(|| format!("{node_name}'s Mesh"));
+    let encrypt = req.encrypt;
 
     // Explicit create = opt into serving remote peers. Mark exposed so
     // the daemon binds non-loopback (+ requires a bearer token). For an
@@ -267,7 +272,7 @@ async fn mesh_create(
     // config change.
     daemon.expose_client_api();
 
-    match daemon.create_mesh(&mesh_name, &node_name).await {
+    match daemon.create_mesh_with(&mesh_name, &node_name, encrypt).await {
         Ok(result) => (
             StatusCode::OK,
             Json(

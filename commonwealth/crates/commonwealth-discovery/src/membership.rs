@@ -73,18 +73,23 @@ pub fn init_mesh_with_node_id(
     addresses: Vec<SocketAddr>,
     node_id: NodeId,
 ) -> (Mesh, String) {
-    init_mesh_with_identity(name, node_name, addresses, node_id, None)
+    init_mesh_with_identity(name, node_name, addresses, node_id, None, false)
 }
 
 /// Same as [`init_mesh_with_node_id`] but also stamps the founder's
 /// Ed25519 identity pubkey into its `MemberRecord`. `None` keeps
 /// the pre-identity behaviour (older daemons, tests).
+///
+/// `require_encryption` seeds the mesh-wide encryption policy
+/// ([`Mesh::require_encryption`]). The founder decides this once at
+/// creation; every joiner inherits it via the join snapshot and gossip.
 pub fn init_mesh_with_identity(
     name: &str,
     node_name: &str,
     addresses: Vec<SocketAddr>,
     node_id: NodeId,
     node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    require_encryption: bool,
 ) -> (Mesh, String) {
     let join_key = generate_join_key();
     let join_key_hash = hash_join_key(&join_key);
@@ -98,6 +103,8 @@ pub fn init_mesh_with_identity(
         // (W2); a fresh record carries none yet.
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id,
         name: node_name.to_string(),
         invited_by: node_id, // Founder invites themselves.
@@ -135,6 +142,7 @@ pub fn init_mesh_with_identity(
         id: mesh_id,
         name: name.to_string(),
         join_key_hash,
+        require_encryption,
         members,
         peers: vec![],
     };
@@ -258,6 +266,8 @@ pub fn accept_join_with_identity(
         // Self-stamped by gossip once this node binds its endpoint (W2).
         relay_url: None,
         iroh_direct_addrs: Vec::new(),
+        dial_info_version: 0,
+        dial_info_sig: None,
         node_id: new_node_id,
         name: new_node_name.to_string(),
         invited_by,

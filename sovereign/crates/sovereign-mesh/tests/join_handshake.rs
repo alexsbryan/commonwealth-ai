@@ -371,6 +371,7 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
         id: serde_json::from_value(body["mesh"]["id"].clone()).unwrap(),
         name: body["mesh"]["name"].as_str().unwrap().to_string(),
         join_key_hash: serde_json::from_value(body["mesh"]["join_key_hash"].clone()).unwrap(),
+        require_encryption: false,
         members: hm,
         peers: serde_json::from_value(body["mesh"]["peers"].clone()).unwrap_or_default(),
     };

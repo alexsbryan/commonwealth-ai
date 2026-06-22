@@ -58,6 +58,7 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         id: MeshId::from_u128(42),
         name: "wiring-test".into(),
         join_key_hash: [7u8; 32],
+        require_encryption: false,
         members,
         peers: vec![],
     };

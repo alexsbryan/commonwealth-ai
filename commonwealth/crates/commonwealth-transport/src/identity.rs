@@ -140,6 +140,23 @@ pub fn sign_join_proof(key: &SigningKey, node_id: &NodeId, node_name: &str) -> S
     hex::encode(key.sign(&join_pop_message(node_id, node_name)).to_bytes())
 }
 
+/// Sign this node's iroh dial info, hex-encoded (matches the join-proof
+/// encoding — serde has no `[u8; 64]` impl). Reuses the canonical message
+/// in [`commonwealth_core::dial_sig`] so this signer and the verifier in
+/// `Mesh::merge_from` agree byte-for-byte. The gossip self-stamp calls
+/// this each time it (re)stamps our reachability.
+pub fn sign_dial_info(
+    key: &SigningKey,
+    version: u64,
+    relay_url: Option<&str>,
+    direct_addrs: &[std::net::SocketAddr],
+) -> String {
+    let pubkey = node_pubkey(key);
+    let msg =
+        commonwealth_core::dial_sig::dial_info_message(&pubkey, version, relay_url, direct_addrs);
+    hex::encode(key.sign(&msg).to_bytes())
+}
+
 /// Founder side: verify a joiner's proof of possession. `false` on
 /// any malformed input (bad hex, wrong lengths, invalid key) — the
 /// caller turns that into a loud 401, never a silent admit.
