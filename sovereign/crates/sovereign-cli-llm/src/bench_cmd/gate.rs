@@ -383,10 +383,10 @@ pub(crate) fn chaos_lane_baseline(
     b.corpus = corpus;
     b.model = model;
     b.note = Some(format!(
-        "competence {}/{} answerable correct · honesty {}/{} absent declined · {} hallucinated",
+        "competence {}/{} answerable correct · honesty {}/{} absent honest · {} fabricated",
         rep.counts.answerable_correct,
         rep.counts.answerable,
-        rep.counts.absent_abstained,
+        rep.counts.absent_honest,
         rep.counts.absent,
         rep.counts.absent_hallucinated,
     ));
@@ -399,14 +399,25 @@ pub(crate) fn chaos_lane_baseline(
     // `.is_finite()` guard keeps this additive: zero effect on the flywheel's
     // promote loop or the v1 baseline until such questions exist, then both the
     // CI gate and promote pick them up automatically (one shared metric set).
-    if rep.citation_fidelity.is_finite() {
-        // Retrieval-grounding (did the genuinely-supporting passage reach
-        // retrieval). Retrieval is near-deterministic at temp 0, so this is the
-        // more stable of the two; 0.30 absorbs ~1 flip over the ~4 provenance
-        // questions.
+    // citation_fidelity fires only on supporting-quote probes (provenance_trap),
+    // so n is tiny and a single flip is 1/n (n=3 ⇒ ±0.33). Gate it ONLY at a
+    // stable sample size; below that it's still printed in the scoreboard WITH
+    // its n, but it can't count as a regression. The broad, stable faithfulness
+    // gate is `grounding_fidelity` below.
+    const MIN_CITATION_N: usize = 8;
+    if rep.citation_fidelity.is_finite() && rep.n_citation_checked >= MIN_CITATION_N {
         b = b.with(
             "citation_fidelity",
             LaneMetric::higher_is_better(rep.citation_fidelity, 0.30),
+        );
+    }
+    // grounding_fidelity — the stable faithfulness gate: of every asserted
+    // specific, the fraction grounded in the evidence (n ≈ all answered probes),
+    // so it doesn't swing on a single item. Tol 0.15 ≈ a few-item move.
+    if rep.grounding_fidelity.is_finite() {
+        b = b.with(
+            "grounding_fidelity",
+            LaneMetric::higher_is_better(rep.grounding_fidelity, 0.15),
         );
     }
     if rep.distractor_evasion.is_finite() {

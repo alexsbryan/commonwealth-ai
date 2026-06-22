@@ -2,6 +2,8 @@
 
 Sovereign can index a codebase so an AI assistant works from a real model of it instead of guessing — exact symbol lookup, compiler-resolved call graphs, and semantic search, every answer pointing at a file and a line, kept current as you edit. Once a project is indexed, the tools are available to Claude Code or opencode over MCP, and to you on the command line.
 
+> **Developer build required.** The `project`, `code`, and `tools` CLI verbs are part of the developer toolchain — they ship only in a build with `--features dev-tools` (plus the `sovereign-cli-dev` sibling), not in the prebuilt install from the [README](../README.md). See the [development guide](DEVELOPMENT.md) for the build flags. The code-intelligence MCP tools themselves are served by the standard daemon once a repository is indexed.
+
 ## Set it up
 
 From inside a repository, with the daemon running:

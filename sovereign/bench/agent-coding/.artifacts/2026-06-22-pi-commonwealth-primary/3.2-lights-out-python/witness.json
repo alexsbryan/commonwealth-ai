@@ -1,0 +1,10 @@
+{
+  "verify_exit_ok": false,
+  "stdout_tail": "\n==================================== ERRORS ====================================\n__________________ ERROR collecting tests/test_integration.py __________________\n/Users/alexsbryan/Library/Python/3.13/lib/python/site-packages/_pytest/python.py:507: in importtestmodule\n    mod = import_path(\n/Users/alexsbryan/Library/Python/3.13/lib/python/site-packages/_pytest/pathlib.py:587: in import_path\n    importlib.import_module(module_name)\n/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n<frozen importlib._bootstrap>:1387: in _gcd_import\n    ???\n<frozen importlib._bootstrap>:1360: in _find_and_load\n    ???\n<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked\n    ???\n<frozen importlib._bootstrap>:935: in _load_unlocked\n    ???\n/Users/alexsbryan/Library/Python/3.13/lib/python/site-packages/_pytest/assertion/rewrite.py:197: in exec_module\n    exec(co, module.__dict__)\ntests/test_integration.py:25: in <module>\n    from lights_out import solve  # noqa: E402\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE     File \"/private/var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/sovereign-agent-bench-OmmPGQ/lights_out.py\", line 73\nE       {write_file_path=/private/var/folders/qf\nE                       ^\nE   SyntaxError: invalid syntax\n=========================== short test summary info ============================\nERROR tests/test_integration.py\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.09s\n",
+  "passed": 0,
+  "failed": 0,
+  "total": 0,
+  "failed_names": [],
+  "pass_fraction": 0.0,
+  "bucketed_score": 0
+}

@@ -103,6 +103,16 @@ sovereign alignment status               # check progress
 
 **Sync mechanics.** This CLI lands the local state on the alignment corpus. The cross-machine merge happens via the daemon's existing hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull); the projector then writes received chunks back to `~/.claude/` and upserts `notes://...` rows into `~/.sovereign/notes.db` automatically.
 
+### `sovereign mobile`
+
+Serve the phone-facing API, riding on the daemon's already-loaded models. The phone talks HTTP + WebSocket to this bridge; no separate model load.
+
+| Subcommand | Description |
+|---|---|
+| `serve` | Start the phone-facing API server (HTTP + WS) backed by the daemon's models |
+| `status` | Show the mobile bridge status |
+| `pair` | Print the pairing string a phone uses to connect |
+
 ### `sovereign code`
 
 Lower-level code-intelligence primitives. `project init` wraps these for the typical flow.
@@ -187,6 +197,23 @@ Throughput + correctness benchmarks for enrichment LLM tasks. Operates against t
 | `atlas` | Run atlas Phase 1 + short-call tasks against the loaded primary model |
 
 See [BENCHMARKING.md](BENCHMARKING.md) for the broader embed-throughput runbook.
+
+### `sovereign search-gym`
+
+Correctness harness for web-search-during-inference, scored against recorded mock-replay fixtures (no live network).
+
+| Subcommand | Description |
+|---|---|
+| `run` | Run the search-gym bank against the configured model; score tool-use correctness |
+| `calibrate-judge` | Calibrate the LLM judge against a labeled set before scoring |
+
+### `sovereign knowledge-gym`
+
+Correctness harness for the unified `knowledge_lookup` tool (mock-replay).
+
+| Subcommand | Description |
+|---|---|
+| `run` | Run the knowledge-gym bank and score `knowledge_lookup` tool-use correctness |
 
 ### `sovereign eval`
 
@@ -357,6 +384,18 @@ The Commonwealth daemon at `localhost:9741` is required for LLM phases (`seed`, 
 
 The pre-atlas command set (`cluster-questions`, `name-concerns`, `cluster-chunks`, `extract-positions`, `detect-tensions`, `detect-gaps`, `cascade`, `legacy-query`, `validate`, `promote`, `diff`) remains callable by exact name for corpora mid-flight on the v1 questions/concerns/positions path. It is hidden from the default `--help` and scheduled to retire once no active corpus depends on it.
 
+### `sovereign govern`
+
+Common-law governance over a corpus — an event-sourced oplog of tensions and resolutions, with grounded Q&A over the active (non-superseded) rule set. Daemon at `localhost:9741` required for `ask`.
+
+| Subcommand | Description |
+|---|---|
+| `seed` | Seed the governance oplog from a corpus's atlas atoms |
+| `tensions` | Surface candidate tensions (conflicting rules / positions) |
+| `resolve` | Record a resolution that supersedes or reconciles rules |
+| `accept` | Accept a resolution into the active rule set |
+| `ask "<question>"` | Grounded Q&A over the active rule set (dead/superseded law excluded) |
+
 ### `sovereign atos`
 
 Feature-layer orchestration — the Agent Task Orchestration System CLI. See [ATOS.md](ATOS.md) for the full flow; this is the command reference only.
@@ -395,6 +434,10 @@ Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in th
 | `--setup-only` | Run the first-boot wizard and exit (what `sovereign setup` aliases to) |
 
 Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
+
+### `sovereign install-service`
+
+Register the daemon with the OS service manager — launchd on macOS, systemd on Linux — so it starts at login and stays running across logouts. Run once after `sovereign setup`. Lives in the `sovereign-cli-daemon` sibling.
 
 ## HTTP endpoints
 

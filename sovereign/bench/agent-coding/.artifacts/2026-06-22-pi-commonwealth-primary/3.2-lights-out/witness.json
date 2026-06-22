@@ -1,0 +1,10 @@
+{
+  "verify_exit_ok": false,
+  "stdout_tail": "\n---stderr---\nerror: this file contains an unclosed delimiter\n  --> src/lib.rs:44:14\n   |\n 6 | pub fn solve(grid: &[Vec<u8>]) -> Option<Vec<(usize, usize)>> {\n   |                                                               - unclosed delimiter\n...\n40 |     fn has_bit(row: &[Word], col: usize) -> bool {\n   |                                                  - this delimiter might not be properly closed...\n...\n44 | }<tool_call>{\n   | -           -^\n   | |           |\n   | |           unclosed delimiter\n   | ...as it matches this but it has different indentation\n\nerror: could not compile `lights_out` (lib) due to 1 previous error\n",
+  "passed": 0,
+  "failed": 0,
+  "total": 0,
+  "failed_names": [],
+  "pass_fraction": 0.0,
+  "bucketed_score": 0
+}

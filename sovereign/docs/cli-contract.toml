@@ -1,0 +1,750 @@
+# CLI contract — the single source of truth for the commands `sovereign`
+# promises. The QA harness reconciles this three ways:
+#   - cli_contract_code test : manifest <-> the real binaries
+#   - cli_contract_docs test : manifest <-> CLI_REFERENCE.md / README.md
+#   - cli-contract-live-verify.sh : read-only smoke against a live daemon
+# Adding a command = add a [[command]] row here first.
+#
+# Fields (defaults in parens, omit a field to take its default):
+#   path           REQUIRED. argv path minus `sovereign`, space-joined.
+#   binary         REQUIRED. dispatcher | dev | llm | daemon (routing + sibling-gating).
+#   classification (offline) offline = --help/parse testable | daemon = needs :9741 + models.
+#   feature        (default) default | dev-tools | awareness  (cargo build gate).
+#   visibility     (internal) public | internal. public = inference + mesh + knowledge
+#                  bases, the surface the top-level READMEs promise; held to the strictest
+#                  bar. internal = dev/advanced tooling (documented in CLI_REFERENCE, the
+#                  full reference, but not required in the READMEs).
+#   probe          (help) help | no-args | skip  (how the offline code-probe verifies it).
+#   flags          [] flags the command promises (checked leniently against the docs).
+#   hidden         (false) intentionally undocumented surface (still tracked; exempt from docs).
+#   alias_of       synonym spelling of the named canonical path.
+#   [command.smoke] read-only live probe (Phase 3; only for classification="daemon").
+#
+# INVARIANT (enforced by cli_contract_code): a `visibility = "public"` command must
+# NOT be `feature = "dev-tools"` — it would exit 2 in the shipped binary, breaking a
+# public promise. This is why code intelligence (project/code/tools) is internal.
+#
+# SCOPE (v1): this manifest covers the *documented* surface (everything in
+# CLI_REFERENCE.md) plus the public surface. The large internal-only surface that
+# dispatches but is undocumented (corpus watch-*, enrich phases/legacy, atlas
+# internals, the atos delegator arms, voice/meta-atlas/router-cache/etc., and the
+# unrouted proxy/portfolio) is enumerated in docs/cli-audit-findings.md and is added
+# here in Phase 2, driven by the `__dump-commands` reverse check (which runs with a
+# compile loop). Until then the reverse code-check is report-only for untracked paths.
+
+schema_version = 1
+
+# ─────────────────────────────────────────────────────────────────────
+# PUBLIC SURFACE — local inference + mesh + knowledge bases.
+# What the top-level READMEs promise. Strictest conformance bar.
+# ─────────────────────────────────────────────────────────────────────
+
+[[command]]
+path = "setup"
+binary = "daemon"
+visibility = "public"
+flags = [
+  { name = "--yes" },
+  { name = "--reset" },
+  { name = "--data-dir", takes_value = true },
+]
+
+[[command]]
+path = "doctor"
+binary = "daemon"
+visibility = "public"
+flags = [
+  { name = "--fix" },
+  { name = "--watch" },
+  { name = "--json" },
+]
+[command.smoke]
+args = ["doctor", "--json"]
+expect_exit = 0
+
+[[command]]
+path = "install-service"
+binary = "daemon"
+visibility = "public"
+
+# `sovereign daemon` — bare invocation runs the daemon in the foreground.
+[[command]]
+path = "daemon"
+binary = "daemon"
+visibility = "public"
+flags = [{ name = "--setup-only" }]
+[[command]]
+path = "daemon run"
+binary = "daemon"
+visibility = "public"
+[[command]]
+path = "daemon start"
+binary = "daemon"
+visibility = "public"
+[[command]]
+path = "daemon stop"
+binary = "daemon"
+visibility = "public"
+[[command]]
+path = "daemon status"
+binary = "daemon"
+visibility = "public"
+[[command]]
+path = "daemon restart"
+binary = "daemon"
+visibility = "public"
+[[command]]
+path = "daemon reload"
+binary = "daemon"
+visibility = "public"
+
+# chat — the core local-inference loop.
+[[command]]
+path = "chat ask"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--conversation", takes_value = true },
+  { name = "--format", takes_value = true },
+  { name = "--show-reasoning" },
+]
+[[command]]
+path = "chat session"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--conversation", takes_value = true },
+  { name = "--show-reasoning" },
+]
+[[command]]
+path = "chat inspect"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--limit", takes_value = true },
+  { name = "--corpus", takes_value = true },
+  { name = "--snippet", takes_value = true },
+  { name = "--format", takes_value = true },
+]
+[[command]]
+path = "chat list"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--limit", takes_value = true },
+  { name = "--offset", takes_value = true },
+]
+[command.smoke]
+args = ["chat", "list", "--limit", "1"]
+expect_exit = 0
+[[command]]
+path = "chat show"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--show-reasoning" }]
+
+# mesh.
+[[command]]
+path = "mesh create"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [{ name = "--name", takes_value = true }]
+[[command]]
+path = "mesh join"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh rotate"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh status"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[command.smoke]
+args = ["mesh", "status"]
+expect_exit = 0
+[[command]]
+path = "mesh balance"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh leave"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh logs"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh fetch-model"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh warm-cache"
+binary = "llm"
+visibility = "public"
+
+# corpus — knowledge bases.
+[[command]]
+path = "corpus list"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[command.smoke]
+args = ["corpus", "list"]
+expect_exit = 0
+[[command]]
+path = "corpus install"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "corpus remove"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "corpus status"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[command.smoke]
+args = ["corpus", "status"]
+expect_exit = 0
+[[command]]
+path = "corpus reconstruct-manifest"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--source-dir", takes_value = true },
+  { name = "--yes" },
+]
+
+# ─────────────────────────────────────────────────────────────────────
+# INTERNAL SURFACE — developer / advanced tooling. Documented in
+# CLI_REFERENCE.md (the full reference) but not promised in the READMEs.
+# ─────────────────────────────────────────────────────────────────────
+
+# Code intelligence — dev-tools-gated (exit 2 in the shipped binary).
+# Public delivery of code intel is the MCP server on :9741, not these verbs.
+[[command]]
+path = "project init"
+binary = "dev"
+feature = "dev-tools"
+flags = [
+  { name = "--name", takes_value = true },
+  { name = "--no-scip" },
+  { name = "--no-hooks" },
+  { name = "--no-claude-config" },
+  { name = "--workspace-root", takes_value = true },
+  { name = "--port", takes_value = true },
+]
+[[command]]
+path = "project design"
+binary = "dev"
+feature = "dev-tools"
+flags = [
+  { name = "--import", takes_value = true },
+  { name = "--via", takes_value = true },
+  { name = "--solo" },
+  { name = "--stopgap" },
+  { name = "--port", takes_value = true },
+]
+[[command]]
+path = "project plan"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--allow-open" }]
+[[command]]
+path = "project charter"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--print" }]
+[[command]]
+path = "project status"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project refresh"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--rebuild-index" }]
+[[command]]
+path = "project serve"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project install-hooks"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project found"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project amend"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project phase"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project audit"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project register"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project unregister"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project list"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "project watch"
+binary = "dev"
+feature = "dev-tools"
+
+# `sovereign init` — documented alias of `project init`.
+[[command]]
+path = "init"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project init"
+
+[[command]]
+path = "code index"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "code watch"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "code mcp-status"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "code search"
+binary = "dev"
+feature = "dev-tools"
+
+[[command]]
+path = "tools list"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "tools describe"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "tools call"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--format", takes_value = true }]
+
+# Flat dev verbs with their own CLI_REFERENCE sections.
+[[command]]
+path = "status"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "notes"
+binary = "dispatcher"
+feature = "dev-tools"
+flags = [
+  { name = "--since", takes_value = true },
+  { name = "--tool", takes_value = true },
+  { name = "--raw" },
+  { name = "--todos" },
+  { name = "--retire" },
+  { name = "--reason", takes_value = true },
+]
+[[command]]
+path = "reflect"
+binary = "dispatcher"
+feature = "dev-tools"
+alias_of = "notes"
+
+# drift — bare (spec diff), accept, detect.
+[[command]]
+path = "drift"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "drift accept"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--reason", takes_value = true }]
+[[command]]
+path = "drift detect"
+binary = "dev"
+feature = "dev-tools"
+flags = [
+  { name = "--code", takes_value = true },
+  { name = "--narrative", takes_value = true },
+  { name = "--output", takes_value = true },
+  { name = "--project-id", takes_value = true },
+  { name = "--chat-model", takes_value = true },
+]
+
+# git-archaeology / archaeology-eval — dev-tools, in-process.
+[[command]]
+path = "git-archaeology"
+binary = "dispatcher"
+feature = "dev-tools"
+flags = [
+  { name = "--source-path", takes_value = true },
+  { name = "--output", takes_value = true },
+  { name = "--threshold", takes_value = true },
+  { name = "--min-joint", takes_value = true },
+]
+[[command]]
+path = "archaeology-eval"
+binary = "dispatcher"
+feature = "dev-tools"
+flags = [
+  { name = "--inquiry", takes_value = true },
+  { name = "--baseline", takes_value = true },
+  { name = "--output", takes_value = true },
+  { name = "--save-baseline" },
+]
+
+# atos — dev-tools. Leaf delegators (spec/end-milestone) reject --help.
+[[command]]
+path = "atos provision"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--charter", takes_value = true }]
+[[command]]
+path = "atos next"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "atos start-milestone"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--brief", takes_value = true }, { name = "--red-team" }]
+[[command]]
+path = "atos end-milestone"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+[[command]]
+path = "atos archive"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--reason", takes_value = true }]
+[[command]]
+path = "atos status"
+binary = "dev"
+feature = "dev-tools"
+[[command]]
+path = "atos promote"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--to", takes_value = true }]
+[[command]]
+path = "atos diff"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--ordinal", takes_value = true }]
+[[command]]
+path = "atos run-ab"
+binary = "dev"
+feature = "dev-tools"
+flags = [{ name = "--brief", takes_value = true }, { name = "--drivers", takes_value = true }]
+[[command]]
+path = "atos probe-driver"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--url", takes_value = true }]
+[[command]]
+path = "atos report"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--section", takes_value = true }, { name = "--out", takes_value = true }]
+[[command]]
+path = "atos teardown"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+flags = [{ name = "--auto" }, { name = "--dry-run" }]
+[[command]]
+path = "atos feature"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+[[command]]
+path = "atos spec"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+[[command]]
+path = "atos doctor"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+[[command]]
+path = "atos install-plugin"
+binary = "dev"
+feature = "dev-tools"
+probe = "no-args"
+
+# mobile — internal (phone bridge), default build.
+[[command]]
+path = "mobile serve"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "mobile status"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "mobile pair"
+binary = "llm"
+classification = "daemon"
+
+# alignment — internal workspace replication, default build.
+[[command]]
+path = "alignment migrate"
+binary = "llm"
+classification = "daemon"
+flags = [{ name = "--dry-run" }]
+[[command]]
+path = "alignment status"
+binary = "llm"
+classification = "daemon"
+
+# govern — internal common-law governance, default build.
+[[command]]
+path = "govern seed"
+binary = "llm"
+[[command]]
+path = "govern tensions"
+binary = "llm"
+[[command]]
+path = "govern resolve"
+binary = "llm"
+[[command]]
+path = "govern accept"
+binary = "llm"
+[[command]]
+path = "govern ask"
+binary = "llm"
+classification = "daemon"
+
+# Correctness gyms — internal, mock-replay (need the daemon for inference).
+[[command]]
+path = "search-gym run"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "search-gym calibrate-judge"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "knowledge-gym run"
+binary = "llm"
+classification = "daemon"
+
+# recipe — internal corpus-ingestion authoring, default build.
+[[command]]
+path = "recipe list"
+binary = "llm"
+flags = [{ name = "--offline" }]
+[[command]]
+path = "recipe test"
+binary = "llm"
+classification = "daemon"
+flags = [
+  { name = "--sample-size", takes_value = true },
+  { name = "--output", takes_value = true },
+  { name = "--offline" },
+  { name = "--verbose" },
+  { name = "--params", takes_value = true },
+  { name = "--params-file", takes_value = true },
+]
+[[command]]
+path = "recipe validate"
+binary = "llm"
+flags = [{ name = "--offline" }]
+[[command]]
+path = "recipe publish"
+binary = "llm"
+flags = [{ name = "--submit-pr" }]
+
+# pipeline — internal ingestion driver, default build.
+[[command]]
+path = "pipeline run"
+binary = "llm"
+flags = [
+  { name = "--db", takes_value = true },
+  { name = "--seed-only" },
+  { name = "--slugs", takes_value = true },
+  { name = "--key", takes_value = true },
+]
+[[command]]
+path = "pipeline status"
+binary = "llm"
+[[command]]
+path = "pipeline list"
+binary = "llm"
+[[command]]
+path = "pipeline pod up"
+binary = "llm"
+[[command]]
+path = "pipeline pod list"
+binary = "llm"
+[[command]]
+path = "pipeline pod down"
+binary = "llm"
+
+# atlas — internal structural enrichment, default build.
+[[command]]
+path = "atlas wikipedia"
+binary = "llm"
+[[command]]
+path = "atlas budget"
+binary = "llm"
+[[command]]
+path = "atlas status"
+binary = "llm"
+
+# bench / eval — internal, need the daemon.
+[[command]]
+path = "bench atlas"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "eval run"
+binary = "llm"
+classification = "daemon"
+flags = [{ name = "--daemon", takes_value = true }]
+
+# mcp — internal diagnostics, default build.
+[[command]]
+path = "mcp list"
+binary = "llm"
+[[command]]
+path = "mcp test"
+binary = "llm"
+[[command]]
+path = "mcp tools"
+binary = "llm"
+
+# enrich — internal v2 atlas enrichment, default build. Daemon needed for
+# the LLM phases (init/seed/extract/name/configure); pure-rust phases offline.
+[[command]]
+path = "enrich init"
+binary = "llm"
+classification = "daemon"
+flags = [
+  { name = "--source", takes_value = true },
+  { name = "--pipeline", takes_value = true },
+  { name = "--chapter-regex", takes_value = true },
+  { name = "--chat-model", takes_value = true },
+  { name = "--embed-model", takes_value = true },
+  { name = "--dry-run" },
+  { name = "--force" },
+]
+[[command]]
+path = "enrich build"
+binary = "llm"
+classification = "daemon"
+flags = [
+  { name = "--chapters", takes_value = true },
+  { name = "--full" },
+  { name = "--skip", takes_value = true },
+  { name = "--dry-run" },
+]
+[[command]]
+path = "enrich query"
+binary = "llm"
+flags = [{ name = "--json" }]
+[[command]]
+path = "enrich report"
+binary = "llm"
+flags = [{ name = "--json" }]
+[[command]]
+path = "enrich review"
+binary = "llm"
+[[command]]
+path = "enrich bridge"
+binary = "llm"
+flags = [{ name = "--explain", takes_value = true }]
+[[command]]
+path = "enrich seed"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "enrich extract"
+binary = "llm"
+classification = "daemon"
+flags = [{ name = "--chapters", takes_value = true }, { name = "--full" }, { name = "--terse" }]
+[[command]]
+path = "enrich cluster"
+binary = "llm"
+[[command]]
+path = "enrich name"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "enrich resolve"
+binary = "llm"
+flags = [{ name = "--phase", takes_value = true }]
+[[command]]
+path = "enrich tensions"
+binary = "llm"
+[[command]]
+path = "enrich gaps"
+binary = "llm"
+[[command]]
+path = "enrich configure"
+binary = "llm"
+classification = "daemon"
+[[command]]
+path = "enrich status"
+binary = "llm"
+[[command]]
+path = "enrich show"
+binary = "llm"
+flags = [{ name = "--chapter", takes_value = true }, { name = "--concern", takes_value = true }]
+[[command]]
+path = "enrich exemplars"
+binary = "llm"
+[[command]]
+path = "enrich reset"
+binary = "llm"
+flags = [
+  { name = "--from", takes_value = true },
+  { name = "--full" },
+  { name = "--include-exemplars" },
+  { name = "--dry-run" },
+  { name = "--yes" },
+]

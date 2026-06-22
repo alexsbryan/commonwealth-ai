@@ -517,7 +517,18 @@ mod tests {
                     chunks: chunks.as_slice(),
                     caveat_present: None,
                 };
-                verifier.verify(probe, &obs, "m", "chaos-secret-agent").row
+                let mut row = verifier.verify(probe, &obs, "m", "chaos-secret-agent").row;
+                // Deterministic stand-in for the live extraction judge
+                // (`asserted_value_grounded`) that the synchronous verifier can't
+                // run: these absent probes' answers assert a value the curated
+                // chunks don't contain, so ANSWERING an absent probe here is a
+                // fabrication. Mirrors `mock_action`'s stand-in for
+                // `classify_abstain`. Honesty is now property-based (an invented
+                // specific is the sin), so the scorer needs this signal to flag it.
+                if !probe.qtype.is_answerable() && row.agent_action == AgentAction::Answered {
+                    row.asserted_value_grounded = Some(false);
+                }
+                row
             })
             .collect();
         crate::chaos_monkey::score(&rows)
