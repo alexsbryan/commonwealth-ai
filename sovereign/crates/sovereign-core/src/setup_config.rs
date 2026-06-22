@@ -57,6 +57,17 @@ pub struct SetupConfig {
     /// Off by default; see [`SharedModelSection`].
     #[serde(default)]
     pub shared_model: SharedModelSection,
+    /// External MCP servers whose tools are loaded into the agent's tool
+    /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
+    /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
+    /// the shared loader `sovereign_tools::mcp::load_from_setup_config`, so a
+    /// server added in one place is available in all of them. Declared last so
+    /// it serializes as a trailing array-of-tables (valid TOML after the
+    /// scalar sections above). Empty by default; back-compat is automatic
+    /// (`#[serde(default)]`), and being a typed field it survives a
+    /// `save()`/`load()` round-trip instead of being dropped as an unknown key.
+    #[serde(default)]
+    pub mcp_servers: Vec<crate::mcp_config::McpServerConfig>,
 }
 
 /// Dial-by-key mesh access over iroh (Track W of
@@ -954,6 +965,7 @@ embed = "/models/embed.gguf"
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            mcp_servers: Vec::new(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");
@@ -963,6 +975,58 @@ embed = "/models/embed.gguf"
         assert_eq!(loaded.daemon.client_port, 9741);
         assert_eq!(loaded.daemon.internal_port, 9742);
         assert!(loaded.daemon.autostart);
+    }
+
+    #[test]
+    fn roundtrip_preserves_mcp_servers() {
+        // Guards the clobber fix: the typed `mcp_servers` field must survive a
+        // save()/load() round-trip. An untyped sibling `[[mcp_servers]]` array
+        // would be dropped by `toml::to_string_pretty`, silently losing the
+        // user's servers on the next desktop config save.
+        use crate::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
+        let cfg = SetupConfig {
+            models: ModelsSection {
+                primary: PathBuf::from("/m/p.gguf"),
+                fast: None,
+                embed: PathBuf::from("/m/e.gguf"),
+                code: None,
+                context_size: None,
+                extra: BTreeMap::new(),
+                max_extras_memory_gb: None,
+                primary_pool: None,
+            },
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: WatchedFoldersSection::default(),
+            memory: Default::default(),
+            iroh: Default::default(),
+            shared_model: Default::default(),
+            mcp_servers: vec![McpServerConfig {
+                name: "vision".into(),
+                description: Some("Describe images".into()),
+                enabled: true,
+                transport: McpTransportConfig::Http {
+                    url: "https://vision.example/mcp".into(),
+                    auth: McpAuthConfig::None,
+                },
+                global: true,
+            }],
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.toml");
+        cfg.save_to(&path).unwrap();
+        let loaded = SetupConfig::load_from(&path).unwrap();
+        assert_eq!(loaded.mcp_servers.len(), 1, "mcp_servers must survive save/load");
+        assert_eq!(loaded.mcp_servers[0].name, "vision");
+        assert!(matches!(
+            &loaded.mcp_servers[0].transport,
+            McpTransportConfig::Http { url, .. } if url == "https://vision.example/mcp"
+        ));
+
+        // An older config with no [[mcp_servers]] loads as empty (serde default).
+        let old = "[models]\nprimary = \"/m/p.gguf\"\nembed = \"/m/e.gguf\"\n";
+        let parsed: SetupConfig = toml::from_str(old).unwrap();
+        assert!(parsed.mcp_servers.is_empty());
     }
 
     #[test]

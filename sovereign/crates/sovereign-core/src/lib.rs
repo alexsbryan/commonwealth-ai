@@ -11,6 +11,7 @@ pub mod health;
 pub mod health_monitor;
 pub mod insight;
 pub mod intent_policy;
+pub mod mcp_config;
 pub mod memory;
 pub mod memory_compaction;
 pub mod mobile_host;

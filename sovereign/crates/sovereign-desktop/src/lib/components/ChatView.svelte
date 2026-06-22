@@ -18,7 +18,7 @@
     warmupPrimarySlot,
     setConversationEnabledCorpora,
   } from "../api";
-  import type { IngestDocumentResult } from "../api";
+  import type { AttachedFileRef, IngestDocumentResult } from "../api";
   import type {
     MessageEntry,
     TaskStep,
@@ -285,6 +285,50 @@
   let isIngesting = $state(false);
   let showDocPicker = $state(false);
   let attachedAsset: DocumentAsset | null = $state(null);
+  // Files attached for a TOOL to act on (vision / OCR / audio transcription) —
+  // distinct from a document attachment (which is ingested for RAG). Their
+  // absolute paths ride into the message preamble so the model passes them to
+  // an MCP tool like describe_image(path) / transcribe_audio(path). Cleared on
+  // a successful send.
+  let attachedToolFiles: AttachedFileRef[] = $state([]);
+
+  function fileNameOf(p: string): string {
+    return p.split(/[\\/]/).pop() || p;
+  }
+  function fileKindOf(p: string): string {
+    const ext = (p.split(".").pop() || "").toLowerCase();
+    if (["png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "heic"].includes(ext)) return "image";
+    if (["m4a", "mp3", "wav", "ogg", "flac", "aac", "opus", "webm"].includes(ext)) return "audio";
+    return "other";
+  }
+  async function attachToolFile() {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "Image or audio",
+            extensions: [
+              "png", "jpg", "jpeg", "webp", "gif", "heic",
+              "m4a", "mp3", "wav", "ogg", "flac", "aac", "opus",
+            ],
+          },
+        ],
+      });
+      if (!selected) return;
+      const path = typeof selected === "string" ? selected : String(selected);
+      if (attachedToolFiles.some((f) => f.path === path)) return;
+      attachedToolFiles = [
+        ...attachedToolFiles,
+        { path, name: fileNameOf(path), kind: fileKindOf(path) },
+      ];
+    } catch (e) {
+      console.error("attach tool file failed", e);
+    }
+  }
+  function removeToolFile(path: string) {
+    attachedToolFiles = attachedToolFiles.filter((f) => f.path !== path);
+  }
 
   // Tracks whether a non-streaming API call (askDocument, searchWeb)
   // is currently in flight. Merged with the machine's streaming state
@@ -1044,12 +1088,16 @@
       const contextChunks = focused
         ? [{ corpus_id: focused.corpusId, chunk_id: focused.chunkId }]
         : undefined;
+      // Files attached for a tool (vision/OCR/transcription) — their paths ride
+      // into the message preamble so the model can pass them to an MCP tool.
+      const toolFiles = attachedToolFiles.length ? attachedToolFiles : undefined;
       wordBuffer.reset();
       earlyCapture = true;
       earlyEvents = [];
       let started;
       try {
-        started = await sendMessageStream(text, convoId, contextChunks);
+        started = await sendMessageStream(text, convoId, contextChunks, toolFiles);
+        attachedToolFiles = [];
       } catch (e) {
         earlyCapture = false;
         earlyEvents = [];
@@ -1400,6 +1448,17 @@
         onremove={() => (attachment = null)}
       />
     {/if}
+    {#if attachedToolFiles.length}
+      <div class="tool-files">
+        {#each attachedToolFiles as f (f.path)}
+          <span class="tool-file-chip" title={f.path}>
+            <span class="tf-kind">{f.kind === "image" ? "🖼" : f.kind === "audio" ? "🎙" : "📎"}</span>
+            <span class="tf-name">{f.name}</span>
+            <button class="tf-remove" onclick={() => removeToolFile(f.path)} title="Remove">×</button>
+          </span>
+        {/each}
+      </div>
+    {/if}
     <div class="input-row">
     <button
       class="attach-btn"
@@ -1414,6 +1473,18 @@
           <path d="M14 8.5l-5.6 5.6a3.5 3.5 0 01-5-5L9 3.5a2.5 2.5 0 013.5 3.5L7 12.5a1.5 1.5 0 01-2.1-2.1L10.3 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
       {/if}
+    </button>
+    <button
+      class="attach-btn"
+      onclick={attachToolFile}
+      disabled={isLoading}
+      title="Attach an image or audio file for a tool (vision, transcription)"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="5.5" cy="6" r="1.2" fill="currentColor"/>
+        <path d="M2 11l3.5-3 2.5 2 3-3.5 3 4.5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+      </svg>
     </button>
     <textarea
       bind:value={inputText}
@@ -1937,5 +2008,42 @@
       transform: scale(1);
       opacity: 1;
     }
+  }
+
+  /* Tool-file attachments (vision / audio for an MCP tool). */
+  .tool-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0 0.25rem 0.4rem;
+  }
+  .tool-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: 16rem;
+    padding: 0.18rem 0.45rem;
+    border: 1px solid var(--border, #2a2a2a);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    background: rgba(140, 140, 140, 0.1);
+  }
+  .tf-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tf-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+  }
+  .tf-remove:hover {
+    opacity: 1;
   }
 </style>

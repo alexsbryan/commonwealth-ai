@@ -484,6 +484,7 @@ impl DesktopConfig {
                     memory: Default::default(),
                     iroh: Default::default(),
                     shared_model: Default::default(),
+                    mcp_servers: Vec::new(),
                 });
                 setup.models.context_size = Some(desktop_ctx);
                 match setup.save() {

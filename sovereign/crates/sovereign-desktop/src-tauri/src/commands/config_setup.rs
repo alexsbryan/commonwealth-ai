@@ -173,6 +173,7 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
         memory: Default::default(),
         iroh: Default::default(),
         shared_model: Default::default(),
+        mcp_servers: Vec::new(),
     });
 
     let cli_primary_before = cli.models.primary.clone();
@@ -481,6 +482,7 @@ pub async fn set_setup_context_size(
                 memory: Default::default(),
                 iroh: Default::default(),
                 shared_model: Default::default(),
+                mcp_servers: Vec::new(),
             }
         }
     };

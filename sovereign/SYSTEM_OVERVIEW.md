@@ -812,6 +812,35 @@ adapters, cutoff legibility, conversation-history compaction — in
 | `ShellTool` / `FileTool` / `EmailTool` / `CalendarTool` / `ComputeTool` | Standard tools (sandbox + approval) |
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC + HTTP+SSE; wrap remote MCP servers as native tools |
 
+**External MCP servers (client direction).** HTTP MCP servers are configured in
+the `[[mcp_servers]]` array of `~/.sovereign/config.toml`
+(`SetupConfig.mcp_servers`) — added via `sovereign mcp add` or **Settings →
+MCP** — and loaded into the agent's tool registry at startup by the one shared
+loader `sovereign_tools::mcp::load_from_setup_config`, which **every** chat
+surface calls (`sovereign chat`, the desktop bootstrap, `sovereign serve`).
+Each MCP tool's descriptor is enriched (`McpToolAdapter` synthesizes an example
+call from the input schema + passes through any `outputSchema`) so the planner
+reliably emits a tool step instead of a reason step; tools declare
+`Permission::Network`, so the executor's approval gate fires on first use
+(add-time trust on the auto-approving CLI). The config DTO lives in
+`sovereign-core::mcp_config` (so `SetupConfig` can carry it without a crate
+cycle) and is re-exported from `sovereign_tools::mcp`. `sovereign mcp
+demo-server` runs a sealed-fact reference server
+(`sovereign-cli-llm/src/mcp_demo_server.rs`) for an end-to-end demo: a tool
+whose output exists nowhere else, so a correct answer in chat proves the model
+actually called it.
+
+**Attach-a-file-for-tools (desktop).** Vision / audio MCP tools take a file
+*path* (the model stays text-only — the tool does the modality work). The
+desktop's media-attach (image/audio) binds a file's absolute path to the turn
+and prepends a `▸ attached file: … path: …` block to the message before the
+runtime sees it — the same "augmented message" rail `context_chunks` uses
+(`commands/chat.rs::build_tool_files_preamble`), so the model passes the path to
+e.g. `describe_image(path)` / `transcribe_audio(path)` on a *local* MCP server
+with no Runtime change. Distinct from a *document* attachment (which is ingested
+for RAG and discards the path). Spec: `docs/specs/ATTACH_FILE_FOR_TOOLS.md`
+(P1 shipped; P2 threads a typed `ToolContext.attached_files`).
+
 **Code-intelligence MCP server**. Long-running variant via
 `sovereign daemon`; ad-hoc via `sovereign project serve`. Tools
 under `sovereign-tools/src/code/` cover code index (`symbols`

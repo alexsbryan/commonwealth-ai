@@ -117,6 +117,12 @@ pub struct AppState {
     /// `kill_on_drop(true)` SIGKILLs `sovereign-server` — that's the toggle-off
     /// path. `None` when Mobile access is off. See [`crate::mobile_host_setup`].
     pub mobile_host_supervisor: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
+    /// Manager for external MCP servers loaded at bootstrap (the
+    /// `[[mcp_servers]]` array of the canonical config). Held only for its
+    /// connection statuses, which the Settings → MCP pane reads via
+    /// `mcp_list_servers`; the live HTTP transports are owned by the tools it
+    /// registered into the Runtime's registry. `None` until bootstrap runs.
+    pub mcp_servers: RwLock<Option<Arc<sovereign_tools::mcp::McpServerManager>>>,
 }
 
 impl AppState {
@@ -209,6 +215,7 @@ impl AppState {
             features: RwLock::new(None),
             supervisor: RwLock::new(supervisor),
             mobile_host_supervisor: RwLock::new(None),
+            mcp_servers: RwLock::new(None),
         }
     }
 }
@@ -1249,6 +1256,16 @@ pub async fn bootstrap_with_progress(
     // client below needs them to resolve `active_is_local_only`
     // before sending each request to the daemon.
     let local_only_skill_ids_for_digests = skills.local_only_skill_ids();
+
+    // External MCP servers — connect over HTTP and register their tools into
+    // the SAME registry the agent plans against (parity with `sovereign chat`
+    // and `sovereign serve`, all three via the one shared loader). Falls under
+    // the WiringKnowledge phase; warn-and-continue per server so a dead URL is
+    // logged, never blocking boot (bounded by an 8s/server connect timeout).
+    // The manager is held on AppState for the Settings → MCP pane's status;
+    // the live transports are owned by the tools moved into the Runtime below.
+    let mcp_manager = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
+    *state.mcp_servers.write().await = Some(Arc::new(mcp_manager));
 
     emit(BootstrapPhase::BuildingRuntime);
     let mut runtime = Runtime::new(

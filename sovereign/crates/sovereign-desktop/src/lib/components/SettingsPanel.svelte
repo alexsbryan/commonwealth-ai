@@ -41,6 +41,7 @@
   import MeshAppsSection from "./MeshAppsSection.svelte";
   import SharingSection from "./SharingSection.svelte";
   import ConnectSection from "./ConnectSection.svelte";
+  import McpServersSection from "./McpServersSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
   import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
@@ -63,6 +64,7 @@
     | "sharing"
     | "tools"
     | "connect"
+    | "mcp"
     | "paths"
     | "recipes"
     | "mobile"
@@ -532,6 +534,7 @@
     { id: "sharing",         label: "Activity & Sharing", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
     { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
+    { id: "mcp",             label: "MCP Servers",      keywords: ["mcp", "tool", "external", "server", "connect", "vision", "augment", "extension", "model context protocol"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml", "author", "workspace", "authoring"] },
     { id: "mobile",          label: "Mobile access",    keywords: ["mobile", "phone", "ios", "android", "app", "pair", "pairing", "tailnet", "tailscale", "token", "host"] },
@@ -1517,6 +1520,15 @@
           <h2 class="doc-h2">Connect</h2>
           <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at the local daemon. Nothing leaves this machine.</p>
           <ConnectSection />
+        </section>
+      {/if}
+
+      <!-- ──────────── MCP SERVERS ──────────── -->
+      {#if activeTab === "mcp"}
+        <section class="doc-section">
+          <h2 class="doc-h2">MCP Servers</h2>
+          <p class="doc-intro">Connect external <strong>Model Context Protocol</strong> servers to give the assistant new capabilities — a vision tool, a web service, your own API. Their tools become available in chat; the assistant asks before the first call to each.</p>
+          <McpServersSection />
         </section>
       {/if}
 

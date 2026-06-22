@@ -80,11 +80,13 @@ export async function sendMessage(
   message: string,
   conversationId: string,
   contextChunks?: FocusedPassageRef[],
+  attachedFiles?: AttachedFileRef[],
 ): Promise<MessageResponse> {
   return invoke("send_message", {
     message,
     conversationId,
     contextChunks,
+    attachedFiles,
   });
 }
 
@@ -97,15 +99,28 @@ export interface FocusedPassageRef {
   chunk_id: number;
 }
 
+/** A file attached for a TOOL to act on (vision, OCR, audio transcription).
+ *  Its absolute path is prepended to the message as a "▸ attached file:" block
+ *  so the model can pass it to an MCP tool. Distinct from a document
+ *  attachment, which is ingested for RAG. */
+export interface AttachedFileRef {
+  path: string;
+  name: string;
+  /** "image" | "audio" | "other" — nudges routing toward the right tool. */
+  kind: string;
+}
+
 export async function sendMessageStream(
   message: string,
   conversationId: string,
   contextChunks?: FocusedPassageRef[],
+  attachedFiles?: AttachedFileRef[],
 ): Promise<StreamStartedResponse> {
   return invoke("send_message_stream", {
     message,
     conversationId,
     contextChunks,
+    attachedFiles,
   });
 }
 
@@ -760,6 +775,49 @@ export async function openCorpusExplorer(corpusId: string): Promise<void> {
 
 export async function uninstallMeshApp(appId: string): Promise<void> {
   return invoke("meshapp_uninstall", { appId });
+}
+
+// ─── MCP servers (Settings → MCP) ─────────────────────────────
+
+/** One external MCP server with its live bootstrap connection status. */
+export interface McpServerView {
+  name: string;
+  url: string;
+  description: string | null;
+  enabled: boolean;
+  bearer: boolean;
+  /** Env var the bearer token is read from (e.g. SOVEREIGN_MCP_TOKEN_VISION). */
+  token_env: string | null;
+  /** null = backend hasn't connected this server yet (added since last start). */
+  connected: boolean | null;
+  tool_count: number | null;
+  error: string | null;
+}
+
+export async function listMcpServers(): Promise<McpServerView[]> {
+  return invoke("mcp_list_servers");
+}
+
+export async function addMcpServer(
+  name: string,
+  url: string,
+  description: string | null,
+  bearer: boolean,
+): Promise<void> {
+  return invoke("mcp_add_server", { name, url, description, bearer });
+}
+
+export async function removeMcpServer(name: string): Promise<void> {
+  return invoke("mcp_remove_server", { name });
+}
+
+/** Probe an MCP server without saving it — resolves to the tool count. */
+export async function testMcpConnection(
+  name: string,
+  url: string,
+  bearer: boolean,
+): Promise<number> {
+  return invoke("mcp_test_connection", { name, url, bearer });
 }
 
 /** A first-party mesh-app manifest (`public/meshapp/<id>/meshapp.json`) — the

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP authentication — credential types and header injection.
 //!
-//! Secure persistence (e.g. system keychain) is intentionally out of scope
-//! right now. Callers construct `McpAuth` values from config or prompts and
-//! pass them through for the lifetime of a request.
+//! Credentials are resolved from an environment variable
+//! (`SOVEREIGN_MCP_TOKEN_<NAME>`) rather than the on-disk config, so secrets
+//! never land in `~/.sovereign/config.toml` (ARCH §7) and no keychain
+//! dependency is pulled in. A keychain-backed store can later extend the
+//! single `resolve` function below; every caller picks it up automatically.
 
 use reqwest::RequestBuilder;
 
@@ -23,20 +25,35 @@ pub enum McpAuth {
 }
 
 impl McpAuth {
-    /// Resolve an `McpAuthConfig` from user config into a concrete `McpAuth`.
-    ///
-    /// There is no secret store wired up yet, so any config that needs a
-    /// credential resolves to `None` with a warning. When a keychain or
-    /// file-backed store is added, extend this single function — every
-    /// caller (discovery, CLI test commands, future callers) will pick up
-    /// the new behavior automatically.
+    /// Resolve an `McpAuthConfig` (the *type* of auth, from on-disk config)
+    /// into a concrete `McpAuth` (carrying the *secret*), reading the secret
+    /// from the `SOVEREIGN_MCP_TOKEN_<NAME>` env var. A credentialed server
+    /// whose env var is unset connects unauthenticated with a loud warning
+    /// naming the exact variable to set — never a silent failure.
     pub fn resolve(server_name: &str, config: &McpAuthConfig) -> Self {
         match config {
             McpAuthConfig::None => McpAuth::None,
-            McpAuthConfig::Bearer | McpAuthConfig::ApiKey { .. } | McpAuthConfig::Basic => {
+            McpAuthConfig::Bearer => match read_secret_env(server_name) {
+                Some(token) => McpAuth::BearerToken(token),
+                None => {
+                    warn_missing_secret(server_name);
+                    McpAuth::None
+                }
+            },
+            McpAuthConfig::ApiKey { header } => match read_secret_env(server_name) {
+                Some(value) => McpAuth::ApiKey {
+                    header: header.clone(),
+                    value,
+                },
+                None => {
+                    warn_missing_secret(server_name);
+                    McpAuth::None
+                }
+            },
+            McpAuthConfig::Basic => {
                 tracing::warn!(
                     server = server_name,
-                    "MCP credential store not configured — falling back to unauthenticated access"
+                    "MCP basic auth is not yet wired — connecting unauthenticated"
                 );
                 McpAuth::None
             }
@@ -52,6 +69,40 @@ impl McpAuth {
             McpAuth::Basic { username, password } => req.basic_auth(username, Some(password)),
         }
     }
+}
+
+/// The environment variable a server's credential is read from:
+/// `SOVEREIGN_MCP_TOKEN_<NAME>`, where NAME is the server name uppercased with
+/// every non-alphanumeric character folded to `_` (so server `my-vision`
+/// reads `SOVEREIGN_MCP_TOKEN_MY_VISION`). Keeps the secret out of the
+/// on-disk config without a keychain dependency. `pub` so `sovereign mcp add`
+/// can name the exact variable back to the user from this single definition.
+pub fn secret_env_var(server_name: &str) -> String {
+    let sanitized: String = server_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("SOVEREIGN_MCP_TOKEN_{sanitized}")
+}
+
+fn read_secret_env(server_name: &str) -> Option<String> {
+    std::env::var(secret_env_var(server_name))
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+fn warn_missing_secret(server_name: &str) {
+    tracing::warn!(
+        server = server_name,
+        env_var = %secret_env_var(server_name),
+        "MCP server needs a credential but its env var is unset — connecting unauthenticated"
+    );
 }
 
 #[cfg(test)]
