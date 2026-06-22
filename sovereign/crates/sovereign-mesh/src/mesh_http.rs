@@ -145,6 +145,23 @@ pub struct StatusResponse {
     /// "Shared model" chip (`k/N anchors · available|forming`).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub shared_model: Option<SharedModelStatusDto>,
+    /// Peer-admission load: current in-flight peer requests + the configured
+    /// ceiling. Lets a multi-process soak assert AdmissionSafety over HTTP
+    /// (inflight ≤ ceiling, → 0 at quiescence) — previously DST-only. Serde
+    /// default keeps older status consumers wire-compatible.
+    #[serde(default)]
+    pub peer_inflight_current: usize,
+    #[serde(default)]
+    pub peer_inflight_ceiling: usize,
+    /// Current outbound peer knowledge fan-out width (the `fanout_inflight`
+    /// gauge). Lets the soak assert `BoundedFanOut` over HTTP. Serde default
+    /// keeps older status consumers wire-compatible.
+    #[serde(default)]
+    pub fanout_inflight_current: usize,
+    /// Corpora currently being ingested on this node — the soak's ingest /
+    /// inference-contention signal (0 when idle).
+    #[serde(default)]
+    pub active_corpus_ingests: usize,
 }
 
 /// Cluster-health snapshot of a shared-model fleet, surfaced on
@@ -248,6 +265,8 @@ async fn mesh_status(
     // Shared-model cluster health (None unless this node is in a shared-model
     // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
     let shared_model = shared_model_status(&daemon).await;
+    let (peer_inflight_current, peer_inflight_ceiling, fanout_inflight_current, active_corpus_ingests) =
+        daemon.glassbox_signals().await;
     let Some(s) = daemon.mesh_state().await else {
         // Running but no mesh — e.g. the daemon started solo and the
         // user hasn't run `mesh create` yet. Empty but valid payload
@@ -267,6 +286,10 @@ async fn mesh_status(
                     rpc_workers,
                     shared_model_host: is_shared_model_host(),
                     shared_model: shared_model.clone(),
+                    peer_inflight_current,
+                    peer_inflight_ceiling,
+                    fanout_inflight_current,
+                    active_corpus_ingests,
                 })
                 .unwrap(),
             ),
@@ -315,6 +338,10 @@ async fn mesh_status(
                 rpc_workers,
                 shared_model_host: is_shared_model_host(),
                 shared_model,
+                peer_inflight_current,
+                peer_inflight_ceiling,
+                fanout_inflight_current,
+                active_corpus_ingests,
             })
             .unwrap(),
         ),

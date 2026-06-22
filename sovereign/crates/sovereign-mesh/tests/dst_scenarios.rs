@@ -120,12 +120,97 @@ async fn partition_then_heal_reconverges() {
             }
         }
     }
-    // Re-converge and assert the full invariant pack holds.
-    let q = dst.gossip_until_quiescent(16).await;
+    // Re-converge and assert the full invariant pack holds. AGREED quiesce: a
+    // stable-but-not-yet-agreed plateau must not pass as converged — that was
+    // this test's intermittent failure.
+    let q = dst.gossip_until_quiescent_agreed(16).await;
     assert!(matches!(q, Quiescence::Converged { .. }), "did not reconverge: {q:?}");
     let violations = check_all(&dst.snapshot().await);
     assert!(violations.is_empty(), "post-heal violations: {violations:?}");
 }
+
+/// The agreed-quiescence variant must REJECT a stably-disagreeing mesh — the
+/// exact post-heal plateau that made `partition_then_heal_reconverges` flaky.
+/// With an ACTIVE partition (decayed, not healed) the two groups settle into
+/// stable but contradictory live-sets: plain `gossip_until_quiescent` reports
+/// `Converged` (stability reached), while `gossip_until_quiescent_agreed`
+/// correctly holds out to the round budget (no agreement). This pins the
+/// distinction the fix relies on, and is why the agreed variant is
+/// heal-then-assert ONLY — running it under an active partition would (rightly)
+/// never converge.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn agreed_quiesce_rejects_stable_disagreement() {
+    let dst = DstMesh::start(4).await;
+    assert!(matches!(
+        dst.gossip_until_quiescent(8).await,
+        Quiescence::Converged { .. }
+    ));
+    let ids = dst.node_ids();
+    // Split {0,1} | {2,3} and decay the cross-group peers — do NOT heal.
+    {
+        let mut p = dst.policy().write().unwrap();
+        for &a in &[0usize, 1] {
+            for &b in &[2usize, 3] {
+                p.partition(ids[a], ids[b]);
+            }
+        }
+    }
+    dst.clock().advance(3601);
+    for _ in 0..6 {
+        dst.sweep().await;
+    }
+    // Stability still holds (views have stopped changing)…
+    assert!(
+        matches!(dst.gossip_until_quiescent(8).await, Quiescence::Converged { .. }),
+        "an active partition should still reach a stable fixpoint"
+    );
+    // …but the two groups disagree on the live-set, so AGREEMENT must not be
+    // claimed: the agreed variant spins out to the round budget.
+    assert!(
+        matches!(
+            dst.gossip_until_quiescent_agreed(8).await,
+            Quiescence::MaxRoundsExceeded { .. }
+        ),
+        "agreed-quiesce must reject a stably-disagreeing (partitioned) mesh"
+    );
+}
+
+/// Wire faults (a throttled peer + a truncated stream) plus a backward clock
+/// jump during gossip must not break convergence once healed: gossip tolerates a
+/// dribbling/truncating peer, and offline-decay ignores a non-monotonic clock.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn wire_faults_and_clock_jump_back_reconverge() {
+    let dst = DstMesh::start(4).await;
+    assert!(matches!(
+        dst.gossip_until_quiescent(8).await,
+        Quiescence::Converged { .. }
+    ));
+    dst.slow_peer(0, 1, 8); // node0 sees node1 as a crawl (8 B/s)
+    dst.truncate_stream(2, 3, 16); // node2 sees node3's response cut at 16 bytes
+    dst.clock_jump_back(1, 120); // node1's wall clock steps back 2 minutes
+    for _ in 0..4 {
+        dst.sweep().await;
+    }
+    dst.clear_faults();
+    // AGREED quiesce (heal-then-assert): require all up nodes to converge to the
+    // identical view, not merely to stop changing.
+    let q = dst.gossip_until_quiescent_agreed(16).await;
+    assert!(
+        matches!(q, Quiescence::Converged { .. }),
+        "did not reconverge: {q:?}"
+    );
+    let violations = check_all(&dst.snapshot().await);
+    assert!(violations.is_empty(), "post-heal violations: {violations:?}");
+}
+
+// Host-failover (SingleHostUnderFailover) is covered without a dedicated DST
+// scenario: `NoSplitBrain` already asserts every up node agrees on
+// `partition::elect_leader` over its live set, and the shared-model host is
+// `should_host` = pin-else-leader, so leader-agreement IS host-agreement; the
+// runtime ≤1-host property is the soak's HTTP `shared_model_single_host` check,
+// and the pin logic has `partition::should_host` unit tests. A dedicated DST
+// leader-crash scenario was tried but only duplicated NoSplitBrain while adding
+// gossip-order flakiness, so it was dropped.
 
 /// Seeded compound chaos: random partitions / wire-faults / downs over many
 /// rounds, then heal everything and require reconvergence + the invariant pack.
@@ -152,9 +237,10 @@ async fn seeded_chaos_soak() {
             dst.apply_schedule_round(&schedule, round);
             dst.sweep().await;
         }
-        // Heal everything, then require clean reconvergence.
+        // Heal everything, then require clean reconvergence — AGREED, so a
+        // stable-but-disagreeing plateau can't masquerade as converged.
         dst.clear_faults();
-        let q = dst.gossip_until_quiescent(24).await;
+        let q = dst.gossip_until_quiescent_agreed(24).await;
         assert!(
             matches!(q, Quiescence::Converged { .. }),
             "seed={seed} did not reconverge: {q:?}"

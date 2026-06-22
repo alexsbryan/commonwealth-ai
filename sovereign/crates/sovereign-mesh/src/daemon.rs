@@ -1410,6 +1410,26 @@ impl EmbeddedDaemon {
     /// `ip:port` RPC endpoints. Fed to the embedded engine's worker provider so
     /// a host needs no manual `SOVEREIGN_RPC_WORKERS`. Best-effort — peers that
     /// don't respond or aren't serving a worker are simply omitted.
+    /// HTTP-observable admission + fan-out + ingest signals for the mesh-soak
+    /// invariant checker: `(peer_inflight_current, peer_inflight_ceiling,
+    /// fanout_inflight_current, active_corpus_ingests)`. Cheap lock/atomic reads
+    /// on a non-hot path; `(0, 0, 0, 0)` when the daemon isn't Running (nothing
+    /// in flight).
+    pub async fn glassbox_signals(&self) -> (usize, usize, usize, usize) {
+        let app_state = {
+            let state = self.state.read().await;
+            match &*state {
+                DaemonState::Running { app_state, .. } => app_state.clone(),
+                DaemonState::Stopped => return (0, 0, 0, 0),
+            }
+        };
+        let inflight = app_state.peer_inflight_count();
+        let ceiling = app_state.contribution_max_peer_inflight();
+        let fanout = app_state.fanout_inflight_count();
+        let ingests = app_state.inner.active_ingests.read().await.len();
+        (inflight, ceiling, fanout, ingests)
+    }
+
     /// The current eligible shared-model anchors, by `NodeId`: online mesh
     /// members (including self, when self is an online anchor) that advertise
     /// `anchor.can_anchor`. This is the input to leader election for the host

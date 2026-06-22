@@ -226,7 +226,12 @@ pub async fn knowledge_search(
             let query_text = request.query_text.clone();
             let limit_u32 = request.effective_limit();
             let requester_id = self_id;
+            let fanout_inner = state.inner.clone();
             futures.push(tokio::spawn(async move {
+                // Hold the live fan-out gauge up for the lifetime of this peer
+                // request; the RAII guard decrements even if the task is
+                // cancelled or panics, so `BoundedFanOut` never sees a leak.
+                let _fanout_guard = FanoutGuard::new(fanout_inner);
                 fanout_one_peer(
                     http,
                     transport,
@@ -290,6 +295,29 @@ pub async fn knowledge_search(
     }
 
     build_response(all_results, corpora_searched, corpora_unavailable, limit)
+}
+
+/// RAII gauge guard for `AppStateInner::fanout_inflight`: increments on
+/// construction and decrements on drop, so the live count of outbound peer
+/// fan-out requests is correct even if a spawned fan-out task panics or is
+/// cancelled. One is held inside each fan-out task; the companion read is
+/// [`AppState::fanout_inflight_count`], surfaced over HTTP via `glassbox_signals`
+/// and asserted by the `BoundedFanOut` soak invariant.
+struct FanoutGuard(std::sync::Arc<crate::state::AppStateInner>);
+impl FanoutGuard {
+    fn new(inner: std::sync::Arc<crate::state::AppStateInner>) -> Self {
+        inner
+            .fanout_inflight
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self(inner)
+    }
+}
+impl Drop for FanoutGuard {
+    fn drop(&mut self) {
+        self.0
+            .fanout_inflight
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// A peer's advertised knowledge offering, cloned out of the mesh

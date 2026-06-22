@@ -17,11 +17,16 @@
 //! The harness is not bit-deterministic (real tokio + TCP + an unseeded gossip
 //! peer-selection RNG). Only the *fault schedule* is seeded. Assertions follow
 //! the **quiesce-then-assert** rule: inject faults during scheduled rounds,
-//! stop, drive to a structural fixpoint ([`DstMesh::gossip_until_quiescent`]),
-//! then snapshot and check invariants. A node's epoch-0 member records (the
-//! harness default) are kept fresh by a [`TestClock`] with a small base and a
-//! large offline threshold, so nothing decays unless the scenario advances the
-//! clock past the threshold.
+//! stop, drive to a fixpoint, then snapshot and check invariants. Two fixpoints
+//! exist because the unseeded RNG makes gossip order-sensitive:
+//! [`DstMesh::gossip_until_quiescent`] (views stopped changing — correct while a
+//! partition is active, where the two sides *stably disagree*) and
+//! [`DstMesh::gossip_until_quiescent_agreed`] (views stopped changing AND every
+//! up node holds the identical view — the heal-then-assert fixpoint, so a stable
+//! but not-yet-agreed plateau can't fire a spurious `Converged`). A node's
+//! epoch-0 member records (the harness default) are kept fresh by a
+//! [`TestClock`] with a small base and a large offline threshold, so nothing
+//! decays unless the scenario advances the clock past the threshold.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -182,6 +187,53 @@ impl DstMesh {
             .install_clock(Arc::new(self.clock.with_offset(offset_secs)));
     }
 
+    /// Install a slow-peer wire fault on the (observer → target) edge: throttle
+    /// the proxy's upstream→client throughput to `bps`. Tests gossip resilience
+    /// to a peer that dribbles bytes — assert on outcome CLASS (the round
+    /// completes once healed, or times out), never on latency. Keep `bps` low
+    /// enough that the outcome is unambiguous (categorical, not marginal).
+    pub fn slow_peer(&self, observer: usize, target: usize, bps: u64) {
+        let ids = self.node_ids();
+        self.policy
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .set_wire(
+                ids[observer],
+                ids[target],
+                commonwealth_test_harness::fault::WireFault {
+                    throttle_bps: Some(bps),
+                    ..Default::default()
+                },
+            );
+    }
+
+    /// Install a truncate-stream wire fault: cut the (observer → target) response
+    /// after `n` bytes — a peer that dies mid-response. Surfaces partial-read
+    /// handling in the gossip merge path (a truncated body must be rejected, not
+    /// half-applied).
+    pub fn truncate_stream(&self, observer: usize, target: usize, n: usize) {
+        let ids = self.node_ids();
+        self.policy
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .set_wire(
+                ids[observer],
+                ids[target],
+                commonwealth_test_harness::fault::WireFault {
+                    cut_after_bytes: Some(n),
+                    ..Default::default()
+                },
+            );
+    }
+
+    /// Jump node `idx`'s clock BACKWARD by `secs` (an NTP step-back / non-
+    /// monotonic wall clock). Thin alias over [`DstMesh::skew_node`] with a
+    /// negative offset — offline-decay must not treat a backward jump as
+    /// staleness (it measures local-observation advance, not the peer's clock).
+    pub fn clock_jump_back(&self, idx: usize, secs: i64) {
+        self.skew_node(idx, -secs);
+    }
+
     /// Clear every injected fault (heal all partitions / wire faults / downs).
     /// Used to settle a chaos schedule before the final quiesce-and-assert.
     /// (Does not un-crash a node stopped via [`DstMesh::crash`] — that server
@@ -241,12 +293,53 @@ impl DstMesh {
     /// Drive sweeps until member views are stable across two consecutive
     /// sweeps (a structural fixpoint, no wall-clock sleeps), or the round
     /// budget is hit.
+    ///
+    /// This is STABILITY, not AGREEMENT. While a partition is active each side
+    /// settles into a *stably disagreeing* view (it has decayed the unreachable
+    /// group to offline), and that is the correct fixpoint to drive to
+    /// mid-partition. For heal-then-assert calls — where every up node must
+    /// converge to the SAME view before the invariant pack runs — use
+    /// [`Self::gossip_until_quiescent_agreed`].
     pub async fn gossip_until_quiescent(&self, max_rounds: usize) -> Quiescence {
+        self.gossip_until_quiescent_internal(max_rounds, false).await
+    }
+
+    /// Like [`Self::gossip_until_quiescent`], but the fixpoint additionally
+    /// requires every up node's member view to be pairwise identical — the mesh
+    /// has not merely stopped changing, it has *agreed*.
+    ///
+    /// This closes the post-heal flake: a 2-sweep stability fixpoint can plateau
+    /// on a not-yet-agreed state (gossip peer-selection is unseeded, so it's
+    /// order-sensitive), making `gossip_until_quiescent` return `Converged` while
+    /// `NoSplitBrain` still saw disagreeing live-sets. Requiring agreement before
+    /// asserting removes the coin-flip.
+    ///
+    /// Use ONLY after healing every fault. An active partition legitimately
+    /// yields disagreeing live-sets, so the agreed variant would (correctly) spin
+    /// to the round budget while one is in force — that is asserted by
+    /// `agreed_quiesce_rejects_stable_disagreement`.
+    pub async fn gossip_until_quiescent_agreed(&self, max_rounds: usize) -> Quiescence {
+        self.gossip_until_quiescent_internal(max_rounds, true).await
+    }
+
+    /// Shared driver for the two quiescence variants. `until_agreed` layers the
+    /// pairwise-identical-views (agreement) requirement on top of the two-sweep
+    /// stability fixpoint.
+    async fn gossip_until_quiescent_internal(
+        &self,
+        max_rounds: usize,
+        until_agreed: bool,
+    ) -> Quiescence {
         let mut prev: Option<Vec<Vec<(NodeId, bool)>>> = None;
         for round in 1..=max_rounds {
             self.sweep().await;
             let cur = self.member_views().await;
-            if prev.as_ref() == Some(&cur) {
+            let stable = prev.as_ref() == Some(&cur);
+            // Agreement: every up node holds an identical (member, is_live) view.
+            // `windows(2)` over the per-node views turns "all equal" into a
+            // consecutive-equal check; vacuously true for 0 or 1 up nodes.
+            let agreed = !until_agreed || cur.windows(2).all(|w| w[0] == w[1]);
+            if stable && agreed {
                 return Quiescence::Converged { rounds: round };
             }
             prev = Some(cur);

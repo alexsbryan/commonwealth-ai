@@ -33,6 +33,18 @@ pub struct NodeStatusView {
     /// on non-shared-model meshes, where the invariant is then a no-op.
     #[serde(default)]
     pub shared_model_host: bool,
+    /// Peer-admission load: current in-flight peer requests + the configured
+    /// ceiling (from `glassbox_signals`). Drives `admission_safety`. Both default
+    /// to 0 on older nodes that don't report them → `0 ≤ 0`, an inert pass.
+    #[serde(default)]
+    pub peer_inflight_current: usize,
+    #[serde(default)]
+    pub peer_inflight_ceiling: usize,
+    /// Current outbound peer knowledge fan-out width (the `fanout_inflight`
+    /// gauge). Drives `bounded_fan_out`. Defaults to 0 on older nodes → an inert
+    /// pass against the sanity ceiling.
+    #[serde(default)]
+    pub fanout_inflight_current: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -128,6 +140,26 @@ pub fn evaluate_invariants(
         }
     }
 
+    // UniqueIds: no two reachable nodes may claim the SAME self-id. A collision
+    // means a restart/rejoin adopted an id another live node already owns — the
+    // deeper cause behind the orphan "ghost" ids the 8h soak surfaced. Checked
+    // over the `is_self` record each daemon reports for itself; a non-colliding
+    // mesh has one distinct claimant per id, so this is inert until it isn't.
+    let mut self_claimants: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+    for (addr, view) in &reachable {
+        if let Some(m) = view.members.iter().find(|m| m.is_self) {
+            self_claimants.entry(m.node_id.clone()).or_default().push(addr);
+        }
+    }
+    for (id, addrs) in &self_claimants {
+        if addrs.len() > 1 {
+            violations.push(Violation {
+                invariant: "unique_ids",
+                detail: format!("node_id {id} claimed as self by {} nodes: {addrs:?}", addrs.len()),
+            });
+        }
+    }
+
     // Shared-model no-split-brain: at most one reachable node may report itself
     // as the host. Two hosts means a partition/convergence bug let the RPC
     // layer-split assemble twice — `partition::should_host` must elect exactly
@@ -146,6 +178,42 @@ pub fn evaluate_invariants(
             invariant: "shared_model_single_host",
             detail: format!("multiple shared-model hosts reachable: {hosts:?}"),
         });
+    }
+
+    // AdmissionSafety: peer in-flight must never exceed the configured ceiling.
+    // (DST also asserts it returns to 0 at quiescence; over HTTP, at arbitrary
+    // checkpoints, we assert the hard bound.) Inert until real peer-inference
+    // load drives inflight above 0 — the ingest/contention lane exercises it.
+    for (addr, view) in &reachable {
+        if view.peer_inflight_current > view.peer_inflight_ceiling {
+            violations.push(Violation {
+                invariant: "admission_safety",
+                detail: format!(
+                    "node {addr} peer_inflight {} exceeds ceiling {}",
+                    view.peer_inflight_current, view.peer_inflight_ceiling
+                ),
+            });
+        }
+    }
+
+    // BoundedFanOut: a node's concurrent OUTBOUND peer fan-out (the
+    // `fanout_inflight` gauge) must never exceed a structural sanity ceiling.
+    // The precise per-request corpora bound is enforced + unit-tested at
+    // `select_fanout_corpora` (≤ MAX_FANOUT_CORPORA, skips oversized); this
+    // runtime check is the glassbox net for a fan-out storm or a leaked
+    // `FanoutGuard` accumulating. Inert (0) until real knowledge fan-out runs —
+    // the ingest/contention lane drives it above 0.
+    const FANOUT_INFLIGHT_CEILING: usize = 64;
+    for (addr, view) in &reachable {
+        if view.fanout_inflight_current > FANOUT_INFLIGHT_CEILING {
+            violations.push(Violation {
+                invariant: "bounded_fan_out",
+                detail: format!(
+                    "node {addr} fanout_inflight {} exceeds sanity ceiling {}",
+                    view.fanout_inflight_current, FANOUT_INFLIGHT_CEILING
+                ),
+            });
+        }
     }
 
     // Liveness: every reachable node (identified by its own self-record id) must
@@ -304,6 +372,9 @@ mod tests {
                 })
                 .collect(),
             shared_model_host: false,
+            peer_inflight_current: 0,
+            peer_inflight_ceiling: 0,
+            fanout_inflight_current: 0,
         }
     }
     fn snap(addr: &str, v: NodeStatusView) -> NodeSnapshot {
@@ -322,6 +393,52 @@ mod tests {
         let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
         let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
         assert!(evaluate_invariants(&[a, b], None).is_empty());
+    }
+
+    #[test]
+    fn duplicate_self_ids_flag_unique_ids() {
+        // Distinct self-claims (a→n1, b→n2) are clean.
+        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        assert!(!evaluate_invariants(&[a, b], None)
+            .iter()
+            .any(|v| v.invariant == "unique_ids"));
+        // Two daemons both claiming n2 as self = an id collision (the 8h-soak bug).
+        let c = snap("c", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let d = snap("d", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let vs = evaluate_invariants(&[c, d], None);
+        assert!(vs.iter().any(|v| v.invariant == "unique_ids"), "{vs:?}");
+    }
+
+    #[test]
+    fn peer_inflight_over_ceiling_flags_admission_safety() {
+        let mut over = view(&[("n1", "online", true)], 1);
+        over.peer_inflight_current = 3;
+        over.peer_inflight_ceiling = 2;
+        let vs = evaluate_invariants(&[snap("a", over)], None);
+        assert!(vs.iter().any(|x| x.invariant == "admission_safety"), "{vs:?}");
+        // At/under ceiling is clean.
+        let mut ok = view(&[("n1", "online", true)], 1);
+        ok.peer_inflight_current = 2;
+        ok.peer_inflight_ceiling = 2;
+        assert!(!evaluate_invariants(&[snap("a", ok)], None)
+            .iter()
+            .any(|x| x.invariant == "admission_safety"));
+    }
+
+    #[test]
+    fn fanout_inflight_over_ceiling_flags_bounded_fan_out() {
+        // A runaway outbound fan-out width trips the sanity ceiling (64).
+        let mut over = view(&[("n1", "online", true)], 1);
+        over.fanout_inflight_current = 65;
+        let vs = evaluate_invariants(&[snap("a", over)], None);
+        assert!(vs.iter().any(|x| x.invariant == "bounded_fan_out"), "{vs:?}");
+        // At the ceiling (≤ 64) is clean; 0 is the inert common case.
+        let mut ok = view(&[("n1", "online", true)], 1);
+        ok.fanout_inflight_current = 64;
+        assert!(!evaluate_invariants(&[snap("a", ok)], None)
+            .iter()
+            .any(|x| x.invariant == "bounded_fan_out"));
     }
 
     #[test]
