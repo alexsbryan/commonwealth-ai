@@ -275,6 +275,70 @@ const DEV_VERBS: &[&str] = &[
     "claim", "nudge",
 ];
 
+/// Every top-level verb the dispatcher routes — the complete surface
+/// `sovereign __dump-commands` reports for the CLI-contract reverse check.
+/// Independent of feature flags (it lists the dev-tools and awareness verbs
+/// too) so the contract sees the whole surface in any build. Kept sorted; the
+/// `all_verbs_is_complete_and_sorted` test pins it against `DEV_VERBS` + `HELP`
+/// so it cannot silently drift from the dispatch `match` arms.
+const ALL_VERBS: &[&str] = &[
+    "agent-bench",
+    "alignment",
+    "amend",
+    "archaeology-eval",
+    "atlas",
+    "atos",
+    "audit",
+    "awareness",
+    "bench",
+    "charter",
+    "chat",
+    "claim",
+    "code",
+    "corpus",
+    "daemon",
+    "design",
+    "doctor",
+    "drift",
+    "enrich",
+    "eval",
+    "git-archaeology",
+    "govern",
+    "init",
+    "install-service",
+    "knowledge-gym",
+    "maintainer",
+    "mcp",
+    "memory",
+    "mesh",
+    "meshapp",
+    "meta-atlas",
+    "milestone",
+    "mobile",
+    "newsworthy",
+    "notes",
+    "nudge",
+    "pipeline",
+    "plan",
+    "portfolio",
+    "project",
+    "proxy",
+    "reading-diag",
+    "recipe",
+    "recipe-agent",
+    "reflect",
+    "refresh",
+    "rough-edges",
+    "router-cache",
+    "search-gym",
+    "serve",
+    "setup",
+    "status",
+    "stop",
+    "tools",
+    "voice",
+];
+
 /// The developer-toolchain verbs as a help table, appended to `--help`
 /// only under `--features dev-tools`. Help text is data (ARCH_PRINCIPLES §6).
 #[cfg(feature = "dev-tools")]
@@ -540,6 +604,43 @@ async fn async_main() {
         }
     }
 
+    // Hidden introspection: `sovereign __dump-commands` prints every top-level
+    // verb the CLI dispatches (one per line) for the cli_contract_code reverse
+    // check. Not advertised in HELP; runs in any build (before the dev-tools
+    // gate) so the contract sees the whole surface regardless of features.
+    if raw_args.first().map(String::as_str) == Some("__dump-commands") {
+        for verb in ALL_VERBS {
+            println!("{verb}");
+        }
+        std::process::exit(0);
+    }
+
+    // Hidden introspection: `sovereign __contract-smoke` prints the manifest's
+    // read-only smoke probes as TSV (`<expect_exit>\t<args>\t<expect_substr>`)
+    // for the cli-contract-live-verify.sh harness. Reads docs/cli-contract.toml
+    // (present in a dev checkout only); a no-op in the shipped binary.
+    if raw_args.first().map(String::as_str) == Some("__contract-smoke") {
+        match sovereign_cli_shared::cli_contract::Contract::load_default() {
+            Ok(contract) => {
+                for cmd in &contract.commands {
+                    if let Some(smoke) = &cmd.smoke {
+                        println!(
+                            "{}\t{}\t{}",
+                            smoke.expect_exit,
+                            smoke.args.join(" "),
+                            smoke.expect_stdout_contains.clone().unwrap_or_default()
+                        );
+                    }
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("__contract-smoke: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Gate the developer toolchain out of the default build. `cfg!` (not
     // `#[cfg]`) so `DEV_VERBS` stays referenced — and thus warning-free —
     // in both feature states; the optimizer drops this block when the
@@ -706,7 +807,8 @@ async fn async_main() {
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
             "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
-            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" => {
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
+            | "portfolio" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
@@ -784,5 +886,35 @@ mod tests {
             }
         }
         assert!(saw_subcommands, "HELP is missing its Subcommands section");
+    }
+
+    /// `ALL_VERBS` (what `__dump-commands` reports) must list every dispatched
+    /// top-level verb. Cross-checked against the two existing authoritative
+    /// lists — `DEV_VERBS` and the `HELP` subcommand table — so the dump
+    /// cannot drift from the `match` arms without a test going red. Also pins
+    /// sorted + dedup so the reverse check's output is stable.
+    #[test]
+    fn all_verbs_is_complete_and_sorted() {
+        for v in DEV_VERBS {
+            assert!(
+                ALL_VERBS.contains(v),
+                "DEV_VERBS lists `{v}` but ALL_VERBS does not (update ALL_VERBS)"
+            );
+        }
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                for (name, _) in *entries {
+                    assert!(
+                        ALL_VERBS.contains(name),
+                        "HELP advertises `{name}` but ALL_VERBS does not (update ALL_VERBS)"
+                    );
+                }
+            }
+        }
+        let mut sorted = ALL_VERBS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ALL_VERBS.len(), "ALL_VERBS has duplicates");
+        assert_eq!(sorted.as_slice(), ALL_VERBS, "ALL_VERBS must be kept sorted");
     }
 }
