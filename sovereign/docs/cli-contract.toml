@@ -58,9 +58,9 @@ flags = [
   { name = "--watch" },
   { name = "--json" },
 ]
-[command.smoke]
-args = ["doctor", "--json"]
-expect_exit = 0
+# No smoke block: `doctor`'s exit code reflects system health (non-zero when
+# checks fail), not command conformance — a poor behavioral probe. doctor is
+# fully covered offline by the docs + code conformance tests.
 
 [[command]]
 path = "install-service"
@@ -748,3 +748,132 @@ flags = [
   { name = "--dry-run" },
   { name = "--yes" },
 ]
+
+# ─────────────────────────────────────────────────────────────────────
+# INTERNAL — top-level surface tracked at VERB level for the reverse check.
+# These dispatch in the real binary but are either deprecated flat aliases
+# of a project/atos subcommand, or undocumented internal tooling (hidden).
+# Listed so the code-conformance reverse check (`__dump-commands` vs the
+# manifest) finds no UNTRACKED top-level verb. They are excluded from the
+# docs check (alias/hidden) and not existence-probed (only canonical, non-
+# hidden, non-alias commands are probed). Subcommand-level rows are future
+# work — see docs/cli-audit-findings.md §2.
+# ─────────────────────────────────────────────────────────────────────
+
+# Flat dev-tool aliases — each prints a deprecation banner and forwards.
+[[command]]
+path = "charter"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project charter"
+[[command]]
+path = "amend"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project amend"
+[[command]]
+path = "design"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project design"
+[[command]]
+path = "plan"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project plan"
+[[command]]
+path = "refresh"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project refresh"
+[[command]]
+path = "serve"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project serve"
+[[command]]
+path = "audit"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "project audit"
+[[command]]
+path = "milestone"
+binary = "dev"
+feature = "dev-tools"
+alias_of = "atos end-milestone"
+
+# Hidden internal tooling — undocumented on purpose, dispatches in the build
+# shown. Tracked here; intentionally absent from CLI_REFERENCE.
+[[command]]
+path = "agent-bench"
+binary = "dispatcher"
+feature = "dev-tools"
+hidden = true
+[[command]]
+path = "rough-edges"
+binary = "dispatcher"
+feature = "dev-tools"
+hidden = true
+[[command]]
+path = "claim"
+binary = "llm"
+feature = "dev-tools"
+hidden = true
+[[command]]
+path = "nudge"
+binary = "dispatcher"
+feature = "dev-tools"
+hidden = true
+[[command]]
+path = "awareness"
+binary = "dispatcher"
+feature = "awareness"
+hidden = true
+[[command]]
+path = "memory"
+binary = "dispatcher"
+hidden = true
+[[command]]
+path = "stop"
+binary = "dispatcher"
+hidden = true
+[[command]]
+path = "meshapp"
+binary = "llm"
+hidden = true
+[[command]]
+path = "meta-atlas"
+binary = "llm"
+hidden = true
+[[command]]
+path = "recipe-agent"
+binary = "llm"
+hidden = true
+[[command]]
+path = "maintainer"
+binary = "llm"
+hidden = true
+[[command]]
+path = "voice"
+binary = "llm"
+hidden = true
+[[command]]
+path = "reading-diag"
+binary = "llm"
+hidden = true
+[[command]]
+path = "newsworthy"
+binary = "llm"
+hidden = true
+[[command]]
+path = "router-cache"
+binary = "llm"
+hidden = true
+[[command]]
+path = "proxy"
+binary = "llm"
+hidden = true
+[[command]]
+path = "portfolio"
+binary = "llm"
+hidden = true
