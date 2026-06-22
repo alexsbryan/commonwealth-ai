@@ -75,11 +75,15 @@ impl<T: McpTransport> McpClient<T> {
                 .get("inputSchema")
                 .cloned()
                 .unwrap_or(serde_json::json!({}));
+            // Newer MCP servers declare an `outputSchema`; pass it through when
+            // present so the planner sees the tool's output keys.
+            let output_schema = tool.get("outputSchema").cloned();
 
             infos.push(McpToolInfo {
                 name,
                 description,
                 input_schema,
+                output_schema,
             });
         }
 

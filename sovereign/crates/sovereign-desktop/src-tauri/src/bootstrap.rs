@@ -335,6 +335,7 @@ mod tests {
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            mcp_servers: Vec::new(),
         };
         let mode = BootstrapMode::Local {
             source: ConfigSource::CliSetup(cfg),

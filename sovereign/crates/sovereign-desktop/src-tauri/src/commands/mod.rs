@@ -250,6 +250,7 @@ mod models;
 mod reading;
 mod recipe_testing;
 mod meshapp;
+mod mcp_servers;
 
 pub use budget::*;
 pub use chat::*;
@@ -264,6 +265,7 @@ pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
 pub use meshapp::*;
+pub use mcp_servers::*;
 
 // ─── Tests ───────────────────────────────────────────────────
 

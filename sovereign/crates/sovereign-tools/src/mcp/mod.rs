@@ -10,6 +10,7 @@ pub mod client;
 pub mod config;
 pub mod discovery;
 pub mod http;
+pub mod loader;
 pub mod reconnect;
 pub mod stdio;
 pub mod transport;
@@ -25,6 +26,7 @@ use sovereign_core::types::*;
 
 pub use config::McpServerConfig;
 pub use discovery::McpServerManager;
+pub use loader::load_from_setup_config;
 pub use types::McpToolInfo;
 
 // ─── McpToolCaller trait ──────────────────────────────────────
@@ -61,17 +63,25 @@ pub struct McpToolAdapter {
     description: String,
     tool_id: String,
     input_schema: serde_json::Value,
+    output_schema: Option<serde_json::Value>,
+    examples: Vec<ToolExample>,
     caller: Arc<dyn McpToolCaller>,
 }
 
 impl McpToolAdapter {
     pub fn new(info: &McpToolInfo, caller: Arc<dyn McpToolCaller>, prefix: &str) -> Self {
         let tool_id = format!("mcp_{prefix}_{}", info.name);
+        // Synthesize a concrete example call from the input schema so the
+        // planner reliably emits a `tool` step (not a `reason` fallback) for
+        // this tool — see `synthesize_examples`.
+        let examples = synthesize_examples(&info.name, &info.input_schema);
         Self {
             tool_name: info.name.clone(),
             description: info.description.clone(),
             tool_id,
             input_schema: info.input_schema.clone(),
+            output_schema: info.output_schema.clone(),
+            examples,
             caller,
         }
     }
@@ -86,7 +96,11 @@ impl Tool for McpToolAdapter {
             name: self.tool_name.clone(),
             description: self.description.clone(),
             parameters: self.input_schema.clone(),
-            examples: vec![],
+            // One example call synthesized from the input schema (see
+            // `synthesize_examples`). Empty only for argument-less tools.
+            // Small models emit a `tool` step far more reliably when the
+            // planner can show them a concrete argument shape to copy.
+            examples: self.examples.clone(),
             // External MCP servers don't declare behavioural properties
             // directly. We heuristically classify effect + idempotency
             // from the tool name + description (D4); unclassifiable
@@ -96,12 +110,11 @@ impl Tool for McpToolAdapter {
             idempotency,
             latency: Latency::Slow,
             scope: Scope::External,
-            // External MCP servers don't declare output schemas; the
-            // adapter reports None so downstream steps fall back to
-            // `{N.output}` piping or reasoning. A future iteration
-            // could inspect MCP `outputSchema` when the protocol
-            // gains that field.
-            output_schema: None,
+            // Passed through from the server's MCP `outputSchema` when it
+            // declares one — lets the planner compose `{N.key}` references.
+            // `None` for servers that don't, where downstream steps pipe the
+            // full text via `{N.output}`.
+            output_schema: self.output_schema.clone(),
         }
     }
 
@@ -187,6 +200,83 @@ fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
 
     // Unknown shape — conservative default.
     (Effect::Write, Idempotency::NonIdempotent)
+}
+
+/// Synthesize one example call from a tool's JSON input schema, so the planner
+/// has a concrete invocation shape to copy.
+///
+/// MCP servers rarely ship examples, and the planner emits a `tool` step far
+/// more reliably when it can show a small model the argument shape than from
+/// the description alone — the same reason native tools like `parcel_analytics`
+/// carry a hand-written example. The synthesized call lists the schema's
+/// `required` properties (or, when nothing is marked required, up to four of
+/// the declared properties), each filled with a representative placeholder.
+/// Returns an empty vec for argument-less tools, where an example adds nothing.
+fn synthesize_examples(tool_name: &str, input_schema: &serde_json::Value) -> Vec<ToolExample> {
+    let Some(props) = input_schema.get("properties").and_then(|v| v.as_object()) else {
+        return vec![];
+    };
+    if props.is_empty() {
+        return vec![];
+    }
+
+    let required: Vec<String> = input_schema
+        .get("required")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let keys: Vec<String> = if required.is_empty() {
+        props.keys().take(4).cloned().collect()
+    } else {
+        required.into_iter().filter(|k| props.contains_key(k)).collect()
+    };
+
+    let mut call = serde_json::Map::new();
+    for key in keys {
+        let schema = props.get(&key).cloned().unwrap_or(serde_json::Value::Null);
+        call.insert(key, placeholder_for_schema(&schema));
+    }
+    if call.is_empty() {
+        return vec![];
+    }
+
+    vec![ToolExample {
+        situation: format!("Call `{tool_name}` with its arguments."),
+        call: serde_json::Value::Object(call),
+    }]
+}
+
+/// A representative placeholder value for one JSON-schema property. Prefers the
+/// schema's own `default`, then `example`, then the first `enum` value (most
+/// informative); otherwise a neutral value matching the declared `type`. The
+/// value communicates *shape*, not a literal the model must reuse.
+fn placeholder_for_schema(schema: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    if let Some(d) = schema.get("default") {
+        return d.clone();
+    }
+    if let Some(e) = schema.get("example") {
+        return e.clone();
+    }
+    if let Some(first) = schema
+        .get("enum")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+    {
+        return first.clone();
+    }
+    match schema.get("type").and_then(|v| v.as_str()).unwrap_or("string") {
+        "integer" | "number" => Value::from(0),
+        "boolean" => Value::Bool(false),
+        "array" => Value::Array(vec![]),
+        "object" => Value::Object(serde_json::Map::new()),
+        _ => Value::String("example".to_string()),
+    }
 }
 
 // ─── Public helpers ───────────────────────────────────────────
@@ -312,5 +402,62 @@ mod tests {
     fn prefix_match_is_case_insensitive() {
         let (e, _) = infer_behaviour("READ_FILE", "");
         assert_eq!(e, Effect::Read);
+    }
+
+    #[test]
+    fn synthesizes_example_from_required_props() {
+        // The reference demo tool's shape: one required string arg.
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "agent": { "type": "string" },
+                "verbose": { "type": "boolean" }
+            },
+            "required": ["agent"]
+        });
+        let ex = synthesize_examples("get_clearance_code", &schema);
+        assert_eq!(ex.len(), 1);
+        // Only the required key, as a string placeholder — the shape the
+        // planner copies, then the model fills with the real agent name.
+        assert_eq!(ex[0].call, serde_json::json!({ "agent": "example" }));
+    }
+
+    #[test]
+    fn argless_tool_gets_no_example() {
+        let empty_props = serde_json::json!({ "type": "object", "properties": {} });
+        assert!(synthesize_examples("ping", &empty_props).is_empty());
+        // No `properties` key at all.
+        assert!(synthesize_examples("ping", &serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn no_required_falls_back_to_declared_props() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": { "q": { "type": "string" } }
+        });
+        let ex = synthesize_examples("search", &schema);
+        assert_eq!(ex.len(), 1);
+        assert_eq!(ex[0].call, serde_json::json!({ "q": "example" }));
+    }
+
+    #[test]
+    fn placeholder_prefers_enum_then_type() {
+        assert_eq!(
+            placeholder_for_schema(&serde_json::json!({ "enum": ["a", "b"] })),
+            serde_json::json!("a")
+        );
+        assert_eq!(
+            placeholder_for_schema(&serde_json::json!({ "default": 7 })),
+            serde_json::json!(7)
+        );
+        assert_eq!(
+            placeholder_for_schema(&serde_json::json!({ "type": "integer" })),
+            serde_json::json!(0)
+        );
+        assert_eq!(
+            placeholder_for_schema(&serde_json::json!({ "type": "boolean" })),
+            serde_json::json!(false)
+        );
     }
 }

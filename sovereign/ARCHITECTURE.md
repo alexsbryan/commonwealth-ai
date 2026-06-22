@@ -700,7 +700,7 @@ Built-in tools and MCP-bridged tools implement the same trait. From the Executor
 
 ### MCP Adapter
 
-The MCP client is not a special subsystem. It is an adapter that turns an MCP server's tool descriptors into `Tool` trait objects:
+The MCP client is not a special subsystem. It is an adapter that turns an MCP server's tool descriptors into `Tool` trait objects. HTTP MCP servers declared in the `[[mcp_servers]]` array of `~/.sovereign/config.toml` are loaded into the agent's tool registry at startup by one shared loader that **every** chat surface calls (CLI, desktop, server) — so the "MCP provides capability extension" principle holds on the flagship desktop, not only the standalone server. The adapter also synthesizes an example call from the tool's input schema so the planner reliably emits a *tool* step rather than reasoning past it. Illustrative shape:
 
 ```rust
 pub struct McpToolAdapter {

@@ -2726,6 +2726,7 @@ mod tests {
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            mcp_servers: Vec::new(),
         };
 
         register_local_model_slots(&app_state, &cfg, node_id);

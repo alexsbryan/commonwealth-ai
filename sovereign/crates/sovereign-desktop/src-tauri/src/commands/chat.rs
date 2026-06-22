@@ -61,6 +61,24 @@ pub struct FocusedChunkRef {
     pub chunk_id: u64,
 }
 
+/// A file the user attached for a *tool* to act on (vision, OCR, audio
+/// transcription) — distinct from a document attachment (which is ingested for
+/// RAG). Its absolute path is surfaced to the model in the turn's message (see
+/// `build_tool_files_preamble`) so the planner passes it to an MCP tool like
+/// `describe_image(path)` / `transcribe_audio(path)`. Turn-scoped: nothing is
+/// ingested or persisted. The path only helps a *local* MCP server that can
+/// read it — the privacy-aligned case (bytes never leave the machine).
+#[derive(serde::Deserialize)]
+pub struct AttachedFile {
+    pub path: String,
+    pub name: String,
+    /// `"image"` | `"audio"` | `"other"` — drives the prompt hint that nudges
+    /// routing toward the right tool. Not authoritative; the tool's own schema
+    /// validates the real argument.
+    #[serde(default)]
+    pub kind: String,
+}
+
 #[tauri::command]
 pub async fn send_message_stream(
     app_handle: tauri::AppHandle,
@@ -68,6 +86,7 @@ pub async fn send_message_stream(
     message: String,
     conversation_id: String,
     context_chunks: Option<Vec<FocusedChunkRef>>,
+    attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<StreamStartedResponse, String> {
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap().clone();
@@ -85,12 +104,8 @@ pub async fn send_message_stream(
     // to what the user has open. The preamble uses a structured
     // marker (`▸ passage from "<title>" (corpus: <id>, chunk #N)`)
     // so chat-UI rendering can detect and present it nicely later.
-    let augmented_message = match &context_chunks {
-        Some(refs) if !refs.is_empty() => {
-            build_context_augmented_message(&state, &message, refs).await
-        }
-        _ => message.clone(),
-    };
+    let augmented_message =
+        augment_for_turn(&state, &message, &context_chunks, &attached_files).await;
 
     // Naked mode (a user setting) runs the loaded model raw — no
     // retrieval, router, grounding gate, tools, atlas, or gap-check.
@@ -321,6 +336,101 @@ async fn build_context_augmented_message(
     format!("{}\n\n---\n\n{}", blocks.join("\n\n---\n\n"), user_message)
 }
 
+/// Apply both turn augmentations: focused-passage context (corpus-backed) then
+/// the tool-files preamble (attached image/audio paths). The user's message
+/// stays at the end; each augmentation prepends its block above it. Shared by
+/// the streaming and non-streaming send commands so they stay identical.
+async fn augment_for_turn(
+    state: &State<'_, Arc<AppState>>,
+    message: &str,
+    context_chunks: &Option<Vec<FocusedChunkRef>>,
+    attached_files: &Option<Vec<AttachedFile>>,
+) -> String {
+    let mut augmented = match context_chunks {
+        Some(refs) if !refs.is_empty() => {
+            build_context_augmented_message(state, message, refs).await
+        }
+        _ => message.to_string(),
+    };
+    if let Some(files) = attached_files {
+        if !files.is_empty() {
+            augmented = build_tool_files_preamble(files, &augmented);
+        }
+    }
+    augmented
+}
+
+/// Prepend a labelled block naming each attached file's path so the model can
+/// pass it to a tool. Pure + synchronous (no corpus engine, unlike the passage
+/// preamble) — the path is the payload. The `▸ attached file:` marker mirrors
+/// the passage marker so chat-UI rendering can present these as chips later.
+/// A kind-aware hint nudges routing toward the right tool class.
+fn build_tool_files_preamble(files: &[AttachedFile], user_message: &str) -> String {
+    if files.is_empty() {
+        return user_message.to_string();
+    }
+    let blocks: Vec<String> = files
+        .iter()
+        .map(|f| {
+            let hint = match f.kind.as_str() {
+                "image" => "Use an image tool to inspect it (e.g. describe or OCR).",
+                "audio" => "Use a transcription tool to convert it to text.",
+                _ => "Call a tool with its path to work with it.",
+            };
+            let kind_label = if f.kind.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", f.kind)
+            };
+            format!(
+                "▸ attached file: {}{}\n  path: {}\n  {hint}",
+                f.name, kind_label, f.path
+            )
+        })
+        .collect();
+    format!("{}\n\n---\n\n{}", blocks.join("\n\n"), user_message)
+}
+
+#[cfg(test)]
+mod tool_files_tests {
+    use super::*;
+
+    fn file(name: &str, path: &str, kind: &str) -> AttachedFile {
+        AttachedFile {
+            path: path.into(),
+            name: name.into(),
+            kind: kind.into(),
+        }
+    }
+
+    #[test]
+    fn empty_attachments_pass_message_through() {
+        assert_eq!(build_tool_files_preamble(&[], "hello"), "hello");
+    }
+
+    #[test]
+    fn preamble_carries_path_and_keeps_message_last() {
+        let out = build_tool_files_preamble(
+            &[file("memo.m4a", "/home/u/memo.m4a", "audio")],
+            "transcribe this",
+        );
+        // The path is present for the model to pass to a tool…
+        assert!(out.contains("/home/u/memo.m4a"), "{out}");
+        // …with a kind-aware hint…
+        assert!(out.contains("transcription tool"), "{out}");
+        // …and the user's message stays at the very end.
+        assert!(out.trim_end().ends_with("transcribe this"), "{out}");
+    }
+
+    #[test]
+    fn image_kind_hints_image_tool() {
+        let out =
+            build_tool_files_preamble(&[file("err.png", "/t/err.png", "image")], "what is this?");
+        assert!(out.contains("image tool"), "{out}");
+        assert!(out.contains("/t/err.png"), "{out}");
+    }
+}
+
 #[tauri::command]
 pub async fn send_message(
     app_handle: tauri::AppHandle,
@@ -328,18 +438,15 @@ pub async fn send_message(
     message: String,
     conversation_id: String,
     context_chunks: Option<Vec<FocusedChunkRef>>,
+    attached_files: Option<Vec<AttachedFile>>,
 ) -> Result<MessageResponse, String> {
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap();
 
     state.approval.set_task_id(&conversation_id).await;
 
-    let augmented_message = match &context_chunks {
-        Some(refs) if !refs.is_empty() => {
-            build_context_augmented_message(&state, &message, refs).await
-        }
-        _ => message.clone(),
-    };
+    let augmented_message =
+        augment_for_turn(&state, &message, &context_chunks, &attached_files).await;
 
     let response = runtime
         .handle_message(&augmented_message, &conversation_id)

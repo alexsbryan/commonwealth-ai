@@ -13,6 +13,12 @@ use sovereign_core::traits::Tool;
 use super::auth::McpAuth;
 use super::config::{McpServerConfig, McpTransportConfig};
 
+/// Per-server connect budget. A remote MCP server that hangs (slow TLS, dead
+/// host behind a load balancer that never RSTs) must not stall chat-surface
+/// bootstrap — bound each connect so the rest of the servers, and the app,
+/// proceed regardless.
+const CONNECT_TIMEOUT_SECS: u64 = 8;
+
 /// Connection status for a server.
 #[derive(Debug, Clone)]
 pub struct McpServerStatus {
@@ -37,8 +43,13 @@ impl McpServerManager {
                 continue;
             }
 
-            match connect_and_discover(config).await {
-                Ok(tools) => {
+            let outcome = tokio::time::timeout(
+                std::time::Duration::from_secs(CONNECT_TIMEOUT_SECS),
+                connect_and_discover(config),
+            )
+            .await;
+            match outcome {
+                Ok(Ok(tools)) => {
                     let count = tools.len();
                     tracing::info!(
                         server = &config.name,
@@ -55,7 +66,7 @@ impl McpServerManager {
                         error: None,
                     });
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     tracing::warn!(
                         server = &config.name,
                         error = %e,
@@ -66,6 +77,19 @@ impl McpServerManager {
                         connected: false,
                         tool_count: 0,
                         error: Some(e.to_string()),
+                    });
+                }
+                Err(_elapsed) => {
+                    tracing::warn!(
+                        server = &config.name,
+                        timeout_secs = CONNECT_TIMEOUT_SECS,
+                        "MCP server connect timed out"
+                    );
+                    statuses.push(McpServerStatus {
+                        name: config.name.clone(),
+                        connected: false,
+                        tool_count: 0,
+                        error: Some(format!("connect timed out after {CONNECT_TIMEOUT_SECS}s")),
                     });
                 }
             }

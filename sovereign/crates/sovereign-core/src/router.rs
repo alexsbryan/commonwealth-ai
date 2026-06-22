@@ -1688,12 +1688,33 @@ impl Router for LlmRouter {
                         const TOOL_GATE_MIN_SIM: f32 = 0.65;
                         const TOOL_GATE_MARGIN: f32 = 0.05;
                         let tool_match = if intent_is_toolless(&verdict.intent) {
-                            self.query_best_tool_sim(&query_embedding, available_tools)
-                                .await
-                                .filter(|(_, tool_sim)| {
-                                    *tool_sim >= TOOL_GATE_MIN_SIM
-                                        && *tool_sim > verdict.top_sim + TOOL_GATE_MARGIN
-                                })
+                            let best =
+                                self.query_best_tool_sim(&query_embedding, available_tools).await;
+                            // Glassbox: emit the gate decision (numbers + verdict)
+                            // for EVERY evaluation — including near-misses that
+                            // fall through — so "why didn't my tool fire?" is
+                            // answerable from `router.tool_gate` logs. The success
+                            // eprintln below is discarded by a detached daemon;
+                            // this tracing event reaches its log file, which is
+                            // what makes the desktop demo legible.
+                            if let Some((tool_id, tool_sim)) = &best {
+                                let passes = *tool_sim >= TOOL_GATE_MIN_SIM
+                                    && *tool_sim > verdict.top_sim + TOOL_GATE_MARGIN;
+                                tracing::debug!(
+                                    target: "router.tool_gate",
+                                    tool = %tool_id,
+                                    tool_sim = *tool_sim,
+                                    exemplar_top_sim = verdict.top_sim,
+                                    floor = TOOL_GATE_MIN_SIM,
+                                    margin = TOOL_GATE_MARGIN,
+                                    passes,
+                                    "router: tool-relevance gate decision"
+                                );
+                            }
+                            best.filter(|(_, tool_sim)| {
+                                *tool_sim >= TOOL_GATE_MIN_SIM
+                                    && *tool_sim > verdict.top_sim + TOOL_GATE_MARGIN
+                            })
                         } else {
                             None
                         };

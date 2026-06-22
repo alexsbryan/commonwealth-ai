@@ -593,6 +593,10 @@ fn main() -> ExitCode {
             commands::meshapp_installed_apps,
             commands::meshapp_open,
             commands::open_corpus_explorer,
+            commands::mcp_list_servers,
+            commands::mcp_add_server,
+            commands::mcp_remove_server,
+            commands::mcp_test_connection,
         ])
         .build(tauri::generate_context!())
         .expect("error building Sovereign")

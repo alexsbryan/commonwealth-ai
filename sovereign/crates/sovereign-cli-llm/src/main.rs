@@ -28,6 +28,7 @@ mod portfolio_cmd;
 mod proxy_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
+mod mcp_demo_server;
 mod mesh_cmd;
 mod mesh_soak;
 mod meshapp_cmd;

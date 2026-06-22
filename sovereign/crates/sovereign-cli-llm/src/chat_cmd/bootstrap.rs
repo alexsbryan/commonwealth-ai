@@ -244,6 +244,23 @@ pub async fn build_session_with_skills(
         Arc::clone(&store),
         Arc::clone(&inference),
     )));
+
+    // External MCP servers (the `[[mcp_servers]]` array of the canonical
+    // config): connect over HTTP and register their tools into the SAME
+    // registry the agent plans against, so a server added via `sovereign mcp
+    // add` or the desktop settings pane is callable here too. One shared
+    // loader, every surface — parity with the router stack below. The manager
+    // is held only for connection statuses (logged); the live transports are
+    // owned by the registered tools in the registry.
+    let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
+    for st in mcp.server_statuses().await {
+        if st.connected {
+            eprintln!("MCP:         {} ({} tools)", st.name, st.tool_count);
+        } else if let Some(e) = &st.error {
+            eprintln!("MCP:         {} unavailable — {e}", st.name);
+        }
+    }
+
     eprintln!("Tools:       {} registered", tools.count());
 
     // 7. Router + planner. The legacy REPL defaults to
