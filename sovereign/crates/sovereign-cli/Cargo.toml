@@ -67,6 +67,9 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# Used by the cli_contract_* conformance tests to load + reconcile the CLI
+# contract manifest (docs/cli-contract.toml) through the one shared parser.
+sovereign-cli-shared = { workspace = true }
 
 [features]
 # `dev-tools` re-enables the developer-toolchain verb surface (project

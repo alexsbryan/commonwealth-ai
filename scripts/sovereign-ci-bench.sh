@@ -89,6 +89,14 @@ AGENT_PROBLEMS="${AGENT_PROBLEMS:-3.2-lights-out,3.2-lights-out-python,5.1-minil
 # 0/27 that hides regressions). Pin it to the primary slot the daemon actually
 # serves; override with AGENT_MODEL for a dedicated coder model.
 AGENT_MODEL="${AGENT_MODEL:-commonwealth/primary}"
+# Agent runner. `search` is the built-in TDD red-green solver (commonwealth-tdd
+# via SearchRunner) — the path the committed baseline was captured with. The
+# bench's OWN default is `pi` (an external tool-calling agent) which scores far
+# lower here (measured 3/27 vs search's 9/27 on the same 3 problems, 2026-06-22)
+# and silently regresses any script-driven run that forgets to pass --agent.
+# Pin search so the suite can't fall back to pi; override with AGENT_RUNNER=pi
+# to A/B the external agent (see the daemon note on Lane 10).
+AGENT_RUNNER="${AGENT_RUNNER:-search}"
 
 # Core corpora the suite gates on (must be installed/queryable). Filters target
 # specific benches that are installed + baselined on a standard dev box — NOT
@@ -343,24 +351,21 @@ run_lane "knowledge-gym-gate" HARD \
 # the run_lane budget guard skips it first under a squeeze, protecting the
 # cheaper lanes. Separate binary; gated on grand_total/max_total.
 #
-# DAEMON CONFIG REQUIREMENT (2026-06-08): this lane needs the daemon started
-# with SOVEREIGN_FORCE_TOOL_CALLS=1 — otherwise the model emits ~100 tokens of
-# plain text and pi's zero-tool-call exit fires immediately (a floored ~3/27
-# that hides regressions; see inference_adapter.rs:722). That flag is
-# DAEMON-GLOBAL and forces a tool call on EVERY tools-bearing request, which
-# regresses search-gym's "don't search when unnecessary" judiciousness — so
-# agent-coding cannot share a daemon with the gym/chaos lanes. Run it in its
-# OWN daemon pass:
-#   sovereign daemon stop && SOVEREIGN_FORCE_TOOL_CALLS=1 \
-#     SOVEREIGN_DISABLE_AUTO_RESUME=1 sovereign daemon start
-# The clean (force-off) daemon is correct for every OTHER lane. The proper fix
-# that lets one daemon serve both is repairing the alternation grammar's
-# text|tool_envelope escape (CI_GATE_HANDOFF Step 2 #2) so tool-or-text per
-# turn works without the loop-trap — then FORCE_TOOL_CALLS is unnecessary and
-# the agent terminates cleanly instead of write-thrashing.
+# DAEMON CONFIG (2026-06-22): with AGENT_RUNNER=search (the default) this lane
+# uses the commonwealth-tdd solver, which ORCHESTRATES its own red-green loop
+# over the chat backend — it does NOT depend on the model emitting tool calls,
+# so it needs NO SOVEREIGN_FORCE_TOOL_CALLS and runs inline on the SAME clean
+# (force-off) daemon as every other lane. No separate daemon pass.
+#   The force-tool-calls dance is ONLY for AGENT_RUNNER=pi (the external agent),
+#   whose zero-tool-call exit otherwise floors it (~3/27; see
+#   inference_adapter.rs:722). FORCE_TOOL_CALLS is DAEMON-GLOBAL and regresses
+#   the gyms' "don't search unless needed" judiciousness, so if you A/B `pi`,
+#   run it in its OWN pass apart from the gym/chaos lanes:
+#     sovereign daemon stop && SOVEREIGN_FORCE_TOOL_CALLS=1 \
+#       SOVEREIGN_DISABLE_AUTO_RESUME=1 sovereign daemon start
 if [[ -x "$AGENT_BIN" ]]; then
   run_lane "agent-coding" TRACKED \
-    "$AGENT_BIN" run --problems "$AGENT_PROBLEMS" --judge-trials 1 \
+    "$AGENT_BIN" run --agent "$AGENT_RUNNER" --problems "$AGENT_PROBLEMS" --judge-trials 1 \
       --model "$AGENT_MODEL" --report "$REPORT_DIR/agent-coding.json"
   run_lane "agent-coding-gate" HARD \
     "$BIN" bench gate agent-coding --report "$REPORT_DIR/agent-coding.json" \

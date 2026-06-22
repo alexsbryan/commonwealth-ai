@@ -34,15 +34,17 @@ curl http://localhost:9741/v1/models      # confirm it's alive
 
 ## Three ways in
 
-The desktop app — Tauri and Svelte — gives you chat, knowledge bases, model setup, and a guided first run, built with `npm install && cargo tauri dev` in `crates/sovereign-desktop`. The CLI does everything the desktop does and adds `setup`, `project`, `mesh`, `corpus`, and `doctor`; every command takes `--help`, and the build is below. The server exposes the same runtime over REST and WebSocket for your own frontends — its [endpoints](docs/CLI_REFERENCE.md#http-endpoints) are in the CLI reference.
+The desktop app — Tauri and Svelte — gives you chat, knowledge bases, model setup, and a guided first run, built with `npm install && cargo tauri dev` in `crates/sovereign-desktop`. The CLI does everything the desktop does and adds `setup`, `mesh`, `corpus`, and `doctor`; every command takes `--help`, and the build is below. The server exposes the same runtime over REST and WebSocket for your own frontends — its [endpoints](docs/CLI_REFERENCE.md#http-endpoints) are in the CLI reference.
 
-## For your code
+## For your code (developer build)
+
+Sovereign also reads code as a codebase — tree-sitter symbols, a SCIP call graph, and MCP tools your AI harness can call, wired into `.claude/` or `.opencode/`:
 
 ```sh
 sovereign project init
 ```
 
-This indexes the current repository — tree-sitter symbols, a SCIP call graph, and MCP tools your AI harness can call — and wires up `.claude/` or `.opencode/` if it finds them. The full flow, the tools, and multi-project setups are in [Code intelligence](docs/CODE_INTELLIGENCE.md).
+This is developer tooling: `project`, `code`, and `tools` ship only in a dev build, not the prebuilt install above. The build flags, the full flow, and multi-project setups are in [Code intelligence](docs/CODE_INTELLIGENCE.md) and the [development guide](docs/DEVELOPMENT.md).
 
 ## Commonwealth
 

@@ -1019,8 +1019,15 @@ fn print_summary(
         );
     }
     eprintln!(
-        "  hallucination-rate {:.2} (≤{:.2}) · citation-fidelity {:.2} · distractor-evasion {:.2}",
-        report.hallucination_rate, gates.max_hallucination, report.citation_fidelity, report.distractor_evasion,
+        "  hallucination-rate {:.2} (≤{:.2}) · grounding-fidelity {:.2} ({}/{} grounded) · citation-fidelity {:.2} (n={}) · distractor-evasion {:.2}",
+        report.hallucination_rate,
+        gates.max_hallucination,
+        report.grounding_fidelity,
+        c.value_assessed.saturating_sub(c.blatant_confab),
+        c.value_assessed,
+        report.citation_fidelity,
+        report.n_citation_checked,
+        report.distractor_evasion,
     );
     eprintln!(
         "  blatant-confab-rate {:.2}  [{}/{} probes presented a value absent from evidence · {} value-bearing answers · gold-free]",

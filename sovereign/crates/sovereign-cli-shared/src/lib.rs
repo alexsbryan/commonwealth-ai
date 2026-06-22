@@ -14,12 +14,14 @@
 //! - [`scip`]: merged SCIP graph loader for code-intelligence tools.
 //!
 //! CLI plumbing (was `sovereign-cli/src/util/`):
+//! - [`cli_contract`]: loader for the CLI contract manifest (`docs/cli-contract.toml`).
 //! - [`help`]: shared `Help` struct + `print` formatter.
 //! - [`deprecation`]: standard deprecation / retired announcements.
 //! - [`prompts`]: interactive confirm / line-read helpers.
 //! - [`tracing_init`]: one-line `init_tracing(default_filter)`.
 
 pub mod args;
+pub mod cli_contract;
 pub mod deprecation;
 pub mod dirs;
 pub mod help;

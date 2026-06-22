@@ -1,0 +1,18 @@
+{
+  "lane": "mechanism-fidelity",
+  "captured_at": "2026-06-22T13:59:50.117232+00:00",
+  "model": "primary",
+  "note": "pool=dev · control Δ̄ over 30 stripped-P1 rows · P1 collapse over 30 full-P1 rows",
+  "metrics": {
+    "control_p1_delta": {
+      "value": 0.0,
+      "direction": "near_zero",
+      "tolerance": 0.05
+    },
+    "p1_collapse_delta": {
+      "value": -0.3799207472333333,
+      "direction": "lower_is_better",
+      "tolerance": 0.15
+    }
+  }
+}

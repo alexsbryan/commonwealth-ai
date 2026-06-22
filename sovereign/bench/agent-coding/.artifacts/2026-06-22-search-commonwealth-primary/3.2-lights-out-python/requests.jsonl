@@ -1,0 +1,1 @@
+{"turn":0,"request":{"search_round":0,"candidates":["rewrite solve@T0.7=0p/3f","rewrite solve@T0.9=3p/0f","rewrite solve@T0.2=3p/0f","rewrite solve@T0.4=err"]},"response":{"winner":"rewrite solve@T0.2","passing_after":3,"failed_after":0},"elapsed_ms":0}

@@ -11974,7 +11974,9 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",
+ "serde",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
 ]

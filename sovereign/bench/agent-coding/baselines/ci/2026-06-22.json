@@ -1,0 +1,13 @@
+{
+  "lane": "agent-coding",
+  "captured_at": "2026-06-22T14:24:57.431334+00:00",
+  "model": "commonwealth/primary",
+  "note": "grand_total 9/27",
+  "metrics": {
+    "score_fraction": {
+      "value": 0.3333333333333333,
+      "direction": "higher_is_better",
+      "tolerance": 0.12
+    }
+  }
+}
