@@ -349,6 +349,7 @@
       <div
         class="convo-item"
         class:selected={selectedConversationId === convo.id}
+        data-conversation-id={convo.id}
         role="button"
         tabindex="0"
         onclick={() => onSelect(convo.id)}

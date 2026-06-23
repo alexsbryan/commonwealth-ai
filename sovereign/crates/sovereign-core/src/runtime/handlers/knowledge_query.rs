@@ -89,6 +89,11 @@ impl Runtime {
              like me to proceed."
             .to_string();
         let metadata = serde_json::json!({
+            // The user's intent was a knowledge query; it merely missed.
+            // Carry it so the turn satisfies the provenance contract (every
+            // turn names an intent) — a retrieval miss is still a knowledge
+            // turn, not an intent-less blank.
+            "intent": "knowledge_query",
             "move_kind": "ask",
             "retrieval_missed": true,
             "documents_found": shape.count,
@@ -209,6 +214,11 @@ impl Runtime {
              like me to proceed."
             .to_string();
         let metadata = serde_json::json!({
+            // The user's intent was a knowledge query; it merely missed.
+            // Carry it so the turn satisfies the provenance contract (every
+            // turn names an intent) — a retrieval miss is still a knowledge
+            // turn, not an intent-less blank.
+            "intent": "knowledge_query",
             "move_kind": "ask",
             "retrieval_missed": true,
             "documents_found": shape.count,

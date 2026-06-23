@@ -1,0 +1,971 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Chaos agent (v1) — the most-challenging-user simulator. Non-deterministic,
+// NO assertions.
+//
+// v0 was an entropy fuzzer; it mostly proved the API rejects junk. v1 is a
+// PERSONA: the single most demanding user this app will ever have. It uses
+// the app FOR REAL — real questions, real documents, real workflows — but
+// relentlessly, impatiently, in unexpected orders and combinations, and it
+// judges the app from the USER'S seat (was the answer right? did it stall?
+// did my work survive?). That's what finds the bugs real users hit — wrong
+// answers, lost state, broken interactions — which entropy never touches.
+//
+// Brain  — the on-box local model (via the daemon's /v1/chat/completions)
+//          plays the demanding user (decides the next real move) AND judges
+//          the app's answers from the user's seat (judgeAsUser). Degrades to
+//          spontaneous real actions if unreachable (itself a finding).
+// Eyes   — the glassbox: every emitted event + the trace-level app log, plus
+//          the actual chat ANSWER the user got back.
+// Oracle — what disappointed the USER, not what a fuzzer noticed. Top weight:
+//          app died, hung, answered wrongly (user-judge), or showed a raw
+//          error. Clean rejections of edge input are cosmetic. Novel
+//          ERROR/WARN glassbox lines still count.
+// Output — a field journal (chaos-journal.jsonl) + a narrative of where the
+//          app let the user down, framed as QUESTIONS. No pass/fail, no gate.
+//
+// Usage: node tests/e2e/scripts/chaos.mjs [--minutes 10] [--spawn]
+//                                         [--no-supervisor]
+//
+// Shares the supervised-spawn + bridge pattern with soak.mjs (KEEP IN SYNC);
+// factor a shared harness module if this sticks.
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CRATE_ROOT = path.resolve(__dirname, "../../..");
+const REPO_ROOT = path.resolve(CRATE_ROOT, "../../..");
+const ARTIFACTS = path.join(CRATE_ROOT, "test-artifacts");
+const JOURNAL = path.join(ARTIFACTS, "chaos-journal.jsonl");
+const APP_LOG = path.join(ARTIFACTS, "chaos-app.log");
+const BRIDGE = process.env.SOVEREIGN_BRIDGE_URL ?? "http://127.0.0.1:9745";
+const BRIDGE_PORT = 9745;
+const DAEMON = "http://127.0.0.1:9741"; // brain: daemon /v1/* (OpenAI-compat)
+const APP_BIN = path.join(REPO_ROOT, "target/debug/sovereign-desktop");
+const CLI_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli");
+const MODELS_DIR = path.join(REPO_ROOT, "sovereign/models");
+const CHAT_MODEL =
+  process.env.SOVEREIGN_REAL_CHAT_MODEL ?? path.join(MODELS_DIR, "Qwen3.5-2B.Q6_K.gguf");
+const EMBED_MODEL =
+  process.env.SOVEREIGN_REAL_EMBED_MODEL ??
+  path.join(MODELS_DIR, "Qwen3-Embedding-0.6B-Q8_0.gguf");
+
+const argv = process.argv.slice(2);
+const flag = (name, fb) => {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 ? argv[i + 1] : fb;
+};
+const MINUTES = Number(flag("minutes", "10"));
+const SPAWN = argv.includes("--spawn");
+const SUPERVISOR = !argv.includes("--no-supervisor");
+
+// Seedless on purpose — every wander is different. (Plain Math.random:
+// this is a node script, not a workflow sandbox.)
+const rand = () => Math.random();
+const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+const chance = (p) => rand() < p;
+
+// ── bridge plumbing (the agent's hands) ───────────────────────────
+async function invoke(cmd, args = {}, timeoutMs = 60_000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BRIDGE}/invoke`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-sovereign-spec": "chaos" },
+      body: JSON.stringify({ cmd, args }),
+      signal: ctrl.signal,
+    });
+    const body = await res.json();
+    if (!body.ok) {
+      const e = new Error(`invoke ${cmd}: ${JSON.stringify(body.error)}`);
+      e.structured = body.error;
+      throw e;
+    }
+    return body.result;
+  } finally {
+    clearTimeout(t);
+  }
+}
+async function recent(sinceSeq = 0) {
+  const res = await fetch(`${BRIDGE}/events/recent?since_seq=${sinceSeq}`);
+  return (await res.json()).rows;
+}
+async function lastSeq() {
+  const rows = await recent(0);
+  return rows.length ? rows[rows.length - 1].seq : 0;
+}
+async function listen(event) {
+  await fetch(`${BRIDGE}/listen`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ event }),
+  }).catch(() => {});
+}
+async function healthz() {
+  try {
+    const res = await fetch(`${BRIDGE}/healthz`, { signal: AbortSignal.timeout(2500) });
+    return (await res.json()).ok === true;
+  } catch {
+    return false;
+  }
+}
+function portInUse(port) {
+  return new Promise((resolve) => {
+    import("node:net").then(({ default: net }) => {
+      const sock = net.connect({ port, host: "127.0.0.1" });
+      const done = (u) => {
+        sock.destroy();
+        resolve(u);
+      };
+      sock.once("connect", () => done(true));
+      sock.once("error", () => done(false));
+      sock.setTimeout(1500, () => done(false));
+    });
+  });
+}
+
+// ── brain (the on-box local model proposes the next wild move) ─────
+let BRAIN_MODEL = null;
+async function discoverBrainModel() {
+  try {
+    const res = await fetch(`${DAEMON}/v1/models`, { signal: AbortSignal.timeout(5000) });
+    const body = await res.json();
+    const ids = (body.data ?? []).map((m) => m.id);
+    // Prefer a chat slot (not the embedder).
+    BRAIN_MODEL =
+      ids.find((id) => !/embed/i.test(id)) ?? ids[0] ?? null;
+  } catch {
+    BRAIN_MODEL = null;
+  }
+  console.log(`[chaos] brain model = ${BRAIN_MODEL ?? "(unreachable — pure-random mode)"}`);
+}
+
+// Shared call into the on-box model. The brain wears two hats now: the
+// demanding-user action proposer AND the user-perspective answer judge.
+async function chatCompletion(messages, { temperature = 0.9, maxTokens = 240 } = {}) {
+  if (!BRAIN_MODEL) return null;
+  try {
+    const res = await fetch(`${DAEMON}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: BRAIN_MODEL, messages, temperature, max_tokens: maxTokens }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const body = await res.json();
+    return body?.choices?.[0]?.message?.content ?? null;
+  } catch {
+    return null;
+  }
+}
+function firstJson(text) {
+  if (!text) return null;
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[0]);
+  } catch {
+    return null;
+  }
+}
+
+// The persona: not a fuzzer, a power user from hell. Real inputs, real
+// workflows — but relentless, impatient, unusual in order and combination.
+const BRAIN_SYSTEM =
+  "You are the single most challenging user this desktop AI app will ever have: a brilliant, " +
+  "relentless, impatient power user. You use the app FOR REAL — real questions about your " +
+  "knowledge base, real documents, real multi-step research — but you push every feature to its " +
+  "edge and combine them in orders the designers never anticipated. You interrupt answers and " +
+  "re-ask, switch topics mid-thought, contradict yourself to test it, ask hard ambiguous " +
+  "questions, and stress every surface. You are NOT trying to send malformed data — you are " +
+  "trying to USE THE APP HARD and find where it disappoints, stalls, loses your work, confuses " +
+  "you, or answers wrongly. Respond with ONLY compact JSON, no prose: " +
+  '{"goal":"<one line: what you, the user, want / what might break>","actions":[{"cmd":"<command>","args":{}}]}. ' +
+  "1-2 actions, real inputs, only commands from the provided list.";
+
+async function brainPropose(catalog, memorySummary) {
+  const text = await chatCompletion(
+    [
+      { role: "system", content: BRAIN_SYSTEM },
+      {
+        role: "user",
+        content:
+          `Commands available: ${catalog.map((c) => c.cmd).join(", ")}.\n\n` +
+          `Your session so far:\n${memorySummary}\n\n` +
+          `What do you, the demanding user, do next? JSON only.`,
+      },
+    ],
+    { temperature: 1.0, maxTokens: 240 },
+  );
+  const parsed = firstJson(text);
+  if (!parsed || !Array.isArray(parsed.actions) || parsed.actions.length === 0) return null;
+  return parsed;
+}
+
+// The user-perspective oracle — the signal entropy can't produce. A real
+// user notices a wrong, empty, evasive, or incoherent answer; a fuzzer
+// only notices a crash. Returns null if the brain is unavailable.
+async function judgeAsUser(question, answer) {
+  const text = await chatCompletion(
+    [
+      {
+        role: "system",
+        content:
+          "You are a demanding, knowledgeable user judging the assistant's answer to YOUR question. " +
+          "Was it correct, coherent, complete, and actually responsive — or wrong, empty, evasive, " +
+          "confusing, cut off, or broken? Respond ONLY as JSON: " +
+          '{"broken":true|false,"score":0-10,"why":"<one line>"}. score 0 = perfect, 10 = totally broken.',
+      },
+      {
+        role: "user",
+        content: `My question:\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(answer).slice(0, 2000)}\n\nJudge it.`,
+      },
+    ],
+    { temperature: 0.2, maxTokens: 120 },
+  );
+  const j = firstJson(text);
+  if (!j || typeof j.score !== "number") return null;
+  return {
+    broken: !!j.broken,
+    score: Math.max(0, Math.min(10, j.score)),
+    why: String(j.why ?? "").slice(0, 140),
+  };
+}
+
+// ── the challenging user's action vocabulary ──────────────────────
+// REAL args, real workflows — the difficulty is intensity, order, and
+// combination, NOT malformed data. Args come from seeded state + a rich
+// real-question pool. `chat:true` marks turns whose ANSWER we capture
+// and judge from the user's seat.
+const CATALOG = [
+  { cmd: "send_message_stream", chat: true, arg: () => ({ message: nextUserMessage(), conversationId: state.convo }) },
+  { cmd: "cancel_stream", arg: () => ({ conversationId: state.convo }) },
+  { cmd: "create_conversation", arg: () => ({}) },
+  { cmd: "get_conversation", arg: () => ({ conversationId: pick(state.convos) ?? state.convo }) },
+  { cmd: "list_conversations", arg: () => ({}) },
+  { cmd: "rename_conversation", arg: () => ({ conversationId: state.convo, title: pick(USER_TITLES) }) },
+  { cmd: "delete_conversation", arg: () => ({ conversationId: pick(state.convos) ?? state.convo }) },
+  { cmd: "set_conversation_enabled_corpora", arg: () => ({ conversationId: state.convo, enabledCorpora: chance(0.3) ? [] : state.corpora.length ? [pick(state.corpora)] : [] }) },
+  { cmd: "get_config", arg: () => ({}) },
+  { cmd: "save_config", arg: () => ({ config: state.config ?? {} }) },
+  { cmd: "get_storage_budget", arg: () => ({}) },
+  { cmd: "read_get_chunk", arg: () => ({ corpusId: pick(state.corpora) ?? "", chunkId: 1 + Math.floor(rand() * 12) }) },
+  { cmd: "read_get_chunk_neighbors", arg: () => ({ corpusId: pick(state.corpora) ?? "", chunkId: 1 + Math.floor(rand() * 12), radius: 1 + Math.floor(rand() * 3) }) },
+  { cmd: "lc_list", arg: () => ({}) },
+  { cmd: "lc_search", arg: () => ({ corpusId: pick(state.corpora) ?? "", query: pick(USER_QUESTIONS) }) },
+  { cmd: "ask_document", chat: true, arg: () => ({ assetId: state.assetId ?? "", question: nextUserMessage(), conversationId: state.convo }) },
+  { cmd: "get_document_asset", arg: () => ({ assetId: state.assetId ?? "" }) },
+  { cmd: "atlas_list_atoms", arg: () => ({ corpusId: pick(state.corpora) ?? "" }) },
+  { cmd: "atlas_subgraph", arg: () => ({ corpusId: pick(state.corpora) ?? "", atomId: "1" }) },
+  { cmd: "search_messages", arg: () => ({ query: pick(USER_QUESTIONS) }) },
+  { cmd: "mesh_get_state", arg: () => ({}) },
+  { cmd: "get_runtime_status", arg: () => ({}) },
+  { cmd: "list_daemon_models", arg: () => ({}) },
+];
+const CATALOG_BY_CMD = new Map(CATALOG.map((c) => [c.cmd, c]));
+
+const SEED_MSGS = [
+  "What is the Meridian Lighthouse?",
+  "Tell me a long story about the sea.",
+  "Count from 1 to 50.",
+  "",
+  "   ",
+];
+const CHAOS_STRINGS = [
+  "",
+  "   \n\t  ",
+  "A".repeat(80_000),
+  "🜂🌊⚓ ‮reverse‬ 日本語 שלום",
+  "null byte[31m",
+  "../../../../etc/passwd",
+  "sovereign://join/" + "Z".repeat(500),
+  "'; DROP TABLE conversations;--",
+  "<script>alert(1)</script>",
+  "{".repeat(300),
+];
+const CHAOS_PATHS = ["/", "/dev/null", "/etc/passwd", "", "~/".padEnd(4000, "x"), "/nonexistent-" + Math.floor(rand() * 1e9)];
+
+// Real questions a demanding user asks of the seeded (lighthouse) base —
+// factual, ambiguous, multi-part, contradictory, off-topic, sloppy,
+// boundary-pushing. (The legacy SEED_MSGS / CHAOS_* pools above are unused
+// now: the challenging user sends real inputs, not entropy.)
+const USER_QUESTIONS = [
+  "How tall is the Meridian Lighthouse?",
+  "Who was Elowen Marsh and what was she known for?",
+  "When was the lighthouse automated, and why?",
+  "Compare the lamp mechanism before and after electrification.",
+  "What is the light's characteristic signal?",
+  "Summarize everything about the Tamarind rescue.",
+  "Tell me about the keeper.",
+  "Wait, wasn't it a different keeper who did the rescue?",
+  "What is the capital of France?",
+  "Explain the Fresnel lens in exhaustive technical detail, at least 2000 words.",
+  "who what when where the light keeper rescue year",
+];
+const USER_TITLES = ["Lighthouse research", "keeper notes", "rescue 1912", "?", "untitled but important"];
+const EDGE_MESSAGES = ["", "?", "Tell me about the lighthouse. ".repeat(900)];
+
+// Mostly real questions; occasionally a realistic edge (fat-fingered empty
+// submit, a pasted wall of text) or an impatient follow-up — a demanding
+// human, not a fuzzer.
+function nextUserMessage() {
+  if (chance(0.15)) return pick(EDGE_MESSAGES);
+  if (state.lastQuestion && chance(0.25)) return `About that — ${pick(USER_QUESTIONS)}`;
+  const q = pick(USER_QUESTIONS);
+  state.lastQuestion = q;
+  return q;
+}
+
+// Per-run mutable state. convos[] lets the user switch among / delete real
+// prior conversations (coherent sessions, not orphaned ids).
+const state = { convo: null, convos: [], corpora: [], config: null, budget: null, assetId: null, lastQuestion: null };
+
+// ── mutation layer (raw entropy on top of the brain's direction) ───
+function mutateArgs(args) {
+  if (!args || typeof args !== "object") return args;
+  if (!chance(0.55)) return args; // sometimes leave the baseline alone
+  const out = Array.isArray(args) ? [...args] : { ...args };
+  const keys = Object.keys(out);
+  if (keys.length === 0) return out;
+  const k = pick(keys);
+  const dice = rand();
+  if (dice < 0.4) out[k] = pick(CHAOS_STRINGS);
+  else if (dice < 0.55) out[k] = null;
+  else if (dice < 0.7) out[k] = Math.floor(rand() * 1e12);
+  else if (dice < 0.8) out[k] = [];
+  else if (dice < 0.9) delete out[k];
+  else out[k] = { nested: pick(CHAOS_STRINGS) }; // type-confused
+  return out;
+}
+
+// ── novelty memory + surprise oracle (no contract, just "huh?") ────
+const seen = {
+  commands: new Set(),
+  eventTypes: new Set(),
+  errorSigs: new Set(),
+  logSigs: new Set(),
+};
+const latencyByCmd = new Map(); // cmd -> [ms,...]
+let appLogPos = 0; // byte offset into APP_LOG already consumed
+
+// Normalize a string into a signature: strip ids/uuids/numbers/hex so
+// "the same kind of thing" collapses to one signature (novelty = a kind
+// we've never seen, not a new uuid).
+function sig(s) {
+  return String(s)
+    .replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, "<uuid>")
+    .replace(/0x[0-9a-f]+/gi, "<hex>")
+    .replace(/\d+/g, "<n>")
+    .slice(0, 200);
+}
+
+function newAppLogLines() {
+  try {
+    const stat = fs.statSync(APP_LOG);
+    if (stat.size <= appLogPos) return [];
+    const fd = fs.openSync(APP_LOG, "r");
+    const buf = Buffer.alloc(stat.size - appLogPos);
+    fs.readSync(fd, buf, 0, buf.length, appLogPos);
+    fs.closeSync(fd);
+    appLogPos = stat.size;
+    return buf.toString("utf8").split("\n").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+const median = (a) => {
+  if (!a.length) return 0;
+  const s = [...a].sort((x, y) => x - y);
+  return s[Math.floor(s.length / 2)];
+};
+
+// Events a healthy app emits all the time — their first sighting is not a
+// surprise (v0 wrongly flagged backend-ready / message-chunk as novel).
+const KNOWN_NORMAL_EVENTS = new Set([
+  "message-chunk",
+  "message-complete",
+  "message-error",
+  "backend-ready",
+  "backend-error",
+  "supervisor-state",
+  "conversations:changed",
+]);
+// A clean validation rejection is EXPECTED — a real user rarely trips it,
+// and the surface correctly refusing junk is not a finding. Internal /
+// unexpected errors are the interesting ones.
+function looksLikeCleanValidation(error) {
+  return /invalid (type|args)|missing required|expected (a |an |u\d|string|sequence|map|integer|boolean)|no atlas|invalid join link|not found|already exists/i.test(
+    String(error),
+  );
+}
+
+// Score a step from the USER'S seat. Highest weight goes to what a
+// demanding user actually cares about: the app died, stalled, answered
+// wrongly, or showed them a raw error. Clean rejections of edge input are
+// cosmetic. Objective glassbox novelty (new WARN/ERROR) still counts.
+function scoreSurprise({ cmd, ok, error, latencyMs, events, alive, answer, userJudge }) {
+  const signals = [];
+  let score = 0;
+
+  if (!alive) {
+    signals.push("APP DIED after this action");
+    score = Math.max(score, 10);
+  }
+  if (latencyMs >= 55_000) {
+    signals.push(`HANG — the user waited ${Math.round(latencyMs / 1000)}s`);
+    score = Math.max(score, 9);
+  }
+
+  // The user-perspective judge — the signal entropy can't produce. A real
+  // user notices a wrong/empty/evasive/incoherent answer.
+  if (userJudge && (userJudge.broken || userJudge.score >= 6)) {
+    signals.push(`bad answer (user rates ${userJudge.score}/10): ${userJudge.why}`);
+    score = Math.max(score, Math.min(9, 3 + userJudge.score));
+  }
+  // The app handed the user a raw error or an empty reply to a real question.
+  if (answer != null) {
+    const a = answer.trim();
+    if (/^error[:\s]/i.test(a)) {
+      signals.push(`raw error shown to user: ${a.slice(0, 80)}`);
+      score = Math.max(score, 6);
+    } else if (a.length === 0) {
+      signals.push("empty answer to a real question");
+      score = Math.max(score, 6);
+    }
+  }
+
+  // Command error: clean validation = cosmetic; internal/unexpected = a lead.
+  if (error) {
+    const es = `${cmd}:${sig(error)}`;
+    if (!seen.errorSigs.has(es)) {
+      seen.errorSigs.add(es);
+      if (looksLikeCleanValidation(error)) {
+        signals.push(`clean rejection: ${sig(error).slice(0, 70)}`);
+        score = Math.max(score, 1);
+      } else {
+        signals.push(`unexpected error: ${sig(error).slice(0, 100)}`);
+        score = Math.max(score, 5);
+      }
+    }
+  }
+
+  // Novel ERROR/WARN log — the glassbox narrating something new.
+  for (const line of events.newLogs ?? []) {
+    if (!/\bERROR\b|\bWARN\b|panic|assertion|unwrap/i.test(line)) continue;
+    const ls = sig(line);
+    if (seen.logSigs.has(ls)) continue;
+    seen.logSigs.add(ls);
+    const sev = /ERROR|panic/i.test(line) ? 8 : 6;
+    signals.push(`new ${sev >= 8 ? "ERROR" : "WARN"} log: ${ls.slice(0, 110)}`);
+    score = Math.max(score, sev);
+  }
+
+  // Novel NON-normal event type (normal events are not surprising).
+  for (const ev of events.types ?? []) {
+    if (KNOWN_NORMAL_EVENTS.has(ev) || seen.eventTypes.has(ev)) {
+      seen.eventTypes.add(ev);
+      continue;
+    }
+    seen.eventTypes.add(ev);
+    signals.push(`unusual event: ${ev}`);
+    score = Math.max(score, 3);
+  }
+
+  // Latency outlier vs this command's own history.
+  const hist = latencyByCmd.get(cmd) ?? [];
+  if (hist.length >= 5) {
+    const med = median(hist);
+    if (med > 0 && latencyMs > med * 6 && latencyMs > 3000) {
+      signals.push(`latency outlier: ${latencyMs}ms vs ~${med}ms median`);
+      score = Math.max(score, 4);
+    }
+  }
+  hist.push(latencyMs);
+  latencyByCmd.set(cmd, hist);
+
+  return { score, signals };
+}
+
+function record(row) {
+  fs.appendFileSync(JOURNAL, `${JSON.stringify(row)}\n`);
+}
+
+// ── production-like seeding (furnish the app before the wander) ────
+// A real corpus + a document asset turn the sparse 0-index world into
+// something the agent can actually explore: retrieval, reading, search,
+// citations, the document surface. The atoms-atlas is heavier (LLM
+// build) so it's best-effort. Each step degrades gracefully — a furnished
+// room beats an empty one, and partial furnishing beats none.
+const FIXTURE_DISPLAY = "Chaos Fixture Corpus";
+const FIXTURE_DIR = path.resolve(__dirname, "../real/fixtures/corpus");
+
+async function seedFixtureCorpus() {
+  const existing = await invoke("lc_list", {});
+  const found = existing.find((c) => c.display_name === FIXTURE_DISPLAY);
+  if (found) {
+    console.log(`[chaos] corpus already present (${found.corpus_id ?? found.id})`);
+    return found.corpus_id ?? found.id;
+  }
+  const val = await invoke("lc_validate_path", { path: FIXTURE_DIR });
+  if (!val.exists || !val.is_dir) throw new Error(`fixture dir invalid: ${FIXTURE_DIR}`);
+  const pre = await invoke(
+    "lc_pre_scan",
+    { path: FIXTURE_DIR, sourceType: "folder", displayName: FIXTURE_DISPLAY },
+    60_000,
+  );
+  const jobId = await invoke("lc_ingest", { corpusId: pre.corpus_id, withOcr: false }, 60_000);
+  // Register the dynamic per-job channel BEFORE polling so a fast ingest
+  // can't outrun us (rows land in the replay ring).
+  const channel = `local-corpus://progress/${jobId}`;
+  await listen(channel);
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    const rows = (await recent(0)).filter((r) => r.event === channel);
+    const terminal = rows.map((r) => JSON.stringify(r.payload)).find((p) => /complete|error/i.test(p));
+    if (terminal) {
+      if (/error/i.test(terminal)) throw new Error(`ingest failed: ${terminal.slice(0, 160)}`);
+      break;
+    }
+    if (Date.now() > deadline) throw new Error("ingest never reached terminal in 180s");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  console.log(`[chaos] corpus seeded ✓ (${pre.corpus_id}) — structural enrichment auto-runs in bg`);
+  return pre.corpus_id;
+}
+
+async function seedDocumentAsset() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chaos-doc-"));
+  const file = path.join(dir, "expedition-log.txt");
+  fs.writeFileSync(
+    file,
+    "Expedition log: the keeper recorded 412 vessels and 9 storms this season. " +
+      "The west pier light burns 4 lamps; the east beacon was relit on the third night.\n",
+  );
+  const up = await invoke("upload_document_asset", { filePath: file }, 60_000);
+  const assetId = up.asset?.id ?? up.id;
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    const asset = await invoke("get_document_asset", { assetId });
+    const st = JSON.stringify(asset.state ?? asset).toLowerCase();
+    if (st.includes("ready")) break;
+    if (st.includes("failed")) throw new Error(`doc ingest failed: ${st.slice(0, 120)}`);
+    if (Date.now() > deadline) throw new Error("doc never reached ready in 180s");
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  state.assetId = assetId;
+  console.log(`[chaos] document asset seeded ✓ (${assetId})`);
+}
+
+async function seedAtlas(corpusId) {
+  // Build the atoms atlas (literary_atlas — lighthouse fixture is narrative)
+  // so atlas_* surfaces are live, not "no atlas". LLM-heavy + needs staged
+  // docs; fully best-effort and time-capped.
+  await invoke("enrich_init_for_local_corpus", { corpusId, pipelineId: "literary_atlas" }, 120_000);
+  const h = await invoke("enrich_build_async", { corpusId }, 30_000);
+  console.log(`[chaos] atlas build kicked off (${JSON.stringify(h).slice(0, 80)}) — polling…`);
+  const deadline = Date.now() + 240_000;
+  for (;;) {
+    const st = await invoke("lc_enrichment_status", { corpusId }).catch(() => null);
+    const s = JSON.stringify(st ?? "").toLowerCase();
+    if (/ready|complete|done|finished/.test(s)) {
+      console.log("[chaos] atlas built ✓ — atlas_* surfaces are live");
+      return;
+    }
+    if (Date.now() > deadline) throw new Error("not ready in 240s — proceeding without atoms");
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
+
+async function seedProductionLikeState() {
+  let corpusId = null;
+  try {
+    corpusId = await seedFixtureCorpus();
+  } catch (e) {
+    console.log(`[chaos] corpus seed failed (wandering corpus-less): ${e}`);
+  }
+  try {
+    await seedDocumentAsset();
+  } catch (e) {
+    console.log(`[chaos] document seed failed (no document surface): ${e}`);
+  }
+  if (corpusId) {
+    try {
+      await seedAtlas(corpusId);
+    } catch (e) {
+      console.log(`[chaos] atlas seed skipped (${e}) — atlas_* will be sparse`);
+    }
+  }
+  await refreshState();
+  console.log(
+    `[chaos] furnished: ${state.corpora.length} corpus(es), document=${state.assetId ? "yes" : "no"}`,
+  );
+}
+
+// ── refresh per-run state so the catalog's baseline args are plausible ──
+async function refreshState() {
+  try {
+    state.convo = (await invoke("create_conversation", {})).id;
+  } catch {
+    /* leave prior */
+  }
+  try {
+    const lc = await invoke("lc_list", {});
+    state.corpora = lc.map((c) => c.corpus_id ?? c.id).filter(Boolean);
+  } catch {
+    /* none */
+  }
+  try {
+    state.config = await invoke("get_config", {});
+  } catch {
+    /* none */
+  }
+  try {
+    state.budget = await invoke("get_storage_budget", {});
+  } catch {
+    /* none */
+  }
+}
+
+// Wait for a chat turn's answer (message-complete.full_text), or null on
+// error / hang — so the user-judge can grade what the app actually said.
+async function awaitChatAnswer(sinceSeq, messageId, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await recent(sinceSeq).catch(() => []);
+    const done = rows.find(
+      (r) => r.event === "message-complete" && r.payload?.message_id === messageId,
+    );
+    if (done) return String(done.payload?.full_text ?? "");
+    if (rows.some((r) => r.event === "message-error")) return null; // errored
+    if (Date.now() > deadline) return null; // hang — latency catches it
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
+// ── one user move: decide → act → (if chat) read+judge the answer → score ──
+let step = 0;
+let movesSinceChat = 0;
+async function chaosStep(memorySummary) {
+  step += 1;
+  let goal = null;
+  let chosen = null;
+  // A demanding user asks questions often (the primary activity, and the
+  // only thing that exercises the answer-judge) but also works the other
+  // features. Bias MODERATELY toward chat, with a cadence floor so the judge
+  // still fires when the brain fixates on a feature thread (v1 did 1 chat
+  // turn in 162 moves — that was the gap).
+  if (chance(0.28) || movesSinceChat >= 6) {
+    chosen = { cmd: "send_message_stream", args: { message: nextUserMessage(), conversationId: state.convo } };
+    goal = "ask my knowledge base a question";
+  } else {
+    const proposal = await brainPropose(CATALOG, memorySummary);
+    if (proposal && CATALOG_BY_CMD.has(proposal.actions[0].cmd)) {
+      goal = proposal.goal ?? null;
+      const a = proposal.actions[0];
+      chosen = { cmd: a.cmd, args: a.args && Object.keys(a.args).length ? a.args : CATALOG_BY_CMD.get(a.cmd).arg() };
+    } else {
+      const c = pick(CATALOG);
+      chosen = { cmd: c.cmd, args: c.arg() };
+      goal = proposal ? "(brain named an unknown command; spontaneous action)" : "(spontaneous user action)";
+    }
+  }
+  // No garbage mutation — a real user sends real inputs.
+  seen.commands.add(chosen.cmd);
+  const isChat = !!CATALOG_BY_CMD.get(chosen.cmd)?.chat;
+  if (isChat) movesSinceChat = 0;
+  else movesSinceChat += 1;
+
+  const since = await lastSeq();
+  const t0 = Date.now();
+  let ok = true;
+  let error = null;
+  let result = null;
+  try {
+    result = await invoke(chosen.cmd, chosen.args, 60_000);
+  } catch (e) {
+    ok = false;
+    error = e.structured ? JSON.stringify(e.structured) : String(e);
+  }
+
+  // Keep the session coherent: track conversations the user opens.
+  if (chosen.cmd === "create_conversation" && result?.id) {
+    state.convo = result.id;
+    state.convos.push(result.id);
+    if (state.convos.length > 30) state.convos.shift();
+  }
+
+  // For a chat turn: wait for the answer, then judge it as the user would.
+  let answer = null;
+  let userJudge = null;
+  if (isChat && ok && result?.message_id) {
+    answer = await awaitChatAnswer(since, result.message_id, 120_000);
+    if (answer != null && answer.length > 0) {
+      userJudge = await judgeAsUser(chosen.args.message ?? chosen.args.question, answer);
+    }
+  }
+
+  const latencyMs = Date.now() - t0; // includes the answer wait — a stall shows here
+  await new Promise((r) => setTimeout(r, 400));
+  const rows = await recent(since).catch(() => []);
+  const events = {
+    types: [...new Set(rows.map((r) => r.event))],
+    count: rows.length,
+    newLogs: newAppLogLines(),
+  };
+  const alive = await healthz();
+
+  const surprise = scoreSurprise({
+    cmd: chosen.cmd,
+    ok,
+    error,
+    latencyMs,
+    events,
+    alive,
+    answer,
+    userJudge,
+  });
+
+  const row = {
+    ts: Date.now(),
+    step,
+    goal,
+    cmd: chosen.cmd,
+    args: JSON.stringify(chosen.args ?? {}).slice(0, 200),
+    ok,
+    error: error ? error.slice(0, 240) : null,
+    answer: answer != null ? answer.slice(0, 200) : null,
+    userJudge,
+    latencyMs,
+    surprise: surprise.score,
+    signals: surprise.signals,
+    alive,
+  };
+  record(row);
+
+  if (surprise.score >= 4) {
+    console.log(
+      `  ⁇ [${surprise.score}] step ${step} ${chosen.cmd} — ${surprise.signals.join("; ").slice(0, 170)}`,
+    );
+  } else {
+    console.log(`[chaos] step ${step} ${chosen.cmd} (${latencyMs}ms${ok ? "" : " ✗"})`);
+  }
+  return { row, alive };
+}
+
+// Build the rolling memory the brain reads — recent moves + the loudest
+// surprises so far, so it can chase a thread and avoid repeating itself.
+const recentMoves = [];
+const loudest = [];
+function memorySummary() {
+  const moves = recentMoves.slice(-8).map((m) => `- ${m.cmd}${m.ok ? "" : " (errored)"}`).join("\n");
+  const surprises = loudest.slice(0, 5).map((s) => `! ${s.cmd}: ${s.signals[0] ?? ""}`).join("\n");
+  const untried = CATALOG.map((c) => c.cmd).filter((c) => !seen.commands.has(c)).slice(0, 10);
+  return (
+    `Recent moves:\n${moves || "(none yet)"}\n\n` +
+    `Surprising so far:\n${surprises || "(nothing yet)"}\n\n` +
+    `Commands you HAVEN'T tried: ${untried.join(", ") || "(all tried)"}`
+  );
+}
+
+// ── spawn lifecycle (supervised hermetic; mirrors soak.mjs) ────────
+function bakeProfile(home) {
+  // dirs::config_dir(): XDG ~/.config on Linux, ~/Library/Application
+  // Support on macOS — bake both (see soak.mjs / global-setup.ts).
+  const configDirs = [
+    path.join(home, ".config/sovereign"),
+    path.join(home, "Library/Application Support/sovereign"),
+  ];
+  for (const d of configDirs) fs.mkdirSync(d, { recursive: true });
+  fs.mkdirSync(path.join(home, ".local/share"), { recursive: true });
+  fs.mkdirSync(path.join(home, ".cache"), { recursive: true });
+  const sovDir = path.join(home, ".sovereign");
+  fs.mkdirSync(sovDir, { recursive: true });
+  if (!fs.existsSync(path.join(sovDir, "models")))
+    fs.symlinkSync(MODELS_DIR, path.join(sovDir, "models"));
+  const desktopToml = [
+    `# Generated by tests/e2e/scripts/chaos.mjs`,
+    `model_path = ${JSON.stringify(CHAT_MODEL)}`,
+    `primary_model_path = ${JSON.stringify(CHAT_MODEL)}`,
+    `embed_model_path = ${JSON.stringify(EMBED_MODEL)}`,
+    `setup_complete = true`,
+    `auto_collaborate = false`,
+    ``,
+  ].join("\n");
+  for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
+  if (SUPERVISOR) {
+    fs.writeFileSync(
+      path.join(sovDir, "config.toml"),
+      [
+        `[models]`,
+        `primary = ${JSON.stringify(CHAT_MODEL)}`,
+        `fast = ${JSON.stringify(CHAT_MODEL)}`,
+        `embed = ${JSON.stringify(EMBED_MODEL)}`,
+        `context_size = 8192`,
+        ``,
+        `[daemon]`,
+        `client_port = 9741`,
+        ``,
+      ].join("\n"),
+    );
+  }
+  return home;
+}
+
+let spawnedPid = null;
+async function maybeSpawn() {
+  if (await healthz()) return null;
+  if (!SPAWN) throw new Error(`bridge not reachable at ${BRIDGE}. Pass --spawn or launch a desktop.`);
+  if (SUPERVISOR && (await portInUse(9741)))
+    throw new Error("supervised chaos needs :9741 free — `sovereign daemon stop` (or --no-supervisor).");
+  const profileDir = path.join(ARTIFACTS, "chaos-profile");
+  fs.rmSync(profileDir, { recursive: true, force: true });
+  const home = bakeProfile(path.join(profileDir, "home"));
+  const log = fs.openSync(APP_LOG, "w");
+  const env = {
+    ...process.env,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, ".config"),
+    XDG_DATA_HOME: path.join(home, ".local/share"),
+    XDG_CACHE_HOME: path.join(home, ".cache"),
+    SOVEREIGN_COMMAND_BRIDGE: "1",
+    SOVEREIGN_COMMAND_BRIDGE_PORT: String(BRIDGE_PORT),
+    SOVEREIGN_COMMAND_BRIDGE_LEDGER: path.join(ARTIFACTS, "ledger-chaos.jsonl"),
+    // Crank the glassbox: trace-level is the agent's richest eye.
+    RUST_LOG: process.env.RUST_LOG ?? "sovereign_desktop=debug,sovereign_core=debug,sovereign_inference=info",
+  };
+  if (SUPERVISOR) {
+    env.SOVEREIGN_USE_SUPERVISOR = "1";
+    env.SOVEREIGN_CLI_PATH = CLI_BIN;
+  }
+  const child = spawn(APP_BIN, [], { env, cwd: os.homedir(), stdio: ["ignore", log, log], detached: true });
+  child.unref();
+  spawnedPid = child.pid;
+  const deadline = Date.now() + 240_000;
+  while (!(await healthz())) {
+    if (Date.now() > deadline) throw new Error("spawned desktop never came up");
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return child.pid;
+}
+async function killGroup() {
+  if (!spawnedPid) return;
+  const grp = (sig) => {
+    try {
+      process.kill(-spawnedPid, sig);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!grp("SIGTERM")) return;
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline && grp(0)) await new Promise((r) => setTimeout(r, 500));
+  grp("SIGKILL");
+}
+for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => void killGroup().finally(() => process.exit(130)));
+
+// ── main wander ───────────────────────────────────────────────────
+async function main() {
+  fs.mkdirSync(ARTIFACTS, { recursive: true });
+  fs.rmSync(JOURNAL, { force: true });
+  await maybeSpawn();
+  // Gate on backend-ready (sticky replay) so the first moves aren't all
+  // "backend loading" noise.
+  {
+    const deadline = Date.now() + 240_000;
+    for (;;) {
+      const r = await fetch(`${BRIDGE}/listen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "backend-ready" }),
+      }).then((x) => x.json()).catch(() => ({}));
+      if (r.replayed) break;
+      if (Date.now() > deadline) throw new Error("backend-ready never fired");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  // Subscribe broadly so events land in the replay ring for our eyes.
+  for (const ev of ["message-chunk", "message-complete", "message-error", "supervisor-state", "backend-error"])
+    await listen(ev);
+  newAppLogLines(); // prime the log offset past boot
+
+  await discoverBrainModel();
+  await seedProductionLikeState();
+
+  console.log(
+    `[chaos] wandering for ${MINUTES}min — seedless, no assertions. brain=${BRAIN_MODEL ?? "random"} ` +
+      `bridge=${BRIDGE} journal=${JOURNAL}`,
+  );
+  record({ ts: Date.now(), kind: "chaos_start", minutes: MINUTES, brain: BRAIN_MODEL });
+
+  const endAt = Date.now() + MINUTES * 60_000;
+  let consecutiveDead = 0;
+  while (Date.now() < endAt) {
+    let res;
+    try {
+      res = await chaosStep(memorySummary());
+    } catch (e) {
+      // The agent itself stumbled — record it, keep wandering.
+      record({ ts: Date.now(), step, kind: "agent_stumble", error: String(e).slice(0, 200) });
+      res = { alive: await healthz() };
+    }
+    if (res.row) {
+      recentMoves.push({ cmd: res.row.cmd, ok: res.row.ok });
+      if (res.row.surprise >= 4) {
+        loudest.push(res.row);
+        loudest.sort((a, b) => b.surprise - a.surprise);
+        loudest.length = Math.min(loudest.length, 20);
+      }
+    }
+    // If the app died, note it loudly and try to let the supervisor heal;
+    // a persistent death ends the wander (the biggest finding there is).
+    if (!res.alive) {
+      consecutiveDead += 1;
+      console.log(`[chaos] ⁇ bridge unreachable (${consecutiveDead}) — app may have died`);
+      if (consecutiveDead >= 3) {
+        record({ ts: Date.now(), step, kind: "app_down", note: "bridge unreachable 3x — ending wander" });
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    } else {
+      consecutiveDead = 0;
+      // Occasionally refresh state + mint a fresh conversation so we don't
+      // get stuck operating on a deleted/poisoned one.
+      if (chance(0.15)) await refreshState();
+    }
+    await new Promise((r) => setTimeout(r, 250 + rand() * 900));
+  }
+
+  record({ ts: Date.now(), kind: "chaos_end", steps: step });
+  killGroup();
+
+  // ── field journal: where the app let the user down, worst first ──
+  loudest.sort((a, b) => b.surprise - a.surprise);
+  console.log(`\n══ chaos field journal ══  (${step} moves as a relentless user, seedless)`);
+  if (loudest.length === 0) {
+    console.log(
+      "the app held up — nothing disappointed the user this session. Try a longer wander or a bigger brain.",
+    );
+  } else {
+    console.log(`${loudest.length} moment(s) the app let the user down — worst first:\n`);
+    for (const r of loudest.slice(0, 12)) {
+      console.log(`⁇ [${r.surprise}] ${r.cmd}  ${r.args}`);
+      for (const s of r.signals) console.log(`    · ${s}`);
+      if (r.goal) console.log(`    user was trying to: ${r.goal}`);
+      if (r.answer) console.log(`    app said: ${String(r.answer).slice(0, 120)}`);
+      console.log(`    → the question: why? (step ${r.step}, journal: ${JOURNAL})`);
+    }
+  }
+  console.log(
+    `\ncoverage this wander: ${seen.commands.size}/${CATALOG.length} commands touched, ` +
+      `${seen.eventTypes.size} event types, ${seen.logSigs.size} distinct ERROR/WARN log shapes.`,
+  );
+}
+
+main().catch((e) => {
+  console.error(`[chaos] fatal: ${e}`);
+  void killGroup().finally(() => process.exit(1));
+});

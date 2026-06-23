@@ -222,25 +222,52 @@ pub async fn send_message_stream(
                         // Use pending_clone as the message_id — the frontend
                         // created a placeholder with this ID and the guard
                         // check in the message-complete handler matches on it.
+                        let content = response.message.content;
+                        // Emit the body as a single chunk first, so the
+                        // stream-integrity contract — concat(message-chunk)
+                        // == full_text — holds for the non-streaming fallback
+                        // exactly as it does for the streaming path above. The
+                        // frontend accumulates chunks identically either way.
+                        let _ = app.emit(
+                            "message-chunk",
+                            MessageChunkPayload {
+                                conversation_id: conversation_id_owned.clone(),
+                                message_id: pending_clone.clone(),
+                                chunk: content.clone(),
+                            },
+                        );
                         let _ = app.emit(
                             "message-complete",
                             MessageCompletePayload {
                                 conversation_id: conversation_id_owned,
                                 message_id: pending_clone.clone(),
-                                full_text: response.message.content,
+                                full_text: content,
                                 metadata: response.message.metadata,
                             },
                         );
                     }
                     Err(e) => {
-                        // Clear the loading state on error too.
+                        // Surface the error as a contract-compliant turn (a
+                        // rejected oversize message lands here): one chunk so
+                        // concat == full_text, and an `intent` marker so the
+                        // turn is visible to the provenance surface instead of
+                        // an intent-less blank. Also clears the loading state.
+                        let body = format!("Error: {e}");
+                        let _ = app.emit(
+                            "message-chunk",
+                            MessageChunkPayload {
+                                conversation_id: conversation_id_owned.clone(),
+                                message_id: pending_clone.clone(),
+                                chunk: body.clone(),
+                            },
+                        );
                         let _ = app.emit(
                             "message-complete",
                             MessageCompletePayload {
                                 conversation_id: conversation_id_owned,
                                 message_id: pending_clone.clone(),
-                                full_text: format!("Error: {e}"),
-                                metadata: None,
+                                full_text: body,
+                                metadata: Some(serde_json::json!({ "intent": "error" })),
                             },
                         );
                     }

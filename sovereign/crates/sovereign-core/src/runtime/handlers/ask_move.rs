@@ -62,6 +62,11 @@ impl Runtime {
         let placeholder_body =
             "I want to make sure I give you the right shape of answer.".to_string();
         let metadata = serde_json::json!({
+            // An Ask move IS the turn's intent: the system chose to ask for
+            // clarification rather than commit. Name it so the turn satisfies
+            // the provenance contract (every turn names an intent); the
+            // classifier's `coarse_intent` guess rides alongside.
+            "intent": "ask",
             "move_kind": "ask",
             "confidence": classification.primary.confidence,
             "clarification": {
@@ -175,6 +180,11 @@ impl Runtime {
         let placeholder_body =
             "I want to make sure I give you the right shape of answer.".to_string();
         let metadata = serde_json::json!({
+            // An Ask move IS the turn's intent: the system chose to ask for
+            // clarification rather than commit. Name it so the turn satisfies
+            // the provenance contract (every turn names an intent); the
+            // classifier's `coarse_intent` guess rides alongside.
+            "intent": "ask",
             "move_kind": "ask",
             "confidence": classification.primary.confidence,
             "clarification": {
