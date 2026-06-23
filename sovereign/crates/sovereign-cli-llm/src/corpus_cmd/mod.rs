@@ -12,8 +12,10 @@
 // helpers. `run_corpus` below is the dispatcher.
 mod diagnostics;
 mod fmt;
+mod ingest;
 mod inventory;
 mod partitions;
+mod search;
 
 use diagnostics::{
     cmd_corpus_dedupe, cmd_corpus_diag, cmd_corpus_export_parcels, cmd_corpus_repair,
@@ -37,6 +39,8 @@ pub async fn run_corpus(args: &[String]) -> i32 {
 
     match args[0].as_str() {
         "list" => cmd_corpus_list().await,
+        "ingest" => ingest::cmd_corpus_ingest(&args[1..]).await,
+        "search" => search::cmd_corpus_search(&args[1..]).await,
         "install" => cmd_corpus_install(&args[1..]).await,
         "remove" => cmd_corpus_remove(&args[1..]).await,
         "status" => cmd_corpus_status().await,
@@ -84,6 +88,8 @@ const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
         sovereign_cli_shared::help::HelpSection::Usage("sovereign corpus <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list",                      "List installed and available corpora"),
+            ("ingest <folder>",           "Build a corpus from a folder via the workflow runner (chunk→embed→store; --corpus <id>, --glob)"),
+            ("search <id> <query>",       "Search a corpus (embeds the query via the daemon; --limit N)"),
             ("install <id>",              "Install a corpus (e.g. 'wikipedia')"),
             ("remove <id>",               "Remove canonical + partitions (or --canonical-only / --partitions-only)"),
             ("status",                    "Show shard status for all corpora"),

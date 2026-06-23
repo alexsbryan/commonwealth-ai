@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use async_trait::async_trait;
+
+use sovereign_core::error::{Error, Result};
+use sovereign_core::traits::Tool;
+use sovereign_core::types::*;
+
 /// Chunking strategy: split on paragraph boundaries, respecting a max token estimate.
 ///
 /// - Max chunk size: ~175 tokens (estimated as ~4 chars per token)
@@ -219,9 +225,121 @@ fn finalize_chunk(chunks: &mut Vec<TextChunk>, current: &mut String, chunk_index
     *current = content[overlap_start..].to_string();
 }
 
+/// The corpus chunker as a workflow `Step` — the exact `chunk_text` the real
+/// ingest uses, exposed as a `1→N` tool so a workflow can fan a downstream step
+/// (`embed:`) over its output. Reads a file `path` (or chunks inline `text`)
+/// and emits a JSON-array *collection* of `{text, index}` objects.
+///
+/// `Read`-effect + idempotent: pure over its input, so the workflow cache skips
+/// it on an unchanged file.
+pub struct ChunkTool;
+
+#[async_trait]
+impl Tool for ChunkTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "chunk".to_string(),
+            name: "chunk".to_string(),
+            description: "Split a document (file `path`, or inline `text`) into the corpus \
+                          chunker's chunks — a collection of {text, index}."
+                .to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "File to read and chunk" },
+                    "text": { "type": "string", "description": "Inline text to chunk (used if no path)" }
+                }
+            }),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Session,
+            output_schema: Some(serde_json::json!({
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": { "type": "string" },
+                        "index": { "type": "integer" }
+                    }
+                }
+            })),
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        // Prefer inline `text`; otherwise read the file at `path`.
+        let text = match params.get("text").and_then(|v| v.as_str()) {
+            Some(t) => t.to_string(),
+            None => {
+                let path = params
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::Execution("chunk: need a `path` or `text`".into()))?;
+                std::fs::read_to_string(path)
+                    .map_err(|e| Error::Execution(format!("chunk: read {path}: {e}")))?
+            }
+        };
+        let chunks: Vec<serde_json::Value> = chunk_text(&text)
+            .into_iter()
+            .map(|c| serde_json::json!({ "text": c.content, "index": c.index }))
+            .collect();
+        Ok(StepOutput::Json(serde_json::Value::Array(chunks)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tool_ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: Default::default(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn chunk_tool_reads_a_file_and_emits_a_collection() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("doc.txt");
+        std::fs::write(&p, "alpha paragraph\n\nbeta paragraph").unwrap();
+
+        let out = ChunkTool
+            .execute(&serde_json::json!({ "path": p.to_string_lossy() }), &tool_ctx())
+            .await
+            .unwrap();
+        match out {
+            StepOutput::Json(serde_json::Value::Array(items)) => {
+                assert!(!items.is_empty());
+                assert!(items[0].get("text").and_then(|v| v.as_str()).is_some());
+                assert!(items[0].get("index").and_then(|v| v.as_u64()).is_some());
+            }
+            other => panic!("expected a JSON array collection, got {other:?}"),
+        }
+
+        // The inline `text` branch works too (no file read).
+        let out2 = ChunkTool
+            .execute(&serde_json::json!({ "text": "just one chunk" }), &tool_ctx())
+            .await
+            .unwrap();
+        assert!(matches!(out2, StepOutput::Json(serde_json::Value::Array(_))));
+
+        // Neither `path` nor `text` is a loud error.
+        assert!(ChunkTool
+            .execute(&serde_json::json!({}), &tool_ctx())
+            .await
+            .is_err());
+    }
 
     #[test]
     fn chunk_empty() {

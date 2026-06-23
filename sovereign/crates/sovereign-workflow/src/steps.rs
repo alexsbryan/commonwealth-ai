@@ -9,10 +9,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
+use sovereign_core::oicp::{InferenceRequirements, LatencyClass};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Effect, Speed, StepOutput, ToolContext};
 
+use crate::kind::StepKind;
 use crate::model::{Artifact, ResolvedArgs, ResourceNeed, StepDescriptor};
 
 /// Per-step run context (item identity for tracing; P2 adds an approval channel
@@ -68,16 +70,16 @@ impl Step for TransformStep {
 
 pub struct ModelStep {
     provider: Arc<dyn InferenceProvider>,
-    speed: Speed,
-    slot: String,
+    latency: LatencyClass,
 }
 
 #[async_trait]
 impl Step for ModelStep {
     fn descriptor(&self) -> StepDescriptor {
+        let label = latency_label(self.latency);
         StepDescriptor {
-            id: format!("model:{}", self.slot),
-            name: format!("model:{}", self.slot),
+            id: format!("model:{label}"),
+            name: format!("model:{label}"),
             description: "local-model completion (routed to the daemon)".into(),
             resources: ResourceNeed::Inference,
             // A model call produces output but no external side effect, so it's
@@ -93,20 +95,22 @@ impl Step for ModelStep {
             .prompt
             .clone()
             .ok_or_else(|| Error::Execution("a `model:` step requires a `prompt`".into()))?;
-        // Mirror the executor's Reason-step request (executor.rs:501). P1 maps
-        // the model slot → preferred_speed; the `resources` hint + oicp
-        // scheduling are P2.
+        // Build a protocol-native request: the OICP envelope carries the
+        // latency class — the standard signal the daemon's slot picker routes on
+        // (`pick_slot_for_oicp`). `preferred_speed` is set coherently for any
+        // pre-OICP consumer, but the OICP envelope is the primary signal, so we
+        // don't rely on the provider's `Speed`→`latency_class` rescue.
         let request = CompletionRequest {
             prompt,
             system_message: args.system.clone(),
-            preferred_speed: self.speed,
+            preferred_speed: speed_for(self.latency),
             max_tokens: None,
             temperature: Some(0.7),
             structured_output: None,
             think_budget: None,
             top_k: None,
             top_p: None,
-            oicp: None,
+            oicp: Some(InferenceRequirements::new().with_latency_class(self.latency)),
             tools: None,
             tool_choice: None,
             model_id: None,
@@ -123,6 +127,25 @@ impl Step for ModelStep {
             type_tag: "text".into(),
             output: StepOutput::Text(resp.text),
         })
+    }
+}
+
+/// OICP latency class → the legacy `Speed` slot, for the `preferred_speed` field
+/// any pre-OICP consumer still reads. The OICP envelope is the primary routing
+/// signal; this just keeps the request struct internally coherent.
+fn speed_for(latency: LatencyClass) -> Speed {
+    match latency {
+        LatencyClass::Fast => Speed::Fast,
+        LatencyClass::Normal => Speed::Medium,
+        LatencyClass::Extended => Speed::Slow,
+    }
+}
+
+fn latency_label(latency: LatencyClass) -> &'static str {
+    match latency {
+        LatencyClass::Fast => "fast",
+        LatencyClass::Normal => "normal",
+        LatencyClass::Extended => "extended",
     }
 }
 
@@ -234,62 +257,44 @@ impl StepRegistry {
         Self { inference, tools }
     }
 
-    /// `model:<slot>` | `tool:<id>` | `mcp:<server>:<tool>` | `transform:<name>`.
-    pub fn resolve(&self, uses: &str) -> Result<Arc<dyn Step>> {
-        let (kind, rest) = uses.split_once(':').ok_or_else(|| {
-            Error::Execution(format!("step `uses` must be `<kind>:<name>` — got `{uses}`"))
-        })?;
+    /// Resolve a typed `StepKind` into a concrete `Step`, injecting the daemon
+    /// provider / tool registry. The `uses` string was parsed to a `StepKind` at
+    /// the workflow boundary (see `kind.rs`), so this is an exhaustive match over
+    /// the taxonomy — no string arms (ARCH §2.1).
+    pub fn resolve(&self, kind: &StepKind) -> Result<Arc<dyn Step>> {
         match kind {
-            "model" => {
+            StepKind::Model { latency } => {
                 let provider = self.inference.as_ref().ok_or_else(|| {
                     Error::Execution(
                         "a `model:` step needs the daemon — none is wired (run `sovereign daemon`)"
                             .into(),
                     )
                 })?;
-                let speed = match rest {
-                    "fast" => Speed::Fast,
-                    "thoughtful" | "slow" => Speed::Slow,
-                    _ => Speed::Medium,
-                };
                 Ok(Arc::new(ModelStep {
                     provider: Arc::clone(provider),
-                    speed,
-                    slot: rest.to_string(),
+                    latency: *latency,
                 }))
             }
-            "embed" => {
+            StepKind::Embed { model } => {
                 let provider = self.inference.as_ref().ok_or_else(|| {
-                    Error::Execution(
-                        "an `embed:` step needs the daemon — none is wired".into(),
-                    )
+                    Error::Execution("an `embed:` step needs the daemon — none is wired".into())
                 })?;
                 Ok(Arc::new(EmbedStep {
                     provider: Arc::clone(provider),
-                    model: rest.to_string(),
+                    model: model.clone(),
                 }))
             }
-            "tool" => Ok(Arc::new(ToolStep {
+            StepKind::Tool { id } => Ok(Arc::new(ToolStep {
                 tools: Arc::clone(&self.tools),
-                tool_id: rest.to_string(),
+                tool_id: id.clone(),
             })),
-            "mcp" => {
-                let (server, tool) = rest.split_once(':').ok_or_else(|| {
-                    Error::Execution(format!(
-                        "an `mcp:` step must be `mcp:<server>:<tool>` — got `{uses}`"
-                    ))
-                })?;
-                Ok(Arc::new(ToolStep {
-                    tools: Arc::clone(&self.tools),
-                    tool_id: format!("mcp_{server}_{tool}"),
-                }))
-            }
-            "transform" => Ok(Arc::new(TransformStep {
-                name: rest.to_string(),
+            StepKind::Mcp { server, tool } => Ok(Arc::new(ToolStep {
+                tools: Arc::clone(&self.tools),
+                tool_id: format!("mcp_{server}_{tool}"),
             })),
-            other => Err(Error::Execution(format!(
-                "unknown step kind `{other}` in `{uses}`"
-            ))),
+            StepKind::Transform { name } => Ok(Arc::new(TransformStep {
+                name: name.clone(),
+            })),
         }
     }
 }

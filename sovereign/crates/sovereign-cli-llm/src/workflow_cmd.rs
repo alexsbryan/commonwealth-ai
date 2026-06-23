@@ -13,10 +13,15 @@ use std::time::Duration;
 
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+use sovereign_inference::remote::SplitInferenceProvider;
+use sovereign_tools::corpus_store::CorpusStoreTool;
+use sovereign_tools::rag::chunk::ChunkTool;
 use sovereign_tools::shell::ShellTool;
 use sovereign_tools::web::WebFetchTool;
-use sovereign_workflow::{ArtifactCache, FileArtifactCache, NoCache, Runner, StepRegistry, Workflow};
+use sovereign_workflow::{
+    ArtifactCache, FileArtifactCache, NoCache, ResourceNeed, Runner, StepKind, StepRegistry,
+    Workflow,
+};
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
 
@@ -111,24 +116,49 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
     };
 
-    // Inference: only assemble (and require) the daemon when a daemon-routed
-    // step (`model:` or `embed:`) is present. Discovering a model doubles as the
-    // liveness probe.
+    run_assembled(&wf, &daemon, concurrency, no_cache).await
+}
+
+/// Assemble the light stack — daemon-routed inference (only when a `model:` or
+/// `embed:` step is present, via a `SplitInferenceProvider` so embed hits the
+/// embed slot and chat the chat slot), a tool registry, MCP servers, and the
+/// content cache — then run `wf` and print a per-item summary. Shared by
+/// `workflow run <file>` and `corpus ingest <folder>` so the assembly lives in
+/// one place.
+pub(crate) async fn run_assembled(
+    wf: &Workflow,
+    daemon: &str,
+    concurrency: usize,
+    no_cache: bool,
+) -> i32 {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
-    let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(&wf) {
-        match discover_chat_model(&v1).await {
-            Ok(model) => {
-                eprintln!("Daemon: {daemon}  ·  model: {model}");
-                Some(Arc::new(RemoteApiProvider::new(&v1, None, &model, 8192)))
-            }
+    let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
+        let models = match discover_models(&v1).await {
+            Ok(m) => m,
             Err(e) => {
                 eprintln!(
                     "Daemon not reachable at {daemon} ({e}).\n\
-                     A `model:` step needs it — start it with `sovereign daemon`."
+                     A `model:`/`embed:` step needs it — start it with `sovereign daemon`."
                 );
                 return 1;
             }
+        };
+        // An `embed:` step needs an embedding model; fail clearly if none is loaded.
+        if uses_embed(wf) && models.embed.is_none() {
+            eprintln!(
+                "The daemon at {daemon} advertises no embedding model, but this workflow \
+                 has an `embed:` step.\nLoad an embed model (see `sovereign setup`) and retry."
+            );
+            return 1;
         }
+        let chat = models.chat.clone().unwrap_or_default();
+        let embed = models.embed.clone().unwrap_or_default();
+        eprintln!(
+            "Daemon: {daemon}  ·  chat: {}  ·  embed: {}",
+            if chat.is_empty() { "—" } else { &chat },
+            if embed.is_empty() { "—" } else { &embed },
+        );
+        Some(Arc::new(SplitInferenceProvider::new(&v1, chat, embed, 8192)))
     } else {
         None
     };
@@ -138,6 +168,8 @@ async fn cmd_run(args: &[String]) -> i32 {
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(WebFetchTool::new()));
+    tools.register(Box::new(ChunkTool));
+    tools.register(Box::new(CorpusStoreTool));
     let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
     for st in mcp.server_statuses().await {
         if st.connected {
@@ -155,10 +187,7 @@ async fn cmd_run(args: &[String]) -> i32 {
         Arc::new(FileArtifactCache::new(cache_dir()))
     };
     let registry = StepRegistry::new(inference, Arc::new(tools));
-    let report = match Runner::with_cache(registry, cache)
-        .run(&wf, concurrency)
-        .await
-    {
+    let report = match Runner::with_cache(registry, cache).run(wf, concurrency).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("workflow run failed: {e}");
@@ -183,12 +212,24 @@ async fn cmd_run(args: &[String]) -> i32 {
     i32::from(report.failed_count() > 0)
 }
 
-/// Whether the workflow has a daemon-routed inference step (`model:` or
-/// `embed:`); if so, the daemon provider is assembled and required.
+/// Whether any step needs daemon-routed inference (so the daemon provider is
+/// assembled and required). Classifies via the typed `StepKind::resources()` —
+/// the exhaustive classifier — not a `uses.starts_with(…)` probe that a new
+/// inference-bearing kind could slip past (ARCH §2.1).
 fn needs_inference(wf: &Workflow) -> bool {
+    wf.steps.iter().any(|s| {
+        StepKind::parse(&s.uses)
+            .map(|k| k.resources() == ResourceNeed::Inference)
+            .unwrap_or(false)
+    })
+}
+
+/// Whether the workflow has an `embed:` step (so we require an embedding model).
+/// Matches the typed `Embed` variant, not the `"embed:"` prefix string.
+fn uses_embed(wf: &Workflow) -> bool {
     wf.steps
         .iter()
-        .any(|s| s.uses.starts_with("model:") || s.uses.starts_with("embed:"))
+        .any(|s| matches!(StepKind::parse(&s.uses), Ok(StepKind::Embed { .. })))
 }
 
 /// `~/.sovereign/workflow-cache` — alongside the canonical config (reuses its
@@ -201,9 +242,17 @@ fn cache_dir() -> std::path::PathBuf {
         .join("workflow-cache")
 }
 
-/// GET `<v1>/models`, return the first non-embedding model id. Doubles as the
-/// daemon liveness probe (a connection error → a clear "start the daemon").
-async fn discover_chat_model(v1: &str) -> std::result::Result<String, String> {
+/// The chat + embed model ids the daemon advertises.
+pub(crate) struct DaemonModels {
+    pub chat: Option<String>,
+    pub embed: Option<String>,
+}
+
+/// GET `<v1>/models` and split the advertised ids into chat vs. embed (by the
+/// `embed` substring convention — the same one `/embeddings` routing uses).
+/// Doubles as the daemon liveness probe (a connection error → "start the
+/// daemon"). Shared with `corpus search` so the convention lives in one place.
+pub(crate) async fn discover_models(v1: &str) -> std::result::Result<DaemonModels, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
@@ -225,11 +274,18 @@ async fn discover_chat_model(v1: &str) -> std::result::Result<String, String> {
         .iter()
         .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
         .collect();
-    ids.iter()
+    let embed = ids
+        .iter()
+        .find(|id| id.to_lowercase().contains("embed"))
+        .map(|s| s.to_string());
+    let chat = ids
+        .iter()
         .find(|id| !id.to_lowercase().contains("embed"))
-        .or_else(|| ids.first())
-        .map(|s| s.to_string())
-        .ok_or_else(|| "the daemon advertises no models".to_string())
+        .map(|s| s.to_string());
+    if chat.is_none() && embed.is_none() {
+        return Err("the daemon advertises no models".to_string());
+    }
+    Ok(DaemonModels { chat, embed })
 }
 
 #[cfg(test)]

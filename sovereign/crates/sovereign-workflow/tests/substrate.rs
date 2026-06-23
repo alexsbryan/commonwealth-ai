@@ -134,6 +134,64 @@ uses = "transform:upper"
     assert!(err.contains("duplicate"), "{err}");
 }
 
+// ── step-kind taxonomy (type-safe dispatch, ARCH §2.1) ────────
+
+#[test]
+fn step_kind_parse_and_resource_classification() {
+    use sovereign_core::oicp::LatencyClass;
+    use sovereign_workflow::{ResourceNeed, StepKind};
+
+    // Parse maps the wire form to the typed variant — the one boundary.
+    // A `model:` slot is OICP's own `LatencyClass` vocabulary.
+    assert_eq!(
+        StepKind::parse("model:fast").unwrap(),
+        StepKind::Model {
+            latency: LatencyClass::Fast
+        }
+    );
+    assert_eq!(
+        StepKind::parse("model:extended").unwrap(),
+        StepKind::Model {
+            latency: LatencyClass::Extended
+        }
+    );
+    // `thoughtful` / `slow` are friendly aliases for `extended`.
+    assert_eq!(
+        StepKind::parse("model:thoughtful").unwrap(),
+        StepKind::Model {
+            latency: LatencyClass::Extended
+        }
+    );
+    assert_eq!(
+        StepKind::parse("embed:default").unwrap(),
+        StepKind::Embed {
+            model: "default".into()
+        }
+    );
+    assert_eq!(
+        StepKind::parse("mcp:demo:read_memo").unwrap(),
+        StepKind::Mcp {
+            server: "demo".into(),
+            tool: "read_memo".into()
+        }
+    );
+
+    // resources() is the single classifier the command + scheduler read —
+    // pinning it here means a new variant can't quietly mis-declare its need.
+    let r = |u: &str| StepKind::parse(u).unwrap().resources();
+    assert_eq!(r("model:thoughtful"), ResourceNeed::Inference);
+    assert_eq!(r("embed:default"), ResourceNeed::Inference);
+    assert_eq!(r("tool:write_note"), ResourceNeed::Tool);
+    assert_eq!(r("mcp:demo:read"), ResourceNeed::Tool);
+    assert_eq!(r("transform:upper"), ResourceNeed::None);
+
+    // Malformed forms are loud errors, not silent misroutes.
+    assert!(StepKind::parse("noColon").is_err());
+    assert!(StepKind::parse("bogus:x").is_err());
+    assert!(StepKind::parse("mcp:missing_tool").is_err());
+    assert!(StepKind::parse("model:turbo").is_err()); // unknown latency, not a silent default
+}
+
 // ── templating ────────────────────────────────────────────────
 
 #[test]

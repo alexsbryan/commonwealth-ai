@@ -30,6 +30,20 @@ user-authored model workflow. Not a rewrite.
 > data model held; the runner grew one verb. This is the discipline the spec
 > calls for — discover the abstraction against a real fifth case, don't design
 > the astronaut.
+>
+> **Dispatch is now type-safe, and `model:` speaks OICP.** Adding `embed:`
+> exposed a stringly-typed smell (ARCH §2.1): the `uses` string was re-parsed by
+> scattered `starts_with` probes — one of which (`needs_inference`) had already
+> silently forgotten `embed:`. The `uses` string is now parsed once into a
+> `StepKind` enum (`kind.rs`); `resources()` is a compiler-checked classifier, so
+> a new inference-bearing kind cannot slip past the "needs the daemon?" gate. In
+> the same pass the `model:` slot vocabulary became OICP's own `LatencyClass`
+> (`fast`/`normal`/`extended`) and `ModelStep` now attaches a real
+> `InferenceRequirements` envelope rather than leaning on the legacy `Speed`
+> field + the provider's `Speed`→`latency_class` rescue. The chat command routes
+> `model:`/`embed:` through `SplitInferenceProvider` so the embed slot is never
+> sent a chat model id, and a real `tool:chunk` (the production `chunk_text`) +
+> `examples/chunk-embed.toml` make the chunk→embed ingest runnable live.
 
 ## Context: we have five workflow engines, not zero
 
@@ -234,24 +248,84 @@ already-transcribed files for free) → schedules step 2 across mesh peers via
 MCP tool, a local model, and a built-in tool, authored as data by a
 non-developer. That is the payoff of the whole MCP→attach→substrate arc.
 
-## Phasing (discover the abstraction; don't design the astronaut)
+## Roadmap — where we stand (updated 2026-06-23)
 
-- **P0 — the seam, zero behaviour change.** New `sovereign-workflow` crate:
-  `Step`, `Artifact`, `StepDescriptor`, `Workflow`, a step registry. Make the
-  pipeline tool's per-`WorkUnit` command run through a trivial *one-step*
-  `Workflow`. Prove the abstraction holds for the existing case (the corpus
-  enrich shell-out still works, now as a `tool:`/`command:` step).
-- **P1 — the example.** Three step impls (`model:`, `mcp:`, `tool:`/`transform:`),
-  the `workflow.toml` parser, `{step.key}` templating (lift `resolve_inputs`),
-  and the `memos-to-actions` run on the `BatchRunner`. First non-corpus instance.
-- **P2 — factor the shared concerns.** Content-addressed artifact cache (free
-  resume/dedup) behind the asset store; have corpus ingest + enrichment adopt it,
-  retiring `_update_progress.json` and `PhaseCache`. Lift the bucketed
-  classifier + adaptive ceiling into the Runner.
-- **P3 — converge the step model.** The `Executor` consumes the same step
-  registry, so a `Plan` *is* a `Workflow` on the `InteractiveRunner`; MCP tools,
-  model calls, and enrichment phases are all `Step`s. ATOS keeps its own
-  human-in-the-loop runtime (a third Runner profile), sharing only the vocabulary.
+Progress lives on **three independent axes** — conflating them is the easiest way
+to overstate where we are.
+
+**1. Capability — can the substrate *express* the work?** Furthest along.
+
+```
+read → chunk → embed → store → search
+ ✅      ✅      ✅       ✅       ✅      ← full ingest stage runs e2e
+```
+
+The read→chunk→embed half is proven byte-identical to the real corpus engine
+(`chunk_then_embed_matches_the_real_corpus_pipeline`); `tool:corpus_store` writes
+the `(chunk, embedding)` pairs into the real LanceDB index via the engine's own
+`insert_batch` (idempotent per `source_doc_id`), and a `corpus search` command
+closes the loop. The whole `ingest.toml` (`chunk → embed → store`) runs live —
+real 1024-dim vectors, FTS indices built, queryable.
+
+**2. Adoption — does *production* run on it?** Started. `sovereign corpus ingest
+<folder>` is a production `corpus` subcommand whose *mechanism is the Runner* — it
+builds a real, searchable corpus by running `chunk → embed → store`, not a bespoke
+loop (plain-text sources; the engine's own `ingest()` is untouched). That's the
+first rung: a real entrypoint on the substrate, not a `workflow run` demo. The
+deeper work — routing `LocalCorpusManager::ingest` (the desktop+CLI API) through
+the Runner and converging the rich path (batched embed, resume, enrichment) before
+retiring the bespoke loops — is the remaining prize.
+
+**3. Scale — durable / distributed / scheduled?** Single-process today. Durable
+resume, mesh-distribution, and Runner-native scheduling are unbuilt (with a
+caveat — see deviation 2).
+
+### Built (core, hardened)
+
+`Step·Artifact·Runner` crate; TOML graph + auto-derived edges; topo execution;
+per-step tracing. Five step kinds behind a type-safe `StepKind` (one parse
+boundary, compiler-checked `resources()`). Content-addressed cache (effect-aware,
+file-fingerprint invalidation, per-element granularity). `for_each` collection-map
+(not in the original plan — discovered when chunk→embed needed it). OICP-native
+`model:` requests. The generalization diff + live chunk→embed e2e.
+
+### Two deviations from the original P0–P3 plan
+
+1. **The Runner is standalone, not bolted onto the pipeline tool.** P0 imagined
+   "the pipeline tool's WorkUnit runs a one-step Workflow." Research killed that:
+   `sovereign-pipeline` has zero inference/tool deps and runs one `/bin/sh -c` per
+   unit with no output threading. So durable/distributed becomes a clean *outer
+   loop* later (the pipeline tool runs `sovereign workflow run-unit`), and the
+   substrate stayed independent. Durability is therefore still entirely unbuilt.
+2. **Scheduling is borrowed from the daemon, not Runner-native.** The "distinctive
+   piece" above imagined the Runner calling `BackendSelector::select` per inference
+   step. Instead `model:`/`embed:` route through the daemon over HTTP and the
+   *daemon* does the OICP/mesh scheduling — thinner, and aligned with "leverage
+   inference via request, don't own complexity." Treat the Runner-native scheduler
+   as a **possible non-goal**, not a pending task.
+
+### Phased path from here
+
+| Phase | What | Status |
+|---|---|---|
+| Done | **Store step** — `tool:corpus_store` (reuses `CorpusIndex::insert_batch`, idempotent per doc); `ingest.toml` = chunk→embed→store; `corpus search` closes the loop. The `secret-agent` ingest runs live and is queryable | ✅ |
+| Done | **Adoption, first rung** — `sovereign corpus ingest <folder>` runs chunk→embed→store on the Runner (plain-text; bespoke `ingest()` untouched). First production path on the substrate; shares `run_assembled` with `workflow run` | ✅ |
+| **Now** | **Deeper adoption** — route `LocalCorpusManager::ingest` (desktop+CLI API) through the Runner for plain-text; converge batched-embed / resume / enrichment; then retire the bespoke loops | ⬜ the prize |
+| Then | **Durable/distributed** — pipeline tool as the outer loop over `run-unit` | ⬜ |
+| Later | **Executor convergence** — a `Plan` *is* a `Workflow`; agent steps = workflow steps; ATOS keeps its own human-in-the-loop Runner profile, sharing only the vocabulary | ⬜ |
+| Maybe-not | Runner-native `BackendSelector` scheduling | ❓ daemon may already own this correctly |
+
+### The store step, scoped
+
+The zip (`store` needs `(chunk, embedding)` pairs) is already expressible: `store`
+is a normal **non-`for_each`** tool taking *both whole collections* as params
+(`chunks = "{chunk.output}"`, `embeddings = "{embed.output}"`) and pairing them
+internally — no new Runner primitive. The real work is corpus-engine-side: writing
+the LanceDB index in the **exact schema the retrieval path reads**. A vector
+written but not in searchable shape is a silent half-success, so DoD is `search`
+returning the chunk, not "rows written." Open fork to settle first: **reuse the
+corpus-engine's real index writer** (faithful, keeps this on the adoption path) vs.
+a minimal parallel table (cleaner demo, risks schema drift) — lean reuse.
 
 ## What NOT to do (the over-build risks)
 
