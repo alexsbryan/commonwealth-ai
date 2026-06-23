@@ -122,8 +122,12 @@ async fn partition_then_heal_reconverges() {
     }
     // Re-converge and assert the full invariant pack holds. AGREED quiesce: a
     // stable-but-not-yet-agreed plateau must not pass as converged — that was
-    // this test's intermittent failure.
-    let q = dst.gossip_until_quiescent_agreed(16).await;
+    // this test's intermittent failure. Budget 32 (not 16): agreement is strictly
+    // harder to reach than stability, so the post-heal live-set needs more rounds
+    // to propagate to ALL nodes under unseeded gossip order. 16 occasionally hit
+    // MaxRoundsExceeded (~1-in-15 overnight); the loop returns early once
+    // agreement lands, so the larger budget only costs anything on the slow tail.
+    let q = dst.gossip_until_quiescent_agreed(32).await;
     assert!(matches!(q, Quiescence::Converged { .. }), "did not reconverge: {q:?}");
     let violations = check_all(&dst.snapshot().await);
     assert!(violations.is_empty(), "post-heal violations: {violations:?}");
@@ -193,8 +197,9 @@ async fn wire_faults_and_clock_jump_back_reconverge() {
     }
     dst.clear_faults();
     // AGREED quiesce (heal-then-assert): require all up nodes to converge to the
-    // identical view, not merely to stop changing.
-    let q = dst.gossip_until_quiescent_agreed(16).await;
+    // identical view, not merely to stop changing. Budget 32 — agreement needs
+    // more rounds than stability to fully propagate (see partition_then_heal).
+    let q = dst.gossip_until_quiescent_agreed(32).await;
     assert!(
         matches!(q, Quiescence::Converged { .. }),
         "did not reconverge: {q:?}"
@@ -238,9 +243,10 @@ async fn seeded_chaos_soak() {
             dst.sweep().await;
         }
         // Heal everything, then require clean reconvergence — AGREED, so a
-        // stable-but-disagreeing plateau can't masquerade as converged.
+        // stable-but-disagreeing plateau can't masquerade as converged. Budget 40
+        // (more nodes → more rounds for full agreement to propagate).
         dst.clear_faults();
-        let q = dst.gossip_until_quiescent_agreed(24).await;
+        let q = dst.gossip_until_quiescent_agreed(40).await;
         assert!(
             matches!(q, Quiescence::Converged { .. }),
             "seed={seed} did not reconverge: {q:?}"
