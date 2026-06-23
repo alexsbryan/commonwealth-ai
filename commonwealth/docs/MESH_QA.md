@@ -46,7 +46,13 @@ active, where the two sides legitimately disagree. The
 `agreed_quiesce_rejects_stable_disagreement` scenario pins the distinction (an
 active partition reaches stability but **not** agreement). This removed the
 former `partition_then_heal` coin-flip at the DST layer; the multi-process soak
-quiesces on the same agreement principle via `wait_online_eq`.
+quiesces on the same agreement principle via `wait_online_eq`. Agreement needs a
+**larger round budget** than stability (it's strictly harder to reach): the
+reconverge calls use 32 / 40 rounds, not the old 16 — an overnight 5× surfaced a
+~1-in-15 `MaxRoundsExceeded{16}` tail (agreement not yet propagated to all nodes
+under unseeded gossip), and 32 verifies 40/40 on the two reconverge tests. The
+loop returns early once agreement lands, so the larger budget only costs on the
+slow tail.
 
 ## Layer 2 — Multi-process soak (real bytes)
 
