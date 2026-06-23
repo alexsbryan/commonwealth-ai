@@ -59,10 +59,14 @@ impl StepDescriptor {
 }
 
 /// Per-item resolution context threaded through one item's run.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Scope {
     pub item: BTreeMap<String, String>,
     pub completed: BTreeMap<String, Artifact>,
+    /// The current element when resolving a `for_each` step — read via
+    /// `{element.key}` (an object field) or `{element.value}` (a scalar).
+    /// `None` outside a `for_each` body.
+    pub element: Option<serde_json::Value>,
 }
 
 /// A step's templated fields, resolved against the scope (see `template`).
@@ -104,6 +108,14 @@ pub struct StepSpec {
     /// (`None`) → cache iff the step's effect is `Read`.
     #[serde(default)]
     pub cache: Option<bool>,
+    /// Map this step over the collection produced by another step (whose output
+    /// is a JSON array). The step runs once per element, read via `{element.key}`
+    /// (object field) or `{element.value}` (scalar); its output is the JSON array
+    /// of the per-element results. This is how a `1→N` stage (a chunker) hands
+    /// off to an N-wise `map` (embed each chunk) — and each element caches
+    /// separately.
+    #[serde(default)]
+    pub for_each: Option<String>,
 }
 
 impl StepSpec {
@@ -293,6 +305,14 @@ impl Workflow {
         for (i, s) in self.steps.iter().enumerate() {
             for r in template::referenced_ids(&s.templated_text()) {
                 if let Some(&j) = index.get(r.as_str()) {
+                    if j != i {
+                        edges.push((j, i));
+                    }
+                }
+            }
+            // A `for_each` step depends on the collection it maps over.
+            if let Some(fe) = &s.for_each {
+                if let Some(&j) = index.get(fe.as_str()) {
                     if j != i {
                         edges.push((j, i));
                     }

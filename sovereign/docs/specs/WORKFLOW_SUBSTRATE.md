@@ -17,6 +17,19 @@ user-authored model workflow. Not a rewrite.
 > cached). Still in P2/P3: the pipeline tool as a *durable/distributed* outer
 > loop, the inference-resource scheduler, and corpus/enrichment/executor
 > convergence.
+>
+> **Collections + the generalization diff landed.** A step can now `for_each`
+> over another step's JSON-array output (a chunker's `1→N`), running once per
+> element (`{element.…}`) with each element caching independently. We proved the
+> substrate generalizes by re-expressing corpus ingest's `chunk → embed` stage as
+> a Workflow and diffing it **byte-for-byte** against the real `chunk_text` +
+> embed run as an oracle — it matches, and re-runs free from cache
+> (`chunk_then_embed_matches_the_real_corpus_pipeline`). The load-bearing
+> finding: **the `Artifact` was already general** (a collection is just a JSON
+> array); the only missing primitive was a Runner-level **map** (`for_each`). The
+> data model held; the runner grew one verb. This is the discipline the spec
+> calls for — discover the abstraction against a real fifth case, don't design
+> the astronaut.
 
 ## Context: we have five workflow engines, not zero
 
