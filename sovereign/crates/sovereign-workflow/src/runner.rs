@@ -13,7 +13,7 @@ use sovereign_core::error::Result;
 use sovereign_core::types::StepOutput;
 
 use crate::cache::{ArtifactCache, NoCache};
-use crate::model::{Scope, SourceItem, Workflow};
+use crate::model::{Artifact, ResolvedArgs, Scope, SourceItem, Workflow};
 use crate::steps::{Step, StepCtx, StepRegistry};
 use crate::{cache, template};
 
@@ -127,65 +127,95 @@ async fn run_item(
     let mut scope = Scope {
         item: item.fields,
         completed: BTreeMap::new(),
+        element: None,
     };
     let mut last_text = String::new();
     let mut ran = 0usize;
     let mut cached = 0usize;
+    let fail = |id: String, spec: &crate::model::StepSpec, msg: String, ran, cached| ItemReport {
+        item: id,
+        result: Err(format!("step `{}`: {msg}", spec.id)),
+        ran,
+        cached,
+    };
 
     for &i in order {
         let spec = &wf.steps[i];
-        let args = template::resolve_args(spec, &scope);
-        let key = do_cache[i].then(|| cache::cache_key(&spec.uses, &spec.id, &args, &fingerprint));
-
-        // Cache hit → skip the step, reuse its artifact.
-        if let Some(k) = &key {
-            if let Some(artifact) = cache.get(k) {
-                last_text = output_text(&artifact.output);
-                tracing::info!(
-                    target: "workflow",
-                    item = %item_id, step = %spec.id, uses = %spec.uses, cached = true,
-                    "workflow: step cached (skipped)"
-                );
-                cached += 1;
-                scope.completed.insert(spec.id.clone(), artifact);
-                continue;
-            }
-        }
-
+        let step = &steps[i];
+        let cacheable = do_cache[i];
         let ctx = StepCtx {
             item_id: item_id.clone(),
         };
-        let start = std::time::Instant::now();
-        match steps[i].run(&args, &ctx).await {
-            Ok(artifact) => {
-                if let Some(k) = &key {
-                    cache.put(k, &artifact);
+
+        let artifact = if let Some(fe) = &spec.for_each {
+            // Fan-out: run this step once per element of `fe`'s collection.
+            // Each element resolves + caches independently (its resolved args
+            // include the element), so editing one element re-runs only it.
+            let collection = match scope.completed.get(fe).map(|a| &a.output) {
+                Some(StepOutput::Json(serde_json::Value::Array(arr))) => arr.clone(),
+                _ => {
+                    return fail(
+                        item_id,
+                        spec,
+                        format!("`for_each = \"{fe}\"` is not a collection (a JSON array)"),
+                        ran,
+                        cached,
+                    )
                 }
-                last_text = output_text(&artifact.output);
-                ran += 1;
-                tracing::info!(
-                    target: "workflow",
-                    item = %item_id, step = %spec.id, uses = %spec.uses,
-                    ms = start.elapsed().as_millis() as u64, cached = false,
-                    "workflow: step ok"
-                );
-                scope.completed.insert(spec.id.clone(), artifact);
+            };
+            let mut results = Vec::with_capacity(collection.len());
+            for elem in collection {
+                let mut elem_scope = scope.clone();
+                elem_scope.element = Some(elem);
+                let args = template::resolve_args(spec, &elem_scope);
+                // Per-element key folds in NO file fingerprint: the element's
+                // content is already in `args` (via `{element.…}`), so identical
+                // elements share a key (dedup / content-addressing) and editing
+                // one element invalidates only it. Using the whole-file
+                // fingerprint here would re-run every element on any file edit.
+                let key = cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, ""));
+                match run_one(step, &args, key.as_deref(), cache, &ctx).await {
+                    Ok((art, was_cached)) => {
+                        if was_cached {
+                            cached += 1;
+                        } else {
+                            ran += 1;
+                        }
+                        results.push(output_value(&art.output));
+                    }
+                    Err(e) => return fail(item_id, spec, format!("{e}"), ran, cached),
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    target: "workflow",
-                    item = %item_id, step = %spec.id, uses = %spec.uses, error = %e,
-                    "workflow: step failed — item aborted"
-                );
-                return ItemReport {
-                    item: item_id,
-                    result: Err(format!("step `{}`: {e}", spec.id)),
-                    ran,
-                    cached,
-                };
+            Artifact {
+                type_tag: "collection".into(),
+                output: StepOutput::Json(serde_json::Value::Array(results)),
             }
-        }
+        } else {
+            let args = template::resolve_args(spec, &scope);
+            let key = cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, &fingerprint));
+            match run_one(step, &args, key.as_deref(), cache, &ctx).await {
+                Ok((art, was_cached)) => {
+                    if was_cached {
+                        cached += 1;
+                    } else {
+                        ran += 1;
+                    }
+                    art
+                }
+                Err(e) => return fail(item_id, spec, format!("{e}"), ran, cached),
+            }
+        };
+
+        tracing::info!(
+            target: "workflow",
+            item = %item_id, step = %spec.id, uses = %spec.uses,
+            for_each = spec.for_each.is_some(),
+            "workflow: step done"
+        );
+        last_text = output_text(&artifact.output);
+        scope.completed.insert(spec.id.clone(), artifact);
     }
+
     ItemReport {
         item: item_id,
         result: Ok(last_text),
@@ -194,11 +224,42 @@ async fn run_item(
     }
 }
 
+/// Run one step (one element, for a `for_each` body) with the shared
+/// cache-check-then-run logic. Returns the artifact + whether it was a cache hit.
+async fn run_one(
+    step: &Arc<dyn Step>,
+    args: &ResolvedArgs,
+    key: Option<&str>,
+    cache: &Arc<dyn ArtifactCache>,
+    ctx: &StepCtx,
+) -> Result<(Artifact, bool)> {
+    if let Some(k) = key {
+        if let Some(art) = cache.get(k) {
+            return Ok((art, true));
+        }
+    }
+    let art = step.run(args, ctx).await?;
+    if let Some(k) = key {
+        cache.put(k, &art);
+    }
+    Ok((art, false))
+}
+
 fn output_text(o: &StepOutput) -> String {
     match o {
         StepOutput::Text(s) => s.clone(),
         StepOutput::Json(v) => serde_json::to_string(v).unwrap_or_default(),
         StepOutput::ReasonWithToolsResult { text, .. } => text.clone(),
         StepOutput::Jump(_) | StepOutput::Skipped => String::new(),
+    }
+}
+
+/// Extract a step output as a JSON value, for collecting `for_each` results.
+fn output_value(o: &StepOutput) -> serde_json::Value {
+    match o {
+        StepOutput::Text(s) => serde_json::Value::String(s.clone()),
+        StepOutput::Json(v) => v.clone(),
+        StepOutput::ReasonWithToolsResult { text, .. } => serde_json::Value::String(text.clone()),
+        StepOutput::Jump(_) | StepOutput::Skipped => serde_json::Value::Null,
     }
 }

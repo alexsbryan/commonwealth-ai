@@ -111,10 +111,11 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
     };
 
-    // Inference: only assemble (and require) the daemon when a `model:` step is
-    // present. Discovering the chat model doubles as the liveness probe.
+    // Inference: only assemble (and require) the daemon when a daemon-routed
+    // step (`model:` or `embed:`) is present. Discovering a model doubles as the
+    // liveness probe.
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
-    let inference: Option<Arc<dyn InferenceProvider>> = if uses_model(&wf) {
+    let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(&wf) {
         match discover_chat_model(&v1).await {
             Ok(model) => {
                 eprintln!("Daemon: {daemon}  ·  model: {model}");
@@ -182,8 +183,12 @@ async fn cmd_run(args: &[String]) -> i32 {
     i32::from(report.failed_count() > 0)
 }
 
-fn uses_model(wf: &Workflow) -> bool {
-    wf.steps.iter().any(|s| s.uses.starts_with("model:"))
+/// Whether the workflow has a daemon-routed inference step (`model:` or
+/// `embed:`); if so, the daemon provider is assembled and required.
+fn needs_inference(wf: &Workflow) -> bool {
+    wf.steps
+        .iter()
+        .any(|s| s.uses.starts_with("model:") || s.uses.starts_with("embed:"))
 }
 
 /// `~/.sovereign/workflow-cache` — alongside the canonical config (reuses its
@@ -229,9 +234,18 @@ async fn discover_chat_model(v1: &str) -> std::result::Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::pin::Pin;
     use std::sync::Arc;
 
+    use async_trait::async_trait;
+    use futures::Stream;
+    use sovereign_core::error::Result as CoreResult;
     use sovereign_core::registry::ToolRegistry;
+    use sovereign_core::traits::{InferenceProvider, Tool};
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, Effect, Idempotency, Latency, Permission,
+        ProviderCapabilities, Scope as ToolScope, Speed, StepOutput, ToolContext, ToolDescriptor,
+    };
     use sovereign_tools::mcp::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
     use sovereign_tools::mcp::McpServerManager;
     use sovereign_workflow::{Runner, StepRegistry, Workflow};
@@ -374,6 +388,213 @@ input = "{read.output}"
             .unwrap();
         assert_eq!(r3.cached_total(), 0, "edited file -> re-runs, nothing cached");
         assert!(r3.items[0].result.as_ref().unwrap().contains("BBBBBB"));
+    }
+
+    /// The generalization proof. Re-express corpus ingest's `chunk → embed`
+    /// stage as a Workflow and diff it, byte for byte, against the **real**
+    /// chunker + embed run directly. The `Artifact` never changed — a chunker's
+    /// `1→N` output is just a JSON-array collection — only the Runner grew
+    /// `for_each` to map `embed` over it. A clean diff means the substrate
+    /// subsumes a fifth, previously-bespoke pipeline; the second run shows the
+    /// content cache giving free resume on that same pipeline.
+    #[tokio::test]
+    async fn chunk_then_embed_matches_the_real_corpus_pipeline() {
+        // Several paragraphs so the real chunker yields more than one chunk
+        // (exercising the fan-out, not a degenerate single element).
+        let doc = (0..6)
+            .map(|i| {
+                format!(
+                    "Paragraph {i}. {}",
+                    "The quick brown fox jumps over the lazy dog near the riverbank. ".repeat(3)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.txt");
+        std::fs::write(&path, &doc).unwrap();
+
+        // ── Oracle: the real corpus steps, run directly ──
+        let oracle_chunks = sovereign_tools::rag::chunk::chunk_text(&doc);
+        assert!(
+            oracle_chunks.len() > 1,
+            "doc must split into several chunks to exercise fan-out"
+        );
+        let provider = DeterministicEmbed;
+        let mut oracle = Vec::new();
+        for c in &oracle_chunks {
+            oracle.push(provider.embed(&c.content).await.unwrap());
+        }
+        // Shape the oracle exactly as EmbedStep does (f32 → f64 → JSON) so the
+        // comparison is byte-identical, not approximate.
+        let oracle_json = serde_json::Value::Array(
+            oracle
+                .iter()
+                .map(|v| {
+                    serde_json::Value::Array(
+                        v.iter().map(|f| serde_json::Value::from(*f as f64)).collect(),
+                    )
+                })
+                .collect(),
+        );
+
+        // ── The same pipeline, authored as a Workflow ──
+        let toml = r#"
+[workflow]
+name = "chunk-embed"
+[source]
+type = "folder"
+path = "__DIR__"
+glob = "*.txt"
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+[[step]]
+id = "embed"
+uses = "embed:default"
+for_each = "chunk"
+input = "{element.text}"
+"#
+        .replace("__DIR__", &dir.path().to_string_lossy());
+        let wf = Workflow::parse(&toml).unwrap();
+
+        let mk_registry = || {
+            let mut tools = ToolRegistry::new();
+            tools.register(Box::new(ChunkerTool));
+            StepRegistry::new(
+                Some(Arc::new(DeterministicEmbed) as Arc<dyn InferenceProvider>),
+                Arc::new(tools),
+            )
+        };
+
+        // First run, fresh cache: the chunk step + one embed per chunk run.
+        let cache: Arc<dyn sovereign_workflow::ArtifactCache> = Arc::new(
+            sovereign_workflow::FileArtifactCache::new(dir.path().join(".cache")),
+        );
+        let r1 = Runner::with_cache(mk_registry(), cache.clone())
+            .run(&wf, 4)
+            .await
+            .unwrap();
+        assert_eq!(r1.ok_count(), 1, "{:?}", r1.items);
+
+        // The byte-identical diff: same chunks, same embeddings, same order.
+        // Compare the *serialized* forms, not parsed Values: serde_json's
+        // default float parser is 1-ULP lossy (no `float_roundtrip` feature),
+        // so parse-then-compare shows phantom last-digit diffs. The Ryū
+        // serializer is exact and deterministic, so equal f64 arrays serialize
+        // to identical strings — a faithful diff of the two pipelines.
+        let wf_text = r1.items[0].result.as_ref().unwrap();
+        let oracle_text = serde_json::to_string(&oracle_json).unwrap();
+        assert_eq!(
+            wf_text, &oracle_text,
+            "workflow chunk→embed must equal the real pipeline"
+        );
+        let wf_json: serde_json::Value = serde_json::from_str(wf_text).unwrap();
+        assert_eq!(wf_json.as_array().unwrap().len(), oracle_chunks.len());
+        assert_eq!(
+            (r1.ran_total(), r1.cached_total()),
+            (oracle_chunks.len() + 1, 0),
+            "fresh: chunk + one embed per chunk"
+        );
+
+        // Re-run, unchanged: every step is a cache hit — free resume on the
+        // real pipeline.
+        let r2 = Runner::with_cache(mk_registry(), cache.clone())
+            .run(&wf, 4)
+            .await
+            .unwrap();
+        assert_eq!(
+            (r2.ran_total(), r2.cached_total()),
+            (0, oracle_chunks.len() + 1),
+            "unchanged re-run is fully cached"
+        );
+    }
+
+    // ── doubles: the real chunker as a tool + a deterministic embed ──
+
+    /// Wraps the *production* `chunk_text` so the diff runs the real chunker,
+    /// not a stand-in. Reads its `path` param and emits the `1→N` collection.
+    struct ChunkerTool;
+
+    #[async_trait]
+    impl Tool for ChunkerTool {
+        fn descriptor(&self) -> ToolDescriptor {
+            ToolDescriptor {
+                id: "chunk".to_string(),
+                name: "chunk".to_string(),
+                description: "split a file into the corpus chunker's chunks".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": { "path": { "type": "string" } }
+                }),
+                examples: vec![],
+                effect: Effect::Read,
+                idempotency: Idempotency::Idempotent,
+                latency: Latency::Fast,
+                scope: ToolScope::Session,
+                output_schema: None,
+            }
+        }
+        fn required_permissions(&self) -> Vec<Permission> {
+            vec![]
+        }
+        async fn execute(
+            &self,
+            params: &serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> CoreResult<StepOutput> {
+            let path = params.get("path").and_then(|v| v.as_str()).unwrap_or_default();
+            let text = std::fs::read_to_string(path).map_err(|e| {
+                sovereign_core::error::Error::Execution(format!("chunk read {path}: {e}"))
+            })?;
+            let arr: Vec<serde_json::Value> = sovereign_tools::rag::chunk::chunk_text(&text)
+                .into_iter()
+                .map(|c| serde_json::json!({ "text": c.content, "index": c.index }))
+                .collect();
+            Ok(StepOutput::Json(serde_json::Value::Array(arr)))
+        }
+    }
+
+    /// A deterministic 8-dim embedding (identical text → identical vector,
+    /// distinct text → distinct vector). Lets the diff assert byte-identity
+    /// without a daemon or weights — the claim is about the Runner's fan-out,
+    /// not the embedding model.
+    struct DeterministicEmbed;
+
+    #[async_trait]
+    impl InferenceProvider for DeterministicEmbed {
+        async fn complete(&self, _req: &CompletionRequest) -> CoreResult<CompletionResponse> {
+            unreachable!("the chunk→embed diff never calls complete()")
+        }
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+            unreachable!("the chunk→embed diff never streams")
+        }
+        async fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
+            Ok((0..8u64)
+                .map(|d| {
+                    // FNV-1a over (dim, bytes) → a bounded, text-sensitive scalar.
+                    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ d.wrapping_mul(0x0000_0100_0000_01b3);
+                    for b in text.bytes() {
+                        h ^= b as u64;
+                        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+                    }
+                    ((h % 2000) as f32) / 1000.0 - 1.0
+                })
+                .collect())
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 8192,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
     }
 }
 

@@ -126,6 +126,45 @@ impl Step for ModelStep {
     }
 }
 
+// ─── embed: daemon-routed embedding step ──────────────────────
+
+pub struct EmbedStep {
+    provider: Arc<dyn InferenceProvider>,
+    model: String,
+}
+
+#[async_trait]
+impl Step for EmbedStep {
+    fn descriptor(&self) -> StepDescriptor {
+        StepDescriptor {
+            id: format!("embed:{}", self.model),
+            name: format!("embed:{}", self.model),
+            description: "embedding of the input text (routed to the daemon)".into(),
+            resources: ResourceNeed::Inference,
+            effect: Effect::Read,
+            deterministic: false,
+        }
+    }
+
+    async fn run(&self, args: &ResolvedArgs, _ctx: &StepCtx) -> Result<Artifact> {
+        let text = args
+            .input
+            .clone()
+            .ok_or_else(|| Error::Execution("an `embed:` step requires an `input`".into()))?;
+        let vector = self.provider.embed(&text).await?;
+        let arr = serde_json::Value::Array(
+            vector
+                .into_iter()
+                .map(|f| serde_json::Value::from(f as f64))
+                .collect(),
+        );
+        Ok(Artifact {
+            type_tag: "embedding".into(),
+            output: StepOutput::Json(arr),
+        })
+    }
+}
+
 // ─── tool: built-in or MCP tool step ──────────────────────────
 
 pub struct ToolStep {
@@ -217,6 +256,17 @@ impl StepRegistry {
                     provider: Arc::clone(provider),
                     speed,
                     slot: rest.to_string(),
+                }))
+            }
+            "embed" => {
+                let provider = self.inference.as_ref().ok_or_else(|| {
+                    Error::Execution(
+                        "an `embed:` step needs the daemon — none is wired".into(),
+                    )
+                })?;
+                Ok(Arc::new(EmbedStep {
+                    provider: Arc::clone(provider),
+                    model: rest.to_string(),
                 }))
             }
             "tool" => Ok(Arc::new(ToolStep {

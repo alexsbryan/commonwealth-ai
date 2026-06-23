@@ -337,3 +337,146 @@ uses = "tool:wc"
     }
     assert_eq!(calls.load(Ordering::SeqCst), 2, "write ran both times, never cached");
 }
+
+// ── for_each fan-out (collection → map) ───────────────────────
+
+/// A `1→N` step: splits its `text` param on whitespace into a JSON array of
+/// `{text, index}` objects — a chunker stand-in, the shape a `for_each` maps over.
+struct SplitTool;
+
+#[async_trait]
+impl Tool for SplitTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "split".to_string(),
+            name: "split".to_string(),
+            description: "split `text` into a collection of {text, index}".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } }
+            }),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: ToolScope::Session,
+            output_schema: None,
+        }
+    }
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> CoreResult<StepOutput> {
+        let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        let arr: Vec<serde_json::Value> = text
+            .split_whitespace()
+            .enumerate()
+            .map(|(i, w)| serde_json::json!({ "text": w, "index": i }))
+            .collect();
+        Ok(StepOutput::Json(serde_json::Value::Array(arr)))
+    }
+}
+
+fn split_registry() -> Arc<ToolRegistry> {
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(SplitTool));
+    Arc::new(tools)
+}
+
+#[tokio::test]
+async fn for_each_maps_a_step_over_a_collection() {
+    // `split` (1→N) hands a JSON-array collection to `up`, which maps over each
+    // element via `for_each` — the fan-out the Runner grew. The Artifact never
+    // changed: a collection is just a JSON array.
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "split-map"
+[source]
+type = "inline"
+items = ["alpha beta gamma"]
+[[step]]
+id = "split"
+uses = "tool:split"
+params = { text = "{item.name}" }
+[[step]]
+id = "up"
+uses = "transform:upper"
+for_each = "split"
+input = "{element.text}"
+"#,
+    )
+    .unwrap();
+
+    let report = Runner::new(StepRegistry::new(None, split_registry()))
+        .run(&wf, 1)
+        .await
+        .unwrap();
+
+    assert_eq!(report.ok_count(), 1);
+    // The for_each step's output is the JSON array of per-element results.
+    let final_text = report.items[0].result.as_ref().unwrap();
+    let arr: serde_json::Value = serde_json::from_str(final_text).unwrap();
+    assert_eq!(arr, serde_json::json!(["ALPHA", "BETA", "GAMMA"]));
+}
+
+#[tokio::test]
+async fn for_each_caches_per_element() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
+        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+
+    let toml = |items: &str| {
+        format!(
+            r#"
+[workflow]
+name = "split-map-cache"
+[source]
+type = "inline"
+items = [{items}]
+[[step]]
+id = "split"
+uses = "tool:split"
+params = {{ text = "{{item.name}}" }}
+[[step]]
+id = "up"
+uses = "transform:upper"
+for_each = "split"
+input = "{{element.text}}"
+"#
+        )
+    };
+
+    // Run 1 — split runs (1) + 3 element maps = 4 ran, 0 cached.
+    let wf1 = Workflow::parse(&toml(r#""a b c""#)).unwrap();
+    let r1 = Runner::with_cache(StepRegistry::new(None, split_registry()), cache.clone())
+        .run(&wf1, 1)
+        .await
+        .unwrap();
+    assert_eq!((r1.ran_total(), r1.cached_total()), (4, 0), "first run runs all");
+
+    // Run 2, identical — everything is a cache hit.
+    let r2 = Runner::with_cache(StepRegistry::new(None, split_registry()), cache.clone())
+        .run(&wf1, 1)
+        .await
+        .unwrap();
+    assert_eq!((r2.ran_total(), r2.cached_total()), (0, 4), "re-run fully cached");
+
+    // Run 3, edit ONE element (c → X): `split` re-runs (its input changed), and
+    // only the changed element re-maps — `a` and `b` are reused. This is the
+    // per-element granularity: editing one chunk re-embeds only that chunk.
+    let wf3 = Workflow::parse(&toml(r#""a b X""#)).unwrap();
+    let r3 = Runner::with_cache(StepRegistry::new(None, split_registry()), cache.clone())
+        .run(&wf3, 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        (r3.ran_total(), r3.cached_total()),
+        (2, 2),
+        "only split + the one changed element re-ran"
+    );
+}

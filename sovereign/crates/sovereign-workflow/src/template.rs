@@ -18,12 +18,14 @@ fn ref_re() -> &'static Regex {
 }
 
 /// Step ids referenced by `text` (the `ref` of `{ref.key}`), excluding the
-/// `item` pseudo-source. Drives DAG-edge derivation.
+/// `item` and `element` pseudo-sources. Drives DAG-edge derivation (a
+/// `for_each` step's collection dep is declared separately, not inferred from
+/// `{element.…}`).
 pub fn referenced_ids(text: &str) -> Vec<String> {
     ref_re()
         .captures_iter(text)
         .map(|c| c[1].to_string())
-        .filter(|r| r != "item")
+        .filter(|r| r != "item" && r != "element")
         .collect()
 }
 
@@ -39,6 +41,15 @@ pub fn resolve_str(template: &str, scope: &Scope) -> String {
 fn resolve_one(reference: &str, key: &str, scope: &Scope) -> String {
     if reference == "item" {
         return scope.item.get(key).cloned().unwrap_or_default();
+    }
+    if reference == "element" {
+        // The current `for_each` element: `{element.<field>}` for an object,
+        // `{element.value}` for a scalar.
+        return scope
+            .element
+            .as_ref()
+            .and_then(|e| element_field(e, key))
+            .unwrap_or_default();
     }
     let Some(artifact) = scope.completed.get(reference) else {
         tracing::warn!(
@@ -74,6 +85,22 @@ fn extract(output: &StepOutput, key: &str, reference: &str) -> String {
         }
         StepOutput::ReasonWithToolsResult { text, .. } => text.clone(),
         StepOutput::Jump(_) | StepOutput::Skipped => String::new(),
+    }
+}
+
+/// `{element.<field>}` for an object element; `{element.value}` for a scalar.
+fn element_field(value: &serde_json::Value, key: &str) -> Option<String> {
+    match value {
+        serde_json::Value::Object(_) => value.get(key).map(value_to_string),
+        _ if key == "value" => Some(value_to_string(value)),
+        _ => None,
+    }
+}
+
+fn value_to_string(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
     }
 }
 

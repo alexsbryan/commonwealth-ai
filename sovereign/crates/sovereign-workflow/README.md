@@ -7,11 +7,20 @@ the smallest real instance, proving the abstraction on a user-authored workflow
 before any unification (P2+).
 
 A **Workflow** is a TOML graph. Nodes are **Step**s — `model:` (a local-model
-call, routed to the daemon), `mcp:` / `tool:` (a tool call), or `transform:` (a
-deterministic function). Edges are **auto-derived** from `{step.key}` references,
-so you never write an edge list. The single-process **Runner** topologically
-orders the steps and runs them per source item, threading **Artifact**s between
-them. The crate is *core-only* — inference + tools are injected by the caller.
+call, routed to the daemon), `embed:` (a daemon-routed embedding), `mcp:` /
+`tool:` (a tool call), or `transform:` (a deterministic function). Edges are
+**auto-derived** from `{step.key}` references, so you never write an edge list.
+The single-process **Runner** topologically orders the steps and runs them per
+source item, threading **Artifact**s between them. The crate is *core-only* —
+inference + tools are injected by the caller.
+
+A step may **`for_each`** another step's output. When that output is a JSON-array
+*collection* — e.g. a chunker's `1→N` chunks — the step runs once per element
+(read via `{element.key}` for an object field, `{element.value}` for a scalar),
+and its own output is the array of the per-element results. Each element resolves and **caches independently**, so
+editing one chunk re-runs only that chunk's downstream work. The `Artifact` never
+had to change for this: a collection *is* a JSON array. Only the Runner grew the
+map.
 
 ```
 sovereign workflow run <file.toml> [--concurrency N] [--daemon <url>]
@@ -52,6 +61,19 @@ sovereign workflow run notes-digest.toml          # read·digest ×10   ~42s
 sovereign workflow run notes-digest.toml          # 20 cached, 0 ran  ~0.3s
 touch notes/standup.md && sovereign workflow run notes-digest.toml   # 1 item re-runs
 ```
+
+## Generalization — diffed against the real pipeline
+
+The substrate's claim is that the system's bespoke pipelines are *instances* of
+one model. We test that directly: corpus ingest's `chunk → embed` stage,
+re-expressed as a two-step Workflow (`tool:chunk` `for_each` → `embed:`), is
+diffed byte-for-byte against the **real** `chunk_text` + embed run as an oracle
+(`workflow_cmd::tests::chunk_then_embed_matches_the_real_corpus_pipeline`). It
+matches — same chunks, same vectors, same order — and a second run is fully
+served from the cache. The finding: the `Artifact` was *already* general enough
+(JSON arrays are collections); the only gap was the **Runner**, which grew
+`for_each`. A fifth previously-hand-rolled pipeline now falls out of the substrate
+unchanged.
 
 ## What's P2+ (not here)
 
