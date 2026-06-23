@@ -187,8 +187,16 @@ function bakeProfile(): void {
   if (!process.env.SOVEREIGN_REAL_KEEP_PROFILE) {
     fs.rmSync(PROFILE, { recursive: true, force: true });
   }
-  const cfgDir = path.join(HOME, ".config/sovereign");
-  fs.mkdirSync(cfgDir, { recursive: true });
+  // dirs::config_dir() is platform-specific — XDG (~/.config) on Linux,
+  // ~/Library/Application Support on macOS — and the Rust desktop reads
+  // desktop.toml from whichever applies (state/config.rs). Bake to both
+  // so the hermetic harness works cross-platform; the off-platform copy
+  // is harmless scratch under the wiped HOME.
+  const configDirs = [
+    path.join(HOME, ".config/sovereign"),
+    path.join(HOME, "Library/Application Support/sovereign"),
+  ];
+  for (const d of configDirs) fs.mkdirSync(d, { recursive: true });
   fs.mkdirSync(path.join(HOME, ".local/share"), { recursive: true });
   fs.mkdirSync(path.join(HOME, ".cache"), { recursive: true });
 
@@ -221,7 +229,7 @@ function bakeProfile(): void {
     `auto_collaborate = false`,
     ``,
   ].join("\n");
-  fs.writeFileSync(path.join(cfgDir, "desktop.toml"), desktopToml);
+  for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
 }
 
 export default async function globalSetup(): Promise<void> {
