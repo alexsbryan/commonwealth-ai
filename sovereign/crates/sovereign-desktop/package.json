@@ -20,6 +20,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "test:e2e:faults": "playwright test -c playwright.faults.config.ts",
+    "a11y": "node tests/e2e/scripts/a11y-report.mjs",
     "soak": "node tests/e2e/scripts/soak.mjs",
     "report:soak": "node tests/e2e/scripts/soak-report.mjs",
     "report:coverage:real": "node tests/e2e/scripts/coverage-report.mjs test-artifacts/ledger-synthetic.jsonl test-artifacts/ledger-real.jsonl",
@@ -45,10 +46,12 @@
     "xstate": "^5.30.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
     "@playwright/test": "^1.59.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
+    "@types/qrcode": "^1.5.5",
     "jsdom": "^26.1.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",

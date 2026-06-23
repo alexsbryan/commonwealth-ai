@@ -40,9 +40,9 @@ test.describe("recipe author workspace", () => {
     const workspace = page.getByTestId("recipe-author-workspace");
     await expect(workspace).toBeVisible();
 
-    // Empty state shows the conversation prompt and "no project
+    // Empty state shows the recipe-author welcome pane and "no project
     // selected" on the right.
-    await expect(workspace).toContainText("Pick a project");
+    await expect(workspace).toContainText("Author a knowledge recipe");
     await expect(workspace).toContainText("No project selected.");
 
     // Open the new-project dialog.

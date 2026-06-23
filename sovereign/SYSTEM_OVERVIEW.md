@@ -1507,6 +1507,18 @@ milestone. The bundles are verified headlessly by
 `tests/e2e/specs/meshapp-{lvt,uap,enron}.spec.ts` (Playwright, a11y
 locators), each mocking `window.meshApp` + one real-shim→IPC wiring test.
 
+**Accessibility tooling.** `npm run a11y` (`tests/e2e/scripts/a11y-report.mjs`)
+is a dev-runnable, NON-BLOCKING axe-core scan of the chat surface + the
+mesh-app bundles, writing a readable report to `test-artifacts/a11y/`
+(glassbox insight into a11y shortcomings; no CI gate). Two reusable a11y
+seams live in `packages/chat-ui` and are shared by desktop + mobile:
+`completionAnnouncement` (per-turn screen-reader wording for the polite
+completion live region — announce on completion, never per token) and the
+`use:dialogFocus` action (modal focus-trap + focus-restore-on-close,
+adopted by `MeshJoinDialog`/`MeshSettings`/`NewProjectDialog`/
+`DocumentInspector`/`EchoOverlay`). Dynamic a11y behaviours (live regions,
+focus restore) are verified by manual screen-reader testing, not axe.
+
 Control routes (loopback-only, on the internal port :9742):
 `GET /internal/contribution/status`,
 `POST /internal/contribution/ceiling`,

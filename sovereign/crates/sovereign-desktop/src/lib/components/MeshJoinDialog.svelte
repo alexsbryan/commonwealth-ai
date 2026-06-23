@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount } from "svelte";
+  import { dialogFocus } from "@sovereign/chat-ui";
   import {
     meshPreviewJoinLink,
     meshJoin,
@@ -71,12 +72,14 @@
   }
 </script>
 
-<div
-  class="modal-backdrop"
-  onclick={onClose}
-  onkeydown={(e) => e.key === "Escape" && onClose()}
-  role="presentation"
->
+<!-- Presentation backdrop: click-outside is a convenience; keyboard
+     users dismiss via Escape (use:dialogFocus on the modal) or the
+     visible Cancel button. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-backdrop" onclick={onClose} role="presentation">
+  <!-- use:dialogFocus owns Escape, the Tab trap, and focus restore on
+       close. tabindex="-1" stays so focus can pin to the dialog during
+       the "Reading join link…" state (no tabbable controls yet). -->
   <div
     class="modal"
     role="dialog"
@@ -84,7 +87,7 @@
     aria-labelledby="join-title"
     tabindex="-1"
     onclick={(e) => e.stopPropagation()}
-    onkeydown={(e) => e.stopPropagation()}
+    use:dialogFocus={{ onEscape: onClose }}
   >
     {#if parseError}
       <h4 id="join-title">Invalid Join Link</h4>

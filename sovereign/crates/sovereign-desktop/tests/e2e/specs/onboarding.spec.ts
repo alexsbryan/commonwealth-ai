@@ -190,6 +190,17 @@ async function bootToWelcome(page: Page) {
   await page.locator(".threshold").waitFor();
 }
 
+// Advance welcome → setup_plan → setup-flow. The consent-first rework
+// inserted the SetupPlan ("Set up Sovereign") consent-before-mutation
+// screen between the welcome threshold and the (mutating) SetupFlow, so
+// every test that used to click Begin and land on setup now passes
+// through the plan. waitFor(".plan") also asserts the plan rendered.
+async function beginSetup(page: Page) {
+  await page.locator(".begin-btn").click();
+  await page.locator(".plan").waitFor();
+  await page.locator(".btn-go").click();
+}
+
 // ── 1. Happy path ──────────────────────────────────────────────
 
 test.describe("onboarding · happy path", () => {
@@ -198,7 +209,7 @@ test.describe("onboarding · happy path", () => {
 
     // Welcome screen renders the three-line script + Begin button.
     await expect(page.locator(".line-primary")).toContainText(
-      "A place to write",
+      "This is Sovereign.",
     );
     await expect(page.locator(".begin-btn")).toBeVisible();
 
@@ -206,7 +217,7 @@ test.describe("onboarding · happy path", () => {
     // installed by the time SetupFlow mounts.
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await page.locator(".setup-flow").waitFor();
 
     const ctl = setupCtl(page);
@@ -245,7 +256,7 @@ test.describe("onboarding · happy path", () => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     await ctl.flush();
     await ctl.finish();
@@ -304,7 +315,7 @@ test.describe("onboarding · progress narration", () => {
       ],
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
 
     await ctl.advance();
@@ -345,7 +356,7 @@ test.describe("onboarding · progress narration", () => {
       ],
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     const eta = page.locator(".setup-flow .eta");
 
@@ -397,7 +408,7 @@ test.describe("onboarding · failure recovery", () => {
       });
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
 
     // Failure sentence + retry button appear; the progress rule is
     // gone (the UI hides the rule when failed).
@@ -428,7 +439,7 @@ test.describe("onboarding · failure recovery", () => {
       });
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await expect(page.locator(".setup-flow .sentence")).toContainText(
       "Hardware not supported",
     );
@@ -451,7 +462,7 @@ test.describe("onboarding · failure recovery", () => {
       });
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     // SetupFlow.svelte's catch block sets a `failed` state with
     // `recoverable: false` when the backend didn't emit one itself.
     await expect(page.locator(".setup-flow .sentence")).toContainText(
@@ -468,7 +479,7 @@ test.describe("onboarding · consent", () => {
   }) => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     await ctl.flush();
     await ctl.finish();
@@ -528,7 +539,7 @@ test.describe("onboarding · consent", () => {
     });
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     await ctl.flush();
     await ctl.finish();
@@ -543,7 +554,7 @@ test.describe("onboarding · consent", () => {
   }) => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     await ctl.flush();
     await ctl.finish();
@@ -599,7 +610,7 @@ test.describe("onboarding · visual consistency", () => {
     });
 
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await page.locator(".setup-flow").waitFor();
     const setupBg = await page.evaluate(() => {
       const el = document.querySelector(".setup-flow");
@@ -694,7 +705,7 @@ test.describe("onboarding · visual consistency", () => {
     ).toBe(true);
 
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await page.locator(".setup-flow").waitFor();
     const setupFont = await firstFamilyLoaded(".setup-flow .sentence");
     expect(
@@ -721,9 +732,9 @@ test.describe("onboarding · visual consistency", () => {
   }) => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await page.locator(".setup-flow").waitFor();
-    await expect(page.locator(".setup-flow .stamp")).toBeVisible();
+    await expect(page.locator(".setup-flow .mark")).toBeVisible();
   });
 });
 
@@ -740,7 +751,8 @@ test.describe("onboarding · keyboard", () => {
     await page.keyboard.press("Tab");
     await expect(page.locator(".begin-btn")).toBeFocused();
     await page.keyboard.press("Enter");
-    await page.locator(".setup-flow").waitFor();
+    // Activating Begin via keyboard advances to the setup plan.
+    await page.locator(".plan").waitFor();
   });
 
   test("Consent choices are keyboard-reachable and announce errors via role=alert", async ({
@@ -748,7 +760,7 @@ test.describe("onboarding · keyboard", () => {
   }) => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const ctl = setupCtl(page);
     await ctl.flush();
     await ctl.finish();
@@ -791,7 +803,7 @@ test.describe("onboarding · keyboard", () => {
       });
     });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     const retry = page.locator(".setup-flow .retry");
     await expect(retry).toBeVisible();
     await retry.focus();
@@ -811,13 +823,13 @@ test.describe("onboarding · motion + resilience", () => {
     await bootToWelcome(page);
     await installScriptedSetup(page, { frames: HAPPY_PATH_FRAMES });
 
-    await page.locator(".begin-btn").click();
+    await beginSetup(page);
     await page.locator(".setup-flow").waitFor();
 
     // The breathing animation is suppressed under reduced-motion;
-    // assert the InkStamp has animation-name: none.
+    // assert the breathing BrandMark has animation-name: none.
     const anim = await page.evaluate(() => {
-      const el = document.querySelector(".setup-flow .stamp");
+      const el = document.querySelector(".setup-flow .mark");
       return el ? getComputedStyle(el).animationName : null;
     });
     expect(anim).toBe("none");

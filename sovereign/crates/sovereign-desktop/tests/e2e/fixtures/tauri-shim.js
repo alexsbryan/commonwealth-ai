@@ -33,6 +33,65 @@
     // see specs/onboarding.spec.ts for the scripted-progress helpers.
     complete_setup_auto: () => undefined,
     start_default_corpus_install: () => undefined,
+    // Consent-first setup-plan reads (SetupPlan.svelte + SetupFlow
+    // provenance). The plan screen renders BEFORE any mutation and
+    // derives its recommended pick via `catalog.find(...)`; without
+    // these stubs the catalog is undefined and onboarding throws on the
+    // SetupPlan screen, so the flow never reaches setup/consent/chat.
+    recommended_profile: () => ({
+      profile: "default",
+      effective_memory_gb: 16,
+      is_unified_memory: true,
+    }),
+    primary_catalog: () => [
+      {
+        profile: "default",
+        recommended: true,
+        file: "qwen3-8b-q4_k_m.gguf",
+        base_name: "Qwen3 8B",
+        family: "Qwen3",
+        quant: "Q4_K_M",
+        size_gb: 5.0,
+        hf_url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF",
+        download_url:
+          "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/qwen3-8b-q4_k_m.gguf",
+      },
+      {
+        profile: "low_mem",
+        recommended: false,
+        file: "qwen3-4b-q4_k_m.gguf",
+        base_name: "Qwen3 4B",
+        family: "Qwen3",
+        quant: "Q4_K_M",
+        size_gb: 2.5,
+        hf_url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+        download_url:
+          "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/qwen3-4b-q4_k_m.gguf",
+      },
+    ],
+    slot_recommendation: ({ kind }) =>
+      kind === "embed"
+        ? {
+            file: "nomic-embed-text-v1.5.Q8_0.gguf",
+            base_name: "Nomic Embed v1.5",
+            family: "Nomic",
+            quant: "Q8_0",
+            size_gb: 0.14,
+            hf_url:
+              "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF",
+            download_url:
+              "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q8_0.gguf",
+          }
+        : {
+            file: "qwen3-0.6b-q4_k_m.gguf",
+            base_name: "Qwen3 0.6B",
+            family: "Qwen3",
+            quant: "Q4_K_M",
+            size_gb: 0.4,
+            hf_url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+            download_url:
+              "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/qwen3-0.6b-q4_k_m.gguf",
+          },
     // Contribution controls (W3 Sharing tab). Default to a fresh
     // unpaused machine — covers the section's happy-path render
     // without spec-side overrides.

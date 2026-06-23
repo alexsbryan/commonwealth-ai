@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount } from "svelte";
+  import { dialogFocus } from "@sovereign/chat-ui";
   import { lcWatchDocument } from "../../api";
   import type { WatchedFolderDocumentResponse } from "../../types";
 
@@ -55,6 +56,7 @@
     aria-label="Document inspector"
     aria-modal="true"
     tabindex="-1"
+    use:dialogFocus={{ onEscape: onClose }}
   >
     <header class="head">
       <h3 class="title">Document inspector</h3>

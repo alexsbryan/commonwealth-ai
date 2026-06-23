@@ -491,6 +491,7 @@
     <div
       class="sv-prose"
       class:prose-refining={refining}
+      aria-busy={isStreaming}
       onclick={handleProseClick}
     >
       {#if isStreaming}

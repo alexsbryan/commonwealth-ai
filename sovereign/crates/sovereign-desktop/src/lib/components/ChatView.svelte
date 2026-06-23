@@ -47,7 +47,7 @@
   } from "./starterQuestions";
   import BrandMark from "./BrandMark.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
-  import { WordBufferedStream } from "@sovereign/chat-ui";
+  import { WordBufferedStream, completionAnnouncement } from "@sovereign/chat-ui";
   import { chatMachine } from "../machines/chat.machine";
   import { routingStore } from "../stores/routing.svelte";
   import MessageBubble from "./MessageBubble.svelte";
@@ -485,6 +485,40 @@
   let pendingInfoRequest = $derived($snapshot.context.pendingInfoRequest);
   let activeConversationId = $derived($snapshot.context.conversationId);
 
+  // ── Screen-reader completion announcement (a11y) ──────────────
+  //
+  // The streaming prose is NOT a live region (that would re-announce
+  // the whole growing answer on every token — see AssistantMessage's
+  // `aria-busy` and the `completionAnnouncement` doc comment). Instead
+  // we announce ONCE, on the streaming → idle edge, into the
+  // visually-hidden polite region rendered inside `.chat-view`.
+  //
+  // `announceNonce` forces a DOM mutation even when two consecutive
+  // turns produce identical wording — a live region only re-announces
+  // when its content actually changes, so the {#key} on the nonce
+  // recreates the text node each time.
+  let announceText = $state("");
+  let announceNonce = $state(0);
+  // Set by the message-error listener just before it sends MESSAGE_ERROR,
+  // so the falling-edge effect below can word the announcement correctly.
+  // Plain `let` (not $state): effect-local memory, never a render dep.
+  let lastTurnErrored = false;
+  let wasStreaming = false;
+  function announce(text: string) {
+    announceText = text;
+    announceNonce += 1;
+  }
+  $effect(() => {
+    const streaming = $snapshot.matches({ turn: "streaming" });
+    // Falling edge: a turn that was streaming has returned to idle —
+    // MESSAGE_COMPLETE, MESSAGE_ERROR, or a redirect that completed.
+    if (wasStreaming && !streaming) {
+      announce(completionAnnouncement({ errored: lastTurnErrored }));
+      lastTurnErrored = false;
+    }
+    wasStreaming = streaming;
+  });
+
   // PR2e — size ceiling for chat-pipeline messages. When the user
   // pastes a document-sized block into the main input, disable send
   // and hint at the attached-file flow instead. Backend applies the
@@ -655,6 +689,10 @@
     );
 
     unlistenError = await listen<ErrorPayload>("message-error", (event) => {
+      // Flag the turn as errored BEFORE the send, so the falling-edge
+      // announcement effect (which runs after the snapshot updates)
+      // words it as an error rather than a clean completion.
+      lastTurnErrored = true;
       send({ type: "MESSAGE_ERROR", error: event.payload.message });
       docProgressText = null;
     });
@@ -1264,6 +1302,14 @@
 </script>
 
 <div class="chat-view">
+  <!-- Polite, visually-hidden live region. Rendered unconditionally so
+       it exists in the DOM before its text first changes (a live region
+       that appears at the same time as its content is not announced).
+       The {#key announceNonce} recreates the text node on each turn so
+       identical back-to-back wording still triggers an announcement. -->
+  <div class="sr-only" role="status" aria-live="polite">
+    {#key announceNonce}{announceText}{/key}
+  </div>
   <CorpusProgressBanner {onOpenSettings} />
   <div class="messages" bind:this={messagesContainer}>
     {#if messages.length === 0 && !isLoading}
@@ -1555,6 +1601,21 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+  }
+
+  /* Visually-hidden but exposed to assistive tech. Standard clip-rect
+     idiom — keeps the polite live region off-screen without
+     display:none (which would remove it from the accessibility tree). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   /* ── Messages ── */

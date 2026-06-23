@@ -3,6 +3,8 @@
   // New-project modal: title + charter (markdown). The charter is
   // stored verbatim on the FeatureRow's `charter_md` and rendered
   // back via the `CharterSummary` card.
+  import { dialogFocus } from "@sovereign/chat-ui";
+
   let {
     onCancel,
     onCreate,
@@ -81,6 +83,7 @@
   role="dialog"
   aria-modal="true"
   aria-labelledby="new-project-heading"
+  use:dialogFocus={{ onEscape: onCancel }}
 >
   <form class="dialog" onsubmit={submit}>
     <h2 id="new-project-heading">New recipe project</h2>

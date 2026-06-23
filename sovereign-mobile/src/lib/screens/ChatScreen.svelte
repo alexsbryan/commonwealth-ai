@@ -5,6 +5,7 @@
   import { useMachine } from "@xstate/svelte";
   import { chatMachine } from "../machines/chat.machine";
   import { attachStreamListeners, attachNarrationListener, type NarrationEntry } from "../events";
+  import { completionAnnouncement } from "@sovereign/chat-ui";
   import { getConversation, sendMessageStream } from "../api";
   import type { MessageEntry } from "../types";
   import AssistantMessage from "../components/AssistantMessage.svelte";
@@ -14,6 +15,30 @@
 
   const { snapshot, send } = useMachine(chatMachine);
   let input = $state("");
+
+  // ── Screen-reader completion announcement (a11y) ──────────────
+  // Mirrors desktop ChatView. Announce ONCE on the streaming → idle
+  // edge into a visually-hidden polite region — never per token. The
+  // `.scroll` container deliberately is NOT an aria-live region (it
+  // wraps the whole streaming list, so a polite live region there
+  // re-announces the growing answer on every chunk). `announceNonce`
+  // forces a DOM mutation so identical back-to-back wording re-fires.
+  let announceText = $state("");
+  let announceNonce = $state(0);
+  let lastTurnErrored = false;
+  let wasStreaming = false;
+  function announce(text: string) {
+    announceText = text;
+    announceNonce += 1;
+  }
+  $effect(() => {
+    const streaming = $snapshot.matches({ turn: "streaming" });
+    if (wasStreaming && !streaming) {
+      announce(completionAnnouncement({ errored: lastTurnErrored }));
+      lastTurnErrored = false;
+    }
+    wasStreaming = streaming;
+  });
   // Live turn progress (glassbox). Transient — kept out of the chat FSM
   // (mirrors desktop's separate routingStore); cleared when the turn ends.
   let narration = $state<NarrationEntry[]>([]);
@@ -32,7 +57,14 @@
     );
     // The answer has landed (or failed) → drop the progress trace.
     offs.push(await listen("message-complete", () => (narration = [])));
-    offs.push(await listen("message-error", () => (narration = [])));
+    offs.push(
+      await listen("message-error", () => {
+        // Word the next completion announcement as an error. Read +
+        // reset by the falling-edge $effect above.
+        lastTurnErrored = true;
+        narration = [];
+      }),
+    );
 
     send({ type: "CONVERSATION_BOUND", conversationId });
     // Cache-first hydrate (offline-read / instant relaunch).
@@ -164,10 +196,18 @@
       <span aria-hidden="true">←</span>
     </button>
   </header>
+  <!-- Polite, visually-hidden completion announcer (a11y). Separate
+       from `.scroll` so it announces ONLY the per-turn completion, not
+       every streamed token. -->
+  <div class="sr-only" role="status" aria-live="polite">
+    {#key announceNonce}{announceText}{/key}
+  </div>
+  <!-- role="log" (not an aria-live region): the conversation reads as a
+       log on screen-reader navigation, but does NOT auto-announce each
+       streamed chunk. Completion is announced via the region above. -->
   <div
     class="scroll"
     role="log"
-    aria-live="polite"
     aria-label="Conversation"
     bind:this={scrollEl}
     onscroll={onScroll}
@@ -206,6 +246,19 @@
 </div>
 
 <style>
+  /* Visually-hidden but exposed to assistive tech (clip-rect idiom).
+     Hosts the polite completion live region off-screen. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .chat {
     display: flex;
     flex-direction: column;

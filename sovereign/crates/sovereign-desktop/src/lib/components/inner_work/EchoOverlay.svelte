@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { dialogFocus } from "@sovereign/chat-ui";
 
   interface Props {
     /// The paragraph the user wrote earlier that resonated with the
@@ -46,6 +47,9 @@
   }
 </script>
 
+<!-- dialogFocus is used for focus-in + focus-restore ONLY (no onEscape):
+     Escape is owned by the window-capture handler above, which
+     deliberately wins over the surface's own Esc handler. -->
 <div
   class="backdrop"
   role="dialog"
@@ -54,6 +58,7 @@
   onclick={handleBackdropClick}
   onkeydown={handleKeydown}
   tabindex="-1"
+  use:dialogFocus
 >
   <article class="card">
     <header class="meta">{dateLabel}</header>

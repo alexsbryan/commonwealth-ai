@@ -66,14 +66,17 @@
 </script>
 
 {#if visible.length > 0}
-  <div class="corpus-banner">
+  <!-- role="status" (a polite live region): phase transitions
+       ("downloading" → "indexing" → "optimizing") are announced to
+       screen readers as the text updates, without stealing focus. -->
+  <div class="corpus-banner" role="status" aria-live="polite">
     {#each visible as item (item.corpus_id)}
       <button
         class="banner-row"
         onclick={() => onOpenSettings?.()}
         title="Click to view in settings"
       >
-        <span class="icon">📚</span>
+        <span class="icon" aria-hidden="true">📚</span>
         <span class="name">{displayName(item.corpus_id)}</span>
         <span class="phase">{phaseLabel(item.phase)}</span>
         {#if item.percent > 0}
