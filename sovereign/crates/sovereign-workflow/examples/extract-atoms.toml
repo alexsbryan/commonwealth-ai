@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Enrichment Phase 1's SHAPE, expressed as a COMPOSITION of general primitives —
+# no bespoke enrich tool. for_each passage -> model constrained to an atom schema.
+# The domain bits (the instruction, the atom schema) are DATA in this file.
+#
+# This is the "say it in TOML" proof: enrichment-shaped structured extraction with
+# zero enrichment-specific Rust — just `tool:chunk` + a `model:` step with
+# `for_each` + `structured_output`. The model's output is parsed into a Json
+# artifact, so the atoms are composable downstream (storable, mappable).
+#
+# Run (needs the daemon up with a chat model):
+#   mkdir -p corpus && printf 'Some passage of prose...' > corpus/doc.txt
+#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache
+
+[workflow]
+name = "extract-atoms"
+
+[source]
+type = "folder"
+path = "corpus"
+glob = "*.txt"
+
+# 1 -> N : split the document into passages (a chapter stand-in).
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+
+# map : extract atoms per passage. `structured_output` constrains the model to the
+# atom schema (a general `model:` primitive) — so we get parsed JSON atoms, not
+# free text to re-parse.
+[[step]]
+id = "atoms"
+uses = "model:fast"
+for_each = "chunk"
+system = "You extract the key questions a passage raises. Respond ONLY with JSON matching the schema."
+prompt = "Passage:\n{element.text}\n\nList 1-3 key interpretive questions this passage raises."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
