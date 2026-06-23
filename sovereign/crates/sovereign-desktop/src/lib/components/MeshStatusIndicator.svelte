@@ -97,6 +97,15 @@
     50%       { opacity: 0.7; box-shadow: 0 0 8px var(--growth); }
   }
 
+  /* Honour the OS "reduce motion" setting — the status is fully
+     conveyed by the text label, so the pulse is decoration. Matches
+     the reduced-motion guards in App/NarrationChip/ToastHost/etc. */
+  @media (prefers-reduced-motion: reduce) {
+    .dot {
+      animation: none;
+    }
+  }
+
   .count {
     font-family: var(--font-mono);
     font-size: 0.65rem;

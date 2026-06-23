@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { dialogFocus } from "@sovereign/chat-ui";
   import {
     withRelay,
     relayLabel,
@@ -901,12 +902,8 @@
 
   <!-- ─── Leave confirmation modal ──────────────────────── -->
   {#if showLeaveConfirm}
-    <div
-      class="modal-backdrop"
-      onclick={cancelLeave}
-      onkeydown={(e) => e.key === "Escape" && cancelLeave()}
-      role="presentation"
-    >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-backdrop" onclick={cancelLeave} role="presentation">
       <div
         class="modal"
         role="dialog"
@@ -914,7 +911,7 @@
         aria-labelledby="leave-title"
         tabindex="-1"
         onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: cancelLeave }}
       >
         <h4 id="leave-title">Leave this mesh?</h4>
         <p>
@@ -935,12 +932,8 @@
 
   <!-- ─── Rotate confirmation modal ─────────────────────── -->
   {#if showRotateConfirm}
-    <div
-      class="modal-backdrop"
-      onclick={cancelRotate}
-      onkeydown={(e) => e.key === "Escape" && cancelRotate()}
-      role="presentation"
-    >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-backdrop" onclick={cancelRotate} role="presentation">
       <div
         class="modal"
         role="dialog"
@@ -948,7 +941,7 @@
         aria-labelledby="rotate-title"
         tabindex="-1"
         onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: cancelRotate }}
       >
         <h4 id="rotate-title">Generate a new invite link?</h4>
         <p>

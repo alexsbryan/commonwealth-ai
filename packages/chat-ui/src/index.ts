@@ -7,6 +7,8 @@
 export * from "./types";
 export * from "./parse-message"; // BlockType, ContentBlock, parseAssistantContent
 export * from "./stream-buffer"; // WordBufferedStream
+export * from "./announce"; // completionAnnouncement (a11y: per-turn live-region wording)
+export * from "./actions/dialog-focus"; // dialogFocus action (a11y: trap + focus restore)
 
 // NOTE: files that import npm packages (the xstate chat FSM
 // `chat.machine.ts`; the `marked`/`katex`/`highlight.js`-based

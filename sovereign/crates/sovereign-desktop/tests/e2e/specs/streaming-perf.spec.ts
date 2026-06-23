@@ -189,10 +189,13 @@ test.describe("streaming render perf", () => {
     // 60Hz over ~400ms is ~24 frames. The harness setTimeout(0)
     // micro-yields between tokens often pack multiple tokens per
     // frame, so the realistic ceiling is well under 100.
-    // 60 is the regression-detection budget — well above the
-    // observed 20-30 with coalescing, well below the 100 we'd see
-    // without it.
-    expect(muts).toBeLessThan(60);
+    // 75 is the regression-detection budget: comfortably above the
+    // observed 20-30 with coalescing (and the ~60 seen on a loaded
+    // CI box, where rAF coalescing degrades), yet well below the ~100
+    // (one mutation per token) we'd see WITHOUT coalescing. The point
+    // is catching that ~10x regression, not millisecond precision — a
+    // budget that sat right at the loaded value (60) flaked on load.
+    expect(muts).toBeLessThan(75);
     expect(muts).toBeGreaterThan(0); // sanity: streaming did update
   });
 });
