@@ -129,5 +129,7 @@ pub fn resolve_args(spec: &StepSpec, scope: &Scope) -> ResolvedArgs {
         system: spec.system.as_ref().map(|s| resolve_str(s, scope)),
         input: spec.input.as_ref().map(|i| resolve_str(i, scope)),
         params: spec.params.as_ref().map(|p| resolve_value(p, scope)),
+        structured_output: spec.structured_output.as_ref().map(|v| resolve_value(v, scope)),
+        grammar: spec.grammar.as_ref().map(|g| resolve_str(g, scope)),
     }
 }

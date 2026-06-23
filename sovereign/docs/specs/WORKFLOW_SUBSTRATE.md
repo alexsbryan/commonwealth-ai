@@ -276,9 +276,22 @@ deeper work — routing `LocalCorpusManager::ingest` (the desktop+CLI API) throu
 the Runner and converging the rich path (batched embed, resume, enrichment) before
 retiring the bespoke loops — is the remaining prize.
 
-**3. Scale — durable / distributed / scheduled?** Single-process today. Durable
-resume, mesh-distribution, and Runner-native scheduling are unbuilt (with a
-caveat — see deviation 2).
+**3. Scale — durable / distributed / scheduled?** `for_each` now runs its elements
+**concurrently** (bounded by `--concurrency`), so a map over many chunks feeds the
+daemon's continuous-batching embed slot instead of one HTTP round-trip at a time —
+the first within-process throughput-parallelism, and per-element caching survives
+it. (The wall-clock win is proportional to how embed-bound the workload is: large
+or slow-model corpora gain most; a small corpus with a fast embed model is
+dominated by index-build, not embedding.) Durable resume, mesh-distribution, and
+Runner-native scheduling are still unbuilt (with a caveat — see deviation 2).
+
+**Adoption strategy: parallel capability before migration.** We grow the generic
+workflow's capabilities so it can run *real* workloads alongside the bespoke
+pipelines, then migrate once parity is proven — not a big-bang replacement.
+Concurrency is the first such capability gap closed. Remaining gaps to run a real
+corpus ingest as a parallel path: document **extraction** (PDF/HTML → text, today
+plain-text only), **filtering**, mid-ingest **resume**, and the **enrichment**
+phase. Each is an injected tool or a Runner capability, added incrementally.
 
 ### Built (core, hardened)
 
@@ -286,8 +299,9 @@ caveat — see deviation 2).
 per-step tracing. Five step kinds behind a type-safe `StepKind` (one parse
 boundary, compiler-checked `resources()`). Content-addressed cache (effect-aware,
 file-fingerprint invalidation, per-element granularity). `for_each` collection-map
-(not in the original plan — discovered when chunk→embed needed it). OICP-native
-`model:` requests. The generalization diff + live chunk→embed e2e.
+(not in the original plan — discovered when chunk→embed needed it), now with
+**bounded concurrent** element execution. OICP-native `model:` requests. The
+generalization diff + live chunk→embed e2e.
 
 ### Two deviations from the original P0–P3 plan
 
@@ -310,7 +324,9 @@ file-fingerprint invalidation, per-element granularity). `for_each` collection-m
 |---|---|---|
 | Done | **Store step** — `tool:corpus_store` (reuses `CorpusIndex::insert_batch`, idempotent per doc); `ingest.toml` = chunk→embed→store; `corpus search` closes the loop. The `secret-agent` ingest runs live and is queryable | ✅ |
 | Done | **Adoption, first rung** — `sovereign corpus ingest <folder>` runs chunk→embed→store on the Runner (plain-text; bespoke `ingest()` untouched). First production path on the substrate; shares `run_assembled` with `workflow run` | ✅ |
-| **Now** | **Deeper adoption** — route `LocalCorpusManager::ingest` (desktop+CLI API) through the Runner for plain-text; converge batched-embed / resume / enrichment; then retire the bespoke loops | ⬜ the prize |
+| Done | **Parallel capability: concurrency** — `for_each` runs elements concurrently (bounded), feeding the daemon's continuous-batching embed slot; per-element caching survives | ✅ |
+| **Now** | **Parallel capability: remaining gaps** — extraction (PDF/HTML), filtering, mid-ingest resume, enrichment — so the generic ingest runs real corpora *alongside* bespoke; migrate once at parity | ⬜ |
+| Later | **Migrate** — route `LocalCorpusManager::ingest` (desktop+CLI API) through the Runner; retire the bespoke loops once parity holds | ⬜ the prize |
 | Then | **Durable/distributed** — pipeline tool as the outer loop over `run-unit` | ⬜ |
 | Later | **Executor convergence** — a `Plan` *is* a `Workflow`; agent steps = workflow steps; ATOS keeps its own human-in-the-loop Runner profile, sharing only the vocabulary | ⬜ |
 | Maybe-not | Runner-native `BackendSelector` scheduling | ❓ daemon may already own this correctly |

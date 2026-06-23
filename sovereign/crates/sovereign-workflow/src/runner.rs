@@ -100,7 +100,7 @@ impl Runner {
         );
 
         let reports: Vec<ItemReport> = stream::iter(items.into_iter())
-            .map(|item| run_item(wf, &steps, &order, &do_cache, &self.cache, item))
+            .map(|item| run_item(wf, &steps, &order, &do_cache, &self.cache, item, concurrency))
             .buffer_unordered(concurrency.max(1))
             .collect()
             .await;
@@ -119,6 +119,7 @@ async fn run_item(
     do_cache: &[bool],
     cache: &Arc<dyn ArtifactCache>,
     item: SourceItem,
+    concurrency: usize,
 ) -> ItemReport {
     let item_id = item
         .fields
@@ -128,7 +129,7 @@ async fn run_item(
     let fingerprint = item.fingerprint;
     let mut scope = Scope {
         item: item.fields,
-        completed: BTreeMap::new(),
+        completed: Arc::new(BTreeMap::new()),
         element: None,
     };
     let mut last_text = String::new();
@@ -165,27 +166,49 @@ async fn run_item(
                     )
                 }
             };
-            let mut results = Vec::with_capacity(collection.len());
-            for elem in collection {
-                let mut elem_scope = scope.clone();
-                elem_scope.element = Some(elem);
-                let args = template::resolve_args(spec, &elem_scope);
-                // Per-element key folds in NO file fingerprint: the element's
-                // content is already in `args` (via `{element.…}`), so identical
-                // elements share a key (dedup / content-addressing) and editing
-                // one element invalidates only it. Using the whole-file
-                // fingerprint here would re-run every element on any file edit.
-                let key = cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, ""));
-                match run_one(step, &args, key.as_deref(), cache, &ctx).await {
-                    Ok((art, was_cached)) => {
+            // Run elements concurrently (bounded by `concurrency`), preserving
+            // order. The daemon's embed slot continuous-batches the concurrent
+            // requests GPU-side, so a `for_each embed` over many chunks is no
+            // longer one HTTP round-trip at a time — and per-element caching
+            // survives (each element keeps its own content-addressed key, so
+            // editing one chunk still re-runs only it, batched with other misses).
+            let elem_results: Vec<std::result::Result<(serde_json::Value, bool), String>> =
+                stream::iter(collection.into_iter())
+                    .map(|elem| {
+                        let mut elem_scope = scope.clone();
+                        elem_scope.element = Some(elem);
+                        let args = template::resolve_args(spec, &elem_scope);
+                        // Per-element key folds in NO file fingerprint: the
+                        // element's content is already in `args` (via
+                        // `{element.…}`), so identical elements share a key and
+                        // editing one element invalidates only it.
+                        let key =
+                            cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, ""));
+                        let step = Arc::clone(step);
+                        let cache = Arc::clone(cache);
+                        let ctx = ctx.clone();
+                        async move {
+                            run_one(&step, &args, key.as_deref(), &cache, &ctx)
+                                .await
+                                .map(|(art, was_cached)| (output_value(&art.output), was_cached))
+                                .map_err(|e| e.to_string())
+                        }
+                    })
+                    .buffered(concurrency.max(1))
+                    .collect()
+                    .await;
+            let mut results = Vec::with_capacity(elem_results.len());
+            for r in elem_results {
+                match r {
+                    Ok((v, was_cached)) => {
                         if was_cached {
                             cached += 1;
                         } else {
                             ran += 1;
                         }
-                        results.push(output_value(&art.output));
+                        results.push(v);
                     }
-                    Err(e) => return fail(item_id, spec, format!("{e}"), ran, cached),
+                    Err(e) => return fail(item_id, spec, e, ran, cached),
                 }
             }
             Artifact {
@@ -215,7 +238,9 @@ async fn run_item(
             "workflow: step done"
         );
         last_text = output_text(&artifact.output);
-        scope.completed.insert(spec.id.clone(), artifact);
+        // make_mut is a no-op clone here: the element scopes that shared this Arc
+        // during a for_each were dropped before we reach the next insert.
+        Arc::make_mut(&mut scope.completed).insert(spec.id.clone(), artifact);
     }
 
     ItemReport {

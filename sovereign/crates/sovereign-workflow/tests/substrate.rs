@@ -3,16 +3,18 @@
 //! glassbox missing-key → empty), and the Runner threading artifacts through a
 //! transform + a mock tool — no daemon, no weights, no MCP.
 
+use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::Stream;
 use sovereign_core::error::Result as CoreResult;
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::Tool;
+use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope as ToolScope, StepOutput, ToolContext,
-    ToolDescriptor,
+    CompletionRequest, CompletionResponse, Depth, Effect, Idempotency, Latency, Permission,
+    ProviderCapabilities, Scope as ToolScope, Speed, StepOutput, ToolContext, ToolDescriptor,
 };
 
 use sovereign_workflow::model::{Artifact, Scope};
@@ -198,7 +200,7 @@ fn step_kind_parse_and_resource_classification() {
 fn resolve_substitutes_item_and_step_refs_and_warns_on_missing() {
     let mut scope = Scope::default();
     scope.item.insert("path".into(), "/notes/a.md".into());
-    scope.completed.insert(
+    std::sync::Arc::make_mut(&mut scope.completed).insert(
         "read".into(),
         Artifact {
             type_tag: "text".into(),
@@ -208,6 +210,102 @@ fn resolve_substitutes_item_and_step_refs_and_warns_on_missing() {
     let out = template::resolve_str("{item.path} :: {read.output} :: {gone.key}", &scope);
     // item field + completed step resolve; an unknown ref → empty string.
     assert_eq!(out, "/notes/a.md :: BODY :: ");
+}
+
+#[test]
+fn model_step_carries_structured_output_and_grammar() {
+    // A general `model:` primitive: a step declares its output shape (a JSON
+    // schema) and/or a grammar as data, so an extraction constrains the model in
+    // TOML rather than parsing free text.
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "structured"
+[[step]]
+id = "extract"
+uses = "model:fast"
+prompt = "{item.name}"
+grammar = "start: object"
+structured_output = { type = "object", required = ["atoms"] }
+"#,
+    )
+    .unwrap();
+    let args = template::resolve_args(&wf.steps[0], &Scope::default());
+    assert_eq!(args.grammar.as_deref(), Some("start: object"));
+    let so = args.structured_output.expect("structured_output resolved");
+    assert_eq!(so.get("type").and_then(|v| v.as_str()), Some("object"));
+    assert_eq!(
+        so.get("required").and_then(|v| v.as_array()).map(|a| a.len()),
+        Some(1)
+    );
+}
+
+/// A model that always returns the given text — to prove a structured step
+/// parses it into a `Json` artifact.
+struct CannedModel(&'static str);
+
+#[async_trait]
+impl InferenceProvider for CannedModel {
+    async fn complete(&self, _req: &CompletionRequest) -> CoreResult<CompletionResponse> {
+        Ok(CompletionResponse {
+            text: self.0.to_string(),
+            tokens_used: 0,
+            prompt_tokens: 0,
+            model_id: "canned".into(),
+            latency_ms: 0,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+    async fn complete_stream(
+        &self,
+        _req: &CompletionRequest,
+    ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+        unreachable!("structured-output test never streams")
+    }
+    async fn embed(&self, _text: &str) -> CoreResult<Vec<f32>> {
+        Ok(vec![])
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 8192,
+            supports_structured_output: true,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+}
+
+#[tokio::test]
+async fn structured_model_output_is_a_parsed_json_artifact() {
+    // The model returns a JSON object; because the step declared
+    // `structured_output`, the runner parses it into a `Json` artifact — so a
+    // downstream `{x.questions}` resolves to the *field*, not the whole string.
+    // (A `Text` artifact would yield the entire object via `{x.questions}`.)
+    let provider: Arc<dyn InferenceProvider> = Arc::new(CannedModel(r#"{"questions":["a","b"]}"#));
+    let registry = StepRegistry::new(Some(provider), Arc::new(ToolRegistry::new()));
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "structured"
+[[step]]
+id = "x"
+uses = "model:fast"
+prompt = "go"
+structured_output = { type = "object" }
+[[step]]
+id = "pick"
+uses = "transform:identity"
+input = "{x.questions}"
+"#,
+    )
+    .unwrap();
+    let report = Runner::new(registry).run(&wf, 1).await.unwrap();
+    assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+    let picked = report.items[0].result.as_ref().unwrap();
+    let arr: serde_json::Value = serde_json::from_str(picked).unwrap();
+    assert_eq!(arr, serde_json::json!(["a", "b"]));
 }
 
 // ── runner end-to-end (transform + mock tool) ─────────────────
@@ -537,4 +635,99 @@ input = "{{element.text}}"
         (2, 2),
         "only split + the one changed element re-ran"
     );
+}
+
+/// Records peak concurrent in-flight calls; echoes `text`. A 30ms hold makes
+/// overlap near-certain when the runner maps elements concurrently.
+struct ConcurrencyProbeTool {
+    inflight: Arc<AtomicUsize>,
+    peak: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Tool for ConcurrencyProbeTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "probe".to_string(),
+            name: "probe".to_string(),
+            description: "record peak concurrency; echo `text`".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } }
+            }),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: ToolScope::Session,
+            output_schema: None,
+        }
+    }
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> CoreResult<StepOutput> {
+        let now = self.inflight.fetch_add(1, Ordering::SeqCst) + 1;
+        self.peak.fetch_max(now, Ordering::SeqCst);
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        self.inflight.fetch_sub(1, Ordering::SeqCst);
+        let text = params
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok(StepOutput::Text(text))
+    }
+}
+
+#[tokio::test]
+async fn for_each_runs_elements_concurrently_and_in_order() {
+    let inflight = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(SplitTool));
+    tools.register(Box::new(ConcurrencyProbeTool {
+        inflight: Arc::clone(&inflight),
+        peak: Arc::clone(&peak),
+    }));
+    let registry = StepRegistry::new(None, Arc::new(tools));
+
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "concurrent-map"
+[source]
+type = "inline"
+items = ["a b c d e f"]
+[[step]]
+id = "split"
+uses = "tool:split"
+params = { text = "{item.name}" }
+[[step]]
+id = "probe"
+uses = "tool:probe"
+for_each = "split"
+params = { text = "{element.text}" }
+"#,
+    )
+    .unwrap();
+
+    let report = Runner::new(registry).run(&wf, 4).await.unwrap();
+    assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+
+    // 6 elements at concurrency 4 → peak in-flight must exceed 1.
+    assert!(
+        peak.load(Ordering::SeqCst) >= 2,
+        "for_each must run elements concurrently; peak in-flight = {}",
+        peak.load(Ordering::SeqCst)
+    );
+
+    // Order is preserved despite concurrent execution.
+    let arr: serde_json::Value =
+        serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
+    assert_eq!(arr, serde_json::json!(["a", "b", "c", "d", "e", "f"]));
 }
