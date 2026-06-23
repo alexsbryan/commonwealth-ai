@@ -343,6 +343,128 @@ returning the chunk, not "rows written." Open fork to settle first: **reuse the
 corpus-engine's real index writer** (faithful, keeps this on the adoption path) vs.
 a minimal parallel table (cleaner demo, risks schema drift) — lean reuse.
 
+## Loop progress & session handoff (2026-06-22)
+
+This is the live state for the next agent. The work is driven by a single
+methodology — read it first, then the state, then resume at "the next break."
+
+### The methodology — "say it in TOML"
+
+**Goal:** one general substrate that subsumes the five bespoke engines. The
+honesty test for whether a primitive is general enough: *can the pipeline be
+written as TOML (data), composing existing primitives?* If adding a capability
+needs a pile of Rust wiring (a bespoke tool, a command, module plumbing), that
+volume is the smell — a primitive is missing a **general** capability.
+
+**The loop:** try to express a real pipeline as a TOML composition → when it
+breaks, the break reveals **one missing general primitive** → add that (general,
+reusable by any workflow), never a per-domain wrapper → repeat. This is how
+`chunk→embed` revealed `for_each`, and how enrichment revealed structured output.
+
+**The anti-pattern (learned the hard way, 2026-06-22):** a *subsystem-in-a-tool*.
+We built an `EnrichPhase1Tool` that swallowed a whole pipeline (compose-prompt →
+model → parse → post-process → write-cache) inside one opaque step and ran it as
+a 1-step "workflow." That's re-shelling the existing `enrich extract` command,
+not composing. **Reverted.** A tool/step is a **leaf** (one op: text→chunks,
+chunks→index, prompt→completion); a *pipeline* is a **composition in the
+workflow**. See memory `feedback_say_it_in_toml`.
+
+### Primitives shipped (this session)
+
+All in `sovereign/crates/sovereign-workflow/` unless noted:
+
+- **`StepKind`** (`kind.rs`) — typed taxonomy parsed once from `uses`;
+  `resources()` is the compiler-checked "needs the daemon?" classifier.
+- **`model:`** (`steps.rs` `ModelStep`) — OICP-native (`fast`/`normal`/`extended`
+  → `LatencyClass`), and now **`structured_output`** (JSON schema) / **`grammar`**
+  (lark) declared on the step → forwarded to the daemon as `response_format` /
+  `lark_grammar`. A structured step **parses its output into a `Json` artifact**
+  (falls back to Text + warn), so downstream steps compose on the structure.
+- **`for_each`** (`runner.rs`) — collection-map, **bounded-concurrent** (feeds
+  the daemon's continuous-batching embed slot), per-element content cache.
+  `Scope.completed` is `Arc`-wrapped so the per-element clone is O(1) (perf
+  parity; was O(N²)).
+- **Content cache** (`cache.rs`) — effect-aware (Read cacheable, Write never),
+  file-fingerprint invalidation, per-element granularity.
+- **Leaf tools:** `tool:chunk` (`sovereign-tools/src/rag/chunk.rs` `ChunkTool`,
+  wraps `chunk_text`), `tool:corpus_store` (`sovereign-tools/src/corpus_store.rs`,
+  wraps `CorpusIndex::insert_batch`, idempotent per `source_doc_id`).
+- **Commands** (`sovereign-cli-llm`): `workflow run` + the shared `run_assembled`
+  stack-assembly (`workflow_cmd.rs`); `corpus ingest` (`corpus_cmd/ingest.rs`);
+  `corpus search` (`corpus_cmd/search.rs`). `model:`/`embed:` route via
+  `SplitInferenceProvider` (chat slot vs embed slot).
+
+### What composes today (proven live)
+
+- **Corpus ingest** = `chunk → embed → store` (`examples/ingest.toml`). Diffed
+  byte-identical to the real engine (`chunk_then_embed_matches_the_real_corpus_pipeline`),
+  runs live, searchable via `corpus search`.
+- **Enrichment Phase 1 *shape*** = `chunk → model(structured_output → Json)`
+  (`examples/extract-atoms.toml`). Runs live; produces real interpretive-question
+  atoms as parsed JSON. **Zero enrichment-specific Rust** — the instruction + atom
+  schema are data in the TOML.
+
+Status: lint clean, **6998 tests green**.
+
+### The next break — resume here
+
+The atoms are computed but not **persisted**. Follow the loop:
+
+1. **`write_json` leaf** — a `Json` artifact → a path. Then
+   `chunk → atoms → write_json` is a full enrichment-shape pipeline as
+   composition. (General; effect `Write`.)
+2. **Full fidelity to the real `enrich extract`** — make the composed atoms match
+   what the downstream phases consume. The real Phase 1 is
+   `corpus-engine/src/enrichment/pipeline/runner.rs:673 phase_1_extract_questions`
+   (corpus-free: `&[ChapterInput]` → atoms via injected `embed`/`chat`); it writes
+   `cache/questions.json` (`Phase1Output`, keyed by chapter id, with anchors); the
+   domain prompt + few-shot exemplars come from the `Pipeline` trait
+   (`compose_phase1`/`parse_phase1`) + an exemplar bank. The faithful path makes
+   the **schema + exemplars data in the workflow** and emits the `Phase1Output`
+   shape — not a bespoke enrich tool. `PhaseCache` is mtime-DAG = the same pattern
+   as our content cache.
+3. **Remaining real-corpus-ingest gaps** (parallel-capability axis): document
+   **extraction** (PDF/HTML → text; today plain-text only), **filtering**,
+   mid-ingest **resume**, the **enrichment** phase — each a general leaf/primitive
+   added when a composition needs it.
+
+A likely sub-break after #1: a `for_each` over a step's *object* field (e.g. map
+over `{atoms.questions}`) — `for_each` currently maps a step whose whole output is
+a JSON array; mapping over a nested array field is the next generalization if a
+pipeline needs it.
+
+### Architecture constraints (don't re-derive)
+
+- **Layering:** `sovereign-core → corpus-engine`, and `sovereign-workflow →
+  sovereign-core`. So **corpus-engine cannot depend on `sovereign-workflow`**
+  (cycle) — the Runner lives *above* corpus-engine; orchestration lifts up.
+  `sovereign-workflow` is core-only (no heavy deps).
+- **Inference in steps:** `model:`/`embed:` get the injected provider. A tool that
+  needs inference must build its own daemon connection — but per the loop, prefer
+  composing a `model:` step over an inference-owning tool.
+- **Scheduling:** `model:`/`embed:` route through the daemon (HTTP), which does the
+  OICP/mesh scheduling + continuous batching. A Runner-native `BackendSelector` is
+  a possible **non-goal** (the daemon already schedules).
+
+### Run / verify (environment, 2026-06-22)
+
+- I (the agent) run builds + the daemon now (see memory `feedback_debug_build_for_dev`).
+- **Daemon:** inside the `sovereign-vulkan` toolbox,
+  `target/debug/sovereign-cli-daemon daemon run` — binds `:9741` ~45s after the
+  slots load (fast=Darwin-9B, embed=Qwen3-Embedding-0.6B; 35B primary lazy). Wait
+  for the "Commonwealth daemon started (client: 127.0.0.1:9741 …)" line.
+- **Build:** `cargo build -p sovereign-cli-llm --bin sovereign-cli-llm` (debug;
+  never `--release` for routine work). Run via `target/debug/sovereign-cli-llm …`.
+- **Verify:** the watcher is `not_configured`, so use `scripts/sovereign-lint.sh
+  --human` + `scripts/sovereign-test.sh --human` (not narrow cargo).
+- **Demo:** `mkdir -p corpus && printf '…prose…' > corpus/doc.txt` then
+  `target/debug/sovereign-cli-llm workflow run
+  sovereign/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache`
+  (run from repo root; the example's source path is relative `corpus`). Real demo
+  corpora `secret-agent-wf` / `conrad-demo` under `~/.sovereign/indexes/`.
+- **Uncommitted:** the whole session's work is in the working tree, not committed.
+  The reverted `EnrichPhase1Tool`/`corpus enrich` files are deleted (don't recreate).
+
 ## What NOT to do (the over-build risks)
 
 - **Don't unify the runtimes.** Interactive (latency, in-memory) and batch

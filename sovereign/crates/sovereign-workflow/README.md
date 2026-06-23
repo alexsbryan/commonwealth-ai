@@ -19,6 +19,13 @@ The single-process **Runner** topologically orders the steps and runs them per
 source item, threading **Artifact**s between them. The crate is *core-only* —
 inference + tools are injected by the caller.
 
+A `model:` step may declare **`structured_output`** (a JSON schema, as a TOML
+table) or **`grammar`** (a lark grammar) — the daemon constrains the model's
+output, and a structured step returns a parsed **`Json` artifact** (not a string)
+so downstream steps compose on the structure. This is the general primitive that
+lets an extraction (e.g. enrichment atoms) be authored as data — its output
+*shape* in the workflow, not parsed in Rust. See `examples/extract-atoms.toml`.
+
 A step may **`for_each`** another step's output. When that output is a JSON-array
 *collection* — e.g. a chunker's `1→N` chunks — the step runs once per element
 (read via `{element.key}` for an object field, `{element.value}` for a scalar),
