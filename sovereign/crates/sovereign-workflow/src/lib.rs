@@ -17,12 +17,14 @@
 //! + tools are injected by the caller (see `StepRegistry::new`).
 
 pub mod cache;
+pub mod kind;
 pub mod model;
 pub mod runner;
 pub mod steps;
 pub mod template;
 
 pub use cache::{ArtifactCache, FileArtifactCache, NoCache};
+pub use kind::StepKind;
 pub use model::{
     Artifact, ResolvedArgs, ResourceNeed, Resources, Scope, Source, SourceItem, StepDescriptor,
     StepSpec, Workflow,

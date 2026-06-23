@@ -6,10 +6,15 @@ workflows. P0+P1 of [`../../docs/specs/WORKFLOW_SUBSTRATE.md`](../../docs/specs/
 the smallest real instance, proving the abstraction on a user-authored workflow
 before any unification (P2+).
 
-A **Workflow** is a TOML graph. Nodes are **Step**s — `model:` (a local-model
-call, routed to the daemon), `embed:` (a daemon-routed embedding), `mcp:` /
-`tool:` (a tool call), or `transform:` (a deterministic function). Edges are
-**auto-derived** from `{step.key}` references, so you never write an edge list.
+A **Workflow** is a TOML graph. Nodes are **Step**s — `model:<class>` (a
+daemon-routed completion; the slot is an OICP latency class — `fast` / `normal` /
+`extended`, with `thoughtful`/`slow` as aliases for `extended` — so the step
+builds a protocol-native request, not a legacy `Speed` shim), `embed:` (a
+daemon-routed embedding), `mcp:` / `tool:` (a tool call), or `transform:` (a
+deterministic function). Each `uses` string is parsed once into a typed
+`StepKind` (ARCH §2.1), so dispatch and "does this need the daemon?" are
+compiler-checked, never re-grepped. Edges are **auto-derived** from `{step.key}`
+references, so you never write an edge list.
 The single-process **Runner** topologically orders the steps and runs them per
 source item, threading **Artifact**s between them. The crate is *core-only* —
 inference + tools are injected by the caller.

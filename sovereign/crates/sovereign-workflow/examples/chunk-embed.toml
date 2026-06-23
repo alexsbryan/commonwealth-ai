@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Re-express corpus ingest's `chunk -> embed` stage as a workflow: read each
+# document in a folder, split it with the *real* corpus chunker (`tool:chunk`,
+# a 1->N collection of {text, index}), and embed every chunk via the daemon's
+# embed slot (`embed:`, a `for_each` map over the collection).
+#
+# This is the chunk+embed half of a real ingest, authored as data. The test
+# `chunk_then_embed_matches_the_real_corpus_pipeline` proves this expression is
+# byte-identical to the bespoke engine; here it runs live against the daemon.
+#
+# Run (needs the daemon up with an embedding model loaded):
+#
+#   mkdir -p corpus
+#   # Drop any .txt in. To follow the chunker's own tuning corpus, use Conrad's
+#   # *The Secret Agent* (Project Gutenberg #974):
+#   #   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
+#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/chunk-embed.toml --concurrency 4
+#
+# Re-running is a free resume: an unchanged file's chunks are served from the
+# content cache; edit one file and only its chunks re-embed.
+
+[workflow]
+name = "chunk-embed"
+
+[source]
+type = "folder"
+path = "corpus"
+glob = "*.txt"
+
+# 1 -> N : the real corpus chunker, emitting a collection of {text, index}.
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+
+# map : embed every chunk via the daemon's embed slot. `for_each` fans this step
+# over the chunk collection; `{element.text}` is the current chunk. The step's
+# output is the JSON array of per-chunk vectors, in order.
+[[step]]
+id = "embed"
+uses = "embed:default"
+for_each = "chunk"
+input = "{element.text}"

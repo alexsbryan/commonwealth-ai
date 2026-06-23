@@ -13,6 +13,7 @@ use sovereign_core::error::Result;
 use sovereign_core::types::StepOutput;
 
 use crate::cache::{ArtifactCache, NoCache};
+use crate::kind::StepKind;
 use crate::model::{Artifact, ResolvedArgs, Scope, SourceItem, Workflow};
 use crate::steps::{Step, StepCtx, StepRegistry};
 use crate::{cache, template};
@@ -71,10 +72,11 @@ impl Runner {
     /// Run `wf` over its source items (or once if it has no `[source]`), with up
     /// to `concurrency` items in flight.
     pub async fn run(&self, wf: &Workflow, concurrency: usize) -> Result<RunReport> {
+        // Parse each `uses` to a typed StepKind once, then resolve it (ARCH §2.1).
         let steps: Vec<Arc<dyn Step>> = wf
             .steps
             .iter()
-            .map(|s| self.registry.resolve(&s.uses))
+            .map(|s| StepKind::parse(&s.uses).and_then(|k| self.registry.resolve(&k)))
             .collect::<Result<_>>()?;
         // A step caches iff it's Read-effect (safe to skip) and not opted out.
         let do_cache: Vec<bool> = wf
