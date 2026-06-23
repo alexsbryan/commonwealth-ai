@@ -106,7 +106,11 @@ impl Step for ModelStep {
             preferred_speed: speed_for(self.latency),
             max_tokens: None,
             temperature: Some(0.7),
-            structured_output: None,
+            // Structured output / grammar are general `model:` primitives,
+            // declared as data on the step — so an extraction (enrichment atoms,
+            // a classification) constrains its output shape in TOML rather than
+            // parsing free text.
+            structured_output: args.structured_output.clone(),
             think_budget: None,
             top_k: None,
             top_p: None,
@@ -120,12 +124,37 @@ impl Step for ModelStep {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
-            lark_grammar: None,
+            lark_grammar: args.grammar.clone(),
         };
         let resp = self.provider.complete(&request).await?;
+        // A structured step (one that declared a `structured_output` schema or a
+        // `grammar`) returns a parsed `Json` artifact, so downstream steps
+        // compose on the structure — `for_each` over it, store it — instead of
+        // re-parsing a string. Falls back to Text (with a warn) if the model's
+        // output isn't valid JSON, so a flaky model degrades visibly.
+        let structured = request.structured_output.is_some() || request.lark_grammar.is_some();
+        let output = if structured {
+            match serde_json::from_str::<serde_json::Value>(resp.text.trim()) {
+                Ok(v) => StepOutput::Json(v),
+                Err(e) => {
+                    tracing::warn!(
+                        target: "workflow", error = %e,
+                        "model: structured output is not valid JSON — returning text"
+                    );
+                    StepOutput::Text(resp.text)
+                }
+            }
+        } else {
+            StepOutput::Text(resp.text)
+        };
+        let type_tag = if matches!(output, StepOutput::Json(_)) {
+            "json"
+        } else {
+            "text"
+        };
         Ok(Artifact {
-            type_tag: "text".into(),
-            output: StepOutput::Text(resp.text),
+            type_tag: type_tag.into(),
+            output,
         })
     }
 }

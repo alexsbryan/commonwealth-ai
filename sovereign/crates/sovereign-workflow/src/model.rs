@@ -6,6 +6,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
@@ -59,10 +60,16 @@ impl StepDescriptor {
 }
 
 /// Per-item resolution context threaded through one item's run.
+///
+/// `completed` is an `Arc` so a `for_each` step can clone the scope per element
+/// in O(1) instead of copying the whole completed-artifact map — without it,
+/// mapping over an N-element collection is O(N²) in the scope size. The runner
+/// mutates it between steps via `Arc::make_mut` (a no-op clone since the element
+/// scopes that share it are dropped before the next insert).
 #[derive(Debug, Default, Clone)]
 pub struct Scope {
     pub item: BTreeMap<String, String>,
-    pub completed: BTreeMap<String, Artifact>,
+    pub completed: Arc<BTreeMap<String, Artifact>>,
     /// The current element when resolving a `for_each` step — read via
     /// `{element.key}` (an object field) or `{element.value}` (a scalar).
     /// `None` outside a `for_each` body.
@@ -77,6 +84,8 @@ pub struct ResolvedArgs {
     pub system: Option<String>,
     pub input: Option<String>,
     pub params: Option<serde_json::Value>,
+    pub structured_output: Option<serde_json::Value>,
+    pub grammar: Option<String>,
 }
 
 /// Optional per-step scheduler hints (P2-bound; parsed in P1, mostly inert).
@@ -116,6 +125,17 @@ pub struct StepSpec {
     /// separately.
     #[serde(default)]
     pub for_each: Option<String>,
+    /// JSON-schema structured output for a `model:` step: the model is
+    /// constrained to emit conforming JSON. A general primitive — any extraction
+    /// step (e.g. enrichment atoms) declares its output *shape* as data here,
+    /// rather than parsing free text. Authored as a TOML table.
+    #[serde(default)]
+    pub structured_output: Option<toml::Value>,
+    /// Lark grammar constraining a `model:` step's output — the lower-level
+    /// alternative to `structured_output` when a JSON schema isn't expressive
+    /// enough. Templated like `prompt`.
+    #[serde(default)]
+    pub grammar: Option<String>,
 }
 
 impl StepSpec {
@@ -123,17 +143,19 @@ impl StepSpec {
     /// `{ref.key}` to derive edges.
     fn templated_text(&self) -> String {
         let mut s = String::new();
-        for f in [&self.prompt, &self.system, &self.input] {
+        for f in [&self.prompt, &self.system, &self.input, &self.grammar] {
             if let Some(t) = f {
                 s.push(' ');
                 s.push_str(t);
             }
         }
-        if let Some(p) = &self.params {
-            // Debug (not Display) — robust across toml versions; we only need the
-            // `{ref.key}` substrings to appear for edge scanning.
-            s.push(' ');
-            s.push_str(&format!("{p:?}"));
+        for v in [&self.params, &self.structured_output] {
+            if let Some(p) = v {
+                // Debug (not Display) — robust across toml versions; we only need
+                // the `{ref.key}` substrings to appear for edge scanning.
+                s.push(' ');
+                s.push_str(&format!("{p:?}"));
+            }
         }
         s
     }
