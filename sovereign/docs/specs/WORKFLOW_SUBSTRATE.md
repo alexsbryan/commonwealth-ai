@@ -1,16 +1,22 @@
 # Spec — Step · Artifact · Runner: a general workflow substrate
 
-Status: **P0+P1 shipped** (the `sovereign-workflow` crate + `sovereign workflow
-run`; see its `README.md`), P2+ design / RFC · Scope: factor the duplicated
-workflow machinery into one substrate, proven by running a user-authored model
-workflow. Not a rewrite.
+Status: **P0+P1 + cache shipped** (the `sovereign-workflow` crate + `sovereign
+workflow run`; see its `README.md`), rest of P2+ design / RFC · Scope: factor
+the duplicated workflow machinery into one substrate, proven by running a
+user-authored model workflow. Not a rewrite.
 
 > **P0+P1 landed** — `sovereign-workflow` (Step · Artifact · Runner: TOML graph,
 > auto-derived edges, `model:`/`mcp:`/`tool:`/`transform:` steps, single-process
 > runner) + the `sovereign workflow run` command (daemon-routed inference, MCP +
-> tools injected). The `notes-digest` demo and a sealed-MCP e2e prove it. P2
-> (the pipeline tool as a durable outer loop, the content-addressed cache, the
-> resource scheduler) and P3 (corpus/enrichment/executor convergence) remain.
+> tools injected). The `notes-digest` demo and a sealed-MCP e2e prove it.
+>
+> **First slice of P2 — the content-addressed cache — landed too**: each `Read`
+> step is keyed by its resolved inputs + the source file's fingerprint and
+> persisted under `~/.sovereign/workflow-cache`, so a re-run skips unchanged
+> work and editing one file re-runs only that item (a `Write` step is never
+> cached). Still in P2/P3: the pipeline tool as a *durable/distributed* outer
+> loop, the inference-resource scheduler, and corpus/enrichment/executor
+> convergence.
 
 ## Context: we have five workflow engines, not zero
 

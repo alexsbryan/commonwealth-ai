@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed, StepOutput, ToolContext};
+use sovereign_core::types::{CompletionRequest, Effect, Speed, StepOutput, ToolContext};
 
 use crate::model::{Artifact, ResolvedArgs, ResourceNeed, StepDescriptor};
 
@@ -43,6 +43,7 @@ impl Step for TransformStep {
             name: self.name.clone(),
             description: "deterministic text transform".into(),
             resources: ResourceNeed::None,
+            effect: Effect::Read,
             deterministic: true,
         }
     }
@@ -79,6 +80,10 @@ impl Step for ModelStep {
             name: format!("model:{}", self.slot),
             description: "local-model completion (routed to the daemon)".into(),
             resources: ResourceNeed::Inference,
+            // A model call produces output but no external side effect, so it's
+            // cacheable: the cache makes a non-deterministic call effectively
+            // deterministic across re-runs (the resume property we want).
+            effect: Effect::Read,
             deterministic: false,
         }
     }
@@ -131,11 +136,21 @@ pub struct ToolStep {
 #[async_trait]
 impl Step for ToolStep {
     fn descriptor(&self) -> StepDescriptor {
+        // Delegate the effect to the wrapped tool so the cache knows whether
+        // this step is safe to skip (a `Read` tool like read_memo) or must
+        // always run (a `Write` tool like write_note). An unresolvable tool is
+        // conservatively `Write` — never cached.
+        let effect = self
+            .tools
+            .get(&self.tool_id)
+            .map(|t| t.descriptor().effect)
+            .unwrap_or(Effect::Write);
         StepDescriptor {
             id: self.tool_id.clone(),
             name: self.tool_id.clone(),
             description: "built-in or MCP tool call".into(),
             resources: ResourceNeed::Tool,
+            effect,
             deterministic: false,
         }
     }

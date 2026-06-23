@@ -7,15 +7,16 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
-use sovereign_core::types::StepOutput;
+use sovereign_core::types::{Effect, StepOutput};
 
 use crate::template;
 
-/// A typed value flowing between steps. P1 carries the `StepOutput` inline; P2
-/// adds a content-addressed `id` + `lineage` for the resume/dedup cache.
-#[derive(Debug, Clone)]
+/// A typed value flowing between steps. Serializable so the content-addressed
+/// cache can persist it; P2's `id`/`lineage` (content hash + provenance edges)
+/// fold in on top.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Artifact {
     pub type_tag: String,
     pub output: StepOutput,
@@ -31,16 +32,30 @@ pub enum ResourceNeed {
     Tool,
 }
 
-/// A step's self-description. P1 is lean; the full behavioural metadata
-/// (effect/idempotency/latency/scope/output_schema, copied from `ToolDescriptor`)
-/// folds in at P2 when the scheduler + cache consume it.
+/// A step's self-description. `effect` is now consumed by the content cache (a
+/// `Read` step is safe to skip on a cache hit; a `Write` step must always run
+/// so its side effect happens). The rest of the `ToolDescriptor` behavioural
+/// metadata (idempotency/latency/scope/output_schema) folds in when the
+/// scheduler needs it.
 #[derive(Debug, Clone)]
 pub struct StepDescriptor {
     pub id: String,
     pub name: String,
     pub description: String,
     pub resources: ResourceNeed,
+    pub effect: Effect,
     pub deterministic: bool,
+}
+
+impl StepDescriptor {
+    /// Safe to skip on a cache hit: it produces an output but no external side
+    /// effect (a `Read` tool, a model call, a deterministic transform). A
+    /// `Write`/`ReadWrite` step is never cached — skipping it would skip the
+    /// write. A per-step `cache = false` opt-out (volatile reads like web fetch)
+    /// is applied by the runner on top of this.
+    pub fn cacheable(&self) -> bool {
+        self.effect == Effect::Read
+    }
 }
 
 /// Per-item resolution context threaded through one item's run.
@@ -51,7 +66,8 @@ pub struct Scope {
 }
 
 /// A step's templated fields, resolved against the scope (see `template`).
-#[derive(Debug, Clone, Default)]
+/// Serialized into the cache key — the resolved values *are* the step's inputs.
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ResolvedArgs {
     pub prompt: Option<String>,
     pub system: Option<String>,
@@ -83,6 +99,11 @@ pub struct StepSpec {
     pub params: Option<toml::Value>,
     #[serde(default)]
     pub resources: Option<Resources>,
+    /// Cache opt-out for a volatile `Read` step (e.g. a web fetch whose target
+    /// changes over time). `Some(false)` → always run, never cache. Default
+    /// (`None`) → cache iff the step's effect is `Read`.
+    #[serde(default)]
+    pub cache: Option<bool>,
 }
 
 impl StepSpec {
@@ -123,11 +144,20 @@ pub enum Source {
     },
 }
 
+/// One enumerated item: its `{item.*}` fields plus a content `fingerprint`
+/// (mtime+size when the value is a file) folded into every step's cache key, so
+/// editing a source file invalidates that item's cached steps.
+#[derive(Debug, Clone)]
+pub struct SourceItem {
+    pub fields: BTreeMap<String, String>,
+    pub fingerprint: String,
+}
+
 impl Source {
-    /// Enumerate items, each a field map exposing `{item.path/name/stem}`.
-    pub fn enumerate(&self) -> Result<Vec<BTreeMap<String, String>>> {
+    /// Enumerate items, each exposing `{item.path/name/stem}` + a fingerprint.
+    pub fn enumerate(&self) -> Result<Vec<SourceItem>> {
         match self {
-            Source::Inline { items } => Ok(items.iter().map(|v| item_fields(v)).collect()),
+            Source::Inline { items } => Ok(items.iter().map(|v| make_item(v)).collect()),
             Source::List { path } => {
                 let text = std::fs::read_to_string(path)
                     .map_err(|e| Error::Execution(format!("workflow source list {path}: {e}")))?;
@@ -135,7 +165,7 @@ impl Source {
                     .lines()
                     .map(|l| l.trim())
                     .filter(|l| !l.is_empty())
-                    .map(item_fields)
+                    .map(make_item)
                     .collect())
             }
             Source::Folder { path, glob } => {
@@ -157,12 +187,19 @@ impl Source {
                             continue;
                         }
                     }
-                    out.push(item_fields(&p.to_string_lossy()));
+                    out.push(make_item(&p.to_string_lossy()));
                 }
-                out.sort_by(|a, b| a.get("path").cmp(&b.get("path")));
+                out.sort_by(|a, b| a.fields.get("path").cmp(&b.fields.get("path")));
                 Ok(out)
             }
         }
+    }
+}
+
+fn make_item(value: &str) -> SourceItem {
+    SourceItem {
+        fields: item_fields(value),
+        fingerprint: fingerprint_for(value),
     }
 }
 
@@ -183,6 +220,23 @@ fn item_fields(value: &str) -> BTreeMap<String, String> {
     m.insert("name".into(), name);
     m.insert("stem".into(), stem);
     m
+}
+
+/// A cheap content fingerprint: `mtime:size` when `value` is an existing file
+/// (so an edit invalidates the cache), else the value itself.
+fn fingerprint_for(value: &str) -> String {
+    if let Ok(md) = std::fs::metadata(value) {
+        if md.is_file() {
+            let mtime = md
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            return format!("{mtime}:{}", md.len());
+        }
+    }
+    value.to_string()
 }
 
 /// A parsed workflow.

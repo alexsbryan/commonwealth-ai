@@ -39,8 +39,22 @@ One file mixes an ecosystem-shaped MCP tool, a local model, and data-authored
 steps. Swap `mcp:demo:read_memo` → `mcp:whisper:transcribe_audio` and `*.md` →
 `*.m4a` and it's audio transcription — no code change.
 
+## Cache + resume (on by default)
+
+Each `Read` step's output is content-addressed by its resolved inputs (incl. the
+source file's mtime+size), persisted under `~/.sovereign/workflow-cache`. So a
+re-run skips unchanged work; editing one file re-runs only that item; a
+`Write`-effect step (e.g. `write_note`) is never cached. `--no-cache` forces a
+full run; a per-step `cache = false` opts a volatile read out.
+
+```
+sovereign workflow run notes-digest.toml          # read·digest ×10   ~42s
+sovereign workflow run notes-digest.toml          # 20 cached, 0 ran  ~0.3s
+touch notes/standup.md && sovereign workflow run notes-digest.toml   # 1 item re-runs
+```
+
 ## What's P2+ (not here)
 
 Durable/distributed execution (the pipeline tool as an outer loop), the
-content-addressed artifact cache + resume, the inference-resource scheduler
-(`BackendSelector`), and corpus/enrichment/executor convergence. See the spec.
+inference-resource scheduler (`BackendSelector`), and corpus/enrichment/executor
+convergence. See the spec.

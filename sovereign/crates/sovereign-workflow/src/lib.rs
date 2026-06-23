@@ -16,14 +16,16 @@
 //! `sovereign-core`'s `Tool` / `InferenceProvider` traits; the concrete provider
 //! + tools are injected by the caller (see `StepRegistry::new`).
 
+pub mod cache;
 pub mod model;
 pub mod runner;
 pub mod steps;
 pub mod template;
 
+pub use cache::{ArtifactCache, FileArtifactCache, NoCache};
 pub use model::{
-    Artifact, ResolvedArgs, ResourceNeed, Resources, Scope, Source, StepDescriptor, StepSpec,
-    Workflow,
+    Artifact, ResolvedArgs, ResourceNeed, Resources, Scope, Source, SourceItem, StepDescriptor,
+    StepSpec, Workflow,
 };
 pub use runner::{ItemReport, RunReport, Runner};
 pub use steps::{Step, StepCtx, StepRegistry};

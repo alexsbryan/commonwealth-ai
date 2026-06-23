@@ -3,6 +3,7 @@
 //! glassbox missing-key → empty), and the Runner threading artifacts through a
 //! transform + a mock tool — no daemon, no weights, no MCP.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -209,4 +210,130 @@ prompt = "hi"
     let registry = StepRegistry::new(None, Arc::new(ToolRegistry::new()));
     let err = Runner::new(registry).run(&wf, 1).await.unwrap_err().to_string();
     assert!(err.contains("daemon"), "{err}");
+}
+
+// ── content-addressed cache ───────────────────────────────────
+
+#[test]
+fn cache_key_is_stable_and_input_sensitive() {
+    use sovereign_workflow::cache::cache_key;
+    use sovereign_workflow::ResolvedArgs;
+
+    let a = ResolvedArgs {
+        input: Some("x".into()),
+        ..Default::default()
+    };
+    let k1 = cache_key("transform:upper", "up", &a, "fp1");
+    assert_eq!(k1, cache_key("transform:upper", "up", &a, "fp1"), "stable");
+
+    let b = ResolvedArgs {
+        input: Some("y".into()),
+        ..Default::default()
+    };
+    assert_ne!(k1, cache_key("transform:upper", "up", &b, "fp1"), "args change");
+    assert_ne!(k1, cache_key("transform:upper", "up", &a, "fp2"), "fingerprint change");
+}
+
+#[tokio::test]
+async fn read_step_is_cached_on_rerun() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
+        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+    let toml = r#"
+[workflow]
+name = "cache-me"
+[source]
+type = "inline"
+items = ["alpha"]
+[[step]]
+id = "up"
+uses = "transform:upper"
+input = "{item.name}"
+"#;
+    let wf = Workflow::parse(toml).unwrap();
+
+    let r1 = Runner::with_cache(StepRegistry::new(None, Arc::new(ToolRegistry::new())), cache.clone())
+        .run(&wf, 1)
+        .await
+        .unwrap();
+    assert_eq!((r1.ran_total(), r1.cached_total()), (1, 0), "first run runs");
+
+    let r2 = Runner::with_cache(StepRegistry::new(None, Arc::new(ToolRegistry::new())), cache.clone())
+        .run(&wf, 1)
+        .await
+        .unwrap();
+    assert_eq!((r2.ran_total(), r2.cached_total()), (0, 1), "re-run is fully cached");
+}
+
+struct WriteCounterTool {
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Tool for WriteCounterTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "wc".to_string(),
+            name: "wc".to_string(),
+            description: "a write-effect tool".to_string(),
+            parameters: serde_json::json!({}),
+            examples: vec![],
+            effect: Effect::Write,
+            idempotency: Idempotency::NonIdempotent,
+            latency: Latency::Fast,
+            scope: ToolScope::Persistent,
+            output_schema: None,
+        }
+    }
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+    async fn execute(
+        &self,
+        _params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> CoreResult<StepOutput> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(StepOutput::Text("wrote".into()))
+    }
+}
+
+#[tokio::test]
+async fn write_step_is_never_cached() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
+        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(WriteCounterTool {
+        calls: Arc::clone(&calls),
+    }));
+    let tools = Arc::new(tools);
+
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "writes"
+[source]
+type = "inline"
+items = ["a"]
+[[step]]
+id = "w"
+uses = "tool:wc"
+"#,
+    )
+    .unwrap();
+
+    for _ in 0..2 {
+        let r = Runner::with_cache(
+            StepRegistry::new(None, Arc::clone(&tools)),
+            cache.clone(),
+        )
+        .run(&wf, 1)
+        .await
+        .unwrap();
+        // A Write step is never cached — it always runs (the side effect must happen).
+        assert_eq!(r.cached_total(), 0);
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 2, "write ran both times, never cached");
 }
