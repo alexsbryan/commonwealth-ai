@@ -22,6 +22,7 @@ pub mod enrich;
 pub mod enrichment_checker;
 pub mod entity_graph;
 pub mod epistemic;
+pub mod extract;
 pub mod file;
 #[cfg(feature = "gliner-ner")]
 pub mod gliner_ner;

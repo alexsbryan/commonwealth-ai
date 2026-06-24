@@ -52,6 +52,7 @@ impl RunReport {
 pub struct Runner {
     registry: StepRegistry,
     cache: Arc<dyn ArtifactCache>,
+    params: Arc<BTreeMap<String, String>>,
 }
 
 impl Runner {
@@ -60,13 +61,26 @@ impl Runner {
         Self {
             registry,
             cache: Arc::new(NoCache),
+            params: Arc::new(BTreeMap::new()),
         }
     }
 
     /// A runner backed by a content-addressed cache — `Read` steps with an
     /// unchanged key are skipped and reused; a re-run is free resume.
     pub fn with_cache(registry: StepRegistry, cache: Arc<dyn ArtifactCache>) -> Self {
-        Self { registry, cache }
+        Self {
+            registry,
+            cache,
+            params: Arc::new(BTreeMap::new()),
+        }
+    }
+
+    /// Run-global parameters, readable in any templated field as `{param.key}` and
+    /// in the source's path/glob/items (`--param k=v`, `--folder`). Builder so the
+    /// existing `run(&wf, n)` signature and its call sites stay unchanged.
+    pub fn with_params(mut self, params: BTreeMap<String, String>) -> Self {
+        self.params = Arc::new(params);
+        self
     }
 
     /// Run `wf` over its source items (or once if it has no `[source]`), with up
@@ -87,7 +101,7 @@ impl Runner {
             .collect();
         let order = wf.topo_order()?;
         let items = match &wf.source {
-            Some(src) => src.enumerate()?,
+            Some(src) => src.enumerate(&self.params)?,
             None => vec![SourceItem {
                 fields: BTreeMap::new(),
                 fingerprint: String::new(),
@@ -100,7 +114,11 @@ impl Runner {
         );
 
         let reports: Vec<ItemReport> = stream::iter(items.into_iter())
-            .map(|item| run_item(wf, &steps, &order, &do_cache, &self.cache, item, concurrency))
+            .map(|item| {
+                run_item(
+                    wf, &steps, &order, &do_cache, &self.cache, &self.params, item, concurrency,
+                )
+            })
             .buffer_unordered(concurrency.max(1))
             .collect()
             .await;
@@ -118,6 +136,7 @@ async fn run_item(
     order: &[usize],
     do_cache: &[bool],
     cache: &Arc<dyn ArtifactCache>,
+    params: &Arc<BTreeMap<String, String>>,
     item: SourceItem,
     concurrency: usize,
 ) -> ItemReport {
@@ -131,6 +150,7 @@ async fn run_item(
         item: item.fields,
         completed: Arc::new(BTreeMap::new()),
         element: None,
+        params: Arc::clone(params),
     };
     let mut last_text = String::new();
     let mut ran = 0usize;

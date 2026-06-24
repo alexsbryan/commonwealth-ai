@@ -72,7 +72,14 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     };
 
     eprintln!("Ingesting `{folder}` (glob {glob}) → corpus `{corpus}` via the workflow runner…");
-    let code = crate::workflow_cmd::run_assembled(&wf, DEFAULT_DAEMON, concurrency, no_cache).await;
+    let code = crate::workflow_cmd::run_assembled(
+        &wf,
+        DEFAULT_DAEMON,
+        concurrency,
+        no_cache,
+        std::collections::BTreeMap::new(),
+    )
+    .await;
     if code == 0 {
         eprintln!("\nDone. Query it:  sovereign corpus search {corpus} \"<your question>\"");
     }

@@ -1,0 +1,34 @@
+# summarize — turn a folder of documents into a folder of one-paragraph summaries.
+# Reads each file (PDF / Office / HTML / Markdown / txt), summarizes it with your
+# local model, and writes summaries/<name>.md in the directory you run it from.
+# Nothing leaves your machine.
+#
+# Run:
+#   sovereign workflow run summarize --folder ~/Downloads/papers
+
+[workflow]
+name = "summarize"
+
+[source]
+type = "folder"
+path = "{param.folder}"
+glob = "{param.glob}"
+
+[[step]]
+id = "extract"
+uses = "tool:extract"
+params = { path = "{item.path}" }
+
+[[step]]
+id = "summary"
+uses = "model:thoughtful"
+prompt = """
+Summarize this document in one paragraph, then list any action items as bullets.
+
+{extract.output}
+"""
+
+[[step]]
+id = "save"
+uses = "tool:write_file"
+params = { path = "summaries/{item.stem}.md", content = "{summary.output}" }

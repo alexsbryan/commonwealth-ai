@@ -89,7 +89,15 @@ impl McpTransport for HttpSseTransport {
         });
 
         let endpoint = self.endpoint.lock().await.clone();
-        let mut req = self.client.post(endpoint).json(&body);
+        let mut req = self
+            .client
+            .post(endpoint)
+            // Streamable-HTTP servers (MCP spec) require the client to accept BOTH
+            // application/json AND text/event-stream, or they reject with 406. Our
+            // own reference server is lenient, but spec-compliant off-the-shelf
+            // servers enforce it — so always send it.
+            .header(reqwest::header::ACCEPT, "application/json, text/event-stream")
+            .json(&body);
         req = self.auth.inject(req);
 
         let response = req
@@ -111,10 +119,30 @@ impl McpTransport for HttpSseTransport {
             return Err(McpError::Transport(format!("HTTP {status}: {body}")));
         }
 
-        let rpc_response: Value = response
-            .json()
-            .await
-            .map_err(|e| McpError::Transport(format!("Invalid JSON response: {e}")))?;
+        // A streamable-HTTP POST is answered either with a single JSON object
+        // (application/json) or an SSE stream (text/event-stream) whose `data:`
+        // line carries the JSON-RPC message. Handle both, so off-the-shelf servers
+        // work — not just our JSON-only reference server.
+        let is_sse = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|t| t.contains("text/event-stream"))
+            .unwrap_or(false);
+        let rpc_response: Value = if is_sse {
+            let text = response
+                .text()
+                .await
+                .map_err(|e| McpError::Transport(format!("read SSE body: {e}")))?;
+            parse_sse_data(&text).ok_or_else(|| {
+                McpError::Transport(format!("no JSON-RPC data in SSE response: {text}"))
+            })?
+        } else {
+            response
+                .json()
+                .await
+                .map_err(|e| McpError::Transport(format!("Invalid JSON response: {e}")))?
+        };
 
         // Extract result or error from JSON-RPC envelope.
         if let Some(error) = rpc_response.get("error") {
@@ -141,7 +169,11 @@ impl McpTransport for HttpSseTransport {
         });
 
         let endpoint = self.endpoint.lock().await.clone();
-        let mut req = self.client.post(endpoint).json(&body);
+        let mut req = self
+            .client
+            .post(endpoint)
+            .header(reqwest::header::ACCEPT, "application/json, text/event-stream")
+            .json(&body);
         req = self.auth.inject(req);
 
         let response = req
@@ -173,9 +205,32 @@ impl McpTransport for HttpSseTransport {
     }
 }
 
+/// Extract the JSON-RPC payload from an SSE response body: the last `data:` line
+/// that parses as JSON. Streamable-HTTP MCP servers may answer a POST with an
+/// event stream (`event: message\ndata: {…}`) instead of a plain JSON body — the
+/// shape spec-compliant off-the-shelf servers (e.g. supergateway) actually send.
+fn parse_sse_data(text: &str) -> Option<Value> {
+    text.lines()
+        .filter_map(|l| l.trim_start().strip_prefix("data:"))
+        .filter_map(|d| serde_json::from_str::<Value>(d.trim()).ok())
+        .last()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The SSE framing a streamable-HTTP server replies with — `event:` +
+    /// `data: {json}` — yields the JSON-RPC envelope. Pins the off-the-shelf
+    /// interop fix (the filesystem server returns exactly this).
+    #[test]
+    fn parses_jsonrpc_from_sse_data_line() {
+        let sse = "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n";
+        let v = parse_sse_data(sse).expect("data line parses");
+        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 0);
+        // A body with no JSON `data:` line is None (caller errors loudly).
+        assert!(parse_sse_data("event: ping\n\n").is_none());
+    }
 
     #[test]
     fn http_transport_url_parsing() {

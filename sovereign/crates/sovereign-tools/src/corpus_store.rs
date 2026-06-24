@@ -122,6 +122,16 @@ impl Tool for CorpusStoreTool {
         };
         let corpus_path = index_dir.join(&corpus);
 
+        // Serialize concurrent writes to the SAME corpus. The notebook workflow
+        // runs items (files) concurrently, so several `corpus_store` steps can
+        // target one corpus at once — and concurrent open + insert + commit on one
+        // LanceDB table races (silent lost writes or a commit-conflict failure,
+        // observed as "1 of 2 files stored" at --concurrency 4). A per-corpus async
+        // lock makes the open→insert→finalize critical section serial, while the
+        // expensive extract/chunk/embed stages keep running concurrently.
+        let lock = corpus_write_lock(&corpus_path);
+        let _guard = lock.lock().await;
+
         let index = if corpus_path.exists() {
             CorpusIndex::open(&corpus_path)
                 .await
@@ -187,6 +197,15 @@ impl Tool for CorpusStoreTool {
             }
         }
 
+        // Finalize: flip the corpus out of `ingestion_in_progress` (the real
+        // ingest's `mark_ingestion_complete`, engine/ingest.rs). Without this a
+        // workflow-built corpus stays invisible to listing AND retrieval —
+        // `installed_indexes()` filters out in-progress corpora — so the notebook
+        // would build but never be queryable. Idempotent.
+        index
+            .mark_ingestion_complete()
+            .map_err(|e| Error::Execution(format!("corpus_store: finalize `{corpus}`: {e}")))?;
+
         Ok(StepOutput::Text(format!(
             "stored {n} chunks into corpus `{corpus}` (doc `{source_doc_id}`, dim {dim})"
         )))
@@ -226,6 +245,23 @@ fn chunk_text_field(v: &serde_json::Value) -> String {
         serde_json::Value::String(s) => s.clone(),
         other => other.to_string(),
     }
+}
+
+/// Process-global per-corpus write lock (keyed by index path). The workflow runs
+/// items concurrently; this serializes `corpus_store`'s write critical section so
+/// concurrent per-file stores to one corpus don't race the LanceDB table. Scoped
+/// to this process (the workflow runner) — the only writer of a workflow corpus.
+fn corpus_write_lock(path: &std::path::Path) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static LOCKS: OnceLock<Mutex<HashMap<std::path::PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
+        OnceLock::new();
+    let map = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map.lock().expect("corpus_store: lock registry poisoned");
+    guard
+        .entry(path.to_path_buf())
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
 }
 
 /// `~/.sovereign/indexes` — the canonical corpus root `corpus list`/retrieval
@@ -290,6 +326,13 @@ mod tests {
             StepOutput::Text(t) => assert!(t.contains("stored 3"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
         }
+
+        // Finalized: the corpus is marked ingestion-complete, so listing +
+        // retrieval surface it (an in-progress corpus is filtered out).
+        assert!(
+            CorpusIndex::is_ingestion_complete(&index_dir.join("conrad")),
+            "store must finalize the corpus so it's listed + queryable"
+        );
 
         // Searchable: a vector flat-scan returns the stored chunk. Query == the
         // "Stevie" chunk's vector, empty text → vector-only mode; a corpus under

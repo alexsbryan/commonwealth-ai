@@ -1,0 +1,48 @@
+# notebook — turn a folder of documents into a private, cited, searchable notebook
+# you can chat with. Reads each file, extracts its text (PDF / Office / HTML / md /
+# txt), splits + embeds it, and stores a LanceDB corpus under ~/.sovereign/indexes/.
+# Nothing leaves your machine.
+#
+# Run:
+#   sovereign workflow run notebook --folder ~/Documents/notes --corpus my-notebook
+#
+# Then ask it (cited, instant):
+#   sovereign chat inspect --corpus my-notebook "your question"
+#
+# Knobs: --glob "*.pdf,*.md" to narrow the file types (default: a broad mix).
+
+[workflow]
+name = "notebook"
+
+[source]
+type = "folder"
+path = "{param.folder}"
+# A comma list of extensions; an unset --glob matches every file in the folder.
+glob = "{param.glob}"
+
+# Extract each file's text by format (PDF/Office/HTML/epub/md/txt). A binary the
+# extractor can't read fails just that file; the rest of the folder continues.
+[[step]]
+id = "extract"
+uses = "tool:extract"
+params = { path = "{item.path}" }
+
+# Split the extracted text into the corpus chunker's chunks (a {text, index} list).
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { text = "{extract.output}" }
+
+# Embed each chunk via the daemon's embed slot.
+[[step]]
+id = "embed"
+uses = "embed:default"
+for_each = "chunk"
+input = "{element.text}"
+
+# Store the (chunk, embedding) pairs into a searchable, cited corpus index.
+# Idempotent per source document — re-running replaces a file's rows, no dups.
+[[step]]
+id = "store"
+uses = "tool:corpus_store"
+params = { corpus = "{param.corpus}", chunks = "{chunk.output}", embeddings = "{embed.output}", title = "{item.stem}", source_doc_id = "{item.path}" }

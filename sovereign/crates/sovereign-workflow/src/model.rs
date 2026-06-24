@@ -100,6 +100,11 @@ pub struct Scope {
     /// `{element.key}` (an object field) or `{element.value}` (a scalar).
     /// `None` outside a `for_each` body.
     pub element: Option<serde_json::Value>,
+    /// Run-global author-supplied parameters, read via `{param.key}`. Unlike
+    /// `item`/`element` these are the same for every item, supplied at run time
+    /// (`--param k=v`, `--folder`). `Arc` so the per-element `for_each` scope
+    /// clone stays O(1) like `completed`. Empty by default.
+    pub params: Arc<BTreeMap<String, String>>,
 }
 
 /// A step's templated fields, resolved against the scope (see `template`).
@@ -259,11 +264,23 @@ pub struct SourceItem {
 
 impl Source {
     /// Enumerate items, each exposing `{item.path/name/stem}` + a fingerprint.
-    pub fn enumerate(&self) -> Result<Vec<SourceItem>> {
+    /// `params` resolves `{param.*}` in the source's paths/globs/items, so a
+    /// workflow takes its folder (etc.) at run time (`--folder`/`--param`).
+    pub fn enumerate(&self, params: &Arc<BTreeMap<String, String>>) -> Result<Vec<SourceItem>> {
+        // A param-only scope: `{item.*}`/`{element.*}` don't exist at enumeration
+        // time, but `{param.*}` does.
+        let pscope = Scope {
+            params: Arc::clone(params),
+            ..Default::default()
+        };
+        let resolve = |s: &str| crate::template::resolve_str(s, &pscope);
         match self {
-            Source::Inline { items } => Ok(items.iter().map(|v| make_item(v)).collect()),
+            Source::Inline { items } => {
+                Ok(items.iter().map(|v| make_item(&resolve(v))).collect())
+            }
             Source::List { path } => {
-                let text = std::fs::read_to_string(path)
+                let path = resolve(path);
+                let text = std::fs::read_to_string(&path)
                     .map_err(|e| Error::Execution(format!("workflow source list {path}: {e}")))?;
                 Ok(text
                     .lines()
@@ -273,12 +290,22 @@ impl Source {
                     .collect())
             }
             Source::Folder { path, glob } => {
-                // Minimal glob: `*.<ext>` filters by extension; otherwise all files.
-                let ext = glob
-                    .as_ref()
-                    .and_then(|g| g.strip_prefix("*."))
-                    .map(|e| e.to_string());
-                let dir = std::fs::read_dir(path)
+                let path = resolve(path);
+                let glob = glob.as_ref().map(|g| resolve(g));
+                // Glob: a comma-separated list of `*.<ext>` patterns (e.g.
+                // `*.pdf,*.txt,*.md`) filters by extension, case-insensitively —
+                // so a mixed folder ingests in one pass. A glob that resolves to
+                // empty (an unset `{param.glob}`) or carries no `*.` pattern
+                // matches every file.
+                let exts: Vec<String> = glob
+                    .as_deref()
+                    .map(|g| {
+                        g.split(',')
+                            .filter_map(|p| p.trim().strip_prefix("*.").map(|e| e.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let dir = std::fs::read_dir(&path)
                     .map_err(|e| Error::Execution(format!("workflow source folder {path}: {e}")))?;
                 let mut out = Vec::new();
                 for entry in dir.flatten() {
@@ -286,8 +313,13 @@ impl Source {
                     if !p.is_file() {
                         continue;
                     }
-                    if let Some(ext) = &ext {
-                        if p.extension().and_then(|e| e.to_str()) != Some(ext.as_str()) {
+                    if !exts.is_empty() {
+                        let matches = p
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .map(|e| exts.iter().any(|x| x.eq_ignore_ascii_case(e)))
+                            .unwrap_or(false);
+                        if !matches {
                             continue;
                         }
                     }

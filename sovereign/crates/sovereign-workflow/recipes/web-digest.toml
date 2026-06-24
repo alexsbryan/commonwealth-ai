@@ -1,0 +1,33 @@
+# web-digest — fetch a web page and write a short summary of it (Markdown). The
+# only thing that leaves your machine is the page fetch you asked for; the
+# summarizing model runs locally.
+#
+# Run one page:
+#   sovereign workflow run web-digest --param url=https://example.com/article
+#
+# To digest several at once, copy this workflow and list the URLs in [source]:
+#   sovereign workflow copy web-digest my-digest
+#   # then edit ~/.sovereign/workflows/my-digest.toml — set type="inline",
+#   # items = ["https://a…", "https://b…"]
+
+[workflow]
+name = "web-digest"
+
+[source]
+type = "inline"
+items = ["{param.url}"]
+
+[[step]]
+id = "page"
+uses = "tool:web_fetch"
+params = { url = "{item.path}" }
+
+[[step]]
+id = "summary"
+uses = "model:thoughtful"
+prompt = "Summarize this page in three sentences, then list its key points as bullets.\n\n{page.output}"
+
+[[step]]
+id = "save"
+uses = "tool:write_file"
+params = { path = "digests/{item.stem}.md", content = "{summary.output}" }

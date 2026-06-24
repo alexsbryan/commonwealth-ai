@@ -1,0 +1,76 @@
+# meeting-to-done — turn a folder of meeting transcripts into action, locally.
+# For each transcript: your local model writes a brief (recap + action-item
+# checklist), an OFF-THE-SHELF MCP server writes that brief to a file, and the
+# transcript is filed into a searchable `meetings` corpus. The model runs on your
+# machine; the only tool we don't own is the one you plugged in.
+#
+# This is the breadth demo: reasoning (ours) + ACTION via a third-party MCP server
+# (theirs) + memory (ours), composed in one text file.
+#
+# Setup — run an off-the-shelf MCP server and connect it (we build no tools):
+#   # the official filesystem server, scoped to where briefs should land,
+#   # bridged to HTTP by supergateway (Sovereign connects HTTP, doesn't supervise):
+#   npx -y supergateway --stdio "npx -y @modelcontextprotocol/server-filesystem ~/meetings" \
+#       --outputTransport streamableHttp --port 8766 &
+#   sovereign mcp add fs --url http://localhost:8766/mcp
+#
+# Run:
+#   sovereign workflow run meeting-to-done --folder ~/meetings/transcripts \
+#       --param outdir=/root/meetings --corpus meetings
+#   sovereign chat inspect --corpus meetings "what did we decide about pricing?"
+#
+# Swap `mcp:fs:write_file` for a real action server and the same workflow drives it:
+#   mcp:todoist:create_task, mcp:gmail:create_draft, mcp:linear:create_issue, …
+# Swap the transcript read for a Whisper MCP server (mcp:whisper:transcribe_audio)
+# and the input becomes audio. The shape doesn't change; the connectors do.
+
+[workflow]
+name = "meeting-to-done"
+
+[source]
+type = "folder"
+path = "{param.folder}"
+glob = "*.txt,*.md,*.vtt,*.srt"
+
+# Read the transcript (a local primitive; swap for mcp:whisper:transcribe_audio
+# to start from a recording instead).
+[[step]]
+id = "transcript"
+uses = "tool:extract"
+params = { path = "{item.path}" }
+
+# Your local model turns the transcript into a Markdown brief.
+[[step]]
+id = "brief"
+uses = "model:thoughtful"
+prompt = """
+You are a chief of staff. From this meeting transcript, write a short Markdown brief:
+a 2-sentence recap, then a `## Action items` section listing each as `- [ ] task — owner`.
+
+TRANSCRIPT:
+{transcript.output}
+"""
+
+# ACTION — an OFF-THE-SHELF MCP server writes the brief to a file. We didn't build
+# this tool; we connected it. Path must be inside the server's allowed directory.
+[[step]]
+id = "save_brief"
+uses = "mcp:fs:write_file"
+params = { path = "{param.outdir}/{item.stem}-brief.md", content = "{brief.output}" }
+
+# MEMORY — file the transcript into a searchable, cited corpus (local primitives).
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { text = "{transcript.output}" }
+
+[[step]]
+id = "embed"
+uses = "embed:default"
+for_each = "chunk"
+input = "{element.text}"
+
+[[step]]
+id = "remember"
+uses = "tool:corpus_store"
+params = { corpus = "{param.corpus}", chunks = "{chunk.output}", embeddings = "{embed.output}", title = "{item.stem}" }
