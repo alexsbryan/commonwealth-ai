@@ -124,7 +124,13 @@ pub fn stage_blocking(
     Ok(result)
 }
 
-pub(crate) fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<String, String> {
+/// Extract a document's text by file extension (PDF / Office / HTML / epub / md /
+/// txt), panic-safe per format. The config-free core shared by the watched-folder
+/// ingest ([`extract_one`]) and the `tool:extract` workflow step — one source of
+/// truth for which formats we support, so a workflow and a recipe extract a file
+/// identically. An unknown extension is a loud error (the caller decides whether
+/// to skip).
+pub fn extract_text(path: &Path) -> Result<String, String> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -142,6 +148,10 @@ pub(crate) fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<St
         "docx" => safe_extract_docx_text(path).map_err(|e| classify_extract_error("docx", &e)),
         other => Err(format!("unsupported extension: {other}")),
     }
+}
+
+pub(crate) fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<String, String> {
+    extract_text(path)
 }
 
 /// Map a `SafeExtractError` onto the human-readable reason string that

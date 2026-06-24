@@ -9,10 +9,38 @@ your machine to do it.
 That text file is a *workflow*. The same `sovereign` daemon you already run
 executes it, using whatever model you have loaded.
 
+## Start from a starter
+
+A few workflows ship ready to run. List them:
+
+```bash
+sovereign workflow list
+```
+
+The flagship turns a folder of documents into a private, cited notebook you can
+chat with — it reads each file (PDF, Office, HTML, Markdown, text), and nothing
+leaves your machine:
+
+```bash
+sovereign workflow run notebook --folder ~/Documents/notes --corpus my-notebook
+sovereign chat inspect --corpus my-notebook "your question"
+```
+
+To make one your own, copy it and edit the text file — it's the same kind of file
+this guide is about:
+
+```bash
+sovereign workflow copy notebook my-recipe
+# edit ~/.sovereign/workflows/my-recipe.toml, then:  sovereign workflow run my-recipe --folder …
+```
+
+The rest of this guide is how those files work, so you can change one or write
+your own from scratch.
+
 ## The whole thing
 
-Here is a workflow that reads every note in a folder and writes back a one-line
-summary with action items. Save it as `summarize.toml`:
+Here is a whole workflow — close to the shipped `summarize` starter — that reads
+every file in a folder and writes back a one-paragraph summary. It's just text:
 
 ```toml
 [workflow]
@@ -92,6 +120,39 @@ then on it's just another step you can name. (A runnable MCP example —
 [`notes-digest.toml`](../sovereign/crates/sovereign-workflow/examples/notes-digest.toml)
 — ships with the engine.)
 
+## Make it act — off-the-shelf tools
+
+Everything above *reads and writes your own files*. The leap is when a workflow
+**acts in your other tools** — and it does that by driving a real MCP server you
+already trust, not one we wrote. We build none of the tools; we connect them.
+
+Take the shipped **`meeting-to-done`** workflow. For each transcript in a folder,
+your local model writes a brief (recap + an action-item checklist), an MCP server
+*writes that brief* where it belongs, and the transcript is filed into a
+searchable `meetings` corpus you can ask later. The model never leaves your
+machine; the only tool we don't own is the one you plugged in.
+
+Connect an off-the-shelf server — here the official filesystem server, bridged to
+HTTP (Sovereign connects to endpoints; it doesn't supervise processes):
+
+```bash
+npx -y supergateway --stdio "npx -y @modelcontextprotocol/server-filesystem ~/meetings" \
+    --outputTransport streamableHttp --port 8766 &
+sovereign mcp add fs --url http://localhost:8766/mcp
+sovereign mcp tools fs            # confirm Sovereign sees its tools
+
+sovereign workflow run meeting-to-done --folder ~/meetings/transcripts \
+    --param outdir=~/meetings --corpus meetings
+sovereign chat inspect --corpus meetings "what did we decide about pricing?"
+```
+
+The action step is just `uses = "mcp:fs:write_file"`. Swap that one line for a
+real task or email server and the same workflow drives those instead —
+`mcp:todoist:create_task`, `mcp:gmail:create_draft`, `mcp:linear:create_issue`.
+Swap the transcript read for `mcp:whisper:transcribe_audio` and it starts from a
+recording. The shape never changes; only the connectors do — and they're the
+whole MCP ecosystem, not a list we shipped.
+
 ## It all stays on your machine
 
 The model that does the thinking runs on your own computer, over your own files.
@@ -152,11 +213,18 @@ live in
 
 You've seen most of it. The remainder, briefly:
 
-- **Sources:** `folder` (a glob of files), `inline` (`items = [...]`), `list` (a
-  file with one item per line).
-- **Steps:** `model:<class>` (`fast`, `thoughtful`), `embed:default`, `tool:<id>`,
-  `mcp:<server>:<tool>`, and `transform:json` (reshape data into a new object — no
-  model, no tool).
+- **Sources:** `folder` (a glob of files — `glob` accepts a comma list like
+  `*.pdf,*.md`), `inline` (`items = [...]`), `list` (a file, one item per line). A
+  folder item exposes `{item.path}`, `{item.stem}`, and `{item.text}` (the file's
+  text, for text files).
+- **Parameters:** `{param.key}` reads a value passed at run time — `--param
+  key=value`, or the shorthands `--folder`, `--corpus`, `--glob`. They resolve in
+  any field *and* in the source path/glob, so one workflow runs over any folder.
+- **Steps:** `model:<class>` (`fast`, `thoughtful`), `embed:default`,
+  `transform:json` (reshape data — no model, no tool), `mcp:<server>:<tool>` (any
+  connected MCP tool), and `tool:<id>` built-ins — `extract` (a document's text, any
+  format), `chunk`, `read_file` / `write_file`, `corpus_store` (build a searchable
+  corpus), `web_fetch`, `zip`.
 - **`for_each`** runs a step once per element of an earlier collection; inside it,
   `{element}` is the current one. It's how you go from one document to a result
   per chapter. To pair two collections back up by position, there's `tool:zip`.

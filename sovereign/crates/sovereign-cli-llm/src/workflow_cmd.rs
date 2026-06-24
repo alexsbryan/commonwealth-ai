@@ -17,6 +17,7 @@ use sovereign_inference::remote::SplitInferenceProvider;
 use sovereign_tools::atlas_phase::gaps::AtlasGapsTool;
 use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
 use sovereign_tools::corpus_store::CorpusStoreTool;
+use sovereign_tools::extract::ExtractTool;
 use sovereign_tools::rag::chunk::ChunkTool;
 use sovereign_tools::rag::section::SectionTool;
 use sovereign_tools::read_file::ReadFileTool;
@@ -44,6 +45,9 @@ pub async fn run_workflow(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => cmd_run(&args[1..]).await,
+        "list" | "ls" => cmd_list(),
+        "copy" | "cp" => cmd_copy(&args[1..]),
+        "new" => cmd_new(&args[1..]),
         other => {
             eprintln!("Unknown workflow subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -52,17 +56,96 @@ pub async fn run_workflow(args: &[String]) -> i32 {
     }
 }
 
+/// Shipped starter workflows, embedded at compile time. The gallery a fresh
+/// install can `list`, `run <name>`, and `copy` to edit — no files to find first.
+const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
+    (
+        "notebook",
+        include_str!("../../sovereign-workflow/recipes/notebook.toml"),
+    ),
+    (
+        "summarize",
+        include_str!("../../sovereign-workflow/recipes/summarize.toml"),
+    ),
+    (
+        "web-digest",
+        include_str!("../../sovereign-workflow/recipes/web-digest.toml"),
+    ),
+    (
+        "meeting-to-done",
+        include_str!("../../sovereign-workflow/recipes/meeting-to-done.toml"),
+    ),
+];
+
+/// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
+/// target). Resolved from the same home-dir as the setup config + workflow cache.
+fn workflows_dir() -> std::path::PathBuf {
+    sovereign_core::setup_config::SetupConfig::default_path()
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default()
+        .join("workflows")
+}
+
+/// Resolve a workflow reference to `(toml, origin)`: an existing file path, else a
+/// user workflow (`~/.sovereign/workflows/<name>.toml`), else a shipped starter.
+/// User shadows shipped (same name → the user's edit wins).
+fn resolve_workflow_source(name_or_path: &str) -> std::result::Result<(String, String), String> {
+    let p = std::path::Path::new(name_or_path);
+    if p.is_file() {
+        return std::fs::read_to_string(p)
+            .map(|t| (t, p.display().to_string()))
+            .map_err(|e| format!("read {name_or_path}: {e}"));
+    }
+    let name = name_or_path.strip_suffix(".toml").unwrap_or(name_or_path);
+    let user = workflows_dir().join(format!("{name}.toml"));
+    if user.is_file() {
+        return std::fs::read_to_string(&user)
+            .map(|t| (t, format!("user:{name}")))
+            .map_err(|e| format!("read {}: {e}", user.display()));
+    }
+    if let Some((_, toml)) = SHIPPED_WORKFLOWS.iter().find(|(n, _)| *n == name) {
+        return Ok((toml.to_string(), format!("shipped:{name}")));
+    }
+    Err(format!(
+        "no workflow `{name_or_path}` — not a file, not in {}, not a shipped starter.\n\
+         See `sovereign workflow list`.",
+        workflows_dir().display()
+    ))
+}
+
+/// The first `#` comment line of a workflow's TOML — its one-line description for
+/// `list`. Empty when the file has no leading comment.
+fn first_comment_line(toml: &str) -> String {
+    toml.lines()
+        .map(|l| l.trim())
+        .find(|l| l.starts_with('#'))
+        .map(|l| l.trim_start_matches('#').trim().to_string())
+        .unwrap_or_default()
+}
+
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign workflow",
     summary: "Run a Step·Artifact·Runner workflow — model, MCP, and tool steps authored as TOML.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign workflow run <file.toml> [--concurrency N] [--daemon <url>] [--no-cache]",
+            "sovereign workflow run <name|file.toml> [--folder <dir>] [--corpus <id>] [--glob <patterns>] [--param k=v]... [--params-file <json>] [--concurrency N] [--daemon <url>] [--no-cache]",
         ),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[(
-            "run <file>",
-            "Run a workflow over its source items (or once if it has no [source])",
-        )]),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+            (
+                "run <name|file>",
+                "Run a workflow (a shipped/user name, or a .toml path) over its source items",
+            ),
+            ("list", "List available workflows (shipped starters + your own)"),
+            (
+                "copy <name> [new]",
+                "Copy a workflow into ~/.sovereign/workflows/ so you can edit it",
+            ),
+            (
+                "new <name> [--from <starter>]",
+                "Scaffold a new editable workflow from a starter (default: notebook)",
+            ),
+        ]),
     ],
 };
 
@@ -71,6 +154,7 @@ async fn cmd_run(args: &[String]) -> i32 {
     let mut concurrency = 4usize;
     let mut daemon = DEFAULT_DAEMON.to_string();
     let mut no_cache = false;
+    let mut params: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -95,6 +179,59 @@ async fn cmd_run(args: &[String]) -> i32 {
                     }
                 }
             }
+            // Run-time parameters, readable in the workflow as `{param.key}` and in
+            // the source path/glob. `--param k=v` is the general form; `--folder`,
+            // `--corpus`, `--glob` are ergonomic aliases for the flagship one-liner.
+            "--param" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.split_once('=')) {
+                    Some((k, v)) if !k.is_empty() => {
+                        params.insert(k.to_string(), v.to_string());
+                    }
+                    _ => {
+                        eprintln!("--param needs key=value");
+                        return 1;
+                    }
+                }
+            }
+            "--params-file" => {
+                i += 1;
+                let Some(p) = args.get(i) else {
+                    eprintln!("--params-file needs a path");
+                    return 1;
+                };
+                match std::fs::read_to_string(p)
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                {
+                    Some(serde_json::Value::Object(map)) => {
+                        for (k, v) in map {
+                            let s = match v {
+                                serde_json::Value::String(s) => s,
+                                other => other.to_string(),
+                            };
+                            params.insert(k, s);
+                        }
+                    }
+                    _ => {
+                        eprintln!("--params-file must be a JSON object of string values: {p}");
+                        return 1;
+                    }
+                }
+            }
+            "--folder" | "--corpus" | "--glob" => {
+                let key = args[i].trim_start_matches('-').to_string();
+                i += 1;
+                match args.get(i) {
+                    Some(v) => {
+                        params.insert(key, v.clone());
+                    }
+                    None => {
+                        eprintln!("--{key} needs a value");
+                        return 1;
+                    }
+                }
+            }
             s if !s.starts_with('-') && file.is_none() => file = Some(s.to_string()),
             other => {
                 eprintln!("Unknown argument: {other}");
@@ -105,14 +242,22 @@ async fn cmd_run(args: &[String]) -> i32 {
     }
 
     let Some(file) = file else {
-        eprintln!("Usage: sovereign workflow run <file.toml>");
+        eprintln!("Usage: sovereign workflow run <name|file.toml> [--folder <dir>] …");
+        eprintln!("       sovereign workflow list   # to see available workflows");
         return 1;
     };
 
-    let toml = match std::fs::read_to_string(&file) {
-        Ok(t) => t,
+    // Resolve a bare name (shipped starter or ~/.sovereign/workflows/<name>.toml)
+    // or a path. Echo the origin for a name so it's clear which file ran.
+    let toml = match resolve_workflow_source(&file) {
+        Ok((t, origin)) => {
+            if !origin.contains('/') {
+                eprintln!("workflow: {origin}");
+            }
+            t
+        }
         Err(e) => {
-            eprintln!("read {file}: {e}");
+            eprintln!("{e}");
             return 1;
         }
     };
@@ -124,7 +269,144 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
     };
 
-    run_assembled(&wf, &daemon, concurrency, no_cache).await
+    // Default the corpus id to the folder's basename when --folder is given
+    // without --corpus, so the flagship one-liner needs only --folder.
+    if params.contains_key("folder") && !params.contains_key("corpus") {
+        if let Some(base) = std::path::Path::new(&params["folder"])
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|b| !b.is_empty())
+        {
+            params.insert("corpus".to_string(), base.to_string());
+        }
+    }
+
+    run_assembled(&wf, &daemon, concurrency, no_cache, params).await
+}
+
+/// `sovereign workflow list` — the gallery: shipped starters + the user's own
+/// (`~/.sovereign/workflows/`), user shadowing a same-named starter.
+fn cmd_list() -> i32 {
+    let dir = workflows_dir();
+    let mut rows: Vec<(String, &'static str, String)> = Vec::new();
+    let mut user_names = std::collections::HashSet::new();
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("toml") {
+                continue;
+            }
+            if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                let desc = std::fs::read_to_string(&p)
+                    .map(|t| first_comment_line(&t))
+                    .unwrap_or_default();
+                user_names.insert(stem.to_string());
+                rows.push((stem.to_string(), "user", desc));
+            }
+        }
+    }
+    for (name, toml) in SHIPPED_WORKFLOWS {
+        if !user_names.contains(*name) {
+            rows.push((name.to_string(), "shipped", first_comment_line(toml)));
+        }
+    }
+    rows.sort();
+    if rows.is_empty() {
+        println!("No workflows found.");
+        return 0;
+    }
+    println!("{:<16} {:<8} {}", "WORKFLOW", "SOURCE", "DESCRIPTION");
+    for (name, src, desc) in &rows {
+        let d: String = desc.chars().take(76).collect();
+        println!("{name:<16} {src:<8} {d}");
+    }
+    println!("\nRun:   sovereign workflow run <name> --folder <dir> [--corpus <id>]");
+    println!("Edit:  sovereign workflow copy <name> <new-name>   # → ~/.sovereign/workflows/");
+    0
+}
+
+/// `sovereign workflow copy <name> [new]` — copy any workflow into the user dir
+/// for editing.
+fn cmd_copy(args: &[String]) -> i32 {
+    let Some(id) = args.first() else {
+        eprintln!("Usage: sovereign workflow copy <name> [new-name]");
+        return 1;
+    };
+    let (toml, _) = match resolve_workflow_source(id) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let new = args
+        .get(1)
+        .map(|s| s.as_str())
+        .unwrap_or(id)
+        .trim_end_matches(".toml");
+    write_user_workflow(new, &toml)
+}
+
+/// `sovereign workflow new <name> [--from <starter>]` — scaffold a new editable
+/// workflow from a starter (default `notebook`).
+fn cmd_new(args: &[String]) -> i32 {
+    let mut name: Option<&str> = None;
+    let mut from = "notebook";
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--from" => {
+                i += 1;
+                match args.get(i) {
+                    Some(f) => from = f,
+                    None => {
+                        eprintln!("--from needs a starter name");
+                        return 1;
+                    }
+                }
+            }
+            s if name.is_none() => name = Some(s),
+            other => {
+                eprintln!("unexpected argument: {other}");
+                return 1;
+            }
+        }
+        i += 1;
+    }
+    let Some(name) = name else {
+        eprintln!("Usage: sovereign workflow new <name> [--from <starter>]");
+        return 1;
+    };
+    let (toml, _) = match resolve_workflow_source(from) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    write_user_workflow(name.trim_end_matches(".toml"), &toml)
+}
+
+/// Write a workflow into `~/.sovereign/workflows/<name>.toml`, refusing to clobber
+/// an existing one. Prints the path + the run one-liner.
+fn write_user_workflow(name: &str, toml: &str) -> i32 {
+    let dir = workflows_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("create {}: {e}", dir.display());
+        return 1;
+    }
+    let dest = dir.join(format!("{name}.toml"));
+    if dest.exists() {
+        eprintln!("{} already exists — pick another name", dest.display());
+        return 1;
+    }
+    if let Err(e) = std::fs::write(&dest, toml) {
+        eprintln!("write {}: {e}", dest.display());
+        return 1;
+    }
+    println!("Created {}", dest.display());
+    println!("Edit it, then:  sovereign workflow run {name} --folder <dir>");
+    0
 }
 
 /// Assemble the light stack — daemon-routed inference (only when a `model:` or
@@ -138,6 +420,7 @@ pub(crate) async fn run_assembled(
     daemon: &str,
     concurrency: usize,
     no_cache: bool,
+    params: std::collections::BTreeMap<String, String>,
 ) -> i32 {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
     let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
@@ -178,6 +461,7 @@ pub(crate) async fn run_assembled(
     tools.register(Box::new(WebFetchTool::new()));
     tools.register(Box::new(ChunkTool));
     tools.register(Box::new(SectionTool));
+    tools.register(Box::new(ExtractTool));
     tools.register(Box::new(ReadJsonTool));
     tools.register(Box::new(ReadFileTool));
     tools.register(Box::new(ZipTool));
@@ -221,7 +505,11 @@ pub(crate) async fn run_assembled(
         Arc::new(FileArtifactCache::new(cache_dir()))
     };
     let registry = StepRegistry::new(inference, Arc::new(tools));
-    let report = match Runner::with_cache(registry, cache).run(wf, concurrency).await {
+    let report = match Runner::with_cache(registry, cache)
+        .with_params(params.clone())
+        .run(wf, concurrency)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("workflow run failed: {e}");
@@ -241,6 +529,18 @@ pub(crate) async fn run_assembled(
         match &item.result {
             Ok(text) => println!("\n## {}\n{}", item.item, text.trim()),
             Err(e) => eprintln!("✗ {}: {e}", item.item),
+        }
+    }
+    // Handoff: if this workflow built a corpus (a `tool:corpus_store` step) and at
+    // least one item succeeded, tell the user how to query it — the flagship's
+    // "now chat with it" payoff.
+    if report.ok_count() > 0 && wf.steps.iter().any(|s| s.uses == "tool:corpus_store") {
+        if let Some(corpus) = params.get("corpus").filter(|c| !c.is_empty()) {
+            eprintln!(
+                "\n✓ Notebook \"{corpus}\" is searchable — nothing left your machine.\n\n  \
+                 Ask it (cited, instant):\n    sovereign chat inspect --corpus {corpus} \"your question\"\n  \
+                 Or chat with full answers:\n    sovereign chat ask \"your question\"\n"
+            );
         }
     }
     i32::from(report.failed_count() > 0)

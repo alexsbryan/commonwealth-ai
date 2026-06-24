@@ -27,7 +27,7 @@ pub fn referenced_ids(text: &str) -> Vec<String> {
     ref_re()
         .captures_iter(text)
         .map(|c| c[1].to_string())
-        .filter(|r| r != "item" && r != "element")
+        .filter(|r| r != "item" && r != "element" && r != "param")
         .collect()
 }
 
@@ -43,6 +43,12 @@ pub fn resolve_str(template: &str, scope: &Scope) -> String {
 fn resolve_one(reference: &str, key: &str, scope: &Scope) -> String {
     if reference == "item" {
         return scope.item.get(key).cloned().unwrap_or_default();
+    }
+    if reference == "param" {
+        // Run-global parameters (`--param k=v`, `--folder`). Warn-on-missing like
+        // the other pseudo-sources is left to the caller; an unset param resolves
+        // to empty (so `{param.glob}` with no `--glob` means "match every file").
+        return scope.params.get(key).cloned().unwrap_or_default();
     }
     if reference == "element" {
         // The current `for_each` element: `{element.<field>}` for an object,
@@ -177,7 +183,7 @@ fn resolve_value_string(s: &str, scope: &Scope) -> serde_json::Value {
                     return v.clone();
                 }
             }
-        } else if reference != "item" {
+        } else if reference != "item" && reference != "param" {
             if let Some(artifact) = scope.completed.get(reference) {
                 // The tolerant-`for_each` failures array sits beside the output.
                 if key == "failures" {
@@ -264,6 +270,7 @@ mod tests {
             item: BTreeMap::new(),
             completed: Arc::new(completed),
             element: None,
+            params: Arc::new(BTreeMap::new()),
         }
     }
 
@@ -303,6 +310,7 @@ mod tests {
             item,
             completed: Arc::new(BTreeMap::new()),
             element: None,
+            params: Arc::new(BTreeMap::new()),
         };
         assert_eq!(
             resolve_value(&toml::Value::String("{item.stem}".into()), &s),
@@ -353,5 +361,30 @@ mod tests {
             serde_json::json!({ "id": "cl_0001", "facet": "question" }),
             "the whole element object splices by value"
         );
+    }
+
+    /// Run-global `{param.*}` resolves from `scope.params` (prose + value
+    /// positions), stays a string in value position (never splices), and is not a
+    /// DAG edge — so `--folder`/`--param` reach a workflow at run time.
+    #[test]
+    fn param_refs_resolve_stringify_and_are_not_edges() {
+        let mut params = BTreeMap::new();
+        params.insert("folder".to_string(), "/tmp/notes".to_string());
+        let scope = Scope {
+            params: Arc::new(params),
+            ..Default::default()
+        };
+        // Prose position (resolve_str): interpolates.
+        assert_eq!(super::resolve_str("{param.folder}/x", &scope), "/tmp/notes/x");
+        // Value position: stays a string (no splice path).
+        assert_eq!(
+            resolve_value(&toml::Value::String("{param.folder}".into()), &scope),
+            serde_json::json!("/tmp/notes"),
+        );
+        // Not a DAG edge (like item/element).
+        assert!(super::referenced_ids("{param.folder}").is_empty());
+        // An unset param resolves to empty (so `{param.glob}` with no --glob means
+        // "match every file").
+        assert_eq!(super::resolve_str("{param.missing}", &scope), "");
     }
 }
