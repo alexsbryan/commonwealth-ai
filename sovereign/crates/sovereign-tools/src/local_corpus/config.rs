@@ -88,6 +88,16 @@ pub struct WatchedFolderConfig {
     /// every field even when they want the defaults.
     #[serde(default)]
     pub follow_symlinks: bool,
+    /// Optional workflow (a `sovereign workflow` name, or a `.toml` path) to run
+    /// automatically whenever a sweep produces added/modified/removed changes —
+    /// the "living trigger". `None` (the default) means no trigger and behaviour
+    /// is byte-identical to a folder without one. Set only via an explicit,
+    /// consent-gated attach (`corpus watch --on-change`), because a triggered
+    /// workflow runs unattended.
+    ///
+    /// `#[serde(default)]` so pre-trigger sidecars round-trip as `None`.
+    #[serde(default)]
+    pub run_on_changes: Option<String>,
     /// Threshold guard against catastrophic deletion (drive unmount,
     /// `rm -rf`, etc.). Evaluated before any deletion is applied.
     ///
@@ -278,6 +288,7 @@ impl Default for WatchedFolderConfig {
             sensitive: false,
             additional_roots: Vec::new(),
             enrichment: WatchedEnrichmentConfig::Off,
+            run_on_changes: None,
         }
     }
 }

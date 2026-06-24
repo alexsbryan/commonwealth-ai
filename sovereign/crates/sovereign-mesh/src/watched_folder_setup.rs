@@ -27,6 +27,7 @@ use sovereign_tools::local_corpus::watched::scheduler::{
     ScheduleCancel, Scheduler, SchedulerConfig,
 };
 use sovereign_tools::local_corpus::watched::worker::Worker;
+use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 /// Default sweep cadence for obsidian vaults registered with the
@@ -64,6 +65,10 @@ impl WatchedSubsystem {
         engine: Arc<CorpusEngine>,
         manager: Arc<LocalCorpusManager>,
         max_concurrent_sweeps: usize,
+        // The living-trigger runtime (a `DaemonWorkflowRuntime` from
+        // `sovereign-workflow-host`). `None` disables the trigger — the desktop's
+        // embedded daemon passes `None` for v1; the CLI daemon passes `Some`.
+        workflow_runtime: Option<Arc<dyn WorkflowTriggerRuntime>>,
     ) -> Self {
         let registry = Arc::new(WatchedFolderRegistry::new());
 
@@ -133,13 +138,16 @@ impl WatchedSubsystem {
             });
         });
 
-        let worker = Arc::new(Worker::new(
-            Arc::clone(&engine),
-            Arc::clone(&manager),
-            Arc::clone(&registry),
-            sink,
-            manager.index_dir_root(),
-        ));
+        let worker = Arc::new(
+            Worker::new(
+                Arc::clone(&engine),
+                Arc::clone(&manager),
+                Arc::clone(&registry),
+                sink,
+                manager.index_dir_root(),
+            )
+            .with_workflow_runtime(workflow_runtime),
+        );
 
         let (cancel_tx, cancel_token) = ScheduleCancel::new();
         let scheduler_cfg = SchedulerConfig {

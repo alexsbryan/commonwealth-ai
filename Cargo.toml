@@ -29,6 +29,10 @@ members = [
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
     # local-model steps; the general form of corpus-ingest/enrichment/agent).
     "sovereign/crates/sovereign-workflow",
+    # Daemon-runnable workflow host — the registry assembly + in-process runner +
+    # catalog, hoisted out of the CLI so the daemon can run workflows (the living
+    # trigger's prerequisite).
+    "sovereign/crates/sovereign-workflow-host",
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
@@ -114,6 +118,7 @@ sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-workflow = { path = "sovereign/crates/sovereign-workflow" }
+sovereign-workflow-host = { path = "sovereign/crates/sovereign-workflow-host" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }

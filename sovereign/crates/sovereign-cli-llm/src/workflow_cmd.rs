@@ -8,28 +8,14 @@
 //! P0+P1 of `docs/specs/WORKFLOW_SUBSTRATE.md`; durable/distributed execution
 //! is P2 (the pipeline tool as an outer loop).
 
-use std::sync::Arc;
-use std::time::Duration;
-
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::SplitInferenceProvider;
-use sovereign_tools::atlas_phase::gaps::AtlasGapsTool;
-use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
-use sovereign_tools::corpus_store::CorpusStoreTool;
-use sovereign_tools::extract::ExtractTool;
-use sovereign_tools::rag::chunk::ChunkTool;
-use sovereign_tools::rag::section::SectionTool;
-use sovereign_tools::read_file::ReadFileTool;
-use sovereign_tools::read_json::ReadJsonTool;
-use sovereign_tools::zip::ZipTool;
-use sovereign_tools::shell::ShellTool;
-use sovereign_tools::web::WebFetchTool;
-use sovereign_tools::write_file::WriteFileTool;
-use sovereign_tools::write_json::WriteJsonTool;
-use sovereign_workflow::{
-    ArtifactCache, FileArtifactCache, NoCache, ResourceNeed, Runner, StepKind, StepRegistry,
-    Workflow,
+use sovereign_core::traits::Tool;
+use sovereign_workflow::Workflow;
+// The registry assembly, in-process runner, and workflow catalog now live in
+// `sovereign-workflow-host` (so the daemon can run workflows too); the CLI is a
+// thin presenter on top.
+use sovereign_workflow_host::{
+    first_comment_line, resolve_workflow_source, run_workflow_in_process, workflows_dir,
+    SHIPPED_WORKFLOWS,
 };
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
@@ -56,73 +42,9 @@ pub async fn run_workflow(args: &[String]) -> i32 {
     }
 }
 
-/// Shipped starter workflows, embedded at compile time. The gallery a fresh
-/// install can `list`, `run <name>`, and `copy` to edit — no files to find first.
-const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
-    (
-        "notebook",
-        include_str!("../../sovereign-workflow/recipes/notebook.toml"),
-    ),
-    (
-        "summarize",
-        include_str!("../../sovereign-workflow/recipes/summarize.toml"),
-    ),
-    (
-        "web-digest",
-        include_str!("../../sovereign-workflow/recipes/web-digest.toml"),
-    ),
-    (
-        "meeting-to-done",
-        include_str!("../../sovereign-workflow/recipes/meeting-to-done.toml"),
-    ),
-];
-
-/// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
-/// target). Resolved from the same home-dir as the setup config + workflow cache.
-fn workflows_dir() -> std::path::PathBuf {
-    sovereign_core::setup_config::SetupConfig::default_path()
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_default()
-        .join("workflows")
-}
-
-/// Resolve a workflow reference to `(toml, origin)`: an existing file path, else a
-/// user workflow (`~/.sovereign/workflows/<name>.toml`), else a shipped starter.
-/// User shadows shipped (same name → the user's edit wins).
-fn resolve_workflow_source(name_or_path: &str) -> std::result::Result<(String, String), String> {
-    let p = std::path::Path::new(name_or_path);
-    if p.is_file() {
-        return std::fs::read_to_string(p)
-            .map(|t| (t, p.display().to_string()))
-            .map_err(|e| format!("read {name_or_path}: {e}"));
-    }
-    let name = name_or_path.strip_suffix(".toml").unwrap_or(name_or_path);
-    let user = workflows_dir().join(format!("{name}.toml"));
-    if user.is_file() {
-        return std::fs::read_to_string(&user)
-            .map(|t| (t, format!("user:{name}")))
-            .map_err(|e| format!("read {}: {e}", user.display()));
-    }
-    if let Some((_, toml)) = SHIPPED_WORKFLOWS.iter().find(|(n, _)| *n == name) {
-        return Ok((toml.to_string(), format!("shipped:{name}")));
-    }
-    Err(format!(
-        "no workflow `{name_or_path}` — not a file, not in {}, not a shipped starter.\n\
-         See `sovereign workflow list`.",
-        workflows_dir().display()
-    ))
-}
-
-/// The first `#` comment line of a workflow's TOML — its one-line description for
-/// `list`. Empty when the file has no leading comment.
-fn first_comment_line(toml: &str) -> String {
-    toml.lines()
-        .map(|l| l.trim())
-        .find(|l| l.starts_with('#'))
-        .map(|l| l.trim_start_matches('#').trim().to_string())
-        .unwrap_or_default()
-}
+// The catalog (SHIPPED_WORKFLOWS, workflows_dir, resolve_workflow_source,
+// first_comment_line) moved to `sovereign-workflow-host` so the daemon's trigger
+// runtime resolves a watched folder's workflow the same way the CLI does.
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign workflow",
@@ -422,97 +344,22 @@ pub(crate) async fn run_assembled(
     no_cache: bool,
     params: std::collections::BTreeMap<String, String>,
 ) -> i32 {
-    let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
-    let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
-        let models = match discover_models(&v1).await {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!(
-                    "Daemon not reachable at {daemon} ({e}).\n\
-                     A `model:`/`embed:` step needs it — start it with `sovereign daemon`."
-                );
-                return 1;
-            }
-        };
-        // An `embed:` step needs an embedding model; fail clearly if none is loaded.
-        if uses_embed(wf) && models.embed.is_none() {
-            eprintln!(
-                "The daemon at {daemon} advertises no embedding model, but this workflow \
-                 has an `embed:` step.\nLoad an embed model (see `sovereign setup`) and retry."
-            );
-            return 1;
-        }
-        let chat = models.chat.clone().unwrap_or_default();
-        let embed = models.embed.clone().unwrap_or_default();
-        eprintln!(
-            "Daemon: {daemon}  ·  chat: {}  ·  embed: {}",
-            if chat.is_empty() { "—" } else { &chat },
-            if embed.is_empty() { "—" } else { &embed },
-        );
-        Some(Arc::new(SplitInferenceProvider::new(&v1, chat, embed, 8192)))
-    } else {
-        None
-    };
-
-    // Tools: cheap built-ins + MCP servers from the canonical config (same path
-    // chat uses, so a server added via `sovereign mcp add` works here too).
-    let mut tools = ToolRegistry::new();
-    tools.register(Box::new(ShellTool));
-    tools.register(Box::new(WebFetchTool::new()));
-    tools.register(Box::new(ChunkTool));
-    tools.register(Box::new(SectionTool));
-    tools.register(Box::new(ExtractTool));
-    tools.register(Box::new(ReadJsonTool));
-    tools.register(Box::new(ReadFileTool));
-    tools.register(Box::new(ZipTool));
-    tools.register(Box::new(CorpusStoreTool));
-    tools.register(Box::new(WriteJsonTool));
-    tools.register(Box::new(WriteFileTool));
-    tools.register(Box::new(AtlasGapsTool));
-    tools.register(Box::new(AtlasTensionsTool));
-    tools.register(Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool));
-    tools.register(Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool));
-    tools.register(Box::new(
-        crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool,
-    ));
-    tools.register(Box::new(
-        crate::enrich_cmd::workflow_primitives::PipelineAssembleTool,
-    ));
-    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool));
-    tools.register(Box::new(
-        crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool,
-    ));
-    let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
-    for st in mcp.server_statuses().await {
-        if st.connected {
-            eprintln!("MCP: {} ({} tools)", st.name, st.tool_count);
-        } else if let Some(e) = &st.error {
-            eprintln!("MCP: {} unavailable — {e}", st.name);
-        }
-    }
-
-    // Content-addressed cache (default on): a re-run with unchanged inputs
-    // skips Read-effect steps. `--no-cache` forces every step to run.
-    let cache: Arc<dyn ArtifactCache> = if no_cache {
-        Arc::new(NoCache)
-    } else {
-        Arc::new(FileArtifactCache::new(cache_dir()))
-    };
-    let registry = StepRegistry::new(inference, Arc::new(tools));
-    let report = match Runner::with_cache(registry, cache)
-        .with_params(params.clone())
-        .run(wf, concurrency)
-        .await
+    // Assembly + run live in `sovereign-workflow-host` (so the daemon can run
+    // workflows too). The CLI injects its enrichment-authoring tools as
+    // `extra_tools`; everything else is the standard registry.
+    let report = match run_workflow_in_process(
+        wf,
+        daemon,
+        concurrency,
+        no_cache,
+        params.clone(),
+        enrich_tools(),
+    )
+    .await
     {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("workflow run failed: {e}");
+            eprintln!("{e}");
             return 1;
         }
     };
@@ -546,80 +393,26 @@ pub(crate) async fn run_assembled(
     i32::from(report.failed_count() > 0)
 }
 
-/// Whether any step needs daemon-routed inference (so the daemon provider is
-/// assembled and required). Classifies via the typed `StepKind::resources()` —
-/// the exhaustive classifier — not a `uses.starts_with(…)` probe that a new
-/// inference-bearing kind could slip past (ARCH §2.1).
-fn needs_inference(wf: &Workflow) -> bool {
-    wf.steps.iter().any(|s| {
-        StepKind::parse(&s.uses)
-            .map(|k| k.resources() == ResourceNeed::Inference)
-            .unwrap_or(false)
-    })
-}
-
-/// Whether the workflow has an `embed:` step (so we require an embedding model).
-/// Matches the typed `Embed` variant, not the `"embed:"` prefix string.
-fn uses_embed(wf: &Workflow) -> bool {
-    wf.steps
-        .iter()
-        .any(|s| matches!(StepKind::parse(&s.uses), Ok(StepKind::Embed { .. })))
-}
-
-/// `~/.sovereign/workflow-cache` — alongside the canonical config (reuses its
-/// home-dir resolution so we don't depend on `dirs` here).
-fn cache_dir() -> std::path::PathBuf {
-    sovereign_core::setup_config::SetupConfig::default_path()
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_default()
-        .join("workflow-cache")
-}
-
-/// The chat + embed model ids the daemon advertises.
-pub(crate) struct DaemonModels {
-    pub chat: Option<String>,
-    pub embed: Option<String>,
-}
-
-/// GET `<v1>/models` and split the advertised ids into chat vs. embed (by the
-/// `embed` substring convention — the same one `/embeddings` routing uses).
-/// Doubles as the daemon liveness probe (a connection error → "start the
-/// daemon"). Shared with `corpus search` so the convention lives in one place.
-pub(crate) async fn discover_models(v1: &str) -> std::result::Result<DaemonModels, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client
-        .get(format!("{v1}/models"))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("/v1/models → HTTP {}", resp.status()));
-    }
-    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let models = body
-        .get("data")
-        .and_then(|d| d.as_array())
-        .ok_or_else(|| "malformed /v1/models response".to_string())?;
-    let ids: Vec<&str> = models
-        .iter()
-        .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
-        .collect();
-    let embed = ids
-        .iter()
-        .find(|id| id.to_lowercase().contains("embed"))
-        .map(|s| s.to_string());
-    let chat = ids
-        .iter()
-        .find(|id| !id.to_lowercase().contains("embed"))
-        .map(|s| s.to_string());
-    if chat.is_none() && embed.is_none() {
-        return Err("the daemon advertises no models".to_string());
-    }
-    Ok(DaemonModels { chat, embed })
+/// The CLI-local enrichment-authoring tools the workflow runner needs in addition
+/// to the standard built-ins — the atlas/pipeline leaves the bespoke enrich
+/// pipeline composes (`crate::enrich_cmd::*`). Injected into the host runtime as
+/// `extra_tools`; the daemon trigger runtime passes none (a living-folder workflow
+/// uses only the standard set + MCP).
+fn enrich_tools() -> Vec<Box<dyn Tool>> {
+    vec![
+        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool),
+        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool),
+    ]
 }
 
 #[cfg(test)]

@@ -38,7 +38,7 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
     // Embed the query via the daemon's embed slot — reuses the workflow command's
     // model discovery so the `embed` model convention lives in one place.
     let v1 = format!("{DEFAULT_DAEMON}/v1");
-    let models = match crate::workflow_cmd::discover_models(&v1).await {
+    let models = match sovereign_workflow_host::discover_models(&v1).await {
         Ok(m) => m,
         Err(e) => {
             eprintln!(

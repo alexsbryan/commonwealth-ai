@@ -74,6 +74,18 @@ pub enum WatchedFolderEvent {
         corpus_id: String,
         reason: String,
     },
+    /// A sweep produced changes and the folder has a `run_on_changes` workflow
+    /// attached — the daemon is dispatching it (the living trigger fired).
+    WorkflowTriggered {
+        corpus_id: String,
+        workflow: String,
+    },
+    /// A triggered workflow finished. `status` is a short human summary, e.g.
+    /// `"ok: 3 items"` or `"error: daemon unreachable"`.
+    WorkflowRun {
+        corpus_id: String,
+        status: String,
+    },
 }
 
 impl WatchedFolderEvent {
@@ -92,7 +104,9 @@ impl WatchedFolderEvent {
             | WatchedFolderEvent::RevivalDetected { corpus_id, .. }
             | WatchedFolderEvent::TombstoneExpired { corpus_id, .. }
             | WatchedFolderEvent::TombstoneEvicted { corpus_id, .. }
-            | WatchedFolderEvent::SweepSkipped { corpus_id, .. } => corpus_id,
+            | WatchedFolderEvent::SweepSkipped { corpus_id, .. }
+            | WatchedFolderEvent::WorkflowTriggered { corpus_id, .. }
+            | WatchedFolderEvent::WorkflowRun { corpus_id, .. } => corpus_id,
         }
     }
 }

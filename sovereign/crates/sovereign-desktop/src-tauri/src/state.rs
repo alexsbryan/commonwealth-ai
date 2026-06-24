@@ -1024,6 +1024,8 @@ pub async fn bootstrap_with_progress(
                 Arc::clone(&corpus_engine),
                 lc_mgr,
                 max_concurrent,
+                // Living trigger: desktop deferred to the recipe×workflow merge (v1).
+                None,
             )
             .await;
             // Stash the subsystem on the AppState so its

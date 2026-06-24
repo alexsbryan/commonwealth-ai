@@ -11868,6 +11868,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
+ "sovereign-workflow-host",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -11957,6 +11958,7 @@ dependencies = [
  "sovereign-tools",
  "sovereign-work-atlas",
  "sovereign-workflow",
+ "sovereign-workflow-host",
  "tar",
  "tempfile",
  "tokio",
@@ -12356,6 +12358,22 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 0.8.2",
+ "tracing",
+]
+
+[[package]]
+name = "sovereign-workflow-host"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-core",
+ "sovereign-inference",
+ "sovereign-tools",
+ "sovereign-workflow",
+ "tempfile",
+ "tokio",
  "tracing",
 ]
 
