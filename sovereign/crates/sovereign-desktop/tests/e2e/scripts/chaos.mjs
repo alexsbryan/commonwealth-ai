@@ -80,6 +80,11 @@ const flag = (name, fb) => {
   return i >= 0 ? argv[i + 1] : fb;
 };
 const MINUTES = Number(flag("minutes", "10"));
+// Stop after N SCORED chats (0 = time-only). The chat rate varies 2-3x with the
+// question mix (slow declines/hangs thin a fixed-minute run), so a chat-count
+// target gives every iteration a consistent sample — the right knob for the
+// measure-iterate loop's signal threshold. MINUTES then acts as a safety cap.
+const CHATS = Number(flag("chats", "0"));
 const SPAWN = argv.includes("--spawn");
 // --attach wanders the resident corpora by attaching the spawned desktop to the
 // already-running dev daemon on :9741, so it is the opposite of supervising our
@@ -493,8 +498,15 @@ async function attachQuestion() {
         .replace(/^["']+|["']+$/g, "")
         .slice(0, 300);
       if (question) {
-        state.lastQuestion = question;
-        return question;
+        // SOVEREIGN_CHAOS_FORCE_LONG=1 appends a long-answer directive to ~half
+        // the questions so the run exercises the synthesis truncation path
+        // (finish_reason=Length) — used to validate the answer-truncation fix.
+        const q2 =
+          process.env.SOVEREIGN_CHAOS_FORCE_LONG && chance(0.5)
+            ? `${question} Answer in exhaustive, comprehensive detail — at least 1500 words.`
+            : question;
+        state.lastQuestion = q2;
+        return q2;
       }
     }
   } catch {
@@ -931,12 +943,24 @@ async function chaosStep(memorySummary) {
   let answer = null;
   let aligned = null; // bench grounding verdict — the primary answer oracle
   let userJudge = null; // UX layer: coherence/completeness + graceful-vs-abrasive
+  // Evidence observability: how many chunks the runtime surfaced (retrieved),
+  // how many we resolved to full text (resolved), and the total evidence size.
+  // This separates a REAL fabrication (asserted value absent from PRESENT
+  // evidence) from a measurement artifact (oracle scored against EMPTY evidence
+  // because retrieval returned nothing, or chunk resolution failed). Without it
+  // the hallucination count conflates the two and the loop signal is untrustworthy.
+  let evidence = null;
   if (isChat && ok && result?.message_id) {
     const got = await awaitChatAnswer(since, result.message_id, 120_000);
     if (got && got.answer && got.answer.length > 0) {
       answer = got.answer;
       const question = chosen.args.message ?? chosen.args.question;
       const chunkTexts = await resolveChunkTexts(got.chunks);
+      evidence = {
+        retrieved: got.chunks.length,
+        resolved: chunkTexts.length,
+        chars: chunkTexts.reduce((n, t) => n + t.length, 0),
+      };
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
       userJudge = await judgeAsUser(question, answer);
       if (aligned?.verdict) verdicts[aligned.verdict] = (verdicts[aligned.verdict] ?? 0) + 1;
@@ -974,9 +998,16 @@ async function chaosStep(memorySummary) {
     ok,
     error: error ? error.slice(0, 240) : null,
     answer: answer != null ? answer.slice(0, 200) : null,
+    // Full length + the last 80 chars: the journal stores only a 200-char head,
+    // so a real mid-sentence cut-off (early stream-end, no finish_reason=Length)
+    // is invisible without seeing how the answer actually ENDS. A complete answer
+    // ends on terminal punctuation; a cut-off ends mid-word/phrase.
+    answerLen: answer != null ? answer.length : null,
+    answerTail: answer != null && answer.length > 200 ? answer.slice(-80) : null,
     aligned: aligned
       ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
       : null,
+    evidence,
     userJudge,
     latencyMs,
     surprise: surprise.score,
@@ -1185,8 +1216,9 @@ async function main() {
   record({ ts: Date.now(), kind: "chaos_start", minutes: MINUTES, brain: BRAIN_MODEL });
 
   const endAt = Date.now() + MINUTES * 60_000;
+  const scoredCount = () => Object.values(verdicts).reduce((a, b) => a + b, 0);
   let consecutiveDead = 0;
-  while (Date.now() < endAt) {
+  while (Date.now() < endAt && (CHATS === 0 || scoredCount() < CHATS)) {
     let res;
     try {
       res = await chaosStep(memorySummary());

@@ -247,12 +247,30 @@ pub async fn send_message_stream(
                         );
                     }
                     Err(e) => {
-                        // Surface the error as a contract-compliant turn (a
-                        // rejected oversize message lands here): one chunk so
-                        // concat == full_text, and an `intent` marker so the
-                        // turn is visible to the provenance surface instead of
-                        // an intent-less blank. Also clears the loading state.
-                        let body = format!("Error: {e}");
+                        // A rejected oversize message lands here. That is a
+                        // NORMAL user action (a big paste), not a system
+                        // failure — so present the runtime's guidance as a calm
+                        // assistant turn (the hint is written to be shown
+                        // unchanged), NOT a raw "Error: Invalid input:" bubble
+                        // that reads as a crash. Every other error keeps the
+                        // diagnostic "Error:" framing. Either way it is a
+                        // contract-compliant turn: one chunk so concat ==
+                        // full_text, plus an `intent` marker so the turn is
+                        // visible to the provenance surface (and clears the
+                        // loading state) instead of an intent-less blank.
+                        let oversize = matches!(
+                            &e,
+                            sovereign_core::Error::InvalidInput(m)
+                                if m.as_str() == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT
+                        );
+                        let (body, intent) = if oversize {
+                            (
+                                sovereign_core::runtime::OVERSIZE_MESSAGE_HINT.to_string(),
+                                "oversize_guidance",
+                            )
+                        } else {
+                            (format!("Error: {e}"), "error")
+                        };
                         let _ = app.emit(
                             "message-chunk",
                             MessageChunkPayload {
@@ -267,7 +285,7 @@ pub async fn send_message_stream(
                                 conversation_id: conversation_id_owned,
                                 message_id: pending_clone.clone(),
                                 full_text: body,
-                                metadata: Some(serde_json::json!({ "intent": "error" })),
+                                metadata: Some(serde_json::json!({ "intent": intent })),
                             },
                         );
                     }

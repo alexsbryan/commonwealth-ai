@@ -237,6 +237,24 @@ async fn run_synthesis_stream(
         break 'synth;
     }
 
+    // Glassbox: a Length finish means the model was cut off at its token cap
+    // mid-generation and the partial text is what gets released (FinishReason is
+    // otherwise recorded but never acted on). Logging the cap + the think budget
+    // + the produced token count makes "was the answer truncated, and by what
+    // budget?" answerable from logs — the signal needed to size the fix (raise
+    // the synthesis output budget vs. think-tokens eating the visible answer).
+    if matches!(observed_finish, Some(crate::types::FinishReason::Length)) {
+        tracing::warn!(
+            target: "synth.truncation",
+            max_tokens = ?request.max_tokens,
+            think_budget = ?request.think_budget,
+            completion_tokens = ?observed_completion_tokens,
+            answer_chars = full_text.chars().count(),
+            "{}: answer TRUNCATED at the token cap (finish_reason=Length) — partial released mid-generation",
+            log_tag
+        );
+    }
+
     Some(SynthStreamOutcome {
         model_id,
         observed_finish,
@@ -1434,11 +1452,23 @@ impl Runtime {
         // ids exist (Tier 1 prompt discipline is then the only
         // safety net — same posture as today).
         let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
+        // Generous synthesis output budget so a thorough DEEP answer completes
+        // instead of truncating mid-sentence at the general cap (mirror of the
+        // KnowledgeQuery PrimarySynthesis fix; the enforce() ladder protects this
+        // reservation by trimming evidence first). Deep answers are the long-form
+        // path, so this is where truncation bites hardest. Env-tunable
+        // (SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR, default 4096); see synth.truncation.
+        let synth_max = self.inference_config.max_tokens.max(
+            std::env::var("SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(4096),
+        );
         let mut request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
-            max_tokens: Some(self.inference_config.max_tokens),
+            max_tokens: Some(synth_max),
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(self.inference_config.think_budget),
             structured_output: None,

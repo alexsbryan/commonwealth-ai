@@ -377,15 +377,21 @@ impl Runtime {
             let corpora = context.installed_corpora_display();
             let prompt = format!(
                 "The user asked: \"{message}\"\n\n\
-                 You searched these installed knowledge sources: {corpora}\n\
-                 The search returned no relevant results.\n\n\
-                 Answer the question from your general knowledge. \
-                 Do not refuse to answer or dwell on the absence of sources \
-                 (the reply is already prefixed with the provenance caveat — \
-                 do not repeat it). \
-                 If you are confident about the topic, answer directly and substantively. \
-                 If you are genuinely uncertain, say so and suggest web search or \
-                 installing an additional corpus."
+                 A search of the installed sources ({corpora}) found nothing \
+                 relevant, so you have no evidence from the user's own material. \
+                 Your reply already opens by noting that — so continue straight \
+                 into the substance and do NOT restate that opening (no echoing \
+                 it, no second caveat).\n\n\
+                 If the question has a genuine general-knowledge answer (a public \
+                 fact, a concept, how something works), give it concisely and \
+                 directly.\n\
+                 If instead it asks for a specific detail that could only come \
+                 from a particular document, dataset, or codebase you don't have, \
+                 do NOT invent it — say in one short sentence that you don't have \
+                 that material, then offer one concrete next step. Never \
+                 fabricate names, numbers, code, identifiers, commands, or URLs.\n\
+                 Keep it brief and warm: a few sentences at most, no preamble and \
+                 no meta-commentary about source limitations."
             );
             let request = CompletionRequest {
                 prompt,
@@ -903,9 +909,22 @@ impl Runtime {
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
-                let budget_note = crate::runtime::build_response_length_directive(
-                    self.inference_config.max_tokens,
+                // Give synthesis a generous output budget so a thorough answer
+                // COMPLETES instead of truncating mid-sentence at the general
+                // cap (finish_reason=Length, released as-is — see synth.truncation
+                // telemetry). The enforce() ladder protects the output reservation
+                // by trimming evidence FIRST, so a larger reservation just gives
+                // the answer the room — the 16k context easily holds it. A
+                // truncated answer is wrong regardless of grounding; the length
+                // directive still steers conciseness. Env-tunable for calibration
+                // against the truncation telemetry, default 4096.
+                let synth_max = self.inference_config.max_tokens.max(
+                    std::env::var("SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR")
+                        .ok()
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .unwrap_or(4096),
                 );
+                let budget_note = crate::runtime::build_response_length_directive(synth_max);
                 // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
                 // is a `<think>`-block contract — include it only when a think
                 // budget is allocated. Comparison routes to FastFocused, never here.
@@ -920,7 +939,7 @@ impl Runtime {
                     prompt,
                     system_message: Some(system),
                     preferred_speed: route_speed,
-                    max_tokens: Some(self.inference_config.max_tokens),
+                    max_tokens: Some(synth_max),
                     temperature: Some(self.inference_config.temperature),
                     think_budget: Some(self.inference_config.think_budget),
                     structured_output: None,
