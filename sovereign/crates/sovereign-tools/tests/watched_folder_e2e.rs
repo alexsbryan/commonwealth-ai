@@ -208,6 +208,53 @@ async fn run_on_changes_dispatches_on_changed_sweep_only() {
     );
 }
 
+/// Empty-folder gotcha: registering + ingesting a folder with no files must still
+/// produce a valid, ingestion-complete index (`_corpus_meta.json` present), so a
+/// watched-folder sweep doesn't error forever on a missing meta — and so files
+/// added later are picked up. Regression for the living-trigger e2e finding.
+#[tokio::test]
+async fn empty_folder_ingest_yields_a_sweepable_index() {
+    let fx = boot().await;
+    // Register an EMPTY folder, then ingest. Before the fix this left the index
+    // without `_corpus_meta.json` and every sweep errored.
+    let id = register(&fx, WatchedFolderConfig::default()).await;
+    fx.manager
+        .ingest(&id, None, None)
+        .await
+        .expect("ingest of an empty folder must succeed");
+
+    // The meta must exist now — the index is a valid (empty) corpus.
+    let meta = fx
+        .manager
+        .index_dir_root()
+        .join(&id)
+        .join("_corpus_meta.json");
+    assert!(
+        meta.is_file(),
+        "empty-folder ingest must create _corpus_meta.json at {}",
+        meta.display()
+    );
+
+    // A sweep over the still-empty folder must NOT error (previously: Errored).
+    fx.worker
+        .run_once(&id)
+        .await
+        .expect("sweep over an empty folder must not error");
+
+    // A file added after registration must be picked up — the empty index accepts
+    // appends through the normal apply path.
+    write(&fx.folder.join("late.md"), "arrived after registration");
+    let outcome = fx
+        .worker
+        .run_once(&id)
+        .await
+        .expect("sweep after adding a file must not error");
+    assert!(
+        matches!(outcome, WorkerOutcome::Applied(ref s) if s.added >= 1),
+        "the late file should be detected + applied; got {outcome:?}"
+    );
+}
+
 #[tokio::test]
 async fn watched_folder_factory_pins_local_scope() {
     // ARCH §7: privacy invariant. Even when the caller passes a

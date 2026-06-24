@@ -436,6 +436,84 @@ impl CorpusEngine {
         }
     }
 
+    /// Ensure a valid but **empty** on-disk index exists for `corpus` (create it
+    /// and mark it ingestion-complete, or no-op if one is already present).
+    ///
+    /// For corpora that have nothing to ingest *yet* — an empty watched folder, or
+    /// one whose files all failed extraction — so the on-disk shape is valid
+    /// (`_corpus_meta.json` present, `installed_indexes()` sees it) and the
+    /// watched-folder sweep can append to it as files arrive, instead of erroring
+    /// on a missing meta on every tick. This is the same "create empty now, append
+    /// later" shape the watcher-driven recipes use; here it's driven by the manager
+    /// when an initial ingest finds zero documents.
+    ///
+    /// Uses the engine's configured embedding model and its *probed*
+    /// dimensionality — the same resolution `ingest()` does — so a later append's
+    /// vectors match the empty index's vector schema.
+    pub async fn ensure_empty_index(&self, corpus: &CorpusSpec) -> Result<IngestResult> {
+        let started = Instant::now();
+        let recipe = self.resolve_recipe(corpus).await?;
+        std::fs::create_dir_all(&self.index_dir)?;
+
+        if self.expected_embedding_model.is_empty() {
+            return Err(Error::Embed(
+                "embedding model name not configured. Call \
+                 `CorpusEngine::with_embedding_model(stem)` before \
+                 `ensure_empty_index()`."
+                    .to_string(),
+            ));
+        }
+        // Probe for the model's true dimensionality so the empty index's vector
+        // schema matches what a later sweep appends (mirrors `ingest()`'s probe).
+        let probe = (self.embed)("probe").await.map_err(|e| {
+            Error::Embed(format!(
+                "Embedding function is not available: {e}. \
+                 Configure an embedding model before creating corpora."
+            ))
+        })?;
+        if probe.is_empty() {
+            return Err(Error::Embed(
+                "Embedding function returned an empty vector.".to_string(),
+            ));
+        }
+        let dims = probe.len();
+
+        let corpus_id = recipe.corpus.id.clone();
+        let canonical = self.index_dir.join(&corpus_id);
+        let idx = if !canonical.exists() {
+            std::fs::create_dir_all(canonical.parent().unwrap_or(&self.index_dir))?;
+            CorpusIndex::create_with_sharing(
+                &canonical,
+                &recipe.corpus.id,
+                &recipe.corpus.name,
+                &self.expected_embedding_model,
+                dims,
+                recipe.corpus.mesh_sharing,
+                recipe.corpus.query_sharing,
+                &recipe.corpus.license,
+            )
+            .await?
+        } else {
+            CorpusIndex::open(&canonical).await?
+        };
+        if !CorpusIndex::is_ingestion_complete(&canonical) {
+            idx.mark_ingestion_complete()?;
+        }
+        tracing::info!(
+            corpus_id = %corpus_id,
+            path = %canonical.display(),
+            dims,
+            "ingest: ensured empty index (nothing to ingest yet)"
+        );
+        Ok(IngestResult {
+            corpus_id,
+            chunks_created: 0,
+            index_size_bytes: 0,
+            duration_secs: started.elapsed().as_secs(),
+            docs_skipped: 0,
+        })
+    }
+
     /// The actual ingest pipeline. Pulled into its own function so the
     /// public `ingest()` can wrap it with cleanup-on-failure logic.
     ///
