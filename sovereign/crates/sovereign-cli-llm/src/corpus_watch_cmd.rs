@@ -101,6 +101,8 @@ pub async fn run_register(args: &[String]) -> i32 {
     let mut with_ocr = false;
     let mut manual = false;
     let mut sensitive = false;
+    let mut on_change: Option<String> = None;
+    let mut allow_trigger = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -121,6 +123,11 @@ pub async fn run_register(args: &[String]) -> i32 {
             "--ocr" => with_ocr = true,
             "--manual" => manual = true,
             "--sensitive" => sensitive = true,
+            // Living trigger: a workflow (name or .toml path) to run automatically
+            // whenever a sweep changes files. `--allow` skips the consent prompt
+            // (for scripting). See `attach_consent`.
+            "--on-change" => on_change = iter.next().cloned(),
+            "--allow" => allow_trigger = true,
             other if !other.starts_with("--") && path.is_none() => {
                 path = Some(PathBuf::from(other));
             }
@@ -205,6 +212,22 @@ pub async fn run_register(args: &[String]) -> i32 {
         config["deletion_guard"] = guard;
     }
 
+    // Living trigger: attach a workflow to run on every change. Because it runs
+    // unattended (shell / network / writes are possible), surface what it can do
+    // and require explicit consent before arming it.
+    if let Some(workflow) = &on_change {
+        match attach_consent(workflow, allow_trigger).await {
+            Ok(true) => config["run_on_changes"] = json!(workflow),
+            Ok(false) => {
+                eprintln!("Not arming the trigger; the folder will still be watched.");
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                return 1;
+            }
+        }
+    }
+
     let body = json!({
         "path": abs_path,
         "display_name": display_name,
@@ -279,9 +302,57 @@ fn print_register_help() {
     eprintln!("  --ocr                    OCR scanned PDFs (requires the daemon's OcrCtx to be installed)");
     eprintln!("  --manual                 Manual sync mode — only sweeps on `watch-sync-now` (default: continuous)");
     eprintln!("  --sensitive              Mark folder sensitive — excluded from ambient situated-context assembly");
+    eprintln!("  --on-change <WORKFLOW>   Run a workflow (a `sovereign workflow` name or .toml path)");
+    eprintln!("                           automatically on every change — the living trigger. Shows what");
+    eprintln!("                           the workflow can do and asks for consent (it runs unattended).");
+    eprintln!("  --allow                  Skip the --on-change consent prompt (for scripting)");
 }
 
 // ─── list / status / pause / resume / confirm / remove ──────
+
+/// Resolve a trigger workflow, show what it can do, and (unless `allow`) ask the
+/// user to confirm running it unattended on every change. Returns whether to arm
+/// it. The presence of `run_on_changes` in the stored config IS the recorded
+/// consent, so this gate is the single place that decides to set it.
+async fn attach_consent(workflow: &str, allow: bool) -> std::result::Result<bool, String> {
+    let (toml, origin) = sovereign_workflow_host::resolve_workflow_source(workflow)?;
+    let wf = sovereign_workflow::Workflow::parse(&toml)
+        .map_err(|e| format!("workflow `{workflow}`: {e}"))?;
+    let caps = sovereign_workflow_host::summarize_capabilities(&wf).await;
+
+    eprintln!("\nArming `{origin}` to run automatically on every change to this folder.");
+    let phrases = caps.describe();
+    if phrases.is_empty() {
+        eprintln!("  It only reads and organizes files — no shell, network, or writes.");
+    } else {
+        eprintln!("  It can:");
+        for p in &phrases {
+            eprintln!("    • {p}");
+        }
+    }
+    if !caps.unresolved.is_empty() {
+        eprintln!(
+            "  (couldn't fully check these steps now — e.g. an MCP server not connected: {})",
+            caps.unresolved.join(", ")
+        );
+    }
+
+    if allow {
+        eprintln!("  --allow given; arming without prompting.");
+        return Ok(true);
+    }
+    eprint!("\n  Run this unattended on every change? [y/N] ");
+    use std::io::Write;
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return Ok(false);
+    }
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
 
 pub async fn run_list(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {

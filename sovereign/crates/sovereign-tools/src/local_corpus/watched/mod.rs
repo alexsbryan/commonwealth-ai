@@ -38,6 +38,7 @@ pub mod status;
 pub mod threshold;
 pub mod walker;
 pub mod worker;
+pub mod workflow_trigger;
 
 pub use events::{EventSink, WatchedFolderEvent};
 pub use registry::WatchedFolderRegistry;
@@ -46,3 +47,4 @@ pub use state::{Tombstone, WatchedFolderState};
 pub use status::{DiffSummary, SweepPhase, TrippedRule, WatchedFolderStatus};
 pub use threshold::{DeletionGuard, GuardDecision};
 pub use worker::{SkipReason, Worker, WorkerOutcome};
+pub use workflow_trigger::WorkflowTriggerRuntime;

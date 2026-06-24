@@ -26,8 +26,10 @@ use sovereign_tools::local_corpus::config::{
 use sovereign_tools::local_corpus::manager::LocalCorpusManager;
 use sovereign_tools::local_corpus::watched::events::noop_sink;
 use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
+use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
+use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
 use tempfile::TempDir;
 
 const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
@@ -116,6 +118,94 @@ async fn register(fx: &Fixture, watched_cfg: WatchedFolderConfig) -> String {
         .register(id.clone(), watched_cfg.sweep_interval_secs)
         .await;
     id
+}
+
+/// A test double for the living-trigger runtime that records each `dispatch`
+/// instead of running a workflow — so the seam can be asserted in-process without
+/// a daemon or a real workflow run.
+#[derive(Default)]
+struct RecordingRuntime {
+    calls: std::sync::Mutex<Vec<(String, Vec<String>)>>,
+}
+
+#[async_trait::async_trait]
+impl WorkflowTriggerRuntime for RecordingRuntime {
+    async fn dispatch(
+        &self,
+        corpus_id: &str,
+        _config: &LocalCorpusConfig,
+        _watched_cfg: &WatchedFolderConfig,
+        diff: &WatchedDiff,
+    ) {
+        self.calls
+            .lock()
+            .unwrap()
+            .push((corpus_id.to_string(), diff.added.clone()));
+    }
+}
+
+/// The living trigger: a sweep that changes files on a folder with `run_on_changes`
+/// set dispatches the workflow runtime with the right corpus + diff — and a sweep
+/// with no changes does not. Proves the Worker seam end-to-end (Phase 2/3) without
+/// a daemon.
+#[tokio::test]
+async fn run_on_changes_dispatches_on_changed_sweep_only() {
+    let fx = boot().await;
+    write(&fx.folder.join("a.md"), "alpha content");
+
+    let recorder = Arc::new(RecordingRuntime::default());
+    // A worker wired with the recording runtime (the daemon wires a real one).
+    let worker = Arc::new(
+        Worker::new(
+            Arc::clone(&fx.engine),
+            Arc::clone(&fx.manager),
+            Arc::clone(&fx.registry),
+            noop_sink(),
+            fx.manager.index_dir_root(),
+        )
+        .with_workflow_runtime(Some(recorder.clone() as Arc<dyn WorkflowTriggerRuntime>)),
+    );
+
+    let cfg = WatchedFolderConfig {
+        run_on_changes: Some("notebook".into()),
+        ..Default::default()
+    };
+    let id = register(&fx, cfg).await;
+    // Initial ingest establishes the index + meta (mirrors the other tests).
+    fx.manager
+        .ingest(&id, None, None)
+        .await
+        .expect("initial ingest");
+    // First sweep populates state.entries (it re-applies the ingested file as an
+    // "add", so it may dispatch once — that's fine, we measure deltas from here).
+    worker.run_once(&id).await.expect("first sweep");
+
+    // A sweep with no filesystem change must NOT fire the trigger again.
+    let before = recorder.calls.lock().unwrap().len();
+    worker.run_once(&id).await.expect("no-change sweep");
+    assert_eq!(
+        recorder.calls.lock().unwrap().len(),
+        before,
+        "an unchanged sweep must not fire the trigger"
+    );
+
+    // Add a file → the next sweep produces a diff → the trigger fires with it.
+    write(&fx.folder.join("b.md"), "beta content");
+    worker.run_once(&id).await.expect("changed sweep");
+
+    let calls = recorder.calls.lock().unwrap();
+    assert!(
+        calls.len() > before,
+        "a changed sweep must fire the trigger (had {before}, now {})",
+        calls.len()
+    );
+    let last = calls.last().unwrap();
+    assert_eq!(last.0, id, "dispatched for the right corpus");
+    assert!(
+        last.1.iter().any(|p| p.contains("b.md")),
+        "the diff carries the added file; got {:?}",
+        last.1
+    );
 }
 
 #[tokio::test]

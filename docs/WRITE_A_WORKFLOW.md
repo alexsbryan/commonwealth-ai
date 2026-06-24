@@ -153,6 +153,37 @@ Swap the transcript read for `mcp:whisper:transcribe_audio` and it starts from a
 recording. The shape never changes; only the connectors do — and they're the
 whole MCP ecosystem, not a list we shipped.
 
+## Make it living — a folder that runs itself
+
+Everything so far is a workflow you *run*. The last turn of the screw is a workflow
+that runs *itself*. Point the daemon at a folder and attach a workflow; from then on,
+whenever a file lands or changes, the workflow runs — unattended, on your machine, no
+command:
+
+```bash
+sovereign corpus watch ~/meetings/transcripts --on-change meeting-to-done
+```
+
+Because a triggered workflow runs without you watching, Sovereign shows what it can do
+and asks once before arming it:
+
+```
+Arming `shipped:meeting-to-done` to run automatically on every change to this folder.
+  It can:
+    • write files
+    • use your local model
+  Run this unattended on every change? [y/N]
+```
+
+That's the difference between a tool you reach for and an assistant that's just *there*
+— quietly turning each new transcript into a brief, each new PDF into your searchable
+notebook, each screenshot into whatever you wired up. The trigger hands the workflow the
+folder, the corpus name, and the changed files (`{param.folder}`, `{param.corpus}`,
+`{param.changed}`); the rest is the same workflow you already wrote. It runs in the
+daemon, so it keeps working after you close the terminal — and, like everything here,
+nothing leaves your machine. (Have a workflow write its output *outside* the folder it
+watches, or you'll feed its own output back to itself.)
+
 ## It all stays on your machine
 
 The model that does the thinking runs on your own computer, over your own files.

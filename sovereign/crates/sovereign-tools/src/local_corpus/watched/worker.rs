@@ -32,6 +32,7 @@ use super::state::WatchedFolderState;
 use super::status::{DiffSummary, WatchedFolderStatus};
 use super::threshold::{DeletionGuard, GuardDecision};
 use super::walker;
+use super::workflow_trigger::WorkflowTriggerRuntime;
 use crate::local_corpus::config::{
     LocalCorpusConfig, LocalCorpusSourceType, ReconcileKind, WatchedFolderConfig,
 };
@@ -82,6 +83,12 @@ pub struct Worker {
     /// `LocalCorpusManager::engine_index_dir` since the engine doesn't
     /// expose that path publicly.
     index_dir_root: PathBuf,
+    /// Living-trigger runtime. The daemon installs one (a
+    /// `DaemonWorkflowRuntime` from `sovereign-workflow-host`); tests and the
+    /// desktop leave it `None`, so the trigger seam is inert. When set, a sweep
+    /// that changes files and whose folder has a `run_on_changes` workflow
+    /// dispatches it here (fire-and-forget). See [`WorkflowTriggerRuntime`].
+    workflow_runtime: Option<Arc<dyn WorkflowTriggerRuntime>>,
 }
 
 impl Worker {
@@ -98,7 +105,19 @@ impl Worker {
             registry,
             sink,
             index_dir_root,
+            workflow_runtime: None,
         }
+    }
+
+    /// Attach a living-trigger runtime. A builder rather than a `new` parameter so
+    /// the many `Worker::new` call sites (tests especially) stay untouched — only
+    /// the daemon, which has a runtime to install, chains this.
+    pub fn with_workflow_runtime(
+        mut self,
+        runtime: Option<Arc<dyn WorkflowTriggerRuntime>>,
+    ) -> Self {
+        self.workflow_runtime = runtime;
+        self
     }
 
     /// State directory for one corpus — `{index_dir}/{corpus_id}/`.
@@ -632,6 +651,24 @@ impl Worker {
                 self.engine
                     .reindex_changed_sources_tiered(&corpus_id, &touched_basenames)
                     .await;
+            }
+        }
+
+        // 11e. Living trigger. If the user attached a workflow to this folder
+        // (`run_on_changes`) AND the daemon installed a runtime, dispatch it on the
+        // changed files. Fire-and-forget — the runtime spawns + debounces, so this
+        // never blocks the sweep or holds the per-corpus lock. Gated on a non-empty
+        // diff (an unchanged sweep is silent). A folder without a runtime or without
+        // `run_on_changes` behaves exactly as before.
+        if !diff.is_empty() {
+            if let (Some(rt), Some(workflow)) =
+                (&self.workflow_runtime, watched_cfg.run_on_changes.as_deref())
+            {
+                self.emit(WatchedFolderEvent::WorkflowTriggered {
+                    corpus_id: corpus_id.clone(),
+                    workflow: workflow.to_string(),
+                });
+                rt.dispatch(&corpus_id, config, watched_cfg, &diff).await;
             }
         }
 
