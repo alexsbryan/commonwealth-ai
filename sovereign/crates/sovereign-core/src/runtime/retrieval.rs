@@ -2189,83 +2189,143 @@ impl Runtime {
             );
         }
 
+        // Per-corpus fan-out. Concurrency is env-gated
+        // (`SOVEREIGN_KQ_FANOUT_CONCURRENCY`) and defaults to 1 — the historical
+        // serial loop, BEHAVIOUR-IDENTICAL: every corpus still pours into one
+        // merged pool that is sorted/capped downstream, so concurrency changes
+        // only WALL-TIME, never results. On a many-corpus unscoped turn the
+        // serial fan-out is the dominant latency (~2s/corpus × N ≈ 60s at N=29);
+        // raising concurrency collapses that toward the slowest single corpus.
+        // Bounded so a wide fan-out can't thundering-herd the big indexes
+        // (sep/wikipedia) on open + search. Per-corpus + total timing is emitted
+        // on `retrieval_audit` so a run can prove where the latency went.
+        use futures::StreamExt as _;
+        let concurrency = std::env::var("SOVEREIGN_KQ_FANOUT_CONCURRENCY")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|n| *n >= 1)
+            .unwrap_or(1);
+        // Owned, shareable handles so each task captures only owned values (no
+        // fn-scope borrow across the .await — that trips the higher-ranked-
+        // lifetime / Send bound). We build a Vec of owned futures in a sync loop
+        // (each one owns its clones) then drive them with bounded concurrency —
+        // the closure-returning-async-block-over-`&info` form does NOT satisfy
+        // the HRTB the stream wants, but a Vec of concrete futures does.
+        let engine_arc = std::sync::Arc::clone(engine);
+        let embedding_arc: std::sync::Arc<[f32]> = std::sync::Arc::from(embedding);
+        let query_arc: std::sync::Arc<str> = std::sync::Arc::from(query_text);
+        let label_arc: std::sync::Arc<str> = std::sync::Arc::from(label);
+        let rerank_fn = self.rerank_fn.clone();
+        let rerank_base = self.rerank_config.clone();
+        let rerank_enabled = self.rerank_config.enabled && self.rerank_fn.is_some();
+        let fanout_t0 = std::time::Instant::now();
+        let mut tasks = Vec::with_capacity(eligible.len());
         for info in &eligible {
-            tracing::info!(
-                corpus = %info.corpus_id,
-                path = %info.path.display(),
-                chunks = info.chunk_count,
-                dims = info.embedding_dimensions,
-                embedding_model = %info.embedding_model,
-                "{label}: opening index"
-            );
-            let idx = match engine.open_index(&info.path).await {
-                Ok(i) => i,
-                Err(e) => {
-                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: open_index failed");
-                    continue;
-                }
-            };
+            let engine = std::sync::Arc::clone(&engine_arc);
+            let embedding = std::sync::Arc::clone(&embedding_arc);
+            let query_text = std::sync::Arc::clone(&query_arc);
+            let label = std::sync::Arc::clone(&label_arc);
+            let rerank_fn = rerank_fn.clone();
             let effective_limit = per_corpus_limits
                 .and_then(|m| m.get(&info.corpus_id).copied())
                 .unwrap_or(limit);
-            if effective_limit != limit {
-                tracing::info!(
-                    corpus = %info.corpus_id,
-                    base_limit = limit,
-                    effective_limit,
-                    "{label}: per-corpus K override applied"
-                );
-            }
             // Per-corpus effective rerank config: opts this corpus into
             // source-dedup when its recipe declared it (recipe-driven SEP
             // promotion), otherwise the runtime base config unchanged.
-            let corpus_rerank = rerank_config_for_corpus(&self.rerank_config, info);
-            match idx
-                .search_with_rerank(
-                    embedding,
-                    query_text,
-                    effective_limit,
-                    self.rerank_fn.as_ref(),
-                    &corpus_rerank,
-                    None,
-                )
-                .await
-            {
-                Ok(scored) => {
+            let corpus_rerank = rerank_config_for_corpus(&rerank_base, info);
+            let corpus_id = info.corpus_id.clone();
+            let path = info.path.clone();
+            let chunk_count = info.chunk_count;
+            let dims = info.embedding_dimensions;
+            let embed_model = info.embedding_model.clone();
+            tasks.push(async move {
+                let corpus_t0 = std::time::Instant::now();
+                tracing::info!(
+                    corpus = %corpus_id,
+                    path = %path.display(),
+                    chunks = chunk_count,
+                    dims = dims,
+                    embedding_model = %embed_model,
+                    "{label}: opening index"
+                );
+                let idx = match engine.open_index(&path).await {
+                    Ok(i) => i,
+                    Err(e) => {
+                        tracing::warn!(corpus = %corpus_id, error = %e, "{label}: open_index failed");
+                        return Vec::new();
+                    }
+                };
+                if effective_limit != limit {
                     tracing::info!(
-                        corpus = %info.corpus_id,
-                        results = scored.len(),
-                        rerank_enabled = self.rerank_config.enabled
-                            && self.rerank_fn.is_some(),
-                        "{label}: search complete"
-                    );
-                    // Naturalistic audit: top-3 per corpus so post-mortem
-                    // can answer "did the right article even reach the
-                    // merge pool from this corpus?" before any cap or
-                    // expansion. Keeps the existing info!() line above
-                    // unchanged; this is a sibling event on its own target.
-                    let top3: Vec<(String, f32)> = scored
-                        .iter()
-                        .take(3)
-                        .map(|c| (c.title.clone().unwrap_or_default(), c.score))
-                        .collect();
-                    tracing::info!(
-                        target: "retrieval_audit",
-                        event = "corpus_results",
-                        label = label,
-                        corpus = %info.corpus_id,
-                        count = scored.len(),
+                        corpus = %corpus_id,
+                        base_limit = limit,
                         effective_limit,
-                        top3 = ?top3,
-                        "retrieval_audit: corpus_results"
+                        "{label}: per-corpus K override applied"
                     );
-                    chunks.extend(scored);
                 }
-                Err(e) => {
-                    tracing::warn!(corpus = %info.corpus_id, error = %e, "{label}: search failed");
+                match idx
+                    .search_with_rerank(
+                        &embedding,
+                        &query_text,
+                        effective_limit,
+                        rerank_fn.as_ref(),
+                        &corpus_rerank,
+                        None,
+                    )
+                    .await
+                {
+                    Ok(scored) => {
+                        let elapsed_ms = corpus_t0.elapsed().as_millis() as u64;
+                        tracing::info!(
+                            corpus = %corpus_id,
+                            results = scored.len(),
+                            elapsed_ms,
+                            rerank_enabled,
+                            "{label}: search complete"
+                        );
+                        // Naturalistic audit: top-3 per corpus so post-mortem
+                        // can answer "did the right article even reach the merge
+                        // pool from this corpus?" before any cap or expansion.
+                        let top3: Vec<(String, f32)> = scored
+                            .iter()
+                            .take(3)
+                            .map(|c| (c.title.clone().unwrap_or_default(), c.score))
+                            .collect();
+                        tracing::info!(
+                            target: "retrieval_audit",
+                            event = "corpus_results",
+                            label = %label,
+                            corpus = %corpus_id,
+                            count = scored.len(),
+                            effective_limit,
+                            elapsed_ms,
+                            top3 = ?top3,
+                            "retrieval_audit: corpus_results"
+                        );
+                        scored
+                    }
+                    Err(e) => {
+                        tracing::warn!(corpus = %corpus_id, error = %e, "{label}: search failed");
+                        Vec::new()
+                    }
                 }
-            }
+            });
         }
+        let per_corpus: Vec<Vec<corpus_engine::ScoredChunk>> =
+            futures::stream::iter(tasks).buffer_unordered(concurrency).collect().await;
+        for scored in per_corpus {
+            chunks.extend(scored);
+        }
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "fanout_complete",
+            label = label,
+            corpora = eligible.len(),
+            concurrency,
+            fanout_ms = fanout_t0.elapsed().as_millis() as u64,
+            merged = chunks.len(),
+            "retrieval_audit: fanout_complete"
+        );
 
         // Merged-pool diversity (glassbox, OPT-IN). After fan-out + merge
         // this is the candidate set synthesis will see. The regressed

@@ -459,7 +459,10 @@ async function attachQuestion() {
   // everything is in scope): scoped, the answer SHOULD land — so the oracle now
   // measures answer QUALITY (grounded? complete? coherent? graceful?) on Qs the
   // app ought to nail, which is where the deeper bugs live.
-  if (state.convo) {
+  // SOVEREIGN_CHAOS_NO_SCOPE=1 leaves the chat UNSCOPED (retrieval fans out
+  // over all corpora) so we can measure the cross-corpus dilution path + the
+  // KQ cap/floor fix against it. Default: scope to the source corpus.
+  if (state.convo && !process.env.SOVEREIGN_CHAOS_NO_SCOPE) {
     await invoke(
       "set_conversation_enabled_corpora",
       { conversationId: state.convo, enabledCorpora: [corpus] },

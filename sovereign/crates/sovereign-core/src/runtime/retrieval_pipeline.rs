@@ -842,6 +842,11 @@ fn step_reweight_and_sort<'a, 'ctx>(
         // same-RRF-score off-domain ties, then cross-corpus sort.
         reweight_by_query_relevance(&mut st.chunks, st.message);
         st.chunks.sort_by(cross_corpus_sort_cmp);
+        // Cross-corpus discipline (env-gated, default no-op): on the now-ranked
+        // pool, cap each corpus's contribution and drop chunks below a relative
+        // cosine-similarity floor, so a many-corpus fan-out can't bury the one
+        // relevant chunk under 32 corpora of near-miss noise.
+        apply_cross_corpus_discipline(&mut st.chunks, st.label);
         StepOutcome::default()
     })
 }

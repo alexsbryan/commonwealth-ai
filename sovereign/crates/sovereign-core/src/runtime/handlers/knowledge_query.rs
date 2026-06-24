@@ -1186,6 +1186,7 @@ impl Runtime {
                     &plan.chunks,
                 )) as _),
                 entity_anchored: plan.gate_entity_anchored,
+                top_similarity: None,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

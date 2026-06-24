@@ -317,6 +317,7 @@ impl Runtime {
                 chunks: step_summaries.clone(),
                 searcher: None,
                 entity_anchored: false,
+                top_similarity: None,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

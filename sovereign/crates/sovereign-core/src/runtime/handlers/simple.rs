@@ -197,6 +197,7 @@ impl Runtime {
                 entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(
                     message,
                 ),
+                top_similarity: None,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

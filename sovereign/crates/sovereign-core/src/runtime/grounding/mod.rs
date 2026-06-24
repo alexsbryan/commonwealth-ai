@@ -83,6 +83,15 @@ pub(crate) struct EvidenceContext {
     /// In-world question: a general-knowledge attribution cannot
     /// exempt a claim from extraction (see `verify_grounding`).
     pub entity_anchored: bool,
+    /// Best retrieval similarity (max cosine = `1 - vector_distance`) over the
+    /// chunks the draft saw, when known. Used ONLY by the env-gated retry floor
+    /// (`SOVEREIGN_KQ_RETRY_FLOOR`): the gate's retry exists for the
+    /// good-evidence-but-bad-draft case, so a high value means "the answer is in
+    /// the evidence — re-synthesise" while a low value means "the evidence can't
+    /// ground an answer — skip the second 35B synthesis and abstain now". `None`
+    /// (FTS-only / surfaces that don't thread it) disables the floor → the retry
+    /// fires exactly as before. Default behaviour is unchanged.
+    pub top_similarity: Option<f32>,
 }
 
 /// Fix B — provenance-aware grounding (2026-06-17). Build the gate's evidence
@@ -208,6 +217,17 @@ pub(crate) struct GateOutcome {
 /// audit → rewrite → annotate ladder. Fail-open on judge failure
 /// everywhere — the gate is a quality lever, not an availability
 /// risk.
+/// Env-gated retry floor (`SOVEREIGN_KQ_RETRY_FLOOR`, absolute cosine
+/// similarity in 0..1): when the best retrieval similarity for a turn is below
+/// this, the gate skips its second-synthesis retry and abstains directly. Unset
+/// (or out of range) → no floor, the retry fires exactly as before.
+fn retry_floor_env() -> Option<f32> {
+    std::env::var("SOVEREIGN_KQ_RETRY_FLOOR")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|f| *f > 0.0 && *f < 1.0)
+}
+
 pub(crate) async fn gate_answer(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
@@ -332,6 +352,44 @@ pub(crate) async fn gate_answer(
                             }),
                         };
                     }
+                    // Env-gated retry floor: the retry below is a SECOND full
+                    // 35B synthesis, justified only when the evidence could
+                    // ground a better answer (the good-evidence-but-bad-draft
+                    // case the retry exists for). When the best retrieval
+                    // similarity is below the floor, the evidence can't ground an
+                    // answer — the retry would near-certainly fail again after
+                    // paying for it (the observed 50-160s slow-abstention) — so
+                    // abstain now. This never changes the answer/abstain DECISION
+                    // on a turn the gate already failed; it only skips a wasted
+                    // retry (gates COST, not competence), so it can't trigger the
+                    // Critic-as-gate over-abstain regression. Default-off no-op.
+                    if let (Some(floor), Some(sim)) = (retry_floor_env(), evidence.top_similarity) {
+                        if sim < floor {
+                            tracing::info!(
+                                target: "grounding_gate",
+                                top_similarity = sim,
+                                retry_floor = floor,
+                                vp = v.violation_prob,
+                                "grounding gate: retry skipped — evidence below retry floor, abstaining without a second synthesis"
+                            );
+                            text = grounded_abstention(&claim, chunks.len().min(12));
+                            action = "abstained_weak_evidence";
+                            return GateOutcome {
+                                text,
+                                meta: serde_json::json!({
+                                    "surface": profile.surface.id(),
+                                    "action": action,
+                                    "retried": false,
+                                    "violation_prob": final_vp,
+                                    "threshold": tau,
+                                    "top_similarity": sim,
+                                    "retry_floor": floor,
+                                    "mode": "single_claim",
+                                    "draft": draft_for_meta,
+                                }),
+                            };
+                        }
+                    }
                     retried = true;
                     let mut retry_req = base_request.clone();
                     let base_sys = retry_req.system_message.clone().unwrap_or_default();
@@ -405,6 +463,7 @@ pub(crate) async fn gate_answer(
         retried,
         vp = ?final_vp,
         tau,
+        top_similarity = ?evidence.top_similarity,
         "grounding gate verdict"
     );
     GateOutcome {
@@ -760,6 +819,7 @@ mod tests {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
             searcher: None,
             entity_anchored: false,
+            top_similarity: None,
         }
     }
 
