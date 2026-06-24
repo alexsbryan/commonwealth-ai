@@ -25,6 +25,7 @@
 //! battery (`validation.rs`), and the CLI admin harness under
 //! `sovereign-cli/src/enrich_cmd/`.
 
+pub mod assemble;
 pub mod atlas;
 pub mod atlas_clustering;
 pub mod atom_normalizer;
@@ -51,6 +52,7 @@ pub use atlas::{
     RelationSketch, RelationStateSketch, RelationType, SectionExtraction, SeedEntities, SeedEntity,
     SeedOrigin, SeedStrategy, StateType,
 };
+pub use assemble::assemble_phase_output;
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};

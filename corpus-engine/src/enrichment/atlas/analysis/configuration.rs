@@ -318,7 +318,7 @@ pub fn summarise_atlas(
 /// Shape the Phase 8 prompt is expected to return. The LLM writes
 /// bare `Phase8ParseItem`s; `parse_configurations` stamps the ids
 /// and the provenance metadata.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Phase8ParseItem {
     pub label: String,
     pub description: String,

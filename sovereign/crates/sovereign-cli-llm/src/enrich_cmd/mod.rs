@@ -23,6 +23,7 @@ pub mod atlas_query;
 pub mod atlas_reconcile;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
+pub mod workflow_primitives;
 pub mod atlas_tensions_classify;
 pub mod build;
 pub mod cascade;

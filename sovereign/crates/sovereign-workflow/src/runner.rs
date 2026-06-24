@@ -197,8 +197,10 @@ async fn run_item(
                     .buffered(concurrency.max(1))
                     .collect()
                     .await;
+            let on_error_skip = spec.on_error.as_deref() == Some("skip");
             let mut results = Vec::with_capacity(elem_results.len());
-            for r in elem_results {
+            let mut failures: Vec<serde_json::Value> = Vec::new();
+            for (idx, r) in elem_results.into_iter().enumerate() {
                 match r {
                     Ok((v, was_cached)) => {
                         if was_cached {
@@ -208,13 +210,26 @@ async fn run_item(
                         }
                         results.push(v);
                     }
+                    // A tolerant `for_each` (`on_error = "skip"`) records the
+                    // failing element and continues — the real Phase-1
+                    // skip-and-continue, so one bad chapter doesn't sink a whole
+                    // book. The default aborts the item on the first error.
+                    Err(e) if on_error_skip => {
+                        tracing::warn!(
+                            target: "workflow",
+                            item = %item_id, step = %spec.id, element = idx, error = %e,
+                            "workflow: for_each element failed — skipped (on_error=skip)"
+                        );
+                        failures.push(serde_json::json!({ "index": idx, "error": e }));
+                    }
                     Err(e) => return fail(item_id, spec, e, ran, cached),
                 }
             }
-            Artifact {
-                type_tag: "collection".into(),
-                output: StepOutput::Json(serde_json::Value::Array(results)),
-            }
+            Artifact::new(
+                "collection",
+                StepOutput::Json(serde_json::Value::Array(results)),
+            )
+            .with_failures(failures)
         } else {
             let args = template::resolve_args(spec, &scope);
             let key = cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, &fingerprint));
@@ -265,11 +280,42 @@ async fn run_one(
             return Ok((art, true));
         }
     }
-    let art = step.run(args, ctx).await?;
+    let mut art = step.run(args, ctx).await?;
+    // Stamp: merge the step's resolved `stamp` object into its output object —
+    // the runner-level "stamp identity onto the result" (e.g. `chapter_id` from
+    // `{element.index}`). Applied here so it covers both plain and per-`for_each`
+    // runs, and is cached with the stamped output (the key already folds `stamp`
+    // in via the resolved args, so a changed stamp invalidates cleanly).
+    if let Some(stamp) = &args.stamp {
+        art.output = apply_stamp(art.output, stamp);
+    }
     if let Some(k) = key {
         cache.put(k, &art);
     }
     Ok((art, false))
+}
+
+/// Merge a resolved `stamp` object into a step's output object. Only when both
+/// are JSON objects — a non-object output (text, a collection array) has nowhere
+/// to receive the fields, so the stamp is left inert and logged (glassbox). The
+/// stamp's keys override (the author-declared identity is authoritative, like the
+/// real Phase-1 runner stamping `chapter_id` over whatever the model emitted).
+fn apply_stamp(output: StepOutput, stamp: &serde_json::Value) -> StepOutput {
+    match (output, stamp) {
+        (StepOutput::Json(serde_json::Value::Object(mut obj)), serde_json::Value::Object(fields)) => {
+            for (k, v) in fields {
+                obj.insert(k.clone(), v.clone());
+            }
+            StepOutput::Json(serde_json::Value::Object(obj))
+        }
+        (other, _) => {
+            tracing::warn!(
+                target: "workflow",
+                "stamp: step output is not a JSON object — stamp left inert"
+            );
+            other
+        }
+    }
 }
 
 fn output_text(o: &StepOutput) -> String {

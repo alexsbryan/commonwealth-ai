@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Literary-atlas PHASE 1 (extract) as a chained workflow — the bakeoff target.
+#
+# This produces the SAME `Phase1Output` (cache/questions.json) the bespoke
+# `sovereign enrich extract` writes, but as a composition of GENERAL primitives:
+# the bespoke `compose_phase1`/`parse_phase1`/`ExemplarBank`/chapter-split are
+# reused VERBATIM (via the `pipeline_compose`/`pipeline_parse`/`exemplar_select`/
+# `atlas_chapters` adapters) — the model call is the only thing lifted to a
+# `model:` step (the substrate's job). No per-phase tools, no re-implemented
+# render: faithful by construction.
+#
+# Shape — a `for_each` CHAIN over aligned collections (zip stitches parallel ones):
+#   chapters → exemplars(map) → zip → compose(map) → model(map) → zip → parse(map,stamp) → envelope → write
+#
+# Run (daemon up with the primary chat + embed; the corpus enrich-init'd):
+#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/atlas-extract.toml --no-cache
+#   # -> out/<corpus>.questions.json  (diff against ~/.sovereign/enrichment/<corpus>/cache/questions.json)
+
+[workflow]
+name = "atlas-extract"
+
+[source]
+type = "inline"
+items = ["chaos-secret-agent"]
+
+# The corpus's chapters (ChapterInput[]), split exactly as the bespoke path does.
+[[step]]
+id = "chapters"
+uses = "tool:atlas_chapters"
+params = { corpus = "{item.name}" }
+
+# The corpus's cached Stage-1a seed (canonical entities). Loaded once, threaded
+# into every chapter's Phase-1 prompt below — exactly as the bespoke runner does
+# (runner.rs reads the seed from cache once per map loop, then passes it to
+# `compose_phase1_with_seed`). Null when the corpus has no seed (→ seedless prompt).
+[[step]]
+id = "seed"
+uses = "tool:atlas_seed"
+params = { corpus = "{item.name}" }
+
+# map: the top-k few-shot exemplars per chapter (your ExemplarBank selection).
+[[step]]
+id = "exemplars"
+uses = "tool:exemplar_select"
+for_each = "chapters"
+params = { corpus = "{item.name}", phase = "questions", query = "{element.text}", k = 5 }
+
+# zip: pair each chapter with its exemplars so one for_each sees both.
+[[step]]
+id = "enriched"
+uses = "tool:zip"
+params = { a = "{chapters.output}", b = "{exemplars.output}", a_key = "chapter", b_key = "exemplars" }
+
+# map: build the Phase-1 prompt per chapter (reuses compose_phase1_with_seed).
+# `{seed.output}` is a step ref (one value, shared across every element) while
+# `{element.*}` vary per chapter — the runner clones the parent scope into each
+# element scope, so both resolve here.
+[[step]]
+id = "prompts"
+uses = "tool:pipeline_compose"
+for_each = "enriched"
+params = { pipeline = "literary_atlas", phase = "questions", input = { chapter = "{element.chapter}", exemplars = "{element.exemplars}", seed = "{seed.output}" } }
+
+# map: the model — grammar-constrained to the section_extraction schema, raw text
+# out (so pipeline_parse runs the bespoke parser over the exact response).
+[[step]]
+id = "responses"
+uses = "model:extended"
+for_each = "prompts"
+system = "{element.system}"
+prompt = "{element.user}"
+structured_output = "{element.schema}"
+raw_output = true
+
+# zip: re-attach each response to its chapter (to recover chapter_id for the stamp).
+[[step]]
+id = "paired"
+uses = "tool:zip"
+params = { a = "{responses.output}", b = "{chapters.output}", a_key = "response", b_key = "chapter" }
+
+# map: parse each response (reuses parse_phase1) + stamp its chapter_id → an
+# ExtractedQuestion, exactly as the bespoke runner does.
+[[step]]
+id = "atoms"
+uses = "tool:pipeline_parse"
+for_each = "paired"
+stamp = { chapter_id = "{element.chapter.chapter_id}" }
+params = { pipeline = "literary_atlas", phase = "questions", response = "{element.response}" }
+
+# assemble: the canonical Phase1Output, built by the DOMAIN's own assembler
+# (`assemble_phase_output` — stamps `written_at` exactly as the runner does).
+# Not a per-phase TOML envelope: one general `pipeline_assemble` adapter,
+# phase-as-data, the persist-side counterpart to compose/parse. The domain
+# struct stays untouched — no hand-built lookalike, no loosened serde.
+[[step]]
+id = "assembled"
+uses = "tool:pipeline_assemble"
+params = { pipeline = "literary_atlas", phase = "questions", atoms = "{atoms.output}" }
+
+# write: the bakeoff artifact — diff against the bespoke cache/questions.json.
+[[step]]
+id = "write"
+uses = "tool:write_json"
+params = { path = "out/{item.name}.questions.json", json = "{assembled.output}" }

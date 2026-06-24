@@ -41,12 +41,12 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--naked] [--grounding-verify] [--gv-shadow]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow]",
         ),
         HelpSection::Subcommands(&[
             (
                 "run",
-                "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL. --naked = true-baseline control: bypass the Runtime (no system prompt, no retrieval, no router/synthesis) and score the bare model; the delta vs a normal run is our prompting+retrieval value-add (citation/distractor N/A under --naked).",
+                "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL. --warm-atlas embeds the sealed corpus's enrichment atlas (Entity grounding + Claim virtual chunks under SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1) so retrieval is actually atlas-grounded — without it the in-process manager is cache-only and an un-warmed corpus contributes 0 atlas contexts, silently measuring base retrieval. --naked = true-baseline control: bypass the Runtime (no system prompt, no retrieval, no router/synthesis) and score the bare model; the delta vs a normal run is our prompting+retrieval value-add (citation/distractor N/A under --naked).",
             ),
             (
                 "rescore",
@@ -142,6 +142,14 @@ struct Args {
     /// measure a path that forces an intent (e.g. governance Q&A = always a
     /// factual lookup), matching what the shipped CLI verb does.
     pin_intent: Option<Intent>,
+    /// Eagerly embed + load the sealed corpus's enrichment atlas into the
+    /// in-process manager before the run (corpus-scoped `warm_one`).
+    /// `build_session` is cache-only, so a freshly-enriched corpus with no
+    /// embed cache contributes 0 atlas contexts and the bench silently
+    /// measures BASE chunk retrieval. The grounding filter is env-driven
+    /// (SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS / _INCLUDE_CLAIMS). Direct
+    /// transport only (naked bypasses the Runtime; bridge has no session).
+    warm_atlas: bool,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -170,6 +178,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut attached_asset: Option<String> = None;
     let mut custom_instructions: Option<String> = None;
     let mut pin_intent: Option<Intent> = None;
+    let mut warm_atlas = false;
 
     let mut i = 0;
     macro_rules! val {
@@ -190,6 +199,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
             "--naked" => naked = true,
+            "--warm-atlas" => warm_atlas = true,
             "--grounding-verify" => grounding_verify = true,
             "--gv-shadow" => gv_shadow = true,
             "--transport" => {
@@ -263,6 +273,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         attached_asset,
         custom_instructions,
         pin_intent,
+        warm_atlas,
     })
 }
 
@@ -348,6 +359,38 @@ async fn run(rest: &[String]) -> i32 {
             }
         }
     };
+
+    // Atlas grounding (opt-in via --warm-atlas): the bench seals to ONE
+    // corpus, so warm THAT corpus's enrichment atlas into the in-process
+    // manager (the same Arc the Runtime queries) before any turn. Without
+    // it the manager is cache-only (build_session) and a freshly-enriched
+    // corpus with no embed cache contributes 0 atlas contexts — the run
+    // would silently measure base chunk retrieval, masking any atlas
+    // difference. The filter (min-description-chars, include-claims) is
+    // env-configured; we echo it so the measurement stays glassbox.
+    if args.warm_atlas {
+        if let Some(s) = session.as_ref() {
+            let f = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
+            let n = s.atlas_mgr.warm_one(&corpus).await;
+            eprintln!(
+                "[chaos] atlas-warm: {n} context entr{} loaded for `{corpus}` (min_description_chars={}, include_claims={})",
+                if n == 1 { "y" } else { "ies" },
+                f.min_description_chars,
+                f.include_claims,
+            );
+            if n == 0 {
+                eprintln!(
+                    "[chaos] WARN: atlas warm loaded 0 entries — this run measures BASE retrieval, NOT the atlas. \
+                     Relax the filter (SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=0 SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1) and confirm an atlas exists for `{corpus}`."
+                );
+            }
+        } else {
+            eprintln!(
+                "[chaos] --warm-atlas ignored: no in-process session (naked or desktop-bridge transport)"
+            );
+        }
+    }
+
     // Attached-document lane: resolve (or ingest) the asset once; every
     // question dispatches through a minted DocumentSession against it.
     // Judging evidence = the asset's full chunk set (truth-vs-document).

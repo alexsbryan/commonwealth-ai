@@ -136,14 +136,16 @@ impl Default for AtlasContextFilter {
         // Tier-2 extracted entities carry multi-sentence descriptions.
         // Small-corpus atom schemas (the `conversational` domain
         // produces ~0-150 char descriptions; arch-principles structural
-        // atoms similarly short) would be filtered to zero here. Two
+        // atoms similarly short) would be filtered to zero here. Three
         // env knobs let the operator relax the filter at boot without
         // rebuilding:
         //   - SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=<N> overrides the
         //     200-char floor. `0` admits every atom.
         //   - SOVEREIGN_ATLAS_INCLUDE_DEPTHS=<csv> overrides the
         //     `extracted`-only depth filter. `*` admits every depth.
-        // The cache signature (`signature()`) bakes both, so a cache
+        //   - SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1|true surfaces Claim
+        //     atoms as virtual chunks (default off).
+        // The cache signature (`signature()`) bakes all three, so a cache
         // populated under one filter is correctly ignored under
         // another — no risk of cross-contaminating loaded atoms.
         let min_chars = std::env::var("SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS")
@@ -159,12 +161,26 @@ impl Default for AtlasContextFilter {
                 .collect(),
             Err(_) => vec!["extracted".to_string()],
         };
+        // Claim atoms as virtual chunks (Path 2 Phase A). Off by default:
+        // wiki/SEP-scale atlases lean on Entity grounding, and claims
+        // multiply the embed count. For a small narrative atlas (a single
+        // novel) the Claims ARE the substance — the entity descriptions are
+        // short and the discriminating content lives in the Claim atoms — so
+        // a literary grounding run sets this on. Baked into `signature()`,
+        // so a cache built with claims off is ignored when it flips on.
+        let include_claims = std::env::var("SOVEREIGN_ATLAS_INCLUDE_CLAIMS")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true")
+            })
+            .unwrap_or(false);
         Self {
             min_description_chars: min_chars,
             depth_allowlist,
             max_entries: None,
             top_k: 3,
-            include_claims: false,
+            include_claims,
             include_tensions: false,
             include_configurations: false,
         }
@@ -336,65 +352,7 @@ impl AtlasContextManager {
                     .counts
                     .extend(state.counts);
             }
-            let context_loaded = match self.load_one(&corpus_id, &atlas_dir, cache_only).await {
-                Ok(ctx) => {
-                    let count = ctx.entries.len();
-                    self.contexts
-                        .write()
-                        .await
-                        .insert(corpus_id.clone(), Arc::new(ctx));
-                    tracing::info!(corpus = corpus_id, entries = count, "atlas-context: loaded");
-                    true
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        corpus = corpus_id,
-                        error = %e,
-                        "atlas-context: load skipped"
-                    );
-                    false
-                }
-            };
-            // Record where this atlas lives so `graph()` can parse it
-            // on first request. Parsing here is deliberate only when
-            // the embedding context loaded: those ids are the pool
-            // `atlas_navigate` seeds from on every query, so they must
-            // be warm. Everything else (atlas-only siblings, stale
-            // embed caches) loads on demand via the atom-enumeration
-            // path's per-id pull — at wikipedia scale an unused graph
-            // costs GBs of RSS, and an unseedable graph is unreachable
-            // by every consumer.
-            if let Ok(mut dirs) = self.graph_dirs.write() {
-                dirs.insert(corpus_id.clone(), atlas_dir.clone());
-            }
-            if context_loaded {
-                match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
-                    &corpus_id, &atlas_dir,
-                ) {
-                    Ok(graph) => {
-                        let atom_count = graph.atoms_by_id.len();
-                        let edge_out_count: usize =
-                            graph.edges_by_source.values().map(|v| v.len()).sum();
-                        self.graphs
-                            .write()
-                            .await
-                            .insert(corpus_id.clone(), Arc::new(graph));
-                        tracing::info!(
-                            corpus = corpus_id,
-                            atoms = atom_count,
-                            edges = edge_out_count,
-                            "atlas-graph: loaded"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::debug!(
-                            corpus = corpus_id,
-                            error = %e,
-                            "atlas-graph: load skipped"
-                        );
-                    }
-                }
-            }
+            self.load_corpus(&corpus_id, &atlas_dir, cache_only).await;
         }
         let loaded = self.contexts.read().await.len();
         let graphs_loaded = self.graphs.read().await.len();
@@ -409,6 +367,102 @@ impl AtlasContextManager {
             graphs_available,
             "atlas-context: init complete (graphs without a loaded context parse on first use)"
         );
+    }
+
+    /// Load one corpus's atlas into the manager: embed-or-replay its
+    /// context (subject to `cache_only`), record its dir for lazy graph
+    /// parsing, and — only when the embedding context actually loaded —
+    /// parse its structural graph eagerly (those ids are the pool
+    /// `atlas_navigate` seeds from). Shared by the [`init_internal`] walk
+    /// and [`warm_one`]. Bump hydration is the caller's job (init does it
+    /// once per candidate; `warm_one` runs post-init). Returns whether
+    /// the embedding context loaded.
+    async fn load_corpus(
+        &self,
+        corpus_id: &str,
+        atlas_dir: &std::path::Path,
+        cache_only: bool,
+    ) -> bool {
+        let context_loaded = match self.load_one(corpus_id, atlas_dir, cache_only).await {
+            Ok(ctx) => {
+                let count = ctx.entries.len();
+                self.contexts
+                    .write()
+                    .await
+                    .insert(corpus_id.to_string(), Arc::new(ctx));
+                tracing::info!(corpus = corpus_id, entries = count, "atlas-context: loaded");
+                true
+            }
+            Err(e) => {
+                tracing::debug!(corpus = corpus_id, error = %e, "atlas-context: load skipped");
+                false
+            }
+        };
+        // Record where this atlas lives so `graph()` can parse it on
+        // first request. Eager parse only when the embedding context
+        // loaded: those ids are the pool `atlas_navigate` seeds from on
+        // every query, so they must be warm. Everything else (atlas-only
+        // siblings, stale embed caches) loads on demand via the atom-
+        // enumeration path's per-id pull — at wikipedia scale an unused
+        // graph costs GBs of RSS, and an unseedable graph is unreachable
+        // by every consumer.
+        if let Ok(mut dirs) = self.graph_dirs.write() {
+            dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
+        }
+        if context_loaded {
+            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
+                Ok(graph) => {
+                    let atom_count = graph.atoms_by_id.len();
+                    let edge_out_count: usize =
+                        graph.edges_by_source.values().map(|v| v.len()).sum();
+                    self.graphs
+                        .write()
+                        .await
+                        .insert(corpus_id.to_string(), Arc::new(graph));
+                    tracing::info!(
+                        corpus = corpus_id,
+                        atoms = atom_count,
+                        edges = edge_out_count,
+                        "atlas-graph: loaded"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
+                }
+            }
+        }
+        context_loaded
+    }
+
+    /// Eagerly (re-)embed and load a SINGLE corpus's atlas, bypassing
+    /// the cache-only policy of [`init_from_cache`]. For measurement
+    /// harnesses (the chaos-monkey bench) that seal to one corpus and
+    /// must deterministically ground against its atlas: the daemon's
+    /// full [`spawn_init`] embeds EVERY installed corpus (incl. the
+    /// 18 GB wikipedia) under the default filter, so it is neither scoped
+    /// to nor guaranteed to cover the corpus under test. A cache hit
+    /// replays instantly; a miss embeds only this corpus's filter-
+    /// admitted atoms and persists the cache for reuse. Returns the
+    /// number of context entries now loaded (0 if the atlas is absent or
+    /// the filter admitted nothing — the caller should surface that as a
+    /// "measuring base retrieval, not the atlas" warning).
+    pub async fn warm_one(&self, corpus_id: &str) -> usize {
+        let atlas_dir = self.indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
+        if !atlas_dir.join("atoms.json").exists() {
+            tracing::warn!(
+                corpus = corpus_id,
+                dir = %atlas_dir.display(),
+                "atlas-context: warm_one found no atoms.json"
+            );
+            return 0;
+        }
+        self.load_corpus(corpus_id, &atlas_dir, false).await;
+        self.contexts
+            .read()
+            .await
+            .get(corpus_id)
+            .map(|c| c.entries.len())
+            .unwrap_or(0)
     }
 
     /// `spawn_init` mirrors `KnowledgeViewManager::spawn_init` —

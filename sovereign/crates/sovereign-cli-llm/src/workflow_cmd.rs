@@ -14,10 +14,18 @@ use std::time::Duration;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::SplitInferenceProvider;
+use sovereign_tools::atlas_phase::gaps::AtlasGapsTool;
+use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
 use sovereign_tools::corpus_store::CorpusStoreTool;
 use sovereign_tools::rag::chunk::ChunkTool;
+use sovereign_tools::rag::section::SectionTool;
+use sovereign_tools::read_file::ReadFileTool;
+use sovereign_tools::read_json::ReadJsonTool;
+use sovereign_tools::zip::ZipTool;
 use sovereign_tools::shell::ShellTool;
 use sovereign_tools::web::WebFetchTool;
+use sovereign_tools::write_file::WriteFileTool;
+use sovereign_tools::write_json::WriteJsonTool;
 use sovereign_workflow::{
     ArtifactCache, FileArtifactCache, NoCache, ResourceNeed, Runner, StepKind, StepRegistry,
     Workflow,
@@ -169,7 +177,33 @@ pub(crate) async fn run_assembled(
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(WebFetchTool::new()));
     tools.register(Box::new(ChunkTool));
+    tools.register(Box::new(SectionTool));
+    tools.register(Box::new(ReadJsonTool));
+    tools.register(Box::new(ReadFileTool));
+    tools.register(Box::new(ZipTool));
     tools.register(Box::new(CorpusStoreTool));
+    tools.register(Box::new(WriteJsonTool));
+    tools.register(Box::new(WriteFileTool));
+    tools.register(Box::new(AtlasGapsTool));
+    tools.register(Box::new(AtlasTensionsTool));
+    tools.register(Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool));
+    tools.register(Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool));
+    tools.register(Box::new(
+        crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool,
+    ));
+    tools.register(Box::new(
+        crate::enrich_cmd::workflow_primitives::PipelineAssembleTool,
+    ));
+    tools.register(Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool));
+    tools.register(Box::new(
+        crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool,
+    ));
     let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
     for st in mcp.server_statuses().await {
         if st.connected {
@@ -568,6 +602,311 @@ input = "{element.text}"
         );
     }
 
+    /// The full enrichment SHAPE as a composition, end to end, no daemon:
+    /// `chunk → atoms → write_json`. The real `ChunkTool` fans a document into
+    /// passages; a `model:fast` step (a deterministic atoms double) maps over
+    /// them under a `structured_output` schema, so each passage becomes a parsed
+    /// `{questions: […]}` Json atom; the real `WriteJsonTool` persists the whole
+    /// collection to a path. This closes the gap the handoff named "atoms
+    /// computed but not persisted": the atoms now land on disk, the pipeline
+    /// authored entirely as TOML data (zero enrichment-specific Rust). The write
+    /// leaf consumes `{atoms.output}` — the same "non-`for_each` step pairs a
+    /// `for_each` step's whole collection" pattern `ingest.toml`'s store uses.
+    #[tokio::test]
+    async fn chunk_atoms_write_persists_the_atoms_collection() {
+        let dir = tempfile::tempdir().unwrap();
+        // Long enough that the real chunker yields several passages, so the
+        // `for_each` produces several atoms — a real fan-out, not a degenerate
+        // single element. (Short paragraphs under ~700 chars coalesce into one
+        // chunk; same construction as the chunk→embed diff test.)
+        let doc = (0..6)
+            .map(|i| {
+                format!(
+                    "Passage {i}. {}",
+                    "The shabby Soho shop concealed more than its modest wares. ".repeat(3)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        std::fs::write(dir.path().join("doc.txt"), &doc).unwrap();
+        // A nested out dir the write leaf must create.
+        let out = dir.path().join("out/doc.atoms.json");
+
+        let toml = r#"
+[workflow]
+name = "chunk-atoms-write"
+[source]
+type = "folder"
+path = "__DIR__"
+glob = "*.txt"
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+[[step]]
+id = "atoms"
+uses = "model:fast"
+for_each = "chunk"
+system = "Extract the questions a passage raises as JSON."
+prompt = "Passage:\n{element.text}\n\nList the interpretive questions."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
+[[step]]
+id = "write"
+uses = "tool:write_json"
+params = { path = "__OUT__", json = "{atoms.output}" }
+"#
+        .replace("__DIR__", &dir.path().to_string_lossy())
+        .replace("__OUT__", &out.to_string_lossy());
+
+        let wf = Workflow::parse(&toml).unwrap();
+        let mut tools = ToolRegistry::new();
+        tools.register(Box::new(sovereign_tools::rag::chunk::ChunkTool));
+        tools.register(Box::new(sovereign_tools::write_json::WriteJsonTool));
+        let registry = StepRegistry::new(
+            Some(Arc::new(DeterministicAtoms) as Arc<dyn InferenceProvider>),
+            Arc::new(tools),
+        );
+        let report = Runner::new(registry).run(&wf, 4).await.unwrap();
+        assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+
+        // The terminal leaf persisted the atoms: the file exists (its missing
+        // parent dir was created) and parses to one atom object per passage,
+        // each carrying a `questions` array.
+        let written =
+            std::fs::read_to_string(&out).expect("write_json must persist the atoms to the path");
+        let atoms: serde_json::Value = serde_json::from_str(&written).unwrap();
+        let arr = atoms.as_array().expect("the atoms collection is a JSON array");
+        assert!(arr.len() >= 2, "several passages -> several atoms: {arr:?}");
+        for a in arr {
+            assert!(
+                a.get("questions").and_then(|q| q.as_array()).is_some(),
+                "each atom carries a `questions` array: {a}"
+            );
+        }
+    }
+
+    /// The `stamp` primitive: a `for_each` map carries each element's identity
+    /// into its output — the workflow analog of the real Phase-1 runner stamping
+    /// `chapter_id` from the dispatched chapter. `stamp = { chapter_id =
+    /// "{element.index}" }` turns the model's `{questions}` into
+    /// `{chapter_id, questions}` keyed per element, so the collection is a
+    /// `Vec<ExtractedQuestion>`-shaped list rather than an anonymous array. A
+    /// *constant* model output + a per-element stamp ⇒ distinct chapter_ids,
+    /// which proves the identity comes from the element, not the model.
+    #[tokio::test]
+    async fn for_each_stamp_carries_element_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = (0..6)
+            .map(|i| {
+                format!(
+                    "Passage {i}. {}",
+                    "Dense Conradian prose that recurs to fill a chunk. ".repeat(3)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        std::fs::write(dir.path().join("doc.txt"), &doc).unwrap();
+
+        let toml = r#"
+[workflow]
+name = "stamp-atoms"
+[source]
+type = "folder"
+path = "__DIR__"
+glob = "*.txt"
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+[[step]]
+id = "atoms"
+uses = "model:fast"
+for_each = "chunk"
+stamp = { chapter_id = "{element.index}" }
+system = "Extract the questions a passage raises as JSON."
+prompt = "Passage:\n{element.text}\n\nList the interpretive questions."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
+"#
+        .replace("__DIR__", &dir.path().to_string_lossy());
+
+        let wf = Workflow::parse(&toml).unwrap();
+        let mut tools = ToolRegistry::new();
+        tools.register(Box::new(sovereign_tools::rag::chunk::ChunkTool));
+        let registry = StepRegistry::new(
+            Some(Arc::new(DeterministicAtoms) as Arc<dyn InferenceProvider>),
+            Arc::new(tools),
+        );
+        let report = Runner::new(registry).run(&wf, 4).await.unwrap();
+        assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+
+        // The atoms collection: each element carries its own `chapter_id` (its
+        // index, stamped from `{element.index}`) merged with the model's
+        // `questions`. Distinct ids per element ⇒ the stamp is per-element.
+        let atoms: serde_json::Value =
+            serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
+        let arr = atoms.as_array().expect("the collection is a JSON array");
+        assert!(arr.len() >= 2, "several chapters -> several stamped atoms: {arr:?}");
+        for (i, a) in arr.iter().enumerate() {
+            assert_eq!(
+                a.get("chapter_id").and_then(|v| v.as_str()),
+                Some(i.to_string()).as_deref(),
+                "element {i} is stamped with its own chapter_id: {a}"
+            );
+            assert!(
+                a.get("questions").and_then(|q| q.as_array()).is_some(),
+                "element {i} keeps the model's questions: {a}"
+            );
+        }
+    }
+
+    /// Break #2's payoff: the real enrichment Phase-1 SHAPE — a `Phase1Output`
+    /// envelope — assembled as pure TOML composition, no daemon. `chunk →
+    /// atoms[stamp] → envelope(transform:json) → write_json`: the model's
+    /// per-chapter atoms are stamped with `chapter_id`, wrapped in
+    /// `{schema_version, pipeline_id, questions_by_chapter: [...]}` by a
+    /// JSON-shape transform (the collection **value-splices** into the envelope —
+    /// a nested array, not a stringified copy), and persisted. Proves
+    /// value-splicing + `transform:json` + `stamp` + `write_json` compose into the
+    /// real `Phase1Output` shape with zero enrichment-specific Rust.
+    #[tokio::test]
+    async fn phase1_shaped_envelope_composes_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = (0..6)
+            .map(|i| {
+                format!(
+                    "Passage {i}. {}",
+                    "Conradian prose that recurs to fill a chunk. ".repeat(3)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        std::fs::write(dir.path().join("doc.txt"), &doc).unwrap();
+        let out = dir.path().join("questions.json");
+
+        let toml = r#"
+[workflow]
+name = "enrich-phase1"
+[source]
+type = "folder"
+path = "__DIR__"
+glob = "*.txt"
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+[[step]]
+id = "atoms"
+uses = "model:fast"
+for_each = "chunk"
+stamp = { chapter_id = "{element.index}" }
+prompt = "Passage:\n{element.text}\n\nList the interpretive questions."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
+[[step]]
+id = "envelope"
+uses = "transform:json"
+params = { schema_version = 1, pipeline_id = "literary", questions_by_chapter = "{atoms.output}" }
+[[step]]
+id = "write"
+uses = "tool:write_json"
+params = { path = "__OUT__", json = "{envelope.output}" }
+"#
+        .replace("__DIR__", &dir.path().to_string_lossy())
+        .replace("__OUT__", &out.to_string_lossy());
+
+        let wf = Workflow::parse(&toml).unwrap();
+        let mut tools = ToolRegistry::new();
+        tools.register(Box::new(sovereign_tools::rag::chunk::ChunkTool));
+        tools.register(Box::new(sovereign_tools::write_json::WriteJsonTool));
+        let registry = StepRegistry::new(
+            Some(Arc::new(DeterministicAtoms) as Arc<dyn InferenceProvider>),
+            Arc::new(tools),
+        );
+        let report = Runner::new(registry).run(&wf, 4).await.unwrap();
+        assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+
+        // The persisted file is a Phase1Output-shaped envelope: metadata plus a
+        // `questions_by_chapter` ARRAY (spliced as structure, not a stringified
+        // copy), each entry an `ExtractedQuestion`-shaped `{chapter_id, questions}`.
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert_eq!(v.get("schema_version").and_then(|x| x.as_i64()), Some(1));
+        assert_eq!(v.get("pipeline_id").and_then(|x| x.as_str()), Some("literary"));
+        let qbc = v
+            .get("questions_by_chapter")
+            .and_then(|x| x.as_array())
+            .expect("questions_by_chapter must be a nested ARRAY, not a stringified copy");
+        assert!(qbc.len() >= 2, "several chapters: {qbc:?}");
+        for (i, e) in qbc.iter().enumerate() {
+            assert_eq!(
+                e.get("chapter_id").and_then(|c| c.as_str()),
+                Some(i.to_string()).as_deref(),
+                "entry {i} keyed by its chapter_id: {e}"
+            );
+            assert!(
+                e.get("questions").and_then(|q| q.as_array()).is_some(),
+                "entry {i} carries questions: {e}"
+            );
+        }
+    }
+
+    /// `tool:section` composes through the registry: a chaptered document is
+    /// sectioned by structure (not 700-char windows), the model maps per chapter,
+    /// and `stamp` keys each atom by the section's id — proving the structure-aware
+    /// chunk leaf is a drop-in for `tool:chunk` at the real Phase-1 chapter unit.
+    #[tokio::test]
+    async fn section_leaf_drives_per_chapter_extraction() {
+        let dir = tempfile::tempdir().unwrap();
+        let book = "Chapter 1\n\nThe shop stood in shabby Soho.\n\n\
+                    Chapter 2\n\nThe Commissioner left Scotland Yard at dusk.\n\n\
+                    Chapter 3\n\nStevie drew his circles on the paper.";
+        std::fs::write(dir.path().join("book.txt"), book).unwrap();
+
+        let toml = r#"
+[workflow]
+name = "section-extract"
+[source]
+type = "folder"
+path = "__DIR__"
+glob = "*.txt"
+[[step]]
+id = "chapters"
+uses = "tool:section"
+params = { path = "{item.path}" }
+[[step]]
+id = "atoms"
+uses = "model:fast"
+for_each = "chapters"
+stamp = { chapter_id = "{element.section_id}" }
+prompt = "Chapter \"{element.title}\":\n{element.text}\n\nList the interpretive questions."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
+"#
+        .replace("__DIR__", &dir.path().to_string_lossy());
+
+        let wf = Workflow::parse(&toml).unwrap();
+        let mut tools = ToolRegistry::new();
+        tools.register(Box::new(sovereign_tools::rag::section::SectionTool));
+        let registry = StepRegistry::new(
+            Some(Arc::new(DeterministicAtoms) as Arc<dyn InferenceProvider>),
+            Arc::new(tools),
+        );
+        let report = Runner::new(registry).run(&wf, 4).await.unwrap();
+        assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+
+        // Three chapters -> three atoms, each keyed by its chapter's section_id.
+        let atoms: serde_json::Value =
+            serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
+        let arr = atoms.as_array().expect("the collection is a JSON array");
+        assert_eq!(arr.len(), 3, "three chapters -> three atoms: {arr:?}");
+        for (i, a) in arr.iter().enumerate() {
+            assert_eq!(
+                a.get("chapter_id").and_then(|c| c.as_str()),
+                Some(format!("sec_{:04}", i + 1)).as_deref(),
+                "atom {i} keyed by its chapter's section_id: {a}"
+            );
+            assert!(a.get("questions").is_some(), "atom {i} carries questions: {a}");
+        }
+    }
+
     // ── doubles: the real chunker as a tool + a deterministic embed ──
 
     /// Wraps the *production* `chunk_text` so the diff runs the real chunker,
@@ -647,6 +986,46 @@ input = "{element.text}"
             ProviderCapabilities {
                 max_context_tokens: 8192,
                 supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    /// A deterministic `model:` double returning a fixed atoms object as JSON —
+    /// lets the `chunk → atoms → write_json` e2e assert the composition (the
+    /// `for_each` map + the terminal write) without a daemon or weights. The
+    /// claim is the Runner threading structured atoms into the write leaf, not
+    /// extraction quality, so a constant well-formed atom suffices.
+    struct DeterministicAtoms;
+
+    #[async_trait]
+    impl InferenceProvider for DeterministicAtoms {
+        async fn complete(&self, _req: &CompletionRequest) -> CoreResult<CompletionResponse> {
+            Ok(CompletionResponse {
+                text: r#"{"questions":["What does this passage reveal?"]}"#.to_string(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "deterministic-atoms".to_string(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+            unreachable!("the chunk→atoms→write e2e never streams")
+        }
+        async fn embed(&self, _text: &str) -> CoreResult<Vec<f32>> {
+            unreachable!("the chunk→atoms→write e2e never embeds")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 8192,
+                supports_structured_output: true,
                 relative_speed: Speed::Fast,
                 relative_reasoning: Depth::Shallow,
             }

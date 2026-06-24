@@ -51,6 +51,19 @@ impl Step for TransformStep {
     }
 
     async fn run(&self, args: &ResolvedArgs, _ctx: &StepCtx) -> Result<Artifact> {
+        // `json` is a SHAPE transform: emit the resolved `params` object as a
+        // `Json` artifact (the inverse of a text transform). With a lone
+        // `{step.output}` ref splicing as a value (see `template::resolve_value`),
+        // this assembles an envelope — e.g. `{ schema_version = 1,
+        // questions_by_chapter = "{atoms.output}" }` — from upstream outputs,
+        // purely as data. Zero domain knowledge: it's how a workflow wraps a
+        // collection in the `Phase1Output`-shaped object the real pipeline writes.
+        if self.name == "json" {
+            let value = args.params.clone().ok_or_else(|| {
+                Error::Execution("transform:json needs a `params` object to shape".into())
+            })?;
+            return Ok(Artifact::new("json", StepOutput::Json(value)));
+        }
         let input = args.input.clone().unwrap_or_default();
         let out = match self.name.as_str() {
             "upper" => input.to_uppercase(),
@@ -59,10 +72,7 @@ impl Step for TransformStep {
             "identity" => input,
             other => return Err(Error::Execution(format!("unknown transform `{other}`"))),
         };
-        Ok(Artifact {
-            type_tag: "text".into(),
-            output: StepOutput::Text(out),
-        })
+        Ok(Artifact::new("text", StepOutput::Text(out)))
     }
 }
 
@@ -95,6 +105,15 @@ impl Step for ModelStep {
             .prompt
             .clone()
             .ok_or_else(|| Error::Execution("a `model:` step requires a `prompt`".into()))?;
+        // A `system_file` loads the system prompt from disk — the bespoke `.md`
+        // enrichment prompts referenced as data, not re-typed — overriding inline
+        // `system`. A read failure is loud (the prompt is load-bearing).
+        let system_message = match &args.system_file {
+            Some(path) => Some(std::fs::read_to_string(path).map_err(|e| {
+                Error::Execution(format!("model: read system_file `{path}`: {e}"))
+            })?),
+            None => args.system.clone(),
+        };
         // Build a protocol-native request: the OICP envelope carries the
         // latency class — the standard signal the daemon's slot picker routes on
         // (`pick_slot_for_oicp`). `preferred_speed` is set coherently for any
@@ -102,7 +121,7 @@ impl Step for ModelStep {
         // don't rely on the provider's `Speed`→`latency_class` rescue.
         let request = CompletionRequest {
             prompt,
-            system_message: args.system.clone(),
+            system_message,
             preferred_speed: speed_for(self.latency),
             max_tokens: None,
             temperature: Some(0.7),
@@ -132,7 +151,10 @@ impl Step for ModelStep {
         // compose on the structure — `for_each` over it, store it — instead of
         // re-parsing a string. Falls back to Text (with a warn) if the model's
         // output isn't valid JSON, so a flaky model degrades visibly.
-        let structured = request.structured_output.is_some() || request.lark_grammar.is_some();
+        // `raw_output` keeps the grammar constraint but skips auto-parsing, so a
+        // downstream step (e.g. `pipeline_parse`) sees the exact model text.
+        let structured = (request.structured_output.is_some() || request.lark_grammar.is_some())
+            && !args.raw_output;
         let output = if structured {
             match serde_json::from_str::<serde_json::Value>(resp.text.trim()) {
                 Ok(v) => StepOutput::Json(v),
@@ -152,10 +174,7 @@ impl Step for ModelStep {
         } else {
             "text"
         };
-        Ok(Artifact {
-            type_tag: type_tag.into(),
-            output,
-        })
+        Ok(Artifact::new(type_tag, output))
     }
 }
 
@@ -210,10 +229,7 @@ impl Step for EmbedStep {
                 .map(|f| serde_json::Value::from(f as f64))
                 .collect(),
         );
-        Ok(Artifact {
-            type_tag: "embedding".into(),
-            output: StepOutput::Json(arr),
-        })
+        Ok(Artifact::new("embedding", StepOutput::Json(arr)))
     }
 }
 
@@ -261,10 +277,7 @@ impl Step for ToolStep {
         };
         let tool = self.tools.get(&self.tool_id)?;
         let output = tool.execute(&params, &ctx).await?;
-        Ok(Artifact {
-            type_tag: "tool".into(),
-            output,
-        })
+        Ok(Artifact::new("tool", output))
     }
 }
 

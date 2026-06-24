@@ -56,6 +56,14 @@ pub struct ChatSession {
     /// vector caches) can key on the active model and invalidate when
     /// the operator swaps it.
     pub embed_model: String,
+    /// The per-process atlas-grounding manager (the same Arc installed
+    /// on `runtime` as its `AtlasContextProvider`). Exposed so a
+    /// measurement harness can `warm_one(corpus)` its sealed corpus —
+    /// `build_session` only loads already-cached atlases
+    /// (`init_from_cache`), so a freshly-enriched corpus contributes 0
+    /// contexts until something warms it. Warming this Arc is visible to
+    /// `runtime` because they share it.
+    pub atlas_mgr: Arc<sovereign_tools::atlas_context_manager::AtlasContextManager>,
 }
 
 /// Build a `Runtime` backed by the daemon over HTTP.
@@ -627,6 +635,7 @@ pub async fn build_session_with_skills(
         inference,
         daemon_base: base,
         embed_model,
+        atlas_mgr,
     })
 }
 

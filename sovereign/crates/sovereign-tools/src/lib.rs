@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod atlas_context_manager;
+pub mod atlas_phase;
 pub mod atlas_peer_advice;
 pub mod atlas_postinstall;
 pub mod atlas_status;
@@ -42,6 +43,8 @@ pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
+pub mod read_file;
+pub mod read_json;
 pub mod recipe_author;
 pub mod search;
 pub mod shell;
@@ -49,6 +52,9 @@ pub mod spec_watcher;
 pub mod typed_call;
 pub mod typed_extension;
 pub mod web;
+pub mod write_file;
+pub mod write_json;
+pub mod zip;
 
 pub use attached_document_search::AttachedDocumentSearchTool;
 #[cfg(feature = "treesitter")]

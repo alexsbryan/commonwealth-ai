@@ -21,6 +21,32 @@ use crate::template;
 pub struct Artifact {
     pub type_tag: String,
     pub output: StepOutput,
+    /// Per-element failures recorded by a tolerant `for_each` (`on_error =
+    /// "skip"`): the elements that errored, so the run continues with the
+    /// successes while the failures stay visible *as data* — the workflow analog
+    /// of `Phase1Output.failures`. Empty for every ordinary step. Each entry is
+    /// `{ index, error }`; referenced downstream as `{step.failures}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<serde_json::Value>,
+}
+
+impl Artifact {
+    /// An artifact with no recorded failures — the common case (a step that
+    /// either fully succeeds or aborts). Construct via this rather than a struct
+    /// literal so adding artifact metadata never ripples across every step.
+    pub fn new(type_tag: impl Into<String>, output: StepOutput) -> Self {
+        Self {
+            type_tag: type_tag.into(),
+            output,
+            failures: Vec::new(),
+        }
+    }
+
+    /// Attach the per-element failures of a tolerant `for_each`.
+    pub fn with_failures(mut self, failures: Vec<serde_json::Value>) -> Self {
+        self.failures = failures;
+        self
+    }
 }
 
 /// What a step needs from the scheduler. P1 carries the kind; P2 carries the
@@ -82,10 +108,13 @@ pub struct Scope {
 pub struct ResolvedArgs {
     pub prompt: Option<String>,
     pub system: Option<String>,
+    pub system_file: Option<String>,
     pub input: Option<String>,
     pub params: Option<serde_json::Value>,
     pub structured_output: Option<serde_json::Value>,
     pub grammar: Option<String>,
+    pub stamp: Option<serde_json::Value>,
+    pub raw_output: bool,
 }
 
 /// Optional per-step scheduler hints (P2-bound; parsed in P1, mostly inert).
@@ -106,6 +135,15 @@ pub struct StepSpec {
     pub prompt: Option<String>,
     #[serde(default)]
     pub system: Option<String>,
+    /// Load the system prompt from a file instead of inline `system` — so a
+    /// `model:` step references a large prompt asset (the bespoke enrichment
+    /// `.md` prompts) as data rather than re-typing it, which keeps the workflow
+    /// byte-faithful to the prompt it's reproducing. The path is templated (so
+    /// `{item.*}` can parameterise it); the file content is used verbatim as the
+    /// system message (the dynamic content goes in the templated `prompt`).
+    /// Overrides `system` when both are set.
+    #[serde(default)]
+    pub system_file: Option<String>,
     #[serde(default)]
     pub input: Option<String>,
     #[serde(default)]
@@ -136,6 +174,32 @@ pub struct StepSpec {
     /// enough. Templated like `prompt`.
     #[serde(default)]
     pub grammar: Option<String>,
+    /// A templated JSON object merged into this step's output object — the
+    /// workflow analog of "the runner stamps `chapter_id` from the dispatched
+    /// input." Resolved against the same scope as the rest of the step (so under
+    /// `for_each` it sees `{element.*}`), then merged into the (object) output,
+    /// overriding any same-named key. This is the general way to carry
+    /// per-element identity through a `for_each` map: e.g.
+    /// `stamp = { chapter_id = "{element.index}" }` turns a model's
+    /// `{questions}` into `{chapter_id, questions}` keyed per chapter — a
+    /// `Vec<ExtractedQuestion>`-shaped collection, not an anonymous array. A
+    /// non-object output (text, a collection) leaves the stamp inert (warned).
+    #[serde(default)]
+    pub stamp: Option<toml::Value>,
+    /// For a `model:` step with `structured_output`/`grammar`: keep the grammar
+    /// constraint but return the **raw** model text instead of auto-parsing it to
+    /// a `Json` artifact. Needed when a downstream step does the parsing itself —
+    /// e.g. `pipeline_parse` running the bespoke `parse_<phase>` over the exact
+    /// response (its scrub/validate/derive operates on the raw form).
+    #[serde(default)]
+    pub raw_output: Option<bool>,
+    /// Per-element error policy for a `for_each` step. `"skip"` records the
+    /// failing element in the step's `failures` and continues with the rest —
+    /// the real Phase-1 skip-and-continue, so one bad chapter doesn't abort a
+    /// whole-book enrich. `"abort"` (the default) fails the item on the first
+    /// element error. Ignored for non-`for_each` steps.
+    #[serde(default)]
+    pub on_error: Option<String>,
 }
 
 impl StepSpec {
@@ -143,13 +207,19 @@ impl StepSpec {
     /// `{ref.key}` to derive edges.
     fn templated_text(&self) -> String {
         let mut s = String::new();
-        for f in [&self.prompt, &self.system, &self.input, &self.grammar] {
+        for f in [
+            &self.prompt,
+            &self.system,
+            &self.system_file,
+            &self.input,
+            &self.grammar,
+        ] {
             if let Some(t) = f {
                 s.push(' ');
                 s.push_str(t);
             }
         }
-        for v in [&self.params, &self.structured_output] {
+        for v in [&self.params, &self.structured_output, &self.stamp] {
             if let Some(p) = v {
                 // Debug (not Display) — robust across toml versions; we only need
                 // the `{ref.key}` substrings to appear for edge scanning.
@@ -221,7 +291,22 @@ impl Source {
                             continue;
                         }
                     }
-                    out.push(make_item(&p.to_string_lossy()));
+                    let mut item = make_item(&p.to_string_lossy());
+                    // Surface the file's text as `{item.text}` so the common
+                    // "a model over each file" workflow needs no separate read
+                    // step. UTF-8 only and size-capped: a binary (PDF, audio,
+                    // image) or an oversized file simply has no `text` field and
+                    // flows through a tool/MCP step instead. The mtime:size
+                    // fingerprint already keys the cache, so an edit to the file
+                    // still invalidates that item's cached steps.
+                    const MAX_ITEM_TEXT: u64 = 1 << 20; // 1 MiB
+                    let small = p.metadata().map(|m| m.len() <= MAX_ITEM_TEXT).unwrap_or(false);
+                    if small {
+                        if let Ok(text) = std::fs::read_to_string(&p) {
+                            item.fields.insert("text".into(), text);
+                        }
+                    }
+                    out.push(item);
                 }
                 out.sort_by(|a, b| a.fields.get("path").cmp(&b.fields.get("path")));
                 Ok(out)

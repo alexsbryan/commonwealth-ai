@@ -2,3 +2,4 @@
 pub mod chunk;
 pub mod ingest;
 pub mod parse;
+pub mod section;
