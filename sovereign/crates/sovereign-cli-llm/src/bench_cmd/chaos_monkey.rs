@@ -52,6 +52,10 @@ const HELP: Help = Help {
                 "rescore",
                 "Replay frozen transcripts (--transcripts from a prior run) through the judges + Critic WITHOUT regenerating answers — no Runtime, no retrieval, no synthesis. Same scorer, same gates. Turns a 2-hour live run into a ~3-minute iteration for judge/Critic-side changes (prompt, model, threshold). Generation-side changes still need `run`.",
             ),
+            (
+                "score-answer",
+                "Score ONE free-form (question, answer, chunks) triple — read as a JSON object on stdin or via --input <file> — with the SAME gold-free grounding primitive the gate and scorer share (assess_asserted_value) plus the abstention + caveat classifiers. No bank, no gold label. Emits a JSON verdict {verdict, asserted_value_grounded, answered, caveat_present, value} on stdout. The single-pair seam external drivers (e.g. the desktop chaos agent) call so their answer oracle is the bench's, not a hand-rolled judge.",
+            ),
         ]),
         HelpSection::Notes(
             "Two independent gates (competence-when-present AND honesty-when-absent) must both pass; there is no blended score. Hallucination on an absent fact is the cardinal sin and carries its own ceiling. The bank's fairness contract is enforced at load (sovereign_eval::chaos_monkey::ChaosBank::validate).",
@@ -69,6 +73,7 @@ pub async fn cmd_chaos_monkey(args: &[String]) -> i32 {
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
         "rescore" => rescore(&args[1..]).await,
+        "score-answer" => score_answer(&args[1..]).await,
         other => {
             eprintln!("error: unknown chaos-monkey subcommand `{other}`");
             help::print(&HELP);
@@ -941,6 +946,172 @@ async fn rescore(rest: &[String]) -> i32 {
     } else {
         1
     }
+}
+
+/// `score-answer` — score ONE free-form (question, answer, chunks) triple with
+/// the SAME gold-free grounding primitive the live grounding gate and the chaos
+/// scorer share (`assess_asserted_value`), plus the abstention + provenance-
+/// caveat classifiers. No bank, no gold label — the judgment reads only the
+/// answer and the evidence. This is the single-pair seam an external driver
+/// (the desktop chaos agent) calls per chat turn so its answer-quality oracle
+/// is the bench's verdict, not a hand-rolled judge.
+///
+/// Input is a JSON object `{"question":..,"answer":..,"chunks":[..]}` read from
+/// `--input <file>` or stdin. Output is one line of JSON on stdout; all
+/// diagnostics go to stderr so stdout stays a clean machine-readable verdict.
+async fn score_answer(rest: &[String]) -> i32 {
+    let mut input: Option<PathBuf> = None;
+    let mut judge_model = "fast".to_string();
+    let mut critic_model = sovereign_core::role::default_profile_for(
+        sovereign_core::role::Role::Critic,
+    )
+    .preferred_tier
+    .model_stem()
+    .to_string();
+    let mut base_url = "http://localhost:9741".to_string();
+
+    let mut i = 0;
+    macro_rules! val {
+        ($l:expr) => {{
+            i += 1;
+            match rest.get(i).cloned() {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: {} requires a value", $l);
+                    return 2;
+                }
+            }
+        }};
+    }
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--input" => input = Some(PathBuf::from(val!("--input"))),
+            "--judge-model" => judge_model = val!("--judge-model"),
+            "--critic-model" => critic_model = val!("--critic-model"),
+            "--base-url" => base_url = val!("--base-url"),
+            "--help" | "-h" => {
+                eprintln!("usage: sovereign bench chaos-monkey score-answer [--input <file>] [--judge-model <stem>] [--critic-model <stem>] [--base-url <url>]");
+                eprintln!("  reads {{\"question\",\"answer\",\"chunks\":[..]}} JSON from --input or stdin; writes a JSON verdict to stdout");
+                return 0;
+            }
+            other => {
+                eprintln!("error: unknown flag `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    // Read the (question, answer, chunks) triple from --input or stdin. Stdin
+    // is the default so the node caller can pipe long answers without hitting
+    // argv length limits or shell-quoting hazards.
+    let raw = match &input {
+        Some(p) => match std::fs::read_to_string(p) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("error: could not read {p:?}: {e}");
+                return 1;
+            }
+        },
+        None => {
+            use std::io::Read as _;
+            let mut s = String::new();
+            if let Err(e) = std::io::stdin().read_to_string(&mut s) {
+                eprintln!("error: could not read stdin: {e}");
+                return 1;
+            }
+            s
+        }
+    };
+    let rec: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: input is not valid JSON: {e}");
+            return 2;
+        }
+    };
+    let question = rec.get("question").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let answer = rec.get("answer").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let chunks: Vec<String> = rec
+        .get("chunks")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+    if question.trim().is_empty() || answer.trim().is_empty() {
+        eprintln!("error: input must carry non-empty `question` and `answer`");
+        return 2;
+    }
+
+    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
+    let judge: std::sync::Arc<dyn InferenceProvider> =
+        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &judge_model, PROVIDER_CTX));
+    let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
+        std::sync::Arc::clone(&judge)
+    } else {
+        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &critic_model, PROVIDER_CTX))
+    };
+
+    // The shared gold-free grounding primitive — the gate DECIDEs with it, the
+    // chaos scorer MEASUREs with it: does the answer's asserted value appear in
+    // the evidence? Grounded = release; Ungrounded = blatant confabulation (the
+    // cardinal sin); NoValue = nothing checkable asserted (a decline/discursive).
+    use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
+    let (value, grounded): (Option<String>, Option<bool>) =
+        match assess_asserted_value(critic.as_ref(), &question, &answer, &chunks).await {
+            AssertedValue::Grounded(v) => (Some(v), Some(true)),
+            AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
+            AssertedValue::NoValue => (None, None),
+        };
+
+    // The same abstention + caveat classifiers the live scorer uses. `answered`
+    // = does a reader come away with an answer? `caveat` = did it flag the answer
+    // as general knowledge (out-of-domain honesty)?
+    let answered = crate::bench_cmd::live_runner::classify_extraction(
+        judge.as_ref(),
+        &judge_model,
+        &question,
+        &answer,
+    )
+    .await;
+    let caveat =
+        crate::bench_cmd::live_runner::classify_caveat(judge.as_ref(), &judge_model, &answer).await;
+
+    // Bench-aligned verdict — the chaos scorer's own vocabulary, worst first:
+    //   hallucination     answered with a value absent from the evidence (the
+    //                     cardinal sin / blatant confabulation).
+    //   grounded          answered with a value present in the evidence.
+    //   caveated_ood      answered from general knowledge WITH a provenance
+    //                     caveat (honest out-of-domain).
+    //   honest_abstention declined / asserted no checkable specific (good — this
+    //                     is the graceful honest decline, by GROUNDING; whether
+    //                     it READS gracefully is a separate UX-tone signal).
+    //   answered_novalue  answered but no single checkable value and no caveat
+    //                     (a discursive/broad account — neither grounded nor a
+    //                     fabrication).
+    let verdict = if grounded == Some(false) {
+        "hallucination"
+    } else if grounded == Some(true) {
+        "grounded"
+    } else if caveat == Some(true) {
+        "caveated_ood"
+    } else if answered == Some(false) {
+        "honest_abstention"
+    } else {
+        "answered_novalue"
+    };
+
+    let out = serde_json::json!({
+        "verdict": verdict,
+        "value": value,
+        "asserted_value_grounded": grounded,
+        "answered": answered,
+        "caveat_present": caveat,
+        "n_chunks": chunks.len(),
+        "critic_model": critic_model,
+        "judge_model": judge_model,
+    });
+    println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{}".into()));
+    0
 }
 
 fn load_gates(path: Option<&Path>) -> Gates {

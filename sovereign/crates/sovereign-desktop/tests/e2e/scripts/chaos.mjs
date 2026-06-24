@@ -16,15 +16,28 @@
 //          spontaneous real actions if unreachable (itself a finding).
 // Eyes   — the glassbox: every emitted event + the trace-level app log, plus
 //          the actual chat ANSWER the user got back.
-// Oracle — what disappointed the USER, not what a fuzzer noticed. Top weight:
-//          app died, hung, answered wrongly (user-judge), or showed a raw
-//          error. Clean rejections of edge input are cosmetic. Novel
-//          ERROR/WARN glassbox lines still count.
+// Oracle — what disappointed the USER, not what a fuzzer noticed. The PRIMARY
+//          answer oracle is the BENCH's own grounding verdict — the shared
+//          `assess_asserted_value` primitive (Grounded / Ungrounded / NoValue)
+//          that the live grounding gate and the chaos-monkey scorer use, via
+//          `sovereign bench chaos-monkey score-answer`. A hallucination (a
+//          value asserted but absent from the evidence) is the cardinal sin.
+//          A thin user-judge adds the UX layer the grounding check can't see:
+//          coherence, completeness, and TONE — flagging an ABRASIVE honest
+//          decline (honest, but unkind) while leaving a GRACEFUL one alone.
+//          App died / hung / raw error still top-weight; clean edge rejections
+//          are cosmetic; novel ERROR/WARN glassbox lines still count.
 // Output — a field journal (chaos-journal.jsonl) + a narrative of where the
 //          app let the user down, framed as QUESTIONS. No pass/fail, no gate.
 //
 // Usage: node tests/e2e/scripts/chaos.mjs [--minutes 10] [--spawn]
-//                                         [--no-supervisor]
+//                                         [--no-supervisor] [--attach]
+//
+//   --attach  wander the RESIDENT corpora: do not spawn a hermetic daemon —
+//             attach the desktop to your already-running dev daemon on :9741
+//             (its installed corpora + loaded model as both SUT and brain).
+//             Read-only against corpora (the catalog never deletes/ingests);
+//             conversations stay in the scratch desktop store. Skips seeding.
 //
 // Shares the supervised-spawn + bridge pattern with soak.mjs (KEEP IN SYNC);
 // factor a shared harness module if this sticks.
@@ -45,6 +58,15 @@ const BRIDGE_PORT = 9745;
 const DAEMON = "http://127.0.0.1:9741"; // brain: daemon /v1/* (OpenAI-compat)
 const APP_BIN = path.join(REPO_ROOT, "target/debug/sovereign-desktop");
 const CLI_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli");
+// The grounding-scorer seam: `bench chaos-monkey score-answer` wraps the
+// bench's shared assess_asserted_value primitive. We point straight at the
+// sovereign-cli-llm SIBLING (which owns the `bench` verb and parses the
+// subcommand itself), not the dispatcher — the release dispatcher isn't always
+// built, and the sibling handles the verb directly when invoked as
+// `sovereign-cli-llm bench chaos-monkey score-answer …`. Release by default for
+// the optimized scorer even though the hermetic app/CLI above are debug.
+const SCORE_CLI =
+  process.env.SOVEREIGN_SCORE_CLI ?? path.join(REPO_ROOT, "target/release/sovereign-cli-llm");
 const MODELS_DIR = path.join(REPO_ROOT, "sovereign/models");
 const CHAT_MODEL =
   process.env.SOVEREIGN_REAL_CHAT_MODEL ?? path.join(MODELS_DIR, "Qwen3.5-2B.Q6_K.gguf");
@@ -59,7 +81,11 @@ const flag = (name, fb) => {
 };
 const MINUTES = Number(flag("minutes", "10"));
 const SPAWN = argv.includes("--spawn");
-const SUPERVISOR = !argv.includes("--no-supervisor");
+// --attach wanders the resident corpora by attaching the spawned desktop to the
+// already-running dev daemon on :9741, so it is the opposite of supervising our
+// own hermetic child: attach implies no supervisor.
+const ATTACH = argv.includes("--attach");
+const SUPERVISOR = !argv.includes("--no-supervisor") && !ATTACH;
 
 // Seedless on purpose — every wander is different. (Plain Math.random:
 // this is a node script, not a workflow sandbox.)
@@ -204,9 +230,12 @@ async function brainPropose(catalog, memorySummary) {
   return parsed;
 }
 
-// The user-perspective oracle — the signal entropy can't produce. A real
-// user notices a wrong, empty, evasive, or incoherent answer; a fuzzer
-// only notices a crash. Returns null if the brain is unavailable.
+// The UX layer of the answer oracle. The BENCH owns honesty/grounding (see
+// scoreAnswerAligned); this judges what grounding can't see — coherence,
+// completeness, responsiveness, and TONE. It deliberately scores a GRACEFUL
+// honest decline LOW (correct behaviour) and an ABRASIVE/lecturing one HIGH
+// (bad UX), so the two oracles compose: the bench says "is it honest?", this
+// says "is it a good, gracious answer?". Returns null if the brain is down.
 async function judgeAsUser(question, answer) {
   const text = await chatCompletion(
     [
@@ -214,9 +243,14 @@ async function judgeAsUser(question, answer) {
         role: "system",
         content:
           "You are a demanding, knowledgeable user judging the assistant's answer to YOUR question. " +
-          "Was it correct, coherent, complete, and actually responsive — or wrong, empty, evasive, " +
-          "confusing, cut off, or broken? Respond ONLY as JSON: " +
-          '{"broken":true|false,"score":0-10,"why":"<one line>"}. score 0 = perfect, 10 = totally broken.',
+          "A correct, coherent, complete, responsive answer scores LOW (good). Wrong, empty, cut off, " +
+          "incoherent, or hallucinated scores HIGH (broken). " +
+          "On HONESTY: if the app genuinely lacks the sources to answer, an honest decline is correct — " +
+          "but ONLY if it is GRACEFUL: brief, warm, and pointing to a path forward (what it CAN do or a " +
+          "suggestion). A graceful honest decline scores LOW. An ABRASIVE, cold, or LECTURING refusal — a " +
+          "wall of meta-commentary about 'source limitations', condescending or annoying to read — scores " +
+          "HIGH even though it's honest, because it's bad UX. " +
+          'Respond ONLY as JSON: {"broken":true|false,"score":0-10,"why":"<one line>"}. 0=perfect, 10=totally broken.',
       },
       {
         role: "user",
@@ -232,6 +266,94 @@ async function judgeAsUser(question, answer) {
     score: Math.max(0, Math.min(10, j.score)),
     why: String(j.why ?? "").slice(0, 140),
   };
+}
+
+// ── bench-aligned grounding oracle (the primary answer judge) ──────
+// We do NOT hand-roll honesty/hallucination scoring — we call the SAME gold-
+// free primitive the live grounding gate and the chaos-monkey scorer share
+// (assess_asserted_value), via `sovereign bench chaos-monkey score-answer`.
+// One definition of "is this asserted value grounded" across gate, bench, and
+// this chaos oracle. Needs the retrieved EVIDENCE, so we first resolve the
+// turn's chunks to full text.
+
+// The message-complete payload carries only 200-char snippets; resolve each
+// retrieved chunk to its FULL text via read_get_chunk so the grounding check
+// sees the real evidence. Best-effort: falls back to the snippet on any miss.
+async function resolveChunkTexts(chunks) {
+  const texts = [];
+  for (const c of (chunks ?? []).slice(0, 12)) {
+    const corpusId = c?.corpus_id ?? c?.corpusId;
+    const chunkId = c?.chunk_id ?? c?.chunkId;
+    if (corpusId != null && chunkId != null) {
+      try {
+        const rec = await invoke("read_get_chunk", { corpusId, chunkId }, 15_000);
+        const content = rec?.content ?? rec?.text;
+        if (content) {
+          texts.push(String(content));
+          continue;
+        }
+      } catch {
+        /* fall through to the snippet */
+      }
+    }
+    if (c?.snippet) texts.push(String(c.snippet));
+  }
+  return texts;
+}
+
+// Score one (question, answer, chunks) with the bench's grounding primitive.
+// Returns {verdict, asserted_value_grounded, answered, caveat_present, value}
+// or null if the scorer is unavailable (itself worth knowing, not fatal).
+//   verdict ∈ hallucination | grounded | caveated_ood | honest_abstention | answered_novalue
+function scoreAnswerAligned(question, answer, chunkTexts) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(
+        SCORE_CLI,
+        ["bench", "chaos-monkey", "score-answer", "--base-url", DAEMON],
+        { stdio: ["pipe", "pipe", "ignore"] },
+      );
+    } catch {
+      return resolve(null);
+    }
+    let out = "";
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+      resolve(null);
+    }, 90_000);
+    child.stdout.on("data", (d) => (out += d));
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      const line = out.trim().split("\n").filter(Boolean).pop();
+      try {
+        resolve(line ? JSON.parse(line) : null);
+      } catch {
+        resolve(null);
+      }
+    });
+    try {
+      child.stdin.write(
+        JSON.stringify({
+          question: String(question ?? ""),
+          answer: String(answer ?? ""),
+          chunks: chunkTexts ?? [],
+        }),
+      );
+      child.stdin.end();
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
 }
 
 // ── the challenging user's action vocabulary ──────────────────────
@@ -318,6 +440,68 @@ function nextUserMessage() {
   return q;
 }
 
+// Attach mode asks about YOUR resident corpora, not the lighthouse fixture.
+// The static pool would only ever draw honest "not in my sources" declines, so
+// we GROUND each question in real content: sample a chunk from a random
+// resident corpus and have the demanding-user brain ask a hard, specific
+// question that passage answers. The question is therefore answerable from the
+// corpus — so the oracle measures answer QUALITY (grounded? complete? coherent?
+// graceful?), not merely whether the app declines an off-topic ask. Demanding-
+// user edges (fat-fingered empty, impatient re-ask) are preserved.
+async function attachQuestion() {
+  if (chance(0.12)) return pick(EDGE_MESSAGES);
+  if (state.lastQuestion && chance(0.2)) return `Wait — also: ${state.lastQuestion}`;
+  const corpus = pick(state.corpora);
+  if (!corpus) return nextUserMessage();
+  // Scope the chat to the SOURCE corpus so the question is actually answerable
+  // (focused retrieval, no cross-corpus dilution among 30+ corpora). This is
+  // the complement to the unscoped finding (the app declines answerable Qs when
+  // everything is in scope): scoped, the answer SHOULD land — so the oracle now
+  // measures answer QUALITY (grounded? complete? coherent? graceful?) on Qs the
+  // app ought to nail, which is where the deeper bugs live.
+  if (state.convo) {
+    await invoke(
+      "set_conversation_enabled_corpora",
+      { conversationId: state.convo, enabledCorpora: [corpus] },
+      10_000,
+    ).catch(() => {});
+  }
+  try {
+    const rec = await invoke(
+      "read_get_chunk",
+      { corpusId: corpus, chunkId: 1 + Math.floor(rand() * 40) },
+      15_000,
+    );
+    const passage = String(rec?.content ?? rec?.text ?? "").slice(0, 1200);
+    if (passage && BRAIN_MODEL) {
+      const q = await chatCompletion(
+        [
+          {
+            role: "system",
+            content:
+              "You are a sharp, demanding power-user of a knowledge app. Given a passage from the user's own corpus, ask ONE hard, specific question that this passage answers — the kind that tests whether the app can find and synthesize the detail (a name, a number, a claim, a comparison). Reply with ONLY the question.",
+          },
+          { role: "user", content: `Passage:\n${passage}\n\nYour question:` },
+        ],
+        { temperature: 0.8, maxTokens: 60 },
+      );
+      const question = String(q ?? "")
+        .trim()
+        .replace(/^["']+|["']+$/g, "")
+        .slice(0, 300);
+      if (question) {
+        state.lastQuestion = question;
+        return question;
+      }
+    }
+  } catch {
+    /* fall through to a generic exploratory ask */
+  }
+  const generic = `What is the most important thing in the "${corpus}" material, and why?`;
+  state.lastQuestion = generic;
+  return generic;
+}
+
 // Per-run mutable state. convos[] lets the user switch among / delete real
 // prior conversations (coherent sessions, not orphaned ids).
 const state = { convo: null, convos: [], corpora: [], config: null, budget: null, assetId: null, lastQuestion: null };
@@ -349,6 +533,7 @@ const seen = {
 };
 const latencyByCmd = new Map(); // cmd -> [ms,...]
 let appLogPos = 0; // byte offset into APP_LOG already consumed
+const verdicts = {}; // bench grounding-verdict tally (hallucination/grounded/…) for the closing summary
 
 // Normalize a string into a signature: strip ids/uuids/numbers/hex so
 // "the same kind of thing" collapses to one signature (novelty = a kind
@@ -406,7 +591,7 @@ function looksLikeCleanValidation(error) {
 // demanding user actually cares about: the app died, stalled, answered
 // wrongly, or showed them a raw error. Clean rejections of edge input are
 // cosmetic. Objective glassbox novelty (new WARN/ERROR) still counts.
-function scoreSurprise({ cmd, ok, error, latencyMs, events, alive, answer, userJudge }) {
+function scoreSurprise({ cmd, ok, error, latencyMs, events, alive, answer, aligned, userJudge }) {
   const signals = [];
   let score = 0;
 
@@ -419,11 +604,33 @@ function scoreSurprise({ cmd, ok, error, latencyMs, events, alive, answer, userJ
     score = Math.max(score, 9);
   }
 
-  // The user-perspective judge — the signal entropy can't produce. A real
-  // user notices a wrong/empty/evasive/incoherent answer.
+  // PRIMARY answer oracle — the BENCH's shared grounding verdict
+  // (assess_asserted_value): the SAME honesty/hallucination definition the live
+  // gate and the chaos-monkey scorer use, not a hand-rolled judge. A
+  // hallucination — a value asserted but absent from the evidence — is the
+  // cardinal sin and scores near the top.
+  if (aligned?.verdict === "hallucination") {
+    signals.push(
+      `HALLUCINATION (bench): asserted "${String(aligned.value ?? "").slice(0, 60)}" — absent from the evidence`,
+    );
+    score = Math.max(score, 9);
+  }
+  // UX layer — the bench owns honesty; this owns "was it a GOOD, gracious
+  // answer?". An ABRASIVE honest decline is flagged DISTINCTLY from a wrong/
+  // incoherent answer, so a GRACEFUL honest decline (correct behaviour) is
+  // never penalised as a bug.
   if (userJudge && (userJudge.broken || userJudge.score >= 6)) {
-    signals.push(`bad answer (user rates ${userJudge.score}/10): ${userJudge.why}`);
-    score = Math.max(score, Math.min(9, 3 + userJudge.score));
+    const honest = aligned?.verdict === "honest_abstention" || aligned?.verdict === "caveated_ood";
+    if (honest) {
+      signals.push(`abrasive honest decline (UX, not dishonest): ${userJudge.why}`);
+      score = Math.max(score, 5);
+    } else if (!aligned) {
+      signals.push(`bad answer (user ${userJudge.score}/10, no bench verdict): ${userJudge.why}`);
+      score = Math.max(score, Math.min(8, 3 + userJudge.score));
+    } else {
+      signals.push(`poor answer (bench: ${aligned.verdict}; user ${userJudge.score}/10): ${userJudge.why}`);
+      score = Math.max(score, Math.min(7, 2 + userJudge.score));
+    }
   }
   // The app handed the user a raw error or an empty reply to a real question.
   if (answer != null) {
@@ -612,8 +819,17 @@ async function refreshState() {
     /* leave prior */
   }
   try {
-    const lc = await invoke("lc_list", {});
-    state.corpora = lc.map((c) => c.corpus_id ?? c.id).filter(Boolean);
+    const lc = await invoke("lc_list", {}).catch(() => []);
+    const local = (lc ?? []).map((c) => c.corpus_id ?? c.id).filter(Boolean);
+    // Installed corpora (the resident ones surfaced in attach mode) come from
+    // list_corpora — lc_list only covers local-folder ingests. Keep only
+    // status="installed" (the catalog also returns not_installed built-ins).
+    const all = await invoke("list_corpora", {}).catch(() => []);
+    const installed = (all ?? [])
+      .filter((c) => c.status === "installed")
+      .map((c) => c.id)
+      .filter(Boolean);
+    state.corpora = [...new Set([...local, ...installed])];
   } catch {
     /* none */
   }
@@ -629,8 +845,10 @@ async function refreshState() {
   }
 }
 
-// Wait for a chat turn's answer (message-complete.full_text), or null on
-// error / hang — so the user-judge can grade what the app actually said.
+// Wait for a chat turn's terminal and return {answer, chunks}: the answer text
+// (message-complete.full_text) plus the retrieved evidence the runtime surfaced
+// (metadata.retrieved_chunks, each carrying chunk_id + corpus_id). null on
+// error / hang. The grounding oracle needs the evidence, not just the answer.
 async function awaitChatAnswer(sinceSeq, messageId, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -638,7 +856,13 @@ async function awaitChatAnswer(sinceSeq, messageId, timeoutMs) {
     const done = rows.find(
       (r) => r.event === "message-complete" && r.payload?.message_id === messageId,
     );
-    if (done) return String(done.payload?.full_text ?? "");
+    if (done) {
+      const rc = done.payload?.metadata?.retrieved_chunks;
+      return {
+        answer: String(done.payload?.full_text ?? ""),
+        chunks: Array.isArray(rc) ? rc : [],
+      };
+    }
     if (rows.some((r) => r.event === "message-error")) return null; // errored
     if (Date.now() > deadline) return null; // hang — latency catches it
     await new Promise((r) => setTimeout(r, 1500));
@@ -658,7 +882,8 @@ async function chaosStep(memorySummary) {
   // still fires when the brain fixates on a feature thread (v1 did 1 chat
   // turn in 162 moves — that was the gap).
   if (chance(0.28) || movesSinceChat >= 6) {
-    chosen = { cmd: "send_message_stream", args: { message: nextUserMessage(), conversationId: state.convo } };
+    const message = ATTACH ? await attachQuestion() : nextUserMessage();
+    chosen = { cmd: "send_message_stream", args: { message, conversationId: state.convo } };
     goal = "ask my knowledge base a question";
   } else {
     const proposal = await brainPropose(CATALOG, memorySummary);
@@ -697,13 +922,21 @@ async function chaosStep(memorySummary) {
     if (state.convos.length > 30) state.convos.shift();
   }
 
-  // For a chat turn: wait for the answer, then judge it as the user would.
+  // For a chat turn: capture the answer + its retrieved evidence, then run
+  // BOTH oracles — the bench's grounding verdict (primary; honesty/
+  // hallucination) and the UX/tone judge (secondary; coherence + grace).
   let answer = null;
-  let userJudge = null;
+  let aligned = null; // bench grounding verdict — the primary answer oracle
+  let userJudge = null; // UX layer: coherence/completeness + graceful-vs-abrasive
   if (isChat && ok && result?.message_id) {
-    answer = await awaitChatAnswer(since, result.message_id, 120_000);
-    if (answer != null && answer.length > 0) {
-      userJudge = await judgeAsUser(chosen.args.message ?? chosen.args.question, answer);
+    const got = await awaitChatAnswer(since, result.message_id, 120_000);
+    if (got && got.answer && got.answer.length > 0) {
+      answer = got.answer;
+      const question = chosen.args.message ?? chosen.args.question;
+      const chunkTexts = await resolveChunkTexts(got.chunks);
+      aligned = await scoreAnswerAligned(question, answer, chunkTexts);
+      userJudge = await judgeAsUser(question, answer);
+      if (aligned?.verdict) verdicts[aligned.verdict] = (verdicts[aligned.verdict] ?? 0) + 1;
     }
   }
 
@@ -725,6 +958,7 @@ async function chaosStep(memorySummary) {
     events,
     alive,
     answer,
+    aligned,
     userJudge,
   });
 
@@ -737,6 +971,9 @@ async function chaosStep(memorySummary) {
     ok,
     error: error ? error.slice(0, 240) : null,
     answer: answer != null ? answer.slice(0, 200) : null,
+    aligned: aligned
+      ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
+      : null,
     userJudge,
     latencyMs,
     surprise: surprise.score,
@@ -810,6 +1047,31 @@ function bakeProfile(home) {
         ``,
       ].join("\n"),
     );
+  } else if (ATTACH) {
+    // Attach to the EXISTING dev daemon on :9741. build_attach_provider does
+    // `SetupConfig::load()?`, and a minimal hand-written [daemon] stanza fails
+    // the SetupConfig deserialize (missing required fields surface as a "TOML
+    // parse error at line 1"). Copy the daemon's OWN config verbatim: it
+    // parses, carries client_port=9741, and its model paths are inert in Attach
+    // mode (no local weights load). The desktop only READS it (save_config
+    // writes desktop.toml, not this), so the real config is never touched.
+    const realConfig = path.join(os.homedir(), ".sovereign", "config.toml");
+    if (!fs.existsSync(realConfig))
+      throw new Error(`--attach needs ${realConfig} (the daemon's SetupConfig) to resolve the daemon port`);
+    fs.copyFileSync(realConfig, path.join(sovDir, "config.toml"));
+    // Surface the RESIDENT corpora. The desktop's corpus_engine reads
+    // dirs::home_dir()/.sovereign/{indexes,recipes} (state.rs:601-603) — under
+    // our scratch HOME those are empty, so attach showed 0 corpora. Symlink
+    // them to the REAL ones so the wander explores your actual installed
+    // corpora. READ-ONLY in practice: the attach catalog only lists/searches/
+    // reads chunks + atoms — it never ingests, installs, deletes, or enriches —
+    // so the real indexes are never mutated.
+    const realSov = path.join(os.homedir(), ".sovereign");
+    for (const sub of ["indexes", "recipes"]) {
+      const target = path.join(realSov, sub);
+      const link = path.join(sovDir, sub);
+      if (fs.existsSync(target) && !fs.existsSync(link)) fs.symlinkSync(target, link);
+    }
   }
   return home;
 }
@@ -820,6 +1082,10 @@ async function maybeSpawn() {
   if (!SPAWN) throw new Error(`bridge not reachable at ${BRIDGE}. Pass --spawn or launch a desktop.`);
   if (SUPERVISOR && (await portInUse(9741)))
     throw new Error("supervised chaos needs :9741 free — `sovereign daemon stop` (or --no-supervisor).");
+  if (ATTACH && !(await portInUse(9741)))
+    throw new Error(
+      "--attach needs your dev daemon on :9741 (the resident corpora + loaded model). Start it: `sovereign daemon start`.",
+    );
   const profileDir = path.join(ARTIFACTS, "chaos-profile");
   fs.rmSync(profileDir, { recursive: true, force: true });
   const home = bakeProfile(path.join(profileDir, "home"));
@@ -893,7 +1159,21 @@ async function main() {
   newAppLogLines(); // prime the log offset past boot
 
   await discoverBrainModel();
-  await seedProductionLikeState();
+  if (ATTACH) {
+    // Resident corpora come from the attached dev daemon — do NOT seed (that
+    // would graft a fixture onto your real setup). Just read what is there.
+    await refreshState();
+    const names = state.corpora.slice(0, 8).join(", ");
+    console.log(
+      `[chaos] ATTACH — ${state.corpora.length} resident corpus(es): ${names}${state.corpora.length > 8 ? " …" : ""}`,
+    );
+    if (state.corpora.length === 0)
+      console.log(
+        "[chaos] ⚠ attached daemon exposed NO corpora — the wander will be answer-thin (is lc_list daemon-proxied in attach mode?)",
+      );
+  } else {
+    await seedProductionLikeState();
+  }
 
   console.log(
     `[chaos] wandering for ${MINUTES}min — seedless, no assertions. brain=${BRAIN_MODEL ?? "random"} ` +
@@ -939,7 +1219,25 @@ async function main() {
     await new Promise((r) => setTimeout(r, 250 + rand() * 900));
   }
 
-  record({ ts: Date.now(), kind: "chaos_end", steps: step });
+  record({ ts: Date.now(), kind: "chaos_end", steps: step, verdicts });
+
+  // Courtesy in --attach: the wander minted conversations; remove the ones we
+  // created so we leave no litter in your real session. (They live in the
+  // scratch desktop store, but this is belt-and-suspenders against any
+  // daemon-side persistence — and it runs while the app is still up.)
+  if (ATTACH && state.convos.length) {
+    let cleaned = 0;
+    for (const id of state.convos) {
+      try {
+        await invoke("delete_conversation", { conversationId: id }, 10_000);
+        cleaned += 1;
+      } catch {
+        /* best-effort */
+      }
+    }
+    console.log(`[chaos] attach cleanup: removed ${cleaned}/${state.convos.length} conversations we created`);
+  }
+
   killGroup();
 
   // ── field journal: where the app let the user down, worst first ──
@@ -955,6 +1253,10 @@ async function main() {
       console.log(`⁇ [${r.surprise}] ${r.cmd}  ${r.args}`);
       for (const s of r.signals) console.log(`    · ${s}`);
       if (r.goal) console.log(`    user was trying to: ${r.goal}`);
+      if (r.aligned?.verdict)
+        console.log(
+          `    bench verdict: ${r.aligned.verdict}${r.aligned.value ? ` (value: "${String(r.aligned.value).slice(0, 50)}")` : ""}`,
+        );
       if (r.answer) console.log(`    app said: ${String(r.answer).slice(0, 120)}`);
       console.log(`    → the question: why? (step ${r.step}, journal: ${JOURNAL})`);
     }
@@ -963,6 +1265,26 @@ async function main() {
     `\ncoverage this wander: ${seen.commands.size}/${CATALOG.length} commands touched, ` +
       `${seen.eventTypes.size} event types, ${seen.logSigs.size} distinct ERROR/WARN log shapes.`,
   );
+
+  // The bench-aligned answer ledger — the same grounding vocabulary as the
+  // chaos-monkey scorer, so a wander's honesty profile is comparable to a
+  // bench run's. Hallucination is called out as the cardinal sin.
+  const vsum = Object.entries(verdicts).sort((a, b) => b[1] - a[1]);
+  if (vsum.length) {
+    const total = vsum.reduce((s, [, n]) => s + n, 0);
+    console.log(
+      `\nbench grounding verdicts over ${total} judged answer(s): ${vsum
+        .map(([k, n]) => `${k}=${n}`)
+        .join("  ")}`,
+    );
+    const hall = verdicts.hallucination ?? 0;
+    if (hall > 0)
+      console.log(
+        `  ⚠ ${hall} HALLUCINATION(s) — the cardinal sin: a value asserted but absent from the evidence.`,
+      );
+  } else {
+    console.log("\nbench grounding verdicts: (no chat answers judged — was the scorer reachable?)");
+  }
 }
 
 main().catch((e) => {
