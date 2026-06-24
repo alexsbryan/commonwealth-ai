@@ -801,6 +801,18 @@ impl Runtime {
                 None
             },
             entity_anchored: gate_entity_anchored,
+            // Best retrieval similarity over the draft's chunks → the env-gated
+            // retry-floor signal (EvidenceContext::top_similarity). Only the gate
+            // path (chunks present) carries it.
+            top_similarity: if gate_on {
+                let best = chunks
+                    .iter()
+                    .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
+                    .fold(f32::NEG_INFINITY, f32::max);
+                best.is_finite().then_some(best)
+            } else {
+                None
+            },
         };
         let gate_profile = gate_surface.profile();
         let gate_question: String = message.to_string();
@@ -1576,6 +1588,20 @@ impl Runtime {
                 None
             },
             entity_anchored: false,
+            // Best retrieval similarity over the draft's chunks → the env-gated
+            // retry-floor signal. The floor engages on the short single-claim
+            // path (a short deep answer can reach it); long-form deep answers
+            // take the per-claim audit path that ignores it.
+            top_similarity: if deep_gate_on {
+                let best = kc
+                    .chunks
+                    .iter()
+                    .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
+                    .fold(f32::NEG_INFINITY, f32::max);
+                best.is_finite().then_some(best)
+            } else {
+                None
+            },
         };
         let deep_gate_profile = deep_gate_surface.profile();
         let deep_gate_question: String = message.to_string();

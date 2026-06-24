@@ -312,6 +312,94 @@ pub(crate) fn reweight_by_query_relevance(chunks: &mut [ScoredChunk], query: &st
     }
 }
 
+/// Cross-corpus retrieval discipline (env-gated prototype, default OFF — a
+/// no-op unless at least one knob is set, so production behaviour is
+/// byte-identical).
+///
+/// After the flat cross-corpus merge, an N-corpus fan-out pours
+/// N×per-corpus-limit chunks into one pool (33 corpora × 20 ≈ 660). The
+/// cross-corpus sort is primarily by cosine distance, so a single relevant
+/// chunk in one corpus competes with every other corpus's top-K — and at that
+/// scale, spurious-low-distance noise from the other 32 corpora can bury it
+/// below the merged truncation or below the grounding gate's support threshold.
+/// That is the observed "I couldn't find a matching internal source" decline on
+/// answerable questions when many corpora are installed; scoping to the one
+/// relevant corpus makes it answerable. Two cheap, structural corrections, each
+/// independently gated:
+///
+///   * PER-CORPUS CAP (`SOVEREIGN_KQ_PER_CORPUS_CAP`): keep at most `cap` chunks
+///     per corpus. Applied AFTER the cross-corpus sort, so `retain` keeps each
+///     corpus's top-`cap` by cross-corpus rank and drops the long tail that
+///     only adds cross-corpus noise.
+///   * CROSS-CORPUS RELATIVE-SCORE FLOOR (`SOVEREIGN_KQ_XCORPUS_FLOOR`, 0..1):
+///     drop chunks whose cosine similarity (`1 - vector_distance`, the one
+///     signal that IS comparable across corpora) is below `floor ×
+///     best_similarity`. FTS-only chunks (no `vector_distance`) are a different
+///     signal and are kept.
+///
+/// Pure + glassbox: emits a `cross_corpus_discipline` audit event with the
+/// before/after counts and the similarity cutoff so a chaos/bench re-run can
+/// SEE the effect against the existing `merged_pool` audit.
+pub(crate) fn apply_cross_corpus_discipline(chunks: &mut Vec<ScoredChunk>, label: &str) {
+    let cap = std::env::var("SOVEREIGN_KQ_PER_CORPUS_CAP")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n > 0);
+    let floor = std::env::var("SOVEREIGN_KQ_XCORPUS_FLOOR")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|f| *f > 0.0 && *f < 1.0);
+    if cap.is_none() && floor.is_none() {
+        return; // production default — no behaviour change
+    }
+    let before = chunks.len();
+
+    // 1. Per-corpus cap — applied post-sort, so retain keeps each corpus's
+    //    top-`cap` by cross-corpus rank.
+    if let Some(cap) = cap {
+        let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        chunks.retain(|c| {
+            let n = seen.entry(c.corpus_id.clone()).or_insert(0);
+            *n += 1;
+            *n <= cap
+        });
+    }
+    let after_cap = chunks.len();
+
+    // 2. Cross-corpus relative-score floor on cosine similarity — the only
+    //    cross-corpus-comparable signal. FTS-only chunks are kept (different
+    //    signal, not floored out).
+    let mut sim_cutoff = 0.0_f32;
+    if let Some(floor) = floor {
+        let best_sim = chunks
+            .iter()
+            .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
+            .fold(f32::NEG_INFINITY, f32::max);
+        if best_sim.is_finite() {
+            sim_cutoff = floor * best_sim;
+            chunks.retain(|c| match c.vector_distance {
+                Some(d) => (1.0 - d) >= sim_cutoff,
+                None => true,
+            });
+        }
+    }
+
+    if tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO) {
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "cross_corpus_discipline",
+            label = label,
+            cap = ?cap,
+            floor = ?floor,
+            sim_cutoff = sim_cutoff,
+            before = before,
+            after_cap = after_cap,
+            after = chunks.len(),
+            "retrieval_audit: cross_corpus_discipline"
+        );
+    }
+}
+
 /// Blend a topic-anchor embedding with the live query embedding so a
 /// cross-corpus fetch is steered by *what the user actually asked*, not
 /// only by the bridged topic. `anchor` (the linked topic's embedding)

@@ -661,6 +661,7 @@ impl Runtime {
             chunks: retrieved_tool_results.to_vec(),
             searcher,
             entity_anchored,
+            top_similarity: None,
         };
         let outcome = crate::runtime::grounding::gate_answer(
             &self.inference,

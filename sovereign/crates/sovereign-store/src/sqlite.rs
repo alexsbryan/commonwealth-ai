@@ -581,6 +581,20 @@ impl ConversationStore for SqliteStateStore {
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>> {
         let conn = self.conn.lock().await;
 
+        // Sanitize the natural-language query into an FTS5-safe expression. The
+        // raw query was bound straight into `MATCH ?1`, so operators and column
+        // syntax in ordinary user text produced hard errors — "corpus-engine"
+        // parsed as `corpus NOT engine`, "research AND methodology" as a bare
+        // AND, a trailing word read as a column ("no such column: reference").
+        // Reuse the SAME sanitizer the memory + document searches already use
+        // (strip punctuation/stopwords, OR the remaining terms). Empty after
+        // sanitisation → nothing searchable, so skip the MATCH (an empty FTS5
+        // query is itself a syntax error).
+        let fts_query = sanitize_fts5_query(query);
+        if fts_query.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = conn
             .prepare(
                 "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, m.metadata
@@ -593,7 +607,7 @@ impl ConversationStore for SqliteStateStore {
             .map_err(map_db)?;
 
         let messages: Vec<Message> = stmt
-            .query_map(rusqlite::params![query], |row| {
+            .query_map(rusqlite::params![fts_query], |row| {
                 let role_str: String = row.get(2)?;
                 let metadata_str: Option<String> = row.get(5)?;
 
