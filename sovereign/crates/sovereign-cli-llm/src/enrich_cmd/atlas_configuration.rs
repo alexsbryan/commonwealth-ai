@@ -17,7 +17,8 @@ use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
     analysis::configuration::{
-        parse_configurations, summarise_atlas, AtlasSummaryParams, ConfigurationsOutput,
+        parse_configurations, summarise_atlas, AtlasSummary, AtlasSummaryParams,
+        ConfigurationsOutput, Phase8ParseItem,
     },
     read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full, AtomEnvelope,
     ATLAS_DIRNAME,
@@ -331,6 +332,167 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
 
 fn atlas_dir_for(corpus_id: &str) -> PathBuf {
     paths::index_root(corpus_id).join(ATLAS_DIRNAME)
+}
+
+/// Load the resolved atlas (`atoms.json` + `edges.json`) and summarise it for the
+/// Phase 8 prompt — the LOAD half of `cmd_atlas_configuration`, exposed so the
+/// workflow `atlas_summary` primitive reaches the SAME `AtlasSummary` the bespoke
+/// cmd builds (reusing `summarise_atlas` verbatim). No divergence.
+pub(crate) fn build_atlas_summary(corpus_id: &str) -> Result<AtlasSummary, String> {
+    let atlas_dir = atlas_dir_for(corpus_id);
+    let atoms_file = read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("reading {}/atoms.json: {e} — run atlas-resolve first", atlas_dir.display()))?;
+    let edges_file = read_atlas_edges(&atlas_dir)
+        .map_err(|e| format!("reading {}/edges.json: {e} — run atlas-resolve first", atlas_dir.display()))?;
+
+    let mut entities = Vec::new();
+    let mut events = Vec::new();
+    let mut states = Vec::new();
+    let mut relations = Vec::new();
+    let mut claims = Vec::new();
+    let mut questions = Vec::new();
+    for a in atoms_file.atoms {
+        match a {
+            AtomEnvelope::Entity(x) => entities.push(x),
+            AtomEnvelope::Event(x) => events.push(x),
+            AtomEnvelope::State(x) => states.push(x),
+            AtomEnvelope::Relation(x) => relations.push(x),
+            AtomEnvelope::Claim(x) => claims.push(x),
+            AtomEnvelope::Question(x) => questions.push(x),
+            _ => {}
+        }
+    }
+
+    // section_count proxy, identical to the bespoke cmd.
+    let mut sections: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for e in &events {
+        sections.insert(e.section_position.section_id.clone());
+    }
+    for s in &states {
+        sections.insert(s.section_range.start.clone());
+    }
+    for ent in &entities {
+        sections.insert(ent.first_appearance.chunk_id.clone());
+    }
+
+    Ok(summarise_atlas(
+        &entities,
+        &events,
+        &states,
+        &relations,
+        &claims,
+        &questions,
+        &edges_file.edges,
+        sections.len(),
+        AtlasSummaryParams::default(),
+    ))
+}
+
+/// Validate the Phase 8 parse items against the atlas and merge the resulting
+/// Configuration atoms into `configurations.json` + `atoms.json` — the WRITE half
+/// of `cmd_atlas_configuration`, exposed so the workflow `atlas_write_configurations`
+/// primitive finalizes identically (reusing `parse_configurations` + `write_atlas_full`
+/// verbatim). Returns the configuration count.
+pub(crate) fn finalize_configurations(
+    corpus_id: &str,
+    items: Vec<Phase8ParseItem>,
+) -> Result<usize, String> {
+    let atlas_dir = atlas_dir_for(corpus_id);
+    let atoms_file = read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("reading {}/atoms.json: {e}", atlas_dir.display()))?;
+    let edges_file = read_atlas_edges(&atlas_dir)
+        .map_err(|e| format!("reading {}/edges.json: {e}", atlas_dir.display()))?;
+
+    let mut entities = Vec::new();
+    let mut events = Vec::new();
+    let mut states = Vec::new();
+    let mut relations = Vec::new();
+    let mut claims = Vec::new();
+    let mut questions = Vec::new();
+    let mut argument_reconstructions = Vec::new();
+    let mut positions = Vec::new();
+    let mut oppositions = Vec::new();
+    for a in atoms_file.atoms {
+        match a {
+            AtomEnvelope::Entity(x) => entities.push(x),
+            AtomEnvelope::Event(x) => events.push(x),
+            AtomEnvelope::State(x) => states.push(x),
+            AtomEnvelope::Relation(x) => relations.push(x),
+            AtomEnvelope::Claim(x) => claims.push(x),
+            AtomEnvelope::Question(x) => questions.push(x),
+            // Drop prior Phase 8 output; this pass replaces it.
+            AtomEnvelope::Configuration(_) => {}
+            AtomEnvelope::ArgumentReconstruction(x) => argument_reconstructions.push(x),
+            AtomEnvelope::Position(x) => positions.push(x),
+            AtomEnvelope::Opposition(x) => oppositions.push(x),
+            // Asset substrate is preserved by the writer, not here (matches the
+            // bespoke cmd_atlas_configuration partition).
+            AtomEnvelope::Asset(_) => {}
+        }
+    }
+
+    // Known atom ids so parse_configurations drops invented references.
+    let mut known_atom_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for e in &entities {
+        known_atom_ids.insert(e.id.as_str().to_string());
+    }
+    for e in &events {
+        known_atom_ids.insert(e.id.as_str().to_string());
+    }
+    for s in &states {
+        known_atom_ids.insert(s.id.as_str().to_string());
+    }
+    for r in &relations {
+        known_atom_ids.insert(r.id.as_str().to_string());
+    }
+    for c in &claims {
+        known_atom_ids.insert(c.id.as_str().to_string());
+    }
+    for q in &questions {
+        known_atom_ids.insert(q.id.as_str().to_string());
+    }
+
+    let configurations = parse_configurations(items, &known_atom_ids);
+
+    let out = ConfigurationsOutput::new(configurations.clone());
+    write_atlas_configurations(&atlas_dir, &out)
+        .map_err(|e| format!("writing configurations.json: {e}"))?;
+
+    // Preserve trajectories across the atoms.json rewrite.
+    let trajectories_path = atlas_dir.join("trajectories.json");
+    let trajectories: std::collections::BTreeMap<
+        String,
+        corpus_engine::enrichment::atlas::resolution::Trajectory,
+    > = match std::fs::read(&trajectories_path) {
+        Ok(bytes) => {
+            match serde_json::from_slice::<corpus_engine::enrichment::atlas::TrajectoriesFile>(
+                &bytes,
+            ) {
+                Ok(file) => serde_json::from_value(file.trajectories).unwrap_or_default(),
+                Err(_) => std::collections::BTreeMap::new(),
+            }
+        }
+        Err(_) => std::collections::BTreeMap::new(),
+    };
+
+    write_atlas_full(
+        &atlas_dir,
+        &entities,
+        &events,
+        &states,
+        &relations,
+        &claims,
+        &questions,
+        &configurations,
+        &argument_reconstructions,
+        &positions,
+        &oppositions,
+        &edges_file.edges,
+        &trajectories,
+    )
+    .map_err(|e| format!("rewriting atoms.json: {e}"))?;
+
+    Ok(configurations.len())
 }
 
 #[derive(Debug)]

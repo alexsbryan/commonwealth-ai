@@ -1,16 +1,30 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Enrichment Phase 1's SHAPE, expressed as a COMPOSITION of general primitives —
-# no bespoke enrich tool. for_each passage -> model constrained to an atom schema.
-# The domain bits (the instruction, the atom schema) are DATA in this file.
+# The real enrichment Phase 1, expressed as a COMPOSITION of general primitives —
+# no bespoke enrich tool. It produces the same `Phase1Output` SHAPE the bespoke
+# `enrich extract` writes to `cache/questions.json`, with the domain bits (the
+# boundary, the instruction, the atom schema, the pipeline id) all DATA here:
 #
-# This is the "say it in TOML" proof: enrichment-shaped structured extraction with
-# zero enrichment-specific Rust — just `tool:chunk` + a `model:` step with
-# `for_each` + `structured_output`. The model's output is parsed into a Json
-# artifact, so the atoms are composable downstream (storable, mappable).
+#   chapters         1 -> N   section the document by structure (tool:section);
+#                             the `boundary` regex is configurable — book
+#                             chapters by default, any source by config
+#   atoms   for_each + model  per-chapter structured extraction, each STAMPED
+#                             with its chapter_id  ->  a Vec<ExtractedQuestion>
+#   envelope   transform:json  wrap the collection in the Phase1Output object
+#                             (the collection value-splices in, as structure)
+#   write       write_json     persist the envelope to disk
 #
-# Run (needs the daemon up with a chat model):
-#   mkdir -p corpus && printf 'Some passage of prose...' > corpus/doc.txt
+# This is the "say it in TOML" proof: the enrichment Phase-1 artifact, at the real
+# chapter unit, composed from general primitives with ZERO enrichment-specific
+# Rust. (The real Phase1Output also carries a `written_at` timestamp; it's omitted
+# here on purpose — a live clock would make the run non-reproducible and defeat
+# the content cache.)
+#
+# Run (needs the daemon up with a chat model); use a chaptered text so `section`
+# finds chapters (a heading-less file becomes one section, which is fine):
+#   mkdir -p corpus
+#   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
 #   sovereign workflow run sovereign/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache
+#   # -> out/<doc>.questions.json per source document (a Phase1Output-shaped file)
 
 [workflow]
 name = "extract-atoms"
@@ -20,19 +34,43 @@ type = "folder"
 path = "corpus"
 glob = "*.txt"
 
-# 1 -> N : split the document into passages (a chapter stand-in).
+# 1 -> N : split the document into chapters (its structural sections). `boundary`
+# is the knob — default is book chapters; set it for Markdown headings
+# (`(?m)^#{1,3}\s`), transcript turns, legal articles — any source. No match ->
+# the whole document is one section, so a heading-less file still flows through.
 [[step]]
-id = "chunk"
-uses = "tool:chunk"
+id = "chapters"
+uses = "tool:section"
 params = { path = "{item.path}" }
 
-# map : extract atoms per passage. `structured_output` constrains the model to the
-# atom schema (a general `model:` primitive) — so we get parsed JSON atoms, not
-# free text to re-parse.
+# map : extract atoms per chapter. `structured_output` constrains the model to the
+# ExtractedQuestion atom schema. `stamp` merges each chapter's identity into its
+# output — the workflow analog of the real runner stamping chapter_id from the
+# dispatched chapter — so the collection is a `Vec<ExtractedQuestion>`, keyed per
+# chapter, not an anonymous array.
 [[step]]
 id = "atoms"
 uses = "model:fast"
-for_each = "chunk"
-system = "You extract the key questions a passage raises. Respond ONLY with JSON matching the schema."
-prompt = "Passage:\n{element.text}\n\nList 1-3 key interpretive questions this passage raises."
-structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } } }, required = ["questions"] }
+for_each = "chapters"
+on_error = "skip"
+stamp = { chapter_id = "{element.section_id}" }
+system = "You extract what a chapter raises. Respond ONLY with JSON matching the schema."
+prompt = "Chapter \"{element.title}\":\n\n{element.text}\n\nExtract the interpretive questions it raises, a one-line `reveals` of what it does in the work, and its `setting`."
+structured_output = { type = "object", properties = { questions = { type = "array", items = { type = "string" } }, reveals = { type = "string" }, setting = { type = "string" } }, required = ["questions"] }
+
+# shape : wrap the per-chapter atoms in the Phase1Output envelope. A lone
+# `{atoms.output}` ref value-splices the collection in AS STRUCTURE (a nested
+# array, not a stringified copy), so `questions_by_chapter` is the real array.
+# `{atoms.failures}` carries the chapters `on_error = "skip"` dropped — the same
+# `failures` record the bespoke Phase1Output keeps (empty when every chapter ran).
+[[step]]
+id = "envelope"
+uses = "transform:json"
+params = { schema_version = 1, pipeline_id = "literary", questions_by_chapter = "{atoms.output}", failures = "{atoms.failures}" }
+
+# write : persist the envelope. One Phase1Output-shaped file per source document,
+# keyed by its stem (effect Write, never cached).
+[[step]]
+id = "write"
+uses = "tool:write_json"
+params = { path = "out/{item.stem}.questions.json", json = "{envelope.output}" }

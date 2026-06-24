@@ -30,7 +30,12 @@ use corpus_engine::types::EmbedFn;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
+use async_trait::async_trait;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_core::traits::Tool;
+use sovereign_core::types::{
+    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
+};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-resolve",
@@ -393,6 +398,126 @@ pub(crate) enum ResolvePhase {
     All,
 }
 
+/// `atlas_resolve` — literary-atlas **Phase 3a/3b** as a workflow leaf: resolve
+/// the Phase-1 section sketches into canonical atoms + edges + trajectories.
+///
+/// One atomic op wrapping the *exact* bespoke `resolve_into_dir` (entity merge by
+/// description cosine, event dedupe, typed-atom resolution, type extensions) — so
+/// a workflow-built atlas is byte-faithful to `sovereign enrich atlas-resolve`.
+/// It reuses the same machinery (`EnrichConfig`, `DaemonInferenceClient`,
+/// `resolve_into_dir`), which is why this leaf lives here in `enrich_cmd` rather
+/// than in `sovereign-tools`: the resolver needs a daemon embed closure (the
+/// description-cosine rule), and that closure + config live in this crate.
+///
+/// Effect `Write` (writes the canonical `atlas/` files); needs the daemon up.
+pub(crate) struct AtlasResolveTool;
+
+#[async_trait]
+impl Tool for AtlasResolveTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "atlas_resolve".to_string(),
+            name: "atlas_resolve".to_string(),
+            description: "Literary-atlas Phase 3a/3b: resolve Phase-1 section sketches into \
+                          canonical atoms + edges + trajectories (entity merge by description \
+                          cosine, typed-atom resolution). Reads cache/questions.json, writes \
+                          atlas/atoms.json + edges.json + trajectories.json. Needs the daemon."
+                .to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "corpus": { "type": "string", "description": "Corpus id (must be enrich-init'd with an *_atlas pipeline)" },
+                    "phase": { "type": "string", "enum": ["3a", "3b", "all"], "description": "Resolution depth (default: all)" }
+                },
+                "required": ["corpus"]
+            }),
+            examples: vec![],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::Persistent,
+            output_schema: None,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> sovereign_core::error::Result<StepOutput> {
+        use sovereign_core::error::Error;
+
+        let corpus = params
+            .get("corpus")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Execution("atlas_resolve: missing required `corpus`".into()))?;
+        // Parse the phase up front (pure) so a bad value fails before any IO.
+        let phase = match params.get("phase").and_then(|v| v.as_str()) {
+            Some("3a") => ResolvePhase::P3a,
+            Some("3b") => ResolvePhase::P3b,
+            Some("all") | None => ResolvePhase::All,
+            Some(other) => {
+                return Err(Error::Execution(format!(
+                    "atlas_resolve: unknown phase `{other}` (expected 3a|3b|all)"
+                )))
+            }
+        };
+
+        let cfg = EnrichConfig::require(corpus).map_err(|e| {
+            Error::Execution(format!(
+                "atlas_resolve: enrichment config for `{corpus}`: {e} — run `enrich init` first"
+            ))
+        })?;
+        if !cfg.pipeline_id.ends_with("_atlas") {
+            return Err(Error::Execution(format!(
+                "atlas_resolve: pipeline `{}` does not produce atlas sketches (need an *_atlas pipeline)",
+                cfg.pipeline_id
+            )));
+        }
+
+        // Load the Phase-1 cache (questions.json) and pull its section sketches.
+        let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+        let phase1: Phase1Output = cache
+            .read(PipelinePhase::Questions)
+            .map_err(|e| Error::Execution(format!("atlas_resolve: read Phase 1 cache: {e}")))?
+            .ok_or_else(|| {
+                Error::Execution(format!(
+                    "atlas_resolve: no Phase 1 cache for `{corpus}` — run the extract phase first"
+                ))
+            })?;
+        let sections = collect_section_extractions(&phase1.questions_by_chapter);
+        if sections.is_empty() {
+            return Err(Error::Execution(
+                "atlas_resolve: Phase 1 cache carries no `section_extraction` sketches \
+                 (re-run extract with an *_atlas pipeline)"
+                    .into(),
+            ));
+        }
+
+        // The description-cosine merge rule needs embeddings — build the same
+        // daemon embed closure the bespoke resolver uses.
+        let client = DaemonInferenceClient::from_enrich_config(&cfg).map_err(|e| {
+            Error::Execution(format!("atlas_resolve: build daemon client: {e}"))
+        })?;
+        let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
+
+        let atlas_dir = atlas_dir_for(&cfg.corpus_id);
+        resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, phase)
+            .await
+            .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?;
+
+        Ok(StepOutput::Text(format!(
+            "atlas_resolve: resolved {} section(s) into {}/atoms.json + edges.json + trajectories.json",
+            sections.len(),
+            atlas_dir.display()
+        )))
+    }
+}
+
 #[derive(Debug)]
 struct ParsedResolve {
     corpus_id: String,
@@ -480,5 +605,33 @@ mod tests {
     fn parse_args_requires_corpus_id() {
         let err = parse_args(&[]).unwrap_err();
         assert!(err.contains("corpus-id"), "got: {err}");
+    }
+
+    /// The `atlas_resolve` workflow leaf validates its params before any IO: a
+    /// missing `corpus`, a bogus `phase`, and an unknown corpus all fail loudly.
+    /// (The happy path needs the daemon + a resolved Phase-1 cache — exercised by
+    /// the integration run, not a unit test.)
+    #[tokio::test]
+    async fn atlas_resolve_leaf_validates_params() {
+        let ctx = ToolContext {
+            conversation_id: Default::default(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        };
+        assert!(AtlasResolveTool
+            .execute(&serde_json::json!({}), &ctx)
+            .await
+            .is_err());
+        assert!(AtlasResolveTool
+            .execute(&serde_json::json!({ "corpus": "x", "phase": "bogus" }), &ctx)
+            .await
+            .is_err());
+        assert!(AtlasResolveTool
+            .execute(&serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }), &ctx)
+            .await
+            .is_err());
     }
 }

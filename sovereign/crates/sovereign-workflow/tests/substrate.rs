@@ -202,10 +202,7 @@ fn resolve_substitutes_item_and_step_refs_and_warns_on_missing() {
     scope.item.insert("path".into(), "/notes/a.md".into());
     std::sync::Arc::make_mut(&mut scope.completed).insert(
         "read".into(),
-        Artifact {
-            type_tag: "text".into(),
-            output: StepOutput::Text("BODY".into()),
-        },
+        Artifact::new("text", StepOutput::Text("BODY".into())),
     );
     let out = template::resolve_str("{item.path} :: {read.output} :: {gone.key}", &scope);
     // item field + completed step resolve; an unknown ref → empty string.
@@ -730,4 +727,242 @@ params = { text = "{element.text}" }
     let arr: serde_json::Value =
         serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
     assert_eq!(arr, serde_json::json!(["a", "b", "c", "d", "e", "f"]));
+}
+
+/// Every shipped example workflow parses — a guard against example rot (a TOML
+/// typo, or a primitive renamed without updating the docs/demos). Parse-only: it
+/// validates structure (`[[step]]` shape, unique ids), not live resolution.
+#[test]
+fn shipped_examples_parse() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let mut parsed = Vec::new();
+    for entry in std::fs::read_dir(&dir).expect("examples dir exists").flatten() {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("toml") {
+            continue;
+        }
+        let toml = std::fs::read_to_string(&p).unwrap();
+        sovereign_workflow::Workflow::parse(&toml)
+            .unwrap_or_else(|e| panic!("example {} must parse: {e}", p.display()));
+        parsed.push(p.file_name().unwrap().to_string_lossy().into_owned());
+    }
+    assert!(
+        parsed.len() >= 3,
+        "expected several shipped example workflows, found {parsed:?}"
+    );
+}
+
+/// Upper-cases its `text`, or errors on the marker "BOOM" — drives the
+/// `for_each` error-tolerance tests.
+struct FlakyTool;
+
+#[async_trait]
+impl Tool for FlakyTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "flaky".to_string(),
+            name: "flaky".to_string(),
+            description: "upper-case `text`, or error on BOOM".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } }
+            }),
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: ToolScope::Session,
+            output_schema: None,
+        }
+    }
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> CoreResult<StepOutput> {
+        let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        if text == "BOOM" {
+            return Err(sovereign_core::error::Error::Execution("kaboom".into()));
+        }
+        Ok(StepOutput::Text(text.to_uppercase()))
+    }
+}
+
+fn flaky_registry() -> Arc<ToolRegistry> {
+    let mut tools = ToolRegistry::new();
+    tools.register(Box::new(SplitTool));
+    tools.register(Box::new(FlakyTool));
+    Arc::new(tools)
+}
+
+/// `on_error = "skip"`: a `for_each` whose element fails records it in the step's
+/// `failures` and continues with the rest — the real Phase-1 skip-and-continue.
+/// The envelope then captures `{proc.output}` (successes) and `{proc.failures}`
+/// as data, so a flaky element stays visible rather than silently lost, and a
+/// single failure never aborts the whole run.
+#[tokio::test]
+async fn for_each_on_error_skip_records_failures_and_continues() {
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "skip-failures"
+[source]
+type = "inline"
+items = ["alpha BOOM gamma"]
+[[step]]
+id = "split"
+uses = "tool:split"
+params = { text = "{item.name}" }
+[[step]]
+id = "proc"
+uses = "tool:flaky"
+for_each = "split"
+on_error = "skip"
+params = { text = "{element.text}" }
+[[step]]
+id = "env"
+uses = "transform:json"
+params = { ok = "{proc.output}", failed = "{proc.failures}" }
+"#,
+    )
+    .unwrap();
+
+    let report = Runner::new(StepRegistry::new(None, flaky_registry()))
+        .run(&wf, 4)
+        .await
+        .unwrap();
+    assert_eq!(
+        report.ok_count(),
+        1,
+        "the run survives the failing element: {:?}",
+        report.items
+    );
+
+    let env: serde_json::Value =
+        serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
+    // Successes only — the BOOM element is dropped from the output.
+    assert_eq!(env["ok"], serde_json::json!(["ALPHA", "GAMMA"]));
+    // The failure is recorded AS DATA: index 1 (BOOM's position) + the error.
+    let failed = env["failed"].as_array().expect("failures is an array");
+    assert_eq!(failed.len(), 1, "exactly one element failed: {failed:?}");
+    assert_eq!(failed[0]["index"], serde_json::json!(1));
+    assert!(failed[0]["error"].as_str().unwrap().contains("kaboom"));
+}
+
+/// The default (no `on_error`) is unchanged: the first element error aborts the
+/// whole item — the safe default for a workflow that wants all-or-nothing.
+#[tokio::test]
+async fn for_each_default_aborts_on_element_error() {
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "abort-default"
+[source]
+type = "inline"
+items = ["alpha BOOM gamma"]
+[[step]]
+id = "split"
+uses = "tool:split"
+params = { text = "{item.name}" }
+[[step]]
+id = "proc"
+uses = "tool:flaky"
+for_each = "split"
+params = { text = "{element.text}" }
+"#,
+    )
+    .unwrap();
+
+    let report = Runner::new(StepRegistry::new(None, flaky_registry()))
+        .run(&wf, 4)
+        .await
+        .unwrap();
+    assert_eq!(
+        report.failed_count(),
+        1,
+        "the default aborts the item on an element error"
+    );
+    assert!(report.items[0]
+        .result
+        .as_ref()
+        .unwrap_err()
+        .contains("kaboom"));
+}
+
+/// Echoes the system message it received back as the completion — lets a test
+/// prove a `model:` step's `system_file` was loaded from disk.
+struct EchoSystemProvider;
+
+#[async_trait]
+impl InferenceProvider for EchoSystemProvider {
+    async fn complete(&self, req: &CompletionRequest) -> CoreResult<CompletionResponse> {
+        Ok(CompletionResponse {
+            text: req.system_message.clone().unwrap_or_default(),
+            tokens_used: 0,
+            prompt_tokens: 0,
+            model_id: "echo-system".into(),
+            latency_ms: 0,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+    async fn complete_stream(
+        &self,
+        _req: &CompletionRequest,
+    ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+        unreachable!("system_file test never streams")
+    }
+    async fn embed(&self, _text: &str) -> CoreResult<Vec<f32>> {
+        unreachable!("system_file test never embeds")
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 8192,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+}
+
+/// `system_file`: a `model:` step loads its (large, static) system prompt from a
+/// file — the bespoke enrichment `.md` prompts referenced as data, not re-typed
+/// inline — while the dynamic content stays in the templated `prompt`. The
+/// foundational primitive for composing the LLM enrichment phases faithfully.
+#[tokio::test]
+async fn model_system_file_loads_the_system_prompt_from_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let prompt_path = dir.path().join("phase1a_seed_system.md");
+    std::fs::write(&prompt_path, "YOU ARE A SEED EXTRACTOR. Respond ONLY with JSON.").unwrap();
+
+    let toml = r#"
+[workflow]
+name = "system-file"
+[source]
+type = "inline"
+items = ["chapter-one"]
+[[step]]
+id = "m"
+uses = "model:fast"
+system_file = "__PROMPT__"
+prompt = "Extract seeds from {item.name}."
+"#
+    .replace("__PROMPT__", &prompt_path.to_string_lossy());
+
+    let wf = Workflow::parse(&toml).unwrap();
+    let registry = StepRegistry::new(
+        Some(Arc::new(EchoSystemProvider) as Arc<dyn InferenceProvider>),
+        Arc::new(ToolRegistry::new()),
+    );
+    let report = Runner::new(registry).run(&wf, 1).await.unwrap();
+    assert_eq!(report.ok_count(), 1, "{:?}", report.items);
+    // The model received the file's content verbatim as its system message.
+    assert_eq!(
+        report.items[0].result.as_ref().unwrap(),
+        "YOU ARE A SEED EXTRACTOR. Respond ONLY with JSON."
+    );
 }

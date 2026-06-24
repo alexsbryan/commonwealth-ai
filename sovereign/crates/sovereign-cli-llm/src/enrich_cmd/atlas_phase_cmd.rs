@@ -19,7 +19,12 @@ use corpus_engine::enrichment::pipeline::{
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
+use async_trait::async_trait;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_core::traits::Tool;
+use sovereign_core::types::{
+    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
+};
 
 // ── cluster-atlas ───────────────────────────────────────────
 
@@ -430,7 +435,11 @@ fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
     ))
 }
 
-fn render_excerpts(
+/// Render a cluster's refs into per-facet `SketchExcerpt`s by indexing the
+/// section map (`chapter_id → SectionExtraction`). Reused verbatim by the
+/// `atlas_cluster_excerpts` workflow primitive so a workflow-composed name phase
+/// builds the same excerpts the bespoke facet-naming loop does.
+pub(crate) fn render_excerpts(
     cluster: &AtlasCluster,
     sections: &std::collections::HashMap<String, SectionExtraction>,
 ) -> Vec<SketchExcerpt> {
@@ -526,4 +535,117 @@ fn truncate_chars(s: &str, cap: usize) -> String {
 #[allow(dead_code)]
 fn _compile_time_reexport_guard() {
     let _ = Arc::new(());
+}
+
+/// `atlas_cluster` — literary-atlas **Phase 2** as a workflow leaf: cluster the
+/// Phase-1 section sketches into typed facet clusters (HDBSCAN per facet over
+/// sketch embeddings).
+///
+/// One atomic op wrapping the *exact* bespoke `PhaseRunner::phase_2_cluster_atlas`
+/// — so a workflow-built clustering is faithful to `sovereign enrich
+/// cluster-atlas`. It reuses the same `build_runner` (which wires the daemon
+/// embed closure), which is why this leaf lives here in `enrich_cmd` rather than
+/// in `sovereign-tools`. Reads cache/questions.json, writes cache/atlas-clusters.json.
+/// Effect `Write`; needs the daemon up (per-sketch embeddings).
+pub(crate) struct AtlasClusterTool;
+
+#[async_trait]
+impl Tool for AtlasClusterTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "atlas_cluster".to_string(),
+            name: "atlas_cluster".to_string(),
+            description: "Literary-atlas Phase 2: cluster Phase-1 section sketches into typed \
+                          facet clusters (HDBSCAN per facet over sketch embeddings). Reads \
+                          cache/questions.json, writes cache/atlas-clusters.json. Needs the daemon."
+                .to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "corpus": { "type": "string", "description": "Corpus id (must be enrich-init'd with an *_atlas pipeline)" }
+                },
+                "required": ["corpus"]
+            }),
+            examples: vec![],
+            effect: Effect::Write,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Slow,
+            scope: Scope::Persistent,
+            output_schema: None,
+        }
+    }
+
+    fn required_permissions(&self) -> Vec<Permission> {
+        vec![]
+    }
+
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> sovereign_core::error::Result<StepOutput> {
+        use sovereign_core::error::Error;
+
+        let corpus = params
+            .get("corpus")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Execution("atlas_cluster: missing required `corpus`".into()))?;
+
+        let cfg = EnrichConfig::require(corpus).map_err(|e| {
+            Error::Execution(format!(
+                "atlas_cluster: enrichment config for `{corpus}`: {e} — run `enrich init` first"
+            ))
+        })?;
+        // `build_runner` wires the daemon embed closure + caches; it prints the
+        // specific cause to stderr and returns an exit code, which we surface as
+        // a generic error (the common cause — missing config — is already caught
+        // above with a clear message).
+        let runner = build_runner(&cfg).map_err(|rc| {
+            Error::Execution(format!(
+                "atlas_cluster: could not build the phase runner (exit {rc}) — is the daemon up?"
+            ))
+        })?;
+        let result = runner
+            .phase_2_cluster_atlas()
+            .await
+            .map_err(|e| Error::Execution(format!("atlas_cluster: phase 2 failed: {e}")))?;
+
+        let clusters = result.output.clusters.len();
+        let noise = result.output.unclustered.len();
+        Ok(StepOutput::Text(format!(
+            "atlas_cluster: {clusters} facet cluster(s), {noise} noise sketch(es) → {}",
+            result.run_path.display()
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: Default::default(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        }
+    }
+
+    /// The `atlas_cluster` leaf validates its `corpus` before any IO: missing or
+    /// unknown corpus fails loudly. (The happy path needs the daemon + a resolved
+    /// Phase-1 cache — exercised by the integration run, not a unit test.)
+    #[tokio::test]
+    async fn atlas_cluster_leaf_validates_corpus() {
+        assert!(AtlasClusterTool
+            .execute(&serde_json::json!({}), &ctx())
+            .await
+            .is_err());
+        assert!(AtlasClusterTool
+            .execute(&serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }), &ctx())
+            .await
+            .is_err());
+    }
 }

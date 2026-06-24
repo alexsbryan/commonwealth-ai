@@ -70,8 +70,6 @@ impl Tool for CorpusStoreTool {
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
-        let chunks_json = str_param(params, "chunks")?;
-        let embeddings_json = str_param(params, "embeddings")?;
         let title = params
             .get("title")
             .and_then(|v| v.as_str())
@@ -91,13 +89,15 @@ impl Tool for CorpusStoreTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        // The two collections arrive as JSON strings (templating serialized the
-        // upstream Json artifacts). Parse + zip by position.
-        let chunk_vals: Vec<serde_json::Value> = serde_json::from_str(&chunks_json)
-            .map_err(|e| Error::Execution(format!("corpus_store: parse `chunks`: {e}")))?;
+        // The two collections arrive either as a JSON *string* (templating
+        // stringified the upstream artifact) or as an already-spliced JSON
+        // *array* (a lone `{chunk.output}` ref — the workflow value-splices a
+        // whole step output). Accept both, then zip by position.
+        let chunk_vals: Vec<serde_json::Value> = serde_json::from_value(collection_param(params, "chunks")?)
+            .map_err(|e| Error::Execution(format!("corpus_store: `chunks` shape: {e}")))?;
         let embeddings: Vec<Vec<f32>> = {
-            let raw: Vec<Vec<f64>> = serde_json::from_str(&embeddings_json)
-                .map_err(|e| Error::Execution(format!("corpus_store: parse `embeddings`: {e}")))?;
+            let raw: Vec<Vec<f64>> = serde_json::from_value(collection_param(params, "embeddings")?)
+                .map_err(|e| Error::Execution(format!("corpus_store: `embeddings` shape: {e}")))?;
             raw.into_iter()
                 .map(|v| v.into_iter().map(|x| x as f32).collect())
                 .collect()
@@ -199,6 +199,20 @@ fn str_param(params: &serde_json::Value, key: &str) -> Result<String> {
         .and_then(|v| v.as_str())
         .map(String::from)
         .ok_or_else(|| Error::Execution(format!("corpus_store: missing required `{key}`")))
+}
+
+/// A collection param as a `serde_json::Value`, accepting either a JSON *string*
+/// (templating stringified it) or an already-structured *value* (the workflow
+/// value-spliced a lone `{step.output}` ref). The caller `from_value`s it into
+/// the concrete shape it needs — so `chunks = "{chunk.output}"` works regardless
+/// of which form templating delivers.
+fn collection_param(params: &serde_json::Value, key: &str) -> Result<serde_json::Value> {
+    match params.get(key) {
+        Some(serde_json::Value::String(s)) => serde_json::from_str(s)
+            .map_err(|e| Error::Execution(format!("corpus_store: parse `{key}`: {e}"))),
+        Some(other) => Ok(other.clone()),
+        None => Err(Error::Execution(format!("corpus_store: missing required `{key}`"))),
+    }
 }
 
 /// A chunk element → its text: an object's `text` field, or a bare string.

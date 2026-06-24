@@ -32,6 +32,16 @@ sovereign mesh join <key>    # on each machine you're pooling in
 
 [Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
 
+## Build a pipeline
+
+Have an idea shaped like a pipeline — read a folder of things, run a model over each, call a tool in between, save the results? Write it as a small TOML file and run it, no code. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
+
+```sh
+sovereign workflow run my-pipeline.toml
+```
+
+[Write a workflow](./docs/WRITE_A_WORKFLOW.md) shows you how.
+
 ## Going deeper
 
 The [Sovereign guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it.
