@@ -239,7 +239,19 @@ pub(crate) async fn gate_answer(
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let entity_anchored = evidence.entity_anchored;
-    if draft.chars().count() > profile.longform_chars {
+    // Verify-correct pivot. gate_longform is the BS-catcher: it extracts each
+    // asserted claim, RE-SEARCHES the sealed corpus for that claim's evidence,
+    // and REWRITES the ones the corpus won't support — catching the load-bearing-
+    // specific confabulation ("Ernest Rhys Jones" for "Ernest Rhys") that the
+    // single-claim path waves through. Short factual answers skip it by default
+    // (pivot 1_800); `SOVEREIGN_LONGFORM_CHARS` A/Bs routing them through it
+    // (0 = always per-claim, the resilient default complex_task already uses) so
+    // the architecture catches a model's first-pass BS rather than trusting it.
+    let longform_pivot = std::env::var("SOVEREIGN_LONGFORM_CHARS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(profile.longform_chars);
+    if draft.chars().count() > longform_pivot {
         return gate_longform(inference, question, draft, evidence, base_request, profile).await;
     }
     // Glassbox (debug-gated): record the pre-gate draft into the message meta so
@@ -260,7 +272,9 @@ pub(crate) async fn gate_answer(
     // Inconclusive (extraction error/unparseable) falls through to the legacy
     // ladder — fail-open, never a refusal from a hiccup. Does not consume the
     // draft, so the fall-through path is unchanged.
-    if entity_anchored && config::citation_grounding_enabled() {
+    if config::citation_grounding_enabled()
+        && (entity_anchored || config::citation_broad_enabled())
+    {
         if let citation::CitationOutcome::Grounded { answer, quote } =
             citation::citation_grounded_answer(&**inference, question, chunks).await
         {

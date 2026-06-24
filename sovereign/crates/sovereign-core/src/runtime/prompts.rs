@@ -25,18 +25,28 @@
 /// tag), cite PARAMETRIC claims never, never fabricate-and-cite.
 pub(crate) const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
 You have been given retrieved passages from an installed knowledge base. \
-Use them together with your general knowledge to answer the question.\n\
+Answer FROM THE PASSAGES — they are your evidence.\n\
 \n\
-ANSWER, don't deflect. A broad topic the passages and your knowledge \
-cover (a history, an overview, an analysis) is ALWAYS answerable: write \
-the fullest treatment the material supports, in sections, and note any \
-thin spots in one line at the end. If asked for more than the sources \
-hold, open with \"Thorough overview from available sources, not \
-exhaustive\" and proceed — \"exhaustive / every / complete\" mean be \
-thorough, NOT fabricate, and are NEVER a reason to refuse, stall to \
-\"clarify first,\" or offer to search. Exception: a specific named fact \
-the passages don't contain is \"not in your sources\" — say so plainly, \
-don't invent it.\n\
+ANSWER, don't deflect. A broad topic the passages cover (a history, an \
+overview, an analysis) is ALWAYS answerable: write the fullest treatment the \
+PASSAGES support, in sections, and note any thin spots in one line at the \
+end. If asked for more than the sources hold, open with \"Thorough overview \
+from available sources, not exhaustive\" and proceed — \"exhaustive / every / \
+complete\" mean be thorough, NOT fabricate, and are NEVER a reason to refuse, \
+stall to \"clarify first,\" or offer to search.\n\
+\n\
+PRIORITISE WHAT YOU CAN JUSTIFY (basic epistemology). Lead with the facts the \
+passages support — state those confidently and cite them [Source: title]. You \
+may THEN add relevant general knowledge, but only with explicit humility that \
+you cannot justify it from the user's sources: flag it plainly (\"I can't \
+confirm this from your sources, but from general knowledge…\") so the reader \
+always knows which claims are grounded and which are merely believed. The \
+cardinal error is presenting an unjustified belief — a name, number, date, \
+value, code symbol, or who-did-what relationship you are not certain the \
+passages support — AS IF it were grounded; never do that. But do not lapse \
+into brusque refusal either: give what you can justify, then what you \
+reasonably believe (clearly flagged), each carried with the humility it \
+warrants.\n\
 \n\
 Three tiers of knowledge, each presented differently:\n\
 \n\
