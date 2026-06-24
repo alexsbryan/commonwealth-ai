@@ -1028,6 +1028,30 @@ impl LocalCorpusManager {
     /// and persists; `Some(false)` flips it off; `None` leaves the
     /// stored flag alone (matches the CLI default and preserves the
     /// per-corpus opt-in across re-ingest).
+    /// Create a valid but empty on-disk index for a corpus that has nothing to
+    /// ingest — an empty folder, or one whose files all failed extraction. Writes
+    /// the recipe the same way the full ingest does, then asks the engine to
+    /// materialise an empty, ingestion-complete index. Without this the index dir
+    /// has no `_corpus_meta.json`, so a watched-folder sweep's precondition guard
+    /// errors on every tick and never recovers — even once files appear, because
+    /// the guard fires before the apply that would build the index.
+    async fn ensure_empty_index(&self, config: &LocalCorpusConfig) -> Result<()> {
+        let staging = default_staging_path(&self.data_dir, &config.id);
+        let recipe = recipe_toml(config, &staging);
+        let recipe_path = recipe_path_for(&self.recipes_dir, &config.id);
+        if let Some(parent) = recipe_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::Execution(format!("create recipe dir: {e}")))?;
+        }
+        std::fs::write(&recipe_path, &recipe)
+            .map_err(|e| Error::Execution(format!("write recipe: {e}")))?;
+        self.engine
+            .ensure_empty_index(&CorpusSpec::RecipePath(recipe_path))
+            .await
+            .map_err(|e| Error::Execution(format!("ensure empty index: {e}")))?;
+        Ok(())
+    }
+
     pub async fn ingest(
         &self,
         id: &str,
@@ -1071,8 +1095,12 @@ impl LocalCorpusManager {
             .map_err(|e| Error::Execution(format!("pre_scan task: {e}")))?
         };
         if scan.readable.is_empty() {
-            // Nothing to index. Emit a Complete event with an empty
-            // IngestStats so the UI can react, and return.
+            // Nothing to index — but still materialise a valid empty index so the
+            // corpus is a first-class (if empty) installed corpus: visible to
+            // listing and, for a watched folder, sweepable as files arrive. Without
+            // this the index has no `_corpus_meta.json` and every sweep errors.
+            self.ensure_empty_index(&config).await?;
+            // Emit a Complete event with an empty IngestStats so the UI can react.
             let stats = IngestStats {
                 corpus_id: id.into(),
                 files_indexed: 0,
@@ -1164,8 +1192,12 @@ impl LocalCorpusManager {
         }
 
         if stage_result.staged == 0 {
-            // Everything failed during extraction. Report to the UI
-            // and return — no point invoking the engine.
+            // Everything failed during extraction. Still materialise a valid empty
+            // index (as in the empty-folder case above) so the corpus is installed
+            // and a watched-folder sweep can pick up readable files later instead of
+            // erroring forever on a missing meta.
+            self.ensure_empty_index(&config).await?;
+            // Report to the UI and return — no point invoking the full engine ingest.
             let stats = IngestStats {
                 corpus_id: id.into(),
                 files_indexed: 0,
