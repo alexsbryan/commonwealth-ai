@@ -34,8 +34,11 @@ pub const MAX_TURN_MESSAGE_CHARS: usize = 16_000;
 
 /// Error text shown when a message exceeds `MAX_TURN_MESSAGE_CHARS`.
 /// Surfaced unchanged to the user via the Tauri command layer, so it
-/// needs to be action-guidance, not a stack trace.
-pub(crate) const OVERSIZE_MESSAGE_HINT: &str =
+/// needs to be action-guidance, not a stack trace. `pub` so the desktop
+/// can recognise this specific case and present it as a calm assistant
+/// turn (graceful guidance) rather than a raw "Error: Invalid input:"
+/// bubble that reads as a crash.
+pub const OVERSIZE_MESSAGE_HINT: &str =
     "This message is too long for the chat pipeline (over 16,000 characters). \
      For document-sized content, attach it as a file instead — Sovereign \
      routes attachments through a map-reduce pipeline designed for long \
