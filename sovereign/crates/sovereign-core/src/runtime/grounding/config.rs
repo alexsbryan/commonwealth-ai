@@ -61,7 +61,30 @@ pub(crate) fn grounding_gate_threshold() -> f64 {
 pub(crate) fn citation_grounding_enabled() -> bool {
     std::env::var("SOVEREIGN_CITATION_GROUNDING")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        // Default ON: the attach-mode QA bank justified the flip (2026-06-24).
+        // Pooled iter8+9 over the resident corpora: answers the verifier grounded
+        // with a copied quote broke at 3.6% vs 25.9% for ungrounded ones — a 7x
+        // reduction, because the model COPIES the supporting span instead of
+        // confabulating the specific. Set SOVEREIGN_CITATION_GROUNDING=0 to A/B off.
+        .unwrap_or(true)
+}
+
+/// Run quote-first citation grounding on ALL gated factual answers, not just
+/// entity-anchored ones. The default `entity_anchored` gate is too strict — the
+/// chaos stream tripped it 0 times — so quote-first never got to cure the
+/// confabulated-specific class ("Ernest Rhys Jones" for "Ernest Rhys"). Quote-
+/// first is ADDITIVE and SAFE where the per-claim rewrite is not: it makes the
+/// model COPY a supporting sentence (it can't add a token the quote lacks) or
+/// falls through to the legacy ladder — it never re-searches near-miss noise nor
+/// rewrites a correct answer. A/B via `SOVEREIGN_CITATION_BROAD`.
+pub(crate) fn citation_broad_enabled() -> bool {
+    std::env::var("SOVEREIGN_CITATION_BROAD")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        // Default ON (2026-06-24): the chaos stream tripped `entity_anchored` 0
+        // times, so without broad the verifier never fires. The fall-through is
+        // additive and safe (no clean quote → legacy ladder), so broad-by-default
+        // only adds coverage. Set SOVEREIGN_CITATION_BROAD=0 to A/B off.
+        .unwrap_or(true)
 }
 
 /// The closed set of answer-producing surfaces the gate covers.
