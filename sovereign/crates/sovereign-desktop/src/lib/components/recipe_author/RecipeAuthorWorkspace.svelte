@@ -41,10 +41,13 @@
     onExit,
     onUseInChat,
     onOpenChat,
+    onRunWorkflow,
   }: {
     onExit: () => void;
     onUseInChat?: (question: StarterQuestion) => void;
     onOpenChat?: () => void;
+    // Deep-link a workflow-kind artifact into the Run view (the author→run loop).
+    onRunWorkflow?: (name: string) => void;
   } = $props();
 
   let showNewProject = $state(false);
@@ -193,6 +196,7 @@
           {dashboard}
           {onUseInChat}
           {onOpenChat}
+          {onRunWorkflow}
           onOpenExplorer={openExplorerForCorpus}
         />
       {:else if selectedFeatureId}

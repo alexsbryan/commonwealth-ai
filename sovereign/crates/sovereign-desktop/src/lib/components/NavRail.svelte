@@ -2,7 +2,7 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  type RailMode = "chat" | "inner_work" | "atlas" | "recipe_author" | "settings";
+  type RailMode = "chat" | "inner_work" | "atlas" | "run_workflow" | "recipe_author" | "settings";
 
   interface Props {
     active: RailMode;
@@ -11,9 +11,12 @@
      *  `enable_recipe_authoring` setting in DesktopConfig so the
      *  workspace only surfaces for operators who opted in. */
     showRecipeAuthor?: boolean;
+    /** Show the Run-a-workflow rail entry. Gated alongside Recipe Author
+     *  (the "workshop" surfaces) during alpha. */
+    showRunWorkflow?: boolean;
   }
 
-  let { active, onNavigate, showRecipeAuthor = false }: Props = $props();
+  let { active, onNavigate, showRecipeAuthor = false, showRunWorkflow = false }: Props = $props();
 
   let hoveredIdx: number | null = $state(null);
 
@@ -29,6 +32,9 @@
       { id: "inner_work", label: "Inner Work", testid: "open-inner-work" },
       { id: "atlas", label: "Atlas", testid: "nav-atlas" },
     ];
+    if (showRunWorkflow) {
+      base.push({ id: "run_workflow", label: "Run", testid: "nav-run-workflow" });
+    }
     if (showRecipeAuthor) {
       base.push({ id: "recipe_author", label: "Recipe Author", testid: "nav-recipe-author" });
     }
@@ -83,6 +89,12 @@
             <path d="M2 14h4"/>
             <path d="M2 18h4"/>
             <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/>
+          </svg>
+        {:else if mark.id === "run_workflow"}
+          <!-- Lucide: circle-play — run a workflow over a folder -->
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
           </svg>
         {:else}
           <!-- Lucide: settings (cog) -->

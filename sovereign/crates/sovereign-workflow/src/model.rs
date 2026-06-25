@@ -4,7 +4,7 @@
 //! references). Pure data — no inference or tool dependencies.
 
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -240,6 +240,24 @@ impl StepSpec {
     }
 }
 
+impl Source {
+    /// The templated strings this source carries — scanned for `{param.*}` so
+    /// the run surface knows the source takes a folder/list/url at run time.
+    fn templated_strings(&self) -> Vec<&str> {
+        match self {
+            Source::Folder { path, glob } => {
+                let mut v = vec![path.as_str()];
+                if let Some(g) = glob {
+                    v.push(g.as_str());
+                }
+                v
+            }
+            Source::List { path } => vec![path.as_str()],
+            Source::Inline { items } => items.iter().map(String::as_str).collect(),
+        }
+    }
+}
+
 /// Where the per-item driver gets its items.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -463,6 +481,25 @@ impl Workflow {
             }
         }
         edges
+    }
+
+    /// The distinct `{param.key}` keys referenced anywhere in the workflow —
+    /// every step's templated fields plus the source's path/glob/items. Each is
+    /// a value the workflow needs supplied at run time (`--param key=…`, or the
+    /// `--folder`/`--corpus`/`--glob` aliases). Drives the run surface's input
+    /// form: one field per key, with `folder`/`corpus`/`glob` getting dedicated
+    /// controls and the rest a plain text field.
+    pub fn referenced_params(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for s in &self.steps {
+            out.extend(template::param_refs(&s.templated_text()));
+        }
+        if let Some(src) = &self.source {
+            for t in src.templated_strings() {
+                out.extend(template::param_refs(t));
+            }
+        }
+        out
     }
 
     /// Topological order (ascending-index within a level for determinism);

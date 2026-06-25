@@ -27,6 +27,7 @@ mod supervisor_setup;
 mod tray;
 mod update_commands;
 mod watched_folder_commands;
+mod workflow_commands;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -502,6 +503,9 @@ fn main() -> ExitCode {
             recipe_author_commands::recipe_author_link_recent_artifact,
             recipe_author_commands::recipe_author_restore_checkpoint,
             recipe_author_commands::recipe_author_build_prelude,
+            workflow_commands::workflow_list_runnable,
+            workflow_commands::workflow_capabilities,
+            workflow_commands::workflow_run,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

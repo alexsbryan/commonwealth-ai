@@ -323,10 +323,11 @@ generalization diff + live chunk→embed e2e.
 | Phase | What | Status |
 |---|---|---|
 | Done | **Store step** — `tool:corpus_store` (reuses `CorpusIndex::insert_batch`, idempotent per doc); `ingest.toml` = chunk→embed→store; `corpus search` closes the loop. The `secret-agent` ingest runs live and is queryable | ✅ |
-| Done | **Adoption, first rung** — `sovereign corpus ingest <folder>` runs chunk→embed→store on the Runner (plain-text; bespoke `ingest()` untouched). First production path on the substrate; shares `run_assembled` with `workflow run` | ✅ |
+| Done | **Adoption, first rung** — `sovereign corpus ingest <folder>` runs the shipped **`notebook`** shape (extract→chunk→embed→store) on the Runner — document-capable (PDF/Office/HTML via `tool:extract`), no longer plain-text. Shares `run_assembled` with `workflow run`; bespoke `ingest()` untouched | ✅ |
 | Done | **Parallel capability: concurrency** — `for_each` runs elements concurrently (bounded), feeding the daemon's continuous-batching embed slot; per-element caching survives | ✅ |
-| **Now** | **Parallel capability: remaining gaps** — extraction (PDF/HTML), filtering, mid-ingest resume, enrichment — so the generic ingest runs real corpora *alongside* bespoke; migrate once at parity | ⬜ |
-| Later | **Migrate** — route `LocalCorpusManager::ingest` (desktop+CLI API) through the Runner; retire the bespoke loops once parity holds | ⬜ the prize |
+| Done | **Parallel capability: extraction** — `tool:extract` (→ `extract_stage::extract_text`) handles PDF/Office/HTML/epub/md/txt; the `notebook` shape ingests a mixed folder. Proven live (a folder's `.html` extracted to clean text + searchable) | ✅ |
+| 🔶 Partial | **Migrate (the prize)** — CLI `corpus ingest` runs the Runner path; the desktop folder-ingest (`lc_ingest`) runs it too behind `SOVEREIGN_RUNNER_INGEST` (opt-in; bespoke stays default), with a `WorkflowProgress`→`LocalCorpusProgress` bridge so the desktop progress UI is unchanged. **Retiring** bespoke awaits the remaining-gaps row | 🔶 |
+| **Now** | **Parallel capability: remaining gaps (the retirement bar)** — filtering, mid-ingest resume, OCR-as-a-step, batched-256 embed, enrichment-as-steps (clustering/atlas) — what the flagged Runner path must match before bespoke `ingest()` is retired | ⬜ |
 | Then | **Durable/distributed** — pipeline tool as the outer loop over `run-unit` | ⬜ |
 | Later | **Executor convergence** — a `Plan` *is* a `Workflow`; agent steps = workflow steps; ATOS keeps its own human-in-the-loop Runner profile, sharing only the vocabulary | ⬜ |
 | Maybe-not | Runner-native `BackendSelector` scheduling | ❓ daemon may already own this correctly |

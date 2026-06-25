@@ -23,13 +23,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::{InferenceProvider, Tool};
+use sovereign_core::traits::{CorpusInstaller, InferenceProvider, Tool};
 use sovereign_core::types::{Effect, Permission};
 use sovereign_inference::remote::SplitInferenceProvider;
 use sovereign_workflow::{
     ArtifactCache, FileArtifactCache, NoCache, ResourceNeed, RunReport, Runner, StepKind,
     StepRegistry, Workflow,
 };
+
+/// Re-exported so a caller (the desktop run surface) can attach a progress
+/// observer and type the events it receives without depending on
+/// `sovereign-workflow` directly.
+pub use sovereign_workflow::{StepObserver, WorkflowProgress};
 
 pub mod trigger;
 pub use trigger::DaemonWorkflowRuntime;
@@ -279,21 +284,58 @@ pub async fn run_workflow_in_process(
         None
     };
 
+    // Attach the corpus installer so `recipe:` stages can run. It targets the
+    // daemon's loopback install endpoint — the same path `corpus install` uses, so
+    // both CLI runs and daemon-triggered runs delegate to it (no mesh refactor).
+    let installer: Arc<dyn CorpusInstaller> = Arc::new(HttpCorpusInstaller::new());
+    run_workflow_with_provider(
+        wf,
+        inference,
+        Some(installer),
+        concurrency,
+        no_cache,
+        params,
+        extra_tools,
+        None,
+    )
+    .await
+}
+
+/// Run a workflow with an **injected** inference provider (plus an optional
+/// corpus installer and progress observer), rather than constructing a
+/// daemon-routed provider from a URL.
+///
+/// This is the embedding entry for a process that already holds a provider — the
+/// desktop passes its `AppState.inference` (a [`SplitInferenceProvider`] in
+/// attach mode, an in-process provider when embedded), so the run surface works
+/// in both modes and reuses exactly the provider desktop chat uses, with no extra
+/// `/v1/models` round-trip. [`run_workflow_in_process`] is this with the provider
+/// built from a daemon URL and no observer.
+///
+/// `observer`, when `Some`, receives a [`WorkflowProgress`] event at each
+/// lifecycle point so a UI can stream "watch it go" updates; `None` is the
+/// headless path (progress goes only to `tracing`).
+#[allow(clippy::too_many_arguments)]
+pub async fn run_workflow_with_provider(
+    wf: &Workflow,
+    inference: Option<Arc<dyn InferenceProvider>>,
+    installer: Option<Arc<dyn CorpusInstaller>>,
+    concurrency: usize,
+    no_cache: bool,
+    params: BTreeMap<String, String>,
+    extra_tools: Vec<Box<dyn Tool>>,
+    observer: Option<StepObserver>,
+) -> std::result::Result<RunReport, String> {
     let tools = standard_registry(extra_tools).await;
     let cache: Arc<dyn ArtifactCache> = if no_cache {
         Arc::new(NoCache)
     } else {
         Arc::new(FileArtifactCache::new(cache_dir()))
     };
-    // Attach the corpus installer so `recipe:` stages can run. It targets the
-    // daemon's loopback install endpoint — the same path `corpus install` uses, so
-    // both CLI runs and daemon-triggered runs delegate to it (no mesh refactor).
-    let installer: Arc<dyn sovereign_core::traits::CorpusInstaller> =
-        Arc::new(HttpCorpusInstaller::new());
-    let registry =
-        StepRegistry::new(inference, Arc::new(tools)).with_installer(Some(installer));
+    let registry = StepRegistry::new(inference, Arc::new(tools)).with_installer(installer);
     Runner::with_cache(registry, cache)
         .with_params(params)
+        .with_observer(observer)
         .run(wf, concurrency)
         .await
         .map_err(|e| format!("workflow run failed: {e}"))

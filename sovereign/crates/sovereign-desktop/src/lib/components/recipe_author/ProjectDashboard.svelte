@@ -26,11 +26,14 @@
     onUseInChat,
     onOpenChat,
     onOpenExplorer,
+    onRunWorkflow,
   }: {
     dashboard: RecipeAuthorDashboardState;
     onUseInChat?: (question: StarterQuestion) => void;
     onOpenChat?: () => void;
     onOpenExplorer?: (corpusId: string) => void;
+    // Deep-link a workflow-kind artifact into the Run view (the author→run loop).
+    onRunWorkflow?: (name: string) => void;
   } = $props();
 
   // recipe | workflow — drives the kind-aware card labels. Defaults to recipe
@@ -56,6 +59,20 @@
     />
   {/if}
   <RecipeValidationCard validation={dashboard.validation} {artifactKind} />
+  {#if artifactKind === "workflow" && dashboard.recipe_id}
+    <!-- The author→run loop: a freshly-authored workflow is runnable right here,
+         deep-linking into the Run view with it preselected. -->
+    <div class="run-card" data-testid="workflow-run-it-card">
+      <span class="run-blurb">Ready to run over a folder.</span>
+      <button
+        class="run-it"
+        data-testid="workflow-run-it"
+        onclick={() => dashboard.recipe_id && onRunWorkflow?.(dashboard.recipe_id)}
+      >
+        Run it →
+      </button>
+    </div>
+  {/if}
   {#if artifactKind === "recipe"}
     <HarnessLadderCard
       recipePath={dashboard.recipe_path ?? null}
@@ -93,5 +110,30 @@
     display: flex;
     flex-direction: column;
     gap: 0.7rem;
+  }
+  .run-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in oklch, var(--accent) 30%, var(--border));
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
+  }
+  .run-blurb {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .run-it {
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast, white);
+    white-space: nowrap;
   }
 </style>

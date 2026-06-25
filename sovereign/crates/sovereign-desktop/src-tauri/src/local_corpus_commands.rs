@@ -9,8 +9,9 @@
 //! `LocalCorpusManager` calls and forward progress events via
 //! `AppHandle::emit`. All heavy lifting happens in `sovereign-tools`.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -18,15 +19,22 @@ use tauri::{AppHandle, Emitter, State};
 use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
-    manager::{IncompleteJob, ProgressCallback},
+    manager::{IncompleteJob, IngestStats, ProgressCallback},
     ocr::{OcrCtx, OcrEngineKind},
     pre_scanner::PreScanResult,
     preview::VaultPreview,
-    progress::LocalCorpusProgress,
+    progress::{CompletionResult, LocalCorpusProgress},
     writeback::{CleanResult, RollbackResult, SnapshotMeta, WriteBackResult},
     LocalCorpusConfig, LocalCorpusManager,
 };
 use std::path::PathBuf as StdPathBuf;
+
+use sovereign_core::traits::InferenceProvider;
+use sovereign_workflow::Workflow;
+use sovereign_workflow_host::{
+    resolve_workflow_source, run_workflow_with_provider, HttpCorpusInstaller, StepObserver,
+    WorkflowProgress,
+};
 
 use crate::state::AppState;
 
@@ -518,8 +526,33 @@ pub async fn lc_ingest(
     let job_id = new_job_id();
     let progress = make_emitter(app.clone(), job_id.clone());
 
-    // Spawn so the command doesn't block. The UI drives the progress
-    // panel off the emit channel; failure propagates via
+    // Opt-in: route folder ingest through the workflow Runner (the substrate
+    // adoption path — same `notebook` definition the CLI + Run view use) when
+    // `SOVEREIGN_RUNNER_INGEST` is set and the corpus needs no OCR (`tool:extract`
+    // has none). Bespoke stays the default and still owns OCR + enrichment.
+    if std::env::var("SOVEREIGN_RUNNER_INGEST").is_ok() && with_ocr != Some(true) {
+        let inference = state.inference.read().await.as_ref().map(Arc::clone);
+        let cfg = manager.list().await.into_iter().find(|c| c.id == corpus_id);
+        match (inference, cfg) {
+            // A daemon-routed (or in-process) provider + a non-OCR corpus → Runner.
+            (Some(inference), Some(cfg)) if !cfg.ocr_pdfs => {
+                let progress = progress.clone();
+                tokio::spawn(run_ingest_via_runner(inference, cfg, corpus_id, progress));
+                return Ok(job_id);
+            }
+            // Missing provider, unknown corpus, or OCR wanted → fall through to bespoke.
+            _ => {
+                tracing::info!(
+                    %corpus_id,
+                    "SOVEREIGN_RUNNER_INGEST set but Runner ingest unavailable \
+                     (no provider / unknown corpus / OCR) — using bespoke ingest"
+                );
+            }
+        }
+    }
+
+    // Bespoke path (default). Spawn so the command doesn't block; the UI drives the
+    // progress panel off the emit channel; failure propagates via
     // `LocalCorpusProgress::Error`.
     tokio::spawn(async move {
         match manager
@@ -540,6 +573,163 @@ pub async fn lc_ingest(
         }
     });
     Ok(job_id)
+}
+
+/// Ingest a folder corpus by running the shipped `notebook` workflow on the
+/// Runner (the substrate adoption path), translating the Runner's
+/// `WorkflowProgress` into the `LocalCorpusProgress` phases the desktop UI already
+/// renders — so the progress panel needs no change. Emits the terminal
+/// `Complete { Ingest(stats) }` / `Error` itself (the headless run is silent).
+async fn run_ingest_via_runner(
+    inference: Arc<dyn InferenceProvider>,
+    cfg: LocalCorpusConfig,
+    corpus_id: String,
+    progress: ProgressCallback,
+) {
+    let started = std::time::Instant::now();
+
+    let wf = match resolve_workflow_source("notebook")
+        .and_then(|(toml, _)| Workflow::parse(&toml).map_err(|e| e.to_string()))
+    {
+        Ok(w) => w,
+        Err(e) => {
+            progress(LocalCorpusProgress::Error {
+                message: format!("notebook workflow: {e}"),
+                recoverable: false,
+            });
+            return;
+        }
+    };
+
+    // Params from the corpus config: the source folder + a comma-glob of its
+    // configured extensions (empty = every file, which `notebook` extracts by type).
+    let glob = cfg
+        .extensions
+        .iter()
+        .map(|e| format!("*.{e}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut params = BTreeMap::new();
+    params.insert("folder".to_string(), cfg.root_path.to_string_lossy().into_owned());
+    params.insert("corpus".to_string(), corpus_id.clone());
+    params.insert("glob".to_string(), glob);
+
+    // Observer: map each Runner event onto a `LocalCorpusProgress::Ingesting` phase.
+    let acc = Arc::new(Mutex::new(IngestAccumulator::default()));
+    let observer: StepObserver = {
+        let progress = progress.clone();
+        let acc = Arc::clone(&acc);
+        Arc::new(move |ev: WorkflowProgress| {
+            if let Some(local) = workflow_progress_to_local(ev, &mut acc.lock().unwrap()) {
+                progress(local);
+            }
+        })
+    };
+
+    let installer = Arc::new(HttpCorpusInstaller::new());
+    match run_workflow_with_provider(
+        &wf,
+        Some(inference),
+        Some(installer),
+        4,
+        false,
+        params,
+        vec![],
+        Some(observer),
+    )
+    .await
+    {
+        Ok(report) => {
+            // `chunks_written` parsed from each item's `tool:corpus_store` output
+            // ("stored N chunks into corpus …"); best-effort, contributes 0 if the
+            // shape ever changes. Excerpts + per-file failure detail are deferred
+            // with the full cutover (the field's documented M1 default is empty).
+            let chunks_written: u64 = report
+                .items
+                .iter()
+                .filter_map(|it| it.result.as_ref().ok())
+                .filter_map(|txt| txt.strip_prefix("stored "))
+                .filter_map(|rest| rest.split_whitespace().next())
+                .filter_map(|n| n.parse::<u64>().ok())
+                .sum();
+            let stats = IngestStats {
+                corpus_id: corpus_id.clone(),
+                files_indexed: report.ok_count(),
+                chunks_written,
+                runtime_failures: Vec::new(),
+                excerpt_chunks: Vec::new(),
+                duration_secs: started.elapsed().as_secs(),
+            };
+            progress(LocalCorpusProgress::Complete {
+                result: CompletionResult::Ingest(stats),
+            });
+        }
+        Err(e) => progress(LocalCorpusProgress::Error {
+            message: e,
+            recoverable: false,
+        }),
+    }
+}
+
+/// Running tally for the progress bar: the item total (from `RunStarted`) and how
+/// many have finished (`ItemDone`), so each emitted phase carries `done/total`.
+#[derive(Default)]
+struct IngestAccumulator {
+    total: u64,
+    done: u64,
+}
+
+/// The desktop UI's friendly phase label for a workflow step's `uses`.
+fn friendly_phase(uses: &str) -> &'static str {
+    if uses.starts_with("tool:extract") {
+        "Reading your documents"
+    } else if uses.starts_with("tool:chunk") {
+        "Chunking"
+    } else if uses.starts_with("embed:") {
+        "Embedding"
+    } else if uses.starts_with("tool:corpus_store") {
+        "Building the index"
+    } else {
+        "Working"
+    }
+}
+
+/// Map a Runner [`WorkflowProgress`] event onto the desktop's
+/// [`LocalCorpusProgress`] phase model. Returns `None` for events that don't move
+/// the UI bar (`RunFinished` — the caller emits the terminal `Complete` after
+/// computing stats; `ElementSkipped` — a per-element warning).
+fn workflow_progress_to_local(
+    ev: WorkflowProgress,
+    acc: &mut IngestAccumulator,
+) -> Option<LocalCorpusProgress> {
+    match ev {
+        WorkflowProgress::RunStarted { items, .. } => {
+            acc.total = items as u64;
+            acc.done = 0;
+            Some(LocalCorpusProgress::Ingesting {
+                done: 0,
+                total: acc.total,
+                phase_label: "Reading your documents".to_string(),
+                current_file: None,
+            })
+        }
+        WorkflowProgress::StepDone { item, uses, .. } => Some(LocalCorpusProgress::Ingesting {
+            done: acc.done,
+            total: acc.total,
+            phase_label: friendly_phase(&uses).to_string(),
+            current_file: (item != "·").then_some(item),
+        }),
+        WorkflowProgress::ItemDone { .. } => {
+            acc.done = (acc.done + 1).min(acc.total.max(1));
+            Some(LocalCorpusProgress::Ingesting {
+                done: acc.done,
+                total: acc.total,
+                phase_label: "Building the index".to_string(),
+                current_file: None,
+            })
+        }
+        WorkflowProgress::RunFinished { .. } | WorkflowProgress::ElementSkipped { .. } => None,
+    }
 }
 
 // ─── Command: lc_list ────────────────────────────────────────────────
@@ -756,4 +946,87 @@ pub async fn lc_search(
             score: c.score,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Runner→desktop progress mapping for a notebook run over two files:
+    /// the right phase labels and a monotonic `done/total` bar.
+    #[test]
+    fn workflow_progress_maps_to_ingesting_phases() {
+        let mut acc = IngestAccumulator::default();
+
+        let start = workflow_progress_to_local(
+            WorkflowProgress::RunStarted {
+                workflow: "notebook".into(),
+                items: 2,
+                steps: 4,
+            },
+            &mut acc,
+        );
+        assert!(matches!(
+            start,
+            Some(LocalCorpusProgress::Ingesting { done: 0, total: 2, .. })
+        ));
+
+        let step = workflow_progress_to_local(
+            WorkflowProgress::StepDone {
+                item: "notes.md".into(),
+                step: "embed".into(),
+                uses: "embed:default".into(),
+                for_each: true,
+                cached: false,
+                step_index: 2,
+                total_steps: 4,
+            },
+            &mut acc,
+        );
+        match step {
+            Some(LocalCorpusProgress::Ingesting {
+                phase_label,
+                current_file,
+                done,
+                total,
+            }) => {
+                assert_eq!(phase_label, "Embedding");
+                assert_eq!(current_file.as_deref(), Some("notes.md"));
+                assert_eq!((done, total), (0, 2)); // not yet item-complete
+            }
+            other => panic!("expected Ingesting, got {other:?}"),
+        }
+
+        // Two items finish → done climbs to 2 and never past the total.
+        for expected in [1u64, 2] {
+            let done = workflow_progress_to_local(
+                WorkflowProgress::ItemDone {
+                    item: "x".into(),
+                    ok: true,
+                    ran: 4,
+                    cached: 0,
+                },
+                &mut acc,
+            );
+            assert!(matches!(
+                done,
+                Some(LocalCorpusProgress::Ingesting { done, total: 2, .. }) if done == expected
+            ));
+        }
+
+        // Terminal + per-element events don't move the bar (the caller owns Complete).
+        assert!(workflow_progress_to_local(
+            WorkflowProgress::RunFinished { ok: 2, failed: 0 },
+            &mut acc,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn friendly_phase_covers_the_notebook_steps() {
+        assert_eq!(friendly_phase("tool:extract"), "Reading your documents");
+        assert_eq!(friendly_phase("tool:chunk"), "Chunking");
+        assert_eq!(friendly_phase("embed:default"), "Embedding");
+        assert_eq!(friendly_phase("tool:corpus_store"), "Building the index");
+    }
 }

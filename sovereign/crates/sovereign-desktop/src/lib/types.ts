@@ -1754,6 +1754,56 @@ export interface EnrichBuildHandle {
   channel: string;
 }
 
+// ── Run a workflow ──────────────────────────────────────────────
+// Mirror `WorkflowParamSpec` / `WorkflowCatalogEntry` / `WorkflowRunHandle` /
+// `WorkflowRunEvent` in `workflow_commands.rs`.
+
+/// One input a workflow declares (`{param.key}`). `kind` lets the run form
+/// render a dedicated control for folder/corpus/glob and a text box otherwise.
+export interface WorkflowParamSpec {
+  key: string;
+  kind: "folder" | "corpus" | "glob" | "text";
+  label: string;
+}
+
+/// A runnable workflow + the inputs it needs. `origin` is
+/// `"shipped:<name>"` or `"user:<name>"`.
+export interface WorkflowCatalogEntry {
+  name: string;
+  description: string;
+  origin: string;
+  params: WorkflowParamSpec[];
+}
+
+/// Handle returned by `workflow_run`. The UI listens on `channel` with
+/// `listen<WorkflowRunProgress>(channel, handler)`. `corpus` is the corpus the
+/// run will build (if any), for the "chat with it" handoff.
+export interface WorkflowRunHandle {
+  job_id: string;
+  channel: string;
+  corpus: string | null;
+}
+
+/// One progress event from a `workflow_run`, tagged on `kind`. The terminal
+/// events are `complete` (with the built corpus, if any) and `failed`.
+export type WorkflowRunProgress =
+  | { kind: "run_started"; workflow: string; items: number; steps: number }
+  | {
+      kind: "step_done";
+      item: string;
+      step: string;
+      uses: string;
+      for_each: boolean;
+      cached: boolean;
+      step_index: number;
+      total_steps: number;
+    }
+  | { kind: "element_skipped"; item: string; step: string; index: number; error: string }
+  | { kind: "item_done"; item: string; ok: boolean; ran: number; cached: number }
+  | { kind: "run_finished"; ok: number; failed: number }
+  | { kind: "complete"; ok: number; failed: number; corpus: string | null }
+  | { kind: "failed"; error: string };
+
 /// One entry in the `enrich_list_corpora` response. `created_at`
 /// is an ISO-8601 UTC string; the panel sorts newest-first.
 export interface EnrichedCorpusSummary {

@@ -15,6 +15,7 @@ use sovereign_core::types::StepOutput;
 use crate::cache::{ArtifactCache, NoCache};
 use crate::kind::StepKind;
 use crate::model::{Artifact, ResolvedArgs, Scope, SourceItem, Workflow};
+use crate::progress::{emit, StepObserver, WorkflowProgress};
 use crate::steps::{Step, StepCtx, StepRegistry};
 use crate::{cache, template};
 
@@ -53,6 +54,7 @@ pub struct Runner {
     registry: StepRegistry,
     cache: Arc<dyn ArtifactCache>,
     params: Arc<BTreeMap<String, String>>,
+    observer: Option<StepObserver>,
 }
 
 impl Runner {
@@ -62,6 +64,7 @@ impl Runner {
             registry,
             cache: Arc::new(NoCache),
             params: Arc::new(BTreeMap::new()),
+            observer: None,
         }
     }
 
@@ -72,6 +75,7 @@ impl Runner {
             registry,
             cache,
             params: Arc::new(BTreeMap::new()),
+            observer: None,
         }
     }
 
@@ -80,6 +84,16 @@ impl Runner {
     /// existing `run(&wf, n)` signature and its call sites stay unchanged.
     pub fn with_params(mut self, params: BTreeMap<String, String>) -> Self {
         self.params = Arc::new(params);
+        self
+    }
+
+    /// Attach a [`StepObserver`] that receives a [`WorkflowProgress`] event at
+    /// each lifecycle point (run start, every step's completion, item + run
+    /// finish). The default is none — the headless path, where progress goes
+    /// only to `tracing`. An interactive caller (the desktop run surface) uses
+    /// this to stream "watch it go" updates to its UI.
+    pub fn with_observer(mut self, observer: Option<StepObserver>) -> Self {
+        self.observer = observer;
         self
     }
 
@@ -112,16 +126,35 @@ impl Runner {
             workflow = %wf.name, items = items.len(), steps = wf.steps.len(),
             "workflow: run start"
         );
+        emit(
+            self.observer.as_ref(),
+            WorkflowProgress::RunStarted {
+                workflow: wf.name.clone(),
+                items: items.len(),
+                steps: wf.steps.len(),
+            },
+        );
 
+        let observer = self.observer.as_ref();
         let reports: Vec<ItemReport> = stream::iter(items.into_iter())
             .map(|item| {
                 run_item(
-                    wf, &steps, &order, &do_cache, &self.cache, &self.params, item, concurrency,
+                    wf, &steps, &order, &do_cache, &self.cache, &self.params, observer, item,
+                    concurrency,
                 )
             })
             .buffer_unordered(concurrency.max(1))
             .collect()
             .await;
+
+        let ok = reports.iter().filter(|i| i.result.is_ok()).count();
+        emit(
+            self.observer.as_ref(),
+            WorkflowProgress::RunFinished {
+                ok,
+                failed: reports.len() - ok,
+            },
+        );
 
         Ok(RunReport {
             workflow: wf.name.clone(),
@@ -130,6 +163,11 @@ impl Runner {
     }
 }
 
+/// Run one item's graph and fire `ItemDone` once it finishes (success or
+/// abort). A thin wrapper over [`run_item_inner`] so the inner body keeps its
+/// several early `return fail(…)` paths untouched — the terminal event fires in
+/// exactly one place regardless of which path produced the report.
+#[allow(clippy::too_many_arguments)]
 async fn run_item(
     wf: &Workflow,
     steps: &[Arc<dyn Step>],
@@ -137,6 +175,34 @@ async fn run_item(
     do_cache: &[bool],
     cache: &Arc<dyn ArtifactCache>,
     params: &Arc<BTreeMap<String, String>>,
+    observer: Option<&StepObserver>,
+    item: SourceItem,
+    concurrency: usize,
+) -> ItemReport {
+    let report =
+        run_item_inner(wf, steps, order, do_cache, cache, params, observer, item, concurrency)
+            .await;
+    emit(
+        observer,
+        WorkflowProgress::ItemDone {
+            item: report.item.clone(),
+            ok: report.result.is_ok(),
+            ran: report.ran,
+            cached: report.cached,
+        },
+    );
+    report
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_item_inner(
+    wf: &Workflow,
+    steps: &[Arc<dyn Step>],
+    order: &[usize],
+    do_cache: &[bool],
+    cache: &Arc<dyn ArtifactCache>,
+    params: &Arc<BTreeMap<String, String>>,
+    observer: Option<&StepObserver>,
     item: SourceItem,
     concurrency: usize,
 ) -> ItemReport {
@@ -162,10 +228,11 @@ async fn run_item(
         cached,
     };
 
-    for &i in order {
+    for (step_index, &i) in order.iter().enumerate() {
         let spec = &wf.steps[i];
         let step = &steps[i];
         let cacheable = do_cache[i];
+        let ran_before = ran;
         let ctx = StepCtx {
             item_id: item_id.clone(),
         };
@@ -240,6 +307,15 @@ async fn run_item(
                             item = %item_id, step = %spec.id, element = idx, error = %e,
                             "workflow: for_each element failed — skipped (on_error=skip)"
                         );
+                        emit(
+                            observer,
+                            WorkflowProgress::ElementSkipped {
+                                item: item_id.clone(),
+                                step: spec.id.clone(),
+                                index: idx,
+                                error: e.clone(),
+                            },
+                        );
                         failures.push(serde_json::json!({ "index": idx, "error": e }));
                     }
                     Err(e) => return fail(item_id, spec, e, ran, cached),
@@ -271,6 +347,19 @@ async fn run_item(
             item = %item_id, step = %spec.id, uses = %spec.uses,
             for_each = spec.for_each.is_some(),
             "workflow: step done"
+        );
+        emit(
+            observer,
+            WorkflowProgress::StepDone {
+                item: item_id.clone(),
+                step: spec.id.clone(),
+                uses: spec.uses.clone(),
+                for_each: spec.for_each.is_some(),
+                // No new `ran` work this step → every unit was a cache hit.
+                cached: ran == ran_before,
+                step_index,
+                total_steps: order.len(),
+            },
         );
         last_text = output_text(&artifact.output);
         // make_mut is a no-op clone here: the element scopes that shared this Arc

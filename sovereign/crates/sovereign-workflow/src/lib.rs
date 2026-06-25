@@ -19,6 +19,7 @@
 pub mod cache;
 pub mod kind;
 pub mod model;
+pub mod progress;
 pub mod runner;
 pub mod steps;
 pub mod template;
@@ -29,6 +30,7 @@ pub use model::{
     Artifact, ResolvedArgs, ResourceNeed, Resources, Scope, Source, SourceItem, StepDescriptor,
     StepSpec, Workflow,
 };
+pub use progress::{StepObserver, WorkflowProgress};
 pub use runner::{ItemReport, RunReport, Runner};
 pub use steps::{Step, StepCtx, StepRegistry};
 
