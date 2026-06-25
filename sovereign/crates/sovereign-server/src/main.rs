@@ -474,6 +474,12 @@ async fn main() {
         tools.register(Box::new(RecipeTestTool::new()));
         tools.register(Box::new(RegistryBrowseTool));
         tools.register(Box::new(ProbeUrlTool::new()));
+        // Workflow-author tools (Inc0) — the umbrella authoring loop. Surfaced
+        // only when active_mode == workflow-author (the narrowed catalog), so
+        // generic chat + recipe-author are unaffected.
+        for t in sovereign_workflow_host::author_tools() {
+            tools.register(t);
+        }
         if let Some(ref notes) = note_store_for_runtime {
             tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(notes))));
             tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(notes))));

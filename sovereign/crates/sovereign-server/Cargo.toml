@@ -9,6 +9,9 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
+# Workflow-author tools (Inc0) — register them on the runtime alongside the
+# recipe-author tools so the agent loop can author workflows too.
+sovereign-workflow-host = { workspace = true }
 # Shared fair-scheduling policy (SchedCore) — backs both this server's
 # turn scheduler and the commonwealth-api peer-admission gate, so both
 # share identical fairness rules. Light crate (oicp-types only).

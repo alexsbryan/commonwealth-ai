@@ -2203,13 +2203,22 @@ impl Runtime {
         // above with `early_active_mode`) already carries the
         // recipe-author tool catalog. See handlers/recipe_author.rs
         // for the loop shape and the 2026-05-23 history note.
-        if active_mode.as_deref() == Some(crate::intent_policy::MODE_RECIPE_AUTHOR) {
+        if matches!(
+            active_mode.as_deref(),
+            Some(crate::intent_policy::MODE_RECIPE_AUTHOR)
+                | Some(crate::intent_policy::MODE_WORKFLOW_AUTHOR)
+        ) {
+            let skill_id = active_mode
+                .as_deref()
+                .unwrap_or(crate::intent_policy::MODE_RECIPE_AUTHOR);
             tracing::info!(
                 intent = ?intent,
-                "runtime: dispatching recipe-author workspace turn to agent loop"
+                skill_id,
+                "runtime: dispatching authoring workspace turn to agent loop"
             );
             return self
                 .handle_recipe_author_turn_stream(
+                    skill_id,
                     message,
                     conversation_id,
                     &context,

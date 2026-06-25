@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::oicp::{InferenceRequirements, LatencyClass};
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_core::traits::{CorpusInstaller, InferenceProvider};
 use sovereign_core::types::{CompletionRequest, Effect, Speed, StepOutput, ToolContext};
 
 use crate::kind::StepKind;
@@ -281,6 +281,61 @@ impl Step for ToolStep {
     }
 }
 
+/// A `recipe:<id>` stage — installs/updates a corpus via the injected
+/// `CorpusInstaller` (which delegates to the existing corpus-install path). The
+/// step's `params` become the recipe's `[parameters]`. Output carries the
+/// `corpus_id` so a downstream step can consume it (`{ingest.corpus_id}`).
+struct RecipeStep {
+    installer: Arc<dyn CorpusInstaller>,
+    recipe_id: String,
+}
+
+#[async_trait]
+impl Step for RecipeStep {
+    fn descriptor(&self) -> StepDescriptor {
+        StepDescriptor {
+            id: format!("recipe:{}", self.recipe_id),
+            name: format!("recipe:{}", self.recipe_id),
+            description: "install/update a corpus from a recipe (delegates to the \
+                          corpus-install path)"
+                .into(),
+            resources: ResourceNeed::Install,
+            // Always runs: an install is a real side effect, and idempotency is the
+            // engine's own resume/dedup, not the workflow content cache.
+            effect: Effect::Write,
+            deterministic: false,
+        }
+    }
+
+    async fn run(&self, args: &ResolvedArgs, _ctx: &StepCtx) -> Result<Artifact> {
+        // The step's `params` table → recipe `[parameters]` (string values).
+        let params: std::collections::BTreeMap<String, String> = args
+            .params
+            .as_ref()
+            .and_then(|v| v.as_object())
+            .map(|m| {
+                m.iter()
+                    .map(|(k, v)| {
+                        let s = match v {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        (k.clone(), s)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let outcome = self.installer.ensure_installed(&self.recipe_id, &params).await?;
+        Ok(Artifact::new(
+            "corpus",
+            StepOutput::Json(serde_json::json!({
+                "corpus_id": outcome.corpus_id,
+                "status": outcome.status,
+            })),
+        ))
+    }
+}
+
 // ─── registry: `uses` string → concrete Step ──────────────────
 
 /// Resolves a workflow's `uses` strings against the injected inference provider
@@ -292,11 +347,25 @@ pub struct StepRegistry {
     /// runs; a `model:` step then errors clearly instead of panicking.
     inference: Option<Arc<dyn InferenceProvider>>,
     tools: Arc<ToolRegistry>,
+    /// `None` unless a `CorpusInstaller` is wired — a `recipe:` step then errors
+    /// clearly. Builder-set so existing `new` call sites (tests) stay stable.
+    installer: Option<Arc<dyn CorpusInstaller>>,
 }
 
 impl StepRegistry {
     pub fn new(inference: Option<Arc<dyn InferenceProvider>>, tools: Arc<ToolRegistry>) -> Self {
-        Self { inference, tools }
+        Self {
+            inference,
+            tools,
+            installer: None,
+        }
+    }
+
+    /// Attach a `CorpusInstaller` so `recipe:` steps can run. The daemon/CLI
+    /// supplies the concrete (HTTP-client) installer; nothing else changes.
+    pub fn with_installer(mut self, installer: Option<Arc<dyn CorpusInstaller>>) -> Self {
+        self.installer = installer;
+        self
     }
 
     /// Resolve a typed `StepKind` into a concrete `Step`, injecting the daemon
@@ -337,6 +406,92 @@ impl StepRegistry {
             StepKind::Transform { name } => Ok(Arc::new(TransformStep {
                 name: name.clone(),
             })),
+            StepKind::Recipe { id } => {
+                let installer = self.installer.as_ref().ok_or_else(|| {
+                    Error::Execution(
+                        "a `recipe:` step needs the corpus installer — it runs via the \
+                         daemon's install path. Run the workflow through the daemon, or \
+                         install the recipe with `sovereign corpus install <id>`."
+                            .into(),
+                    )
+                })?;
+                Ok(Arc::new(RecipeStep {
+                    installer: Arc::clone(installer),
+                    recipe_id: id.clone(),
+                }))
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sovereign_core::traits::InstallOutcome;
+    use std::sync::Mutex;
+
+    /// Records each `ensure_installed` so the RecipeStep delegation can be asserted
+    /// without a daemon.
+    #[derive(Default)]
+    struct StubInstaller {
+        calls: Mutex<Vec<(String, std::collections::BTreeMap<String, String>)>>,
+    }
+
+    #[async_trait]
+    impl CorpusInstaller for StubInstaller {
+        async fn ensure_installed(
+            &self,
+            id: &str,
+            params: &std::collections::BTreeMap<String, String>,
+        ) -> Result<InstallOutcome> {
+            self.calls.lock().unwrap().push((id.to_string(), params.clone()));
+            Ok(InstallOutcome {
+                corpus_id: id.to_string(),
+                status: "complete".into(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn recipe_step_delegates_to_installer_with_coerced_params() {
+        let stub = Arc::new(StubInstaller::default());
+        let registry = StepRegistry::new(None, Arc::new(ToolRegistry::new()))
+            .with_installer(Some(stub.clone() as Arc<dyn CorpusInstaller>));
+        let step = registry
+            .resolve(&StepKind::Recipe {
+                id: "my-notes".into(),
+            })
+            .expect("recipe step resolves with an installer");
+
+        let args = ResolvedArgs {
+            params: Some(serde_json::json!({ "folder": "/x", "limit": 5 })),
+            ..Default::default()
+        };
+        let art = step.run(&args, &StepCtx::default()).await.unwrap();
+
+        let calls = stub.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1, "ensure_installed called once");
+        assert_eq!(calls[0].0, "my-notes", "the recipe id");
+        assert_eq!(calls[0].1.get("folder").map(String::as_str), Some("/x"));
+        // Non-string params are coerced to strings.
+        assert_eq!(calls[0].1.get("limit").map(String::as_str), Some("5"));
+        // The artifact carries corpus_id for a downstream `{ref.corpus_id}`.
+        match art.output {
+            StepOutput::Json(v) => assert_eq!(v["corpus_id"], serde_json::json!("my-notes")),
+            other => panic!("expected Json, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn recipe_step_without_installer_errors_clearly() {
+        let registry = StepRegistry::new(None, Arc::new(ToolRegistry::new()));
+        let res = registry.resolve(&StepKind::Recipe { id: "x".into() });
+        assert!(res.is_err(), "a recipe step with no installer must error");
+        // `.err()` drops the Ok payload (Arc<dyn Step> isn't Debug) so we can unwrap.
+        let err = res.err().unwrap();
+        assert!(
+            format!("{err}").contains("installer"),
+            "error should name the missing installer; got: {err}"
+        );
     }
 }

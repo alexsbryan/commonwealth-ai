@@ -340,13 +340,27 @@ impl Runtime {
         // Recipe-author workspace dispatch on the non-streaming path
         // (mesh peer, OICP caller, CLI). Symmetric with the streaming
         // dispatch above — same handler, drained into a Response.
-        if active_mode.as_deref() == Some(crate::intent_policy::MODE_RECIPE_AUTHOR) {
+        if matches!(
+            active_mode.as_deref(),
+            Some(crate::intent_policy::MODE_RECIPE_AUTHOR)
+                | Some(crate::intent_policy::MODE_WORKFLOW_AUTHOR)
+        ) {
+            let skill_id = active_mode
+                .as_deref()
+                .unwrap_or(crate::intent_policy::MODE_RECIPE_AUTHOR);
             tracing::info!(
                 intent = ?intent,
-                "runtime: dispatching recipe-author workspace turn to agent loop (non-stream)"
+                skill_id,
+                "runtime: dispatching authoring workspace turn to agent loop (non-stream)"
             );
             return self
-                .handle_recipe_author_turn(message, conversation_id, &context, &tool_descriptors)
+                .handle_recipe_author_turn(
+                    skill_id,
+                    message,
+                    conversation_id,
+                    &context,
+                    &tool_descriptors,
+                )
                 .await;
         }
 

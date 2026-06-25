@@ -61,22 +61,25 @@ impl Runtime {
     /// next turn sees the prior reply in `context.conversation`.
     pub(crate) async fn handle_recipe_author_turn_stream(
         &self,
+        skill_id: &str,
         message: &str,
         conversation_id: &str,
         context: &ConversationContext,
         tool_descriptors: &[ToolDescriptor],
     ) -> Result<StreamHandle> {
+        // Generic over authoring skills (recipe-author, workflow-author): the loop
+        // is driven entirely by the named skill's `[prompts] synthesis` + the
+        // registered tool descriptors handed in. `skill_id` selects the prompt.
         let base_prompt = self
             .skills
-            .skill_by_id("recipe-author")
+            .skill_by_id(skill_id)
             .and_then(|s| s.prompts.synthesis.clone())
             .ok_or_else(|| {
-                Error::NotImplemented(
-                    "recipe-author skill not loaded or `[prompts] synthesis` missing. \
-                     Check that the daemon can resolve modes/recipe-author/skill.toml \
+                Error::NotImplemented(format!(
+                    "{skill_id} skill not loaded or `[prompts] synthesis` missing. \
+                     Check that the daemon can resolve modes/{skill_id}/skill.toml \
                      (set SOVEREIGN_MODES_DIR or run from the workspace root)."
-                        .into(),
-                )
+                ))
             })?;
         // Agent-loop-only addendum. The skill.toml prompt is shared
         // with non-loop callers; the `done` virtual tool is a
@@ -472,6 +475,7 @@ impl Runtime {
     /// future MCP route) gets the same shape as a chat-style caller.
     pub(crate) async fn handle_recipe_author_turn(
         &self,
+        skill_id: &str,
         message: &str,
         conversation_id: &str,
         context: &ConversationContext,
@@ -480,7 +484,13 @@ impl Runtime {
         use futures::StreamExt;
 
         let handle = self
-            .handle_recipe_author_turn_stream(message, conversation_id, context, tool_descriptors)
+            .handle_recipe_author_turn_stream(
+                skill_id,
+                message,
+                conversation_id,
+                context,
+                tool_descriptors,
+            )
             .await?;
         let StreamHandle {
             message_id,

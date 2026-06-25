@@ -34,6 +34,12 @@ use sovereign_workflow::{
 pub mod trigger;
 pub use trigger::DaemonWorkflowRuntime;
 
+pub mod author;
+pub use author::{author_tools, WorkflowValidateTool, WorkflowWriteTool};
+
+pub mod installer;
+pub use installer::HttpCorpusInstaller;
+
 // ── Catalog ─────────────────────────────────────────────────────────────
 // Shipped starters + the user's own (`~/.sovereign/workflows/`). Shared by the
 // CLI (`workflow list/copy/new/run <name>`) and the daemon trigger runtime, which
@@ -274,7 +280,13 @@ pub async fn run_workflow_in_process(
     } else {
         Arc::new(FileArtifactCache::new(cache_dir()))
     };
-    let registry = StepRegistry::new(inference, Arc::new(tools));
+    // Attach the corpus installer so `recipe:` stages can run. It targets the
+    // daemon's loopback install endpoint — the same path `corpus install` uses, so
+    // both CLI runs and daemon-triggered runs delegate to it (no mesh refactor).
+    let installer: Arc<dyn sovereign_core::traits::CorpusInstaller> =
+        Arc::new(HttpCorpusInstaller::new());
+    let registry =
+        StepRegistry::new(inference, Arc::new(tools)).with_installer(Some(installer));
     Runner::with_cache(registry, cache)
         .with_params(params)
         .run(wf, concurrency)
@@ -319,6 +331,8 @@ impl CapabilitySummary {
                     Permission::CalendarRead => "read your calendar",
                     Permission::CalendarWrite => "change your calendar",
                     Permission::RecipeAuthoring => "author recipes",
+                    Permission::WorkflowAuthoring => "author workflows",
+                    Permission::CorpusIngest => "download and index a corpus",
                 }
                 .to_string(),
             );
@@ -375,6 +389,16 @@ pub fn workflow_capabilities(wf: &Workflow, registry: &ToolRegistry) -> Capabili
         match StepKind::parse(&step.uses) {
             Ok(StepKind::Model { .. }) | Ok(StepKind::Embed { .. }) => needs_inference = true,
             Ok(StepKind::Transform { .. }) => {}
+            Ok(StepKind::Recipe { .. }) => {
+                // A recipe stage downloads + indexes a corpus (network + compute +
+                // disk write) via the install path. One honest capability line.
+                if !effects.contains(&Effect::Write) {
+                    effects.push(Effect::Write);
+                }
+                if !permissions.contains(&Permission::CorpusIngest) {
+                    permissions.push(Permission::CorpusIngest);
+                }
+            }
             Ok(StepKind::Tool { id }) => {
                 add_tool(&id, &step.uses, &mut effects, &mut permissions, &mut unresolved)
             }

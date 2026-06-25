@@ -57,6 +57,10 @@ pub enum ResourceNeed {
     None,
     Inference,
     Tool,
+    /// A `recipe:` stage — needs the corpus installer (delegates to the
+    /// corpus-install path). Not the inference provider: the install does its own
+    /// embedding via the daemon engine.
+    Install,
 }
 
 /// A step's self-description. `effect` is now consumed by the content cache (a

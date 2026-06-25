@@ -38,6 +38,11 @@ pub enum StepKind {
     Mcp { server: String, tool: String },
     /// `transform:<name>` — a deterministic in-process transform.
     Transform { name: String },
+    /// `recipe:<id>` — a coarse corpus ingest/enrich stage. References a cataloged
+    /// recipe by id; runs it via the injected `CorpusInstaller` (which delegates to
+    /// the existing corpus-install path). Recipe `[parameters]` come from the step's
+    /// `params`.
+    Recipe { id: String },
 }
 
 impl StepKind {
@@ -70,6 +75,9 @@ impl StepKind {
             "transform" => StepKind::Transform {
                 name: rest.to_string(),
             },
+            "recipe" => StepKind::Recipe {
+                id: rest.to_string(),
+            },
             other => {
                 return Err(Error::Execution(format!(
                     "unknown step kind `{other}` in `{uses}`"
@@ -87,6 +95,7 @@ impl StepKind {
             StepKind::Model { .. } | StepKind::Embed { .. } => ResourceNeed::Inference,
             StepKind::Tool { .. } | StepKind::Mcp { .. } => ResourceNeed::Tool,
             StepKind::Transform { .. } => ResourceNeed::None,
+            StepKind::Recipe { .. } => ResourceNeed::Install,
         }
     }
 }
