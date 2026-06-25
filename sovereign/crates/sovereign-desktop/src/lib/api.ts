@@ -2,6 +2,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeError } from "./errors";
 import type {
+  WorkflowCatalogEntry,
+  WorkflowRunHandle,
+} from "./types";
+import type {
   MessageResponse,
   ConversationEntry,
   ConversationDetail,
@@ -1588,6 +1592,30 @@ export async function enrichBuildAsync(
     chapters,
     skipSteps,
   });
+}
+
+// ── Run a workflow ──────────────────────────────────────────────
+
+/** List the workflows the user can run — their own (`~/.sovereign/workflows/`)
+ *  plus the shipped starters, each with the input params it declares. */
+export async function workflowListRunnable(): Promise<WorkflowCatalogEntry[]> {
+  return invoke("workflow_list_runnable");
+}
+
+/** Plain-language bullets of what a workflow can do (write files, use your local
+ *  model, fetch the network…) — shown before a run so the user knows what it does. */
+export async function workflowCapabilities(nameOrPath: string): Promise<string[]> {
+  return invoke("workflow_capabilities", { nameOrPath });
+}
+
+/** Run a workflow in-process, streaming per-step progress on the returned
+ *  handle's channel (`listen<WorkflowRunProgress>(handle.channel, …)`). `params`
+ *  carries the whole form: folder/corpus/glob and any extra `{param.*}`. */
+export async function workflowRun(
+  nameOrPath: string,
+  params: Record<string, string>,
+): Promise<WorkflowRunHandle> {
+  return invoke("workflow_run", { nameOrPath, params });
 }
 
 /** Bridge a freshly-INSTALLED recipe corpus into the atlas-enrichment path.

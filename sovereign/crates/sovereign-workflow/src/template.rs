@@ -31,6 +31,17 @@ pub fn referenced_ids(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Param keys referenced by `text` — the `key` of each `{param.key}`. The run
+/// surface turns these into the form fields a workflow needs filled at run time
+/// (the `--folder`/`--corpus`/`--glob` aliases and any other `--param`).
+pub fn param_refs(text: &str) -> Vec<String> {
+    ref_re()
+        .captures_iter(text)
+        .filter(|c| &c[1] == "param")
+        .map(|c| c[2].to_string())
+        .collect()
+}
+
 /// Resolve every `{ref.key}` in `template` against `scope`.
 pub fn resolve_str(template: &str, scope: &Scope) -> String {
     ref_re()

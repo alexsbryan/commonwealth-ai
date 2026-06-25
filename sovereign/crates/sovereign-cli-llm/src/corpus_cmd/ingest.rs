@@ -1,23 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus ingest <folder>` — build a corpus by running the
-//! `chunk → embed → store` workflow over a folder of documents, on the
-//! Step·Artifact·Runner substrate.
+//! `sovereign corpus ingest <folder>` — build a corpus by running the shipped
+//! `notebook` workflow (`extract → chunk → embed → store`) over a folder of
+//! documents, on the Step·Artifact·Runner substrate.
 //!
-//! This is the first *production* ingest path backed by the workflow substrate:
-//! a real `corpus` subcommand whose mechanism is the Runner, not a bespoke loop.
-//! The engine's own `ingest()` is untouched — this covers the plain-text case
-//! (no extraction/OCR/sharding), proven identical by the chunk→embed→store diff
-//! and queryable via `corpus search`. Convergence with the rich engine path
-//! (batched embed, resume, enrichment) is future work.
+//! This is a *production* ingest path backed by the workflow substrate: a real
+//! `corpus` subcommand whose mechanism is the Runner, not a bespoke loop. It runs
+//! the same document-capable definition as `workflow run notebook` and the
+//! desktop folder-ingest — `tool:extract` handles PDF/Office/HTML/epub/md/txt, so
+//! this is no longer plain-text only. The corpus it builds is byte-compatible with
+//! the bespoke engine's (`tool:corpus_store` writes via the same
+//! `CorpusIndex::insert_batch`). Still bespoke-only: OCR, batched embedding, and
+//! enrichment — convergence on those is future work.
 
 use sovereign_workflow::Workflow;
+use sovereign_workflow_host::resolve_workflow_source;
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
 
 pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     let mut folder: Option<String> = None;
     let mut corpus: Option<String> = None;
-    let mut glob = "*.txt".to_string();
+    // Unset → notebook matches every file and extracts each by type.
+    let mut glob: Option<String> = None;
     let mut concurrency = 4usize;
     let mut no_cache = false;
     let mut i = 0;
@@ -30,9 +34,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
             }
             "--glob" => {
                 i += 1;
-                if let Some(g) = args.get(i) {
-                    glob = g.clone();
-                }
+                glob = args.get(i).cloned();
             }
             "--concurrency" => {
                 i += 1;
@@ -49,7 +51,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
 
     let Some(folder) = folder else {
         eprintln!(
-            "Usage: sovereign corpus ingest <folder> [--corpus <id>] [--glob '*.txt'] \
+            "Usage: sovereign corpus ingest <folder> [--corpus <id>] [--glob '*.pdf,*.md'] \
              [--concurrency N] [--no-cache]"
         );
         return 1;
@@ -63,95 +65,70 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
             .to_string()
     });
 
-    let wf = match build_ingest_workflow(&folder, &corpus, &glob) {
-        Ok(w) => w,
+    // Run the shipped, document-capable `notebook` workflow — the single ingest
+    // definition shared with `workflow run notebook` and the desktop. A user's
+    // customized `notebook` (via `workflow copy`) is honored; the shipped one is
+    // the fallback. Params drive the source folder/glob and the corpus name.
+    let (toml, origin) = match resolve_workflow_source("notebook") {
+        Ok(pair) => pair,
         Err(e) => {
             eprintln!("ingest: {e}");
             return 1;
         }
     };
+    let wf = match Workflow::parse(&toml) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("ingest: parse notebook workflow: {e}");
+            return 1;
+        }
+    };
 
-    eprintln!("Ingesting `{folder}` (glob {glob}) → corpus `{corpus}` via the workflow runner…");
-    let code = crate::workflow_cmd::run_assembled(
-        &wf,
-        DEFAULT_DAEMON,
-        concurrency,
-        no_cache,
-        std::collections::BTreeMap::new(),
-    )
-    .await;
+    let glob_param = glob.unwrap_or_default();
+    let mut params = std::collections::BTreeMap::new();
+    params.insert("folder".to_string(), folder.clone());
+    params.insert("corpus".to_string(), corpus.clone());
+    params.insert("glob".to_string(), glob_param.clone());
+
+    let glob_desc = if glob_param.is_empty() {
+        "all files".to_string()
+    } else {
+        glob_param
+    };
+    eprintln!(
+        "Ingesting `{folder}` ({glob_desc}) → corpus `{corpus}` via the workflow runner ({origin})…"
+    );
+    let code =
+        crate::workflow_cmd::run_assembled(&wf, DEFAULT_DAEMON, concurrency, no_cache, params)
+            .await;
     if code == 0 {
         eprintln!("\nDone. Query it:  sovereign corpus search {corpus} \"<your question>\"");
     }
     code
 }
 
-/// Build the `chunk → embed → store` ingest workflow for a folder. The shape
-/// mirrors `examples/ingest.toml`; built as TOML so it reuses the parser's
-/// edge-derivation + validation rather than hand-constructing the graph.
-fn build_ingest_workflow(
-    folder: &str,
-    corpus: &str,
-    glob: &str,
-) -> std::result::Result<Workflow, String> {
-    let toml = format!(
-        r#"
-[workflow]
-name = "ingest-{corpus_id}"
-
-[source]
-type = "folder"
-path = "{folder}"
-glob = "{glob}"
-
-[[step]]
-id = "chunk"
-uses = "tool:chunk"
-params = {{ path = "{{item.path}}" }}
-
-[[step]]
-id = "embed"
-uses = "embed:default"
-for_each = "chunk"
-input = "{{element.text}}"
-
-[[step]]
-id = "store"
-uses = "tool:corpus_store"
-params = {{ corpus = "{corpus_id}", chunks = "{{chunk.output}}", embeddings = "{{embed.output}}", title = "{{item.stem}}", source_doc_id = "{{item.path}}" }}
-"#,
-        corpus_id = toml_escape(corpus),
-        folder = toml_escape(folder),
-        glob = toml_escape(glob),
-    );
-    Workflow::parse(&toml).map_err(|e| e.to_string())
-}
-
-/// Escape a value for a TOML basic (double-quoted) string — backslash + quote
-/// (enough for filesystem paths and corpus ids; control chars don't occur here).
-fn toml_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// `corpus ingest` runs the shipped `notebook` definition — the
+    /// document-capable shape (`extract → chunk → embed → store`), not the old
+    /// plain-text `chunk → embed → store`. Asserted against the embedded shipped
+    /// TOML so it's hermetic (no `~/.sovereign/workflows` dependency).
     #[test]
-    fn ingest_workflow_builds_chunk_embed_store_in_order() {
-        let wf = build_ingest_workflow("/data/docs", "mybook", "*.txt").unwrap();
+    fn ingest_runs_the_document_capable_notebook_shape() {
+        let (_, toml) = sovereign_workflow_host::SHIPPED_WORKFLOWS
+            .iter()
+            .find(|(name, _)| *name == "notebook")
+            .expect("the `notebook` starter ships");
+        let wf = Workflow::parse(toml).unwrap();
         let order = wf.topo_order().unwrap();
         let ids: Vec<&str> = order.iter().map(|&i| wf.steps[i].id.as_str()).collect();
-        // chunk → embed (maps over chunk) → store (consumes both collections).
-        assert_eq!(ids, vec!["chunk", "embed", "store"]);
-        let embed = wf.steps.iter().find(|s| s.id == "embed").unwrap();
-        assert_eq!(embed.for_each.as_deref(), Some("chunk"));
-    }
-
-    #[test]
-    fn ingest_workflow_escapes_paths() {
-        // A path with a quote must not break the generated TOML.
-        let wf = build_ingest_workflow("/data/\"odd\" docs", "c", "*.txt").unwrap();
-        assert_eq!(wf.steps.len(), 3);
+        assert_eq!(ids, vec!["extract", "chunk", "embed", "store"]);
+        // The folder/corpus/glob the command passes are real params of the workflow.
+        let params = wf.referenced_params();
+        assert!(params.contains("folder"));
+        assert!(params.contains("corpus"));
+        assert!(params.contains("glob"));
     }
 }

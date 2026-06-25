@@ -5,7 +5,7 @@
 
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -18,7 +18,9 @@ use sovereign_core::types::{
 };
 
 use sovereign_workflow::model::{Artifact, Scope};
-use sovereign_workflow::{template, Runner, StepRegistry, Workflow};
+use sovereign_workflow::{
+    template, Runner, StepObserver, StepRegistry, Workflow, WorkflowProgress,
+};
 
 // ── A mock tool: echoes its `text` param ──────────────────────
 
@@ -64,6 +66,100 @@ fn echo_registry() -> Arc<ToolRegistry> {
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(EchoTool));
     Arc::new(tools)
+}
+
+// ── progress observer (the glassbox seam the run surface streams) ──
+
+#[tokio::test]
+async fn observer_sees_every_lifecycle_event_in_order() {
+    // Two deterministic transforms, no source → one item, two steps. No
+    // provider/tools needed, so this exercises the observer hermetically.
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "obs"
+[[step]]
+id = "a"
+uses = "transform:upper"
+input = "hello"
+[[step]]
+id = "b"
+uses = "transform:identity"
+input = "{a.output}"
+"#,
+    )
+    .unwrap();
+
+    let events: Arc<Mutex<Vec<WorkflowProgress>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&events);
+    let observer: StepObserver = Arc::new(move |ev| sink.lock().unwrap().push(ev));
+
+    let registry = StepRegistry::new(None, Arc::new(ToolRegistry::new()));
+    let report = Runner::new(registry)
+        .with_observer(Some(observer))
+        .run(&wf, 1)
+        .await
+        .unwrap();
+    assert_eq!(report.ok_count(), 1);
+
+    let evs = events.lock().unwrap();
+    assert_eq!(evs.len(), 5, "got {evs:?}");
+    assert!(matches!(
+        evs[0],
+        WorkflowProgress::RunStarted {
+            items: 1,
+            steps: 2,
+            ..
+        }
+    ));
+    match &evs[1] {
+        WorkflowProgress::StepDone {
+            step,
+            step_index: 0,
+            total_steps: 2,
+            ..
+        } => assert_eq!(step, "a"),
+        other => panic!("expected StepDone(a), got {other:?}"),
+    }
+    match &evs[2] {
+        WorkflowProgress::StepDone {
+            step,
+            step_index: 1,
+            total_steps: 2,
+            ..
+        } => assert_eq!(step, "b"),
+        other => panic!("expected StepDone(b), got {other:?}"),
+    }
+    assert!(matches!(evs[3], WorkflowProgress::ItemDone { ok: true, .. }));
+    assert!(matches!(
+        evs[4],
+        WorkflowProgress::RunFinished { ok: 1, failed: 0 }
+    ));
+}
+
+#[test]
+fn referenced_params_collects_every_param_key() {
+    // `{param.*}` in the source path/glob AND in a step's params field — the
+    // run surface turns each into a form field.
+    let wf = Workflow::parse(
+        r#"
+[workflow]
+name = "params"
+[source]
+type = "folder"
+path = "{param.folder}"
+glob = "{param.glob}"
+[[step]]
+id = "store"
+uses = "transform:identity"
+input = "x"
+params = { corpus = "{param.corpus}" }
+"#,
+    )
+    .unwrap();
+    let params: Vec<String> = wf.referenced_params().into_iter().collect();
+    // BTreeSet → sorted + de-duplicated.
+    assert_eq!(params, vec!["corpus", "folder", "glob"]);
 }
 
 // ── parse + topo ──────────────────────────────────────────────

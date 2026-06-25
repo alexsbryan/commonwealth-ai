@@ -21,6 +21,7 @@
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import RecipeAuthorWorkspace from "./lib/components/recipe_author/RecipeAuthorWorkspace.svelte";
+  import WorkflowRunView from "./lib/components/workflow_run/WorkflowRunView.svelte";
   import InnerWorkSurface from "./lib/components/inner_work/InnerWorkSurface.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
@@ -51,9 +52,10 @@
     | "settings"
     | "recipe_author"
     | "inner_work"
-    | "atlas";
+    | "atlas"
+    | "run_workflow";
 
-  type RailMode = "chat" | "inner_work" | "atlas" | "recipe_author" | "settings";
+  type RailMode = "chat" | "inner_work" | "atlas" | "recipe_author" | "run_workflow" | "settings";
 
   // `let view: AppView = $state("loading")` would narrow `view` to the
   // literal type `"loading"`, breaking every later `view === "chat"`
@@ -69,6 +71,7 @@
     view === "inner_work" ? "inner_work"
     : view === "atlas" ? "atlas"
     : view === "recipe_author" ? "recipe_author"
+    : view === "run_workflow" ? "run_workflow"
     : view === "settings" ? "settings"
     : "chat"
   );
@@ -192,6 +195,14 @@
   function handleSettingsStarterPick(question: StarterQuestion) {
     chatSeedStore.set(question);
     view = "chat";
+  }
+
+  // Deep-link target for the Run view: the recipe-author dashboard's "Run it"
+  // sets a workflow name and switches the view; WorkflowRunView preselects it.
+  let runWorkflowPreselect = $state<string | null>(null);
+  function handleRunWorkflow(name: string) {
+    runWorkflowPreselect = name;
+    view = "run_workflow";
   }
 
   /// Called by FolderDropFlow inside Settings → Knowledge when the
@@ -472,6 +483,7 @@
       active={railMode}
       onNavigate={handleRailNavigate}
       showRecipeAuthor={recipeAuthorEnabled}
+      showRunWorkflow={recipeAuthorEnabled}
     />
     <div class="app-chrome-content">
       <!-- InnerWork keep-alive layer: mounted on first visit, shown/hidden
@@ -497,7 +509,15 @@
           onExit={() => (view = "chat")}
           onUseInChat={handleSettingsStarterPick}
           onOpenChat={handleDropToChat}
+          onRunWorkflow={handleRunWorkflow}
         />
+      {:else if view === "run_workflow"}
+        <div class="run-workflow-surface">
+          <WorkflowRunView
+            onOpenChat={handleDropToChat}
+            preselectName={runWorkflowPreselect}
+          />
+        </div>
       {:else if view === "atlas"}
         <div class="atlas-surface">
           <AtlasSurface />
@@ -986,6 +1006,12 @@
     flex-direction: column;
     height: 100%;
     overflow-y: auto;
+    background: var(--bg-primary);
+  }
+
+  .run-workflow-surface {
+    height: 100%;
+    overflow: hidden;
     background: var(--bg-primary);
   }
 </style>
