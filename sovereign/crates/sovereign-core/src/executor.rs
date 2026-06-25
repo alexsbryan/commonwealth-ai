@@ -1224,7 +1224,10 @@ When ready to answer (without a <tool_call>):
                 "{}\n\nOutput to evaluate:\n{}\n\n\
                  Respond with JSON: {{\"pass\": true}} or {{\"pass\": false, \"feedback\": \"what's wrong\"}}",
                 eval_config.eval_prompt,
-                &text[..text.len().min(2000)]
+                // char-aware truncation: `&text[..2000]` panics when byte 2000
+                // lands mid-character on multi-byte step output (same class as
+                // the router log-slice panic, breaker 2026-06-25).
+                crate::runtime::truncate_with_ellipsis(text, 2000)
             );
 
             let eval_request =
