@@ -391,7 +391,12 @@ impl Runtime {
                  that material, then offer one concrete next step. Never \
                  fabricate names, numbers, code, identifiers, commands, or URLs.\n\
                  Keep it brief and warm: a few sentences at most, no preamble and \
-                 no meta-commentary about source limitations."
+                 no meta-commentary about source limitations.\n\
+                 You have NO tools, commands, or code search available here: never \
+                 emit tool-call syntax (\"<tool_call>\", \"<tool_code>\", \
+                 \"<symbols>\", function calls) and never say you will \"search the \
+                 codebase\" or \"look it up\" — you cannot. Answer directly or say \
+                 plainly you don't have it."
             );
             let request = CompletionRequest {
                 prompt,
