@@ -12041,6 +12041,7 @@ dependencies = [
  "sovereign-meshapp",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-workflow",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",

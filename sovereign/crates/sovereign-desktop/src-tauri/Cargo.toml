@@ -9,6 +9,10 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
+# Workflow authoring parity: the recipe-author workspace commands validate a
+# workflow project's TOML via `Workflow::parse` (the same way they validate a
+# recipe via `Recipe::from_toml`). Core-only crate — no inference/tool deps.
+sovereign-workflow = { workspace = true }
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }

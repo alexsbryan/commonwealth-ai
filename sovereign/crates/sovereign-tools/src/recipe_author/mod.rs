@@ -48,8 +48,8 @@ pub use checkpoint::CheckpointTool;
 pub use decision_log::DecisionLogTool;
 pub use probe_url::{detect_pagination_hint, PaginationHint, ProbeUrlTool};
 pub use project::{
-    maintainer_inbox_dir, projects_root_dir, CheckpointMeta, DecisionFrontier, ProjectSummary,
-    RecipeProject,
+    maintainer_inbox_dir, projects_root_dir, ArtifactKind, CheckpointMeta, DecisionFrontier,
+    ProjectSummary, RecipeProject,
 };
 pub use read::RecipeReadTool;
 pub use recipe_schema::recipe_json_schema;
@@ -157,6 +157,60 @@ pub(crate) fn resolve_recipe_path(input: &str, override_dir: Option<&PathBuf>) -
     };
     let root = resolve_root(override_dir)?;
     assert_under_root(&candidate, &root)
+}
+
+/// Resolve the user's local workflows directory: `~/.sovereign/workflows/`. The
+/// tools-local mirror of `sovereign_workflow_host::workflows_dir()` — both derive
+/// the same `~/.sovereign/workflows` path, but `checkpoint.rs` lives in
+/// `sovereign-tools`, which `sovereign-workflow-host` depends on, so it cannot call
+/// back into the host without a dependency cycle. Same `~/.sovereign` root as
+/// [`local_recipes_dir`].
+pub fn local_workflows_dir() -> Result<PathBuf> {
+    std::env::var_os("HOME")
+        .map(|h| PathBuf::from(h).join(".sovereign").join("workflows"))
+        .ok_or_else(|| {
+            Error::InvalidInput(
+                "HOME environment variable is not set; cannot locate \
+                 ~/.sovereign/workflows/. Set HOME or pass an explicit path."
+                    .into(),
+            )
+        })
+}
+
+/// Translate an agent-supplied workflow ref into its on-disk TOML path. Unlike a
+/// recipe (`<id>/recipe.toml`), a workflow is a single file `<id>.toml`, so a bare
+/// id expands to `<id>.toml`. Scoped to `~/.sovereign/workflows/` via the same
+/// traversal guard as recipes.
+pub(crate) fn resolve_workflow_path(
+    input: &str,
+    override_dir: Option<&PathBuf>,
+) -> Result<PathBuf> {
+    let candidate: PathBuf = if input.ends_with(".toml") {
+        input.into()
+    } else {
+        format!("{input}.toml").into()
+    };
+    let root = match override_dir {
+        Some(p) => p.clone(),
+        None => local_workflows_dir()?,
+    };
+    assert_under_root(&candidate, &root)
+}
+
+/// Resolve an artifact path by kind — the single dispatch point the checkpoint
+/// snapshot/restore uses so it never hardcodes "recipe". Recipe → a
+/// `<id>/recipe.toml` under `~/.sovereign/recipes/`; Workflow → a `<id>.toml`
+/// under `~/.sovereign/workflows/`. `override_dir` is the kind's root override
+/// (tests inject a tempdir).
+pub(crate) fn resolve_artifact_path(
+    kind: ArtifactKind,
+    input: &str,
+    override_dir: Option<&PathBuf>,
+) -> Result<PathBuf> {
+    match kind {
+        ArtifactKind::Recipe => resolve_recipe_path(input, override_dir),
+        ArtifactKind::Workflow => resolve_workflow_path(input, override_dir),
+    }
 }
 
 #[cfg(test)]
