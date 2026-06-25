@@ -15,7 +15,7 @@
 
   import { onMount, onDestroy } from "svelte";
   import { recipeProjectStore } from "../../stores/recipeProject.svelte";
-  import type { StarterQuestion } from "../../types";
+  import type { ArtifactKind, StarterQuestion } from "../../types";
   import RecipeProjectList from "./RecipeProjectList.svelte";
   import RecipeChatSurface from "./RecipeChatSurface.svelte";
   import ProjectDashboard from "./ProjectDashboard.svelte";
@@ -117,8 +117,12 @@
     await recipeProjectStore.select(featureId);
   }
 
-  async function handleCreate(title: string, charterMd: string) {
-    await recipeProjectStore.createProject(title, charterMd);
+  async function handleCreate(
+    title: string,
+    charterMd: string,
+    artifactKind: ArtifactKind,
+  ) {
+    await recipeProjectStore.createProject(title, charterMd, artifactKind);
     showNewProject = false;
   }
 </script>
@@ -170,6 +174,7 @@
         <RecipeChatSurface
           featureId={selectedFeatureId}
           projectTitle={dashboard.title}
+          artifactKind={dashboard.artifact_kind ?? "recipe"}
         />
       {:else}
         <RecipeAuthorWelcome

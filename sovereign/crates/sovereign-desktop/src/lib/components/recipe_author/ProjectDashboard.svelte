@@ -32,6 +32,10 @@
     onOpenChat?: () => void;
     onOpenExplorer?: (corpusId: string) => void;
   } = $props();
+
+  // recipe | workflow — drives the kind-aware card labels. Defaults to recipe
+  // when the backend payload predates the tag.
+  const artifactKind = $derived(dashboard.artifact_kind ?? "recipe");
 </script>
 
 <div class="dashboard" data-testid="recipe-author-dashboard">
@@ -39,25 +43,33 @@
     title={dashboard.title}
     charterMd={dashboard.charter_md}
   />
-  <CorpusStateCard
-    recipeId={dashboard.recipe_id ?? null}
-    recipePath={dashboard.recipe_path ?? null}
-    lastTestStatus={dashboard.last_test_status ?? null}
-    lastTestAt={dashboard.last_test_at ?? null}
-  />
-  <RecipeValidationCard validation={dashboard.validation} />
-  <HarnessLadderCard
-    recipePath={dashboard.recipe_path ?? null}
-    sampleSize={dashboard.current_sample_size ?? 15}
-  />
-  <BuildEnrichCard
-    recipeId={dashboard.recipe_id ?? null}
-    enrichmentReady={dashboard.validation.enrichment_ready}
-    {onUseInChat}
-    {onOpenChat}
-    {onOpenExplorer}
-  />
-  <SampleProgressBar currentSampleSize={dashboard.current_sample_size ?? null} />
+  <!-- Corpus state, the sample-size ladder, build+enrich, and the sample
+       progress bar are recipe-build concepts (ingest → test → enrich). A
+       workflow has none of them, so they're recipe-only; the validation card,
+       decision log, checkpoints, research, and the TOML drawer serve both. -->
+  {#if artifactKind === "recipe"}
+    <CorpusStateCard
+      recipeId={dashboard.recipe_id ?? null}
+      recipePath={dashboard.recipe_path ?? null}
+      lastTestStatus={dashboard.last_test_status ?? null}
+      lastTestAt={dashboard.last_test_at ?? null}
+    />
+  {/if}
+  <RecipeValidationCard validation={dashboard.validation} {artifactKind} />
+  {#if artifactKind === "recipe"}
+    <HarnessLadderCard
+      recipePath={dashboard.recipe_path ?? null}
+      sampleSize={dashboard.current_sample_size ?? 15}
+    />
+    <BuildEnrichCard
+      recipeId={dashboard.recipe_id ?? null}
+      enrichmentReady={dashboard.validation.enrichment_ready}
+      {onUseInChat}
+      {onOpenChat}
+      {onOpenExplorer}
+    />
+    <SampleProgressBar currentSampleSize={dashboard.current_sample_size ?? null} />
+  {/if}
   <IssueList issues={dashboard.recipe_issues} />
   <DecisionFeed
     decisions={dashboard.decisions}
@@ -72,6 +84,7 @@
   <TechnicalDetailDrawer
     recipeToml={dashboard.recipe_toml ?? null}
     featureId={dashboard.feature_id}
+    {artifactKind}
   />
 </div>
 

@@ -14,23 +14,34 @@
   // - ok=false + errors.length  → red "needs attention" + each error
   //                                in its own block, copy-friendly
   import Card from "./Card.svelte";
-  import type { RecipeValidationReport } from "../../types";
+  import {
+    artifactNoun,
+    artifactTitle,
+    type ArtifactKind,
+    type RecipeValidationReport,
+  } from "../../types";
   import { recipeAuthorChat } from "../../stores/recipeAuthorChat";
 
-  let { validation }: { validation: RecipeValidationReport } = $props();
+  let {
+    validation,
+    artifactKind = "recipe",
+  }: { validation: RecipeValidationReport; artifactKind?: ArtifactKind } = $props();
+
+  const noun = $derived(artifactNoun(artifactKind));
+  const Title = $derived(artifactTitle(artifactKind));
 
   let copiedIdx: number | null = $state(null);
 
   // Conversational recovery: hand the parse errors to the live agent, which is
-  // prompted to ACT on "fix it" (rewrite the recipe), or to explain them.
+  // prompted to ACT on "fix it" (rewrite the artifact), or to explain them.
   function askFix() {
     recipeAuthorChat.requestTurn(
-      `The recipe has validation errors. Fix them in the recipe and re-validate:\n\n${validation.errors.join("\n\n")}`,
+      `The ${noun} has validation errors. Fix them in the ${noun} and re-validate:\n\n${validation.errors.join("\n\n")}`,
     );
   }
   function askWhy() {
     recipeAuthorChat.requestTurn(
-      `Explain these recipe validation errors in plain language and what change fixes each — don't edit yet:\n\n${validation.errors.join("\n\n")}`,
+      `Explain these ${noun} validation errors in plain language and what change fixes each — don't edit yet:\n\n${validation.errors.join("\n\n")}`,
     );
   }
 
@@ -48,33 +59,37 @@
   }
 </script>
 
-<Card title="Recipe validation">
+<Card title="{Title} validation">
   {#if validation.no_recipe}
-    <p class="muted">No recipe drafted yet.</p>
+    <p class="muted">No {noun} drafted yet.</p>
   {:else if validation.ok}
     <div class="row">
       <span class="pill ok">valid</span>
-      <span class="muted">Engine parsed the recipe.toml without errors.</span>
+      <span class="muted">Parsed the {noun}.toml without errors.</span>
     </div>
-    <div class="row">
-      {#if validation.enrichment_ready}
-        <span class="pill ok">enrichment ready</span>
-        <span class="muted">Build will produce a knowledge graph (atoms).</span>
-      {:else}
-        <span class="pill warn" data-testid="enrichment-not-ready">no enrichment</span>
-        <span class="muted">
-          This recipe builds with <strong>zero atoms</strong> — turn on atlas
-          enrichment to get a knowledge graph.
-        </span>
-      {/if}
-    </div>
+    {#if artifactKind === "recipe"}
+      <!-- Enrichment readiness is a recipe concept (atlas/investigation atoms);
+           a workflow has no equivalent, so the row is recipe-only. -->
+      <div class="row">
+        {#if validation.enrichment_ready}
+          <span class="pill ok">enrichment ready</span>
+          <span class="muted">Build will produce a knowledge graph (atoms).</span>
+        {:else}
+          <span class="pill warn" data-testid="enrichment-not-ready">no enrichment</span>
+          <span class="muted">
+            This recipe builds with <strong>zero atoms</strong> — turn on atlas
+            enrichment to get a knowledge graph.
+          </span>
+        {/if}
+      </div>
+    {/if}
   {:else}
     <div class="row">
       <span class="pill fail">needs attention</span>
       <span class="muted">
         {validation.errors.length === 1
-          ? "1 issue blocking the recipe"
-          : `${validation.errors.length} issues blocking the recipe`}
+          ? `1 issue blocking the ${noun}`
+          : `${validation.errors.length} issues blocking the ${noun}`}
       </span>
     </div>
     <ul class="errors">

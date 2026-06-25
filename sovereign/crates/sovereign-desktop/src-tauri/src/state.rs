@@ -1209,6 +1209,19 @@ pub async fn bootstrap_with_progress(
             );
         }
     }
+
+    // Workflow-author tools — the workflow analog of the recipe-author set above.
+    // The same generic agent loop drives workflow authoring (skill =
+    // `workflow-author`), so a Workflow-kind project's chat can compose a workflow
+    // via `workflow_write_structured` / `workflow_validate` / `workflow_test`.
+    // Registered unconditionally (no store handles needed); the recipe sub-flow
+    // tools above stay available so a workflow can author its `recipe:` ingest
+    // stage. Without these, a workflow-author turn sees `unknown tool` and the
+    // agent can't write a workflow.
+    for t in sovereign_workflow_host::author_tools() {
+        tools.register(t);
+    }
+
     tracing::info!("Tools: {} registered", tools.count());
 
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =

@@ -13,6 +13,10 @@ sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 # workflow project's TOML via `Workflow::parse` (the same way they validate a
 # recipe via `Recipe::from_toml`). Core-only crate — no inference/tool deps.
 sovereign-workflow = { workspace = true }
+# The workflow-author tool bundle (workflow_write/_structured/validate/test) the
+# desktop runtime registers so a Workflow-kind project's chat can compose a
+# workflow. Same agent loop as recipe authoring; only the tools + skill differ.
+sovereign-workflow-host = { workspace = true }
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }
