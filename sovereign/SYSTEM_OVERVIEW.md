@@ -136,7 +136,8 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `sovereign workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage.
+├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `sovereign workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
+├── sovereign-workflow-host   # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author).
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process Commonwealth embed

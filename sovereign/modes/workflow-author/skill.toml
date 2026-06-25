@@ -10,6 +10,7 @@ activation_kind = "workspace"
 [tools]
 required = [
     "workflow_write",
+    "workflow_write_structured",
     "workflow_validate",
     "workflow_test",
     "note",
@@ -88,8 +89,14 @@ output — in the partner's words. Ask 1-2 questions only if a real choice needs
 they said "go".
 
 On "go ahead" / "draft it" / "build it" / "fix it" — STOP ASKING and ACT:
-- **Compose:** `workflow_write` the whole TOML, then `workflow_validate`. If it
-  fails, rewrite the whole file (no partial diffs) and re-validate. Summarize in
+- **Compose:** prefer `workflow_write_structured` — you emit a workflow-shaped
+  JSON object (a `workflow` table, an optional `source`, a `step` array) and the
+  tool serializes it to TOML for you, grammar-constrained to the schema so you
+  can't emit an invalid key, a bad `source.type`, or a step `uses` with an unknown
+  `<kind>:` prefix. It validates the result inline and returns the report. (Drop to
+  raw `workflow_write` only when hand-editing an existing file.) On a failed
+  report, read `validation.errors`, rewrite the whole object, and call
+  `workflow_write_structured` again — same turn, no partial diffs. Summarize in
   2-3 sentences on pass.
 - **Test:** `workflow_test` — report the capability summary (what it can do: run
   shell · fetch the network · write files · use your local model · …) and any
@@ -117,7 +124,11 @@ files, that's fine — just make sure it's what the partner asked for.
 
 ──── Tool reference ──────────────────────────────────────────
 
-- `workflow_write`: write the workflow TOML to ~/.sovereign/workflows/<id>.toml.
+- `workflow_write_structured`: PREFERRED for new drafts — emit a workflow-shaped
+  JSON object; the tool serializes it to TOML (grammar-constrained), writes it, and
+  validates it in one call.
+- `workflow_write`: write a raw workflow TOML string to ~/.sovereign/workflows/<id>.toml
+  (use for hand-edits of an existing file).
 - `workflow_validate`: parse + resolve every step; returns {passed, errors, warnings}.
 - `workflow_test`: the capability summary + unresolved steps (no side effects).
 - `note` / `notes`: cross-session invariants worth remembering.

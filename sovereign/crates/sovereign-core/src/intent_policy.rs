@@ -413,6 +413,7 @@ fn recipe_author_tools() -> Vec<&'static str> {
 fn workflow_author_tools() -> Vec<&'static str> {
     vec![
         "workflow_write",
+        "workflow_write_structured",
         "workflow_validate",
         "workflow_test",
         // The recipe sub-flow — author the ingest/enrich stage a workflow's

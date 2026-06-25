@@ -8,6 +8,7 @@
 //! P0+P1 of `docs/specs/WORKFLOW_SUBSTRATE.md`; durable/distributed execution
 //! is P2 (the pipeline tool as an outer loop).
 
+use corpus_engine::RecipeRegistry;
 use sovereign_core::traits::Tool;
 use sovereign_workflow::Workflow;
 // The registry assembly, in-process runner, and workflow catalog now live in
@@ -18,7 +19,69 @@ use sovereign_workflow_host::{
     SHIPPED_WORKFLOWS,
 };
 
+// Inc3 surface unification: `workflow run <recipe-id>` delegates to the *same*
+// install client `corpus install` uses, and shapes its `--param` values the same
+// way. Two backends, one surface — the recipe install path stays intact.
+use crate::corpus_cmd::{param_json_value, submit_install_request};
+
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
+
+/// A name on the unified `workflow` surface resolves to one of two artifact kinds,
+/// each with its own backend: a **workflow** (run in-process by the workflow host)
+/// or a **recipe** (a corpus ingest/enrich, delegated to the daemon's install
+/// path). One `list`/`run` surface; the two backends stay intact underneath.
+#[derive(Debug)]
+enum ResolvedArtifact {
+    Workflow { toml: String, origin: String },
+    Recipe { id: String, name: String },
+}
+
+/// Pure classifier (no I/O): a name is a `Workflow` when the workflow catalog
+/// resolved it, else a `Recipe` when the recipe registry knows the id, else
+/// unresolved. A workflow **shadows** a same-named recipe — local/authored intent
+/// wins, the same precedence `resolve_workflow_source` already applies between a
+/// user workflow and a shipped starter. Kept data-in/data-out (§5.4) so it tests
+/// without the ambient `~/.sovereign` filesystem or a live registry fetch.
+fn classify_artifact(
+    name: &str,
+    workflow: Option<(String, String)>,
+    registry: &RecipeRegistry,
+) -> std::result::Result<ResolvedArtifact, String> {
+    if let Some((toml, origin)) = workflow {
+        return Ok(ResolvedArtifact::Workflow { toml, origin });
+    }
+    if let Some(e) = registry.find_entry(name) {
+        return Ok(ResolvedArtifact::Recipe {
+            id: e.id.clone(),
+            name: e.name.clone(),
+        });
+    }
+    Err(format!(
+        "no workflow or recipe named `{name}` — not a workflow file/catalog entry, \
+         not a recipe in the registry.\n  See `sovereign workflow list`."
+    ))
+}
+
+/// Resolve a name against both backends — the workflow catalog
+/// (`resolve_workflow_source`) and the recipe registry.
+fn resolve_artifact(name: &str) -> std::result::Result<ResolvedArtifact, String> {
+    let workflow = resolve_workflow_source(name).ok();
+    classify_artifact(name, workflow, &recipe_registry())
+}
+
+/// The recipe catalog: the compiled-in bundled snapshot plus the user's published
+/// `~/.sovereign/recipes/registry.toml`. No network — `find_entry`/`list_entries`
+/// read the bundled snapshot; `with_local_registry` silently no-ops when the user
+/// has none. Mirrors `recipe_cmd`'s construction so the two surfaces see the same
+/// catalog.
+fn recipe_registry() -> RecipeRegistry {
+    let local_dir = RecipeRegistry::default_local_recipes_dir();
+    let mut registry = RecipeRegistry::from_bundled(local_dir.clone());
+    if let Some(d) = &local_dir {
+        registry = registry.with_local_registry(&d.join("registry.toml"));
+    }
+    registry
+}
 
 pub async fn run_workflow(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
@@ -180,13 +243,13 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "run <name|file>",
-                "Run a workflow (a shipped/user name, or a .toml path) over its source items",
+                "Run a workflow over its items, OR install a recipe corpus — by name (or a .toml path)",
             ),
             (
                 "author \"<description>\"",
                 "Describe a workflow in plain language; your local model composes, validates, and saves it",
             ),
-            ("list", "List available workflows (shipped starters + your own)"),
+            ("list", "List what you can run: workflows (shipped + your own) + recipe corpora"),
             (
                 "copy <name> [new]",
                 "Copy a workflow into ~/.sovereign/workflows/ so you can edit it",
@@ -297,48 +360,61 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 1;
     };
 
-    // Resolve a bare name (shipped starter or ~/.sovereign/workflows/<name>.toml)
-    // or a path. Echo the origin for a name so it's clear which file ran.
-    let toml = match resolve_workflow_source(&file) {
-        Ok((t, origin)) => {
+    // Resolve a bare name (or path) against BOTH backends — a workflow to run, or
+    // a recipe to install. One surface; the two backends stay intact underneath.
+    match resolve_artifact(&file) {
+        Ok(ResolvedArtifact::Workflow { toml, origin }) => {
+            // Echo the origin for a name so it's clear which file ran.
             if !origin.contains('/') {
                 eprintln!("workflow: {origin}");
             }
-            t
+            let wf = match Workflow::parse(&toml) {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("workflow: {e}");
+                    return 1;
+                }
+            };
+            // Default the corpus id to the folder's basename when --folder is given
+            // without --corpus, so the flagship one-liner needs only --folder. (A
+            // workflow-only convenience — a recipe install never sees this.)
+            if params.contains_key("folder") && !params.contains_key("corpus") {
+                if let Some(base) = std::path::Path::new(&params["folder"])
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .filter(|b| !b.is_empty())
+                {
+                    params.insert("corpus".to_string(), base.to_string());
+                }
+            }
+            run_assembled(&wf, &daemon, concurrency, no_cache, params).await
+        }
+        Ok(ResolvedArtifact::Recipe { id, name }) => {
+            // A recipe id installs/updates a corpus via the daemon's install path —
+            // the same client `corpus install` uses (which remains a permanent
+            // alias). The collected `--param`s become the recipe's install
+            // parameters, shaped by the one shared `--param` convention.
+            eprintln!("recipe: {id} ({name}) — installing via the corpus path …");
+            let install_params: std::collections::BTreeMap<String, serde_json::Value> = params
+                .iter()
+                .map(|(k, v)| (k.clone(), param_json_value(v)))
+                .collect();
+            submit_install_request(&id, install_params).await
         }
         Err(e) => {
             eprintln!("{e}");
-            return 1;
-        }
-    };
-    let wf = match Workflow::parse(&toml) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("workflow: {e}");
-            return 1;
-        }
-    };
-
-    // Default the corpus id to the folder's basename when --folder is given
-    // without --corpus, so the flagship one-liner needs only --folder.
-    if params.contains_key("folder") && !params.contains_key("corpus") {
-        if let Some(base) = std::path::Path::new(&params["folder"])
-            .file_name()
-            .and_then(|n| n.to_str())
-            .filter(|b| !b.is_empty())
-        {
-            params.insert("corpus".to_string(), base.to_string());
+            1
         }
     }
-
-    run_assembled(&wf, &daemon, concurrency, no_cache, params).await
 }
 
 /// `sovereign workflow list` — the gallery: shipped starters + the user's own
 /// (`~/.sovereign/workflows/`), user shadowing a same-named starter.
 fn cmd_list() -> i32 {
-    let dir = workflows_dir();
     let mut rows: Vec<(String, &'static str, String)> = Vec::new();
+
+    // Workflows: the user's own (shadowing a same-named starter) + shipped starters.
+    let dir = workflows_dir();
     let mut user_names = std::collections::HashSet::new();
     if let Ok(rd) = std::fs::read_dir(&dir) {
         for e in rd.flatten() {
@@ -351,27 +427,36 @@ fn cmd_list() -> i32 {
                     .map(|t| first_comment_line(&t))
                     .unwrap_or_default();
                 user_names.insert(stem.to_string());
-                rows.push((stem.to_string(), "user", desc));
+                rows.push((stem.to_string(), "workflow", desc));
             }
         }
     }
     for (name, toml) in SHIPPED_WORKFLOWS {
         if !user_names.contains(*name) {
-            rows.push((name.to_string(), "shipped", first_comment_line(toml)));
+            rows.push((name.to_string(), "workflow", first_comment_line(toml)));
         }
     }
+
+    // Recipes: the corpus catalog (bundled snapshot + the user's published
+    // recipes). Surfaced on the same list so the user sees the full menu of names
+    // `run` accepts — the surface is unified even though the backends stay separate.
+    for e in recipe_registry().list_entries() {
+        rows.push((e.id.clone(), "recipe", e.description.clone()));
+    }
+
     rows.sort();
     if rows.is_empty() {
-        println!("No workflows found.");
+        println!("No workflows or recipes found.");
         return 0;
     }
-    println!("{:<16} {:<8} {}", "WORKFLOW", "SOURCE", "DESCRIPTION");
-    for (name, src, desc) in &rows {
-        let d: String = desc.chars().take(76).collect();
-        println!("{name:<16} {src:<8} {d}");
+    println!("{:<24} {:<9} {}", "NAME", "KIND", "DESCRIPTION");
+    for (name, kind, desc) in &rows {
+        let d: String = desc.chars().take(64).collect();
+        println!("{name:<24} {kind:<9} {d}");
     }
-    println!("\nRun:   sovereign workflow run <name> --folder <dir> [--corpus <id>]");
-    println!("Edit:  sovereign workflow copy <name> <new-name>   # → ~/.sovereign/workflows/");
+    println!("\nRun:   sovereign workflow run <name> [--folder <dir>] [--param k=v]");
+    println!("       a workflow name runs its steps; a recipe name installs that corpus.");
+    println!("Edit:  sovereign workflow copy <workflow> <new-name>   # → ~/.sovereign/workflows/");
     0
 }
 
@@ -541,6 +626,61 @@ fn enrich_tools() -> Vec<Box<dyn Tool>> {
         Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool),
         Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool),
     ]
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+
+    // `classify_artifact` is pure (data-in/data-out), so these run hermetically
+    // against the compiled-in bundled registry snapshot — no ~/.sovereign, no
+    // network. "sep" is a known bundled recipe id (see corpus-engine registry tests).
+
+    #[test]
+    fn workflow_match_classifies_as_workflow() {
+        let reg = RecipeRegistry::from_bundled(None);
+        let got = classify_artifact(
+            "notebook",
+            Some(("[workflow]\nname = \"x\"\n".into(), "shipped:notebook".into())),
+            &reg,
+        )
+        .expect("resolves");
+        assert!(matches!(got, ResolvedArtifact::Workflow { .. }));
+    }
+
+    #[test]
+    fn known_recipe_id_classifies_as_recipe_when_no_workflow() {
+        let reg = RecipeRegistry::from_bundled(None);
+        let got = classify_artifact("sep", None, &reg).expect("resolves");
+        match got {
+            ResolvedArtifact::Recipe { id, .. } => assert_eq!(id, "sep"),
+            ResolvedArtifact::Workflow { .. } => panic!("expected the sep recipe, got a workflow"),
+        }
+    }
+
+    #[test]
+    fn workflow_shadows_a_same_named_recipe() {
+        // A workflow named "sep" wins over the "sep" recipe — authored/local intent
+        // takes precedence, the same way a user workflow shadows a shipped starter.
+        let reg = RecipeRegistry::from_bundled(None);
+        let got = classify_artifact(
+            "sep",
+            Some(("[workflow]\nname = \"sep\"\n".into(), "user:sep".into())),
+            &reg,
+        )
+        .expect("resolves");
+        assert!(
+            matches!(got, ResolvedArtifact::Workflow { .. }),
+            "a workflow must shadow a same-named recipe"
+        );
+    }
+
+    #[test]
+    fn unknown_name_is_an_error_naming_both_backends() {
+        let reg = RecipeRegistry::from_bundled(None);
+        let err = classify_artifact("definitely-not-a-thing-xyz", None, &reg).unwrap_err();
+        assert!(err.contains("no workflow or recipe"), "got: {err}");
+    }
 }
 
 #[cfg(test)]

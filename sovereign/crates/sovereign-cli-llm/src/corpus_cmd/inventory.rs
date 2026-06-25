@@ -117,6 +117,18 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         }
     }
 
+    submit_install_request(id, params).await
+}
+
+/// POST an install request to the running daemon's `/internal/corpus/install`
+/// endpoint and report the outcome. The daemon owns the actual ingest task; this
+/// is the thin, fire-and-forget client. Shared by `corpus install` and a
+/// `workflow run <recipe-id>` dispatch so both delegate to the *same* install path
+/// (surface-unify, don't deep-collapse — one client, two callers).
+pub(crate) async fn submit_install_request(
+    id: &str,
+    params: std::collections::BTreeMap<String, serde_json::Value>,
+) -> i32 {
     let url = "http://127.0.0.1:9742/internal/corpus/install";
     let body = serde_json::json!({
         "corpus_id": id,
@@ -181,7 +193,18 @@ fn parse_param_spec(
     if key.is_empty() {
         return Err("empty parameter name".into());
     }
-    let value = if value.contains(',') {
+    out.insert(key.to_string(), param_json_value(value));
+    Ok(())
+}
+
+/// Shape a single `--param`/`--params` *value* into JSON: a comma-bearing value
+/// becomes an array of trimmed, non-empty strings; otherwise a single trimmed
+/// string. The daemon coerces strings → ints/dates per the recipe's declared
+/// `ParameterKind`, so the CLI only shapes the JSON. Shared by [`parse_param_spec`]
+/// and the `workflow run <recipe-id>` param conversion so the one `--param`
+/// convention behaves identically across both surfaces.
+pub(crate) fn param_json_value(value: &str) -> serde_json::Value {
+    if value.contains(',') {
         let items: Vec<serde_json::Value> = value
             .split(',')
             .map(|s| s.trim().to_string())
@@ -191,9 +214,7 @@ fn parse_param_spec(
         serde_json::Value::Array(items)
     } else {
         serde_json::Value::String(value.trim().to_string())
-    };
-    out.insert(key.to_string(), value);
-    Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -35,7 +35,12 @@ pub mod trigger;
 pub use trigger::DaemonWorkflowRuntime;
 
 pub mod author;
-pub use author::{author_tools, WorkflowValidateTool, WorkflowWriteTool};
+pub use author::{
+    author_tools, WorkflowValidateTool, WorkflowWriteStructuredTool, WorkflowWriteTool,
+};
+
+pub mod author_schema;
+pub use author_schema::workflow_json_schema;
 
 pub mod installer;
 pub use installer::HttpCorpusInstaller;
