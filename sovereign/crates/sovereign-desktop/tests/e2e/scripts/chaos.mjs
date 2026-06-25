@@ -91,6 +91,12 @@ const SPAWN = argv.includes("--spawn");
 // own hermetic child: attach implies no supervisor.
 const ATTACH = argv.includes("--attach");
 const SUPERVISOR = !argv.includes("--no-supervisor") && !ATTACH;
+// CASE-1-vs-CASE-2 diagnostic (env SOVEREIGN_CHAOS_CASE_DIAG=1): for grounded
+// answers the quote-first verifier did NOT ground (no "Grounded in the source"),
+// ask a fast-model judge whether the question's answer is actually PRESENT in the
+// retrieved chunks. Cross-tab against broke: present+broke = CASE-1-missed (the
+// value was retrievable; firing-rate gap), absent+broke = CASE-2 (retrieval gap).
+const DIAG_CASE = !!process.env.SOVEREIGN_CHAOS_CASE_DIAG;
 
 // Seedless on purpose — every wander is different. (Plain Math.random:
 // this is a node script, not a workflow sandbox.)
@@ -259,7 +265,11 @@ async function judgeAsUser(question, answer) {
       },
       {
         role: "user",
-        content: `My question:\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(answer).slice(0, 2000)}\n\nJudge it.`,
+        // The answer window must be large enough to show the judge the WHOLE
+        // answer — a 2000-char slice made it flag every long synthesis as "cut
+        // off mid-sentence" because IT saw a truncation, not the app. 12k covers
+        // the synthesis ceiling; genuinely-longer answers still truncate (rare).
+        content: `My question:\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(answer).slice(0, 12000)}\n\nJudge it.`,
       },
     ],
     { temperature: 0.2, maxTokens: 120 },
@@ -271,6 +281,48 @@ async function judgeAsUser(question, answer) {
     score: Math.max(0, Math.min(10, j.score)),
     why: String(j.why ?? "").slice(0, 140),
   };
+}
+
+// Direct call to a SPECIFIC daemon model (not the discovered 35B brain) — the
+// CASE diagnostic runs its presence judge on the FAST slot, cheaply.
+async function daemonChat(model, messages, { temperature = 0.0, maxTokens = 6 } = {}) {
+  try {
+    const res = await fetch(`${DAEMON}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    return (await res.json())?.choices?.[0]?.message?.content ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// CASE diagnostic: is the question's answer actually PRESENT in the retrieved
+// chunks? A fast-model YES/NO presence judge — distinct from assess_asserted_value
+// (which checks the model's ASSERTED value); this asks whether the corpus COULD
+// have answered, regardless of what the model said. null on judge failure.
+async function answerInEvidence(question, chunkTexts) {
+  if (!chunkTexts || !chunkTexts.length) return null;
+  const passages = chunkTexts
+    .map((c, i) => `[${i + 1}] ${String(c).slice(0, 1200)}`)
+    .join("\n\n")
+    .slice(0, 9000);
+  const txt = await daemonChat("fast", [
+    {
+      role: "system",
+      content:
+        "You judge whether a question can be answered from given passages. " +
+        "Reply with EXACTLY one word: YES or NO.",
+    },
+    {
+      role: "user",
+      content: `QUESTION:\n${String(question).slice(0, 600)}\n\nPASSAGES:\n${passages}\n\nDo these passages directly contain the specific fact the question asks for? Answer YES only if the answer is present in the passages. Reply YES or NO.`,
+    },
+  ]);
+  if (txt == null) return null;
+  return /\byes\b/i.test(txt);
 }
 
 // ── bench-aligned grounding oracle (the primary answer judge) ──────
@@ -458,6 +510,11 @@ async function attachQuestion() {
   if (state.lastQuestion && chance(0.2)) return `Wait — also: ${state.lastQuestion}`;
   const corpus = pick(state.corpora);
   if (!corpus) return nextUserMessage();
+  // Record the scoped corpus so the CASE diagnostic can re-search it with
+  // lc_search when the gated retrieval returns 0 — a SPECIFIC question is
+  // answerable from this corpus by construction, so raw hits there prove the
+  // gated path dropped an answerable chunk (recall bug) vs genuinely off-domain.
+  state.scopedCorpus = corpus;
   // Scope the chat to the SOURCE corpus so the question is actually answerable
   // (focused retrieval, no cross-corpus dilution among 30+ corpora). This is
   // the complement to the unscoped finding (the app declines answerable Qs when
@@ -964,6 +1021,22 @@ async function chaosStep(memorySummary) {
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
       userJudge = await judgeAsUser(question, answer);
       if (aligned?.verdict) verdicts[aligned.verdict] = (verdicts[aligned.verdict] ?? 0) + 1;
+      // CASE-1-vs-CASE-2 split: only for grounded answers quote-first did NOT
+      // ground (no citation marker) — that legacy-path residual is what we're
+      // splitting into "answer was retrievable" vs "retrieval gap".
+      if (DIAG_CASE && got.chunks.length > 0 && !/Grounded in the source/.test(answer)) {
+        evidence.answerInChunks = await answerInEvidence(question, chunkTexts);
+      } else if (DIAG_CASE && got.chunks.length === 0 && state.scopedCorpus) {
+        // CASE-2 confirm: the gated KQ path returned 0 — does a RAW lc_search on
+        // the scoped corpus find chunks it dropped? Hits => recall bug (the answer
+        // was retrievable, the gate filtered it). 0 hits => genuinely off-domain.
+        const hits = await invoke(
+          "lc_search",
+          { corpusId: state.scopedCorpus, query: question },
+          15_000,
+        ).catch(() => []);
+        evidence.lcHits = Array.isArray(hits) ? hits.length : null;
+      }
     }
   }
 
