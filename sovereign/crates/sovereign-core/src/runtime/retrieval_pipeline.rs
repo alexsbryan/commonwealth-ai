@@ -540,6 +540,87 @@ fn step_governance_active_set<'a, 'ctx>(
     })
 }
 
+/// Dim-mismatch glassbox (2026-06-25): when retrieval comes up EMPTY, a SCOPED
+/// corpus may have been silently SKIPPED because its index was built with a
+/// different embedding model — the index dims can't compare to the loaded model,
+/// so it's excluded from `eligible` and `corpora_searched=0`. Without this the
+/// model fabricates over a corpus it never searched (KnowledgeQuery) or goes
+/// agentic and leaks `<tool_code>` (DeepQuery). Inject a synthetic disclosure
+/// chunk so EVERY synthesis path sharing this core relays the actionable cause —
+/// and the now-non-empty result also stops the deep path from going agentic. The
+/// user learns their corpus is stale instead of getting a confident wrong answer.
+/// Reuses `installed_indexes` (the same per-corpus dims the desktop startup guard
+/// probes); inert whenever retrieval found anything.
+fn step_dim_mismatch_disclosure<'a, 'ctx>(
+    rt: &'a Runtime,
+    st: &'a mut PipelineState<'ctx>,
+) -> StepFuture<'a> {
+    Box::pin(async move {
+        if !st.chunks.is_empty() {
+            return StepOutcome::default();
+        }
+        let loaded_dims = st.embedding.len();
+        if loaded_dims == 0 {
+            return StepOutcome::default(); // embed unavailable — nothing to compare
+        }
+        let engine = match rt.corpus_engine.as_ref() {
+            Some(e) => e,
+            None => return StepOutcome::default(),
+        };
+        let scoped = st.enabled_corpora;
+        let mismatch = engine.installed_indexes().await.ok().and_then(|idx| {
+            idx.into_iter()
+                .find(|info| {
+                    // Only disclose the corpus the user actually SCOPED to — an
+                    // unscoped (search-everything) empty result shouldn't single
+                    // out one stale corpus the question may have nothing to do
+                    // with. Verified scoped case (`Some([corpus])`) is unchanged.
+                    let in_scope =
+                        scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id));
+                    in_scope
+                        && info.embedding_dimensions != 0
+                        && info.embedding_dimensions != loaded_dims
+                })
+                .map(|info| (info.corpus_id, info.embedding_dimensions))
+        });
+        let (corpus, built) = match mismatch {
+            Some(m) => m,
+            None => return StepOutcome::default(),
+        };
+        tracing::info!(
+            target: "retrieval.pipeline",
+            corpus = %corpus,
+            built_dims = built,
+            loaded_dims,
+            "{}: dim-mismatch glassbox — scoped corpus skipped; injecting rebuild disclosure",
+            st.label
+        );
+        let content = format!(
+            "SYSTEM NOTE (corpus unavailable): The \"{corpus}\" material the user is \
+             asking about could NOT be searched — its index was built with a \
+             different embedding model ({built}-dimensional vs the current \
+             {loaded_dims}-dimensional), so it was skipped entirely. Tell the user \
+             this plainly and ask them to rebuild it in Settings → Knowledge → \
+             Rebuild. Do NOT answer the question from general knowledge and do NOT \
+             invent an answer."
+        );
+        st.chunks.push(corpus_engine::ScoredChunk {
+            content,
+            title: Some(format!("{corpus} (needs rebuild)")),
+            url: None,
+            corpus_id: corpus,
+            score: 1.0,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        });
+        StepOutcome {
+            note: Some("injected dim-mismatch rebuild disclosure".to_string()),
+        }
+    })
+}
+
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
         step("entity_boost", None, step_entity_boost),
@@ -558,6 +639,11 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         // FR-9: drop dead-law chunks for governance corpora; inert
         // elsewhere. After the cap, before truncate (see fn doc).
         step("governance_active_set", None, step_governance_active_set),
+        // Last core step: sees the FINAL post-retrieval state, so an EMPTY
+        // result here means a scoped corpus may have been skipped for an
+        // embed-model/dims mismatch — inject a rebuild disclosure. Shared by
+        // KnowledgeQuery + DeepQuery + ComparisonQuery (all run this core).
+        step("dim_mismatch_disclosure", None, step_dim_mismatch_disclosure),
     ]
 }
 
@@ -1498,7 +1584,7 @@ mod tests {
     /// The step order is bench-tuned DATA — a change to either golden
     /// list is a behavior change and needs a bench A/B, not a drive-by
     /// edit. These lists pin the POST-Phase-2 sequences (2026-06-09):
-    /// the shared 13-step core (incl. the FR-9 governance active-set
+    /// the shared 14-step core (incl. the FR-9 governance active-set
     /// filter), deep grounding at the KQ (post-floor) position, and
     /// dedupe on both paths.
     #[test]
@@ -1523,6 +1609,7 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
+                "dim_mismatch_disclosure",
                 "truncate_merged",
             ]
         );
@@ -1550,6 +1637,7 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
+                "dim_mismatch_disclosure",
                 "truncate_merged",
                 "top_sources_expand",
             ]

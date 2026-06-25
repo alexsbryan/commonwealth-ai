@@ -87,27 +87,72 @@ pub const PRESENTER_MAX_TOKENS_CAP: u32 = 1024;
 /// into `s` directly (no `to_lowercase()` remap, which could shift byte
 /// offsets on non-ASCII text) and all other text is left intact.
 fn strip_tool_code_blocks(s: &str) -> String {
-    const OPEN: &str = "<tool_code";
-    const CLOSE: &str = "</tool_code>";
-    let mut out = String::with_capacity(s.len());
-    let mut cursor = 0usize;
-    while let Some(rel) = s[cursor..].find(OPEN) {
-        let open_at = cursor + rel;
-        out.push_str(&s[cursor..open_at]);
-        // Find the end of the closing tag after the open tag.
-        match s[open_at..].find(CLOSE) {
-            Some(rel_close) => {
-                cursor = open_at + rel_close + CLOSE.len();
-            }
-            None => {
-                // Unterminated — drop the rest.
-                cursor = s.len();
-                break;
+    // BOTH envelope tags the distilled models reflex when no tool is wired:
+    // `<tool_code>…</tool_code>` and `<tool_call>…</tool_call>` (closed, or
+    // unterminated → drop from the open tag to end). A real tool call travels
+    // as structured `tool_choice`/`tools`, never as prose — presentation-only.
+    fn pass(s: &str, open: &str, close: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut cursor = 0usize;
+        while let Some(rel) = s[cursor..].find(open) {
+            let open_at = cursor + rel;
+            out.push_str(&s[cursor..open_at]);
+            match s[open_at..].find(close) {
+                Some(rel_close) => {
+                    cursor = open_at + rel_close + close.len();
+                }
+                None => {
+                    cursor = s.len();
+                    break;
+                }
             }
         }
+        out.push_str(&s[cursor..]);
+        out
     }
-    out.push_str(&s[cursor..]);
-    out
+    let s = pass(s, "<tool_code", "</tool_code>");
+    pass(&s, "<tool_call", "</tool_call>")
+}
+
+/// True when `text` is essentially a phantom tool call the chat CANNOT run — a
+/// bare colon-call (`:code_search("X")`, `:document_operation(...)` — the format
+/// Qwen3.6 reflexes for code/lookup questions even though chat wires no tools),
+/// or a leftover envelope tag, with little real prose around it. The caller
+/// replaces such an answer with an honest fallback rather than leak the raw call
+/// to the user. Length-guarded so a genuine answer that merely MENTIONS a tool
+/// name isn't caught. (The structured-tools path — Recipe Author — is unaffected:
+/// real calls travel as `tool_choice`, never as this colon/tag prose.)
+pub fn looks_like_phantom_tool_call(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return true;
+    }
+    const MARKERS: &[&str] = &[
+        ":code_search(",
+        ":document_operation(",
+        ":symbols(",
+        ":callers(",
+        ":callees(",
+        ":blast(",
+        ":recent_changes(",
+        "<tool_call",
+        "<tool_code",
+    ];
+    t.len() < 400 && MARKERS.iter().any(|m| t.contains(m))
+}
+
+/// Present a model answer for the user: strip phantom tool-call envelopes the
+/// chat reflexes (no executable tool is wired in chat), and if the WHOLE answer
+/// was such a call, return an honest fallback rather than leak the raw call.
+/// Shared by the desktop stream-complete and the runtime gate output so every
+/// surface presents identically.
+pub fn present_answer(raw: &str) -> String {
+    let presented = strip_presenter_artifacts(raw);
+    if looks_like_phantom_tool_call(&presented) {
+        "I couldn't find that in the indexed material here.".to_string()
+    } else {
+        presented
+    }
 }
 
 /// Idempotent: running over already-clean text returns the same
@@ -627,6 +672,43 @@ mod tests {
         // survive (e.g. citations, em dashes). Conservative test.
         let raw = "You said — once — that Jordan called.";
         assert_eq!(strip_presenter_artifacts(raw), raw);
+    }
+
+    const TOOL_FALLBACK: &str = "I couldn't find that in the indexed material here.";
+
+    #[test]
+    fn present_answer_falls_back_on_bare_colon_tool_call() {
+        // Qwen reflexes a bare `:code_search(...)` for code questions even
+        // though chat wires no executable tool — show an honest fallback, not
+        // the raw call.
+        assert_eq!(
+            present_answer("```\n:code_search(\"OICP_VERSION\")\n```"),
+            TOOL_FALLBACK
+        );
+        assert_eq!(
+            present_answer(":document_operation(document_id=\"x\")"),
+            TOOL_FALLBACK
+        );
+    }
+
+    #[test]
+    fn present_answer_falls_back_when_tool_envelope_strips_to_empty() {
+        // Both envelope tags strip to empty → fallback (not a blank message).
+        assert_eq!(present_answer("<tool_code></tool_code>"), TOOL_FALLBACK);
+        assert_eq!(
+            present_answer("<tool_call>\n  symbols(\"X\")\n</tool_call>"),
+            TOOL_FALLBACK
+        );
+    }
+
+    #[test]
+    fn present_answer_keeps_a_real_grounded_answer() {
+        // A genuine answer that NAMES a symbol survives untouched — the trigger
+        // is the colon-CALL form `:code_search(`, never a prose mention.
+        let real = "The score field is `f32` [Source: \"pub score: f32,\"].";
+        assert_eq!(present_answer(real), real);
+        let mentions = "Use the code_search tool in the CLI to find it.";
+        assert_eq!(present_answer(mentions), mentions);
     }
 
     #[test]

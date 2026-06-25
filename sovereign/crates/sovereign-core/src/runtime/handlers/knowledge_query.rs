@@ -375,7 +375,7 @@ impl Runtime {
         if chunks.is_empty() {
             tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();
-            let mut prompt = format!(
+            let prompt = format!(
                 "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
                  relevant, so you have no evidence from the user's own material. \
@@ -398,59 +398,6 @@ impl Runtime {
                  codebase\" or \"look it up\" — you cannot. Answer directly or say \
                  plainly you don't have it."
             );
-            // Dim-mismatch glassbox (2026-06-25): a scoped corpus built with a
-            // DIFFERENT embed model is silently SKIPPED by retrieval (its index
-            // dims can't compare to the loaded model) → corpora_searched=0 → empty
-            // → the model would fabricate from general knowledge over a corpus it
-            // never actually searched, and the user never learns their corpus is
-            // stale. Detect it here (the query embedding's dim vs each SCOPED
-            // corpus's built dim — reusing `installed_indexes`, the same data the
-            // desktop startup guard probes) and OVERRIDE the reply to disclose the
-            // actionable cause. The prefix is deterministic, so we never fabricate.
-            let mut empty_prefix = crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string();
-            let loaded_dims = embedding.len();
-            let scoped_mismatch: Option<(String, usize)> = if loaded_dims == 0 {
-                None // embed unavailable — can't compare; fall through to GK
-            } else if let Some(engine) = self.corpus_engine.as_ref() {
-                let scoped = context.conversation.enabled_corpora.as_deref();
-                engine.installed_indexes().await.ok().and_then(|idx| {
-                    idx.into_iter()
-                        .find(|info| {
-                            let in_scope = scoped
-                                .map_or(true, |s| s.iter().any(|c| c == &info.corpus_id));
-                            in_scope
-                                && info.embedding_dimensions != 0
-                                && info.embedding_dimensions != loaded_dims
-                        })
-                        .map(|info| (info.corpus_id, info.embedding_dimensions))
-                })
-            } else {
-                None
-            };
-            if let Some((corpus, built)) = scoped_mismatch {
-                tracing::info!(
-                    target: "retrieval.pipeline",
-                    corpus = %corpus,
-                    built_dims = built,
-                    loaded_dims,
-                    "dim-mismatch glassbox: scoped corpus skipped — disclosing rebuild, not GK"
-                );
-                prompt = format!(
-                    "The \"{corpus}\" material the user asked about could NOT be \
-                     searched — its index was built with a different embedding \
-                     model, so it was skipped. You have ALREADY told them this (the \
-                     note appears as the start of your reply). Do NOT answer the \
-                     question from general knowledge and do NOT invent anything. Add \
-                     at most one short, warm sentence offering to help once it's \
-                     rebuilt, or simply stop."
-                );
-                empty_prefix = format!(
-                    "I couldn't search your \"{corpus}\" material — its index was \
-                     built with a different embedding model ({built}-dim vs the \
-                     current {loaded_dims}-dim), so it was skipped. Rebuild it in \
-                     Settings → Knowledge → Rebuild and I'll answer from it. "
-                );
-            }
             let request = CompletionRequest {
                 prompt,
                 system_message: None,
@@ -478,7 +425,9 @@ impl Runtime {
                 // slot; this was the holdout bank's whole honesty gap,
                 // 0.64 vs a 0.91 counterfactual). The KQ stream spawn
                 // emits the prefix as visible text.
-                assistant_prefix: Some(empty_prefix),
+                assistant_prefix: Some(
+                    crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string(),
+                ),
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
