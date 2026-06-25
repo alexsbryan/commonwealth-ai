@@ -286,7 +286,10 @@ async fn gate_held_answer(
             profile,
         )
         .await;
-        *full_text = outcome.text;
+        // Present the gated answer: strip phantom tool-call envelopes the model
+        // reflexes (chat wires no tools) so the persisted record + non-desktop
+        // surfaces don't carry a raw `<tool_call>` / `:code_search(...)` leak.
+        *full_text = crate::pipeline::presenter::present_answer(&outcome.text);
         Some(outcome.meta)
     } else {
         None

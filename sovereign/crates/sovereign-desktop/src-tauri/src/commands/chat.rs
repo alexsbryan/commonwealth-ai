@@ -182,6 +182,28 @@ pub async fn send_message_stream(
                     None
                 };
 
+                // Strip phantom tool-call envelopes the chat model reflexes
+                // (`<tool_call>`/`<tool_code>`/`:code_search(...)`) for code/lookup
+                // questions — chat wires no executable tools, so the raw call must
+                // not leak; if that WAS the whole answer, an honest fallback shows.
+                //
+                // EXEMPT the recipe-author workspace (intent=RecipeAuthor): that
+                // path passes REAL tools and parses + EXECUTES tool calls from the
+                // assistant's prose server-side (handlers/recipe_author.rs) BEFORE
+                // this point, so present_answer must not touch its display — doing
+                // so could strip a legitimate tool envelope or mis-fire the
+                // fallback. (The runtime gate-output strip is already exempt — that
+                // path uses inference.complete, never the gated stream.)
+                let is_recipe_author = metadata
+                    .as_ref()
+                    .and_then(|m| m.get("intent"))
+                    .and_then(|v| v.as_str())
+                    == Some("RecipeAuthor");
+                let full_text = if is_recipe_author {
+                    full_text
+                } else {
+                    sovereign_core::pipeline::presenter::present_answer(&full_text)
+                };
                 let _ = app.emit(
                     "message-complete",
                     MessageCompletePayload {
