@@ -244,6 +244,39 @@ impl RemoteApiProvider {
             body["lark_grammar"] = serde_json::json!(grammar);
         }
 
+        // Forward the tool catalog + `tool_choice` so the daemon presents the
+        // tools to the model in its chat template. Without this, a daemon-routed
+        // agent/authoring loop sends `lark_grammar` (the call SHAPE) but the model
+        // never sees the tools it's meant to call — so it emits a prose/markdown
+        // description instead, the grammar's permitted plain-text branch lets it,
+        // and the loop captures zero tool calls. (Proven 2026-06-24: workflow
+        // authoring worked embedded but not attach-routed for exactly this reason.)
+        // The embedded path receives `tools`/`tool_choice` directly; mirror that on
+        // the wire. The daemon's inference_adapter rebuilds the tool-envelope grammar
+        // from these, equivalent to the forwarded `lark_grammar`.
+        if let Some(tools) = &request.tools {
+            if !tools.is_empty() {
+                body["tools"] = serde_json::Value::Array(
+                    tools
+                        .iter()
+                        .map(|t| {
+                            serde_json::json!({
+                                "type": "function",
+                                "function": {
+                                    "name": t.name,
+                                    "description": t.description,
+                                    "parameters": t.parameters,
+                                }
+                            })
+                        })
+                        .collect(),
+                );
+            }
+        }
+        if let Some(tc) = &request.tool_choice {
+            body["tool_choice"] = tc.clone();
+        }
+
         body
     }
 

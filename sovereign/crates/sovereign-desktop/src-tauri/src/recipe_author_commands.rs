@@ -559,6 +559,108 @@ pub async fn recipe_author_save_edited_toml(
     Ok(report)
 }
 
+// ─── Link a freshly-authored artifact to the project ─────────
+
+/// The id of the newest artifact under `dir` whose TOML was (re)written at/after
+/// `since_unix` — i.e. the one the agent just wrote this turn. `None` when nothing
+/// was written in the window (so a turn with no draft never mislinks). A recipe
+/// lives at `<dir>/<id>/recipe.toml`, a workflow at `<dir>/<id>.toml`.
+fn find_recent_artifact(
+    kind: ArtifactKind,
+    dir: &std::path::Path,
+    since_unix: i64,
+) -> Option<String> {
+    let rd = std::fs::read_dir(dir).ok()?;
+    let mut best: Option<(String, i64)> = None;
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let (id, toml_path) = match kind {
+            ArtifactKind::Recipe => {
+                if !path.is_dir() {
+                    continue;
+                }
+                let Some(id) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                (id.to_string(), path.join("recipe.toml"))
+            }
+            ArtifactKind::Workflow => {
+                if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                    continue;
+                }
+                let Some(id) = path.file_stem().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                (id.to_string(), path.clone())
+            }
+        };
+        let Some(mt) = std::fs::metadata(&toml_path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+        else {
+            continue;
+        };
+        if mt >= since_unix && best.as_ref().map(|(_, b)| mt > *b).unwrap_or(true) {
+            best = Some((id, mt));
+        }
+    }
+    best.map(|(id, _)| id)
+}
+
+/// After an authoring turn, register the artifact the agent just wrote onto the
+/// project's summary (`recipe_id`), so the dashboard surfaces it. The shared agent
+/// loop writes the TOML but can't touch the project model (`RecipeProject` is a
+/// downstream crate), and the CLI live-trial's "writing the TOML IS the
+/// registration" linkage never reached the desktop — this closes that gap on the
+/// desktop side. `since_unix` is the turn's start time, so only an artifact written
+/// THIS turn is linked (a chat-only turn links nothing). Returns the linked id, or
+/// `None` when the turn wrote no artifact. Idempotent + cheap; the chat surface
+/// calls it on every turn-complete.
+#[tauri::command]
+pub async fn recipe_author_link_recent_artifact(
+    state: State<'_, Arc<AppState>>,
+    feature_id: String,
+    since_unix: i64,
+) -> Result<Option<String>, String> {
+    let (notes, features) = handles(&state).await?;
+    let project = RecipeProject::load(&feature_id, Arc::clone(&notes), Arc::clone(&features))
+        .await
+        .map_err(|e| format!("recipe_author_link_recent_artifact: {e}"))?;
+    let mut summary = project
+        .read_summary()
+        .map_err(|e| format!("recipe_author_link_recent_artifact: read summary: {e}"))?;
+
+    let dir = match summary.artifact_kind {
+        ArtifactKind::Recipe => recipe_author::local_recipes_dir(),
+        ArtifactKind::Workflow => recipe_author::local_workflows_dir(),
+    }
+    .map_err(|e| format!("recipe_author_link_recent_artifact: locate dir: {e}"))?;
+
+    let Some(id) = find_recent_artifact(summary.artifact_kind, &dir, since_unix) else {
+        return Ok(None);
+    };
+
+    if summary.recipe_id.as_deref() != Some(id.as_str()) {
+        summary.recipe_id = Some(id.clone());
+        summary.updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        project
+            .write_summary(&summary)
+            .map_err(|e| format!("recipe_author_link_recent_artifact: write summary: {e}"))?;
+        tracing::info!(
+            feature_id = %feature_id,
+            artifact_id = %id,
+            kind = summary.artifact_kind.label(),
+            "linked freshly-authored artifact to project"
+        );
+    }
+    Ok(Some(id))
+}
+
 // ─── Restore checkpoint ──────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]

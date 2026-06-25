@@ -1844,11 +1844,29 @@ export interface PhaseFailure {
 // ─── Recipe Author Workspace (M2) ────────────────────────────
 
 /** Sidebar entry for one recipe-author project. */
+/** What an authoring project builds. The recipe-author workspace hosts both —
+ *  a recipe (corpus ingest) or a workflow (a step pipeline). Mirrors the Rust
+ *  `ArtifactKind` (serde `snake_case`). */
+export type ArtifactKind = "recipe" | "workflow";
+
+/** Lowercase noun for prose ("recipe" | "workflow"). Tolerates the field being
+ *  absent (older seeded payloads) → "recipe". */
+export function artifactNoun(kind: ArtifactKind | null | undefined): string {
+  return kind === "workflow" ? "workflow" : "recipe";
+}
+
+/** Capitalized label for headings ("Recipe" | "Workflow"). */
+export function artifactTitle(kind: ArtifactKind | null | undefined): string {
+  return kind === "workflow" ? "Workflow" : "Recipe";
+}
+
 export interface RecipeProjectListEntry {
   feature_id: string;
   title: string;
   /** First ~200 chars of the charter — sidebar tooltip. */
   charter_excerpt: string;
+  /** recipe | workflow. Optional for back-compat with pre-tag payloads (→ recipe). */
+  artifact_kind?: ArtifactKind;
   recipe_id?: string | null;
   current_sample_size?: number | null;
   last_test_status?: string | null;
@@ -1906,6 +1924,9 @@ export interface RecipeAuthorDashboardState {
   feature_id: string;
   title: string;
   charter_md: string;
+  /** recipe | workflow — drives the dashboard's labels + the chat surface's
+   *  skill tag. Optional for back-compat with pre-tag payloads (→ recipe). */
+  artifact_kind?: ArtifactKind;
   recipe_id?: string | null;
   recipe_path?: string | null;
   recipe_toml?: string | null;

@@ -28,6 +28,7 @@ import {
   recipeAuthorRestoreCheckpoint,
 } from "../api";
 import type {
+  ArtifactKind,
   RecipeAuthorDashboardState,
   RecipeProjectListEntry,
   RestoreCheckpointOutcome,
@@ -171,10 +172,11 @@ export const recipeProjectStore = {
   async createProject(
     title: string,
     charterMd: string,
+    artifactKind: ArtifactKind = "recipe",
   ): Promise<RecipeProjectListEntry> {
     _loading = true;
     try {
-      const entry = await recipeAuthorNewProject(title, charterMd);
+      const entry = await recipeAuthorNewProject(title, charterMd, artifactKind);
       await refreshProjects();
       await this.select(entry.feature_id);
       return entry;

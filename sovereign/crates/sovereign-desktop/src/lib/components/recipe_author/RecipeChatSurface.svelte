@@ -19,11 +19,34 @@
     createConversation,
     sendMessageStream,
     recipeAuthorBuildPrelude,
+    recipeAuthorLinkRecentArtifact,
   } from "../../api";
   import { recipeAuthorChat } from "../../stores/recipeAuthorChat";
+  import { recipeProjectStore } from "../../stores/recipeProject.svelte";
+  import { artifactNoun, type ArtifactKind } from "../../types";
 
-  let { featureId, projectTitle }: { featureId: string; projectTitle: string } =
-    $props();
+  // Unix-seconds start of the in-flight turn. After the turn completes we ask the
+  // backend to link any artifact written at/after this time onto the project, so a
+  // freshly-authored recipe/workflow surfaces on the dashboard. 0 = no turn yet.
+  let lastTurnStartUnix = 0;
+
+  let {
+    featureId,
+    projectTitle,
+    artifactKind = "recipe",
+  }: {
+    featureId: string;
+    projectTitle: string;
+    artifactKind?: ArtifactKind;
+  } = $props();
+
+  // Tags every conversation this surface creates so routing applies the right
+  // authoring intent_policy: `workflow-author` for a workflow project,
+  // `recipe-author` otherwise. Co-located with the surface that owns it.
+  const surfaceSkillId = $derived(
+    artifactKind === "workflow" ? "workflow-author" : "recipe-author",
+  );
+  const noun = $derived(artifactNoun(artifactKind));
 
   type ErrorKind =
     | "context_overflow"   // prompt + history > n_ctx, recoverable by reset
@@ -82,17 +105,12 @@
     void resetForProject(featureId);
   });
 
-  // Surface skill id — tags every conversation this surface creates
-  // so routing applies the recipe-author intent_policy. Co-located
-  // with the surface that owns it (2026-05-24 architecture redesign).
-  const SURFACE_SKILL_ID = "recipe-author";
-
   async function resetForProject(_id: string): Promise<void> {
     messages = [];
     composerValue = "";
     sending = false;
     try {
-      const resp = await createConversation(SURFACE_SKILL_ID);
+      const resp = await createConversation(surfaceSkillId);
       conversationId = resp.id;
     } catch (e) {
       console.warn("recipe-author chat: createConversation failed:", e);
@@ -150,6 +168,16 @@
         streaming: false,
       });
       sending = false;
+      // If the agent wrote an artifact this turn, link it onto the project so the
+      // dashboard shows it (the shared loop writes the TOML but can't update the
+      // project model). Best-effort; refresh the dashboard immediately on a hit.
+      void recipeAuthorLinkRecentArtifact(featureId, lastTurnStartUnix)
+        .then((id) => {
+          if (id) void recipeProjectStore.refreshDashboard();
+        })
+        .catch((e) =>
+          console.warn("recipe-author chat: link artifact failed:", e),
+        );
     });
     unlistenError = await listen<{ message: string }>(
       "message-error",
@@ -204,6 +232,9 @@
   async function dispatchTurn(text: string): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
+    // Mark the turn's start so we only link an artifact the agent writes DURING
+    // this turn (a chat-only turn writes none).
+    lastTurnStartUnix = Math.floor(Date.now() / 1000);
     if (!conversationId) {
       const resp = await createConversation();
       conversationId = resp.id;
@@ -283,8 +314,13 @@
   <div class="transcript" bind:this={transcriptRef}>
     {#if messages.length === 0}
       <p class="placeholder">
-        Describe the corpus you want to build. The agent will probe
-        URLs, draft TOML, and surface decisions on the right.
+        {#if artifactKind === "workflow"}
+          Describe the workflow you want to build. The agent will draft the
+          step pipeline, validate it, and surface decisions on the right.
+        {:else}
+          Describe the corpus you want to build. The agent will probe
+          URLs, draft TOML, and surface decisions on the right.
+        {/if}
       </p>
     {:else}
       {#each messages as m (m.id)}
@@ -345,7 +381,7 @@
     <textarea
       bind:value={composerValue}
       onkeydown={handleKeydown}
-      placeholder="Talk to the recipe agent. Press Enter to send."
+      placeholder="Talk to the {noun} agent. Press Enter to send."
       rows="3"
       disabled={sending}
       data-testid="recipe-author-composer"

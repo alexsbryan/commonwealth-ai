@@ -584,7 +584,22 @@ fn parse_assistant_text(text: &str) -> (String, Vec<ParsedToolCall>) {
                 }
                 cursor = inner_start + end_rel + "</tool_call>".len();
             }
-            None => break,
+            // No closing tag. A grammar that satisfies on the tool envelope's
+            // final `}` lets the model stop before emitting `</tool_call>` — seen
+            // on daemon-routed authoring turns, where the envelope JSON is complete
+            // but the wrapper isn't. Recover by extracting the balanced JSON object
+            // right after the opener rather than discarding a valid tool call.
+            None => {
+                let rest = &stripped[inner_start..];
+                if let Some(obj_len) = balanced_json_len(rest) {
+                    if let Some(parsed) = parse_tool_call_body(&rest[..obj_len]) {
+                        calls.push(parsed);
+                    }
+                    cursor = inner_start + obj_len;
+                } else {
+                    break;
+                }
+            }
         }
     }
     clean.push_str(&stripped[cursor..]);
@@ -608,6 +623,52 @@ fn parse_tool_call_body(body: &str) -> Option<ParsedToolCall> {
         raw_args
     };
     Some(ParsedToolCall { name, arguments })
+}
+
+/// Byte length of the leading balanced JSON object in `s` — from the first `{`
+/// (after optional whitespace) through its matching `}`, honouring string literals
+/// and escapes so braces inside string values don't miscount. `None` when `s`
+/// doesn't start with an object or it never closes. ASCII-only scan: UTF-8
+/// continuation bytes (≥0x80) never collide with the `{ } " \` it watches for, so a
+/// byte index is a safe char boundary (it always lands right after an ASCII `}`).
+fn balanced_json_len(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'{' {
+        return None;
+    }
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == b'\\' {
+                escaped = true;
+            } else if c == b'"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                b'"' => in_string = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
 }
 
 fn strip_think_block(content: &str) -> String {
@@ -756,6 +817,38 @@ mod tests {
         assert_eq!(calls[0].name, "recipe_validate");
         assert_eq!(calls[0].arguments, serde_json::json!({"path": "foo"}));
         assert_eq!(visible, "Let me check the recipe.");
+    }
+
+    #[test]
+    fn parses_tool_call_missing_closing_tag() {
+        // Daemon-routed authoring turns: the grammar satisfies on the envelope's
+        // final `}` and the model stops before `</tool_call>`. The envelope JSON is
+        // complete and valid — recover it instead of dropping a real tool call.
+        // (A nested object + a brace inside a string value exercise brace-matching.)
+        let text = r#"<tool_call>{"name":"workflow_write_structured","arguments":{"path":"folder-summaries","workflow":{"step":[{"id":"s","prompt":"use { braces } in text"}]}}}"#;
+        let (visible, calls) = parse_assistant_text(text);
+        assert_eq!(calls.len(), 1, "missing-closing-tag call must still parse");
+        assert_eq!(calls[0].name, "workflow_write_structured");
+        assert_eq!(
+            calls[0].arguments["path"],
+            serde_json::json!("folder-summaries")
+        );
+        // The envelope is stripped from the visible text just like the tagged case.
+        assert_eq!(visible, "");
+    }
+
+    #[test]
+    fn balanced_json_len_handles_nesting_and_strings() {
+        assert_eq!(balanced_json_len("{}"), Some(2));
+        assert_eq!(balanced_json_len(r#"{"a":{"b":1}}rest"#), Some(13));
+        // Braces inside a string value must not miscount the close.
+        assert_eq!(balanced_json_len(r#"{"k":"a{b}c"}"#), Some(13));
+        // An escaped quote inside a string doesn't end the string early.
+        assert_eq!(balanced_json_len(r#"{"k":"a\"}"}xx"#), Some(12));
+        // Leading whitespace is counted in the returned length (offset from start).
+        assert_eq!(balanced_json_len("  {\"x\":1} "), Some(9));
+        assert_eq!(balanced_json_len("not json"), None);
+        assert_eq!(balanced_json_len("{unclosed"), None);
     }
 
     #[test]

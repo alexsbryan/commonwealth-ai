@@ -10,11 +10,20 @@
   // the agent picks the edit up next turn via its disk re-read (no round-trip).
   import Card from "./Card.svelte";
   import { recipeAuthorSaveEditedToml } from "../../api";
+  import { artifactNoun, artifactTitle, type ArtifactKind } from "../../types";
 
   let {
     recipeToml,
     featureId,
-  }: { recipeToml: string | null; featureId: string | null } = $props();
+    artifactKind = "recipe",
+  }: {
+    recipeToml: string | null;
+    featureId: string | null;
+    artifactKind?: ArtifactKind;
+  } = $props();
+
+  const noun = $derived(artifactNoun(artifactKind));
+  const Title = $derived(artifactTitle(artifactKind));
 
   let expanded = $state(false);
   let editing = $state(false);
@@ -61,9 +70,9 @@
   }
 </script>
 
-<Card title="Recipe TOML">
+<Card title="{Title} TOML">
   {#if !recipeToml && !editing}
-    <p class="muted">No recipe drafted yet.</p>
+    <p class="muted">No {noun} drafted yet.</p>
   {:else}
     <div class="row">
       <button

@@ -321,4 +321,59 @@ test.describe("recipe author workspace", () => {
     await expect(dashboard).toContainText("Recipe validation");
     await expect(dashboard).toContainText("No recipe drafted yet.");
   });
+
+  test("creates a workflow project — kind-aware dashboard + workflow-author skill tag", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    // The same workspace hosts workflow authoring: the new-project dialog offers
+    // a Recipe/Workflow toggle, the dashboard relabels by kind, and the chat
+    // surface routes turns through the workflow-author skill instead of recipe.
+    await bootToChat(page, chat);
+    await page.getByTestId("nav-recipe-author").click();
+    await expect(page.getByTestId("recipe-author-workspace")).toBeVisible();
+
+    // Open the dialog and switch the kind toggle to Workflow.
+    await page.getByTestId("recipe-author-new-project").click();
+    await page.getByTestId("recipe-author-new-kind-workflow").click();
+    await expect(page.getByText("New workflow project")).toBeVisible();
+
+    await page.getByTestId("recipe-author-new-title").fill("Daily digest");
+    await page
+      .getByTestId("recipe-author-new-charter")
+      .fill("# Charter\n\nSummarize a folder of notes into a daily digest.");
+    await page.getByTestId("recipe-author-new-submit").click();
+
+    // Auto-selected; the dashboard renders with WORKFLOW labels (not recipe).
+    await expect(
+      page.getByTestId("recipe-author-project-row").first(),
+    ).toContainText("Daily digest");
+    const dashboard = page.getByTestId("recipe-author-dashboard");
+    await expect(dashboard).toBeVisible();
+    await expect(dashboard).toContainText("Workflow validation");
+    await expect(dashboard).toContainText("No workflow drafted yet.");
+    await expect(dashboard).toContainText("Workflow TOML");
+    // The validation card title is workflow-flavored, and the recipe-only
+    // build cards (Corpus state, etc.) are absent for a workflow project.
+    await expect(dashboard).not.toContainText("Recipe validation");
+    await expect(dashboard).not.toContainText("Corpus state");
+
+    // The slim chat surface uses the workflow placeholder…
+    const chatSurface = page.getByTestId("recipe-author-chat");
+    await expect(chatSurface).toContainText(
+      "Describe the workflow you want to build",
+    );
+
+    // …and tags its conversation with the workflow-author skill so the runtime
+    // routes turns through the workflow authoring loop (not recipe-author).
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __sovereign_test__: { _lastCreateConversation?: { surfaceSkillId?: string } } })
+              .__sovereign_test__._lastCreateConversation?.surfaceSkillId,
+        ),
+      )
+      .toBe("workflow-author");
+  });
 });

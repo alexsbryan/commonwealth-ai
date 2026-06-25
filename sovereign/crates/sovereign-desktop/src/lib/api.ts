@@ -1745,15 +1745,17 @@ export async function recipeAuthorListProjects(): Promise<
   return invoke("recipe_author_list_projects");
 }
 
-/** Create a new recipe-author project. Allocates a v4 UUID
- *  feature_id, lays down the FeatureRow + sidecar dir, returns the
- *  freshly-created list entry. */
+/** Create a new authoring project. Allocates a v4 UUID feature_id, lays down the
+ *  FeatureRow + sidecar dir, returns the freshly-created list entry. `artifactKind`
+ *  picks recipe vs workflow authoring (defaults to recipe; omitted → the backend's
+ *  `#[serde(default)]` also yields recipe). */
 export async function recipeAuthorNewProject(
   title: string,
   charterMd: string,
+  artifactKind: import("./types").ArtifactKind = "recipe",
 ): Promise<RecipeProjectListEntry> {
   return invoke("recipe_author_new_project", {
-    req: { title, charter_md: charterMd },
+    req: { title, charter_md: charterMd, artifact_kind: artifactKind },
   });
 }
 
@@ -1780,6 +1782,16 @@ export async function recipeAuthorSaveEditedToml(
     featureId,
     editedToml,
   });
+}
+
+/** After an authoring turn, link the artifact the agent wrote THIS turn onto the
+ *  project (so the dashboard shows it). `sinceUnix` is the turn's start time, so a
+ *  chat-only turn links nothing. Returns the linked artifact id, or null. */
+export async function recipeAuthorLinkRecentArtifact(
+  featureId: string,
+  sinceUnix: number,
+): Promise<string | null> {
+  return invoke("recipe_author_link_recent_artifact", { featureId, sinceUnix });
 }
 
 /** Restore a project to a prior checkpoint snapshot. Lays down a new

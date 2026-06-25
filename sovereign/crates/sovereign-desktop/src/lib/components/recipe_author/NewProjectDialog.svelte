@@ -4,19 +4,29 @@
   // stored verbatim on the FeatureRow's `charter_md` and rendered
   // back via the `CharterSummary` card.
   import { dialogFocus } from "@sovereign/chat-ui";
+  import { artifactNoun, type ArtifactKind } from "../../types";
 
   let {
     onCancel,
     onCreate,
   }: {
     onCancel: () => void;
-    onCreate: (title: string, charterMd: string) => Promise<void>;
+    onCreate: (
+      title: string,
+      charterMd: string,
+      artifactKind: ArtifactKind,
+    ) => Promise<void>;
   } = $props();
 
   let title = $state("");
   let charter = $state("");
+  // Recipe (a corpus ingest) vs workflow (a step pipeline). The same workspace
+  // hosts both; the agent loop routes by the conversation's surface skill.
+  let artifactKind = $state<ArtifactKind>("recipe");
   let saving = $state(false);
   let error: string | null = $state(null);
+
+  const noun = $derived(artifactNoun(artifactKind));
 
   // Optional one-click starting points so a first-time author doesn't face an
   // empty box. A chip seeds the charter (and the title, if still blank); the
@@ -69,7 +79,7 @@
     saving = true;
     error = null;
     try {
-      await onCreate(title.trim(), charter);
+      await onCreate(title.trim(), charter, artifactKind);
     } catch (e) {
       error = String(e);
     } finally {
@@ -86,21 +96,59 @@
   use:dialogFocus={{ onEscape: onCancel }}
 >
   <form class="dialog" onsubmit={submit}>
-    <h2 id="new-project-heading">New recipe project</h2>
+    <h2 id="new-project-heading">New {noun} project</h2>
+
+    <!-- What this project authors. A recipe ingests + enriches a corpus; a
+         workflow is a step pipeline (model/tool/recipe stages). The agent loop
+         routes to the matching authoring skill by the project's kind. -->
+    <div class="kind" role="radiogroup" aria-label="What to author">
+      <button
+        type="button"
+        class="kind-opt"
+        class:active={artifactKind === "recipe"}
+        role="radio"
+        aria-checked={artifactKind === "recipe"}
+        onclick={() => (artifactKind = "recipe")}
+        data-testid="recipe-author-new-kind-recipe"
+      >
+        <span class="kind-name">Recipe</span>
+        <span class="kind-desc">Ingest + enrich a corpus</span>
+      </button>
+      <button
+        type="button"
+        class="kind-opt"
+        class:active={artifactKind === "workflow"}
+        role="radio"
+        aria-checked={artifactKind === "workflow"}
+        onclick={() => (artifactKind = "workflow")}
+        data-testid="recipe-author-new-kind-workflow"
+      >
+        <span class="kind-name">Workflow</span>
+        <span class="kind-desc">A pipeline of steps</span>
+      </button>
+    </div>
+
     <p class="hint">
-      Give the project a short name. The charter is your domain
-      framing — what the corpus is, who it's for, and the boundary
-      decisions you've already made. The agent reads it on every turn.
+      Give the project a short name. The charter is your domain framing —
+      {#if artifactKind === "workflow"}
+        what the workflow does, what it runs over, and where its output goes.
+      {:else}
+        what the corpus is, who it's for, and the boundary decisions you've
+        already made.
+      {/if}
+      The agent reads it on every turn.
     </p>
 
-    <div class="archetypes" role="group" aria-label="Starting points">
-      <span class="archetypes-label">Start from a source (optional):</span>
-      {#each ARCHETYPES as a}
-        <button type="button" class="chip" onclick={() => applyArchetype(a)}>
-          {a.label}
-        </button>
-      {/each}
-    </div>
+    {#if artifactKind === "recipe"}
+      <div class="archetypes" role="group" aria-label="Starting points">
+        <span class="archetypes-label">Start from a source (optional):</span>
+        {#each ARCHETYPES as a}
+          <button type="button" class="chip" onclick={() => applyArchetype(a)}>
+            {a.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <label for="np-title">Title</label>
     <input
@@ -173,6 +221,37 @@
     color: var(--muted, #8a8c93);
     font-size: 0.85rem;
     margin: 0 0 0.5rem;
+  }
+  .kind {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.2rem 0 0.4rem;
+  }
+  .kind-opt {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    align-items: flex-start;
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid var(--border, #2a2c33);
+    background: var(--bg-elevated, transparent);
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .kind-opt.active {
+    border-color: color-mix(in srgb, var(--lavender) 55%, transparent);
+    background: color-mix(in srgb, var(--lavender) 14%, transparent);
+  }
+  .kind-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .kind-desc {
+    font-size: 0.76rem;
+    color: var(--muted, #8a8c93);
   }
   .archetypes {
     display: flex;

@@ -206,11 +206,16 @@
       enable_recipe_authoring: true,
     }),
     diagnose_corpus: () => "ok",
-    create_conversation: () => ({
-      id: `conv-${Math.random().toString(36).slice(2, 10)}`,
-      title: "New conversation",
-      created_at: Math.floor(Date.now() / 1000),
-    }),
+    create_conversation: ({ surfaceSkillId } = {}) => {
+      // Record the surface skill tag so specs can assert which authoring loop a
+      // surface routes into (recipe-author vs workflow-author).
+      window.__sovereign_test__._lastCreateConversation = { surfaceSkillId };
+      return {
+        id: `conv-${Math.random().toString(36).slice(2, 10)}`,
+        title: "New conversation",
+        created_at: Math.floor(Date.now() / 1000),
+      };
+    },
     send_message_stream: ({ conversationId }) => {
       const messageId = `asst-${Math.random().toString(36).slice(2, 10)}`;
       // Record so tests can grab the streaming id without coordination.
@@ -328,10 +333,13 @@
     recipe_author_new_project: ({ req }) => {
       const id = `feat-${Math.random().toString(36).slice(2, 10)}`;
       const now = Math.floor(Date.now() / 1000);
+      // Mirror the backend's #[serde(default)] — an omitted kind is a recipe.
+      const artifactKind = req.artifact_kind ?? "recipe";
       const entry = {
         feature_id: id,
         title: req.title,
         charter_excerpt: (req.charter_md ?? "").slice(0, 200),
+        artifact_kind: artifactKind,
         recipe_id: null,
         current_sample_size: null,
         last_test_status: null,
@@ -343,6 +351,7 @@
         feature_id: id,
         title: entry.title,
         charter_md: req.charter_md ?? "",
+        artifact_kind: artifactKind,
         recipe_id: null,
         recipe_path: null,
         recipe_toml: null,

@@ -499,6 +499,7 @@ fn main() -> ExitCode {
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,
             recipe_author_commands::recipe_author_save_edited_toml,
+            recipe_author_commands::recipe_author_link_recent_artifact,
             recipe_author_commands::recipe_author_restore_checkpoint,
             recipe_author_commands::recipe_author_build_prelude,
             mesh_commands::mesh_create,

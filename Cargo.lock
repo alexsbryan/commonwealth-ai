@@ -12042,6 +12042,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-workflow",
+ "sovereign-workflow-host",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
