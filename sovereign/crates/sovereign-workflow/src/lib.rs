@@ -24,7 +24,7 @@ pub mod steps;
 pub mod template;
 
 pub use cache::{ArtifactCache, FileArtifactCache, NoCache};
-pub use kind::StepKind;
+pub use kind::{StepKind, WireKind};
 pub use model::{
     Artifact, ResolvedArgs, ResourceNeed, Resources, Scope, Source, SourceItem, StepDescriptor,
     StepSpec, Workflow,
