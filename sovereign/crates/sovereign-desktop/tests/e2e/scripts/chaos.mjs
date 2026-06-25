@@ -97,6 +97,38 @@ const SUPERVISOR = !argv.includes("--no-supervisor") && !ATTACH;
 // retrieved chunks. Cross-tab against broke: present+broke = CASE-1-missed (the
 // value was retrievable; firing-rate gap), absent+broke = CASE-2 (retrieval gap).
 const DIAG_CASE = !!process.env.SOVEREIGN_CHAOS_CASE_DIAG;
+// Paired-replay A/B: ask a FIXED bank of (question, corpus) from a prior run's
+// journal instead of brain-generating, so two passes (e.g. a feature ON vs OFF)
+// see the IDENTICAL question stream + retrieval scope. Pairing by question
+// cancels the dominant question-mix variance — the noise that made single-run
+// A/Bs undecidable. SOVEREIGN_CHAOS_REPLAY=<journal.jsonl>.
+const REPLAY_BANK = (() => {
+  const f = process.env.SOVEREIGN_CHAOS_REPLAY;
+  if (!f) return null;
+  let raw;
+  try {
+    raw = fs.readFileSync(f, "utf8");
+  } catch {
+    return null;
+  }
+  const bank = [];
+  const seen = new Set();
+  for (const line of raw.split("\n").filter(Boolean)) {
+    try {
+      const r = JSON.parse(line);
+      if (r.cmd !== "send_message_stream" || !r.scopedCorpus) continue;
+      const m = JSON.parse(r.args ?? "{}").message;
+      if (m && !seen.has(m)) {
+        seen.add(m);
+        bank.push({ question: m, corpus: r.scopedCorpus });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return bank.length ? bank : null;
+})();
+let replayIdx = 0;
 
 // Seedless on purpose — every wander is different. (Plain Math.random:
 // this is a node script, not a workflow sandbox.)
@@ -506,6 +538,20 @@ function nextUserMessage() {
 // graceful?), not merely whether the app declines an off-topic ask. Demanding-
 // user edges (fat-fingered empty, impatient re-ask) are preserved.
 async function attachQuestion() {
+  if (REPLAY_BANK) {
+    const entry = REPLAY_BANK[replayIdx % REPLAY_BANK.length];
+    replayIdx += 1;
+    state.scopedCorpus = entry.corpus;
+    if (state.convo && !process.env.SOVEREIGN_CHAOS_NO_SCOPE) {
+      await invoke(
+        "set_conversation_enabled_corpora",
+        { conversationId: state.convo, enabledCorpora: [entry.corpus] },
+        10_000,
+      ).catch(() => {});
+    }
+    state.lastQuestion = entry.question;
+    return entry.question;
+  }
   if (chance(0.12)) return pick(EDGE_MESSAGES);
   if (state.lastQuestion && chance(0.2)) return `Wait — also: ${state.lastQuestion}`;
   const corpus = pick(state.corpora);
@@ -953,7 +999,7 @@ async function chaosStep(memorySummary) {
   // features. Bias MODERATELY toward chat, with a cadence floor so the judge
   // still fires when the brain fixates on a feature thread (v1 did 1 chat
   // turn in 162 moves — that was the gap).
-  if (chance(0.28) || movesSinceChat >= 6) {
+  if (REPLAY_BANK || chance(0.28) || movesSinceChat >= 6) {
     const message = ATTACH ? await attachQuestion() : nextUserMessage();
     chosen = { cmd: "send_message_stream", args: { message, conversationId: state.convo } };
     goal = "ask my knowledge base a question";
@@ -1081,6 +1127,7 @@ async function chaosStep(memorySummary) {
       ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
       : null,
     evidence,
+    scopedCorpus: state.scopedCorpus ?? null,
     userJudge,
     latencyMs,
     surprise: surprise.score,
@@ -1291,7 +1338,11 @@ async function main() {
   const endAt = Date.now() + MINUTES * 60_000;
   const scoredCount = () => Object.values(verdicts).reduce((a, b) => a + b, 0);
   let consecutiveDead = 0;
-  while (Date.now() < endAt && (CHATS === 0 || scoredCount() < CHATS)) {
+  while (
+    Date.now() < endAt &&
+    (CHATS === 0 || scoredCount() < CHATS) &&
+    (!REPLAY_BANK || replayIdx < REPLAY_BANK.length)
+  ) {
     let res;
     try {
       res = await chaosStep(memorySummary());
