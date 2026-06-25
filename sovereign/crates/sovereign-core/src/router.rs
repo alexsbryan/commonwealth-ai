@@ -1582,7 +1582,7 @@ impl Router for LlmRouter {
                 .await;
             eprintln!(
                 "[router] \"{}\" → {:?} (knowledge thread; inherited from prior turn)",
-                &message[..message.len().min(60)],
+                message.chars().take(60).collect::<String>(),
                 inherited,
             );
             return Ok(RouterClassification {
@@ -1728,7 +1728,7 @@ impl Router for LlmRouter {
                                 .await;
                             eprintln!(
                                 "[router] \"{}\" embed→{:?} (sim={:.3}) → ComplexTask: registered tool '{}' matches the query more closely (tool_sim={:.3}); the agentic path will plan the tool call",
-                                &message[..message.len().min(50)],
+                                message.chars().take(50).collect::<String>(),
                                 verdict.intent,
                                 verdict.top_sim,
                                 tool_id,
@@ -1764,7 +1764,7 @@ impl Router for LlmRouter {
                             .await;
                         eprintln!(
                             "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?} scope={:?} effort={:?})",
-                            &message[..message.len().min(50)],
+                            message.chars().take(50).collect::<String>(),
                             routed,
                             verdict.top_sim,
                             verdict.margin,
@@ -1828,7 +1828,7 @@ impl Router for LlmRouter {
 
             eprintln!(
                 "[router] \"{}\" → {:?} (topic continuity override)",
-                &message[..message.len().min(50)],
+                message.chars().take(50).collect::<String>(),
                 override_intent,
             );
 
@@ -1999,7 +1999,11 @@ impl Router for LlmRouter {
 
         eprintln!(
             "[router] \"{}\" → {:?} (coarse={}, confidence={:.2})",
-            &message[..message.len().min(50)],
+            // char-aware truncation: a byte slice (`&message[..50]`) panics when
+            // byte 50 lands mid-character (multi-byte unicode — CJK, emoji, RTL),
+            // and a panic in this LOG line drops the send_message_stream responder
+            // → the user gets no response (breaker input_fuzzer, 2026-06-25).
+            message.chars().take(50).collect::<String>(),
             intent,
             coarse.intent,
             coarse.confidence,
