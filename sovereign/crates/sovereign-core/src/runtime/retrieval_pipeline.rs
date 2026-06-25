@@ -735,7 +735,40 @@ fn step_noise_floor<'a, 'ctx>(
         // without signal. See `drop_no_overlap_chunks` for the
         // v33/v36 design history.
         let pre_floor = st.chunks.len();
+        // GLASSBOX INSTRUMENT (empty-retrieval rescue diagnosis, 2026-06-25):
+        // capture the most vector-similar candidate BEFORE the lexical floor so
+        // an EMPTIED result can be classified. vector_distance is raw cosine
+        // distance (lower = closer). A vector-close chunk (distance < ~0.5)
+        // dropped purely for zero query-token overlap means the floor killed an
+        // answerable chunk — a lexical-floor-bypass vector top-K would rescue it.
+        // All-far (distance high / None) means genuinely off-domain — a bypass
+        // would only inject noise. This log decides whether the rescue is built.
+        let best_dropped = st
+            .chunks
+            .iter()
+            .map(|c| {
+                (
+                    c.vector_distance.unwrap_or(f32::INFINITY),
+                    c.score,
+                    c.title.clone().unwrap_or_default(),
+                )
+            })
+            .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         st.chunks = drop_no_overlap_chunks(take(&mut st.chunks), st.message);
+        if st.chunks.is_empty() && pre_floor > 0 {
+            let (vd, sc, title) = best_dropped.unwrap_or((f32::INFINITY, 0.0, String::new()));
+            tracing::info!(
+                target: "retrieval.pipeline",
+                pre_floor,
+                query = %st.message,
+                best_dropped_vector_distance = vd,
+                best_dropped_score = sc,
+                best_dropped_title = %title,
+                "{}: NOISE FLOOR EMPTIED candidate set — all {} chunks lexically dropped (vector-rescue diagnosis)",
+                st.label,
+                pre_floor
+            );
+        }
         if st.chunks.len() < pre_floor {
             tracing::info!(
                 pre_floor,
