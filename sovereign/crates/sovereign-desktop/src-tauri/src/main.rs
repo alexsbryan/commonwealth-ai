@@ -432,6 +432,7 @@ fn main() -> ExitCode {
             commands::get_runtime_status,
             commands::download_model,
             commands::list_corpora,
+            commands::notebook_list,
             commands::install_corpus,
             commands::lc_expand_corpus,
             commands::lc_can_expand,

@@ -32,9 +32,10 @@ test("real stack: run the notebook workflow over a folder from the desktop UI", 
 
   await realBootToChat(page);
 
-  // Enter the Run view (nav gated by enable_recipe_authoring, baked true in the
-  // real profile alongside Recipe Author).
-  await page.getByTestId("nav-run-workflow").click();
+  // Enter the Run view: Workshop rail → Run tab (the standalone Run nav folded
+  // into the Workshop in P0; ingest moves to Library → Add in P1).
+  await page.getByTestId("nav-workshop").click();
+  await page.getByTestId("workshop-tab-run").click();
   await expect(page.getByTestId("workflow-run-view")).toBeVisible();
 
   // Pick the shipped flagship starter explicitly (the list auto-selects the

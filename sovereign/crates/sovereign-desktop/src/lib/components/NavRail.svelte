@@ -2,45 +2,33 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  type RailMode = "chat" | "inner_work" | "atlas" | "run_workflow" | "recipe_author" | "settings";
+  type RailMode = "home" | "chat" | "library" | "inner_work" | "workshop" | "settings";
 
   interface Props {
     active: RailMode;
     onNavigate: (mode: RailMode) => void;
-    /** Show the Recipe Author rail entry. Gated on the
-     *  `enable_recipe_authoring` setting in DesktopConfig so the
-     *  workspace only surfaces for operators who opted in. */
-    showRecipeAuthor?: boolean;
-    /** Show the Run-a-workflow rail entry. Gated alongside Recipe Author
-     *  (the "workshop" surfaces) during alpha. */
-    showRunWorkflow?: boolean;
   }
 
-  let { active, onNavigate, showRecipeAuthor = false, showRunWorkflow = false }: Props = $props();
+  let { active, onNavigate }: Props = $props();
 
   let hoveredIdx: number | null = $state(null);
 
-  // Rail order: Outer → Inner → Atlas → (Recipe Author) → Settings.
-  // Recipe Author slots between Atlas and Settings — it's a
-  // workspace destination like the other three, but lives behind
-  // an opt-in so most users won't see it. Building the array
-  // conditionally keeps the index alignment that drives the
-  // hover-label tooltip stable across opt-in / opt-out states.
-  let marks = $derived.by(() => {
-    const base: { id: RailMode; label: string; testid: string }[] = [
-      { id: "chat", label: "Outer Work", testid: "nav-chat" },
-      { id: "inner_work", label: "Inner Work", testid: "open-inner-work" },
-      { id: "atlas", label: "Atlas", testid: "nav-atlas" },
-    ];
-    if (showRunWorkflow) {
-      base.push({ id: "run_workflow", label: "Run", testid: "nav-run-workflow" });
-    }
-    if (showRecipeAuthor) {
-      base.push({ id: "recipe_author", label: "Recipe Author", testid: "nav-recipe-author" });
-    }
-    base.push({ id: "settings", label: "Settings", testid: "nav-settings" });
-    return base;
-  });
+  // Rail order: Ask · Library · Reflect · Workshop · Settings. Labels are
+  // verbs/nouns a newcomer can predict (the evocative "Outer/Inner Work" names
+  // can return as hover taglines in the later copy sweep). Library is the
+  // knowledge home — per-notebook Ask + Explore replace the old top-level
+  // Atlas rail (the atlas surface lives on inside a notebook's Explore tab and
+  // as a reading deep-link target). The Workshop holds the maker surfaces
+  // (Build/Run) — always present, no opt-in flag. Static now that nothing is
+  // gated.
+  const marks: { id: RailMode; label: string; testid: string }[] = [
+    { id: "home", label: "Home", testid: "nav-home" },
+    { id: "chat", label: "Ask", testid: "nav-ask" },
+    { id: "library", label: "Library", testid: "nav-library" },
+    { id: "inner_work", label: "Reflect", testid: "nav-reflect" },
+    { id: "workshop", label: "Workshop", testid: "nav-workshop" },
+    { id: "settings", label: "Settings", testid: "nav-settings" },
+  ];
 </script>
 
 <nav
@@ -60,41 +48,34 @@
         onmouseenter={() => (hoveredIdx = i)}
         onmouseleave={() => (hoveredIdx = null)}
       >
-        {#if mark.id === "chat"}
-          <!-- Lucide: briefcase -->
+        {#if mark.id === "home"}
+          <!-- Lucide: house — the hub / landing -->
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-            <rect width="20" height="14" x="2" y="6" rx="2"/>
+            <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/>
+            <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          </svg>
+        {:else if mark.id === "chat"}
+          <!-- Lucide: message-square — Ask -->
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
         {:else if mark.id === "inner_work"}
           <!-- Lucide: moon — calm and introspective -->
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>
           </svg>
-        {:else if mark.id === "atlas"}
-          <!-- Lucide: network — the atom graph -->
+        {:else if mark.id === "library"}
+          <!-- Lucide: library — the knowledge home -->
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="16" y="16" width="6" height="6" rx="1"/>
-            <rect x="2" y="16" width="6" height="6" rx="1"/>
-            <rect x="9" y="2" width="6" height="6" rx="1"/>
-            <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/>
-            <path d="M12 12V8"/>
+            <path d="m16 6 4 14"/>
+            <path d="M12 6v14"/>
+            <path d="M8 8v12"/>
+            <path d="M4 4v16"/>
           </svg>
-        {:else if mark.id === "recipe_author"}
-          <!-- Lucide: notebook-pen — conversation-driven authoring -->
+        {:else if mark.id === "workshop"}
+          <!-- Lucide: wrench — the maker surfaces (Build / Run) -->
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/>
-            <path d="M2 6h4"/>
-            <path d="M2 10h4"/>
-            <path d="M2 14h4"/>
-            <path d="M2 18h4"/>
-            <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/>
-          </svg>
-        {:else if mark.id === "run_workflow"}
-          <!-- Lucide: circle-play — run a workflow over a folder -->
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="10 8 16 12 10 16 10 8"/>
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
           </svg>
         {:else}
           <!-- Lucide: settings (cog) -->

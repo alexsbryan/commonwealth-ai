@@ -21,7 +21,7 @@ test.describe("inner work surface — Phase 1", () => {
     await bootToChat(page, chat);
 
     // The sidebar entry is always-on once Phase 1 ships.
-    const openBtn = page.getByTestId("open-inner-work");
+    const openBtn = page.getByTestId("nav-reflect");
     await expect(openBtn).toBeVisible();
     await openBtn.click();
 
@@ -50,7 +50,7 @@ test.describe("inner work surface — Phase 1", () => {
     // Re-enter the surface; the draft is restored from localStorage
     // and the same text is visible. The threshold has already played
     // for this session, so there's no 800ms hold the second time.
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const columnAgain = page.locator("textarea.column");
     await expect(columnAgain).toBeVisible({ timeout: 1_500 });
     await expect(columnAgain).toHaveValue("Sitting with what's here today.");
@@ -63,7 +63,7 @@ test.describe("inner work surface — Phase 2 witness", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -108,7 +108,7 @@ test.describe("inner work surface — Phase 2 witness", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -149,7 +149,7 @@ test.describe("inner work surface — Phase 2 witness", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -210,7 +210,7 @@ test.describe("inner work surface — Phase 3a echoes", () => {
   }) => {
     await shortenEchoDelay(page);
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -262,7 +262,7 @@ test.describe("inner work surface — Phase 3a echoes", () => {
   }) => {
     await shortenEchoDelay(page);
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -308,7 +308,7 @@ test.describe("inner work surface — Phase 3a echoes", () => {
   }) => {
     await shortenEchoDelay(page);
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 

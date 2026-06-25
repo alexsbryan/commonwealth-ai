@@ -243,9 +243,6 @@ function bakeProfile(): void {
     `embed_model_path = ${JSON.stringify(embedModel)}`,
     `setup_complete = true`,
     `auto_collaborate = false`,
-    // Surface the recipe/workflow authoring workspace (nav-recipe-author) so
-    // real-mode specs can drive the authoring flows. Defaults off in product.
-    `enable_recipe_authoring = true`,
     ``,
   ].join("\n");
   for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);

@@ -154,6 +154,46 @@ pub struct CorpusEntry {
     pub catalog_status: Option<String>,
 }
 
+/// One row on the Library shelf — the unified, deduped view of an
+/// *installed* corpus the user can ask or explore (Phase 1 UX refactor).
+///
+/// This is the single source of truth that `notebook_list` assembles by
+/// merging three existing surfaces:
+///   - `installed_indexes()` — the deduped installed set (id, doc count,
+///     freshness, parent),
+///   - the `LocalCorpusManager` configs (folder / vault / watched
+///     discrimination + the user's chosen display name + scope),
+///   - the atlas readers (atoms.json + conv enrichment) — whether the
+///     corpus has an explorable map.
+///
+/// It deliberately carries only the fields the shelf renders; the rich
+/// per-surface DTOs (`CorpusEntry`, `LocalCorpusConfig`,
+/// `AtlasCorpusSummary`) remain the source for their detail views.
+#[derive(Serialize)]
+pub struct NotebookSummary {
+    /// Corpus id — the citation handle, structurally unique.
+    pub id: String,
+    /// Human-facing name. Prefers the user's local-corpus display name,
+    /// then the catalog name, then the on-disk index name, then the id.
+    pub name: String,
+    /// Where this notebook came from, for the shelf icon + grouping:
+    /// `"folder"` | `"obsidian"` | `"watched"` | `"catalog"` |
+    /// `"installed"` (recipe / CLI / mesh-app / import).
+    pub source_kind: String,
+    /// Chunk count from the installed index.
+    pub doc_count: u64,
+    /// True when the corpus has an explorable map on disk — an
+    /// `atoms.json` atlas or conv-tiered enrichment. Drives the ✦ badge
+    /// and whether the detail view's Explore tab renders the map or the
+    /// "Make explorable" CTA.
+    pub explorable: bool,
+    /// Index build time (Unix seconds) — the freshness signal.
+    pub updated_unix: Option<u64>,
+    /// `"local"` | `"mesh"` | `"public"`. Local corpora carry their
+    /// configured scope; everything else defaults to `"local"`.
+    pub scope: String,
+}
+
 /// Detailed health report for a single installed corpus, loaded on demand
 /// (avoids opening every LanceDB index on every `list_corpora` call).
 #[derive(Serialize)]

@@ -339,9 +339,6 @@
     background: var(--bg-primary, var(--bg-secondary));
     color: var(--text-primary);
   }
-  input[readonly] {
-    color: var(--text-secondary);
-  }
   .folder-row {
     display: flex;
     gap: 8px;

@@ -19,6 +19,14 @@ async function openSettings(page: Page, chat: Parameters<typeof bootToChat>[1]) 
   await page.locator(".cfg").waitFor();
 }
 
+async function openWorkshopApps(page: Page, chat: Parameters<typeof bootToChat>[1]) {
+  // ConnectSection re-homed to Workshop → Open to apps in Phase 3.
+  await bootToChat(page, chat);
+  await page.getByTestId("nav-workshop").click();
+  await page.getByTestId("workshop-tab-apps").click();
+  await page.locator(".connect").waitFor();
+}
+
 async function bgLuminance(page: Page, selector: string): Promise<number | null> {
   return page.evaluate((s) => {
     const el = document.querySelector(s);
@@ -105,24 +113,17 @@ test.describe("settings · visual consistency", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
-    await page
-      .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Connect$/ })
-      .click();
-    await page.locator(".connect").waitFor();
+    // ConnectSection re-homed to Workshop → Open to apps (Phase 3).
+    await openWorkshopApps(page, chat);
 
-    // The env-row card should be a darker shade than the page —
-    // either equal-or-less luminance than .cfg-doc. A reverted card
-    // would render light-on-dark and fail this.
+    // The env-row card must stay on the dark substrate — a reverted
+    // light-on-light card would push its background luminance up.
     const envLum = await bgLuminance(page, ".connect .env-row");
-    const pageLum = await bgLuminance(page, ".cfg-doc");
     expect(envLum, "no .env-row").not.toBeNull();
-    expect(pageLum, "no .cfg-doc").not.toBeNull();
     expect(
       envLum!,
-      `env-row background (${envLum}) is lighter than the page (${pageLum})`,
-    ).toBeLessThanOrEqual(pageLum! + 0.02);
+      `env-row background (${envLum}) reads as a bright island`,
+    ).toBeLessThan(0.08);
   });
 
   // Font drift sentinel. The same pattern that hit Welcome/Setup/
@@ -152,19 +153,29 @@ test.describe("settings · visual consistency", () => {
       }, selector);
     }
 
-    for (const [label, selector] of [
-      ["Activity & Sharing", ".sharing"],
-      ["Connect", ".connect"],
-    ] as const) {
-      await page
-        .locator(".cfg-toc .toc-item")
-        .filter({ hasText: new RegExp(`^${label}$`) })
-        .click();
-      await page.locator(selector).waitFor();
-      const { family, loaded } = await firstFamilyLoaded(selector);
+    // Activity & Sharing — a Settings section.
+    await page
+      .locator(".cfg-toc .toc-item")
+      .filter({ hasText: /^Activity & Sharing$/ })
+      .click();
+    await page.locator(".sharing").waitFor();
+    {
+      const { family, loaded } = await firstFamilyLoaded(".sharing");
       expect(
         loaded,
-        `${label} section first-choice font "${family}" is not bundled`,
+        `Activity & Sharing first-choice font "${family}" is not bundled`,
+      ).toBe(true);
+    }
+
+    // Connect — re-homed to Workshop → Open to apps (Phase 3).
+    await page.getByTestId("nav-workshop").click();
+    await page.getByTestId("workshop-tab-apps").click();
+    await page.locator(".connect").waitFor();
+    {
+      const { family, loaded } = await firstFamilyLoaded(".connect");
+      expect(
+        loaded,
+        `Open-to-apps (Connect) first-choice font "${family}" is not bundled`,
       ).toBe(true);
     }
   });

@@ -6,7 +6,7 @@
 import { expect, realBootToChat, test } from "./test-base-real";
 
 interface DesktopConfig {
-  enable_recipe_authoring: boolean;
+  knowledge_view_enabled: boolean;
   [key: string]: unknown;
 }
 
@@ -20,16 +20,16 @@ test("settings panel renders; save_config round-trips and restores", async ({
   await expect(page.locator(".cfg")).toBeVisible();
 
   const original = await bridge.invoke<DesktopConfig>("get_config");
-  expect(typeof original.enable_recipe_authoring).toBe("boolean");
+  expect(typeof original.knowledge_view_enabled).toBe("boolean");
 
-  const flipped = { ...original, enable_recipe_authoring: !original.enable_recipe_authoring };
+  const flipped = { ...original, knowledge_view_enabled: !original.knowledge_view_enabled };
   try {
     await bridge.invoke("save_config", { config: flipped });
     const readBack = await bridge.invoke<DesktopConfig>("get_config");
-    expect(readBack.enable_recipe_authoring).toBe(flipped.enable_recipe_authoring);
+    expect(readBack.knowledge_view_enabled).toBe(flipped.knowledge_view_enabled);
   } finally {
     await bridge.invoke("save_config", { config: original });
   }
   const restored = await bridge.invoke<DesktopConfig>("get_config");
-  expect(restored.enable_recipe_authoring).toBe(original.enable_recipe_authoring);
+  expect(restored.knowledge_view_enabled).toBe(original.knowledge_view_enabled);
 });

@@ -5,7 +5,7 @@
 //! `generate_handler!` stay valid.
 #![allow(unused_imports)]
 use super::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,6 +14,9 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use tokio::io::AsyncWriteExt;
+
+use sovereign_tools::atlas_view::FileAtlasReader;
+use sovereign_tools::local_corpus::{LocalCorpusConfig, LocalCorpusSourceType};
 
 use crate::state::{self, AppState, DesktopConfig};
 
@@ -335,6 +338,147 @@ pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusE
     );
 
     Ok(entries)
+}
+
+/// Unified Library shelf listing — every *installed* corpus the user can
+/// ask or explore, as one deduped [`NotebookSummary`] row.
+///
+/// Phase 1 of the UX refactor: the Library is the one knowledge home,
+/// replacing four scattered listing surfaces (`list_corpora`, `lc_list`,
+/// `enrich_list_corpora`, `atlas_list_corpora`). Rather than re-implement
+/// their logic, this command *merges their underlying data sources* so
+/// there is a single source of truth for "what notebooks do I have":
+///
+///   - [`installed_indexes()`](corpus_engine::CorpusEngine::installed_indexes)
+///     is the deduped, shard-excluded record of what is on disk (id,
+///     name, chunk count, freshness, parent). Layer/satellite children
+///     (`parent_corpus_id` set) fold under their parent notebook, exactly
+///     as the catalog picker hides them — so the shelf lists top-level
+///     notebooks only.
+///   - the `LocalCorpusManager` configs supply the source-kind
+///     discriminator (folder / vault / watched), the user's chosen
+///     display name, and scope for locally-ingested corpora.
+///   - the atlas readers (`atoms.json` via `FileAtlasReader`, plus
+///     conv-tiered enrichment in the SQLite store) decide `explorable`.
+///
+/// Every secondary lookup degrades gracefully: a missing local-corpus
+/// manager, an absent atlas, or an uninitialised sqlite store narrows the
+/// metadata for the affected rows rather than failing the whole listing.
+#[tauri::command]
+pub async fn notebook_list(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<NotebookSummary>, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Ok(Vec::new()),
+    };
+
+    // The deduped, shard-excluded installed set is the spine of the list.
+    let installed = engine.installed_indexes().await.unwrap_or_default();
+
+    // Built-in catalog names, for classifying + naming catalog notebooks.
+    let builtins = engine.builtin_corpora();
+    let builtin_names: HashMap<&str, &str> = builtins
+        .iter()
+        .map(|b| (b.id.as_str(), b.name.as_str()))
+        .collect();
+
+    // Local-corpus configs: id → config. Clone the Arc and drop the guard
+    // before awaiting so we never hold the lock across `list()`. A missing
+    // manager (setup incomplete) just leaves rows unclassified-as-local —
+    // they fall through to "catalog"/"installed".
+    let local_mgr = state.local_corpus.read().await.as_ref().cloned();
+    let local_configs: HashMap<String, LocalCorpusConfig> = match local_mgr {
+        Some(mgr) => mgr
+            .list()
+            .await
+            .into_iter()
+            .map(|c| (c.id.clone(), c))
+            .collect(),
+        None => HashMap::new(),
+    };
+
+    // Explorable set — union of corpora with an `atoms.json` atlas and
+    // corpora with conv-tiered enrichment. Both lookups are best-effort.
+    let mut explorable: HashSet<String> = HashSet::new();
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    if let Ok(atom_corpora) = reader.list_corpora().await {
+        explorable.extend(atom_corpora.into_iter().map(|c| c.corpus_id));
+    }
+    let conv_store = state.sqlite_store.read().await.as_ref().map(Arc::clone);
+    if let Some(store) = conv_store {
+        if let Ok(buckets) = store.list_conv_corpora_with_state_buckets().await {
+            explorable.extend(buckets.into_iter().map(|(corpus_id, ..)| corpus_id));
+        }
+    }
+
+    let mut notebooks = Vec::new();
+    for info in &installed {
+        // Shards are storage internals; layer children belong to their
+        // parent notebook (the catalog hides them under the parent row).
+        if info.is_shard || info.parent_corpus_id.is_some() {
+            continue;
+        }
+
+        let local = local_configs.get(&info.corpus_id);
+
+        let source_kind = if let Some(cfg) = local {
+            match &cfg.source_type {
+                LocalCorpusSourceType::ObsidianVault { .. } => "obsidian",
+                LocalCorpusSourceType::WatchedFolder(_) => "watched",
+                LocalCorpusSourceType::DocumentFolder => "folder",
+            }
+        } else if builtin_names.contains_key(info.corpus_id.as_str()) {
+            "catalog"
+        } else {
+            // Recipe-installed, CLI-acquired, snapshot-restored, mesh-app,
+            // or conversation import — a real notebook with no local-folder
+            // config behind it.
+            "installed"
+        };
+
+        let name = if let Some(cfg) = local {
+            cfg.display_name.clone()
+        } else if let Some(n) = builtin_names.get(info.corpus_id.as_str()) {
+            n.to_string()
+        } else if !info.corpus_name.is_empty() {
+            info.corpus_name.clone()
+        } else {
+            info.corpus_id.clone()
+        };
+
+        let scope = local
+            .map(|c| c.scope.as_recipe_str().to_string())
+            .unwrap_or_else(|| "local".to_string());
+
+        notebooks.push(NotebookSummary {
+            id: info.corpus_id.clone(),
+            name,
+            source_kind: source_kind.to_string(),
+            doc_count: info.chunk_count,
+            explorable: explorable.contains(&info.corpus_id),
+            updated_unix: Some(info.created_at),
+            scope,
+        });
+    }
+
+    // Most-recently-indexed first, then alphabetical — a stable, scannable
+    // shelf order that floats fresh ingests to the top.
+    notebooks.sort_by(|a, b| {
+        b.updated_unix
+            .cmp(&a.updated_unix)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    tracing::debug!(
+        installed_on_disk = installed.len(),
+        notebooks = notebooks.len(),
+        local_configs = local_configs.len(),
+        explorable = explorable.len(),
+        "notebook_list: unified Library shelf",
+    );
+
+    Ok(notebooks)
 }
 
 /// Build the IVF-PQ vector index for an installed corpus in the background.

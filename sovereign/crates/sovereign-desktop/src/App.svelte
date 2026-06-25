@@ -4,14 +4,14 @@
   import { initEventListeners } from "./lib/events";
   import {
     detectBootstrap,
-    getConfig,
     isSetupComplete,
     startDefaultCorpusInstall,
   } from "./lib/api";
-  import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
+  import type { BootstrapSnapshot, StarterQuestion, NotebookSummary } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
   import { chatSeedStore } from "./lib/stores/chatSeed.svelte";
   import { outerWorkScopeStore } from "./lib/stores/outerWorkScope.svelte";
+  import { libraryNav } from "./lib/stores/libraryNav.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
     StepDonePayload,
@@ -20,14 +20,15 @@
   import NavRail from "./lib/components/NavRail.svelte";
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
-  import RecipeAuthorWorkspace from "./lib/components/recipe_author/RecipeAuthorWorkspace.svelte";
-  import WorkflowRunView from "./lib/components/workflow_run/WorkflowRunView.svelte";
+  import WorkshopView from "./lib/components/workshop/WorkshopView.svelte";
   import InnerWorkSurface from "./lib/components/inner_work/InnerWorkSurface.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
   import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
   import AtlasSurface from "./lib/components/atlas/AtlasSurface.svelte";
+  import LibraryView from "./lib/components/library/LibraryView.svelte";
+  import HomeView from "./lib/components/home/HomeView.svelte";
   import BrandMark from "./lib/components/BrandMark.svelte";
   import { readingSession } from "./lib/stores/readingSession.svelte";
   import { atlasNavigation } from "./lib/stores/atlasNavigation.svelte";
@@ -48,30 +49,34 @@
     | "setup_plan"
     | "setup"
     | "consent"
+    | "home"
     | "chat"
+    | "library"
     | "settings"
-    | "recipe_author"
     | "inner_work"
+    // `atlas` is no longer a rail destination — the Library's per-notebook
+    // Explore tab owns the atlas surface. It survives as a view only as the
+    // reading-surface "Open in atlas" deep-link target (see the bridge below).
     | "atlas"
-    | "run_workflow";
+    | "workshop";
 
-  type RailMode = "chat" | "inner_work" | "atlas" | "recipe_author" | "run_workflow" | "settings";
+  type RailMode = "home" | "chat" | "library" | "inner_work" | "workshop" | "settings";
 
   // `let view: AppView = $state("loading")` would narrow `view` to the
   // literal type `"loading"`, breaking every later `view === "chat"`
   // comparison. The generic form keeps the full union.
   let view = $state<AppView>("loading");
 
-  // Rail mirrors view for every top-level destination. Recipe Author
-  // joins Outer / Inner / Atlas / Settings as a peer when the
-  // workspace is enabled in DesktopConfig; without the opt-in the
-  // rail entry is hidden by NavRail itself (no rail-mode collapse
-  // needed).
+  // Rail mirrors view for every top-level destination. The deep-linked
+  // `atlas` view (reading-surface "Open in atlas") has no rail slot of its
+  // own anymore — it highlights Library, which is where exploring a
+  // notebook's map now lives.
   let railMode: RailMode = $derived(
-    view === "inner_work" ? "inner_work"
-    : view === "atlas" ? "atlas"
-    : view === "recipe_author" ? "recipe_author"
-    : view === "run_workflow" ? "run_workflow"
+    view === "home" ? "home"
+    : view === "library" ? "library"
+    : view === "atlas" ? "library"
+    : view === "inner_work" ? "inner_work"
+    : view === "workshop" ? "workshop"
     : view === "settings" ? "settings"
     : "chat"
   );
@@ -90,23 +95,6 @@
   // The user's "Customize" primary-model choice from the Setup Plan screen
   // (a catalog GGUF filename); undefined = the hardware-recommended default.
   let chosenPrimaryFile = $state<string | undefined>(undefined);
-
-  // M3 — Recipe Author workspace gate. Read from `DesktopConfig`
-  // on bootstrap and cached in $state so it stays reactive when the
-  // user flips the toggle in Settings (where save_config rebuilds
-  // the runtime). Default `false`: a fresh install hides the
-  // workspace until the user opts in.
-  let recipeAuthorEnabled = $state(false);
-
-  async function refreshRecipeAuthorFlag() {
-    try {
-      const cfg = await getConfig();
-      recipeAuthorEnabled = !!cfg.enable_recipe_authoring;
-    } catch {
-      // Config unreadable (early bootstrap) — leave the flag off.
-      recipeAuthorEnabled = false;
-    }
-  }
 
   let backendReady = $state(false);
   let backendError: string | null = $state(null);
@@ -197,12 +185,47 @@
     view = "chat";
   }
 
-  // Deep-link target for the Run view: the recipe-author dashboard's "Run it"
-  // sets a workflow name and switches the view; WorkflowRunView preselects it.
+  // Home hub handoffs. The ask box mints a fresh global conversation
+  // seeded with the typed question; the notebook tiles / "+ Add" hand a
+  // one-shot target to the Library via `libraryNav`; recent threads open
+  // the conversation in Ask.
+  function handleHomeAsk(text: string) {
+    chatSeedStore.set({
+      text,
+      atom_id: "",
+      source_section: null,
+      question_type: "user",
+    });
+    selectedConversationId = null;
+    view = "chat";
+  }
+  function handleHomeOpenNotebook(notebook: NotebookSummary) {
+    libraryNav.set({ notebookId: notebook.id });
+    view = "library";
+  }
+  function handleHomeAdd() {
+    libraryNav.set({ openAdd: true });
+    view = "library";
+  }
+  function handleHomeOpenConversation(id: string) {
+    selectedConversationId = id;
+    view = "chat";
+  }
+
+  // Workshop sub-tab + deep-link: the recipe-author dashboard's "Run it" sets a
+  // recipe name, switches to Workshop, and selects the Run tab (preselected).
+  let workshopTab = $state<"build" | "run" | "test" | "connect" | "apps">("build");
   let runWorkflowPreselect = $state<string | null>(null);
   function handleRunWorkflow(name: string) {
     runWorkflowPreselect = name;
-    view = "run_workflow";
+    workshopTab = "run";
+    view = "workshop";
+  }
+  // The use→make bridge (D9): a notebook's Settings → open the recipe in
+  // the Workshop's Build facet.
+  function handleOpenWorkshop() {
+    workshopTab = "build";
+    view = "workshop";
   }
 
   /// Called by FolderDropFlow inside Settings → Knowledge when the
@@ -227,12 +250,8 @@
       onBackendReady: () => {
         backendReady = true;
         backendError = null;
-        // The recipe-author flag lives in DesktopConfig — read it as
-        // soon as the backend is ready so the sidebar entry appears
-        // (or stays hidden) on the very first paint of the chat view.
-        void refreshRecipeAuthorFlag();
         if (view === "loading") {
-          view = "chat";
+          view = "home";
         }
       },
       onBackendError: (error) => {
@@ -330,7 +349,7 @@
     } catch (e) {
       console.warn("getFirstMeshConsent failed:", e);
     }
-    view = needsConsent ? "consent" : "chat";
+    view = needsConsent ? "consent" : "home";
     // Background install of the default Wikipedia Core corpus — ONLY when
     // the user opted in on the Setup Plan screen. Never a silent,
     // unconsented download (that was the old behaviour this redesign fixes).
@@ -342,7 +361,7 @@
   }
 
   function handleConsentRecorded() {
-    view = "chat";
+    view = "home";
   }
 
   function handleConversationSelect(id: string | null) {
@@ -392,17 +411,25 @@
     switch (e.key) {
       case "1":
         e.preventDefault();
-        handleRailNavigate("chat");
+        handleRailNavigate("home");
         break;
       case "2":
         e.preventDefault();
-        handleRailNavigate("inner_work");
+        handleRailNavigate("chat");
         break;
       case "3":
         e.preventDefault();
-        handleRailNavigate("atlas");
+        handleRailNavigate("library");
         break;
       case "4":
+        e.preventDefault();
+        handleRailNavigate("inner_work");
+        break;
+      case "5":
+        e.preventDefault();
+        handleRailNavigate("workshop");
+        break;
+      case "6":
         e.preventDefault();
         handleRailNavigate("settings");
         break;
@@ -479,12 +506,7 @@
 {:else}
   <!-- Post-onboarding chrome shell: rail + content area side by side -->
   <div class="app-chrome">
-    <NavRail
-      active={railMode}
-      onNavigate={handleRailNavigate}
-      showRecipeAuthor={recipeAuthorEnabled}
-      showRunWorkflow={recipeAuthorEnabled}
-    />
+    <NavRail active={railMode} onNavigate={handleRailNavigate} />
     <div class="app-chrome-content">
       <!-- InnerWork keep-alive layer: mounted on first visit, shown/hidden
            via CSS so the mount lifecycle (skill snapshot, conversation
@@ -504,18 +526,30 @@
         </div>
       {/if}
 
-      {#if view === "recipe_author"}
-        <RecipeAuthorWorkspace
+      {#if view === "workshop"}
+        <WorkshopView
+          tab={workshopTab}
+          onTabChange={(t) => (workshopTab = t)}
           onExit={() => (view = "chat")}
           onUseInChat={handleSettingsStarterPick}
           onOpenChat={handleDropToChat}
           onRunWorkflow={handleRunWorkflow}
+          runPreselect={runWorkflowPreselect}
         />
-      {:else if view === "run_workflow"}
-        <div class="run-workflow-surface">
-          <WorkflowRunView
-            onOpenChat={handleDropToChat}
-            preselectName={runWorkflowPreselect}
+      {:else if view === "home"}
+        <HomeView
+          onAsk={handleHomeAsk}
+          onOpenLibrary={() => (view = "library")}
+          onOpenNotebook={handleHomeOpenNotebook}
+          onOpenConversation={handleHomeOpenConversation}
+          onAdd={handleHomeAdd}
+        />
+      {:else if view === "library"}
+        <div class="library-surface">
+          <LibraryView
+            onOpenChatWithSeed={handleSettingsStarterPick}
+            onDropToChat={handleDropToChat}
+            onOpenWorkshop={handleOpenWorkshop}
           />
         </div>
       {:else if view === "atlas"}
@@ -527,13 +561,7 @@
           <SettingsPanel
             onClose={() => {
               view = "chat";
-              // The user may have flipped enable_recipe_authoring in
-              // Settings — re-read so the sidebar entry appears /
-              // disappears without a desktop restart.
-              void refreshRecipeAuthorFlag();
             }}
-            onOpenChatWithSeed={handleSettingsStarterPick}
-            onDropToChat={handleDropToChat}
           />
         </div>
       {:else}
@@ -997,6 +1025,17 @@
     background: var(--bg-primary);
   }
 
+  /* Library surface — full-width knowledge home, no chat sidebar. The
+     shelf, Add sheet, and notebook detail own their own internal layout
+     and scrolling, so this is a plain full-height flex host. */
+  .library-surface {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-primary);
+  }
+
   /* Atlas surface — full-width inspection view, no sidebar. AtlasIndex
      and its descendants (corpus list in Step 2, browse view in Step 3,
      atom detail in Step 4) own their own internal layout. Scrolls
@@ -1009,9 +1048,4 @@
     background: var(--bg-primary);
   }
 
-  .run-workflow-surface {
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg-primary);
-  }
 </style>
