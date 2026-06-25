@@ -281,6 +281,18 @@ pub enum Permission {
     /// agent can iterate on recipes" without granting blanket
     /// filesystem write.
     RecipeAuthoring,
+    /// Author / edit workflows — the umbrella authoring permission, distinct
+    /// from `RecipeAuthoring` (which is the proprietary ingest/enrich stage).
+    /// The workflow-author tools are allowlisted to `~/.sovereign/workflows/`,
+    /// so a single gate covers the whole compose→validate→test loop without
+    /// granting blanket filesystem write.
+    WorkflowAuthoring,
+    /// Download + index a corpus from a recipe (the `recipe:` workflow stage).
+    /// One gate covers the heavy ingest (network fetch + large local compute +
+    /// disk write) — more honest in a trigger-attach prompt than three generic
+    /// permissions, and lets a policy grant "may build corpora" without blanket
+    /// `Network`/`FileWrite`.
+    CorpusIngest,
 }
 
 // ─── Trust ────────────────────────────────────────────────────

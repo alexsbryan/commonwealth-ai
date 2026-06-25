@@ -168,6 +168,36 @@ pub trait EntityExtractor: Send + Sync {
     fn extract_entities(&self, text: &str) -> Vec<String>;
 }
 
+// ─── Corpus install (the `recipe:` workflow stage) ─────────────
+
+/// Installs/updates a corpus from a recipe. The `recipe:` workflow stage
+/// delegates to this instead of reimplementing ingest — implementations route
+/// through the EXISTING corpus-install path (the daemon's mesh-coordinated
+/// `/internal/corpus/install`), so a `recipe:` step never bypasses the work-queue
+/// / partition lock. Lives on core so `sovereign-workflow` (core-only) can hold a
+/// `dyn CorpusInstaller` without depending on the engine or the install crate; the
+/// concrete HTTP-client impl lives at the daemon/CLI layer.
+#[async_trait]
+pub trait CorpusInstaller: Send + Sync {
+    /// Install or update the corpus produced by recipe `id`, threading the
+    /// recipe's `[parameters]` values. Idempotent (a no-op when already installed
+    /// and fresh), and blocks until the install reaches a terminal state so a
+    /// downstream workflow step can consume the corpus.
+    async fn ensure_installed(
+        &self,
+        id: &str,
+        params: &std::collections::BTreeMap<String, String>,
+    ) -> Result<InstallOutcome>;
+}
+
+/// Result of [`CorpusInstaller::ensure_installed`].
+#[derive(Debug, Clone)]
+pub struct InstallOutcome {
+    pub corpus_id: String,
+    /// A short status token: `complete` | `already_installed` | `installing`.
+    pub status: String,
+}
+
 // ─── 1. Inference ──────────────────────────────────────────────
 
 #[async_trait]

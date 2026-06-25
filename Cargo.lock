@@ -12223,6 +12223,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-workflow-host",
  "tempfile",
  "tokio",
  "tokio-tungstenite",

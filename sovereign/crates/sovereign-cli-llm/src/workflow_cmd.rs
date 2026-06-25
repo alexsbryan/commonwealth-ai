@@ -31,6 +31,7 @@ pub async fn run_workflow(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => cmd_run(&args[1..]).await,
+        "author" => cmd_author(&args[1..]).await,
         "list" | "ls" => cmd_list(),
         "copy" | "cp" => cmd_copy(&args[1..]),
         "new" => cmd_new(&args[1..]),
@@ -40,6 +41,129 @@ pub async fn run_workflow(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// `sovereign workflow author "<describe what you want>"` — natural-language
+/// authoring. Tags a daemon conversation with the `workflow-author` skill and
+/// sends the description; the daemon runs the compose→validate→test agent loop
+/// server-side and returns the partner-facing reply. One authoring turn — re-run
+/// with more detail (or edit the saved TOML) to iterate.
+async fn cmd_author(args: &[String]) -> i32 {
+    let mut daemon = DEFAULT_DAEMON.to_string();
+    let mut desc: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--daemon" => {
+                i += 1;
+                match args.get(i) {
+                    Some(u) => daemon = u.clone(),
+                    None => {
+                        eprintln!("--daemon needs a URL");
+                        return 1;
+                    }
+                }
+            }
+            s if !s.starts_with('-') && desc.is_none() => desc = Some(s.to_string()),
+            other => {
+                eprintln!("Unknown argument: {other}");
+                return 1;
+            }
+        }
+        i += 1;
+    }
+    let Some(desc) = desc else {
+        eprintln!("Usage: sovereign workflow author \"<describe the workflow you want>\"");
+        eprintln!("Example: sovereign workflow author \"fetch a web page and write a 3-sentence summary\"");
+        return 1;
+    };
+
+    let base = daemon.trim_end_matches('/').to_string();
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(240))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("http client: {e}");
+            return 1;
+        }
+    };
+
+    // Tag a conversation with the workflow-author skill so the daemon routes it
+    // into the authoring agent loop.
+    let conv = match client
+        .post(format!("{base}/v1/conversations"))
+        .json(&serde_json::json!({ "skill_id": "workflow-author" }))
+        .send()
+        .await
+    {
+        Ok(r) => match r.error_for_status() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!(
+                    "Daemon rejected the conversation ({e}). It may predate workflow-author \
+                     support — rebuild + restart the daemon."
+                );
+                return 1;
+            }
+        },
+        Err(e) => {
+            eprintln!("Daemon not reachable at {daemon} ({e}). Start it with `sovereign daemon`.");
+            return 1;
+        }
+    };
+    let conv_id = match conv.json::<serde_json::Value>().await {
+        Ok(v) => v
+            .get("id")
+            .and_then(|x| x.as_str())
+            .map(String::from)
+            .unwrap_or_default(),
+        Err(e) => {
+            eprintln!("parse create-conversation response: {e}");
+            return 1;
+        }
+    };
+    if conv_id.is_empty() {
+        eprintln!("create-conversation response missing `id`");
+        return 1;
+    }
+    eprintln!("Authoring (conversation {conv_id}) — composing, validating, and checking what it can do…\n");
+
+    // One partner turn; the daemon's whole server-side tool loop runs before this returns.
+    let reply = match client
+        .post(format!("{base}/v1/conversations/{conv_id}/messages"))
+        .json(&serde_json::json!({ "content": desc }))
+        .send()
+        .await
+    {
+        Ok(r) => match r.error_for_status() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("daemon returned an error running the authoring turn: {e}");
+                return 1;
+            }
+        },
+        Err(e) => {
+            eprintln!("send authoring message: {e}");
+            return 1;
+        }
+    };
+    let content = reply
+        .json::<serde_json::Value>()
+        .await
+        .ok()
+        .and_then(|v| {
+            v.get("content")
+                .and_then(|x| x.as_str())
+                .map(String::from)
+        })
+        .unwrap_or_default();
+    println!("{}", content.trim());
+    eprintln!("\n— authored workflows land in ~/.sovereign/workflows/ —");
+    eprintln!("  sovereign workflow list                 # see them");
+    eprintln!("  sovereign workflow run <name> --folder <dir>   # run it");
+    0
 }
 
 // The catalog (SHIPPED_WORKFLOWS, workflows_dir, resolve_workflow_source,
@@ -57,6 +181,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "run <name|file>",
                 "Run a workflow (a shipped/user name, or a .toml path) over its source items",
+            ),
+            (
+                "author \"<description>\"",
+                "Describe a workflow in plain language; your local model composes, validates, and saves it",
             ),
             ("list", "List available workflows (shipped starters + your own)"),
             (

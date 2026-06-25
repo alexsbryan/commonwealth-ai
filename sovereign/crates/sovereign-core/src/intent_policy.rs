@@ -32,6 +32,9 @@ use crate::types::{Intent, ToolDescriptor};
 /// the `id` field of the TOMLs at `sovereign/modes/<id>/skill.toml`.
 pub const MODE_INNER_WORK: &str = "inner-work";
 pub const MODE_RECIPE_AUTHOR: &str = "recipe-author";
+/// Workflow-author workspace — the umbrella authoring mode. Same agent-loop
+/// treatment as recipe-author (force the tool loop, Primary slot), different tools.
+pub const MODE_WORKFLOW_AUTHOR: &str = "workflow-author";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -89,6 +92,9 @@ pub enum PolicySource {
     /// Recipe-author workspace: bespoke tool set. Mode takes
     /// precedence over intent.
     RecipeAuthorMode,
+    /// Workflow-author workspace: the workflow authoring tool set. Mode takes
+    /// precedence over intent (same as recipe-author).
+    WorkflowAuthorMode,
     /// No classification yet (test harness, headless boot). Falls
     /// through to `ToolFilter::Unrestricted`.
     Unsituated,
@@ -169,7 +175,7 @@ pub fn policy_for(
             source: PolicySource::InnerWorkMode,
             effective_intent: Some(effective_intent),
         },
-        Some(MODE_RECIPE_AUTHOR) => {
+        Some(mode @ (MODE_RECIPE_AUTHOR | MODE_WORKFLOW_AUTHOR)) => {
             // Recipe-author workspace REQUIRES tool orchestration —
             // every meaningful turn calls `recipe_write_structured`,
             // `recipe_validate`, `recipe_test`, `decision_log`,
@@ -192,11 +198,16 @@ pub fn policy_for(
                 Intent::ComplexTask | Intent::Continuation { .. } => effective_intent.clone(),
                 _ => Intent::ComplexTask,
             };
+            let (tools, source) = if mode == MODE_WORKFLOW_AUTHOR {
+                (workflow_author_tools(), PolicySource::WorkflowAuthorMode)
+            } else {
+                (recipe_author_tools(), PolicySource::RecipeAuthorMode)
+            };
             IntentPolicy {
-                tool_filter: ToolFilter::allow(recipe_author_tools()),
+                tool_filter: ToolFilter::allow(tools),
                 synthesis_addendum: None,
                 register: effective_register,
-                source: PolicySource::RecipeAuthorMode,
+                source,
                 effective_intent: Some(recipe_intent),
             }
         }
@@ -272,13 +283,20 @@ pub fn policy_for_mode_only(register: SkillRegister, active_mode: Option<&str>) 
             source: PolicySource::InnerWorkMode,
             effective_intent: None,
         },
-        Some(MODE_RECIPE_AUTHOR) => IntentPolicy {
-            tool_filter: ToolFilter::allow(recipe_author_tools()),
-            synthesis_addendum: None,
-            register,
-            source: PolicySource::RecipeAuthorMode,
-            effective_intent: None,
-        },
+        Some(mode @ (MODE_RECIPE_AUTHOR | MODE_WORKFLOW_AUTHOR)) => {
+            let (tools, source) = if mode == MODE_WORKFLOW_AUTHOR {
+                (workflow_author_tools(), PolicySource::WorkflowAuthorMode)
+            } else {
+                (recipe_author_tools(), PolicySource::RecipeAuthorMode)
+            };
+            IntentPolicy {
+                tool_filter: ToolFilter::allow(tools),
+                synthesis_addendum: None,
+                register,
+                source,
+                effective_intent: None,
+            }
+        }
         _ => IntentPolicy {
             tool_filter: ToolFilter::Unrestricted,
             synthesis_addendum: None,
@@ -389,6 +407,26 @@ fn recipe_author_tools() -> Vec<&'static str> {
     ]
 }
 
+/// Tool allowlist for the workflow-author workspace. The umbrella authoring tools;
+/// Inc1 will add the recipe sub-flow tools here so a workflow can author its ingest
+/// stage via the proven recipe loop.
+fn workflow_author_tools() -> Vec<&'static str> {
+    vec![
+        "workflow_write",
+        "workflow_validate",
+        "workflow_test",
+        // The recipe sub-flow — author the ingest/enrich stage a workflow's
+        // `recipe:<id>` step references, with the same validate/dry-run rigor.
+        "registry_browse",
+        "recipe_read",
+        "recipe_write_structured",
+        "recipe_validate",
+        "recipe_test",
+        "note",
+        "notes",
+    ]
+}
+
 // ─── Apply ─────────────────────────────────────────────────────
 
 /// Apply the policy's `tool_filter` to a catalog. Preserves catalog
@@ -479,6 +517,9 @@ mod tests {
             "probe_url",
             "note",
             "run_tests",
+            "workflow_write",
+            "workflow_validate",
+            "workflow_test",
         ]
         .iter()
         .map(|id| fake_descriptor(id))
@@ -586,6 +627,29 @@ mod tests {
         // ComplexTask.
         assert!(!ids.contains(&"shell"));
         assert!(!ids.contains(&"symbol_lookup"));
+    }
+
+    #[test]
+    fn policy_for_workflow_author_mode_has_workflow_tools() {
+        // Even on a plain query, workflow-author mode forces the tool loop
+        // (ComplexTask) + its own tool set + the WorkflowAuthorMode source.
+        let policy = policy_for(
+            &Intent::SimpleQuery,
+            SkillRegister::Factual,
+            Some(MODE_WORKFLOW_AUTHOR),
+        );
+        assert_eq!(policy.source, PolicySource::WorkflowAuthorMode);
+        assert_eq!(policy.effective_intent, Some(Intent::ComplexTask));
+        let narrowed = narrow_tools(&full_catalog(), &policy);
+        let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
+        assert!(ids.contains(&"workflow_write"));
+        assert!(ids.contains(&"workflow_validate"));
+        assert!(ids.contains(&"workflow_test"));
+        // The recipe sub-flow is available too — the workflow-author authors a
+        // workflow's ingest/enrich stage via the proven recipe loop.
+        assert!(ids.contains(&"recipe_write_structured"));
+        // But not unrelated tools.
+        assert!(!ids.contains(&"shell"));
     }
 
     #[test]
