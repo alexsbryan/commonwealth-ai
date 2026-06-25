@@ -25,11 +25,12 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use corpus_engine::Recipe;
+use sovereign_workflow::Workflow;
 use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_tools::recipe_author::{
-    self, checkpoint::restore_checkpoint as do_restore_checkpoint, CheckpointMeta, ProjectSummary,
-    RecipeProject,
+    self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
+    ProjectSummary, RecipeProject,
 };
 
 use crate::state::AppState;
@@ -73,6 +74,8 @@ pub struct RecipeProjectListEntry {
     pub feature_id: String,
     pub title: String,
     pub charter_excerpt: String,
+    /// `"recipe"` or `"workflow"` — so the sidebar can tag the project's kind.
+    pub artifact_kind: ArtifactKind,
     pub recipe_id: Option<String>,
     pub current_sample_size: Option<u64>,
     pub last_test_status: Option<String>,
@@ -92,6 +95,7 @@ impl RecipeProjectListEntry {
             feature_id: row.id.clone(),
             title: row.title.clone(),
             charter_excerpt: excerpt,
+            artifact_kind: summary.artifact_kind,
             recipe_id: summary.recipe_id,
             current_sample_size: summary.current_sample_size,
             last_test_status: summary.last_test_status,
@@ -138,6 +142,9 @@ fn default_summary(row: &RecipeProjectRow) -> ProjectSummary {
     ProjectSummary {
         feature_id: row.id.clone(),
         title: row.title.clone(),
+        // Fallback summary when the sidecar can't be read — default to Recipe
+        // (the only kind the desktop drives today; Layer B makes this kind-aware).
+        artifact_kind: ArtifactKind::Recipe,
         recipe_id: None,
         current_sample_size: None,
         last_test_status: None,
@@ -153,6 +160,11 @@ fn default_summary(row: &RecipeProjectRow) -> ProjectSummary {
 pub struct NewProjectRequest {
     pub title: String,
     pub charter_md: String,
+    /// What the project authors. `#[serde(default)]` → an existing frontend that
+    /// omits it creates a `Recipe` project, unchanged; a workflow-author surface
+    /// passes `"workflow"`.
+    #[serde(default)]
+    pub artifact_kind: ArtifactKind,
 }
 
 #[tauri::command]
@@ -165,9 +177,10 @@ pub async fn recipe_author_new_project(
     if title.is_empty() {
         return Err("title cannot be empty".into());
     }
-    let project = RecipeProject::new(
+    let project = RecipeProject::new_with_kind(
         title,
         &req.charter_md,
+        req.artifact_kind,
         Arc::clone(&notes),
         Arc::clone(&features),
     )
@@ -271,6 +284,10 @@ pub struct RecipeAuthorDashboardState {
     pub feature_id: String,
     pub title: String,
     pub charter_md: String,
+    /// `"recipe"` or `"workflow"` — lets the frontend label the workspace and
+    /// branch its validation card. `recipe_*` fields below carry the artifact
+    /// regardless of kind (frontend-compat field names).
+    pub artifact_kind: ArtifactKind,
     pub recipe_id: Option<String>,
     pub recipe_path: Option<String>,
     pub recipe_toml: Option<String>,
@@ -288,48 +305,87 @@ pub struct RecipeAuthorDashboardState {
     pub validation: RecipeValidationReport,
 }
 
-/// Validate recipe TOML into the dashboard's [`RecipeValidationReport`] shape.
-/// Single source of truth for "did this recipe parse + will it enrich?" used by
-/// both the dashboard poll and the in-app TOML save (B1) so the partner sees
-/// identical verdicts whether the agent wrote the recipe or they hand-edited it.
-fn validate_recipe_toml(recipe_toml: Option<&str>) -> RecipeValidationReport {
-    match recipe_toml {
-        None => RecipeValidationReport {
-            ok: false,
-            errors: Vec::new(),
-            no_recipe: true,
-            enrichment_ready: false,
-        },
-        Some(toml_str) => match Recipe::from_toml(toml_str) {
+/// Validate artifact TOML into the dashboard's [`RecipeValidationReport`] shape,
+/// dispatched by [`ArtifactKind`]: a recipe via `Recipe::from_toml` (carrying the
+/// translated parse guidance + enrichment readiness), a workflow via
+/// `Workflow::parse` (syntax, duplicate step ids, step cycles). `enrichment_ready`
+/// is recipe-only — always `false` for a workflow. Single source of truth for "did
+/// this artifact parse?" used by both the dashboard poll and the in-app TOML save
+/// so the partner sees identical verdicts whether the agent or they authored it.
+fn validate_artifact_toml(
+    kind: ArtifactKind,
+    artifact_toml: Option<&str>,
+) -> RecipeValidationReport {
+    let toml_str = match artifact_toml {
+        None => {
+            return RecipeValidationReport {
+                ok: false,
+                errors: Vec::new(),
+                no_recipe: true,
+                enrichment_ready: false,
+            }
+        }
+        Some(t) => t,
+    };
+    match kind {
+        ArtifactKind::Recipe => match Recipe::from_toml(toml_str) {
             Ok(recipe) => RecipeValidationReport {
                 ok: true,
                 errors: Vec::new(),
                 no_recipe: false,
                 enrichment_ready: recipe.produces_enriched_atoms(),
             },
-            // Error text already carries the translate_parse_error rewrite
-            // (missing-section guidance, allowed-variant lists). Split on blank
-            // lines so each guidance block renders as a discrete row, intact.
-            Err(e) => {
-                let message = e.to_string();
-                let errors = if message.is_empty() {
-                    vec!["recipe failed to parse (no message)".to_string()]
-                } else {
-                    message
-                        .split("\n\n")
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string)
-                        .collect()
-                };
-                RecipeValidationReport {
-                    ok: false,
-                    errors,
-                    no_recipe: false,
-                    enrichment_ready: false,
-                }
-            }
+            Err(e) => RecipeValidationReport {
+                ok: false,
+                errors: split_parse_errors(&e.to_string()),
+                no_recipe: false,
+                enrichment_ready: false,
+            },
         },
+        ArtifactKind::Workflow => match Workflow::parse(toml_str) {
+            Ok(_) => RecipeValidationReport {
+                ok: true,
+                errors: Vec::new(),
+                no_recipe: false,
+                enrichment_ready: false,
+            },
+            Err(e) => RecipeValidationReport {
+                ok: false,
+                errors: split_parse_errors(&e.to_string()),
+                no_recipe: false,
+                enrichment_ready: false,
+            },
+        },
+    }
+}
+
+/// Split a parser error into discrete guidance rows. Recipe errors carry
+/// blank-line-separated blocks from `translate_parse_error` (missing-section
+/// guidance, allowed-variant lists) — render each intact; a workflow parse error
+/// is a single line. Empty message → one fallback row.
+fn split_parse_errors(message: &str) -> Vec<String> {
+    if message.is_empty() {
+        return vec!["artifact failed to parse (no message)".to_string()];
+    }
+    message
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Resolve the on-disk artifact TOML path for a project's `(kind, id)`: a recipe at
+/// `~/.sovereign/recipes/<id>/recipe.toml`, a workflow at
+/// `~/.sovereign/workflows/<id>.toml`. `None` when the home dir can't be resolved.
+fn artifact_toml_path(kind: ArtifactKind, artifact_id: &str) -> Option<std::path::PathBuf> {
+    match kind {
+        ArtifactKind::Recipe => recipe_author::local_recipes_dir()
+            .ok()
+            .map(|r| r.join(artifact_id).join("recipe.toml")),
+        ArtifactKind::Workflow => recipe_author::local_workflows_dir()
+            .ok()
+            .map(|r| r.join(format!("{artifact_id}.toml"))),
     }
 }
 
@@ -354,15 +410,17 @@ pub async fn recipe_author_dashboard_state(
         .read_summary()
         .unwrap_or_else(|_| default_summary(&row));
 
-    // Resolve recipe.toml on disk if the project has a recipe id yet.
+    // Resolve the artifact TOML on disk if the project has an id yet — recipe.toml
+    // or workflow.toml by the project's kind. (`recipe_id` carries the artifact id
+    // for both kinds; the DTO field names stay recipe-shaped for frontend compat,
+    // with `artifact_kind` added so the UI can branch.)
     let (recipe_path, recipe_toml) = match summary.recipe_id.as_deref() {
-        Some(rid) => match recipe_author::local_recipes_dir() {
-            Ok(root) => {
-                let path = root.join(rid).join("recipe.toml");
+        Some(aid) => match artifact_toml_path(summary.artifact_kind, aid) {
+            Some(path) => {
                 let text = std::fs::read_to_string(&path).ok();
                 (Some(path.to_string_lossy().into_owned()), text)
             }
-            Err(_) => (None, None),
+            None => (None, None),
         },
         None => (None, None),
     };
@@ -402,12 +460,13 @@ pub async fn recipe_author_dashboard_state(
         .list_checkpoints()
         .map_err(|e| format!("recipe_author_dashboard_state: list checkpoints: {e}"))?;
 
-    let validation = validate_recipe_toml(recipe_toml.as_deref());
+    let validation = validate_artifact_toml(summary.artifact_kind, recipe_toml.as_deref());
 
     Ok(RecipeAuthorDashboardState {
         feature_id,
         title: row.title,
         charter_md: row.charter_md,
+        artifact_kind: summary.artifact_kind,
         recipe_id: summary.recipe_id,
         recipe_path,
         recipe_toml,
@@ -454,25 +513,33 @@ pub async fn recipe_author_save_edited_toml(
     let summary = project
         .read_summary()
         .map_err(|e| format!("recipe_author_save_edited_toml: read summary: {e}"))?;
-    let recipe_id = summary.recipe_id.ok_or_else(|| {
-        "this project has no recipe yet — draft one with the agent before editing".to_string()
+    let kind = summary.artifact_kind;
+    let artifact_id = summary.recipe_id.ok_or_else(|| {
+        format!(
+            "this project has no {} yet — draft one with the agent before editing",
+            kind.label()
+        )
     })?;
 
-    // Validate against the SAME engine parse the dashboard uses. Do not write a
-    // recipe that fails to parse.
-    let report = validate_recipe_toml(Some(&edited_toml));
+    // Validate against the SAME parser the dashboard uses (by kind). Do not write
+    // an artifact that fails to parse.
+    let report = validate_artifact_toml(kind, Some(&edited_toml));
     if !report.ok {
         return Ok(report);
     }
 
-    // Atomic write to <recipes>/<recipe_id>/recipe.toml (`.part` → rename),
-    // mirroring RecipeWriteStructuredTool so agent + manual writes are identical.
-    let root = recipe_author::local_recipes_dir()
-        .map_err(|e| format!("recipe_author_save_edited_toml: locate recipes dir: {e}"))?;
-    let dir = root.join(&recipe_id);
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("recipe_author_save_edited_toml: create {}: {e}", dir.display()))?;
-    let path = dir.join("recipe.toml");
+    // Atomic write to the kind's on-disk path (`.part` → rename), mirroring the
+    // structured-write tools so an agent write and a manual edit are identical on
+    // disk — the agent picks it up next turn via the prelude's disk re-read.
+    let path = artifact_toml_path(kind, &artifact_id).ok_or_else(|| {
+        "recipe_author_save_edited_toml: cannot locate the artifact directory (HOME unset)"
+            .to_string()
+    })?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            format!("recipe_author_save_edited_toml: create {}: {e}", parent.display())
+        })?;
+    }
     let part = path.with_extension("toml.part");
     std::fs::write(&part, edited_toml.as_bytes())
         .map_err(|e| format!("recipe_author_save_edited_toml: write {}: {e}", part.display()))?;
@@ -485,8 +552,9 @@ pub async fn recipe_author_save_edited_toml(
     })?;
     tracing::info!(
         feature_id = %feature_id,
-        recipe_id = %recipe_id,
-        "recipe_author_save_edited_toml wrote hand-edited recipe.toml"
+        artifact_id = %artifact_id,
+        kind = kind.label(),
+        "recipe_author_save_edited_toml wrote hand-edited artifact TOML"
     );
     Ok(report)
 }
@@ -515,11 +583,12 @@ pub async fn recipe_author_restore_checkpoint(
         .await
         .map_err(|e| format!("recipe_author_restore_checkpoint: {e}"))?;
 
-    // The summary holds the optional recipe_id we need to overwrite
-    // the live recipe.toml from the snapshot. Best-effort — if the
-    // project hasn't drafted a recipe yet, restore_checkpoint just
-    // lays down a restore-anchor checkpoint without touching disk.
-    let recipe_id = project.read_summary().ok().and_then(|s| s.recipe_id);
+    // The summary holds the optional artifact id (`recipe_id` carries it for both
+    // kinds) we need to overwrite the live recipe.toml / workflow.toml from the
+    // snapshot. Best-effort — if the project hasn't drafted an artifact yet,
+    // `do_restore_checkpoint` just lays down a restore-anchor checkpoint without
+    // touching disk. It resolves the write path by the project's kind internally.
+    let artifact_id = project.read_summary().ok().and_then(|s| s.recipe_id);
 
     // Stable session id so the resulting `kind=checkpoint_restored`
     // note attributes the act to the desktop workspace rather than to
@@ -529,7 +598,7 @@ pub async fn recipe_author_restore_checkpoint(
     let outcome = do_restore_checkpoint(
         &project,
         &req.checkpoint_id,
-        recipe_id.as_deref(),
+        artifact_id.as_deref(),
         None,
         &session_id,
     )
@@ -595,25 +664,34 @@ pub async fn recipe_author_build_prelude(
     let summary = project
         .read_summary()
         .map_err(|e| format!("Recipe Author: read summary failed: {e}"))?;
+    // Resolve + render the artifact TOML by kind (`recipe.toml` under recipes/, or
+    // `workflow.toml` under workflows/). `recipe_id` carries the artifact id for
+    // both. Kept on `sovereign_root_dir()` (honours SOVEREIGN_HOME) as before.
+    let label = summary.artifact_kind.label();
     let (recipe_block, validation_block) = match &summary.recipe_id {
-        Some(recipe_id) => {
-            let path = sovereign_root_dir()
-                .join("recipes")
-                .join(recipe_id)
-                .join("recipe.toml");
+        Some(artifact_id) => {
+            let path = match summary.artifact_kind {
+                ArtifactKind::Recipe => sovereign_root_dir()
+                    .join("recipes")
+                    .join(artifact_id)
+                    .join("recipe.toml"),
+                ArtifactKind::Workflow => sovereign_root_dir()
+                    .join("workflows")
+                    .join(format!("{artifact_id}.toml")),
+            };
             match std::fs::read_to_string(&path) {
                 Ok(toml) => {
-                    let validation = inline_validate_recipe(&toml);
-                    let recipe = format!(
-                        "\n[Current recipe TOML]\nPath: {}\n```toml\n{}\n```\n",
+                    let validation = inline_validate_artifact(summary.artifact_kind, &toml);
+                    let block = format!(
+                        "\n[Current {label} TOML]\nPath: {}\n```toml\n{}\n```\n",
                         path.display(),
                         toml.trim_end(),
                     );
-                    (recipe, validation)
+                    (block, validation)
                 }
                 Err(e) => (
                     format!(
-                        "\n[Current recipe TOML]\nNot readable at {}: {e}\n",
+                        "\n[Current {label} TOML]\nNot readable at {}: {e}\n",
                         path.display()
                     ),
                     String::new(),
@@ -621,9 +699,10 @@ pub async fn recipe_author_build_prelude(
             }
         }
         None => (
-            "\n[Current recipe TOML]\n(no recipe drafted yet — use \
-             `recipe_write_structured` to create one)\n"
-                .to_string(),
+            format!(
+                "\n[Current {label} TOML]\n(no {label} drafted yet — use \
+                 `{label}_write_structured` to create one)\n"
+            ),
             String::new(),
         ),
     };
@@ -633,15 +712,22 @@ pub async fn recipe_author_build_prelude(
     Ok(block)
 }
 
-/// Inline TOML-parse validation. Mirrors what `RecipeValidateTool`
-/// produces but runs in-process so the prelude doesn't need to dance
-/// around the tool dispatcher. Returns an empty string when the
-/// recipe parses cleanly — the agent doesn't need to see a "passes"
-/// notice every turn.
-fn inline_validate_recipe(toml: &str) -> String {
-    match toml::from_str::<corpus_engine::Recipe>(toml) {
-        Ok(_) => String::new(),
-        Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
+/// Inline TOML-parse validation by kind. Mirrors what `RecipeValidateTool` /
+/// `WorkflowValidateTool` produce but runs in-process so the prelude doesn't dance
+/// around the tool dispatcher. Returns an empty string when the artifact parses
+/// cleanly — the agent doesn't need to see a "passes" notice every turn.
+fn inline_validate_artifact(kind: ArtifactKind, toml: &str) -> String {
+    match kind {
+        ArtifactKind::Recipe => match toml::from_str::<corpus_engine::Recipe>(toml) {
+            Ok(_) => String::new(),
+            Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
+        },
+        ArtifactKind::Workflow => match Workflow::parse(toml) {
+            Ok(_) => String::new(),
+            Err(e) => {
+                format!("\n[Latest validation]\nWorkflow does NOT parse. First error:\n{e}\n")
+            }
+        },
     }
 }
 

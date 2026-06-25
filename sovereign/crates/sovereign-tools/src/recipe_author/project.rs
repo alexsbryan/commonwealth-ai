@@ -104,6 +104,40 @@ pub fn maintainer_inbox_dir() -> Result<PathBuf> {
         })
 }
 
+/// Which artifact a project authors. The recipe-author project model is
+/// artifact-blind almost everywhere (charter, decision log, frontier, research +
+/// capability sidecars, restore) — this one tag is what the *snapshot* path needs
+/// to know: a recipe project snapshots `recipe.toml`, a workflow project
+/// `workflow.toml`. `#[default] Recipe` + `#[serde(default)]` on the carrying
+/// fields means every existing `project.json` / `meta.json` (written before this
+/// tag existed) decodes as `Recipe`, restoring byte-identically.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactKind {
+    #[default]
+    Recipe,
+    Workflow,
+}
+
+impl ArtifactKind {
+    /// The snapshot filename inside a checkpoint dir. `recipe.toml` is unchanged
+    /// (existing checkpoints restore identically); `workflow.toml` is the new arm.
+    pub fn snapshot_basename(self) -> &'static str {
+        match self {
+            ArtifactKind::Recipe => "recipe.toml",
+            ArtifactKind::Workflow => "workflow.toml",
+        }
+    }
+
+    /// Lowercase noun for prose surfaces (`[Current <label> TOML]`, errors).
+    pub fn label(self) -> &'static str {
+        match self {
+            ArtifactKind::Recipe => "recipe",
+            ArtifactKind::Workflow => "workflow",
+        }
+    }
+}
+
 /// On-disk per-project summary, kept small so `RecipeProject::load`
 /// doesn't have to walk the whole project directory. Updated by
 /// tools that change state — `recipe_id` is set when a recipe is
@@ -114,6 +148,10 @@ pub fn maintainer_inbox_dir() -> Result<PathBuf> {
 pub struct ProjectSummary {
     pub feature_id: String,
     pub title: String,
+    /// What this project authors (recipe vs workflow). `#[serde(default)]` →
+    /// pre-tag `project.json` files decode as `Recipe`.
+    #[serde(default)]
+    pub artifact_kind: ArtifactKind,
     /// Recipe id under `~/.sovereign/recipes/<recipe_id>/`. `None`
     /// before the agent has drafted a recipe.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -155,6 +193,11 @@ pub struct DecisionFrontier {
 pub struct CheckpointMeta {
     /// Stable id (the directory basename: `<ts>-<slug>`).
     pub checkpoint_id: String,
+    /// What was snapshotted (recipe vs workflow) — so a checkpoint dir is
+    /// self-describing. `#[serde(default)]` → pre-tag checkpoints decode as
+    /// `Recipe` (they hold a `recipe.toml`).
+    #[serde(default)]
+    pub artifact_kind: ArtifactKind,
     /// Human-readable name supplied by the agent / partner.
     pub name: String,
     /// Why the checkpoint was created. Set to one of the
@@ -180,18 +223,33 @@ pub struct CheckpointMeta {
 pub struct RecipeProject {
     feature_id: String,
     title: String,
+    artifact_kind: ArtifactKind,
     project_dir: PathBuf,
     notes: Arc<NoteStore>,
     features: Arc<RecipeProjectStore>,
 }
 
 impl RecipeProject {
-    /// Provision a fresh project. Allocates a v4 UUID feature_id,
-    /// writes the RecipeProjectRow at state=`RecipeAuthoring`, lays down
-    /// the on-disk directory + summary, and returns the live handle.
+    /// Provision a fresh **recipe** project — the common case. Delegates to
+    /// [`Self::new_with_kind`] so every existing caller stays unchanged; the
+    /// workflow-authoring path constructs with `ArtifactKind::Workflow`.
     pub async fn new(
         title: &str,
         charter_md: &str,
+        notes: Arc<NoteStore>,
+        features: Arc<RecipeProjectStore>,
+    ) -> Result<Self> {
+        Self::new_with_kind(title, charter_md, ArtifactKind::Recipe, notes, features).await
+    }
+
+    /// Provision a fresh project of a given [`ArtifactKind`]. Allocates a v4 UUID
+    /// feature_id, writes the RecipeProjectRow at state=`RecipeAuthoring`, lays
+    /// down the on-disk directory + summary (tagged with `artifact_kind`), and
+    /// returns the live handle.
+    pub async fn new_with_kind(
+        title: &str,
+        charter_md: &str,
+        artifact_kind: ArtifactKind,
         notes: Arc<NoteStore>,
         features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
@@ -219,6 +277,7 @@ impl RecipeProject {
         let summary = ProjectSummary {
             feature_id: feature_id.clone(),
             title: title.into(),
+            artifact_kind,
             recipe_id: None,
             current_sample_size: None,
             last_test_status: None,
@@ -231,6 +290,7 @@ impl RecipeProject {
         Ok(Self {
             feature_id,
             title: title.into(),
+            artifact_kind,
             project_dir,
             notes,
             features,
@@ -270,9 +330,17 @@ impl RecipeProject {
             std::fs::create_dir_all(&research)
                 .map_err(|e| io_err("create_dir_all", &research, e))?;
         }
+        // Recover the artifact kind from the on-disk summary (default `Recipe` for
+        // pre-tag projects and brand-new dirs that don't have a project.json yet).
+        let artifact_kind = std::fs::read_to_string(project_dir.join("project.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<ProjectSummary>(&t).ok())
+            .map(|s| s.artifact_kind)
+            .unwrap_or_default();
         Ok(Self {
             feature_id: row.id,
             title: row.title,
+            artifact_kind,
             project_dir,
             notes,
             features,
@@ -285,6 +353,12 @@ impl RecipeProject {
 
     pub fn title(&self) -> &str {
         &self.title
+    }
+
+    /// What this project authors — drives the checkpoint snapshot basename and the
+    /// desktop's validation/prelude branch.
+    pub fn artifact_kind(&self) -> ArtifactKind {
+        self.artifact_kind
     }
 
     pub fn project_dir(&self) -> &Path {
@@ -312,6 +386,7 @@ impl RecipeProject {
             return Ok(ProjectSummary {
                 feature_id: self.feature_id.clone(),
                 title: self.title.clone(),
+                artifact_kind: self.artifact_kind,
                 recipe_id: None,
                 current_sample_size: None,
                 last_test_status: None,
@@ -374,17 +449,16 @@ impl RecipeProject {
         Ok(out)
     }
 
-    /// Read the recipe TOML snapshot stored inside a checkpoint.
-    /// Returns [`Error::InvalidInput`] when the checkpoint id is
-    /// unknown or the snapshot is missing.
-    pub fn read_checkpoint_recipe(&self, checkpoint_id: &str) -> Result<String> {
-        let path = self
-            .checkpoints_dir()
-            .join(checkpoint_id)
-            .join("recipe.toml");
+    /// Read the artifact TOML snapshot stored inside a checkpoint — `recipe.toml`
+    /// for a recipe project, `workflow.toml` for a workflow project (by this
+    /// project's [`ArtifactKind`]). Returns [`Error::InvalidInput`] when the
+    /// checkpoint id is unknown or the snapshot is missing.
+    pub fn read_checkpoint_artifact(&self, checkpoint_id: &str) -> Result<String> {
+        let basename = self.artifact_kind.snapshot_basename();
+        let path = self.checkpoints_dir().join(checkpoint_id).join(basename);
         if !path.exists() {
             return Err(Error::InvalidInput(format!(
-                "checkpoint `{checkpoint_id}` has no recipe.toml snapshot"
+                "checkpoint `{checkpoint_id}` has no {basename} snapshot"
             )));
         }
         std::fs::read_to_string(&path).map_err(|e| io_err("read", &path, e))
@@ -449,4 +523,57 @@ pub async fn feature_row_for(
     features: &RecipeProjectStore,
 ) -> Result<Option<RecipeProjectRow>> {
     features.get(feature_id).await.map_err(ce_rps_err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn artifact_kind_defaults_to_recipe() {
+        assert_eq!(ArtifactKind::default(), ArtifactKind::Recipe);
+    }
+
+    #[test]
+    fn snapshot_basename_by_kind() {
+        assert_eq!(ArtifactKind::Recipe.snapshot_basename(), "recipe.toml");
+        assert_eq!(ArtifactKind::Workflow.snapshot_basename(), "workflow.toml");
+    }
+
+    #[test]
+    fn artifact_kind_round_trips_snake_case() {
+        assert_eq!(
+            serde_json::to_value(ArtifactKind::Workflow).unwrap(),
+            serde_json::json!("workflow")
+        );
+        let k: ArtifactKind = serde_json::from_value(serde_json::json!("recipe")).unwrap();
+        assert_eq!(k, ArtifactKind::Recipe);
+    }
+
+    #[test]
+    fn pretag_project_summary_decodes_as_recipe() {
+        // The backward-compat invariant: a project.json written before the tag
+        // existed (no `artifact_kind` field) must decode as a Recipe project, so
+        // existing recipe-author projects keep snapshotting recipe.toml.
+        let pretag = serde_json::json!({
+            "feature_id": "f1",
+            "title": "legacy",
+            "created_at": 0,
+            "updated_at": 0
+        });
+        let summary: ProjectSummary = serde_json::from_value(pretag).unwrap();
+        assert_eq!(summary.artifact_kind, ArtifactKind::Recipe);
+    }
+
+    #[test]
+    fn pretag_checkpoint_meta_decodes_as_recipe() {
+        let pretag = serde_json::json!({
+            "checkpoint_id": "123-init",
+            "name": "init",
+            "trigger": "project_creation",
+            "created_at": "2026-01-01T00:00:00Z"
+        });
+        let meta: CheckpointMeta = serde_json::from_value(pretag).unwrap();
+        assert_eq!(meta.artifact_kind, ArtifactKind::Recipe);
+    }
 }

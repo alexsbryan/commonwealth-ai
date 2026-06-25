@@ -279,11 +279,12 @@ pub async fn do_create(
     name: &str,
     summary: &str,
     trigger: &str,
-    recipe_path: Option<&str>,
-    recipes_dir_override: Option<&PathBuf>,
+    artifact_path: Option<&str>,
+    dir_override: Option<&PathBuf>,
     session_id: &str,
     restored_from: Option<&str>,
 ) -> Result<CheckpointOutcome> {
+    let kind = project.artifact_kind();
     let timestamp_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -292,19 +293,20 @@ pub async fn do_create(
     let dir = project.checkpoints_dir().join(&checkpoint_id);
     std::fs::create_dir_all(&dir).map_err(|e| io_err("create_dir_all", &dir, e))?;
 
-    // 1. Snapshot the recipe TOML if the agent supplied a path. The
-    //    project-creation checkpoint may be empty here.
-    if let Some(rpath) = recipe_path {
-        let resolved = super::resolve_recipe_path(rpath, recipes_dir_override)?;
+    // 1. Snapshot the artifact TOML if the agent supplied a path — `recipe.toml`
+    //    or `workflow.toml` per the project's kind. The project-creation
+    //    checkpoint may be empty here.
+    if let Some(apath) = artifact_path {
+        let resolved = super::resolve_artifact_path(kind, apath, dir_override)?;
         match std::fs::read_to_string(&resolved) {
             Ok(content) => {
-                let target = dir.join("recipe.toml");
+                let target = dir.join(kind.snapshot_basename());
                 std::fs::write(&target, content).map_err(|e| io_err("write", &target, e))?;
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Path resolves under ~/.sovereign/recipes/ but no
-                // file exists yet — record the omission so a future
-                // restore knows there's nothing to write back.
+                // Path resolves under the kind's root but no file exists yet —
+                // record the omission so a future restore knows there's nothing
+                // to write back.
             }
             Err(e) => {
                 return Err(io_err("read", &resolved, e));
@@ -344,6 +346,7 @@ pub async fn do_create(
         .unwrap_or_else(|| timestamp_secs.to_string());
     let meta = CheckpointMeta {
         checkpoint_id: checkpoint_id.clone(),
+        artifact_kind: kind,
         name: name.to_string(),
         trigger: if restored_from.is_some() {
             "restore".to_string()
@@ -428,17 +431,18 @@ pub async fn do_create(
 pub async fn restore_checkpoint(
     project: &RecipeProject,
     source_checkpoint_id: &str,
-    recipe_id: Option<&str>,
-    recipes_dir_override: Option<&PathBuf>,
+    artifact_id: Option<&str>,
+    dir_override: Option<&PathBuf>,
     session_id: &str,
 ) -> Result<CheckpointOutcome> {
-    // 1. Read the snapshot TOML from the source checkpoint.
-    let snapshot_text = project.read_checkpoint_recipe(source_checkpoint_id)?;
+    // 1. Read the snapshot TOML from the source checkpoint (recipe.toml or
+    //    workflow.toml, by the project's kind).
+    let snapshot_text = project.read_checkpoint_artifact(source_checkpoint_id)?;
 
-    // 2. Write it back to the active recipe path (when one is
-    //    provided — early projects may not yet have a recipe id).
-    if let Some(rid) = recipe_id {
-        let resolved = super::resolve_recipe_path(rid, recipes_dir_override)?;
+    // 2. Write it back to the active artifact path (when one is provided — early
+    //    projects may not yet have an id), resolved by the project's kind.
+    if let Some(aid) = artifact_id {
+        let resolved = super::resolve_artifact_path(project.artifact_kind(), aid, dir_override)?;
         if let Some(parent) = resolved.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err("create_dir_all", parent, e))?;
         }
@@ -455,8 +459,8 @@ pub async fn restore_checkpoint(
         // Trigger string is overridden by `restored_from.is_some()`
         // inside `do_create`; pass any valid value for the param check.
         "partner_request",
-        recipe_id,
-        recipes_dir_override,
+        artifact_id,
+        dir_override,
         session_id,
         Some(source_checkpoint_id),
     )
@@ -466,6 +470,7 @@ pub async fn restore_checkpoint(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::ArtifactKind;
     use sovereign_store::recipe_project_store::RecipeProjectStore;
 
     /// Per-test-module HOME mutex. `HOME` is process-global, so two
@@ -582,6 +587,65 @@ mod tests {
         let snapshotted =
             std::fs::read_to_string(outcome.snapshot_path.join("recipe.toml")).unwrap();
         assert!(snapshotted.contains("\"trial\""));
+    }
+
+    #[tokio::test]
+    async fn workflow_project_snapshots_workflow_toml() {
+        // A workflow-kind project snapshots `workflow.toml` (a single file <id>.toml
+        // under ~/.sovereign/workflows/), NOT `recipe.toml` — the whole point of the
+        // ArtifactKind tag threading through do_create.
+        let _guard = home_test_lock();
+        let workflows_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            workflows_dir.path().join("myflow.toml"),
+            "[workflow]\nname = \"myflow\"\n[[step]]\nid = \"a\"\nuses = \"transform:json\"\n",
+        )
+        .unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+        let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
+        std::env::set_var("HOME", dir.path());
+        let project = RecipeProject::new_with_kind(
+            "myflow",
+            "a flow",
+            ArtifactKind::Workflow,
+            Arc::clone(&notes),
+            Arc::clone(&features),
+        )
+        .await
+        .unwrap();
+
+        let outcome = do_create(
+            &project,
+            "after first draft",
+            "drafted workflow",
+            "auto_strategy_change",
+            Some("myflow"),
+            Some(&workflows_dir.path().to_path_buf()),
+            "session-x",
+            None,
+        )
+        .await
+        .unwrap();
+
+        // The snapshot lands under the workflow basename, not the recipe one.
+        assert!(
+            outcome.snapshot_path.join("workflow.toml").exists(),
+            "workflow project must snapshot workflow.toml"
+        );
+        assert!(!outcome.snapshot_path.join("recipe.toml").exists());
+        let snap = std::fs::read_to_string(outcome.snapshot_path.join("workflow.toml")).unwrap();
+        assert!(snap.contains("[workflow]"));
+
+        // The checkpoint meta records the kind, and read_checkpoint_artifact reads
+        // it back via the workflow basename.
+        let checkpoints = project.list_checkpoints().unwrap();
+        assert_eq!(checkpoints[0].artifact_kind, ArtifactKind::Workflow);
+        let read_back = project
+            .read_checkpoint_artifact(&outcome.checkpoint_id)
+            .unwrap();
+        assert!(read_back.contains("[workflow]"));
     }
 
     // Flaky under parallel `cargo test` despite `home_test_lock` —

@@ -541,7 +541,11 @@ it. Generic primitives:
   (project model), `situated_context.rs` (per-turn renderer),
   `sovereign recipe-agent {new,show,list,live-trial}` CLI. Skill
   manifest at `sovereign/modes/recipe-author/skill.toml`
-  (privacy = `local_only`).
+  (privacy = `local_only`). The project model carries an
+  `ArtifactKind` (recipe | workflow), so the same checkpoints /
+  decision log / desktop workspace back **workflow** authoring too
+  (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
+  the recipes×workflows merge.
 
 ### Schema back-compat
 
