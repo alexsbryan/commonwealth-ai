@@ -14,6 +14,7 @@
   import AtomDetail from "./AtomDetail.svelte";
   import ConvDetail from "./ConvDetail.svelte";
   import type { AtomType } from "../../types";
+  import { atlasListConvCorpora } from "../../api";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
   type CorpusKind = "atom" | "conv";
@@ -34,6 +35,19 @@
     convUuid?: string;
   };
 
+  interface Props {
+    /** When set, scope the surface to a single corpus: seed `selection`
+     *  to it and skip the corpus index. The parent (a notebook's Explore
+     *  tab) has already chosen the corpus, so there is no picker to show.
+     *  Atom / conv drill-in still works; "back" from the corpus view
+     *  returns to this corpus's browse view rather than the (absent)
+     *  index. Omitted → the standalone Atlas Inspector (index → corpus →
+     *  atom), unchanged. */
+    startingCorpusId?: string;
+  }
+
+  let { startingCorpusId }: Props = $props();
+
   let selection: Selection | null = $state(null);
 
   // Consume the cross-surface navigation request, if any. Runs on
@@ -53,9 +67,11 @@
     }
   });
 
-  onMount(() => {
-    // Same shape on first mount — covers the case where AtlasSurface
-    // mounts AFTER the store gets set (race-tolerant).
+  onMount(async () => {
+    // A pending deep-link atom (from a reading-surface "Open in atlas")
+    // takes priority over a scoped start — the user asked for a specific
+    // atom. Race-tolerant: covers AtlasSurface mounting AFTER the store
+    // got set.
     const pending = atlasNavigation.take();
     if (pending) {
       selection = {
@@ -63,8 +79,43 @@
         kind: "atom",
         atomId: pending.atomId,
       };
+      return;
+    }
+    // Scoped mount (a notebook's Explore tab): seed straight to the
+    // corpus, resolving whether it's an atom- or conv-backed atlas so we
+    // route to the right corpus view.
+    if (startingCorpusId) {
+      const kind = await resolveCorpusKind(startingCorpusId);
+      selection = { corpusId: startingCorpusId, kind };
     }
   });
+
+  /** Conv corpora (SQLite tiered enrichment) vs atom corpora
+   *  (atoms.json). A corpus listed by `atlasListConvCorpora` is conv;
+   *  everything else (the common case — folders, documents, catalog
+   *  corpora) routes to the atom browser. Best-effort: any failure
+   *  defaults to "atom". */
+  async function resolveCorpusKind(corpusId: string): Promise<CorpusKind> {
+    try {
+      const convs = await atlasListConvCorpora();
+      if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
+    } catch {
+      // Fall through to the atom default.
+    }
+    return "atom";
+  }
+
+  /** Return to the surface's root. Unscoped: the corpus index. Scoped to
+   *  one notebook: there is no index, so pin the selection to the
+   *  starting corpus — "back" stays inside this notebook's map instead of
+   *  falling through to the global picker. */
+  function resetToRoot() {
+    if (startingCorpusId && selection) {
+      selection = { corpusId: startingCorpusId, kind: selection.kind };
+    } else {
+      selection = null;
+    }
+  }
 
   function handleSelectCorpus(corpusId: string, kind: CorpusKind) {
     selection = { corpusId, kind };
@@ -118,7 +169,7 @@
 {:else if selection?.kind === "conv"}
   <AtlasConvCorpusView
     corpusId={selection.corpusId}
-    onBack={() => (selection = null)}
+    onBack={resetToRoot}
     onSelectConv={handleSelectConv}
   />
 {:else if selection}
@@ -126,7 +177,7 @@
     corpusId={selection.corpusId}
     atomCountsHint={selection.atomCounts}
     totalAtomsHint={selection.totalAtoms}
-    onBack={() => (selection = null)}
+    onBack={resetToRoot}
     onSelectAtom={handleSelectAtom}
   />
 {:else}

@@ -163,6 +163,10 @@
       throw new Error(`conversation ${conversationId} not found`);
     },
     list_corpora: () => [],
+    // Unified Library shelf (Phase 1 UX refactor). Default empty; specs
+    // that exercise the Library override with realistic notebooks via
+    // setHandler. Shape mirrors the Rust `NotebookSummary`.
+    notebook_list: () => [],
     list_document_assets: () => [],
     list_legacy_documents: () => [],
     list_skills: () => [],

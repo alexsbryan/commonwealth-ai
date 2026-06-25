@@ -624,6 +624,39 @@ export interface CorpusEntry {
   catalog_status: string | null;
 }
 
+/** One row on the Library shelf — the unified, deduped view of an
+ *  *installed* corpus the user can ask or explore. Assembled by the
+ *  `notebook_list` command, which merges `installed_indexes()` (the
+ *  deduped on-disk set), the local-corpus configs (source kind + display
+ *  name + scope), and the atlas readers (explorable flag). Mirrors the
+ *  Rust `NotebookSummary`. */
+export interface NotebookSummary {
+  /** Corpus id — the citation handle. */
+  id: string;
+  /** Human-facing name (local display name → catalog name → index name → id). */
+  name: string;
+  /** `"folder"` | `"obsidian"` | `"watched"` | `"catalog"` | `"installed"`. */
+  source_kind: string;
+  /** Chunk count from the installed index. */
+  doc_count: number;
+  /** True when the corpus has an explorable map on disk (atoms.json or
+   *  conv-tiered enrichment). Drives the ✦ badge and the Explore tab. */
+  explorable: boolean;
+  /** Index build time (Unix seconds) — the freshness signal. */
+  updated_unix: number | null;
+  /** `"local"` | `"mesh"` | `"public"`. */
+  scope: string;
+}
+
+/** Notebook source kinds, narrowed for the shelf's icon + label map.
+ *  Backend may emit other strings; the UI treats unknowns as `"installed"`. */
+export type NotebookSourceKind =
+  | "folder"
+  | "obsidian"
+  | "watched"
+  | "catalog"
+  | "installed";
+
 /** Detailed health stats for an installed corpus — loaded on demand. */
 export interface CorpusHealthDetail {
   corpus_id: string;

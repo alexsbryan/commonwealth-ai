@@ -79,7 +79,7 @@ test.describe("inner work surface — surface skill tag", () => {
       });
     });
 
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -116,7 +116,7 @@ test.describe("inner work surface — render hygiene", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 
@@ -172,7 +172,7 @@ test.describe("inner work surface — render hygiene", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-inner-work").click();
+    await page.getByTestId("nav-reflect").click();
     const column = page.locator("textarea.column");
     await expect(column).toBeVisible({ timeout: 3_000 });
 

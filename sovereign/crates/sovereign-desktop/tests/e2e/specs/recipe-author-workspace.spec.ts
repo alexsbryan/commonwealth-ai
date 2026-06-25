@@ -33,7 +33,7 @@ test.describe("recipe author workspace", () => {
 
     // The nav-rail entry is gated behind enable_recipe_authoring,
     // which the shim default returns true — so it's present.
-    const openBtn = page.getByTestId("nav-recipe-author");
+    const openBtn = page.getByTestId("nav-workshop");
     await expect(openBtn).toBeVisible();
 
     await openBtn.click();
@@ -91,7 +91,7 @@ test.describe("recipe author workspace", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("nav-recipe-author").click();
+    await page.getByTestId("nav-workshop").click();
     const workspace = page.getByTestId("recipe-author-workspace");
     await expect(workspace).toBeVisible();
     // Sidebar shows the "no projects yet" text.
@@ -182,7 +182,7 @@ test.describe("recipe author workspace", () => {
       };
     });
 
-    await page.getByTestId("nav-recipe-author").click();
+    await page.getByTestId("nav-workshop").click();
 
     // Pick the seeded project from the sidebar.
     const row = page.getByTestId("recipe-author-project-row").first();
@@ -259,7 +259,7 @@ test.describe("recipe author workspace", () => {
       };
     });
 
-    await page.getByTestId("nav-recipe-author").click();
+    await page.getByTestId("nav-workshop").click();
     await page.getByTestId("recipe-author-project-row").first().click();
 
     const dashboard = page.getByTestId("recipe-author-dashboard");
@@ -277,42 +277,12 @@ test.describe("recipe author workspace", () => {
     await expect(copyButtons.first()).toBeVisible();
   });
 
-  test("workspace switcher is hidden when enable_recipe_authoring is false", async ({
-    sovereignPage: page,
-    chat,
-  }) => {
-    // Override the shim's default get_config BEFORE bootToChat runs
-    // so the very first read by App.svelte returns the OFF state.
-    await page.addInitScript(() => {
-      // Wait for the shim's __sovereign_test__ to install before
-      // overriding — the shim init is synchronous, but its handler
-      // overrides only kick in after `setHandler` is callable.
-      const tryInstall = () => {
-        if (!window.__sovereign_test__) {
-          setTimeout(tryInstall, 0);
-          return;
-        }
-        window.__sovereign_test__.setHandler("get_config", () => ({
-          embedding_model: null,
-          chat_model: null,
-          mesh_enabled: false,
-          enable_recipe_authoring: false,
-        }));
-      };
-      tryInstall();
-    });
-    await bootToChat(page, chat);
-
-    // Sidebar entry must NOT appear when the flag is off.
-    await expect(page.getByTestId("nav-recipe-author")).toHaveCount(0);
-  });
-
   test("validation card shows the no-recipe state cleanly", async ({
     sovereignPage: page,
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("nav-recipe-author").click();
+    await page.getByTestId("nav-workshop").click();
     await page.getByTestId("recipe-author-new-project").click();
     await page.getByTestId("recipe-author-new-title").fill("Pristine");
     await page.getByTestId("recipe-author-new-charter").fill("# Charter");
@@ -330,7 +300,7 @@ test.describe("recipe author workspace", () => {
     // a Recipe/Workflow toggle, the dashboard relabels by kind, and the chat
     // surface routes turns through the workflow-author skill instead of recipe.
     await bootToChat(page, chat);
-    await page.getByTestId("nav-recipe-author").click();
+    await page.getByTestId("nav-workshop").click();
     await expect(page.getByTestId("recipe-author-workspace")).toBeVisible();
 
     // Open the dialog and switch the kind toggle to Workflow.

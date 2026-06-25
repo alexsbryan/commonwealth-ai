@@ -128,17 +128,16 @@ const FIXTURE = {
   },
 };
 
-async function openKnowledgeTab(page: import("@playwright/test").Page) {
-  // From chat → settings via the cog in the left nav rail.
-  await page.getByTestId("nav-settings").click();
-  // From Settings → Knowledge tab. The TOC items are <button> not <a>,
-  // and the panel filters tabs by feature flag — wait for the
-  // Knowledge entry to be present before clicking.
-  const knowledgeTab = page.getByRole("button", { name: /^Knowledge$/ });
-  await expect(knowledgeTab).toBeVisible({ timeout: 5_000 });
-  await knowledgeTab.click();
+async function openCatalog(page: import("@playwright/test").Page) {
+  // Catalog corpora now live under Library → Add → Catalog (the
+  // KnowledgeStatus tiles re-parented out of the old Settings → Knowledge
+  // tab). KnowledgeStatus calls list_corpora on mount, so wait for the
+  // first tile to render before the tests assert on it.
+  await page.getByTestId("nav-library").click();
+  await page.getByTestId("library-add").click();
+  await page.getByTestId("add-section-catalog").click();
   await expect(
-    page.getByRole("heading", { name: "Knowledge", exact: true }),
+    page.getByTestId("add-sheet").locator(".corpus-row").first(),
   ).toBeVisible({ timeout: 5_000 });
 }
 
@@ -189,19 +188,16 @@ test.describe("knowledge picker — layer grouping", () => {
       window.__sovereign_test__.setHandler("lc_newsworthy_status", () => null);
       window.__sovereign_test__.setHandler("lc_can_expand", () => false);
     }, FIXTURE);
-    await openKnowledgeTab(page);
+    await openCatalog(page);
   });
 
   test("renders one Wikipedia row, not four — children grouped, partition hidden", async ({
     sovereignPage: page,
   }) => {
-    // Only the parent renders as a top-level row. Filter to corpus
-    // rows under the Knowledge tab to avoid catching rows in other
-    // surfaces that happen to share the class.
-    const knowledgePanel = page
-      .getByRole("heading", { name: "Knowledge", exact: true })
-      .locator("xpath=ancestor::section");
-    const rows = knowledgePanel.locator(".corpus-row");
+    // Only the parent renders as a top-level row. Scope to the Add
+    // sheet (KnowledgeStatus is the sole surface rendering corpus rows
+    // there) to avoid catching rows that share the class elsewhere.
+    const rows = page.getByTestId("add-sheet").locator(".corpus-row");
     await expect(rows).toHaveCount(1);
 
     // Pin the row's identity to Wikipedia via the corpus-name element
@@ -321,10 +317,11 @@ test.describe("knowledge picker — layer grouping", () => {
       ]);
     }, FIXTURE);
 
-    // Trigger a re-fetch by navigating away and back. KnowledgeStatus
-    // refreshes its corpus list on mount, so toggling tabs is enough.
-    await page.getByRole("button", { name: /^Models$/ }).click();
-    await page.getByRole("button", { name: /^Knowledge$/ }).click();
+    // Trigger a re-fetch by remounting KnowledgeStatus: toggle the Add
+    // sheet's section away and back (Catalog unmounts → remounts, and its
+    // onMount re-reads list_corpora).
+    await page.getByTestId("add-section-files").click();
+    await page.getByTestId("add-section-catalog").click();
 
     const newsworthyChip = page.locator(
       '[data-testid="layer-chip"][data-layer-id="wikipedia-newsworthy"]',

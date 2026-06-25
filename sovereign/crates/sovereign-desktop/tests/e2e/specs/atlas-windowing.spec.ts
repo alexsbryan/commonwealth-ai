@@ -40,6 +40,20 @@ test.describe("atlas corpus view — windowed atom list", () => {
       ]);
       w.__sovereign_test__.setHandler("atlas_list_conv_corpora", () => []);
 
+      // Library shelf: one explorable notebook. Its Explore tab opens
+      // this corpus's atom map via AtlasSurface(startingCorpusId).
+      w.__sovereign_test__.setHandler("notebook_list", () => [
+        {
+          id: "sep",
+          name: "Stanford Encyclopedia of Philosophy",
+          source_kind: "catalog",
+          doc_count: total,
+          explorable: true,
+          updated_unix: Math.floor(Date.now() / 1000),
+          scope: "public",
+        },
+      ]);
+
       // Atom list: serve the requested page slice out of `total` atoms.
       // Unique atom_id per atom (the #each key) — duplicates would trip
       // the harness console gate.
@@ -69,11 +83,10 @@ test.describe("atlas corpus view — windowed atom list", () => {
       });
     }, TOTAL);
 
-    // Navigate to Atlas → select the corpus → AtlasCorpusView mounts.
-    await page.getByTestId("nav-atlas").click();
-    const corpusRow = page.getByTestId("atlas-corpus-row").first();
-    await expect(corpusRow).toBeVisible();
-    await corpusRow.locator("button").click();
+    // Open the notebook's Explore tab → AtlasSurface seeds straight to
+    // this corpus (startingCorpusId) and AtlasCorpusView mounts.
+    await page.getByTestId("nav-library").click();
+    await page.getByTestId("notebook-explore").first().click();
 
     // The windowed scroll container + first rows render.
     const scroll = page.locator(".atom-scroll");
@@ -135,6 +148,17 @@ test.describe("atlas corpus view — windowed atom list", () => {
         },
       ]);
       w.__sovereign_test__.setHandler("atlas_list_conv_corpora", () => []);
+      w.__sovereign_test__.setHandler("notebook_list", () => [
+        {
+          id: "wikipedia",
+          name: "Wikipedia (English)",
+          source_kind: "catalog",
+          doc_count: 3,
+          explorable: true,
+          updated_unix: Math.floor(Date.now() / 1000),
+          scope: "public",
+        },
+      ]);
 
       const nowSecs = Math.floor(Date.now() / 1000);
       // Returned in backend sort order: two freshly-reindexed atoms
@@ -182,10 +206,8 @@ test.describe("atlas corpus view — windowed atom list", () => {
       }));
     });
 
-    await page.getByTestId("nav-atlas").click();
-    const corpusRow = page.getByTestId("atlas-corpus-row").first();
-    await expect(corpusRow).toBeVisible();
-    await corpusRow.locator("button").click();
+    await page.getByTestId("nav-library").click();
+    await page.getByTestId("notebook-explore").first().click();
 
     const rows = page.locator('[data-testid="atlas-atom-row"]');
     await expect(rows).toHaveCount(3);

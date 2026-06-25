@@ -18,6 +18,7 @@ import type {
   DiscoveredModel,
   DownloadRequest,
   CorpusEntry,
+  NotebookSummary,
   CorpusProgressPayload,
   CorpusHealthDetail,
   HardwareInfo,
@@ -591,6 +592,14 @@ export async function downloadModel(
 
 export async function listCorpora(): Promise<CorpusEntry[]> {
   return invoke("list_corpora");
+}
+
+/// Unified Library shelf listing — every installed corpus the user can
+/// ask or explore, deduped into one `NotebookSummary` row each. Merges
+/// the catalog/installed, local-corpus, and atlas surfaces backend-side
+/// so the Library has a single source of truth (Phase 1 UX refactor).
+export async function notebookList(): Promise<NotebookSummary[]> {
+  return invoke("notebook_list");
 }
 
 export async function installCorpus(corpusId: string): Promise<void> {

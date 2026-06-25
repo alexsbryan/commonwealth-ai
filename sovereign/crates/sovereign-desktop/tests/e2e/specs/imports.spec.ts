@@ -27,14 +27,16 @@ import type { Page } from "@playwright/test";
 
 const CORPUS_ID = "conversations-anthropic";
 
-async function openSettings(page: Page, chat: Parameters<typeof bootToChat>[1]) {
+async function openLibraryAdd(page: Page, chat: Parameters<typeof bootToChat>[1]) {
+  // Conversation imports moved from Settings → Imports to Library → Add →
+  // Conversations (ImportsTab re-parented into AddSheet, Phase 1 refactor).
   await bootToChat(page, chat);
-  await page.getByTestId("nav-settings").click();
-  await page.locator(".cfg").waitFor();
+  await page.getByTestId("nav-library").click();
+  await page.getByTestId("library-add").click();
 }
 
-async function clickImportsTab(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Imports" }).click();
+async function openConversations(page: Page): Promise<void> {
+  await page.getByTestId("add-section-imports").click();
   await page.getByText("Claude (Anthropic)").waitFor();
 }
 
@@ -85,14 +87,14 @@ async function stubBaselineHandlers(page: Page): Promise<void> {
   });
 }
 
-test.describe("Settings → Imports", () => {
+test.describe("Library → Add → Conversations (imports)", () => {
   test("state survives tab navigation; the progress card persists", async ({
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await stubBaselineHandlers(page);
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
 
@@ -120,12 +122,12 @@ test.describe("Settings → Imports", () => {
       /Extracting conversations/,
     );
 
-    // Navigate to a different tab and back. v1 of this spec failed
-    // here: the component remounted to an "Idle" panel and the
-    // progress card vanished. The fix lifted state into a module-
+    // Switch the Add sheet to a different section and back. v1 of this
+    // spec failed here: the component remounted to an "Idle" panel and
+    // the progress card vanished. The fix lifted state into a module-
     // level Svelte store; this assertion is the regression gate.
-    await page.getByRole("button", { name: "Models" }).click();
-    await page.getByRole("button", { name: "Imports" }).click();
+    await page.getByTestId("add-section-files").click();
+    await page.getByTestId("add-section-imports").click();
 
     await expect(page.getByTestId("imports-progress-card")).toBeVisible();
     await expect(page.getByText(/12,000 messages/)).toBeVisible();
@@ -138,9 +140,9 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await stubBaselineHandlers(page);
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     await expect(page.getByTestId("imports-progress-card")).toBeVisible();
@@ -208,7 +210,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     // Cancellation: dialog returns null.
     await page.evaluate(() => {
       const w = window as unknown as {
@@ -218,7 +220,7 @@ test.describe("Settings → Imports", () => {
       };
       w.__sovereign_test__.setHandler("plugin:dialog|open", () => null);
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     // Progress card never appears when no file was picked.
@@ -230,7 +232,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     // First call: report a partial index. Second call (after user
     // confirms): start cleanly. We track invocation order from
     // inside the page.
@@ -285,7 +287,7 @@ test.describe("Settings → Imports", () => {
         };
       });
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     // Confirmation banner appears; progress card does NOT.
@@ -317,7 +319,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
@@ -346,7 +348,7 @@ test.describe("Settings → Imports", () => {
         };
       });
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     await expect(page.getByTestId("imports-reset-confirm")).toBeVisible();
@@ -365,7 +367,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     // Stub the resume probe + seed localStorage BEFORE clicking
     // the Imports tab. The store calls `get_corpus_progress` on
     // init; a non-terminal payload should flip the stage straight
@@ -403,11 +405,11 @@ test.describe("Settings → Imports", () => {
         }),
       );
     });
-    // Don't use `clickImportsTab` here — its `Claude (Anthropic)`
+    // Don't use `openConversations` here — its `Claude (Anthropic)`
     // text-wait depends on the picker, and the picker is the exact
-    // thing this test asserts is suppressed. Click + wait on the
-    // resume banner instead.
-    await page.getByRole("button", { name: "Imports" }).click();
+    // thing this test asserts is suppressed. Open the section + wait on
+    // the resume banner instead.
+    await page.getByTestId("add-section-imports").click();
     await page.getByTestId("imports-resume-banner").waitFor();
 
     // Claude's picker is suppressed; its resume banner + progress card
@@ -427,7 +429,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
@@ -437,7 +439,7 @@ test.describe("Settings → Imports", () => {
       w.__sovereign_test__.setHandler("get_corpus_progress", () => null);
       localStorage.removeItem("imports.lastStartResponse.v1");
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     // No in-flight import → picker visible, banner + progress card absent.
     await expect(page.getByTestId("imports-sources")).toBeVisible();
@@ -449,7 +451,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
@@ -465,7 +467,7 @@ test.describe("Settings → Imports", () => {
       }));
       localStorage.removeItem("imports.lastStartResponse.v1");
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await expect(page.getByTestId("imports-sources")).toBeVisible();
     await expect(page.getByTestId("imports-resume-banner")).toHaveCount(0);
@@ -475,7 +477,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await stubBaselineHandlers(page);
     // Override: the Tauri command throws (e.g. no conversations.json inside).
     await page.evaluate(() => {
@@ -488,7 +490,7 @@ test.describe("Settings → Imports", () => {
         throw new Error("no conversations.json in archive");
       });
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-claude").click();
     await expect(page.getByTestId("imports-error")).toContainText(
@@ -510,7 +512,7 @@ test.describe("Settings → Imports", () => {
     sovereignPage: page,
     chat,
   }) => {
-    await openSettings(page, chat);
+    await openLibraryAdd(page, chat);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
@@ -529,7 +531,7 @@ test.describe("Settings → Imports", () => {
           "/home/test/.sovereign/conversations-chatgpt/conversations.json",
       }));
     });
-    await clickImportsTab(page);
+    await openConversations(page);
 
     await page.getByTestId("imports-pick-chatgpt").click();
 

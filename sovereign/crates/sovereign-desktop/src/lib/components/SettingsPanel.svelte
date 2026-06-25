@@ -31,42 +31,26 @@
     DesktopConfig,
     HardwareInfo,
     SetupContextWindow,
-    StarterQuestion,
   } from "../types";
-  import EnrichmentPanel from "./EnrichmentPanel.svelte";
-  import ImportsTab from "./settings/ImportsTab.svelte";
-  import KnowledgeStatus from "./KnowledgeStatus.svelte";
-  import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import MeshAppsSection from "./MeshAppsSection.svelte";
   import SharingSection from "./SharingSection.svelte";
-  import ConnectSection from "./ConnectSection.svelte";
-  import McpServersSection from "./McpServersSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
-  import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
   import SetupReportCard from "./SetupReportCard.svelte";
 
   interface Props {
     onClose: () => void;
-    onOpenChatWithSeed?: (question: StarterQuestion) => void;
-    onDropToChat?: () => void;
   }
 
-  let { onClose, onOpenChatWithSeed, onDropToChat }: Props = $props();
+  let { onClose }: Props = $props();
 
   type Tab =
     | "models"
-    | "knowledge"
-    | "imports"
-    | "enrichment"
     | "mesh"
     | "sharing"
     | "tools"
-    | "connect"
-    | "mcp"
     | "paths"
-    | "recipes"
     | "mobile"
     | "about";
   let activeTab: Tab = $state("models");
@@ -458,9 +442,7 @@
   let needsSave = $derived(
     activeTab === "models"
       || activeTab === "paths"
-      || activeTab === "knowledge"
-      || activeTab === "tools"
-      || activeTab === "recipes",
+      || activeTab === "tools",
   );
 
   // ── Semantic preset detection ──────────────────────────────────
@@ -525,20 +507,22 @@
     markDirty(`model-${activeSlot}`);
   }
 
-  const ALL_TABS: { id: Tab; label: string; keywords: string[] }[] = [
-    { id: "models",          label: "Models",          keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
-    { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview", "local", "folder", "obsidian", "document", "file", "vault"] },
-    { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "conversation", "export", "zip"] },
-    { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
-    { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
-    { id: "sharing",         label: "Activity & Sharing", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
-    { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
-    { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
-    { id: "mcp",             label: "MCP Servers",      keywords: ["mcp", "tool", "external", "server", "connect", "vision", "augment", "extension", "model context protocol"] },
-    { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
-    { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml", "author", "workspace", "authoring"] },
-    { id: "mobile",          label: "Mobile access",    keywords: ["mobile", "phone", "ios", "android", "app", "pair", "pairing", "tailnet", "tailscale", "token", "host"] },
-    { id: "about",           label: "About",            keywords: ["about", "version", "update", "updates", "upgrade", "check", "release"] },
+  // Two clusters (D7): plain configuration plumbing, and an operator
+  // cluster (mesh / sharing / mobile) for running this node on a mesh.
+  // Order here = visual order in the TOC.
+  const ALL_TABS: { id: Tab; label: string; keywords: string[]; group: "general" | "operator" }[] = [
+    { id: "models",          label: "Models",          group: "general",  keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
+    { id: "tools",           label: "Web Search",       group: "general",  keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
+    { id: "paths",           label: "Paths",            group: "general",  keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
+    { id: "about",           label: "About",            group: "general",  keywords: ["about", "version", "update", "updates", "upgrade", "check", "release"] },
+    { id: "mesh",            label: "Mesh",             group: "operator", keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
+    { id: "sharing",         label: "Activity & Sharing", group: "operator", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
+    { id: "mobile",          label: "Mobile access",    group: "operator", keywords: ["mobile", "phone", "ios", "android", "app", "pair", "pairing", "tailnet", "tailscale", "token", "host"] },
+  ];
+
+  const TAB_GROUPS: { id: "general" | "operator"; label: string }[] = [
+    { id: "general",  label: "General" },
+    { id: "operator", label: "Operator" },
   ];
 
   let visibleTabs = $derived.by(() => {
@@ -549,6 +533,14 @@
       t.keywords.some(k => k.includes(q))
     );
   });
+
+  // Group the (filtered) tabs for the TOC. A group whose tabs are all
+  // filtered out by search is dropped so its header never orphans.
+  let visibleGroups = $derived(
+    TAB_GROUPS
+      .map((g) => ({ ...g, tabs: visibleTabs.filter((t) => t.group === g.id) }))
+      .filter((g) => g.tabs.length > 0),
+  );
 
   $effect(() => {
     if (visibleTabs.length === 1) {
@@ -593,15 +585,18 @@
       {#if visibleTabs.length === 0}
         <p class="toc-empty">No matches</p>
       {:else}
-        {#each visibleTabs as tab}
-          <button
-            class="toc-item"
-            class:toc-item--active={activeTab === tab.id}
-            onclick={() => { activeTab = tab.id; saveMessage = ""; }}
-            aria-current={activeTab === tab.id ? "page" : undefined}
-          >
-            {tab.label}
-          </button>
+        {#each visibleGroups as group}
+          <div class="toc-group-header">{group.label}</div>
+          {#each group.tabs as tab}
+            <button
+              class="toc-item"
+              class:toc-item--active={activeTab === tab.id}
+              onclick={() => { activeTab = tab.id; saveMessage = ""; }}
+              aria-current={activeTab === tab.id ? "page" : undefined}
+            >
+              {tab.label}
+            </button>
+          {/each}
         {/each}
       {/if}
 
@@ -1203,214 +1198,6 @@
         </section>
       {/if}
 
-      <!-- ──────────── KNOWLEDGE ──────────── -->
-      {#if activeTab === "knowledge"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Knowledge</h2>
-          <p class="doc-intro">Everything Sovereign searches lives on this machine.</p>
-
-          <!-- Catalog corpora first — Wikipedia, SEP, etc. The wider
-               reference universe sits above personal local sources
-               so the user sees what's available before what they've
-               added. -->
-          <h3 class="doc-h3">Catalog libraries</h3>
-          <KnowledgeStatus />
-
-          <div class="doc-divider"></div>
-
-          <!-- Your folders & vaults — local content embedded from
-               the former "Local Knowledge" tab. The embedded
-               component carries its own `_theme.css` that maps onto
-               the same Lavender Court tokens as doc-section, so
-               colours align; this wrapper smooths the typographic
-               rhythm. The inner component drops its own h1/lede
-               when `embedded` is set so headings don't stack. -->
-          <h3 class="doc-h3">Your folders &amp; vaults</h3>
-          <div class="lk-embed">
-            <LocalKnowledgeSection embedded {onOpenChatWithSeed} {onDropToChat} />
-          </div>
-
-          <h3 class="doc-h3">Disk budget</h3>
-
-          {#if storageBudget}
-            <div class="cfg-entry" class:cfg-entry--open={editingStorageBudget}>
-              <button class="cfg-entry-display" onclick={() => editingStorageBudget = !editingStorageBudget} aria-expanded={editingStorageBudget}>
-                <span class="cfg-entry-name">Budget</span>
-                <span class="cfg-entry-current">
-                  {#if storageBudget.budget_bytes !== null}
-                    <span class="cfg-entry-val">{fmtGib(storageBudget.used_bytes)} of {fmtGib(storageBudget.budget_bytes)}</span>
-                    <span class="cfg-entry-tech">{fmtGib(storageBudget.free_disk_bytes, 0)} free on disk</span>
-                  {:else}
-                    <span class="cfg-entry-val">{fmtGib(storageBudget.used_bytes)} used</span>
-                    <span class="cfg-entry-tech">no limit set</span>
-                  {/if}
-                </span>
-                <span class="cfg-entry-prov">
-                  {#if storageBudget.budget_bytes !== null}
-                    {usagePercent.toFixed(0)}%
-                  {:else}
-                    No limit
-                  {/if}
-                </span>
-              </button>
-
-              {#if storageBudget.budget_bytes !== null}
-                <div class="storage-bar-wrap" aria-hidden="true">
-                  <div
-                    class="storage-bar-fill"
-                    class:storage-bar-fill--near={usageState === "near"}
-                    class:storage-bar-fill--over={usageState === "over"}
-                    style="width: {usagePercent.toFixed(1)}%"
-                  ></div>
-                </div>
-              {/if}
-
-              {#if editingStorageBudget}
-                <div class="cfg-entry-edit">
-                  {#if usageState === "over"}
-                    <p class="cfg-caution">Over the ceiling. Nothing new — local or from peers — until you free space or raise the limit.</p>
-                  {:else if usageState === "near"}
-                    <p class="cfg-caution">Close to the ceiling. New work from peers will be deferred soon.</p>
-                  {/if}
-                  <div class="inline-field">
-                    <input
-                      class="cfg-number-input"
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder={storageBudget.budget_bytes !== null ? bytesToGib(storageBudget.budget_bytes).toFixed(0) : "—"}
-                      value={storageDraftGib ?? ""}
-                      oninput={(e) => {
-                        const v = (e.target as HTMLInputElement).value;
-                        storageDraftGib = v === "" ? null : Number(v);
-                      }}
-                      aria-label="Storage budget in GiB"
-                    />
-                    <span class="inline-field-unit">GiB</span>
-                    <button
-                      class="act-btn"
-                      disabled={storageDraftGib === null}
-                      onclick={applyDraftStorageBudget}
-                    >Apply</button>
-                  </div>
-                  <div class="edit-row">
-                    <button class="act-btn act-btn--ghost" onclick={applyRecommendedStorageBudget}>
-                      Use recommended ({fmtGib(storageBudget.recommended_bytes, 0)})
-                    </button>
-                    {#if storageBudget.budget_bytes !== null}
-                      <button class="act-btn act-btn--ghost act-btn--danger" onclick={clearStorageBudget}>
-                        Remove limit
-                      </button>
-                    {/if}
-                  </div>
-                  {#if storageStatusMessage}
-                    <p class="cfg-error">{storageStatusMessage}</p>
-                  {/if}
-                  <button class="edit-done" onclick={() => editingStorageBudget = false}>Done</button>
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <p class="doc-loading">Loading…</p>
-          {/if}
-
-          <!-- KnowledgeView — feature toggle, below the status facts -->
-          {#if config}
-            <h3 class="doc-h3">KnowledgeView</h3>
-            <div class="surface-card">
-            <div class="cfg-entry cfg-entry--toggle">
-              <label class="cfg-toggle-row">
-                <input
-                  type="checkbox"
-                  bind:checked={config.knowledge_view_enabled}
-                  onchange={() => markDirty('knowledge_view')}
-                  class="cfg-checkbox"
-                />
-                <span class="cfg-toggle-body">
-                  <span class="cfg-toggle-label">Build a recurring-themes map across notes and conversations</span>
-                  <span class="cfg-toggle-sub">Read before every answer. Restart to apply.</span>
-                </span>
-              </label>
-            </div>
-            </div>
-
-            <!-- Background ingest — operational controls, after features -->
-            <h3 class="doc-h3">Background ingest</h3>
-
-            <div class="surface-card">
-            <div class="cfg-entry">
-              <div class="cfg-entry-display cfg-entry-display--static">
-                <span class="cfg-entry-name">Throttle</span>
-                <span class="cfg-entry-current">
-                  <span class="cfg-entry-val">
-                    {THROTTLE_PRESETS.find(p => p.value === throttlePreset)?.label ?? `${(ingestThrottle * 100).toFixed(0)}%`}
-                  </span>
-                  <span class="cfg-entry-tech">
-                    {#if throttlePreset === 1.0}full speed{:else}{(ingestThrottle * 100).toFixed(0)}% duty cycle{/if}
-                  </span>
-                </span>
-              </div>
-              <div class="cfg-entry-edit cfg-entry-edit--always">
-                <div class="preset-row" role="radiogroup" aria-label="Ingest throttle">
-                  {#each THROTTLE_PRESETS as preset (preset.value)}
-                    <button
-                      type="button"
-                      class="preset-btn"
-                      class:preset-btn--active={throttlePreset === preset.value}
-                      role="radio"
-                      aria-checked={throttlePreset === preset.value}
-                      onclick={() => applyThrottle(preset.value)}
-                    >{preset.label}</button>
-                  {/each}
-                </div>
-                <p class="preset-desc">
-                  {THROTTLE_PRESETS.find(p => p.value === throttlePreset)?.desc ?? `${(ingestThrottle * 100).toFixed(0)}% duty cycle.`}
-                </p>
-              </div>
-            </div>
-
-            <div class="cfg-entry cfg-entry--toggle">
-              <label class="cfg-toggle-row">
-                <input
-                  type="checkbox"
-                  checked={meshQuiesced}
-                  onchange={(e) => applyQuiesce((e.target as HTMLInputElement).checked)}
-                  class="cfg-checkbox"
-                />
-                <span class="cfg-toggle-body">
-                  <span class="cfg-toggle-label">Pause shared ingest work</span>
-                  <span class="cfg-toggle-sub">Stops handing work to peers and stops accepting theirs. Anything already running on this machine keeps going. Untick to rejoin — no restart needed.</span>
-                </span>
-              </label>
-            </div>
-            </div>
-
-            {#if ingestStatusMessage}
-              <p class="cfg-error">{ingestStatusMessage}</p>
-            {/if}
-          {/if}
-
-        </section>
-      {/if}
-
-      <!-- ──────────── IMPORTS ──────────── -->
-      {#if activeTab === "imports"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Imports</h2>
-          <p class="doc-intro">Bring in your conversation history from Claude. Sovereign builds an atlas you can browse — threads, people, and the topics you keep returning to — in the Atlas tab.</p>
-          <ImportsTab />
-        </section>
-      {/if}
-
-      <!-- ──────────── ENRICHMENT ──────────── -->
-      {#if activeTab === "enrichment"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Enrichment</h2>
-          <p class="doc-intro">Builds a graph of people, events, claims, and open questions across a library — so the assistant can reason over structure, not just paragraphs. Run it one article or book at a time. When something fails, you'll see exactly what to do next.</p>
-          <EnrichmentPanel />
-        </section>
-      {/if}
-
       <!-- ──────────── MESH ──────────── -->
       {#if activeTab === "mesh"}
         <section class="doc-section">
@@ -1514,24 +1301,6 @@
         </section>
       {/if}
 
-      <!-- ──────────── CONNECT (W5) ──────────── -->
-      {#if activeTab === "connect"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Connect</h2>
-          <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at the local daemon. Nothing leaves this machine.</p>
-          <ConnectSection />
-        </section>
-      {/if}
-
-      <!-- ──────────── MCP SERVERS ──────────── -->
-      {#if activeTab === "mcp"}
-        <section class="doc-section">
-          <h2 class="doc-h2">MCP Servers</h2>
-          <p class="doc-intro">Connect external <strong>Model Context Protocol</strong> servers to give the assistant new capabilities — a vision tool, a web service, your own API. Their tools become available in chat; the assistant asks before the first call to each.</p>
-          <McpServersSection />
-        </section>
-      {/if}
-
       <!-- ──────────── PATHS ──────────── -->
       {#if activeTab === "paths" && config}
         <section class="doc-section">
@@ -1584,55 +1353,6 @@
       {:else if activeTab === "paths"}
         <section class="doc-section">
           <p class="doc-loading">Loading…</p>
-        </section>
-      {/if}
-
-      <!-- ──────────── RECIPES ──────────── -->
-      {#if activeTab === "recipes"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Recipes</h2>
-          <p class="doc-intro">Test a library recipe before you ship it. Downloads a small sample, runs the full extraction pipeline locally, and tells you what broke.</p>
-          <RecipeTestingPanel />
-
-          {#if config}
-            <!-- Recipe Author — conversation-driven recipe authoring.
-                 Moved here from the Knowledge tab where it didn't
-                 belong; this is the natural home (Recipes tab covers
-                 recipe testing + authoring). Toggle persists
-                 immediately on change so the sidebar refresh on
-                 Settings-close picks up the new state without the
-                 user needing to hit Save first. -->
-            <div class="doc-divider"></div>
-            <h3 class="doc-h3">Recipe Author workspace</h3>
-            <p class="doc-body">
-              A chat-based workspace for drafting and iterating on
-              recipes. Off by default — turn it on when you're
-              actively authoring one.
-            </p>
-
-            <div class="cfg-entry cfg-entry--toggle">
-              <label class="cfg-toggle-row">
-                <input
-                  type="checkbox"
-                  bind:checked={config.enable_recipe_authoring}
-                  onchange={async () => {
-                    markDirty('recipe_authoring');
-                    // Persist immediately so the sidebar reflects
-                    // the new state on close. Save bar still appears
-                    // for parity with other settings, but the bit is
-                    // already on disk.
-                    await handleSave();
-                  }}
-                  class="cfg-checkbox"
-                  data-testid="settings-recipe-author-toggle"
-                />
-                <span class="cfg-toggle-body">
-                  <span class="cfg-toggle-label">Enable Recipe Author workspace</span>
-                  <span class="cfg-toggle-sub">Adds a Recipe Author entry to the left rail, next to Atlas. Saves immediately; close Settings to see it appear.</span>
-                </span>
-              </label>
-            </div>
-          {/if}
         </section>
       {/if}
 
@@ -1850,6 +1570,22 @@
     overflow-y: auto;
   }
 
+  /* Cluster headers — plumbing vs the operator cluster (D7). Not
+     `.toc-item` and not buttons, so nav-by-label selectors are unaffected. */
+  .toc-group-header {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    opacity: 0.65;
+    padding: 12px 16px 4px;
+    user-select: none;
+  }
+  .cfg-toc > .toc-group-header:first-child {
+    padding-top: 2px;
+  }
+
   .toc-item {
     display: block;
     width: 100%;
@@ -2028,57 +1764,6 @@
     border-radius: 3px;
     background: var(--bg-elevated);
     color: var(--text-secondary);
-  }
-
-  /* Bridge wrapper for the embedded LocalKnowledgeSection. The inner
-     component carries its own `_theme.css` (lk-* tokens map onto the
-     same app palette, so colours align), but its outer chrome and
-     spacing scale don't match the doc-section rhythm. This wrapper
-     pulls the section flush to the doc rhythm: kills the inner
-     hero-sized header padding, normalises plate margins, and lets
-     the embedded list inherit the surrounding 22px gutter. */
-  .lk-embed {
-    margin: 8px 0 0;
-  }
-  .lk-embed :global(.lk-section) {
-    padding: 0;
-  }
-  /* Direct child only — hides LocalKnowledgeSection's own hero header,
-     NOT a descendant `.head` inside a child panel. The broad
-     descendant form also matched WatchedFolderDetail's `.detail > .head`,
-     hiding its "← Back to folders" button and trapping the user in the
-     detail view (embedded mode is the only mode that panel renders in). */
-  .lk-embed :global(.lk-section > .head) {
-    display: none;
-  }
-  /* Each plate inside the embedded local-knowledge section reads as
-     a Settings surface-card — same `bg-secondary` substrate, same
-     border, same radius, same rhythm as KnowledgeView and Background
-     ingest. Drops the inner plate-head bottom rule (the rule was
-     useful in the standalone view where each plate sat on a hero-
-     headed page, but here the outer h3 already names the section
-     and a nested rule reads as borrowed chrome). */
-  .lk-embed :global(.lk-section .plate) {
-    margin-top: 10px;
-    padding: 14px 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    animation: none;
-  }
-  .lk-embed :global(.lk-section .plate:first-of-type) {
-    margin-top: 10px;
-  }
-  .lk-embed :global(.lk-section .plate-head) {
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 10px;
-  }
-  .lk-embed :global(.lk-section .plate.plate-add) {
-    /* Override the LocalKnowledgeSection's dashed-gold-gradient
-       fallback so the Add plate sits flush with its siblings. */
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
   }
 
   .doc-loading {

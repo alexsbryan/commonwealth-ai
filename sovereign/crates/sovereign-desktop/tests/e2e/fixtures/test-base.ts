@@ -55,7 +55,7 @@ declare global {
   }
 }
 
-interface ChatHarness {
+export interface ChatHarness {
   /** Drives the Tauri shim from inside the page. */
   api: {
     /** Run an arbitrary closure against window.__sovereign_test__. */
@@ -253,18 +253,21 @@ export { expect };
 export async function bootToChat(page: Page, chat: ChatHarness): Promise<void> {
   await page.goto("/");
   await page
-    .locator(".loading-screen, .chat-view, .app-layout")
+    .locator(".loading-screen, [data-testid='home-view'], .chat-view, .app-layout")
     .first()
     .waitFor();
-  const chatView = page.locator(".chat-view");
+  // P2: the app lands on Home. Poll-emit backend-ready until the rail is
+  // up, then hop Home → Ask so chat-dependent specs reach the chat view.
+  const navAsk = page.getByTestId("nav-ask");
   await expect
     .poll(
       async () => {
         await chat.api.signalBackendReady();
-        return chatView.count();
+        return navAsk.count();
       },
       { timeout: 10_000, intervals: [50, 100, 200, 500] },
     )
     .toBeGreaterThan(0);
-  await chatView.waitFor({ state: "visible" });
+  await navAsk.click();
+  await page.locator(".chat-view").waitFor({ state: "visible" });
 }

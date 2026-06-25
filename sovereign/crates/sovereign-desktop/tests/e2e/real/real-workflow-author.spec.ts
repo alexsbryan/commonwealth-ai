@@ -77,7 +77,7 @@ test("real stack: author a workflow through the desktop UI with a real model", a
 
   // Enter the authoring workspace (nav gated by enable_recipe_authoring, baked
   // true in the real profile).
-  await page.getByTestId("nav-recipe-author").click();
+  await page.getByTestId("nav-workshop").click();
   await expect(page.getByTestId("recipe-author-workspace")).toBeVisible();
 
   // New project, switched to the Workflow kind.

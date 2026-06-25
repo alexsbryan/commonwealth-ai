@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat } from "../fixtures/test-base";
 
+async function openYourFiles(page: import("@playwright/test").Page) {
+  // The watched-folder list lives under Library → Add → Your files
+  // (LocalKnowledgeSection embedded, re-parented out of the old Settings
+  // → Knowledge tab in the Phase 1 UX refactor). Same component, so the
+  // `.card` / "Details" affordances below are unchanged.
+  await page.getByTestId("nav-library").click();
+  await page.getByTestId("library-add").click();
+  await page.getByTestId("add-section-files").click();
+}
+
 // Folder-ingest v1 §3.7 — glassbox folder-detail surface.
 //
 // Pinned here because the spec is explicit: "without [the glassbox
@@ -146,17 +156,8 @@ test.describe("watched-folder detail panel", () => {
       }));
     }, lastSweepUnix);
 
-    // Open Settings → Knowledge tab where the watched-folder surface
-    // now lives (the former "Local Knowledge" tab was merged in).
-    await page.getByTestId("nav-settings").click();
-    await page.locator(".cfg").waitFor();
-    // The Settings panel uses `.cfg` as its root and `.toc-item`
-    // buttons for the left rail. Exact-text match on Knowledge.
-    const knowledgeTab = page
-      .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Knowledge$/ });
-    await expect(knowledgeTab).toBeVisible();
-    await knowledgeTab.click();
+    // Open the watched-folder surface (Library → Add → Your files).
+    await openYourFiles(page);
 
     // The watched-folder list should render the stubbed corpus
     // with the multi-root, Manual-sync, and Sensitive badges.
@@ -248,8 +249,10 @@ test.describe("watched-folder detail panel", () => {
     // WatchedFolderDetail's `.detail > .head`, hiding this button. Fixed
     // by narrowing that rule to a direct-child selector — see
     // SettingsPanel.svelte.)
-    const back = page.locator(".back");
-    await expect(back).toHaveText(/Back to folders/);
+    // Scope to the detail's own back button by name — the Add sheet
+    // that now hosts this surface also renders a `.back` ("← Library").
+    const back = page.getByRole("button", { name: /Back to folders/ });
+    await expect(back).toBeVisible();
     await back.click();
     // Detail panel gone; the folder list (the "Research dump" card) is
     // back.
@@ -319,12 +322,7 @@ test.describe("watched-folder detail panel", () => {
       }));
     });
 
-    await page.getByTestId("nav-settings").click();
-    await page.locator(".cfg").waitFor();
-    await page
-      .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Knowledge$/ })
-      .click();
+    await openYourFiles(page);
     await page
       .locator(".card")
       .filter({ hasText: "Building corpus" })
@@ -406,12 +404,7 @@ test.describe("watched-folder detail panel", () => {
       }));
     });
 
-    await page.getByTestId("nav-settings").click();
-    await page.locator(".cfg").waitFor();
-    await page
-      .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Knowledge$/ })
-      .click();
+    await openYourFiles(page);
     await page
       .locator(".card")
       .filter({ hasText: "Complete corpus" })
