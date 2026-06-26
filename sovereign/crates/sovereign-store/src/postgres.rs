@@ -9,7 +9,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::observer::{noop_observer, SharedStateStoreObserver};
 use sovereign_core::traits::{
     BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore, DocumentStore,
-    HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+    HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, StepExecutionStore,
+    TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -127,6 +128,21 @@ impl PostgresStateStore {
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS step_executions (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                step_id BIGINT NOT NULL,
+                tool_id TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'started',
+                idempotency_key TEXT NOT NULL DEFAULT '',
+                summary TEXT,
+                anomalies TEXT,
+                started_at BIGINT NOT NULL,
+                ended_at BIGINT
+            );
+            CREATE INDEX IF NOT EXISTS idx_step_exec_key
+                ON step_executions(idempotency_key);
 
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
@@ -613,6 +629,124 @@ impl TaskStore for PostgresStateStore {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
+    }
+}
+
+#[async_trait]
+impl StepExecutionStore for PostgresStateStore {
+    async fn record_started(&self, execution: &StepExecution) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let step_id = execution.step_id as i64;
+        let status = execution.status.as_str();
+        client
+            .execute(
+                "INSERT INTO step_executions
+                   (id, task_id, step_id, tool_id, status, idempotency_key,
+                    summary, anomalies, started_at, ended_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status",
+                &[
+                    &execution.id,
+                    &execution.task_id,
+                    &step_id,
+                    &execution.tool_id,
+                    &status,
+                    &execution.idempotency_key,
+                    &execution.summary,
+                    &execution.anomalies,
+                    &execution.started_at,
+                    &execution.ended_at,
+                ],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn mark_completed(
+        &self,
+        execution_id: &str,
+        summary: Option<String>,
+        anomalies: Option<String>,
+    ) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let ended = Self::now();
+        client
+            .execute(
+                "UPDATE step_executions
+                    SET status = 'completed', summary = $2, anomalies = $3, ended_at = $4
+                  WHERE id = $1",
+                &[&execution_id, &summary, &anomalies, &ended],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn mark_failed(&self, execution_id: &str, message: &str) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let ended = Self::now();
+        client
+            .execute(
+                "UPDATE step_executions
+                    SET status = 'failed', anomalies = $2, ended_at = $3
+                  WHERE id = $1",
+                &[&execution_id, &message, &ended],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn find_execution(
+        &self,
+        idempotency_key: &str,
+    ) -> Result<Option<StepExecution>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let row = client
+            .query_opt(
+                "SELECT id, task_id, step_id, tool_id, status, idempotency_key,
+                        summary, anomalies, started_at, ended_at
+                   FROM step_executions
+                  WHERE idempotency_key = $1
+               ORDER BY started_at DESC
+                  LIMIT 1",
+                &[&idempotency_key],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(row.map(|r| {
+            let sid: i64 = r.get("step_id");
+            let status_str: String = r.get("status");
+            StepExecution {
+                id: r.get("id"),
+                task_id: r.get("task_id"),
+                step_id: sid as usize,
+                tool_id: r.get("tool_id"),
+                status: ExecutionStatus::from_db(&status_str),
+                idempotency_key: r.get("idempotency_key"),
+                summary: r.get("summary"),
+                anomalies: r.get("anomalies"),
+                started_at: r.get("started_at"),
+                ended_at: r.get("ended_at"),
+            }
+        }))
     }
 }
 

@@ -26,6 +26,7 @@ postgres = ["tokio-postgres", "deadpool-postgres", "postgres-types"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
+futures = { workspace = true }
 
 [lints]
 workspace = true

@@ -129,6 +129,49 @@ struct ParsedToolCall {
 }
 
 /// Parse a `<tool_call>{"tool":"...","query":"..."}</tool_call>` from model output.
+/// Content-derived idempotency key for a tool action: stable across a
+/// replan that re-issues the same `(tool, params)` under a new step_id,
+/// and across a process restart (the hash is deterministic, unlike
+/// `DefaultHasher`). Scoped by task so identical actions in different
+/// tasks never collide.
+///
+/// Public so callers can precompute the key a tool would be deduped under
+/// (e.g. to forward it to a server for downstream dedup) and so tests can
+/// seed a matching ledger row.
+pub fn idempotency_key(task_id: &str, tool_id: &str, params: &serde_json::Value) -> String {
+    let canonical = serde_json::to_string(params).unwrap_or_default();
+    format!("{task_id}:{tool_id}:{:016x}", fnv1a64(canonical.as_bytes()))
+}
+
+/// FNV-1a 64-bit — a tiny, dependency-free, deterministic hash. Stable
+/// across processes and toolchain versions, so an idempotency key written
+/// before a crash still matches after the restart.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Compress a step output into the ledger's `summary` field — bounded text
+/// the idempotency-skip path replays as the action's prior result.
+fn summarize_output(output: &StepOutput) -> Option<String> {
+    let text = match output {
+        StepOutput::Text(t) => t.clone(),
+        StepOutput::Json(v) => v.to_string(),
+        StepOutput::ReasonWithToolsResult { text, .. } => text.clone(),
+        StepOutput::Jump(_) | StepOutput::Skipped => return None,
+    };
+    const CAP: usize = 2000;
+    if text.chars().count() > CAP {
+        Some(text.chars().take(CAP).collect())
+    } else {
+        Some(text)
+    }
+}
+
 fn parse_tool_call(text: &str) -> Option<ParsedToolCall> {
     let start = text.find("<tool_call>")?;
     let end = text.find("</tool_call>")?;
@@ -650,6 +693,81 @@ impl Executor {
                 let retry_is_safe = descriptor.idempotency == Idempotency::Idempotent;
                 let mut last_error = None;
 
+                // Idempotency ledger (replay safety). Only NonIdempotent
+                // tools carry a durable attempt record — they are the exact
+                // set where a second execution duplicates a side-effect
+                // (email, calendar, note). The key is content-derived, so it
+                // also catches a *replan* that re-issues the same action
+                // under a new step_id, not just a same-plan resume.
+                let mut ledger_id: Option<String> = None;
+                if descriptor.idempotency == Idempotency::NonIdempotent {
+                    let key = idempotency_key(&task.id, tool_id, &resolved_params);
+                    if let Some(prior) = self.store.find_execution(&key).await? {
+                        match prior.status {
+                            ExecutionStatus::Completed => {
+                                // This exact action already succeeded earlier
+                                // in the task (a replan or duplicate step).
+                                // Reuse the recorded result; do not re-run.
+                                tracing::info!(
+                                    target: "executor.execution",
+                                    tool_id = %tool_id,
+                                    step_id = step.id,
+                                    idempotency_key = %key,
+                                    "NonIdempotent action already completed — skipping re-execution"
+                                );
+                                return Ok(StepOutput::Text(prior.summary.unwrap_or_default()));
+                            }
+                            ExecutionStatus::Started => {
+                                // A prior attempt began this side-effect and
+                                // never recorded completion — a crash in the
+                                // gap. Blind-replaying could duplicate it, so
+                                // halt and surface for review rather than
+                                // guess whether it landed. ARCH §7.
+                                tracing::warn!(
+                                    target: "executor.execution",
+                                    tool_id = %tool_id,
+                                    step_id = step.id,
+                                    idempotency_key = %key,
+                                    "NonIdempotent action was in flight at a prior interruption — halting to avoid a duplicate side-effect"
+                                );
+                                return Err(Error::Execution(format!(
+                                    "step {} ({tool_id}) may have already executed its \
+                                     non-idempotent side-effect before an interruption \
+                                     (idempotency_key={key}); halting to avoid a duplicate — \
+                                     resolve the prior attempt before resuming",
+                                    step.id
+                                )));
+                            }
+                            ExecutionStatus::Failed => {
+                                // Prior attempt recorded as failed; re-attempt.
+                            }
+                        }
+                    }
+                    let id = uuid::Uuid::new_v4().to_string();
+                    self.store
+                        .record_started(&StepExecution {
+                            id: id.clone(),
+                            task_id: task.id.clone(),
+                            step_id: step.id,
+                            tool_id: tool_id.to_string(),
+                            status: ExecutionStatus::Started,
+                            idempotency_key: key,
+                            summary: None,
+                            anomalies: None,
+                            started_at: now(),
+                            ended_at: None,
+                        })
+                        .await?;
+                    tracing::info!(
+                        target: "executor.execution",
+                        tool_id = %tool_id,
+                        step_id = step.id,
+                        execution_id = %id,
+                        "NonIdempotent action started — durable attempt recorded"
+                    );
+                    ledger_id = Some(id);
+                }
+
                 for attempt in 0..=retry.max_retries {
                     if attempt > 0 {
                         let delay = retry.backoff_ms.get(attempt - 1).copied().unwrap_or(3000);
@@ -674,7 +792,19 @@ impl Executor {
                         .call_cached(tool_id, &resolved_params, &tool_ctx)
                         .await
                     {
-                        Ok(output) => return Ok(output),
+                        Ok(output) => {
+                            if let Some(ref eid) = ledger_id {
+                                // Best-effort: a failed completion write leaves
+                                // the row `Started`, which on resume halts (a
+                                // spurious review) rather than re-running — the
+                                // safe direction, never a duplicate side-effect.
+                                let _ = self
+                                    .store
+                                    .mark_completed(eid, summarize_output(&output), None)
+                                    .await;
+                            }
+                            return Ok(output);
+                        }
                         Err(e) => {
                             let msg = e.to_string().to_lowercase();
                             let retryable = msg.contains("timeout")
@@ -692,6 +822,9 @@ impl Executor {
                                     "executor: NonIdempotent tool failed with a transient-looking \
                                      error; retry suppressed to avoid duplicate side-effect"
                                 );
+                            }
+                            if let Some(ref eid) = ledger_id {
+                                let _ = self.store.mark_failed(eid, &e.to_string()).await;
                             }
                             return Err(e);
                         }
