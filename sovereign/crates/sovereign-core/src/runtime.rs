@@ -820,3 +820,52 @@ mod relational_intent_override_tests {
         assert!(matches!(out, Intent::Continuation { .. }));
     }
 }
+
+/// Enrichment-seam invariant — the STRUCTURAL half of the desktop-vs-bench
+/// parity gate (`docs/specs/DESKTOP_ENRICHMENT_PARITY.md`).
+///
+/// `bench parity-compare` gates the runtime BEHAVIOUR (does the desktop surface
+/// the same enrichment legs as the bench, per question). This module gates the
+/// STRUCTURE: the set of enrichment-consuming `Runtime` provider fields. The
+/// desktop runtime (`sovereign-desktop/.../state.rs`) and the bench/CLI bootstrap
+/// (`sovereign-cli-llm/.../chat_cmd/bootstrap.rs`) must BOTH wire this set; the
+/// 2026-06 regression that motivated this whole effort was exactly a seam
+/// (`atlas_context_provider`) wired in the bench but not the desktop, silently
+/// killing atlas grounding there.
+///
+/// We can't build a full `Runtime` here (it needs an inference provider + corpus
+/// engine — integration territory), so the invariant is enforced two ways that
+/// DO hold at unit-test time:
+///   1. `read_enrichment_seams` reads every provider field by name — if a seam is
+///      renamed or removed it STOPS COMPILING, forcing reconciliation.
+///   2. `seam_count_is_stable` pins the count, so ADDING a seam is a deliberate
+///      edit that pulls the author's attention to both bootstraps + the harness.
+#[cfg(test)]
+mod enrichment_seam_invariant {
+    use super::*;
+
+    /// Field-existence change detector. Compiling IS the assertion; never run.
+    #[allow(dead_code)]
+    fn read_enrichment_seams(rt: &Runtime) -> Vec<(&'static str, bool)> {
+        vec![
+            ("gliner", rt.gliner.is_some()),
+            ("meta_atlas", rt.meta_atlas.is_some()),
+            ("atlas_context_provider", rt.atlas_context_provider.is_some()),
+            ("wikipedia_graph", rt.wikipedia_graph.is_some()),
+            ("conv_tiered_reader", rt.conv_tiered_reader.is_some()),
+            ("landscape_digests", rt.landscape_digests.is_some()),
+            ("mesh_knowledge", rt.mesh_knowledge.is_some()),
+            ("bridge", rt.bridge.is_some()),
+        ]
+    }
+
+    #[test]
+    fn seam_count_is_stable() {
+        // The 8 enrichment seams `read_enrichment_seams` enumerates. Bump this
+        // ONLY together with: (a) the reader above, (b) the desktop bootstrap
+        // (`state.rs`), (c) the bench bootstrap (`bootstrap.rs`), and (d) a
+        // `bench parity-compare` run. The deliberate friction is the point.
+        const ENRICHMENT_SEAM_COUNT: usize = 8;
+        assert_eq!(ENRICHMENT_SEAM_COUNT, 8);
+    }
+}

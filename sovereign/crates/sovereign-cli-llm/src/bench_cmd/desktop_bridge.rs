@@ -247,6 +247,10 @@ pub async fn run_bridge_live(
             // bridge response metadata — the same signal as the in-process path.
             gate_action: gate["action"].as_str().map(str::to_string),
             draft: gate["draft"].as_str().map(str::to_string),
+            // Carry the full bridge metadata on the answer too, so the parity
+            // harness reads the SAME `LiveAnswer.metadata` channel for both
+            // transports (BridgeTurn.metadata is kept for existing callers).
+            metadata: complete["metadata"].clone(),
         },
         metadata: complete["metadata"].clone(),
     })
