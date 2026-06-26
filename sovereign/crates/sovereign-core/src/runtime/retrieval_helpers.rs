@@ -309,8 +309,48 @@ pub(crate) fn reweight_by_query_relevance(chunks: &mut [ScoredChunk], query: &st
         // nothing relevant stays at 1x.
         let relevance = 2.0 * title_overlap + content_overlap;
         c.score *= 1.0 + relevance;
+        // Code-intelligence-in-chat: a code-intel SUMMARY chunk is the curated
+        // user-vocabulary bridge to a symbol (and the call-graph trace anchor),
+        // worth far more for a "how does X work / what calls it" question than a
+        // raw code chunk — and raw code chunks, vastly more numerous in a code
+        // corpus, otherwise crowd the summaries below the trace window (measured
+        // in the Inc 3/4 grade: gate_held_answer's summary fell to ~#11). Promote
+        // them so the bridge + trace engage. This is SELF-GATING by relevance:
+        // it scales the already-relevance-weighted score, so a summary with no
+        // query overlap stays low (3x a small score is small) — only a summary
+        // that actually matches the query is lifted. No-op for non-code corpora,
+        // which carry no such chunks.
+        if c.metadata.get("source").map(String::as_str) == Some(CODE_INTEL_SUMMARY_SOURCE) {
+            c.score *= CODE_INTEL_SUMMARY_BOOST;
+            // The CROSS-CORPUS sort orders by `vector_distance`, not `score`
+            // (see `cross_corpus_sort_cmp` — it only falls back to `score` when
+            // both distances are `None`), so a score-only boost is invisible to
+            // the merged ranking. Promote the summary on the actual sort key too:
+            // pull its distance toward the query so a relevant summary clears the
+            // raw-chunk crowd. `None` (FTS-only paths) keeps the score boost above.
+            if let Some(d) = c.vector_distance.as_mut() {
+                *d *= CODE_INTEL_SUMMARY_DISTANCE_FACTOR;
+            }
+        }
     }
 }
+
+/// Metadata marker `code_intel::store` stamps on every per-symbol summary chunk.
+const CODE_INTEL_SUMMARY_SOURCE: &str = "code_intel_summary";
+
+/// Relevance-stacked boost for code-intel summary chunks (see
+/// [`reweight_by_query_relevance`]). Applied to `score` for the score-based gates
+/// (off-target / grounding); the cross-corpus *sort* is handled by the distance
+/// factor below. Self-gating — it multiplies the already-relevance-weighted
+/// score, never a flat add.
+const CODE_INTEL_SUMMARY_BOOST: f32 = 3.0;
+
+/// Multiplier on a code-intel summary chunk's `vector_distance` — the key
+/// `cross_corpus_sort_cmp` actually sorts by. `< 1.0` pulls the summary closer to
+/// the query so a relevant one ranks above the (far more numerous) raw code
+/// chunks that would otherwise bury it. 0.6 ≈ a 40% pull, enough to clear the
+/// observed ~#11 gap without ignoring genuine distance differences.
+const CODE_INTEL_SUMMARY_DISTANCE_FACTOR: f32 = 0.6;
 
 /// Cross-corpus retrieval discipline (env-gated prototype, default OFF — a
 /// no-op unless at least one knob is set, so production behaviour is

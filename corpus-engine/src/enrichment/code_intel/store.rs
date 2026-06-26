@@ -42,11 +42,11 @@ pub struct IndexReport {
 /// Stable per-symbol key for the chunk's `source_doc_id` — the upsert handle.
 /// Must survive a body edit (so the prior summary is found + replaced) and be
 /// unique per symbol. Prefer the SCIP qualified name; fall back to `file#name`.
-pub fn symbol_source_key(e: &SymbolEnrichment) -> String {
-    let id = if e.meta.qualified_name.is_empty() {
-        format!("{}#{}", e.meta.file_path, e.meta.name)
+pub fn symbol_source_key(meta: &super::SymbolMeta) -> String {
+    let id = if meta.qualified_name.is_empty() {
+        format!("{}#{}", meta.file_path, meta.name)
     } else {
-        e.meta.qualified_name.clone()
+        meta.qualified_name.clone()
     };
     format!("{SOURCE_PREFIX}{id}")
 }
@@ -95,7 +95,7 @@ fn insert_chunk_for(e: &SymbolEnrichment, key: &str, content: String) -> InsertC
 /// Returns `Ok(true)` if it wrote (new/changed), `Ok(false)` if it skipped
 /// (body unchanged — its hash already sits under this symbol's key).
 async fn index_one(index: &CorpusIndex, embed: &EmbedFn, e: &SymbolEnrichment) -> Result<bool> {
-    let key = symbol_source_key(e);
+    let key = symbol_source_key(&e.meta);
     let committed = index.committed_chunks_for_doc(&key).await?;
     if committed.iter().any(|c| c.content_hash == e.body_hash) {
         return Ok(false);
@@ -196,11 +196,11 @@ mod tests {
     #[test]
     fn source_key_is_namespaced_and_stable() {
         let e = enr("f", "h", "s");
-        assert_eq!(symbol_source_key(&e), "codeintel:crate::f");
+        assert_eq!(symbol_source_key(&e.meta), "codeintel:crate::f");
         // A body edit (new hash) must NOT change the key — that's what makes the
         // upsert find + replace the old summary.
         let e2 = enr("f", "DIFFERENT", "s2");
-        assert_eq!(symbol_source_key(&e), symbol_source_key(&e2));
+        assert_eq!(symbol_source_key(&e.meta), symbol_source_key(&e2.meta));
     }
 
     #[test]

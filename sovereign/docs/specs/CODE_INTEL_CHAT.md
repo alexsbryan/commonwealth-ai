@@ -581,9 +581,31 @@ remaining work is the production build (Inc 1–3), not more proof.
       routed to `code_query`.** Since k-NN only reclassifies when a code exemplar is
       the nearest neighbour, and none became one, the code cluster provably stole no
       non-code query — the guard you asked for held.
-    - **Remaining:** dedicated code-explanation synthesis prompt (v2; today reuses
-      the knowledge prompt); drop `*_tests` from the caller-set; re-enrich with a
-      stronger summary model for exact-rank precision.
+    - **Summary preference — the fix that makes the bridge + trace engage.** First
+      cut: scoping to code corpora replaced cross-corpus dilution with a
+      *within*-corpus one — the 279 summaries lost to tens of thousands of raw code
+      chunks, so the bridge/trace didn't fire (gate summary fell to ~#11). A `score`
+      boost did nothing: **`cross_corpus_sort_cmp` sorts by `vector_distance`, not
+      `score`** (falls back to score only when both distances are `None`). The fix
+      (`reweight_by_query_relevance`) pulls a code-intel summary's `vector_distance`
+      toward the query (×0.6) — and boosts `score` ×3 for the score-based gates.
+      Self-gating (only lifts a summary that already matches) and a no-op for
+      non-code corpora. (`chat inspect` won't show it — it skips the reweight step;
+      verify via full `chat ask` provenance.)
+    - **Result — the headline §4 demo, live.** "Where is answer gating implemented,
+      and what calls it?" → CodeQuery → 4 code corpora → **summaries rank #1
+      (`gate_held_answer`) and #3 (`gate_answer`)**, above the raw chunks → the trace
+      fires for both → the 35B answers BOTH halves with cited call-graph facts:
+      *"Who calls it: `gate_held_answer` ← `stream_knowledge_query_turn`,
+      `stream_deep_query_turn`; `gate_answer` ← `handle_complex_task`,
+      `handle_knowledge_query`, `handle_simple`, `run_post_stream_refinement`,
+      `gate_attached_doc_answer` [Source: Call-graph trace]"* — matching the §4
+      answer-key. Plain-English → summary-bridge → call-graph-trace → cited answer,
+      end-to-end.
+    - **Remaining (polish, not blockers):** dedicated code-explanation synthesis
+      prompt (today reuses the knowledge prompt); drop `*_tests` from the caller-set
+      enumeration; re-enrich with a stronger summary model for exact-rank precision;
+      tune the 0.6 distance factor if summaries over/under-promote on other queries.
 
 ---
 
