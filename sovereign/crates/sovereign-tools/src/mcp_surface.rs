@@ -45,6 +45,11 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "callers",
     "callees",
     "blast",
+    // Capability map — derived "what the codebase does" from the SCIP
+    // call graph (clusters of entry points + their spines). Read-only,
+    // deterministic; agent-callable to get a capability-level overview
+    // instead of reading files one by one.
+    "capability_map",
     // Build/lint status. `build` is the canonical single-call
     // tool; `lint_status` + `get_lint_output` remain registered
     // for backward-compat during the alias window.

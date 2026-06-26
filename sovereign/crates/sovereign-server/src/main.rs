@@ -429,6 +429,8 @@ async fn main() {
         sovereign_tools::FindCallersTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
             .with_health_checker(Arc::clone(&health_checker)),
     ));
+    // Capability map — derived "what the codebase does" overview.
+    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join(".sovereign").join("notes.db");

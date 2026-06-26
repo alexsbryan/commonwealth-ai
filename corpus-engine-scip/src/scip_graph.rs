@@ -1043,6 +1043,64 @@ impl ScipGraph {
         Ok(set)
     }
 
+    /// Bulk-enumerate every symbol defined in this corpus, in one lock.
+    /// This is the snapshot the capability-map builder
+    /// ([`crate::capability_map`]) consumes. Scoped by `corpus_id` so a
+    /// merged daemon graph yields only this corpus's definitions (same
+    /// scoping as [`caller_qualified_names`](Self::caller_qualified_names)).
+    pub async fn iter_all_symbols(&self) -> Result<Vec<ScipSymbolRecord>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                 FROM symbols WHERE corpus_id = ?",
+            )
+            .map_err(|e| Error::Database(format!("iter_all_symbols prepare: {e}")))?;
+        let rows = stmt
+            .query_map(params![self.corpus_id], |row| {
+                Ok(ScipSymbolRecord {
+                    name: row.get(0)?,
+                    qualified_name: row.get(1)?,
+                    kind: row.get(2)?,
+                    file_path: row.get(3)?,
+                    line_start: row.get(4)?,
+                    line_end: row.get(5)?,
+                    language: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::Database(format!("iter_all_symbols query: {e}")))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Bulk-enumerate every call/reference edge in this corpus. The
+    /// capability-map builder filters these down to first-party
+    /// function-call edges (`caller_qualified -> callee_qualified`, callee
+    /// descriptor ending `().`). Scoped by `corpus_id`.
+    pub async fn iter_all_refs(&self) -> Result<Vec<ScipRefRecord>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT caller_symbol, callee_symbol, caller_qualified, callee_qualified,
+                        file_path, line, ref_kind
+                 FROM refs WHERE corpus_id = ?",
+            )
+            .map_err(|e| Error::Database(format!("iter_all_refs prepare: {e}")))?;
+        let rows = stmt
+            .query_map(params![self.corpus_id], |row| {
+                Ok(ScipRefRecord {
+                    caller_symbol: row.get(0)?,
+                    callee_symbol: row.get(1)?,
+                    caller_qualified: row.get(2)?,
+                    callee_qualified: row.get(3)?,
+                    file_path: row.get(4)?,
+                    line: row.get(5)?,
+                    ref_kind: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::Database(format!("iter_all_refs query: {e}")))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
     /// Direct lookup of a symbol's definition row by exact name.
     /// Returns `None` when nothing matches in this corpus. Use
     /// [`resolve_symbol`](Self::resolve_symbol) when the caller has an
@@ -1924,6 +1982,29 @@ mod integrity_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn iter_all_accessors_return_full_corpus() {
+        let graph = ScipGraph::open_in_memory("cap-test").unwrap();
+        let syms = test_symbols();
+        let refs = test_refs();
+        let (n_syms, n_refs) = (syms.len(), refs.len());
+        graph.ingest_symbols_and_refs(syms, refs).await.unwrap();
+
+        let got_syms = graph.iter_all_symbols().await.unwrap();
+        assert_eq!(got_syms.len(), n_syms, "iter_all_symbols returns every defined symbol");
+        assert!(got_syms.iter().any(|s| s.name == "login_handler"));
+
+        let got_refs = graph.iter_all_refs().await.unwrap();
+        assert_eq!(got_refs.len(), n_refs, "iter_all_refs returns every edge");
+        assert!(
+            got_refs
+                .iter()
+                .any(|r| r.caller_symbol == "auth_middleware"
+                    && r.callee_symbol == "validate_access_token"),
+            "a known edge survives the round-trip"
+        );
+    }
 
     fn test_symbols() -> Vec<ScipSymbolRecord> {
         vec![

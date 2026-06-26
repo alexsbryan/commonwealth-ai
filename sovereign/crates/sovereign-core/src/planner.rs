@@ -209,6 +209,7 @@ STEP KINDS:
 - "tool": Execute a tool. Requires "tool_id" (must match an available tool name) and "params" (JSON object passed to the tool).
 - "reason_with_tools": Iterative research. The model thinks, searches, examines results, and searches again as needed. Requires "prompt", "speed", "tools" (list of tool IDs like ["search"]), and "max_iterations" (number, typically 6). Use for complex questions needing multiple searches.
 - "await_user_info": Suspend the task and surface a structured information request to the user. The output is whatever content the user pastes back (or empty on skip). Use when the corpus is genuinely insufficient and a specific external source would resolve the question. Optionally include a pre-filled "request" object with fields {current_understanding, gap, relevance, satisfying_source, search_hints}.
+- "delegate": Hand a focused, high-volume subtask to a sub-agent that works in its own context and returns ONLY a compact result. Use when a subtask reads a LOT (a web page, a long document, a spreadsheet) but the rest of the plan needs just a few fields from it — the sub-agent's raw observations never enter your context. Requires "goal" (the subtask, self-contained), "tools" (list of tool IDs the sub-agent may use), "return_schema" (a JSON Schema of the fields you need back), and "max_iterations" (typically 6).
 
 RULES:
 - Step IDs start at 0 and increment by 1
@@ -259,6 +260,7 @@ fn describe_step_kind(kind: &StepKind) -> String {
         StepKind::Branch { .. } => "branch".to_string(),
         StepKind::UserInput { .. } => "user_input".to_string(),
         StepKind::AwaitUserInfo { .. } => "await_user_info".to_string(),
+        StepKind::Delegate { tools, .. } => format!("delegate [{}]", tools.join(", ")),
     }
 }
 
@@ -512,6 +514,36 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     prompt_template: prompt,
                     speed,
                     available_tools: tools,
+                    max_iterations: max_iter,
+                }
+            }
+            "delegate" => {
+                let goal = step_obj
+                    .get("goal")
+                    .or_else(|| step_obj.get("prompt"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&description)
+                    .to_string();
+                let tools: Vec<String> = step_obj
+                    .get("tools")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let return_schema = step_obj.get("return_schema").cloned().unwrap_or_else(|| {
+                    serde_json::json!({ "type": "object", "properties": {} })
+                });
+                let max_iter = step_obj
+                    .get("max_iterations")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(6) as usize;
+                StepKind::Delegate {
+                    goal,
+                    tools,
+                    return_schema,
                     max_iterations: max_iter,
                 }
             }

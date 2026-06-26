@@ -38,6 +38,11 @@ pub mod working_set;
 pub mod callees;
 #[cfg(feature = "treesitter")]
 pub mod callers;
+// Capability map — derives "what the codebase does" from the SCIP graph
+// (`corpus_engine_scip::capability_map`). Treesitter-gated like its
+// code-intel siblings; it lives on the code-corpus surface.
+#[cfg(feature = "treesitter")]
+pub mod capability_map_tool;
 // `symbol_lookup` reads `ScipGraphHandle` from `callees`, so it shares
 // the same `treesitter` gate. Without the gate the import target
 // doesn't exist and the crate fails to build for non-treesitter
@@ -168,6 +173,8 @@ pub use recent_changes::RecentChangesTool;
 pub use callees::{FindCalleesTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]
 pub use callers::FindCallersTool;
+#[cfg(feature = "treesitter")]
+pub use capability_map_tool::CapabilityMapTool;
 #[cfg(feature = "treesitter")]
 pub use symbol_lookup::SymbolLookupTool;
 

@@ -1,0 +1,5 @@
+- generic [active] [ref=e1]:
+  - heading "Sovereign Actuator Fixture" [level=1] [ref=e2]
+  - generic [ref=e3]:
+    - textbox [ref=e4]
+    - button "Send" [ref=e5]

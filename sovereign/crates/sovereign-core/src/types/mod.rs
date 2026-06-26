@@ -180,6 +180,28 @@ pub enum StepKind {
         available_tools: Vec<ToolId>,
         max_iterations: usize,
     },
+    /// Delegate a focused subtask to a context-firewall worker. The worker
+    /// runs a scoped rich-param tool loop in its OWN context — the raw tool
+    /// observations (a page DOM, a spreadsheet's cells) accumulate inside the
+    /// worker and never reach the orchestrator. It returns ONLY a typed
+    /// summary matching `return_schema` plus an `anomalies` channel, so the
+    /// orchestrator decides on a compact contract, not a wall of raw output.
+    /// This is the §5.2 context-firewall: isolate where context is large and
+    /// coupling is low ("pull four figures out of an 80-page PDF"). Unlike
+    /// `ReasonWithTools` (a search loop keyed on `{query}`), the worker drives
+    /// rich-param tools via the `{name, arguments}` protocol, so it can
+    /// actuate (browser, etc.).
+    Delegate {
+        /// The subtask, as a self-contained instruction to the worker.
+        goal: String,
+        /// The tool subset the worker may use (least privilege).
+        tools: Vec<ToolId>,
+        /// JSON schema the worker's structured return is constrained to. An
+        /// `anomalies` string field is always added (the surprises channel).
+        return_schema: serde_json::Value,
+        /// Worker loop bound, like `ReasonWithTools`'s `max_iterations`.
+        max_iterations: usize,
+    },
     /// Asynchronously surface a structured information request to the user
     /// and suspend the task until the user either pastes relevant content
     /// or skips. Unlike `UserInput` (which asks a short free-form question),
