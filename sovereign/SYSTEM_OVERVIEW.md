@@ -675,6 +675,21 @@ side-effect (an email sent twice). The key is content-derived, not
 action under a new step id. Proven exactly-once both ways by
 `sovereign-store/tests/step_execution_replay.rs`.
 
+**Idempotency ledger (executor replay-safety).** Before a
+`NonIdempotent` tool step runs, the executor writes a durable `Started`
+`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
+idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
+after the side-effect returns. On resume the guard reads that key: a
+`Completed` row means the action already ran — a replan re-runs from an
+empty completed-set, so this is the path that would otherwise re-send —
+and is skipped with its recorded result; a `Started`-but-not-`Completed`
+row means a crash interrupted it mid-flight, so the executor halts and
+surfaces for review rather than blind-replaying a non-idempotent
+side-effect (an email sent twice). The key is content-derived, not
+`(task, step_id)`, so it matches across a replan that re-issues the same
+action under a new step id. Proven exactly-once both ways by
+`sovereign-store/tests/step_execution_replay.rs`.
+
 The router emits **facts**; the runtime applies **policy**.
 Splitting them keeps classification testable without a model and
 lets thresholds calibrate without touching the trait.
