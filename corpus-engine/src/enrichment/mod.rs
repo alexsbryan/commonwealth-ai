@@ -9,6 +9,7 @@ pub mod alignment;
 pub mod atlas;
 pub mod checkpoint;
 pub mod clustering;
+pub mod code_intel;
 pub mod domain;
 pub mod domain_registry;
 pub mod domains;

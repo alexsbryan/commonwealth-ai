@@ -1,0 +1,18 @@
+{
+  "bank_name": "single-causal-roman",
+  "started_at_unix": 1782443796,
+  "results": [
+    {
+      "question_id": "causal_roman_empire_fall",
+      "category": "causal_reasoning",
+      "question": "What caused the fall of the Western Roman Empire?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Why did the Roman Empire fall, and what came after?\" (cosine 0.783, margin 0.510)",
+      "correct": true,
+      "latency_ms": 96
+    }
+  ]
+}

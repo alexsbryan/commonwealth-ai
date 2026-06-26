@@ -541,7 +541,17 @@ pub fn parse_scip_file(
                 sym_info.display_name.clone()
             };
 
-            // Find the definition occurrence to get line numbers.
+            // Find the definition occurrence to get line numbers. The BODY span
+            // comes from `enclosing_range` (the whole function / type), NOT
+            // `range` (just the name identifier). A single-line `range` is
+            // `[line, start_col, END_COL]` — reading `range[2]` as a line was the
+            // bug that stored an end-COLUMN as `line_end` for every definition,
+            // making bodies un-extractable downstream (code-intel enrichment,
+            // `symbol_lookup::read_symbol_body`). `enclosing_range` is
+            // `[start_line, start_col, end_line, end_col]`; `[2]` is the true end
+            // line. Mirrors the caller-scope logic below. Falls back to the name
+            // range only for single-line symbols with no enclosing range
+            // (const / field / variable).
             let (line_start, line_end) = doc
                 .occurrences
                 .iter()
@@ -551,7 +561,9 @@ pub fn parse_scip_file(
                 })
                 .map(|occ| {
                     let start = occ.range.first().copied().unwrap_or(0);
-                    let end = if occ.range.len() >= 3 {
+                    let end = if occ.enclosing_range.len() >= 3 {
+                        occ.enclosing_range[2]
+                    } else if occ.range.len() >= 4 {
                         occ.range[2]
                     } else {
                         start

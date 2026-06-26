@@ -194,6 +194,19 @@ impl Runtime {
                 Some(&display_categories)
             },
         );
+        // Code-intelligence-in-chat (Inc 2): append call-graph traces for any
+        // code-intel summary hits — the same augmentation the KnowledgeQuery and
+        // DeepQuery paths run. A "this codebase" metalingual query that found a
+        // code corpus lands here. Empty string (zero overhead) for non-code
+        // corpora, so it is safe to run unconditionally.
+        let doc_context = {
+            let code_trace = crate::runtime::code_trace::build_code_trace_block(&chunks).await;
+            if code_trace.is_empty() {
+                doc_context
+            } else {
+                format!("{doc_context}\n\n{code_trace}")
+            }
+        };
         let knowledge_block = if conv_briefing.is_empty() {
             doc_context
         } else {

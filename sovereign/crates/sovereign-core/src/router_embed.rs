@@ -360,6 +360,7 @@ fn parse_intent(s: &str) -> std::result::Result<Intent, String> {
         "knowledge_query" | "KnowledgeQuery" => Ok(Intent::KnowledgeQuery),
         "deep_query" | "DeepQuery" => Ok(Intent::DeepQuery),
         "comparison_query" | "ComparisonQuery" => Ok(Intent::ComparisonQuery),
+        "code_query" | "CodeQuery" => Ok(Intent::CodeQuery),
         "complex_task" | "ComplexTask" => Ok(Intent::ComplexTask),
         "metalingual_query" | "MetalingualQuery" => Ok(Intent::MetalingualQuery),
         "conation_query" | "ConationQuery" => Ok(Intent::ConationQuery),

@@ -103,6 +103,7 @@ pub(crate) use self::formatters::{
     format_scored_chunks_with_kinds, MAX_KNOWLEDGE_CHARS,
 };
 
+mod code_trace;
 mod collaboration;
 mod evidence;
 mod evidence_loop;

@@ -63,6 +63,18 @@ pub enum Intent {
     /// loaded, the handler asks plainly what the user is working on
     /// — epistemic honesty as the natural path.
     ExpressiveQuery,
+    /// A question about how THIS codebase works — "how does inference run",
+    /// "what calls gate_answer", "where is X implemented", "trace the request
+    /// flow". A first-class referential route over CODE corpora: retrieval
+    /// rides the intent-summary bridge (plain-English → symbol) and the answer
+    /// is grounded in the SCIP call-graph trace, scoped to code corpora so the
+    /// 30+ non-code corpora can't dilute it. Distinct from `MetalingualQuery`
+    /// (vocabulary lookup — "what does X *mean* here") and from
+    /// `KnowledgeQuery`/`DeepQuery` (which neither scope to code nor surface the
+    /// call graph as primary evidence). Inert when no code corpus is installed:
+    /// the handler detects that and falls back to the knowledge path, so a
+    /// non-code deployment behaves exactly as before.
+    CodeQuery,
     SimpleAction {
         tool: ToolId,
     },

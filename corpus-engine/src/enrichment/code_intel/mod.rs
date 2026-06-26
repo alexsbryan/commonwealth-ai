@@ -1,0 +1,542 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Per-symbol code-intelligence enrichment — the storage-agnostic generation core.
+//!
+//! Given a code symbol (a function) and its source body, produce an
+//! *intent-forced* plain-English summary plus the questions it answers,
+//! keyed by a content-hash of the body. This is the validated bridge from a
+//! conceptual ("no function keywords") question to the right symbol:
+//! retrieval matches the summary + questions, then the SCIP call-graph traces
+//! from there. See `sovereign/docs/specs/CODE_INTEL_CHAT.md`.
+//!
+//! Design (SOLID, single-responsibility, dependency-injected):
+//!  - [`SymbolMeta`] + [`SymbolEnrichment`] are plain data.
+//!  - [`enrich_symbol`] is the unit of work: `(meta, body) -> enrichment`,
+//!    pure given the injected [`ChatCompletionFn`]. It does NO file IO, NO
+//!    SCIP access, and bakes in NO storage decision — those are later slices,
+//!    so this core is identical whether the result lands as Atlas atoms or
+//!    chunk-index rows.
+//!  - [`enrich_symbols_incremental`] is the *patchable* batch driver: it
+//!    re-generates only symbols whose body-hash is absent from the prior
+//!    cache. A rename, a move, or a caller-only change leaves the body-hash
+//!    untouched, so nothing re-generates — per-commit cost equals the number
+//!    of changed function *bodies* (spec §3.4), not the corpus.
+//!
+//! The summary *style* is load-bearing: the prompt forces user-vocabulary
+//! ("another machine in the cluster"), never code jargon ("peer", "node"). A
+//! jargon summary fails retrieval; the user-voiced one wins (spec §3.2). The
+//! prompt input here is code-only — identical to the input validated in the
+//! 172-function scale run — so this is not coached to any eval.
+
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use serde::{Deserialize, Serialize};
+
+use crate::enrichment::pipeline::prompts::load_or_baked;
+use crate::enrichment::pipeline::types::{ChatCompletionFn, ChatPrompt};
+use crate::error::{Error, Result};
+
+/// SCIP-sourced symbol enumeration (slice 2) — gated on `treesitter`, the
+/// feature that pulls in `corpus-engine-scip` (matches `atlas::code_walk`).
+#[cfg(feature = "treesitter")]
+pub mod scip_source;
+
+/// Storage: write per-symbol enrichments as searchable chunks (slice 3, Path B).
+pub mod store;
+
+/// The composed enrichment pass (slice 4): enumerate -> summarize -> index,
+/// patchable via a body-hash sidecar cache. Gated on `treesitter`.
+#[cfg(feature = "treesitter")]
+pub mod pass;
+
+// Inc 2 slice 2a — the call-graph *trace* builder lives in the lean
+// `corpus-engine-scip` crate (`corpus_engine_scip::trace`), NOT here: it reads
+// the call graph via SQL over `scip_graph.db` and needs none of the tree-sitter
+// grammars this crate's `treesitter` feature pulls in. Homing it there lets the
+// chat runtime depend on the read API without dragging the parser into every
+// build. See `corpus-engine-scip/src/trace.rs`.
+
+/// Phase id carried on every code-intel prompt, so the chat client can route
+/// bulk symbol summarization to a fast/short model when the operator has
+/// declared a per-phase override. See [`ChatPrompt::phase_id`].
+pub const PHASE_ID: &str = "code_intel_symbol";
+
+/// Output-token budget: one SUMMARY sentence plus two short ASKS. Matches the
+/// budget used in the validated scale run (spec §5).
+const MAX_OUTPUT_TOKENS: u32 = 160;
+
+/// Low temperature — factual descriptions, not creative prose.
+const TEMPERATURE: f32 = 0.2;
+
+const SUMMARY_LABEL: &str = "summary:";
+const ASKS_LABEL: &str = "asks:";
+
+/// The intent-forced system prompt. Overridable on disk via
+/// `$SOVEREIGN_PROMPT_DIR/code_intel/symbol_enrichment_system.md` (glassbox:
+/// tune the lever without a rebuild — see `pipeline::prompts`).
+static SYMBOL_ENRICHMENT_SYSTEM: LazyLock<&'static str> = LazyLock::new(|| {
+    load_or_baked(
+        "code_intel/symbol_enrichment_system.md",
+        include_str!("prompts/symbol_enrichment_system.md"),
+    )
+});
+
+/// Identity + location of a code symbol to enrich. Sourced from the SCIP
+/// graph (`SymbolRow`) in a later slice; defined here decoupled so the
+/// generator carries no dependency on the SCIP reader.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SymbolMeta {
+    /// Display name, e.g. `select_route`.
+    pub name: String,
+    /// Fully-qualified SCIP descriptor, e.g.
+    /// `sovereign_mesh::peer_inference::MeshInferenceProvider::select_route`.
+    pub qualified_name: String,
+    /// Source file (corpus-relative), e.g.
+    /// `crates/sovereign-mesh/src/peer_inference.rs`.
+    pub file_path: String,
+    /// 1-based inclusive line span of the symbol definition.
+    pub line_start: u32,
+    pub line_end: u32,
+    /// Source language, e.g. `rust`.
+    pub language: String,
+}
+
+/// The enrichment produced for one symbol: the user-voiced summary, the
+/// questions it answers, and the body content-hash that keys it for
+/// incremental re-generation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SymbolEnrichment {
+    pub meta: SymbolMeta,
+    /// `blake3(body)[..16]` — the patchability key. Same body => same hash =>
+    /// the prior summary is reused; a body edit => new hash => one
+    /// re-generation. Matches the `atoms.rs::short_hash` / chunk
+    /// `content_hash` convention.
+    pub body_hash: String,
+    /// One plain-English sentence on the real-world job the symbol does.
+    pub summary: String,
+    /// Plain-English questions a user might ask that this answers (the
+    /// conceptual->symbol bridge; maps onto the Atlas `Question`-atom shape).
+    pub asks: Vec<String>,
+}
+
+/// A symbol plus its current source body — the input to a batch run.
+#[derive(Debug, Clone)]
+pub struct SymbolSource {
+    pub meta: SymbolMeta,
+    pub body: String,
+}
+
+/// Glassbox counts for one incremental batch — the patchability cost model
+/// made observable (per-commit cost = `regenerated`, not `total`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct IncrementalReport {
+    pub total: usize,
+    /// Body-hash already present in the prior cache — summary reused, no model
+    /// call (rename / move / caller-only change land here).
+    pub reused: usize,
+    /// Body new or changed — one model call spent.
+    pub regenerated: usize,
+    /// Generation or parse failure — logged and skipped (never poisons the set).
+    pub failed: usize,
+}
+
+/// `blake3` 16-hex of the symbol body. Matches the hashing convention used for
+/// atom ids (`enrichment/atlas/atoms.rs::short_hash`) and chunk `content_hash`
+/// (`engine/reindex.rs`), so a symbol's key is stable and comparable across
+/// the pipeline.
+pub fn body_hash(body: &str) -> String {
+    blake3::hash(body.as_bytes()).to_hex().to_string()[..16].to_string()
+}
+
+/// Read a 0-indexed inclusive `[line_start, line_end]` line range out of source
+/// text — the body of a symbol. Matches the canonical reader
+/// `sovereign-tools/.../symbol_lookup.rs::read_symbol_body`: SCIP records line
+/// numbers 0-based, so a symbol at editor line N has `line_start = N - 1`.
+pub fn extract_body(content: &str, line_start: i32, line_end: i32) -> String {
+    let start = line_start.max(0) as usize;
+    // `line_end.max(line_start)` guards a residual mis-span (a symbol whose SCIP
+    // enclosing range was absent → `line_end <= line_start`); `min(start + cap)`
+    // bounds the LLM prompt for a very large function (or any leftover bad span).
+    let end = (line_end.max(line_start) as usize).min(start + MAX_BODY_LINES);
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(i, l)| (i >= start && i <= end).then_some(l))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Max body lines extracted per symbol — bounds the prompt and caps any leftover
+/// mis-span. Real functions rarely exceed this; a longer one is truncated, which
+/// still conveys intent for the summary.
+const MAX_BODY_LINES: usize = 400;
+
+/// Which SCIP symbol kinds get a per-symbol intent summary. We *want* functions
+/// and methods — but rust-analyzer's SCIP export leaves nearly every Rust
+/// function/method as `unknown` (and labels some methods `trait`); it reliably
+/// tags only `enum`/`module`/`class`/`struct`/`type`/`variable`/`const`/`field`.
+/// So allow-listing `function`/`method` skips almost the entire codebase
+/// (verified on commonwealth-ai: §4 targets `select_route`, `gate_answer`,
+/// `handle_message_stream_with_classification` are labelled `trait`/`unknown`).
+/// We INVERT: enrich anything that is NOT a reliably-labelled non-callable. The
+/// body-length gate + (post exporter-fix) real body spans drop the residue. The
+/// precise signal is the call graph — a symbol present as a `refs.caller_symbol`
+/// has a body and calls things — a future full-corpus slice can switch to that.
+pub fn is_enrichable_kind(kind: &str) -> bool {
+    !matches!(
+        kind,
+        "enum" | "module" | "class" | "struct" | "type" | "variable" | "const" | "field"
+    )
+}
+
+/// Compose the chat prompt for one symbol. Pure + deterministic, so it is
+/// unit-testable without a model. The system message carries the
+/// intent-forcing rules + output format; the user message carries only the
+/// code (identical to the validated scale-run input).
+pub fn compose_symbol_prompt(body: &str) -> ChatPrompt {
+    ChatPrompt::new(*SYMBOL_ENRICHMENT_SYSTEM, format!("CODE:\n{body}"))
+        .with_phase_id(PHASE_ID)
+        .with_temperature(TEMPERATURE)
+        .with_max_output_tokens(MAX_OUTPUT_TOKENS)
+}
+
+/// Case-insensitive (ASCII) substring search returning the byte offset in the
+/// *original* string. The labels are ASCII, so the returned offset is always a
+/// char boundary — safe to slice at even when the surrounding text is UTF-8.
+fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
+    let (h, n) = (haystack.as_bytes(), needle.as_bytes());
+    if n.is_empty() || h.len() < n.len() {
+        return None;
+    }
+    (0..=h.len() - n.len()).find(|&i| {
+        (0..n.len()).all(|j| h[i + j].eq_ignore_ascii_case(&n[j]))
+    })
+}
+
+/// Parse the model's `SUMMARY:` / `ASKS:` response into `(summary, asks)`.
+/// Lenient: tolerates missing labels, asks on one or several lines, list
+/// markers, and surrounding quotes. Never panics; an empty summary is
+/// surfaced as an error by [`enrich_symbol`].
+pub fn parse_symbol_response(text: &str) -> (String, Vec<String>) {
+    let t = text.trim();
+    let s_at = find_ci(t, SUMMARY_LABEL);
+    let a_at = find_ci(t, ASKS_LABEL);
+    let (sl, al) = (SUMMARY_LABEL.len(), ASKS_LABEL.len());
+
+    let (summary_raw, asks_raw): (&str, &str) = match (s_at, a_at) {
+        (Some(s), Some(a)) if a > s => (&t[s + sl..a], &t[a + al..]),
+        (Some(s), Some(a)) => (&t[s + sl..], &t[a + al..s]), // asks before summary
+        (Some(s), None) => (&t[s + sl..], ""),
+        (None, Some(a)) => (&t[..a], &t[a + al..]),
+        (None, None) => (t, ""),
+    };
+    (clean(summary_raw), split_asks(asks_raw))
+}
+
+/// Trim whitespace and a single layer of surrounding quotes.
+fn clean(s: &str) -> String {
+    s.trim().trim_matches('"').trim().to_string()
+}
+
+/// Strip a leading list marker (`-`, `*`, bullet, `1.`, `2)`) and quotes.
+fn strip_marker(s: &str) -> &str {
+    let s = s.trim().trim_start_matches(['-', '*', '\u{2022}', '\u{00b7}']).trim();
+    let s = s
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .trim_start_matches(['.', ')'])
+        .trim();
+    s.trim_matches('"').trim()
+}
+
+/// Split the ASKS block into individual questions. Prefers `?` boundaries
+/// (re-appending the mark); falls back to one-per-line.
+fn split_asks(raw: &str) -> Vec<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    if raw.contains('?') {
+        raw.split('?')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(|p| format!("{}?", strip_marker(p)))
+            .collect()
+    } else {
+        raw.lines()
+            .map(|l| strip_marker(l).to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+}
+
+/// Generate the enrichment for one symbol. Pure given `chat`. Returns an
+/// [`Error::Extraction`] if the model yields no usable summary (surfaced, not
+/// silently stored, per the glassbox principle).
+pub async fn enrich_symbol(
+    chat: &ChatCompletionFn,
+    meta: SymbolMeta,
+    body: &str,
+) -> Result<SymbolEnrichment> {
+    let prompt = compose_symbol_prompt(body);
+    let raw = (chat)(&prompt).await?;
+    let (summary, asks) = parse_symbol_response(&raw);
+    if summary.is_empty() {
+        return Err(Error::Extraction(format!(
+            "code_intel: empty summary for `{}` ({}B in; response head: {:?})",
+            meta.name,
+            body.len(),
+            raw.chars().take(120).collect::<String>(),
+        )));
+    }
+    Ok(SymbolEnrichment {
+        body_hash: body_hash(body),
+        meta,
+        summary,
+        asks,
+    })
+}
+
+/// Enrich a batch of symbols, reusing prior results whose body-hash is
+/// unchanged — the patchable hot path. Returns the full current set (reused +
+/// regenerated, in input order) and a glassbox [`IncrementalReport`].
+///
+/// `prior` is keyed by [`body_hash`]: content-addressed, so two symbols with
+/// identical bodies share one summary, and a rename/move with an unchanged
+/// body reuses it (only the `meta` is refreshed).
+pub async fn enrich_symbols_incremental(
+    chat: &ChatCompletionFn,
+    symbols: Vec<SymbolSource>,
+    prior: &HashMap<String, SymbolEnrichment>,
+) -> (Vec<SymbolEnrichment>, IncrementalReport) {
+    let mut out = Vec::with_capacity(symbols.len());
+    let mut report = IncrementalReport {
+        total: symbols.len(),
+        ..Default::default()
+    };
+
+    for src in symbols {
+        let hash = body_hash(&src.body);
+        if let Some(prev) = prior.get(&hash) {
+            // Body unchanged (hash-keyed) — reuse the summary, refresh meta in
+            // case the symbol moved or was renamed with an identical body.
+            let mut e = prev.clone();
+            e.meta = src.meta;
+            report.reused += 1;
+            out.push(e);
+            continue;
+        }
+        match enrich_symbol(chat, src.meta.clone(), &src.body).await {
+            Ok(e) => {
+                report.regenerated += 1;
+                out.push(e);
+            }
+            Err(err) => {
+                report.failed += 1;
+                tracing::warn!(
+                    target: "enrichment.code_intel",
+                    symbol = %src.meta.name,
+                    file = %src.meta.file_path,
+                    error = %err,
+                    "symbol enrichment failed; skipping",
+                );
+            }
+        }
+    }
+
+    tracing::info!(
+        target: "enrichment.code_intel",
+        total = report.total,
+        regenerated = report.regenerated,
+        reused = report.reused,
+        failed = report.failed,
+        "code_intel incremental enrichment complete",
+    );
+    (out, report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    fn meta(name: &str) -> SymbolMeta {
+        SymbolMeta {
+            name: name.to_string(),
+            qualified_name: format!("crate::{name}"),
+            file_path: "src/x.rs".to_string(),
+            line_start: 1,
+            line_end: 9,
+            language: "rust".to_string(),
+        }
+    }
+
+    /// A fake injected provider: counts calls and returns a fixed response, so
+    /// tests assert on plumbing + the incremental-skip behaviour without a model.
+    fn fake_chat(resp: &'static str, calls: Arc<AtomicUsize>) -> ChatCompletionFn {
+        Arc::new(move |_p: &ChatPrompt| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            let r = resp.to_string();
+            Box::pin(async move { Ok(r) })
+        })
+    }
+
+    #[test]
+    fn body_hash_is_stable_and_sensitive() {
+        let a = body_hash("fn f() {}");
+        assert_eq!(a, body_hash("fn f() {}"), "same body => same hash");
+        assert_ne!(a, body_hash("fn f() { g() }"), "changed body => new hash");
+        assert_eq!(a.len(), 16, "16 hex chars (matches short_hash convention)");
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn extract_body_is_zero_based_inclusive() {
+        let c = "L0\nL1\nL2\nL3";
+        assert_eq!(extract_body(c, 1, 2), "L1\nL2", "0-based inclusive");
+        assert_eq!(extract_body(c, 0, 0), "L0", "single line");
+        assert_eq!(extract_body(c, 0, 3), c, "whole file");
+        assert_eq!(extract_body(c, 2, 99), "L2\nL3", "end clamps to file");
+    }
+
+    #[test]
+    fn enrichable_kinds_exclude_reliably_labelled_noncallables() {
+        // Functions/methods are enrichable — but so are the `unknown`/`trait`
+        // labels rust-analyzer (mis)assigns to real Rust functions, which is the
+        // whole reason this is a deny-list rather than an allow-list.
+        assert!(is_enrichable_kind("function"));
+        assert!(is_enrichable_kind("method"));
+        assert!(is_enrichable_kind("unknown"), "RA labels most Rust fns 'unknown'");
+        assert!(is_enrichable_kind("trait"), "RA labels some methods 'trait'");
+        // Reliably-labelled non-callables stay excluded.
+        assert!(!is_enrichable_kind("struct"));
+        assert!(!is_enrichable_kind("module"));
+        assert!(!is_enrichable_kind("enum"));
+        assert!(!is_enrichable_kind("field"));
+    }
+
+    #[test]
+    fn parse_well_formed() {
+        let (s, a) = parse_symbol_response(
+            "SUMMARY: It decides where the request runs.\nASKS: Which machine handles it? What if it is down?",
+        );
+        assert_eq!(s, "It decides where the request runs.");
+        assert_eq!(a, vec!["Which machine handles it?", "What if it is down?"]);
+    }
+
+    #[test]
+    fn parse_tolerates_missing_asks_and_labels() {
+        let (s, a) = parse_symbol_response("SUMMARY: Just a summary.");
+        assert_eq!(s, "Just a summary.");
+        assert!(a.is_empty());
+
+        // No labels at all: whole text is the summary.
+        let (s2, a2) = parse_symbol_response("It picks a model.");
+        assert_eq!(s2, "It picks a model.");
+        assert!(a2.is_empty());
+    }
+
+    #[test]
+    fn parse_strips_list_markers_and_quotes() {
+        let (s, a) = parse_symbol_response(
+            "SUMMARY: \"Routes the work.\"\nASKS:\n1. Where does it go?\n2. What is the fallback?",
+        );
+        assert_eq!(s, "Routes the work.");
+        assert_eq!(a, vec!["Where does it go?", "What is the fallback?"]);
+    }
+
+    #[test]
+    fn parse_is_case_insensitive_on_labels() {
+        let (s, a) = parse_symbol_response("summary: lower works.\nAsks: really? yes?");
+        assert_eq!(s, "lower works.");
+        assert_eq!(a, vec!["really?", "yes?"]);
+    }
+
+    #[tokio::test]
+    async fn enrich_symbol_produces_enrichment() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let chat = fake_chat(
+            "SUMMARY: It chooses which computer answers.\nASKS: Where does my request go? What if none are free?",
+            calls.clone(),
+        );
+        let e = enrich_symbol(&chat, meta("select_route"), "fn select_route() {}")
+            .await
+            .expect("ok");
+        assert_eq!(e.meta.name, "select_route");
+        assert_eq!(e.summary, "It chooses which computer answers.");
+        assert_eq!(e.asks.len(), 2);
+        assert_eq!(e.body_hash, body_hash("fn select_route() {}"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn enrich_symbol_errors_on_empty_summary() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let chat = fake_chat("ASKS: only questions? no summary?", calls.clone());
+        let r = enrich_symbol(&chat, meta("f"), "fn f() {}").await;
+        assert!(matches!(r, Err(Error::Extraction(_))));
+    }
+
+    #[tokio::test]
+    async fn incremental_skips_unchanged_bodies() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let chat = fake_chat(
+            "SUMMARY: does a thing.\nASKS: a? b?",
+            calls.clone(),
+        );
+
+        // First pass: empty prior -> everything regenerates.
+        let syms = vec![
+            SymbolSource { meta: meta("f"), body: "fn f() { 1 }".to_string() },
+            SymbolSource { meta: meta("g"), body: "fn g() { 2 }".to_string() },
+        ];
+        let prior = HashMap::new();
+        let (set, rep) = enrich_symbols_incremental(&chat, syms.clone(), &prior).await;
+        assert_eq!(rep.regenerated, 2);
+        assert_eq!(rep.reused, 0);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        // Build the cache from the first pass.
+        let cache: HashMap<String, SymbolEnrichment> =
+            set.into_iter().map(|e| (e.body_hash.clone(), e)).collect();
+
+        // Second pass: f unchanged (reused, no call), g body edited (one call).
+        calls.store(0, Ordering::SeqCst);
+        let syms2 = vec![
+            SymbolSource { meta: meta("f"), body: "fn f() { 1 }".to_string() },
+            SymbolSource { meta: meta("g"), body: "fn g() { 2 + 2 }".to_string() },
+        ];
+        let (_set2, rep2) = enrich_symbols_incremental(&chat, syms2, &cache).await;
+        assert_eq!(rep2.reused, 1, "f reused");
+        assert_eq!(rep2.regenerated, 1, "g re-summarized");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "only the changed body cost a call");
+    }
+
+    #[tokio::test]
+    async fn incremental_rename_same_body_is_free() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let chat = fake_chat("SUMMARY: a job.\nASKS: x? y?", calls.clone());
+        let body = "fn original() { work() }";
+        let (set, _) = enrich_symbols_incremental(
+            &chat,
+            vec![SymbolSource { meta: meta("original"), body: body.to_string() }],
+            &HashMap::new(),
+        )
+        .await;
+        let cache: HashMap<String, SymbolEnrichment> =
+            set.into_iter().map(|e| (e.body_hash.clone(), e)).collect();
+
+        // Rename: identical body, new name -> reused, meta refreshed, zero calls.
+        calls.store(0, Ordering::SeqCst);
+        let (set2, rep) = enrich_symbols_incremental(
+            &chat,
+            vec![SymbolSource { meta: meta("renamed"), body: body.to_string() }],
+            &cache,
+        )
+        .await;
+        assert_eq!(rep.reused, 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "rename with same body is free");
+        assert_eq!(set2[0].meta.name, "renamed", "meta refreshed to the new name");
+        assert_eq!(set2[0].summary, "a job.", "summary carried over");
+    }
+}

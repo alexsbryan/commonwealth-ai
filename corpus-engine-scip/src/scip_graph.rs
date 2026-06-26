@@ -1020,6 +1020,29 @@ impl ScipGraph {
         Ok(rows)
     }
 
+    /// The set of `caller_qualified` names in the ref graph — every symbol with a
+    /// body that calls something. This is the precise "real function / method"
+    /// population for code-intel enrichment: the per-symbol `kind` field from a
+    /// SCIP export is unreliable (rust-analyzer leaves most Rust fns `unknown`),
+    /// but a symbol that appears as a caller provably has a body. Empty when the
+    /// graph has no refs (e.g. an in-memory test fixture) — callers treat an
+    /// empty set as "no caller filter", falling back to the kind screen.
+    pub async fn caller_qualified_names(&self) -> Result<std::collections::HashSet<String>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT caller_qualified FROM refs
+                 WHERE corpus_id = ? AND caller_qualified != ''",
+            )
+            .map_err(|e| Error::Database(format!("caller_qualified_names prepare: {e}")))?;
+        let set: std::collections::HashSet<String> = stmt
+            .query_map(params![self.corpus_id], |row| row.get::<_, String>(0))
+            .map_err(|e| Error::Database(format!("caller_qualified_names query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(set)
+    }
+
     /// Direct lookup of a symbol's definition row by exact name.
     /// Returns `None` when nothing matches in this corpus. Use
     /// [`resolve_symbol`](Self::resolve_symbol) when the caller has an

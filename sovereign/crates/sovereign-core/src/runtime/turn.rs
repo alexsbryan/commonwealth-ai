@@ -605,6 +605,7 @@ impl Runtime {
         let dispatch = match intent {
             Intent::ComplexTask => "handle_complex_task",
             Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
+            Intent::CodeQuery => "handle_code_query",
             Intent::MetalingualQuery => "handle_metalingual_query",
             Intent::ConationQuery => "handle_conation_query",
             Intent::CommissiveQuery => "handle_commissive_query",
@@ -624,6 +625,17 @@ impl Runtime {
                     conversation_id,
                     &context,
                     &intent,
+                    coarse_intent,
+                    self_assessment,
+                    classification.rationale.clone(),
+                )
+                .await
+            }
+            Intent::CodeQuery => {
+                self.handle_code_query(
+                    message,
+                    conversation_id,
+                    &context,
                     coarse_intent,
                     self_assessment,
                     classification.rationale.clone(),

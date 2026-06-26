@@ -432,6 +432,7 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
         Intent::KnowledgeQuery => "knowledge_query".into(),
         Intent::DeepQuery => "deep_query".into(),
         Intent::ComparisonQuery => "comparison_query".into(),
+        Intent::CodeQuery => "code_query".into(),
         Intent::MetalingualQuery => "metalingual_query".into(),
         Intent::ConationQuery => "conation_query".into(),
         Intent::CommissiveQuery => "commissive_query".into(),

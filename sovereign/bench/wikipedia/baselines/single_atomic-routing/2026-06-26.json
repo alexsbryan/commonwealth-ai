@@ -1,0 +1,18 @@
+{
+  "bank_name": "single-atomic-bombings",
+  "started_at_unix": 1782443754,
+  "results": [
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What are the ethical considerations around the atomic bombings of Hiroshima and …\" (cosine 0.863, margin 0.460)",
+      "correct": true,
+      "latency_ms": 101
+    }
+  ]
+}

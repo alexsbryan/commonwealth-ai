@@ -1,0 +1,102 @@
+{
+  "bank_name": "wikipedia-summarize-pilot-v1",
+  "started_at_unix": 1782443839,
+  "results": [
+    {
+      "question_id": "summary_einstein",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of Albert Einstein. Cover his major scientific\ncontributions, the key ideas and how they changed physics, his role in the\nquantum debates, and the main arc of his personal and political life. Aim for\nbreadth across the whole topic rather than depth on any single point.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 115
+    },
+    {
+      "question_id": "summary_wwii",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of World War II. Cover its scope and timeline,\nthe major belligerents, the principal theaters and turning points, its human\ncost, and its consequences. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 103
+    },
+    {
+      "question_id": "summary_evolution",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of evolution as a scientific theory. Cover its\ncentral claim, the main mechanisms, the principal lines of evidence, and its\nhistorical development. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 107
+    },
+    {
+      "question_id": "summary_french_revolution",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the French Revolution. Cover its causes,\nthe major events and phases, the key factions and figures, and its outcomes and\nlegacy. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 97
+    },
+    {
+      "question_id": "summary_kant",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the philosophy of Immanuel Kant. Cover his\ncentral doctrines in metaphysics and epistemology, his moral philosophy, and his\nbroader significance. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 96
+    },
+    {
+      "question_id": "summary_roman_empire",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the Roman Empire. Cover its political\nevolution, its military and administration, its economy and culture, the\nreligious changes it underwent, and its decline. Aim for breadth across the\nwhole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Why did the Roman Empire fall, and what came after?\" (cosine 0.615, margin 0.383)",
+      "correct": true,
+      "latency_ms": 110
+    },
+    {
+      "question_id": "summary_dna",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of DNA. Cover its structure, how it encodes\ninformation, how that information is copied and expressed, and its role in\nheredity. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 107
+    },
+    {
+      "question_id": "summary_ai",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of artificial intelligence. Cover its main\napproaches, its historical development, major subfields and applications, and\nits risks and open debates. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 107
+    }
+  ]
+}

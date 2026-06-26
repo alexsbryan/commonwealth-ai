@@ -804,6 +804,21 @@ impl Runtime {
                 Some(&display_categories)
             },
         );
+        // Code-intelligence-in-chat (Inc 2 slice 2b): when retrieval surfaced
+        // code-intel *summary* chunks, append each matched symbol's call-graph
+        // trace (callers/callees, dyn-dispatch boundaries flagged) so the
+        // synthesis model answers structural "how does X reach Y" questions from
+        // the real graph, not prose. Reads the corpus's `scip_graph.db` via the
+        // lean `corpus-engine-scip` crate — no tree-sitter grammars. Empty string
+        // (zero overhead) for the common non-code corpus, so it is unconditional.
+        let doc_context = {
+            let code_trace = crate::runtime::code_trace::build_code_trace_block(&chunks).await;
+            if code_trace.is_empty() {
+                doc_context
+            } else {
+                format!("{doc_context}\n\n{code_trace}")
+            }
+        };
         let knowledge_block = if conv_briefing.is_empty() {
             doc_context.clone()
         } else {

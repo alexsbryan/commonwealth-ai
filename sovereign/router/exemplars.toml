@@ -929,3 +929,61 @@ query = "How do TCP and UDP differ as transport protocols?"
 [[example]]
 intent = "comparison_query"
 query = "What's the difference between a function and a method in object-oriented code?"
+
+# ── code_query — how THIS codebase works (Inc 4, first-class code route) ──
+# Retrieval rides the intent-summary bridge (plain-English -> symbol) and the
+# answer is grounded in the SCIP call-graph trace, scoped to code corpora.
+# Distinct from metalingual (vocabulary — "what does X *mean* here") and
+# deep_query (open-ended reasoning). The separating signal is the CODE-STRUCTURE
+# locator: "what calls X", "where is Y implemented", "trace the flow", "which
+# function does Z", "call graph". Keep these phrasings code-structural so the
+# cluster does not steal general "how does X work" knowledge questions — the
+# routing bench (`bench --routing-only`) guards that boundary.
+
+[[example]]
+intent = "code_query"
+query = "How does inference actually run when I send a chat message?"
+
+[[example]]
+intent = "code_query"
+query = "What calls gate_answer?"
+
+[[example]]
+intent = "code_query"
+query = "Where is the retrieval pipeline implemented in the code?"
+
+[[example]]
+intent = "code_query"
+query = "Trace how a chat message becomes a streamed response."
+
+[[example]]
+intent = "code_query"
+query = "Which function decides whether to show or withhold a generated answer?"
+
+[[example]]
+intent = "code_query"
+query = "How does the router classify a query into an intent in the code?"
+
+[[example]]
+intent = "code_query"
+query = "What's the call graph around select_route?"
+
+[[example]]
+intent = "code_query"
+query = "Where in the code does the system pick which GPU slot to use?"
+
+[[example]]
+intent = "code_query"
+query = "How do mesh peers get selected for distributed inference in the codebase?"
+
+[[example]]
+intent = "code_query"
+query = "What functions handle the streaming token loop?"
+
+[[example]]
+intent = "code_query"
+query = "Show me how the SCIP call graph gets built in the source."
+
+[[example]]
+intent = "code_query"
+query = "Where is answer gating implemented and what calls it?"
