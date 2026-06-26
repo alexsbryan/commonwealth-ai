@@ -159,7 +159,19 @@ impl Tool for McpToolAdapter {
 ///    Idempotency::NonIdempotent` (second call creates a second
 ///    side-effect).
 ///
-/// 4. **Fallback** — unclassified tools stay at the conservative
+/// 4. **Actuator verbs** — GUI / browser / automation servers name
+///    tools `<namespace>_<verb>` (e.g. `browser_click`,
+///    `browser_snapshot`), so the action is a `_`-delimited token, not a
+///    prefix. Observation verbs (`snapshot`, `screenshot`, `navigate`,
+///    `console`, `network`, `wait`, `hover`, …) → `Read + Idempotent`;
+///    mutation verbs (`click`, `type`, `fill`, `submit`, `select`,
+///    `press`, `upload`, `drag`, …) → `Write + NonIdempotent`. Mutation
+///    is checked first, so a tool that both reads and writes lands on the
+///    safe (gated, ledgered) side. This is what lets a `browser_click`
+///    that submits a form pick up the replay-safety ledger while a
+///    `browser_snapshot` read does not.
+///
+/// 5. **Fallback** — unclassified tools stay at the conservative
 ///    default `Effect::Write + Idempotency::NonIdempotent`.
 ///
 /// No parameter-schema inspection yet — the name signal is high-
@@ -186,6 +198,16 @@ fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
         "create_", "add_", "insert_", "write_", "post_", "send_", "publish_", "push_", "commit_",
         "apply_", "update_", "set_",
     ];
+    // Actuator verbs, matched as whole `_`-delimited tokens (not prefixes)
+    // because GUI/browser/automation servers name tools `namespace_verb`.
+    const MUTATE_VERBS: &[&str] = &[
+        "click", "type", "fill", "submit", "select", "press", "upload", "drag", "drop", "tap",
+        "check", "clear", "paste",
+    ];
+    const OBSERVE_VERBS: &[&str] = &[
+        "snapshot", "screenshot", "navigate", "console", "network", "wait", "hover", "view",
+        "capture", "scrape", "extract",
+    ];
 
     let lower = name.to_lowercase();
 
@@ -197,6 +219,16 @@ fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
     }
     if MUTATING_PREFIXES.iter().any(|p| lower.starts_with(p)) {
         return (Effect::Write, Idempotency::NonIdempotent);
+    }
+
+    // Actuator-verb tokens. Mutation wins over observation so a tool that
+    // does both is gated and ledgered rather than treated as a safe read.
+    let has_token = |verbs: &[&str]| lower.split('_').any(|t| verbs.contains(&t));
+    if has_token(MUTATE_VERBS) {
+        return (Effect::Write, Idempotency::NonIdempotent);
+    }
+    if has_token(OBSERVE_VERBS) {
+        return (Effect::Read, Idempotency::Idempotent);
     }
 
     // Unknown shape — conservative default.
@@ -403,6 +435,62 @@ mod tests {
     fn prefix_match_is_case_insensitive() {
         let (e, _) = infer_behaviour("READ_FILE", "");
         assert_eq!(e, Effect::Read);
+    }
+
+    /// The real `@playwright/mcp` tool names (captured from a live
+    /// `tools/list`). Reads must stay off the write/ledger path; mutations
+    /// must be `NonIdempotent` so the approval gate fires and the
+    /// replay-safety ledger (#4) guards a form submit.
+    #[test]
+    fn playwright_browser_tools_classify_by_action() {
+        for name in [
+            "browser_snapshot",
+            "browser_take_screenshot",
+            "browser_navigate",
+            "browser_navigate_back",
+            "browser_console_messages",
+            "browser_network_requests",
+            "browser_wait_for",
+            "browser_hover",
+        ] {
+            let (e, i) = infer_behaviour(name, "");
+            assert_eq!(e, Effect::Read, "observation should be Read (name={name})");
+            assert_eq!(
+                i,
+                Idempotency::Idempotent,
+                "observation should be Idempotent (name={name})"
+            );
+        }
+
+        for name in [
+            "browser_click",
+            "browser_type",
+            "browser_fill_form",
+            "browser_press_key",
+            "browser_select_option",
+            "browser_file_upload",
+            "browser_drag",
+            "browser_drop",
+        ] {
+            let (e, i) = infer_behaviour(name, "");
+            assert_eq!(e, Effect::Write, "mutation should be Write (name={name})");
+            assert_eq!(
+                i,
+                Idempotency::NonIdempotent,
+                "mutation should be NonIdempotent (name={name})"
+            );
+        }
+
+        // Ambiguous / arbitrary-code tools stay conservative (gated, ledgered).
+        for name in ["browser_evaluate", "browser_run_code_unsafe", "browser_tabs"] {
+            let (e, i) = infer_behaviour(name, "");
+            assert_eq!(e, Effect::Write, "ambiguous stays conservative (name={name})");
+            assert_eq!(
+                i,
+                Idempotency::NonIdempotent,
+                "ambiguous stays conservative (name={name})"
+            );
+        }
     }
 
     #[test]
