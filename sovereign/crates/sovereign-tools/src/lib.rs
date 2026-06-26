@@ -15,6 +15,8 @@ pub mod conv_tiered_provider;
 pub mod corpus;
 pub mod corpus_search;
 pub mod corpus_store;
+pub mod read_csv;
+pub mod vector_mean;
 pub mod document;
 pub mod document_asset;
 pub mod document_operation;

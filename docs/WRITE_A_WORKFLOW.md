@@ -256,7 +256,8 @@ You've seen most of it. The remainder, briefly:
   connected MCP tool), and `tool:<id>` built-ins — `extract` (a document's text, any
   format), `chunk`, `read_file` / `write_file`, `corpus_store` (build a searchable
   corpus), `corpus_search` (read one back — the top-k items by similarity to a
-  query vector, ranked), `web_fetch`, `zip`.
+  query vector, ranked), `read_csv` (a CSV as a collection of row objects),
+  `vector_mean` (the weighted centroid of a set of vectors), `web_fetch`, `zip`.
 - **`for_each`** runs a step once per element of an earlier collection; inside it,
   `{element}` is the current one. It's how you go from one document to a result
   per chapter. To pair two collections back up by position, there's `tool:zip`.

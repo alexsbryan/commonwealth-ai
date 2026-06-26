@@ -20,6 +20,8 @@
 //! `[0, 1]`. It deliberately does NOT use the `DocumentStore::search_documents_scored`
 //! trait default, whose fallback impl returns `score: 0.0`. Effect is `Read`.
 
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 
 use corpus_engine::CorpusIndex;
@@ -46,6 +48,8 @@ impl Tool for CorpusSearchTool {
                     "embedding": { "type": "string", "description": "Query vector — e.g. {seed_vec.output} from an embed: step" },
                     "query": { "type": "string", "description": "Optional query text for hybrid lexical (FTS) recall on top of vector similarity" },
                     "top_k": { "type": "string", "description": "How many hits to return (default 10)" },
+                    "single": { "type": "boolean", "description": "Return the single top hit as an object (or null) instead of an array — for resolution under for_each" },
+                    "exclude": { "type": "string", "description": "Array of source_doc_ids (or objects with source_doc_id) to drop from results — e.g. {resolved.output}" },
                     "index_dir": { "type": "string", "description": "Index root. Default: ~/.sovereign/indexes" }
                 },
                 "required": ["corpus", "embedding"]
@@ -78,6 +82,12 @@ impl Tool for CorpusSearchTool {
         let corpus = str_param(params, "corpus")?;
         let query_text = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let top_k = parse_top_k(params).unwrap_or(10);
+        // `single` → return the top hit as an object (resolution under for_each).
+        let single = params
+            .get("single")
+            .map(|v| v.as_bool().unwrap_or(matches!(v.as_str(), Some("true") | Some("1"))))
+            .unwrap_or(false);
+        let exclude = parse_exclude(params);
         let embedding = parse_embedding(params)?;
 
         let index_dir = match params.get("index_dir").and_then(|v| v.as_str()) {
@@ -101,16 +111,24 @@ impl Tool for CorpusSearchTool {
             .map_err(|e| Error::Execution(format!("corpus_search: open `{corpus}`: {e}")))?;
 
         // The retrieval read path: real cosine / RRF-hybrid scores in [0, 1].
+        // Over-fetch by the exclude count so at least `top_k` survive the drop
+        // (`CorpusIndex::search` has no native filter, so we filter client-side).
+        let fetch_k = top_k + exclude.len();
         let hits = index
-            .search(&embedding, query_text, top_k)
+            .search(&embedding, query_text, fetch_k)
             .await
             .map_err(|e| Error::Execution(format!("corpus_search: search `{corpus}`: {e}")))?;
 
         // Ranked collection — a JSON array makes this `for_each`-able downstream
         // (`{element.title}`, `{element.score}`, …). `search` already returns hits
-        // sorted by descending score.
+        // sorted by descending score; we drop excluded docs, then cap at `top_k`.
         let out: Vec<serde_json::Value> = hits
             .into_iter()
+            .filter(|h| match &h.source_doc_id {
+                Some(id) => !exclude.contains(id),
+                None => true,
+            })
+            .take(top_k)
             .map(|h| {
                 serde_json::json!({
                     "source_doc_id": h.source_doc_id,
@@ -121,8 +139,47 @@ impl Tool for CorpusSearchTool {
             })
             .collect();
 
+        // `single` → the top hit as an object (or null). Lets a caller use
+        // `corpus_search` under `for_each` for resolution (title → best match)
+        // and get a FLAT collection of objects, not an array-of-arrays.
+        if single {
+            return Ok(StepOutput::Json(
+                out.into_iter().next().unwrap_or(serde_json::Value::Null),
+            ));
+        }
         Ok(StepOutput::Json(serde_json::Value::Array(out)))
     }
+}
+
+/// The set of `source_doc_id`s to drop from results. Accepts the `exclude` param
+/// as a JSON *string* (templated) or a structured array, and each element as
+/// either a bare id string or an object carrying `source_doc_id` — so a recipe can
+/// pass a whole resolved collection (`exclude = "{resolved.output}"`) unchanged.
+fn parse_exclude(params: &serde_json::Value) -> HashSet<String> {
+    let mut set = HashSet::new();
+    let raw = match params.get("exclude") {
+        Some(serde_json::Value::String(s)) if !s.trim().is_empty() => {
+            serde_json::from_str(s).unwrap_or(serde_json::Value::Null)
+        }
+        Some(other) => other.clone(),
+        None => serde_json::Value::Null,
+    };
+    if let serde_json::Value::Array(arr) = raw {
+        for item in arr {
+            match item {
+                serde_json::Value::String(s) => {
+                    set.insert(s);
+                }
+                serde_json::Value::Object(o) => {
+                    if let Some(id) = o.get("source_doc_id").and_then(|v| v.as_str()) {
+                        set.insert(id.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    set
 }
 
 fn str_param(params: &serde_json::Value, key: &str) -> Result<String> {
@@ -280,5 +337,81 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("not found"), "{msg}");
         assert!(msg.contains("notebook"), "should point at the build step: {msg}");
+    }
+
+    /// `single` returns one object (for resolution under for_each); `exclude`
+    /// drops seen docs while still returning the next-best survivors.
+    #[tokio::test]
+    async fn single_returns_one_object_and_exclude_drops_seen() {
+        let dir = tempfile::tempdir().unwrap();
+        let index_dir = dir.path().join("indexes");
+
+        // Three movies, each its own source_doc_id + a distinct 4-dim vector.
+        // bravo sits close to alpha so it survives as the runner-up after exclude.
+        let movies = [
+            ("alpha", "Alpha: a quiet space drama", [1.0f32, 0.0, 0.0, 0.0]),
+            ("bravo", "Bravo: another quiet space drama", [0.9, 0.1, 0.0, 0.0]),
+            ("charlie", "Charlie: a loud heist", [0.0, 0.0, 1.0, 0.0]),
+        ];
+        for (id, text, vec) in movies.iter() {
+            let p = serde_json::json!({
+                "corpus": "films",
+                "chunks": serde_json::json!([{ "text": text, "index": 0 }]).to_string(),
+                "embeddings": serde_json::json!([vec]).to_string(),
+                "source_doc_id": id,
+                "title": id,
+                "index_dir": index_dir.to_string_lossy(),
+                "build_indexes": false
+            });
+            CorpusStoreTool.execute(&p, &ctx()).await.unwrap();
+        }
+
+        // single=true → ONE object (not an array), and it's alpha (its own vector).
+        let single = CorpusSearchTool
+            .execute(
+                &serde_json::json!({
+                    "corpus": "films",
+                    "embedding": [1.0, 0.0, 0.0, 0.0],
+                    "single": true,
+                    "index_dir": index_dir.to_string_lossy()
+                }),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        match single {
+            StepOutput::Json(serde_json::Value::Object(o)) => assert_eq!(
+                o.get("source_doc_id").and_then(|v| v.as_str()),
+                Some("alpha"),
+                "single must resolve to the closest doc"
+            ),
+            o => panic!("single must return one object; got {o:?}"),
+        }
+
+        // exclude=[{source_doc_id: alpha}] → alpha never appears, bravo (runner-up)
+        // does. Proves over-fetch-and-drop keeps real results, not just removes one.
+        let recs = CorpusSearchTool
+            .execute(
+                &serde_json::json!({
+                    "corpus": "films",
+                    "embedding": [1.0, 0.0, 0.0, 0.0],
+                    "exclude": [{ "source_doc_id": "alpha" }],
+                    "top_k": "5",
+                    "index_dir": index_dir.to_string_lossy()
+                }),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        let arr = match recs {
+            StepOutput::Json(serde_json::Value::Array(a)) => a,
+            o => panic!("expected array; got {o:?}"),
+        };
+        let ids: Vec<&str> = arr
+            .iter()
+            .filter_map(|h| h.get("source_doc_id").and_then(|v| v.as_str()))
+            .collect();
+        assert!(!ids.contains(&"alpha"), "excluded doc must not appear: {ids:?}");
+        assert!(ids.contains(&"bravo"), "runner-up must survive the exclude: {ids:?}");
     }
 }

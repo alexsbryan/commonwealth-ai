@@ -36,6 +36,7 @@ corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
+csv = "1.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

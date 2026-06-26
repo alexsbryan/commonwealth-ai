@@ -77,6 +77,14 @@ pub const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
         "genome",
         include_str!("../../sovereign-workflow/recipes/genome.toml"),
     ),
+    (
+        "movie-catalog",
+        include_str!("../../sovereign-workflow/recipes/movie-catalog.toml"),
+    ),
+    (
+        "recommend-personal",
+        include_str!("../../sovereign-workflow/recipes/recommend-personal.toml"),
+    ),
 ];
 
 /// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
@@ -214,6 +222,8 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
     use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
     use sovereign_tools::corpus_search::CorpusSearchTool;
     use sovereign_tools::corpus_store::CorpusStoreTool;
+    use sovereign_tools::read_csv::ReadCsvTool;
+    use sovereign_tools::vector_mean::VectorMeanTool;
     use sovereign_tools::extract::ExtractTool;
     use sovereign_tools::rag::chunk::ChunkTool;
     use sovereign_tools::rag::section::SectionTool;
@@ -236,6 +246,8 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
     tools.register(Box::new(ZipTool));
     tools.register(Box::new(CorpusStoreTool));
     tools.register(Box::new(CorpusSearchTool));
+    tools.register(Box::new(ReadCsvTool));
+    tools.register(Box::new(VectorMeanTool));
     tools.register(Box::new(WriteJsonTool));
     tools.register(Box::new(WriteFileTool));
     tools.register(Box::new(AtlasGapsTool));
@@ -483,6 +495,32 @@ pub fn workflow_capabilities(wf: &Workflow, registry: &ToolRegistry) -> Capabili
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every shipped recipe parses AND every `tool:` step it names resolves to a
+    /// registered tool. Guards the hand-written `recipes/` TOML against a typo or a
+    /// primitive that doesn't exist (e.g. a renamed/forgotten tool) — parse +
+    /// resolve, no daemon. (`shipped_examples_parse` in sovereign-workflow covers
+    /// `examples/`; this covers the host's `SHIPPED_WORKFLOWS`.)
+    #[tokio::test]
+    async fn shipped_recipes_parse_and_resolve_tools() {
+        let registry = standard_registry(vec![]).await;
+        assert!(
+            SHIPPED_WORKFLOWS.len() >= 5,
+            "expected several shipped recipes, found {}",
+            SHIPPED_WORKFLOWS.len()
+        );
+        for (name, toml) in SHIPPED_WORKFLOWS {
+            let wf = Workflow::parse(toml)
+                .unwrap_or_else(|e| panic!("shipped recipe `{name}` must parse: {e}"));
+            for step in &wf.steps {
+                if let Some(id) = step.uses.strip_prefix("tool:") {
+                    registry.get(id).unwrap_or_else(|_| {
+                        panic!("shipped recipe `{name}` names unregistered tool `{id}`")
+                    });
+                }
+            }
+        }
+    }
 
     /// A workflow's declared capabilities come straight from its steps' tools:
     /// `tool:shell` → Shell, `tool:write_file` → FileWrite, `model:` →

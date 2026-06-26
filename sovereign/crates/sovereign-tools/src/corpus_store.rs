@@ -151,12 +151,21 @@ impl Tool for CorpusStoreTool {
             .map_err(|e| Error::Execution(format!("corpus_store: create `{corpus}`: {e}")))?
         };
 
-        // Idempotency: drop this document's prior rows, then insert fresh, so a
-        // workflow re-run replaces rather than duplicates.
-        index
-            .delete_chunks_by_source_doc(&source_doc_id)
-            .await
-            .map_err(|e| Error::Execution(format!("corpus_store: clear `{source_doc_id}`: {e}")))?;
+        // Idempotency: drop the prior rows for every document id we're about to
+        // write, then insert fresh, so a re-run replaces rather than duplicates. A
+        // batch may carry MANY ids — e.g. a movie catalog, one id per film, via a
+        // per-chunk `source_doc_id` — so delete each distinct one (first run finds
+        // none; cheap).
+        let doc_ids: std::collections::HashSet<String> = chunk_vals
+            .iter()
+            .map(|cv| chunk_field(cv, "source_doc_id").unwrap_or_else(|| source_doc_id.clone()))
+            .collect();
+        for id in &doc_ids {
+            index
+                .delete_chunks_by_source_doc(id)
+                .await
+                .map_err(|e| Error::Execution(format!("corpus_store: clear `{id}`: {e}")))?;
+        }
 
         let pairs: Vec<(InsertChunk, Vec<f32>)> = chunk_vals
             .iter()
@@ -165,11 +174,17 @@ impl Tool for CorpusStoreTool {
                 (
                     InsertChunk {
                         content: chunk_text_field(cv),
-                        title: title.clone(),
+                        // Per-chunk `title` / `source_doc_id` when the chunk object
+                        // carries them (a heterogeneous batch — one corpus_store call
+                        // holding many distinct documents); else the call-level params.
+                        title: chunk_field(cv, "title").or_else(|| title.clone()),
                         url: None,
                         metadata: None,
                         content_hash: None,
-                        source_doc_id: Some(source_doc_id.clone()),
+                        source_doc_id: Some(
+                            chunk_field(cv, "source_doc_id")
+                                .unwrap_or_else(|| source_doc_id.clone()),
+                        ),
                         source_file: None,
                         code: Default::default(),
                         unit_id: None,
@@ -232,6 +247,16 @@ fn collection_param(params: &serde_json::Value, key: &str) -> Result<serde_json:
         Some(other) => Ok(other.clone()),
         None => Err(Error::Execution(format!("corpus_store: missing required `{key}`"))),
     }
+}
+
+/// An optional string field on a chunk element (object only). Lets a batch carry
+/// per-chunk `title` / `source_doc_id` so one `corpus_store` call can hold many
+/// distinct documents (a catalog), each correctly keyed and titled.
+fn chunk_field(v: &serde_json::Value, key: &str) -> Option<String> {
+    v.as_object()
+        .and_then(|o| o.get(key))
+        .and_then(|x| x.as_str())
+        .map(String::from)
 }
 
 /// A chunk element → its text: an object's `text` field, or a bare string.
