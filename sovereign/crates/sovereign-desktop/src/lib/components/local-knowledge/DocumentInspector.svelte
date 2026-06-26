@@ -85,14 +85,14 @@
         <dd>{formatMtime(doc.mtime_unix)}</dd>
         <dt>Content hash</dt>
         <dd class="mono">{doc.content_hash}</dd>
-        <dt>Indexed chunks</dt>
+        <dt>Passages</dt>
         <dd>
           {doc.chunk_count}
           {#if doc.chunk_count === 0}
             <span class="hint">— extraction pending or failed</span>
           {/if}
         </dd>
-        <dt>Atlas atoms</dt>
+        <dt>Map elements</dt>
         <dd>
           {doc.atoms.length}
           {#if doc.atoms.length === 0}

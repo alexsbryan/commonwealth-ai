@@ -70,15 +70,15 @@
 
   function stepLabel(step: EnrichBuildStep): string {
     switch (step) {
-      case "seed":      return "Seed entities";
-      case "extract":   return "Per-section extraction";
-      case "cluster":   return "Cluster by facet";
-      case "name":      return "Name clusters";
-      case "resolve":   return "Resolve atoms + edges";
-      case "tensions":  return "Tension candidates";
-      case "gaps":      return "Structural gaps";
-      case "configure": return "Configurations";
-      case "report":    return "Schema validation";
+      case "seed":      return "Find key topics";
+      case "extract":   return "Read each section";
+      case "cluster":   return "Group by theme";
+      case "name":      return "Name the groups";
+      case "resolve":   return "Build connections";
+      case "tensions":  return "Find tensions";
+      case "gaps":      return "Find open questions";
+      case "configure": return "Settings";
+      case "report":    return "Final check";
     }
   }
 </script>

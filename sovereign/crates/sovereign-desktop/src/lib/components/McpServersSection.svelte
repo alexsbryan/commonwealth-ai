@@ -11,6 +11,8 @@
     addMcpServer,
     removeMcpServer,
     testMcpConnection,
+    setMcpToken,
+    clearMcpToken,
     type McpServerView,
   } from "../api";
 
@@ -22,9 +24,25 @@
   let url = $state("");
   let description = $state("");
   let bearer = $state(false);
+  let token = $state("");
   let adding = $state(false);
   let testing = $state(false);
   let testResult = $state("");
+
+  // Per-row token editing (set / update / clear an existing server's token).
+  let editingToken = $state<string | null>(null);
+  let editToken = $state("");
+
+  // The env var a bearer token can ALSO be read from — the headless / CI
+  // override — derived from the server name with the same fold the daemon
+  // uses (`secret_env_var`): non-alphanumeric → `_`, uppercased. The primary
+  // path is the in-app token field below (stored under ~/.sovereign/secrets);
+  // this is surfaced as the alternative for nodes with no GUI.
+  const tokenEnvVar = $derived(
+    name.trim()
+      ? `SOVEREIGN_MCP_TOKEN_${name.trim().replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`
+      : null,
+  );
 
   async function refresh() {
     try {
@@ -53,7 +71,12 @@
     testing = true;
     testResult = "";
     try {
-      const n = await testMcpConnection(name.trim() || "test", url.trim(), bearer);
+      const n = await testMcpConnection(
+        name.trim() || "test",
+        url.trim(),
+        bearer,
+        token.trim() || null,
+      );
       testResult = `Connected — ${n} tools.`;
     } catch (e) {
       testResult = `Failed: ${e}`;
@@ -75,10 +98,14 @@
     adding = true;
     try {
       await addMcpServer(name.trim(), url.trim(), description.trim() || null, bearer);
+      if (bearer && token.trim()) {
+        await setMcpToken(name.trim(), token.trim());
+      }
       name = "";
       url = "";
       description = "";
       bearer = false;
+      token = "";
       testResult = "";
       await refresh();
     } catch (e) {
@@ -97,6 +124,31 @@
       error = String(e);
     }
   }
+
+  function startEditToken(serverName: string) {
+    editingToken = serverName;
+    editToken = "";
+  }
+  async function saveToken(serverName: string) {
+    error = "";
+    try {
+      await setMcpToken(serverName, editToken);
+      editingToken = null;
+      editToken = "";
+      await refresh();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+  async function doClearToken(serverName: string) {
+    error = "";
+    try {
+      await clearMcpToken(serverName);
+      await refresh();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 </script>
 
 <div class="mcp">
@@ -109,8 +161,35 @@
             <span class="server-name">{s.name}</span>
             <span class="server-url">{s.url}</span>
             {#if s.description}<span class="server-desc">{s.description}</span>{/if}
-            {#if s.bearer && s.token_env}
-              <span class="server-auth">token env: <code>{s.token_env}</code></span>
+            {#if s.bearer}
+              <span class="server-auth">
+                {#if s.has_token}token stored{:else}no token yet{/if}
+                <button
+                  class="link"
+                  onclick={() => startEditToken(s.name)}
+                  data-testid="mcp-row-set-token"
+                >
+                  {s.has_token ? "Update" : "Set token"}
+                </button>
+                {#if s.has_token}
+                  <button class="link-danger" onclick={() => doClearToken(s.name)}>Clear</button>
+                {/if}
+              </span>
+              {#if editingToken === s.name}
+                <div class="token-edit">
+                  <input
+                    type="password"
+                    bind:value={editToken}
+                    placeholder="paste token"
+                    autocomplete="off"
+                    data-testid="mcp-row-token-input"
+                  />
+                  <button class="link" onclick={() => saveToken(s.name)} data-testid="mcp-row-token-save">
+                    Save
+                  </button>
+                  <button class="link" onclick={() => (editingToken = null)}>Cancel</button>
+                </div>
+              {/if}
             {/if}
           </div>
           <span class="badge {st.cls}">{st.text}</span>
@@ -145,8 +224,25 @@
     </label>
     <label class="checkbox">
       <input type="checkbox" bind:checked={bearer} />
-      <span>Bearer auth — token read from <code>SOVEREIGN_MCP_TOKEN_&lt;NAME&gt;</code></span>
+      <span>Bearer auth</span>
     </label>
+    {#if bearer}
+      <label>
+        <span>Token</span>
+        <input
+          type="password"
+          bind:value={token}
+          placeholder="paste the bearer token"
+          autocomplete="off"
+          data-testid="mcp-token-input"
+        />
+      </label>
+      <p class="bearer-note">
+        Stored under <code>~/.sovereign/secrets/</code> (owner-only) — never in
+        your config, a backup, or gossiped to a peer.{#if tokenEnvVar} On a
+        headless node or in CI, set <code>{tokenEnvVar}</code> instead.{/if}
+      </p>
+    {/if}
     <div class="actions">
       <button class="btn-secondary" onclick={test} disabled={testing}>
         {testing ? "Testing…" : "Test connection"}
@@ -253,7 +349,41 @@
     align-items: center;
     gap: 0.4rem;
   }
-  .add-form input[type="text"] {
+  .bearer-note {
+    font-size: 0.78rem;
+    line-height: 1.45;
+    opacity: 0.8;
+    margin: -0.1rem 0 0.1rem;
+  }
+  .token-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+  }
+  .token-edit input {
+    flex: 1;
+    padding: 0.3rem 0.45rem;
+    border-radius: 5px;
+    border: 1px solid var(--border, #2a2a2a);
+    background: var(--input-bg, #1a1a1a);
+    color: inherit;
+    font-size: 0.8rem;
+  }
+  .link {
+    background: none;
+    border: none;
+    color: var(--accent, #6ab0f3);
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 0;
+  }
+  .server-auth .link,
+  .server-auth .link-danger {
+    margin-left: 0.4rem;
+  }
+  .add-form input[type="text"],
+  .add-form input[type="password"] {
     padding: 0.4rem 0.5rem;
     border-radius: 5px;
     border: 1px solid var(--border, #2a2a2a);

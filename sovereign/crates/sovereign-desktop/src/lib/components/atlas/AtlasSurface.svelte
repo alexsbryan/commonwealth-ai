@@ -44,9 +44,12 @@
      *  index. Omitted → the standalone Atlas Inspector (index → corpus →
      *  atom), unchanged. */
     startingCorpusId?: string;
+    /** Move 4: forwarded to AtomDetail so a notebook's Explore tab can
+     *  offer "Ask about this" → its Ask tab, seeded. */
+    onAskAbout?: (name: string) => void;
   }
 
-  let { startingCorpusId }: Props = $props();
+  let { startingCorpusId, onAskAbout }: Props = $props();
 
   let selection: Selection | null = $state(null);
 
@@ -158,6 +161,7 @@
     atomId={selection.atomId}
     onBack={handleBackFromAtom}
     onSelectAtom={handleSelectAtom}
+    {onAskAbout}
   />
 {:else if selection?.convUuid && selection.kind === "conv"}
   <ConvDetail

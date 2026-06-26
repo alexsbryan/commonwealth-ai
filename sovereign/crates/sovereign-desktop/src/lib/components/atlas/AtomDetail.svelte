@@ -42,9 +42,13 @@
     /** Navigate to another atom's detail page (used by the Related
      *  list to drill into a neighbour). */
     onSelectAtom?: (atomId: string) => void;
+    /** Move 4 (Ask↔Explore continuity): when set, an "Ask about this"
+     *  affordance appears that hands the atom's name back to the host —
+     *  a notebook's Explore tab uses it to switch to Ask, seeded. */
+    onAskAbout?: (name: string) => void;
   }
 
-  let { corpusId, atomId, onBack, onSelectAtom }: Props = $props();
+  let { corpusId, atomId, onBack, onSelectAtom, onAskAbout }: Props = $props();
 
   const ATOM_TYPE_LABEL: Record<AtomType, string> = {
     Entity: "Entity",
@@ -140,6 +144,16 @@
           <span class="salience-chip" title="Salience">
             ◆ {detail.salience.toFixed(2)}
           </span>
+        {/if}
+        {#if onAskAbout}
+          <button
+            class="ask-about-btn"
+            type="button"
+            onclick={() => onAskAbout?.(detail!.display_name)}
+            data-testid="atom-ask-about"
+          >
+            Ask about this
+          </button>
         {/if}
         <!-- Phase 2 forward-compat slot. Hidden when curation_status
              is "generated" + overlay_supports is false, which is
@@ -363,6 +377,22 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+  }
+
+  .ask-about-btn {
+    flex-shrink: 0;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 550;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklch, var(--accent) 40%, var(--border));
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .ask-about-btn:hover {
+    background: color-mix(in oklch, var(--accent) 18%, transparent);
   }
 
   .atom-title {

@@ -331,7 +331,7 @@
           {/if}
           {corpus.name}
           {#if corpus.enrichment_enabled}
-            <span class="enrichment-pill" title="Includes claim and relationship enrichment for the epistemic-research skill">✦ enriched</span>
+            <span class="enrichment-pill" title="Can be explored as a map of people, claims, and connections">✦ explorable</span>
           {/if}
         </div>
         <div class="corpus-detail">
@@ -344,7 +344,7 @@
                   onclick={() => handleBuildIndex(corpus.id)}
                   disabled={building.has(corpus.id)}
                 >
-                  {building.has(corpus.id) ? "Building…" : "Build index"}
+                  {building.has(corpus.id) ? "Building…" : "Improve search"}
                 </button>
               </div>
             {/if}
@@ -360,7 +360,7 @@
               &middot; {formatDate(corpus.indexed_at)}
             {/if}
             {#if corpus.chunks_count}
-              &middot; {corpus.chunks_count.toLocaleString()} chunks
+              &middot; {corpus.chunks_count.toLocaleString()} passages
             {/if}
             {#if expanded.has(corpus.id)}
               <div class="health-panel">
@@ -371,9 +371,9 @@
                   {#if health[corpus.id].claims_count > 0}
                     <span class="health-chip enriched">✦ {health[corpus.id].claims_count.toLocaleString()} questions</span>
                   {:else if corpus.enrichment_enabled}
-                    <span class="health-chip">✦ enriched (no questions yet)</span>
+                    <span class="health-chip">✦ explorable (no questions yet)</span>
                   {:else}
-                    <span class="health-chip muted">No enrichment</span>
+                    <span class="health-chip muted">Not yet explorable</span>
                   {/if}
                   {#if health[corpus.id].parse_failure_count > 0}
                     <button

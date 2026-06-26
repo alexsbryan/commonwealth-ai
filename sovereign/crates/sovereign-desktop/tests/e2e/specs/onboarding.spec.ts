@@ -240,8 +240,8 @@ test.describe("onboarding · happy path", () => {
     );
 
     await page.locator(".choice-primary").click();
-    // After consent, we land on Home (P2).
-    await page.getByTestId("home-view").waitFor({ timeout: 5_000 });
+    // After consent, we land on the chat (Ask) surface.
+    await page.locator(".chat-view").waitFor({ timeout: 5_000 });
 
     // Sanity: consent was recorded with shareGpu=true.
     const consent = await page.evaluate(() =>
@@ -263,7 +263,7 @@ test.describe("onboarding · happy path", () => {
     await page.locator(".gate").waitFor();
 
     await page.locator(".choice-secondary").click();
-    await page.getByTestId("home-view").waitFor();
+    await page.locator(".chat-view").waitFor();
 
     const consent = await page.evaluate(() =>
       window.__sovereign_test__.lastConsent(),
@@ -271,22 +271,22 @@ test.describe("onboarding · happy path", () => {
     expect(consent).toEqual({ shareGpu: false });
   });
 
-  test("setup-already-complete bypasses welcome and lands on home", async ({
+  test("setup-already-complete bypasses welcome and lands on chat", async ({
     sovereignPage: page,
     chat,
   }) => {
     // is_setup_complete default is true, so onMount won't switch to
-    // welcome. backend-ready then advances loading → home (P2).
+    // welcome. backend-ready then advances loading → chat.
     await page.goto("/");
     await page
-      .locator(".loading-screen, [data-testid='home-view'], .app-layout")
+      .locator(".loading-screen, .chat-view, .app-layout")
       .first()
       .waitFor();
     await expect
       .poll(
         async () => {
           await chat.api.signalBackendReady();
-          return page.getByTestId("home-view").count();
+          return page.locator(".chat-view").count();
         },
         { timeout: 8_000, intervals: [50, 100, 200] },
       )
@@ -423,8 +423,8 @@ test.describe("onboarding · failure recovery", () => {
 
     await page.locator(".setup-flow .retry").click();
 
-    // After retry the consent gate (or Home, if already consented) is reached.
-    await page.locator(".gate, [data-testid='home-view']").first().waitFor();
+    // After retry the consent gate (or chat, if already consented) is reached.
+    await page.locator(".gate, .chat-view").first().waitFor();
   });
 
   test("non-recoverable failure shows an escape (re-run or contact)", async ({
@@ -522,14 +522,14 @@ test.describe("onboarding · consent", () => {
 
     // Retry: second click should advance through.
     await page.locator(".choice-secondary").click();
-    await page.getByTestId("home-view").waitFor();
+    await page.locator(".chat-view").waitFor();
     const consent = await page.evaluate(() =>
       window.__sovereign_test__.lastConsent(),
     );
     expect(consent).toEqual({ shareGpu: false });
   });
 
-  test("consent already recorded — skip directly to home after setup", async ({
+  test("consent already recorded — skip directly to chat after setup", async ({
     sovereignPage: page,
   }) => {
     await bootToWelcome(page);
@@ -548,7 +548,7 @@ test.describe("onboarding · consent", () => {
     await ctl.finish();
 
     // Consent gate must NOT appear.
-    await page.getByTestId("home-view").waitFor();
+    await page.locator(".chat-view").waitFor();
     expect(await page.locator(".gate").count()).toBe(0);
   });
 
@@ -588,7 +588,7 @@ test.describe("onboarding · consent", () => {
     // the second invocation.
     await primary.click();
     await primary.click({ force: true }).catch(() => {});
-    await page.getByTestId("home-view").waitFor();
+    await page.locator(".chat-view").waitFor();
 
     const calls = await page.evaluate(
       () => (window as unknown as { __consentCalls: number }).__consentCalls,

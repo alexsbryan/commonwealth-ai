@@ -207,6 +207,15 @@ export async function createConversation(
  *  sidebar only sees default-chat conversations; Inner Work history
  *  only sees inner-work conversations; Recipe Author only sees its
  *  own. */
+/// The conversations scoped to one notebook (corpus), newest first —
+/// the notebook's Ask-tab history. "Everything"-scoped chats are excluded.
+export async function notebookConversations(
+  corpusId: string,
+  limit?: number,
+): Promise<ConversationEntry[]> {
+  return invoke("notebook_conversations", { corpusId, limit });
+}
+
 export async function listConversations(
   limit?: number,
   offset?: number,
@@ -799,8 +808,11 @@ export interface McpServerView {
   description: string | null;
   enabled: boolean;
   bearer: boolean;
-  /** Env var the bearer token is read from (e.g. SOVEREIGN_MCP_TOKEN_VISION). */
+  /** Env var the bearer token is read from (e.g. SOVEREIGN_MCP_TOKEN_VISION) —
+   * the headless / CI override. */
   token_env: string | null;
+  /** Whether a token is stored in the app's secret file (the primary path). */
+  has_token: boolean;
   /** null = backend hasn't connected this server yet (added since last start). */
   connected: boolean | null;
   tool_count: number | null;
@@ -824,13 +836,26 @@ export async function removeMcpServer(name: string): Promise<void> {
   return invoke("mcp_remove_server", { name });
 }
 
-/** Probe an MCP server without saving it — resolves to the tool count. */
+/** Probe an MCP server without saving it — resolves to the tool count. Pass the
+ * just-typed token so the probe reflects the form, not yet-stored state. */
 export async function testMcpConnection(
   name: string,
   url: string,
   bearer: boolean,
+  token?: string | null,
 ): Promise<number> {
-  return invoke("mcp_test_connection", { name, url, bearer });
+  return invoke("mcp_test_connection", { name, url, bearer, token: token ?? null });
+}
+
+/** Store (or, if blank, clear) a server's bearer token in the app secret file
+ * (`~/.sovereign/secrets/`, 0600 — never in config or gossip). */
+export async function setMcpToken(name: string, token: string): Promise<void> {
+  return invoke("mcp_set_token", { name, token });
+}
+
+/** Remove a server's stored token. */
+export async function clearMcpToken(name: string): Promise<void> {
+  return invoke("mcp_clear_token", { name });
 }
 
 /** A first-party mesh-app manifest (`public/meshapp/<id>/meshapp.json`) — the

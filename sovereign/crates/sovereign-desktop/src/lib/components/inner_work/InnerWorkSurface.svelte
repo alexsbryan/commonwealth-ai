@@ -37,10 +37,6 @@
   } from "./innerWorkText";
 
   interface Props {
-    /// Called when the user wants to leave inner-work mode. The
-    /// sidebar entry doubles as the toggle; the brand mark in the
-    /// corner also routes here.
-    onExit?: () => void;
     /// Increment to trigger a history-drawer toggle from outside
     /// (nav-rail re-tap, Cmd+[ while inner work is active).
     historyToggle?: number;
@@ -53,7 +49,7 @@
     active?: boolean;
   }
 
-  let { onExit, historyToggle = 0, active = true }: Props = $props();
+  let { historyToggle = 0, active = true }: Props = $props();
 
   // React to external toggle signals (nav-rail re-tap, Cmd+[).
   // Initialize `prev` to the same literal default as the prop (0)
@@ -955,10 +951,6 @@
     }
   }
 
-  function exit() {
-    if (onExit) onExit();
-  }
-
   // ── Helpers ─────────────────────────────────────────────────
   /// Pair user/assistant messages from a conversation detail into the
   /// document's Turn shape. Skips system messages and orphan user
@@ -1022,11 +1014,17 @@
   <div class="grain" aria-hidden="true"></div>
 
   <button
-    class="exit-mark"
-    onclick={exit}
-    title="Return"
-    aria-label="Return to chat"
-  >◈</button>
+    class="history-mark"
+    onclick={() => (historyVisible ? closeHistory() : void openHistory())}
+    title="Past entries (⌘H)"
+    aria-label="Open past entries"
+  >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </svg>
+  </button>
 
   <div class="local-indicator" aria-label="Stored locally">
     <svg width="9" height="11" viewBox="0 0 9 11" fill="none" aria-hidden="true">
@@ -1472,13 +1470,15 @@
     outline: 0;
   }
 
-  /* ── Brand-corner exit ──────────────────────────────────────
-     Hover-only reveal so the surface stays bare for the typist.
+  /* ── Brand-corner: past entries ─────────────────────────────
+     A second, belts-and-braces way into the past-entries drawer
+     (the dateline is the other; clicking a date can read as inert).
+     Hover-reveal so the surface stays bare for the typist.
      `position: absolute` (not `fixed`) so the mark is anchored to
      the inner-work layer's bounds — the viewport-anchored variant
      placed it under the always-on 60px NavRail and silently
      swallowed every click. */
-  .exit-mark {
+  .history-mark {
     position: absolute;
     top: 1.25rem;
     left: 1.5rem;
@@ -1495,14 +1495,14 @@
     transition: opacity 220ms ease, color 220ms ease;
   }
 
-  .exit-mark:hover,
-  .exit-mark:focus-visible {
+  .history-mark:hover,
+  .history-mark:focus-visible {
     opacity: 1;
     color: var(--inner-ink-muted);
     outline: none;
   }
 
-  .exit-mark:focus-visible {
+  .history-mark:focus-visible {
     box-shadow: 0 0 0 2px var(--inner-focus);
     outline-offset: 2px;
   }
@@ -1510,7 +1510,7 @@
   /* ── Local indicator ────────────────────────────────────────
      Persistent. Unblinking. The user notices it once and stops.
      Anchored to the inner-work layer (not viewport) to avoid
-     overlapping the NavRail — see the exit-mark comment above. */
+     overlapping the NavRail — see the history-mark comment above. */
   .local-indicator {
     position: absolute;
     bottom: 1rem;

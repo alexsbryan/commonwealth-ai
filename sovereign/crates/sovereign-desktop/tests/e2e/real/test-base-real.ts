@@ -143,9 +143,8 @@ export { expect };
  *  handshake as soon as App.svelte registers its listener. */
 export async function realBootToChat(page: Page): Promise<void> {
   await page.goto("/");
-  // P2: the app lands on Home — hop to Ask for chat-dependent specs.
-  const navAsk = page.getByTestId("nav-ask");
-  await navAsk.waitFor({ state: "visible", timeout: 30_000 });
-  await navAsk.click();
+  // The app lands on the chat (Ask) surface; the sticky backend-ready
+  // replay from the bridge delivers the handshake as soon as App.svelte
+  // registers its listener.
   await page.locator(".chat-view").waitFor({ state: "visible", timeout: 30_000 });
 }

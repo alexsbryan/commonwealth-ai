@@ -7,11 +7,10 @@
     isSetupComplete,
     startDefaultCorpusInstall,
   } from "./lib/api";
-  import type { BootstrapSnapshot, StarterQuestion, NotebookSummary } from "./lib/types";
+  import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
   import { chatSeedStore } from "./lib/stores/chatSeed.svelte";
   import { outerWorkScopeStore } from "./lib/stores/outerWorkScope.svelte";
-  import { libraryNav } from "./lib/stores/libraryNav.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
     StepDonePayload,
@@ -28,7 +27,6 @@
   import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
   import AtlasSurface from "./lib/components/atlas/AtlasSurface.svelte";
   import LibraryView from "./lib/components/library/LibraryView.svelte";
-  import HomeView from "./lib/components/home/HomeView.svelte";
   import BrandMark from "./lib/components/BrandMark.svelte";
   import { readingSession } from "./lib/stores/readingSession.svelte";
   import { atlasNavigation } from "./lib/stores/atlasNavigation.svelte";
@@ -49,7 +47,6 @@
     | "setup_plan"
     | "setup"
     | "consent"
-    | "home"
     | "chat"
     | "library"
     | "settings"
@@ -60,7 +57,7 @@
     | "atlas"
     | "workshop";
 
-  type RailMode = "home" | "chat" | "library" | "inner_work" | "workshop" | "settings";
+  type RailMode = "chat" | "library" | "inner_work" | "workshop" | "settings";
 
   // `let view: AppView = $state("loading")` would narrow `view` to the
   // literal type `"loading"`, breaking every later `view === "chat"`
@@ -72,8 +69,7 @@
   // own anymore — it highlights Library, which is where exploring a
   // notebook's map now lives.
   let railMode: RailMode = $derived(
-    view === "home" ? "home"
-    : view === "library" ? "library"
+    view === "library" ? "library"
     : view === "atlas" ? "library"
     : view === "inner_work" ? "inner_work"
     : view === "workshop" ? "workshop"
@@ -185,33 +181,6 @@
     view = "chat";
   }
 
-  // Home hub handoffs. The ask box mints a fresh global conversation
-  // seeded with the typed question; the notebook tiles / "+ Add" hand a
-  // one-shot target to the Library via `libraryNav`; recent threads open
-  // the conversation in Ask.
-  function handleHomeAsk(text: string) {
-    chatSeedStore.set({
-      text,
-      atom_id: "",
-      source_section: null,
-      question_type: "user",
-    });
-    selectedConversationId = null;
-    view = "chat";
-  }
-  function handleHomeOpenNotebook(notebook: NotebookSummary) {
-    libraryNav.set({ notebookId: notebook.id });
-    view = "library";
-  }
-  function handleHomeAdd() {
-    libraryNav.set({ openAdd: true });
-    view = "library";
-  }
-  function handleHomeOpenConversation(id: string) {
-    selectedConversationId = id;
-    view = "chat";
-  }
-
   // Workshop sub-tab + deep-link: the recipe-author dashboard's "Run it" sets a
   // recipe name, switches to Workshop, and selects the Run tab (preselected).
   let workshopTab = $state<"build" | "run" | "test" | "connect" | "apps">("build");
@@ -251,7 +220,7 @@
         backendReady = true;
         backendError = null;
         if (view === "loading") {
-          view = "home";
+          view = "chat";
         }
       },
       onBackendError: (error) => {
@@ -349,7 +318,7 @@
     } catch (e) {
       console.warn("getFirstMeshConsent failed:", e);
     }
-    view = needsConsent ? "consent" : "home";
+    view = needsConsent ? "consent" : "chat";
     // Background install of the default Wikipedia Core corpus — ONLY when
     // the user opted in on the Setup Plan screen. Never a silent,
     // unconsented download (that was the old behaviour this redesign fixes).
@@ -361,7 +330,7 @@
   }
 
   function handleConsentRecorded() {
-    view = "home";
+    view = "chat";
   }
 
   function handleConversationSelect(id: string | null) {
@@ -411,25 +380,21 @@
     switch (e.key) {
       case "1":
         e.preventDefault();
-        handleRailNavigate("home");
+        handleRailNavigate("chat");
         break;
       case "2":
         e.preventDefault();
-        handleRailNavigate("chat");
+        handleRailNavigate("library");
         break;
       case "3":
         e.preventDefault();
-        handleRailNavigate("library");
+        handleRailNavigate("inner_work");
         break;
       case "4":
         e.preventDefault();
-        handleRailNavigate("inner_work");
-        break;
-      case "5":
-        e.preventDefault();
         handleRailNavigate("workshop");
         break;
-      case "6":
+      case "5":
         e.preventDefault();
         handleRailNavigate("settings");
         break;
@@ -519,7 +484,6 @@
           aria-hidden={view !== "inner_work"}
         >
           <InnerWorkSurface
-            onExit={() => (view = "chat")}
             historyToggle={innerWorkHistoryToggle}
             active={view === "inner_work"}
           />
@@ -535,14 +499,6 @@
           onOpenChat={handleDropToChat}
           onRunWorkflow={handleRunWorkflow}
           runPreselect={runWorkflowPreselect}
-        />
-      {:else if view === "home"}
-        <HomeView
-          onAsk={handleHomeAsk}
-          onOpenLibrary={() => (view = "library")}
-          onOpenNotebook={handleHomeOpenNotebook}
-          onOpenConversation={handleHomeOpenConversation}
-          onAdd={handleHomeAdd}
         />
       {:else if view === "library"}
         <div class="library-surface">

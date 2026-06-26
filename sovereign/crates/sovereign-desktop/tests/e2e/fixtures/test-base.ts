@@ -253,21 +253,21 @@ export { expect };
 export async function bootToChat(page: Page, chat: ChatHarness): Promise<void> {
   await page.goto("/");
   await page
-    .locator(".loading-screen, [data-testid='home-view'], .chat-view, .app-layout")
+    .locator(".loading-screen, .chat-view, .app-layout")
     .first()
     .waitFor();
-  // P2: the app lands on Home. Poll-emit backend-ready until the rail is
-  // up, then hop Home → Ask so chat-dependent specs reach the chat view.
-  const navAsk = page.getByTestId("nav-ask");
+  // The app lands on the chat (Ask) surface. Poll-emit backend-ready until
+  // the chat view appears so we don't race App.svelte's listener
+  // registration. Cheap (in-page event) and idempotent.
+  const chatView = page.locator(".chat-view");
   await expect
     .poll(
       async () => {
         await chat.api.signalBackendReady();
-        return navAsk.count();
+        return chatView.count();
       },
       { timeout: 10_000, intervals: [50, 100, 200, 500] },
     )
     .toBeGreaterThan(0);
-  await navAsk.click();
-  await page.locator(".chat-view").waitFor({ state: "visible" });
+  await chatView.first().waitFor({ state: "visible" });
 }

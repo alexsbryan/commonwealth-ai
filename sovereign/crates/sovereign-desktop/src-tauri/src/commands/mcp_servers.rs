@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use sovereign_core::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_tools::mcp::auth::{secret_env_var, McpAuth};
+use sovereign_tools::mcp::secret_store;
 use tauri::State;
 
 use crate::state::AppState;
@@ -27,9 +28,12 @@ pub struct McpServerView {
     pub description: Option<String>,
     pub enabled: bool,
     pub bearer: bool,
-    /// Env var the bearer token is read from, so the UI can tell the user
-    /// exactly what to set. `None` for no-auth servers.
+    /// Env var the bearer token is read from — shown as the headless / CI
+    /// override. `None` for no-auth servers.
     pub token_env: Option<String>,
+    /// Whether a token is currently stored in the app's secret file for this
+    /// server (the primary path). Drives the "token set" affordance.
+    pub has_token: bool,
     /// Live status from bootstrap: `Some(true)` connected, `Some(false)`
     /// failed, `None` if the backend hasn't connected this server yet (e.g.
     /// added since the last start — restart to load it).
@@ -71,6 +75,7 @@ pub async fn mcp_list_servers(
             let st = statuses.iter().find(|x| x.name == s.name);
             let bearer = is_bearer(&s.transport);
             let token_env = bearer.then(|| secret_env_var(&s.name));
+            let has_token = bearer && secret_store::has_token(&s.name);
             let url = http_url(&s.transport);
             let connected = st.map(|x| x.connected);
             let tool_count = st.map(|x| x.tool_count);
@@ -82,6 +87,7 @@ pub async fn mcp_list_servers(
                 enabled: s.enabled,
                 bearer,
                 token_env,
+                has_token,
                 connected,
                 tool_count,
                 error,
@@ -136,20 +142,50 @@ pub async fn mcp_remove_server(name: String) -> Result<(), String> {
         return Err(format!("No MCP server named '{name}'."));
     }
     cfg.save().map_err(|e| format!("save config: {e}"))?;
+    // Don't leave an orphaned secret behind.
+    let _ = secret_store::delete_token(&name);
     Ok(())
 }
 
 /// Probe an HTTP MCP server without persisting it — returns the tool count so
 /// the user gets immediate "is this reachable?" feedback in the add dialog.
 #[tauri::command]
-pub async fn mcp_test_connection(name: String, url: String, bearer: bool) -> Result<usize, String> {
-    let auth = if bearer {
-        McpAuth::resolve(&name, &McpAuthConfig::Bearer)
-    } else {
+pub async fn mcp_test_connection(
+    name: String,
+    url: String,
+    bearer: bool,
+    token: Option<String>,
+) -> Result<usize, String> {
+    // Prefer the token the user just typed (not yet saved) so "Test" reflects
+    // the form; otherwise fall back to the stored / env secret for an
+    // already-saved server.
+    let auth = if !bearer {
         McpAuth::None
+    } else if let Some(t) = token.filter(|t| !t.trim().is_empty()) {
+        McpAuth::BearerToken(t.trim().to_string())
+    } else {
+        McpAuth::resolve(&name, &McpAuthConfig::Bearer)
     };
     let tools = sovereign_tools::mcp::connect_http_mcp_server(&url, auth, &name)
         .await
         .map_err(|e| e.to_string())?;
     Ok(tools.len())
+}
+
+/// Store (or, if blank, clear) the bearer token for a server. The token lives
+/// in `~/.sovereign/secrets/` (0600) — never in `config.toml` or the store, so
+/// it can't ride along with anything the app shares, syncs, or gossips.
+#[tauri::command]
+pub async fn mcp_set_token(name: String, token: String) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Server name is required.".into());
+    }
+    secret_store::write_token(name, &token).map_err(|e| format!("store token: {e}"))
+}
+
+/// Remove a server's stored token (a no-op if none is set).
+#[tauri::command]
+pub async fn mcp_clear_token(name: String) -> Result<(), String> {
+    secret_store::delete_token(name.trim()).map_err(|e| format!("clear token: {e}"))
 }

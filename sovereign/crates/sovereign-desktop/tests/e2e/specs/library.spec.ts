@@ -61,7 +61,7 @@ test.describe("Library shelf", () => {
     // The vault: name, Obsidian source chip, an explorable ✦ badge.
     const vault = cards.filter({ hasText: "Research Vault" });
     await expect(vault).toContainText("Obsidian");
-    await expect(vault).toContainText("1,234 chunks");
+    await expect(vault).toContainText("1,234 passages");
     await expect(vault.getByText("✦")).toBeVisible();
 
     // The catalog corpus: Catalog chip, no ✦ (not explorable).

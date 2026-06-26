@@ -66,8 +66,8 @@
       <span class="dot" aria-hidden="true">●</span>
       <h2 class="title">
         {blocked.length === 1
-          ? "1 watched folder needs attention"
-          : `${blocked.length} watched folders need attention`}
+          ? "1 live folder needs attention"
+          : `${blocked.length} live folders need attention`}
       </h2>
     </header>
 
