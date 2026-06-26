@@ -136,6 +136,125 @@ impl FieldSkeleton {
     pub fn is_empty(&self) -> bool {
         self.canonical_questions.is_empty()
     }
+
+    /// Render a compact, budget-bounded markdown landscape digest of this field
+    /// skeleton for **ambient injection into a system prompt**. Domain-agnostic:
+    /// the caller supplies the `heading` (e.g. `"Field guide — sep"`). Three
+    /// clearly-labelled sections — Settled concerns / Live tensions / Open
+    /// questions — each capped at five bullets and gated against `budget_tokens`
+    /// with a conservative upper-bound estimator (we'd rather drop a line than
+    /// overflow the prompt).
+    ///
+    /// This is the canonical `FieldSkeleton` → digest renderer. It lives here,
+    /// beside the type at the lowest crate layer, so BOTH the shared runtime's
+    /// ambient field_model step (`sovereign-core`, which cannot reach
+    /// `sovereign-tools`) and the knowledge-view manager (`sovereign-tools`) can
+    /// produce the same shape without duplicating the budgeting logic. (The
+    /// `sovereign-tools` `format_landscape` predates this and still has its own
+    /// copy keyed on `ViewKind` titles + glassbox tracing; converging it onto
+    /// this method is a low-risk follow-up.)
+    pub fn render_landscape(&self, heading: &str, budget_tokens: usize) -> String {
+        let mut out = String::new();
+        out.push_str(heading);
+        out.push_str(":\n\n");
+
+        // Settled concerns: canonical questions with at least one
+        // consensus/dominant/settled-style position.
+        let settled: Vec<_> = self
+            .canonical_questions
+            .iter()
+            .filter(|q| q.positions.iter().any(|p| is_settled_status(&p.status)))
+            .collect();
+        if !settled.is_empty() {
+            out.push_str("  Settled concerns:\n");
+            for q in settled.iter().take(5) {
+                let line = format!("    — {}\n", q.question);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+            out.push('\n');
+        }
+
+        // Live tensions: fault lines flattened across all canonical questions.
+        let fault_lines: Vec<_> = self
+            .canonical_questions
+            .iter()
+            .flat_map(|q| q.fault_lines.iter())
+            .collect();
+        if !fault_lines.is_empty() {
+            out.push_str("  Live tensions:\n");
+            for fl in fault_lines.iter().take(5) {
+                let line = format!("    — {}\n", fl.crux);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+            out.push('\n');
+        }
+
+        // Open questions.
+        if !self.open_questions.is_empty() {
+            out.push_str("  Open questions:\n");
+            for oq in self.open_questions.iter().take(5) {
+                let line = format!("    — {}\n", oq.question);
+                if estimate_digest_tokens(&out) + estimate_digest_tokens(&line) > budget_tokens {
+                    break;
+                }
+                out.push_str(&line);
+            }
+        }
+
+        // Hard guard: if a long per-bullet entry squeaked past the per-line
+        // check, trim at the last newline that keeps us under budget.
+        // Conservative — better to lose a line than leak past the prompt budget.
+        while estimate_digest_tokens(&out) > budget_tokens {
+            match out.rfind('\n') {
+                Some(idx) if idx > 0 => out.truncate(idx),
+                _ => {
+                    out.clear();
+                    break;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Conservative upper-bound BPE token estimate for digest budgeting (ported
+/// from the knowledge-view formatter so the renderer is self-contained at this
+/// layer). NOT a real tokenizer — bounds prompt sections only; biased to
+/// over-count so the budget guard truncates early rather than overflowing.
+fn estimate_digest_tokens(text: &str) -> usize {
+    let mut tokens: f32 = 0.0;
+    for word in text.split_whitespace() {
+        let total_chars = word.chars().count();
+        if total_chars == 0 {
+            continue;
+        }
+        let non_ascii = word.chars().filter(|c| !c.is_ascii()).count();
+        let ascii = total_chars - non_ascii;
+        if non_ascii > 0 {
+            tokens += non_ascii as f32 * 0.75;
+            tokens += ascii as f32 * 0.35;
+        } else if total_chars > 15 {
+            tokens += (total_chars as f32 / 4.0).ceil();
+        } else {
+            tokens += 1.3;
+        }
+    }
+    tokens.ceil() as usize
+}
+
+/// `true` when a position `status` marks it as consensus / dominant / settled.
+/// Lowercased before comparison so capitalised variants still match.
+fn is_settled_status(status: &str) -> bool {
+    matches!(
+        status.to_lowercase().as_str(),
+        "held" | "dominant" | "majority" | "settled" | "established" | "recurring"
+    )
 }
 
 #[cfg(test)]
@@ -272,6 +391,31 @@ mod tests {
             ..test_skeleton()
         };
         assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn render_landscape_has_heading_and_three_sections() {
+        let skeleton = test_skeleton();
+        let out = skeleton.render_landscape("Field guide — sep", 400);
+        // Caller-supplied heading.
+        assert!(out.starts_with("Field guide — sep:"), "missing heading in:\n{out}");
+        // Settled concerns (the free-will question has a `majority` position).
+        assert!(out.contains("Settled concerns:"), "missing settled section:\n{out}");
+        assert!(out.contains("Is free will compatible with determinism?"));
+        // Live tensions (the fault-line crux).
+        assert!(out.contains("Live tensions:"), "missing tensions section:\n{out}");
+        assert!(out.contains("Whether alternative possibilities are required"));
+        // Open questions.
+        assert!(out.contains("Open questions:"), "missing open section:\n{out}");
+        assert!(out.contains("What explains manipulation arguments?"));
+    }
+
+    #[test]
+    fn render_landscape_respects_token_budget() {
+        let skeleton = test_skeleton();
+        // A tiny budget keeps the heading but truncates the bullet body.
+        let tight = skeleton.render_landscape("Field guide — sep", 8);
+        assert!(estimate_digest_tokens(&tight) <= 8, "overshot budget:\n{tight}");
     }
 
     #[test]

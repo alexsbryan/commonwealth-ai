@@ -570,6 +570,23 @@ pub struct EnrichmentConfig {
     pub normalization: Option<NormalizationConfig>,
 }
 
+impl EnrichmentConfig {
+    /// The on-disk artifact (relative to the corpus index dir) that a BUILT
+    /// enrichment of this declared `type` writes — the file whose ABSENCE means
+    /// the declared enrichment was never built/pulled on this machine (drift).
+    ///
+    /// Conservative by design: `None` for any type with no single verifiable
+    /// artifact (e.g. `investigation`) so callers don't assert drift they can't
+    /// check. Drives [`crate::engine`]'s `enrichment_drift` freshness probe.
+    pub fn declared_artifact_rel_path(&self) -> Option<&'static str> {
+        match self.enrichment_type.as_str() {
+            "field_model" => Some("field_skeleton.json"),
+            "atlas" => Some("atlas/atoms.json"),
+            _ => None,
+        }
+    }
+}
+
 /// Custom atlas ontology declared in `[enrichment.ontology]`. The headline
 /// "build the ontology for your domain" surface: `guidance` is domain-language
 /// instructions for what to extract (entities, relations, events, claims),
@@ -2713,6 +2730,22 @@ type = "paragraph"
             }
             other => panic!("SEP must use Parquet extractor, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn declared_artifact_rel_path_maps_known_types() {
+        // Minimal TOML — every other EnrichmentConfig field is serde-default.
+        let atlas: EnrichmentConfig = toml::from_str("enabled = true\ntype = \"atlas\"").unwrap();
+        assert_eq!(atlas.declared_artifact_rel_path(), Some("atlas/atoms.json"));
+
+        let field: EnrichmentConfig =
+            toml::from_str("enabled = true\ntype = \"field_model\"").unwrap();
+        assert_eq!(field.declared_artifact_rel_path(), Some("field_skeleton.json"));
+
+        // Artifact-less / unrecognised types assert no drift (conservative).
+        let investigation: EnrichmentConfig =
+            toml::from_str("enabled = true\ntype = \"investigation\"").unwrap();
+        assert_eq!(investigation.declared_artifact_rel_path(), None);
     }
 
     #[test]

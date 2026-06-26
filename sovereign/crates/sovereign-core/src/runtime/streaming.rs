@@ -2458,6 +2458,12 @@ impl Runtime {
             context.set_landscape_digests(Vec::new());
         }
 
+        // 3c. Ambient field_model — append a landscape digest for any
+        // `field_skeleton`-built corpus the turn is scoped to (closes the
+        // "compute_digests is view-fixed" gap; shared so bench/desktop/server
+        // all gain it). No-op when unscoped or the corpus has no skeleton.
+        self.splice_ambient_field_digests(&mut context).await;
+
         // R3 — temporal tension pre-pass. Active for relational
         // skills only; zero-cost no-op for factual skills.
         self.maybe_splice_temporal_tensions(&mut context, message)

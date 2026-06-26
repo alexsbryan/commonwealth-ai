@@ -40,6 +40,7 @@ mod lane_baseline;
 mod live_runner;
 mod mechanism_fidelity;
 mod obsidian;
+mod parity_compare;
 mod promote;
 mod redteam;
 mod render;
@@ -93,6 +94,10 @@ const HELP: Help = Help {
                 "Score an obsidian-vault corpus against the in-repo fixture golden (correctness, not throughput).",
             ),
             (
+                "parity-compare",
+                "Enrichment-parity gate: run each (corpus, question) through the bench AND desktop-bridge paths, diff the enrichment legs each surfaces, fail when desktop ⊊ bench.",
+            ),
+            (
                 "scaffold",
                 "Draft a golden TOML from an existing resolved atlas — sample atoms per axis, emit reviewable starting point.",
             ),
@@ -138,6 +143,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "promote" => promote::cmd_promote(&args[1..]).await,
         "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
+        "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
         other => {

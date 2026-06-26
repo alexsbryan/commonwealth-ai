@@ -417,6 +417,11 @@ impl Runtime {
                 .await;
         }
 
+        // 2b'. Ambient field_model — append a landscape digest for any
+        // `field_skeleton`-built corpus the turn is scoped to (mirror of the
+        // streaming path; shared Runtime helper so every surface gains it).
+        self.splice_ambient_field_digests(&mut context).await;
+
         // 2c. R3 — temporal tension pre-pass. Mirror of the
         // streaming path: active for relational skills only,
         // zero-cost no-op for factual skills.

@@ -39,6 +39,63 @@ check each:
 3. **Surfaced in chat** — retrieval/synthesis consumes it (atom-enum virtual
    chunks, landscape-digest splice, code-trace).
 
+## Implementation status (2026-06-26)
+
+All phases landed in one pass (uncommitted). Where the build deviated from the
+original plan, the reason is recorded here — the plan below is the intent; this
+is what shipped. **Verified 2026-06-26**: full-workspace compile-check green
+(24/24 crates, `corpus-engine/treesitter`) and full test suite green
+(`pass:7109, fail:0`). **Live end-to-end run green too**: `bench parity-compare`
+against a spawned desktop (attach mode, `SOVEREIGN_COMMAND_BRIDGE=1`) + the dev
+daemon, over the resident maple-house atlas — `RESULT: PASS`, 0 desktop-deficient
+over 3 questions; the two overview questions surfaced `{atom_claim, atom_enum}`
+identically on bench and desktop. Desktop-side glassbox confirmed the
+load-bearing paths fired locally (`atom_enum_overview count=16`,
+`post-apply_atlas_grounding n_chunks=59`, `atom_enum_survived=16`) — the same
+`apply_atlas_grounding` step that was a dead no-op pre-fix.
+
+- **Phase 0 — DONE.** `sovereign-cli-llm/src/bench_cmd/parity_compare.rs`
+  (`bench parity-compare`). Added `metadata: serde_json::Value` to `LiveAnswer`
+  (populated from the persisted `message.metadata` on the bench path and
+  `complete["metadata"]` on the bridge path) so one extractor reads both
+  transports. Signal tokens come off `retrieved_chunks[].metadata.source`:
+  `atom_enum` / `code_intel` / `raptor` / `cross_corpus_bridge`, plus
+  `atom_claim`, `atlas_tag:*`, and `digest:*`. Gate = `desktop ⊇ bench` per
+  question (exit 1 on any deficient question or bridge error). Warms the bench
+  atlas (`atlas_mgr.warm_one`) so the bench side measures its real surface.
+- **Phase 1 — DONE** (prior session): `with_wikipedia_graph` + `with_meta_atlas`
+  on the desktop runtime; `SOVEREIGN_ATOM_ENUM_OVERVIEW` default-on.
+- **Phase 2 — VERIFIED (no code needed).** `/v1/knowledge/landscape_digest` IS
+  mounted: `sovereign-cli-daemon/.../daemon_cmd/bootstrap.rs` builds
+  `landscape_digest_http::landscape_digest_router(KnowledgeViewManager)` and
+  calls `install_knowledge_view_http_router`, which `daemon.rs:1960` merges into
+  the client router. Attach-mode desktop already reaches it.
+- **Phase 3 — DONE.** The renderer lives in **corpus-engine**
+  (`FieldSkeleton::render_landscape(heading, budget)`), NOT sovereign-tools:
+  `sovereign-core` only dev-depends on `sovereign-tools`, so the production
+  ambient step can't call `format_landscape`. Putting the renderer beside its
+  type at the lowest layer is the correct fix (the tools `format_landscape`
+  predates it; converging it is a noted follow-up). The shared step
+  `Runtime::splice_ambient_field_digests` (in `runtime/retrieval.rs`) runs in
+  BOTH `turn.rs` and `streaming.rs` after `splice_landscape_digests`, scoped to
+  `enabled_corpora`. **Not harness-gated**: it's shared core, so bench and
+  desktop gain it identically — there's no seam to diverge, so Phase 0 correctly
+  ignores it (it gates the seam-wired, chunk-surfacing legs).
+- **Phase 4 — DONE, relocated.** Drift detection is
+  `CorpusEngine::enrichment_drift` (built on the pure
+  `EnrichmentConfig::declared_artifact_rel_path`), surfaced by the **parity
+  harness** (warns + records `corpus_stale` when a scoped corpus's declared
+  enrichment artifact is missing). It is NOT wired into
+  `step_readiness_disclosure`: that step is structurally empty-result-only and
+  "needs rebuild / was skipped"-framed, whereas a stale-enrichment corpus is
+  still searchable (a soft, different signal). A per-turn freshness disclosure is
+  a noted follow-up; the detection primitive now exists for it.
+- **Phase 5 — DONE.** Structural guard `enrichment_seam_invariant` in
+  `runtime.rs` (a compile-time field-existence change-detector over the 8
+  enrichment provider fields + a pinned count). The behavioural gate is
+  `bench parity-compare` (Phase 0); wiring it into a nightly GPU CI lane is
+  environment-specific and left as the documented run command in Verification.
+
 ## Current state (audited 2026-06)
 
 `Runtime` enrichment seams (`sovereign-core/src/runtime.rs`): `with_gliner`

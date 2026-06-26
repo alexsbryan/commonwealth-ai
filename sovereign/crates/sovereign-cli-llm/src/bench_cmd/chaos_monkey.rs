@@ -525,6 +525,7 @@ async fn run(rest: &[String]) -> i32 {
                             retrieved_chunk_texts: Vec::new(),
                             gate_action: None,
                             draft: None,
+                            metadata: serde_json::Value::Null,
                         }
                     }
                 }
@@ -613,6 +614,7 @@ async fn score_question(
         retrieved_chunk_texts: chunk_texts,
         gate_action,
         draft,
+        metadata: _,
     } = live;
 
     // External grounding-verifier (--grounding-verify gates, --gv-shadow only
@@ -949,6 +951,7 @@ async fn rescore(rest: &[String]) -> i32 {
             // the retrieval-attributed coarse cells for those rows.
             gate_action: rec.get("gate_action").and_then(|v| v.as_str()).map(str::to_string),
             draft: rec.get("draft").and_then(|v| v.as_str()).map(str::to_string),
+            metadata: serde_json::Value::Null,
         };
         let row = score_question(
             live,

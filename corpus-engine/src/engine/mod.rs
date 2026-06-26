@@ -2308,6 +2308,41 @@ impl CorpusEngine {
         self.registry.fetch_recipe(corpus_id).await
     }
 
+    /// Declared-vs-built enrichment **drift**: `Some(reason)` when the corpus's
+    /// recipe DECLARES an `[enrichment] type` whose on-disk artifact is MISSING —
+    /// e.g. a recipe that says `type = "atlas"` on a machine whose local index
+    /// only has `field_skeleton.json` (a stale HF pull that never carried the
+    /// `atlas/` build). Such a corpus is still SEARCHABLE, so this is NOT a hard
+    /// readiness failure (`validate_corpus_readiness` stays orthogonal) — but a
+    /// chat/bench/parity run over it measures a DIFFERENT enrichment surface than
+    /// the recipe promises. The parity harness uses this to flag a confounded run
+    /// (a stale corpus would otherwise read as "desktop-deficient"), and a
+    /// freshness disclosure can surface it to the user.
+    ///
+    /// Conservative: only artifact-backed types are checked (via
+    /// [`crate::recipe::EnrichmentConfig::declared_artifact_rel_path`]); `None`
+    /// when enrichment is disabled, the type has no verifiable artifact, the
+    /// recipe can't be loaded, or the artifact is present.
+    pub async fn enrichment_drift(&self, corpus_id: &str) -> Option<String> {
+        let recipe = self.load_recipe(corpus_id).await.ok()?;
+        let enrichment = recipe.enrichment.as_ref()?;
+        if !enrichment.enabled {
+            return None;
+        }
+        let rel = enrichment.declared_artifact_rel_path()?;
+        let path = self.index_dir.join(corpus_id).join(rel);
+        if path.exists() {
+            return None;
+        }
+        Some(format!(
+            "recipe declares `[enrichment] type = \"{ty}\"` but the built artifact \
+             `{rel}` is missing on disk — this corpus's {ty} enrichment was not \
+             pulled/built (likely a stale index). Re-sync or rebuild it to restore \
+             the enrichment surface.",
+            ty = enrichment.enrichment_type,
+        ))
+    }
+
     /// Chunk a document's text content using the recipe's chunker config.
     pub fn chunk_document(
         &self,

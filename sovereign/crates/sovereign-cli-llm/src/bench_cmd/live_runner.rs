@@ -42,6 +42,14 @@ pub struct LiveAnswer {
     /// (`SOVEREIGN_AGENTIC_KQ_DEBUG=1`); `None` otherwise. Lets the scorer tell a
     /// gate-killed-CORRECT answer from a confabulation the gate caught.
     pub draft: Option<String>,
+    /// The RAW persisted message metadata for this turn (`retrieved_chunks` with
+    /// their per-chunk `metadata` tag maps, `grounding_gate`, `knowledge_view_digests`,
+    /// `provenance`, …). `Value::Null` for surfaces that don't persist a message
+    /// (naked, attached). This is the glassbox channel the parity harness diffs to
+    /// prove the desktop surfaces the SAME enrichment legs as the bench — both the
+    /// in-process (`run_live_pinned`) and bridge (`run_bridge_live`) paths populate
+    /// it from the identical `message.metadata` shape, so one extractor reads both.
+    pub metadata: serde_json::Value,
 }
 
 /// Drive the desktop chat path, sealed to `corpus` via `enabled_corpora`.
@@ -181,7 +189,15 @@ pub async fn run_live_pinned(
     }
 
     let visible = strip_think(&raw);
-    LiveAnswer { visible, retrieved_chunk_texts, gate_action, draft }
+    LiveAnswer {
+        visible,
+        retrieved_chunk_texts,
+        gate_action,
+        draft,
+        // The same persisted metadata the chunk-text + gate recovery above read
+        // — surfaced verbatim so the parity harness can diff enrichment signals.
+        metadata: last_meta.unwrap_or(serde_json::Value::Null),
+    }
 }
 
 /// Drive the ATTACHED-DOCUMENT surface: fresh conversation + minted
@@ -254,6 +270,7 @@ pub async fn run_attached(
             retrieved_chunk_texts: doc_chunk_texts.clone(),
             gate_action: None,
             draft: None,
+            metadata: serde_json::Value::Null,
         };
     }
     let doc_session = DocumentSession {
@@ -277,6 +294,7 @@ pub async fn run_attached(
             retrieved_chunk_texts: doc_chunk_texts.clone(),
             gate_action: None,
             draft: None,
+            metadata: serde_json::Value::Null,
         };
     }
     let visible = match session.runtime.handle_turn(question, &conversation_id).await {
@@ -291,6 +309,7 @@ pub async fn run_attached(
         retrieved_chunk_texts: doc_chunk_texts,
         gate_action: None,
         draft: None,
+        metadata: serde_json::Value::Null,
     }
 }
 
@@ -348,6 +367,7 @@ pub async fn run_naked(
         retrieved_chunk_texts: Vec::new(),
         gate_action: None,
         draft: None,
+        metadata: serde_json::Value::Null,
     }
 }
 
