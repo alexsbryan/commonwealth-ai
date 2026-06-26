@@ -602,10 +602,24 @@ remaining work is the production build (Inc 1–3), not more proof.
       `gate_attached_doc_answer` [Source: Call-graph trace]"* — matching the §4
       answer-key. Plain-English → summary-bridge → call-graph-trace → cited answer,
       end-to-end.
-    - **Remaining (polish, not blockers):** dedicated code-explanation synthesis
-      prompt (today reuses the knowledge prompt); drop `*_tests` from the caller-set
-      enumeration; re-enrich with a stronger summary model for exact-rank precision;
-      tune the 0.6 distance factor if summaries over/under-promote on other queries.
+    - **Polish (done 2026-06-25):**
+      - **Code synthesis prompt** — `CODE_SYNTHESIS_DIRECTIVE` appended to the
+        synthesis system prompt on CodeQuery turns (both route sites);
+        `handle_code_query` passes `CodeQuery` so the branch fires. The answer now
+        names callers at file:line and explains the architecture
+        (`gate_held_answer` streaming gate → delegates to `gate_answer` engine;
+        callers match the §4 key: `handle_knowledge_query`@1229, `handle_simple`@201,
+        `handle_complex_task`@321, `gate_attached_doc_answer`@665).
+      - **Drop `*_tests` from the caller-set + prune** — `mod tests` fns sit under a
+        `/tests/` SCIP path segment; the pass partitions them out of enrichment AND
+        deletes any prior summary for them (`symbol_source_key` refactored to key off
+        `SymbolMeta`). Re-enrich: 279 → **260** (19 test summaries pruned, non-test
+        all cache hits). Real-fn summaries (`gate_held_answer`/`gate_answer`) now
+        cleanly rank #1/#2.
+    - **Still open (not blockers):** stronger summary model for exact-rank precision
+      (35B is too slow to re-enrich and there's no mid tier); broader tuning of the
+      0.6 distance factor across more queries (works for the gate Q; routing bench
+      clean; the boost is self-gating + a no-op for non-code corpora).
 
 ---
 
