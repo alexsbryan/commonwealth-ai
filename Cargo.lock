@@ -12275,6 +12275,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "csv",
  "dirs 5.0.1",
  "docx-lite",
  "ego-tree",

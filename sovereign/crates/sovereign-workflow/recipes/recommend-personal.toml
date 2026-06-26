@@ -1,0 +1,88 @@
+# recommend-personal — personalized movie recommendations from YOUR ratings.
+# Reads your ratings export, builds a TASTE PROFILE (a rating-weighted average of the
+# films you rated, in the catalog's own representation), ranks the catalog against it
+# — skipping what you've already seen — and explains each pick. Everything runs on
+# your machine over your own data; your taste never leaves it.
+#
+# First build a catalog (once) with `movie-catalog`, then:
+#   sovereign workflow run recommend-personal --corpus films --param history=~/ratings.csv --param baseline=0
+#
+# Expects a ratings CSV with columns: Name, Year, Rating (a Letterboxd export). Edit
+# the {element.*} column names below to match your file. `baseline` is subtracted from
+# each rating before weighting (0 = pure rating-weighted; raise it, e.g. 3, to push
+# away from films you rated low).
+
+[workflow]
+name = "recommend-personal"
+
+# One inline item → runs once. The whole pipeline is a single profile → ranked list.
+[source]
+type = "inline"
+items = ["me"]
+
+# 1. Read your ratings export.
+[[step]]
+id = "rows"
+uses = "tool:read_csv"
+params = { path = "{param.history}" }
+
+# 2. Embed each rated film's title, to look it up in the catalog.
+[[step]]
+id = "title_vec"
+uses = "embed:default"
+for_each = "rows"
+input = "{element.Name} ({element.Year})"
+
+# 3. Pair each row with its title vector.
+[[step]]
+id = "paired"
+uses = "tool:zip"
+params = { a = "{rows.output}", b = "{title_vec.output}", a_key = "row", b_key = "vec" }
+
+# 4. Resolve each rated title to its catalog film. `single` returns the top-1 hit as
+#    an object, so this for_each yields a FLAT list of films (not a list of lists).
+[[step]]
+id = "resolved"
+uses = "tool:corpus_search"
+for_each = "paired"
+params = { corpus = "{param.corpus}", embedding = "{element.vec}", query = "{element.row.Name}", single = true }
+
+# 5. Re-embed each resolved film's catalog text → its genome vector (search hits don't
+#    carry vectors). This puts the profile in the SAME representation as the catalog.
+[[step]]
+id = "cat_vec"
+uses = "embed:default"
+for_each = "resolved"
+input = "{element.text}"
+
+# 6. Pair each rating row with its film's genome vector.
+[[step]]
+id = "profiled"
+uses = "tool:zip"
+params = { a = "{rows.output}", b = "{cat_vec.output}", a_key = "row", b_key = "vector" }
+
+# 7. The taste profile: a rating-weighted centroid of the films you rated.
+[[step]]
+id = "profile"
+uses = "tool:vector_mean"
+params = { items = "{profiled.output}", vector_key = "vector", weight_key = "row.Rating", baseline = "{param.baseline}" }
+
+# 8. Rank the catalog against your taste — excluding everything you've already rated.
+[[step]]
+id = "recs"
+uses = "tool:corpus_search"
+params = { corpus = "{param.corpus}", embedding = "{profile.output}", exclude = "{resolved.output}", top_k = "15" }
+
+# 9. Explain each pick, grounded in the film and your taste — the recommender shows
+#    its work.
+[[step]]
+id = "why"
+uses = "model:fast"
+for_each = "recs"
+prompt = """
+Recommend this film to someone whose taste you just studied. One line: the title in
+bold, then " — ", then a single sentence on why it fits, naming the specific quality.
+
+Title: {element.title}
+{element.text}
+"""

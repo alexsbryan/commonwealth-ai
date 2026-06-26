@@ -1,0 +1,50 @@
+# movie-catalog — turn a movies dataset (CSV) into a searchable "genome" corpus to
+# recommend from. One vector per film. Pair it with `recommend-personal` (which reads
+# your ratings export) for personalized picks. Nothing leaves your machine.
+#
+# Expects a CSV with columns: title, year, overview, genres (a TMDB / MovieLens
+# export). Map your file's actual column names by editing the `meta` step's {element.*}.
+#
+# Run:
+#   sovereign workflow run movie-catalog --param csv=~/movies.csv --corpus films
+#   # then build your taste profile over it:
+#   sovereign workflow run recommend-personal --corpus films --param history=~/ratings.csv
+
+[workflow]
+name = "movie-catalog"
+
+# One inline item → the workflow runs once; read_csv fans the rows out below.
+[source]
+type = "inline"
+items = ["catalog"]
+
+# Read every row of the movies CSV as an object (header→value, strings).
+[[step]]
+id = "rows"
+uses = "tool:read_csv"
+params = { path = "{param.csv}" }
+
+# Compose each film's genome text + its identity. `transform:json` under `for_each`
+# maps each row to {text, title, source_doc_id}. Edit the column names to match
+# your CSV (e.g. Letterboxd-style "Name"/"Year").
+[[step]]
+id = "meta"
+uses = "transform:json"
+for_each = "rows"
+params = { text = "{element.title} ({element.year}): {element.overview} [{element.genres}]", title = "{element.title} ({element.year})", source_doc_id = "{element.title} ({element.year})" }
+
+# Embed each film's genome text — one vector per film (no chunking: the film is the
+# unit you recommend).
+[[step]]
+id = "vec"
+uses = "embed:default"
+for_each = "meta"
+input = "{element.text}"
+
+# Store the (text, embedding) pairs into one searchable corpus. corpus_store reads
+# the per-chunk `title` / `source_doc_id` from each `meta` object, so every film is
+# keyed by its own "Title (Year)".
+[[step]]
+id = "store"
+uses = "tool:corpus_store"
+params = { corpus = "{param.corpus}", chunks = "{meta.output}", embeddings = "{vec.output}" }
