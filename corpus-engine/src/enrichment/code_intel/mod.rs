@@ -148,22 +148,41 @@ pub fn body_hash(body: &str) -> String {
     blake3::hash(body.as_bytes()).to_hex().to_string()[..16].to_string()
 }
 
-/// Read a 0-indexed inclusive `[line_start, line_end]` line range out of source
-/// text — the body of a symbol. Matches the canonical reader
-/// `sovereign-tools/.../symbol_lookup.rs::read_symbol_body`: SCIP records line
-/// numbers 0-based, so a symbol at editor line N has `line_start = N - 1`.
+/// Extract a symbol's body from source text, starting at the 0-based `line_start`.
+///
+/// rust-analyzer's SCIP export omits function *enclosing ranges*, so `line_end` is
+/// unreliable — frequently `< line_start` — which previously collapsed the body to
+/// the single signature line (`fn name(`) and starved the summarizer into
+/// name-only confabulation. We instead recover the real body by **brace-matching**
+/// from `line_start`: accumulate lines until the `{`…`}` depth returns to zero
+/// after the first `{`. For a braceless symbol (a trait-method declaration, a
+/// `const`) we fall back to the original `line_end`-bounded span. Capped at
+/// `MAX_BODY_LINES`. SCIP records line numbers 0-based, so editor line N is `N-1`.
 pub fn extract_body(content: &str, line_start: i32, line_end: i32) -> String {
     let start = line_start.max(0) as usize;
-    // `line_end.max(line_start)` guards a residual mis-span (a symbol whose SCIP
-    // enclosing range was absent → `line_end <= line_start`); `min(start + cap)`
-    // bounds the LLM prompt for a very large function (or any leftover bad span).
-    let end = (line_end.max(line_start) as usize).min(start + MAX_BODY_LINES);
-    content
-        .lines()
-        .enumerate()
-        .filter_map(|(i, l)| (i >= start && i <= end).then_some(l))
-        .collect::<Vec<_>>()
-        .join("\n")
+    let lines: Vec<&str> = content.lines().collect();
+    if start >= lines.len() {
+        return String::new();
+    }
+    let cap = (start + MAX_BODY_LINES).min(lines.len());
+    let (mut depth, mut seen_brace) = (0i32, false);
+    for (i, l) in lines.iter().enumerate().take(cap).skip(start) {
+        depth += l.matches('{').count() as i32 - l.matches('}').count() as i32;
+        seen_brace |= l.contains('{');
+        if seen_brace && depth <= 0 {
+            return lines[start..=i].join("\n");
+        }
+    }
+    if seen_brace {
+        // Opened but never balanced within the cap — return the capped window.
+        return lines[start..cap].join("\n");
+    }
+    // Braceless symbol (or the plain-text test path): fall back to the original
+    // `line_end`-bounded inclusive span.
+    let end = (line_end.max(line_start) as usize)
+        .min(start + MAX_BODY_LINES)
+        .min(lines.len() - 1);
+    lines[start..=end].join("\n")
 }
 
 /// Max body lines extracted per symbol — bounds the prompt and caps any leftover
@@ -190,11 +209,14 @@ pub fn is_enrichable_kind(kind: &str) -> bool {
 }
 
 /// Compose the chat prompt for one symbol. Pure + deterministic, so it is
-/// unit-testable without a model. The system message carries the
-/// intent-forcing rules + output format; the user message carries only the
-/// code (identical to the validated scale-run input).
-pub fn compose_symbol_prompt(body: &str) -> ChatPrompt {
-    ChatPrompt::new(*SYMBOL_ENRICHMENT_SYSTEM, format!("CODE:\n{body}"))
+/// unit-testable without a model. The system message carries the accuracy rules +
+/// output format; the user message carries the function's full name, its file, and
+/// its code. The name + file are a domain anchor — without them the model judged a
+/// body like `blast_radius` from the bare name and invented "machines in a
+/// cluster"; with them it stays in the right domain.
+pub fn compose_symbol_prompt(qualified_name: &str, file_path: &str, body: &str) -> ChatPrompt {
+    let user = format!("FUNCTION: {qualified_name}\nFILE: {file_path}\n\nCODE:\n{body}");
+    ChatPrompt::new(*SYMBOL_ENRICHMENT_SYSTEM, user)
         .with_phase_id(PHASE_ID)
         .with_temperature(TEMPERATURE)
         .with_max_output_tokens(MAX_OUTPUT_TOKENS)
@@ -277,7 +299,7 @@ pub async fn enrich_symbol(
     meta: SymbolMeta,
     body: &str,
 ) -> Result<SymbolEnrichment> {
-    let prompt = compose_symbol_prompt(body);
+    let prompt = compose_symbol_prompt(&meta.qualified_name, &meta.file_path, body);
     let raw = (chat)(&prompt).await?;
     let (summary, asks) = parse_symbol_response(&raw);
     if summary.is_empty() {
