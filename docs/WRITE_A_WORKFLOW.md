@@ -255,7 +255,8 @@ You've seen most of it. The remainder, briefly:
   `transform:json` (reshape data — no model, no tool), `mcp:<server>:<tool>` (any
   connected MCP tool), and `tool:<id>` built-ins — `extract` (a document's text, any
   format), `chunk`, `read_file` / `write_file`, `corpus_store` (build a searchable
-  corpus), `web_fetch`, `zip`.
+  corpus), `corpus_search` (read one back — the top-k items by similarity to a
+  query vector, ranked), `web_fetch`, `zip`.
 - **`for_each`** runs a step once per element of an earlier collection; inside it,
   `{element}` is the current one. It's how you go from one document to a result
   per chapter. To pair two collections back up by position, there's `tool:zip`.

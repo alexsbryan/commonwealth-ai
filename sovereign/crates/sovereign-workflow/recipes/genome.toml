@@ -1,0 +1,55 @@
+# genome — recommend items from a corpus you already built, by content similarity.
+# Seed it with a sentence describing what you want; it finds the closest items in
+# the corpus and explains, grounded in each item, why it fits. The model runs on
+# your machine over your own index — nothing leaves it.
+#
+# Build a corpus once (the `notebook` starter is the index half), then recommend
+# over it as many times as you like:
+#   sovereign workflow run notebook --folder ~/films --corpus my-films
+#   sovereign workflow run genome  --corpus my-films --param seed="melancholy sci-fi, mostly quiet, hopeful ending"
+#
+# Make it yours — author your own "genome". The recommender below matches on each
+# item's raw text. To match on FEATURES you choose — your own genes (energy, mood,
+# palette, ending, …) — add a structured_output extraction at index time and embed
+# *those* instead of the raw text. That's the Music-Genome-Project move, as a few
+# lines you control. See docs/internal/THE_RECOMMENDER_ARC.md.
+
+[workflow]
+name = "genome"
+
+# One inline item → the workflow runs once. The seed itself is {param.seed}; this
+# item is just the trigger (a recommend pass is a single search, not a per-file fan-out).
+[source]
+type = "inline"
+items = ["seed"]
+
+# Embed the seed into one taste vector. No `for_each` → a single vector, which is
+# exactly what corpus_search wants as its query `embedding`.
+[[step]]
+id = "seed_vec"
+uses = "embed:default"
+input = "{param.seed}"
+
+# Rank the corpus by similarity to the seed vector. `query` adds lexical (FTS)
+# recall on top of vector similarity. Returns a ranked collection of
+# { source_doc_id, title, score, text } — the read side of `corpus_store`.
+[[step]]
+id = "similar"
+uses = "tool:corpus_search"
+params = { corpus = "{param.corpus}", embedding = "{seed_vec.output}", query = "{param.seed}", top_k = "10" }
+
+# Explain each pick, grounded in the item itself — the recommender shows its work.
+# `for_each` fans this over the ranked hits; {element.*} is the current one.
+[[step]]
+id = "why"
+uses = "model:fast"
+for_each = "similar"
+prompt = """
+Someone is looking for: {param.seed}
+
+Write one line about the item below: its title in bold, then " — ", then a single
+sentence saying why it fits, naming the specific quality that matches.
+
+Title: {element.title}
+{element.text}
+"""

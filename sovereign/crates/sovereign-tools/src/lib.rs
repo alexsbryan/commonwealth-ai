@@ -13,6 +13,7 @@ pub mod code;
 pub mod compute;
 pub mod conv_tiered_provider;
 pub mod corpus;
+pub mod corpus_search;
 pub mod corpus_store;
 pub mod document;
 pub mod document_asset;

@@ -73,6 +73,10 @@ pub const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
         "meeting-to-done",
         include_str!("../../sovereign-workflow/recipes/meeting-to-done.toml"),
     ),
+    (
+        "genome",
+        include_str!("../../sovereign-workflow/recipes/genome.toml"),
+    ),
 ];
 
 /// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
@@ -208,6 +212,7 @@ pub fn cache_dir() -> std::path::PathBuf {
 pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry {
     use sovereign_tools::atlas_phase::gaps::AtlasGapsTool;
     use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
+    use sovereign_tools::corpus_search::CorpusSearchTool;
     use sovereign_tools::corpus_store::CorpusStoreTool;
     use sovereign_tools::extract::ExtractTool;
     use sovereign_tools::rag::chunk::ChunkTool;
@@ -230,6 +235,7 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
     tools.register(Box::new(ReadFileTool));
     tools.register(Box::new(ZipTool));
     tools.register(Box::new(CorpusStoreTool));
+    tools.register(Box::new(CorpusSearchTool));
     tools.register(Box::new(WriteJsonTool));
     tools.register(Box::new(WriteFileTool));
     tools.register(Box::new(AtlasGapsTool));
