@@ -330,10 +330,11 @@ fn tool_filter_for_intent(intent: &Intent) -> ToolFilter {
                 "web_fetch",
             ])
         }
-        // Codebase / project-internal vocabulary questions. Code
-        // intelligence tools + the unified front door for cross-
-        // cutting questions that live in notes / project docs.
-        Intent::MetalingualQuery => ToolFilter::allow([
+        // Codebase / project-internal vocabulary questions (Metalingual) and
+        // first-class "how does this code work" questions (CodeQuery). Code
+        // intelligence tools + the unified front door for cross-cutting
+        // questions that live in notes / project docs.
+        Intent::MetalingualQuery | Intent::CodeQuery => ToolFilter::allow([
             "knowledge_lookup",
             "symbol_lookup",
             "code_search",

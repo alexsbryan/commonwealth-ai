@@ -40,6 +40,12 @@ pub(crate) fn default_oicp_for_intent(
             // Retrieval-driven synthesis over a bounded chunk set.
             (CapabilityHint::general(), LatencyClass::Normal)
         }
+        Intent::CodeQuery => {
+            // First-class code route: retrieval over code-intel summaries plus
+            // the SCIP call-graph trace, then synthesis. Code-capable hint,
+            // normal latency (same shape as KnowledgeQuery, code-scoped).
+            (CapabilityHint::code(), LatencyClass::Normal)
+        }
         Intent::ComparisonQuery => {
             // Bounded two-entity contrast — Fast slot, no reasoning
             // budget. Retrieval over a small chunk set, constrained
@@ -96,6 +102,7 @@ pub(crate) fn format_interpretation(
         Intent::SimpleQuery => "a quick factual answer",
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a look in your installed knowledge",
+        Intent::CodeQuery => "a look in the indexed code",
         Intent::ComparisonQuery => "a comparison between two things",
         Intent::MetalingualQuery => "a lookup in your codebase",
         Intent::ConationQuery => "a tweak to my last reply",
@@ -118,6 +125,7 @@ pub(crate) fn label_for_intent(intent: &Intent) -> String {
         Intent::SimpleQuery => "Give me a quick answer".into(),
         Intent::DeepQuery => "Walk me through it in depth".into(),
         Intent::KnowledgeQuery => "Check my knowledge base".into(),
+        Intent::CodeQuery => "Search the codebase".into(),
         Intent::ComparisonQuery => "Compare them side by side".into(),
         Intent::MetalingualQuery => "Look it up in this codebase".into(),
         Intent::ConationQuery => "Adjust the last reply".into(),
@@ -139,6 +147,7 @@ pub(crate) fn intent_hint(intent: &Intent) -> String {
         Intent::SimpleQuery => "simple_query".into(),
         Intent::DeepQuery => "deep_query".into(),
         Intent::KnowledgeQuery => "knowledge_query".into(),
+        Intent::CodeQuery => "code_query".into(),
         Intent::ComparisonQuery => "comparison_query".into(),
         Intent::MetalingualQuery => "metalingual_query".into(),
         Intent::ConationQuery => "conation_query".into(),
@@ -158,6 +167,7 @@ pub(crate) fn parse_intent_hint(hint: &str) -> Intent {
         "simple_query" => Intent::SimpleQuery,
         "deep_query" => Intent::DeepQuery,
         "knowledge_query" => Intent::KnowledgeQuery,
+        "code_query" => Intent::CodeQuery,
         "comparison_query" => Intent::ComparisonQuery,
         "metalingual_query" => Intent::MetalingualQuery,
         "conation_query" => Intent::ConationQuery,
@@ -194,6 +204,7 @@ pub(crate) fn build_clarification_question(_message: &str, primary: &Intent) -> 
         Intent::SimpleQuery => "a quick factual answer",
         Intent::DeepQuery => "a deeper explanation",
         Intent::KnowledgeQuery => "a corpus lookup",
+        Intent::CodeQuery => "a question about the code",
         Intent::ComparisonQuery => "a side-by-side comparison",
         Intent::MetalingualQuery => "a vocabulary lookup in our system",
         Intent::ConationQuery => "an adjustment to my last reply",

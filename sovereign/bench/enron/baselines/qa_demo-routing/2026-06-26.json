@@ -1,0 +1,66 @@
+{
+  "bank_name": "enron-demo-v0",
+  "started_at_unix": 1782443133,
+  "results": [
+    {
+      "question_id": "exec_cast",
+      "category": "entity",
+      "question": "Who were the senior executives running Enron, and what was each one\nresponsible for?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1211
+    },
+    {
+      "question_id": "ljm_fraud",
+      "category": "fraud_structure",
+      "question": "What do these communications reveal about the LJM and Raptor\npartnerships, and which executive was behind them?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1204
+    },
+    {
+      "question_id": "dynegy_rescue",
+      "category": "deal",
+      "question": "Describe the proposed Dynegy rescue of Enron as it appears in Kenneth\nLay's communications to employees.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 94
+    },
+    {
+      "question_id": "financial_state",
+      "category": "financial_structure",
+      "question": "What was being said internally about Enron's financial condition — its\ncredit ratings, mark-to-market accounting, and off-balance-sheet exposure?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1208
+    },
+    {
+      "question_id": "counterparty_network",
+      "category": "network",
+      "question": "Which energy companies appear as counterparties or competitors in the\nexecutives' correspondence?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1179
+    }
+  ]
+}

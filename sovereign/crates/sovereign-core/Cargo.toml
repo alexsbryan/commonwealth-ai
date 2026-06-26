@@ -13,6 +13,14 @@ oicp-types = { path = "../../../oicp-types" }
 # no source-level dependency on the gated APIs.
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# Read-only SCIP call-graph access for code-intelligence-in-chat: the chat
+# runtime opens a code corpus's `scip_graph.db` and renders a caller/callee
+# trace into the synthesis evidence block (`corpus_engine_scip::trace`). This is
+# the LEAN crate — rusqlite (bundled) + prost, NO tree-sitter grammars. We
+# depend on it directly rather than `corpus-engine/treesitter` precisely to keep
+# the 5 grammar crates out of every sovereign-core build; the grammars stay
+# confined to the indexing path that WRITES the db (CLI `enrich` + the watcher).
+corpus-engine-scip = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

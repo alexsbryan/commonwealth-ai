@@ -1,0 +1,102 @@
+{
+  "bank_name": "sep-summarize-v1",
+  "started_at_unix": 1782443528,
+  "results": [
+    {
+      "question_id": "summary_idealism",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of idealism as a philosophical position.\nCover its central claims, the major varieties and the figures associated with\nthem, the principal arguments for it, and the main lines of criticism. Aim for\nbreadth across the whole topic rather than depth on any single point.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 116
+    },
+    {
+      "question_id": "summary_cosmological_argument",
+      "category": "comprehensive_summary",
+      "question": "Give a comprehensive overview of the cosmological argument for the existence of\nGod. Cover the major forms the argument takes, its key premises, the principal\nfigures, and the most important objections. Aim for breadth across the whole\ntopic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 113
+    },
+    {
+      "question_id": "summary_problem_of_evil",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the problem of evil in philosophy of\nreligion. Cover the main formulations of the problem, the principal responses\nand defenses, and the key figures. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 95
+    },
+    {
+      "question_id": "summary_descartes_epistemology",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of Descartes's epistemology. Cover his method,\nhis foundational certainties, the role of God, and the principal difficulties\nthat have been raised. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 101
+    },
+    {
+      "question_id": "summary_mill_moral_political",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of John Stuart Mill's moral and political\nphilosophy. Cover his utilitarianism, his political principles, and his major\nworks and positions. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 95
+    },
+    {
+      "question_id": "summary_conservatism",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of conservatism as a political philosophy.\nCover its central commitments, its principal theorists, and the way it differs\nfrom rival traditions. Aim for breadth across the whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 95
+    },
+    {
+      "question_id": "summary_game_theory",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of game theory as it bears on philosophy.\nCover the core solution concepts, the canonical games, the main distinctions in\nhow games are modeled, and the principal applications. Aim for breadth across\nthe whole topic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 102
+    },
+    {
+      "question_id": "summary_infinity",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the philosophy of the infinite. Cover the\ncentral distinctions, the major historical and mathematical developments, the\nkey paradoxes, and the principal figures. Aim for breadth across the whole\ntopic.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 94
+    }
+  ]
+}

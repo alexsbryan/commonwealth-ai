@@ -34,9 +34,11 @@ pub mod error;
 pub mod scip_export;
 pub mod scip_graph;
 mod scip_proto;
+pub mod trace;
 
 pub use error::{Error, Result};
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
     ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
 };
+pub use trace::{build_symbol_trace, render_trace, CallSite, SymbolTrace};

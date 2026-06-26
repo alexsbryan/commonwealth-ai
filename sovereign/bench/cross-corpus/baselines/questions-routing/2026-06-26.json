@@ -1,0 +1,102 @@
+{
+  "bank_name": "cross-corpus-v1",
+  "started_at_unix": 1782443037,
+  "results": [
+    {
+      "question_id": "consequence_argument_van_inwagen",
+      "category": "cross_corpus",
+      "question": "Reconstruct van Inwagen's consequence argument against compatibilism, and\nstate who Peter van Inwagen is and when the argument was formulated.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Reconstruct van Inwagen's consequence argument.\" (cosine 0.766, margin 0.143)",
+      "correct": true,
+      "latency_ms": 141
+    },
+    {
+      "question_id": "twin_earth_content_externalism",
+      "category": "cross_corpus",
+      "question": "Explain Putnam's Twin Earth thought experiment as an argument for content\nexternalism, and identify the philosophers credited with developing semantic\nexternalism.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 93
+    },
+    {
+      "question_id": "locke_memory_personal_identity",
+      "category": "cross_corpus",
+      "question": "Reconstruct Locke's memory criterion of personal identity and the standard\nobjections to it, and situate Locke's Essay historically.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Compare Locke and Reid on personal identity.\" (cosine 0.690, margin 0.247)",
+      "correct": false,
+      "latency_ms": 62
+    },
+    {
+      "question_id": "aristotle_function_argument_eudaimonia",
+      "category": "cross_corpus",
+      "question": "Explain Aristotle's function (ergon) argument for eudaimonia and the role of\npractical wisdom, and identify the work in which it appears.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 95
+    },
+    {
+      "question_id": "kant_hume_causality",
+      "category": "cross_corpus",
+      "question": "Reconstruct Kant's response to Hume's skepticism about causality, and give the\ndates and major works of each philosopher.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Contrast Kant and Hume on causation.\" (cosine 0.813, margin 0.379)",
+      "correct": false,
+      "latency_ms": 62
+    },
+    {
+      "question_id": "godel_hilbert_program",
+      "category": "cross_corpus",
+      "question": "Explain how Gödel's incompleteness theorems bear on Hilbert's program, and\nstate when the theorems were proved and by whom.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 96
+    },
+    {
+      "question_id": "rawls_original_position_nozick",
+      "category": "cross_corpus",
+      "question": "Reconstruct Rawls's original-position argument for the difference principle\nand Nozick's entitlement-theory objection, citing the major works.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What are the deepest tensions in Rawls's original position thought experiment?\" (cosine 0.679, margin 0.227)",
+      "correct": true,
+      "latency_ms": 62
+    },
+    {
+      "question_id": "consequentialism_vs_deontology",
+      "category": "cross_corpus",
+      "question": "Contrast consequentialist and deontological ethics on what makes an act right,\nand give the encyclopedic definitions and a key proponent of each.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Compare the act and rule formulations of utilitarianism.\" (cosine 0.562, margin 0.147)",
+      "correct": false,
+      "latency_ms": 64
+    }
+  ]
+}

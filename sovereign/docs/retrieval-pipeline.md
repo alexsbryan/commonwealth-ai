@@ -39,7 +39,8 @@ dated convergence/divergence log.
 | 15 | `dedupe_merged` | — |
 | 16 | `cap_and_reserve` | — |
 | 17 | `governance_active_set` | — |
-| 18 | `truncate_merged` | — |
+| 18 | `dim_mismatch_disclosure` | — |
+| 19 | `truncate_merged` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -62,8 +63,9 @@ dated convergence/divergence log.
 | 15 | `dedupe_merged` | — |
 | 16 | `cap_and_reserve` | — |
 | 17 | `governance_active_set` | — |
-| 18 | `truncate_merged` | — |
-| 19 | `top_sources_expand` | — |
+| 18 | `dim_mismatch_disclosure` | — |
+| 19 | `truncate_merged` | — |
+| 20 | `top_sources_expand` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -81,8 +83,9 @@ dated convergence/divergence log.
 | 10 | `dedupe_merged` | — |
 | 11 | `cap_and_reserve` | — |
 | 12 | `governance_active_set` | — |
-| 13 | `truncate_merged` | — |
-| 14 | `top_sources_expand` | — |
+| 13 | `dim_mismatch_disclosure` | — |
+| 14 | `truncate_merged` | — |
+| 15 | `top_sources_expand` | — |
 
 ## Env-knob registry
 

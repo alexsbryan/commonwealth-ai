@@ -1,0 +1,126 @@
+{
+  "bank_name": "enron-qa-v0",
+  "started_at_unix": 1782443081,
+  "results": [
+    {
+      "question_id": "exec_roles",
+      "category": "network",
+      "question": "Who are the senior Enron executives in this correspondence, and what role\ndid each hold?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1213
+    },
+    {
+      "question_id": "ljm_raptor_vehicles",
+      "category": "financial_structure",
+      "question": "What do the communications reveal about the LJM and Raptor partnership\nvehicles, and which executive is associated with them?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1186
+    },
+    {
+      "question_id": "dynegy_transaction",
+      "category": "deal",
+      "question": "Describe the proposed Dynegy–Enron transaction as it appears in the\ncorrespondence.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 93
+    },
+    {
+      "question_id": "california_energy_crisis",
+      "category": "topic",
+      "question": "What do the executives' communications say about the California energy\ncrisis?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1184
+    },
+    {
+      "question_id": "counterparties",
+      "category": "network",
+      "question": "Which energy-sector companies appear as counterparties or peers in the\nexecutives' mail?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1183
+    },
+    {
+      "question_id": "financial_condition",
+      "category": "financial_structure",
+      "question": "What references are there to Enron's financial condition — credit ratings,\nmark-to-market accounting, or off-balance-sheet exposure?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1190
+    },
+    {
+      "question_id": "fastow_position",
+      "category": "network",
+      "question": "What was Andrew Fastow's position at Enron, and what financial structures\nis he linked to in the correspondence?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1190
+    },
+    {
+      "question_id": "new_ventures",
+      "category": "topic",
+      "question": "What new-business ventures — such as broadband, NewPower, Azurix, or\ninternational exploration and production — surface in the correspondence?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1190
+    },
+    {
+      "question_id": "workforce_actions",
+      "category": "topic",
+      "question": "What workforce or organizational changes are discussed in the mail?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 89
+    },
+    {
+      "question_id": "lay_skilling_comms",
+      "category": "network",
+      "question": "Characterize the communication between Kenneth Lay and Jeffrey Skilling in\nthis corpus — what topics do they exchange on?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1213
+    }
+  ]
+}

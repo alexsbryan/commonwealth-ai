@@ -13,6 +13,7 @@
 
 mod ask_move;
 mod attached_doc;
+mod code_query;
 mod commissive;
 mod complex_task;
 mod conation;

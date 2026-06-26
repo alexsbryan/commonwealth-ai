@@ -11993,6 +11993,7 @@ dependencies = [
  "chrono",
  "corpus-engine",
  "corpus-engine-notes",
+ "corpus-engine-scip",
  "dashmap",
  "dirs 5.0.1",
  "futures",

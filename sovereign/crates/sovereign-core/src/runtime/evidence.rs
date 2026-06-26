@@ -648,7 +648,7 @@ pub(crate) fn operation_of(intent: &Intent, has_atom_enum: bool) -> Option<Opera
         // the turn to Enumerate (a set/roster). The flag is only meaningful
         // here — it is set during corpus retrieval for set-questions — so it
         // never reaches the non-referential arm below.
-        Intent::SimpleQuery | Intent::KnowledgeQuery | Intent::DeepQuery => {
+        Intent::SimpleQuery | Intent::KnowledgeQuery | Intent::DeepQuery | Intent::CodeQuery => {
             if has_atom_enum {
                 Some(Operation::Enumerate)
             } else {

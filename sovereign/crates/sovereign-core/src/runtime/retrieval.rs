@@ -3433,6 +3433,21 @@ impl Runtime {
                     Some(&display_categories)
                 },
             );
+            // Code-intelligence-in-chat (Inc 2): mirror the KnowledgeQuery
+            // augmentation on the DEEP path. Code questions route to DeepQuery
+            // (REASONING), whose synthesis evidence is assembled here — so the
+            // call-graph trace must be appended at this site too, not only at
+            // knowledge_query.rs. Empty string (zero overhead) for non-code
+            // corpora, so it is safe to run unconditionally. Twin injection.
+            let doc_context = {
+                let code_trace =
+                    crate::runtime::code_trace::build_code_trace_block(&all_chunks).await;
+                if code_trace.is_empty() {
+                    doc_context
+                } else {
+                    format!("{doc_context}\n\n{code_trace}")
+                }
+            };
             let knowledge_block = if conv_briefing.is_empty() {
                 doc_context
             } else {
