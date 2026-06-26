@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP authentication — credential types and header injection.
 //!
-//! Credentials are resolved from an environment variable
-//! (`SOVEREIGN_MCP_TOKEN_<NAME>`) rather than the on-disk config, so secrets
-//! never land in `~/.sovereign/config.toml` (ARCH §7) and no keychain
-//! dependency is pulled in. A keychain-backed store can later extend the
-//! single `resolve` function below; every caller picks it up automatically.
+//! Credentials are resolved by [`McpAuth::resolve`] from a file-backed secret
+//! store ([`super::secret_store`], `~/.sovereign/secrets/`) first, then the
+//! `SOVEREIGN_MCP_TOKEN_<NAME>` env var (headless nodes / CI) — never from the
+//! on-disk `config.toml` (ARCH §7), so the secret never rides along with
+//! shared / synced / gossiped state. Both are read through the single `resolve`
+//! seam; every caller picks up the precedence automatically.
 
 use reqwest::RequestBuilder;
 
@@ -33,14 +34,14 @@ impl McpAuth {
     pub fn resolve(server_name: &str, config: &McpAuthConfig) -> Self {
         match config {
             McpAuthConfig::None => McpAuth::None,
-            McpAuthConfig::Bearer => match read_secret_env(server_name) {
+            McpAuthConfig::Bearer => match read_secret(server_name) {
                 Some(token) => McpAuth::BearerToken(token),
                 None => {
                     warn_missing_secret(server_name);
                     McpAuth::None
                 }
             },
-            McpAuthConfig::ApiKey { header } => match read_secret_env(server_name) {
+            McpAuthConfig::ApiKey { header } => match read_secret(server_name) {
                 Some(value) => McpAuth::ApiKey {
                     header: header.clone(),
                     value,
@@ -78,7 +79,14 @@ impl McpAuth {
 /// on-disk config without a keychain dependency. `pub` so `sovereign mcp add`
 /// can name the exact variable back to the user from this single definition.
 pub fn secret_env_var(server_name: &str) -> String {
-    let sanitized: String = server_name
+    format!("SOVEREIGN_MCP_TOKEN_{}", sanitized_name(server_name))
+}
+
+/// The server name folded to a slug shared by the env var and the file store:
+/// every non-alphanumeric char becomes `_`, then uppercased (`my-vision` →
+/// `MY_VISION`). One definition so the two stores never disagree on the key.
+pub fn sanitized_name(server_name: &str) -> String {
+    server_name
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() {
@@ -87,8 +95,13 @@ pub fn secret_env_var(server_name: &str) -> String {
                 '_'
             }
         })
-        .collect();
-    format!("SOVEREIGN_MCP_TOKEN_{sanitized}")
+        .collect()
+}
+
+/// A server's secret, file store first (what the desktop writes) then the
+/// `SOVEREIGN_MCP_TOKEN_<NAME>` env var (headless / CI). The single read seam.
+fn read_secret(server_name: &str) -> Option<String> {
+    super::secret_store::read_token(server_name).or_else(|| read_secret_env(server_name))
 }
 
 fn read_secret_env(server_name: &str) -> Option<String> {
@@ -101,7 +114,8 @@ fn warn_missing_secret(server_name: &str) {
     tracing::warn!(
         server = server_name,
         env_var = %secret_env_var(server_name),
-        "MCP server needs a credential but its env var is unset — connecting unauthenticated"
+        "MCP server needs a credential but none is stored in the app and its env \
+         var is unset — connecting unauthenticated"
     );
 }
 

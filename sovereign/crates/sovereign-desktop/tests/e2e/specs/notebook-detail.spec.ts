@@ -2,10 +2,10 @@
 import { test, expect, bootToChat } from "../fixtures/test-base";
 import type { Page } from "@playwright/test";
 
-// Notebook detail — Ask / Explore / Sources / Settings (Phase 1 refactor).
+// Notebook detail — Ask / Explore in the header, Sources / Settings in ⋯.
 //
 // Pins the per-notebook contract the Library opens into:
-//   1. the four tabs switch and surface the right content;
+//   1. the sections switch and surface the right content;
 //   2. Explore on a notebook with no map offers "Make explorable", which
 //      runs the standard enrich path (init + build) and shows progress;
 //   3. Ask scopes the conversation to this notebook (the existing
@@ -37,7 +37,7 @@ const CATALOG_NB = {
 };
 
 test.describe("Notebook detail", () => {
-  test("the four tabs switch and surface their content", async ({
+  test("the sections switch and surface their content", async ({
     sovereignPage: page,
     chat,
   }) => {
@@ -50,19 +50,18 @@ test.describe("Notebook detail", () => {
     await expect(page.getByTestId("notebook-detail")).toBeVisible();
     await expect(page.getByTestId("notebook-tab-ask")).toHaveClass(/active/);
 
-    // Explore (not explorable) → the Make-explorable surface.
+    // Explore (segmented) → the Make-explorable surface.
     await page.getByTestId("notebook-tab-explore").click();
     await expect(page.getByTestId("notebook-tab-explore")).toHaveClass(/active/);
     await expect(page.getByTestId("notebook-make-explorable")).toBeVisible();
 
-    // Sources → provenance for a catalog notebook (no local config).
+    // Sources + Settings live in the ⋯ overflow now.
+    await page.getByTestId("notebook-more").click();
     await page.getByTestId("notebook-tab-sources").click();
-    await expect(page.getByTestId("notebook-tab-sources")).toHaveClass(/active/);
     await expect(page.getByText("Installed from the public catalog")).toBeVisible();
 
-    // Settings → the remove affordance.
+    await page.getByTestId("notebook-more").click();
     await page.getByTestId("notebook-tab-settings").click();
-    await expect(page.getByTestId("notebook-tab-settings")).toHaveClass(/active/);
     await expect(page.getByTestId("notebook-remove")).toBeVisible();
   });
 
@@ -166,6 +165,7 @@ test.describe("Notebook detail", () => {
 
     await page.getByTestId("nav-library").click();
     await page.getByTestId("notebook-explore").first().click();
+    await page.getByTestId("notebook-more").click();
     await page.getByTestId("notebook-tab-settings").click();
     await page.getByTestId("notebook-remove").click();
     await page.getByTestId("notebook-remove-confirm").click();
@@ -188,6 +188,7 @@ test.describe("Notebook detail", () => {
     await seedOneNotebook(page, CATALOG_NB);
     await page.getByTestId("nav-library").click();
     await page.getByTestId("notebook-explore").first().click();
+    await page.getByTestId("notebook-more").click();
     await page.getByTestId("notebook-tab-settings").click();
 
     // The "Built by … → Open in Workshop" hinge opens the Workshop.

@@ -391,6 +391,7 @@ fn main() -> ExitCode {
             commands::cancel_stream,
             commands::create_conversation,
             commands::list_conversations,
+            commands::notebook_conversations,
             commands::get_conversation,
             commands::delete_conversation,
             commands::rename_conversation,
@@ -603,6 +604,8 @@ fn main() -> ExitCode {
             commands::mcp_add_server,
             commands::mcp_remove_server,
             commands::mcp_test_connection,
+            commands::mcp_set_token,
+            commands::mcp_clear_token,
         ])
         .build(tauri::generate_context!())
         .expect("error building Sovereign")

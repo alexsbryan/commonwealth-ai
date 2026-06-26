@@ -75,19 +75,19 @@
   function phaseHuman(phase: string): string {
     switch (phase) {
       case "starting":
-        return "Starting enrichment";
+        return "Starting";
       case "scanning":
-        return "Reading chunks";
+        return "Reading passages";
       case "entity_extraction":
-        return "Extracting entities";
+        return "Finding key topics";
       case "raptor_leaves":
-        return "Summarising chunks (RAPTOR leaves)";
+        return "Summarising passages";
       case "raptor_tree":
-        return "Building RAPTOR tree";
+        return "Building summaries";
       case "motif_extraction":
-        return "Indexing motifs";
+        return "Finding patterns";
       case "atom_extraction":
-        return "Extracting atoms";
+        return "Building the map";
       case "persisting":
         return "Saving";
       default:

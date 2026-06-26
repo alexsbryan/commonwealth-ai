@@ -22,6 +22,7 @@
   import AtlasSurface from "../atlas/AtlasSurface.svelte";
   import EnrichmentStage from "../EnrichmentStage.svelte";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
+  import { cardSend, cardReceive } from "../../motion";
   import { kindLabel, kindTitle, normalizeKind } from "./notebookKind";
   import {
     recipeEnrichInitFromCorpus,
@@ -30,13 +31,16 @@
     removeCorpus,
     lcWatchSyncNow,
     lcList,
+    notebookConversations,
   } from "../../api";
   import { enrichProgressStore } from "../../stores/enrichProgress.svelte";
   import { outerWorkScopeStore } from "../../stores/outerWorkScope.svelte";
+  import { chatSeedStore } from "../../stores/chatSeed.svelte";
   import type {
     NotebookSummary,
     StarterQuestion,
     LocalCorpusConfig,
+    ConversationEntry,
   } from "../../types";
 
   type TabId = "ask" | "explore" | "sources" | "settings";
@@ -91,13 +95,81 @@
   // an in-progress conversation. The scope MUST be set before ChatView
   // mounts — its consume-on-empty effect reads `outerWorkScopeStore`
   // when the first (empty) conversation is minted.
+  // The Ask tab keeps a conversation with this notebook. On first open we
+  // load the notebook's history (conversations scoped to it) and resume
+  // the most recent; "+ New" starts a fresh scoped thread. The keep-alive
+  // ChatView swaps its `conversationId` rather than remounting.
   let askVisited = $state(false);
-  $effect(() => {
-    if (tab === "ask" && !askVisited) {
-      outerWorkScopeStore.set([notebook.id]);
-      askVisited = true;
+  let askConversationId = $state<string | null>(null);
+  let notebookConvs = $state<ConversationEntry[]>([]);
+  // Header menus: the conversation switcher (Ask tab) and the ⋯ overflow
+  // that holds Sources + Settings.
+  let convMenuOpen = $state(false);
+  let moreMenuOpen = $state(false);
+
+  function setTab(t: TabId) {
+    tab = t;
+    convMenuOpen = false;
+    moreMenuOpen = false;
+  }
+
+  async function openAsk() {
+    try {
+      notebookConvs = (await notebookConversations(notebook.id, 12)) ?? [];
+    } catch {
+      notebookConvs = [];
     }
+    if (notebookConvs.length > 0) {
+      // Resume where you left off with this notebook.
+      askConversationId = notebookConvs[0].id;
+    } else {
+      // No history yet — mint a fresh scoped conversation. The scope MUST
+      // be set before ChatView mounts (its consume-on-empty effect reads
+      // outerWorkScopeStore when the first conversation is minted).
+      outerWorkScopeStore.set([notebook.id]);
+      askConversationId = null;
+    }
+    askVisited = true;
+  }
+
+  $effect(() => {
+    if (tab === "ask" && !askVisited) void openAsk();
   });
+
+  function selectConversation(id: string) {
+    askConversationId = id;
+  }
+  function newConversation() {
+    outerWorkScopeStore.set([notebook.id]);
+    askConversationId = null;
+  }
+
+  // Move 4 (Map → Ask): from an atom in Explore, open a fresh scoped
+  // question about it in this notebook's Ask tab — the conversation and
+  // the map as two views of one notebook.
+  function handleAskAbout(name: string) {
+    outerWorkScopeStore.set([notebook.id]);
+    chatSeedStore.set({
+      text: `Tell me about ${name}.`,
+      atom_id: "",
+      source_section: null,
+      question_type: "user",
+    });
+    askConversationId = null;
+    askVisited = true;
+    tab = "ask";
+  }
+  function onAskConversationCreated(id: string) {
+    askConversationId = id;
+    // Surface the freshly-minted thread in the switcher.
+    void notebookConversations(notebook.id, 12)
+      .then((c) => (notebookConvs = c ?? []))
+      .catch(() => {});
+  }
+
+  function threadTitle(c: ConversationEntry): string {
+    return c.title?.trim() || "Untitled";
+  }
 
   // ── Explore: make-explorable enrich flow ──────────────────────────
   let enrichError = $state<string | null>(null);
@@ -192,13 +264,6 @@
     }
   }
 
-  const TABS: { id: TabId; label: string }[] = [
-    { id: "ask", label: "Ask" },
-    { id: "explore", label: "Explore" },
-    { id: "sources", label: "Sources" },
-    { id: "settings", label: "Settings" },
-  ];
-
   function freshness(unix: number | null): string {
     if (!unix) return "—";
     const days = Math.floor((Date.now() / 1000 - unix) / 86400);
@@ -211,7 +276,7 @@
 </script>
 
 <div class="notebook-detail" data-testid="notebook-detail">
-  <header class="nb-header">
+  <header class="nb-header" in:cardReceive={{ key: notebook.id }} out:cardSend={{ key: notebook.id }}>
     <button class="back" onclick={onBack} data-testid="notebook-detail-back" aria-label="Back to Library">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6" />
@@ -227,32 +292,109 @@
         <span class="nb-explorable" title="Has an explorable map">✦</span>
       {/if}
     </div>
-  </header>
 
-  <nav class="nb-tabs" aria-label="Notebook sections">
-    {#each TABS as t}
-      <button
-        class:active={tab === t.id}
-        data-testid={`notebook-tab-${t.id}`}
-        onclick={() => (tab = t.id)}
-      >
-        {t.label}
-      </button>
-    {/each}
-  </nav>
+    <div class="nb-nav">
+      <!-- The two things you do with a notebook. Sources / Settings are
+           rarer, so they live in the ⋯ overflow. -->
+      <div class="seg">
+        <button
+          class="seg-btn"
+          class:active={tab === "ask"}
+          data-testid="notebook-tab-ask"
+          onclick={() => setTab("ask")}
+        >Ask</button>
+        <button
+          class="seg-btn"
+          class:active={tab === "explore"}
+          data-testid="notebook-tab-explore"
+          onclick={() => setTab("explore")}
+        >Explore</button>
+      </div>
+
+      {#if tab === "ask" && notebookConvs.length > 0}
+        <div class="menu-anchor">
+          <button
+            class="menu-trigger"
+            data-testid="notebook-conv-menu"
+            aria-expanded={convMenuOpen}
+            onclick={() => (convMenuOpen = !convMenuOpen)}
+          >
+            Conversations
+            <svg class="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          {#if convMenuOpen}
+            <button class="menu-backdrop" aria-label="Close menu" onclick={() => (convMenuOpen = false)}></button>
+            <div class="menu-pop right" data-testid="notebook-ask-history">
+              <button
+                class="menu-item fresh"
+                data-testid="notebook-ask-new"
+                onclick={() => { newConversation(); convMenuOpen = false; }}
+              >+ New conversation</button>
+              {#each notebookConvs as c (c.id)}
+                <button
+                  class="menu-item"
+                  class:active={c.id === askConversationId}
+                  data-testid="notebook-ask-thread"
+                  title={threadTitle(c)}
+                  onclick={() => { selectConversation(c.id); convMenuOpen = false; }}
+                >{threadTitle(c)}</button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <div class="menu-anchor">
+        <button
+          class="menu-trigger icon"
+          data-testid="notebook-more"
+          aria-label="More"
+          aria-expanded={moreMenuOpen}
+          onclick={() => (moreMenuOpen = !moreMenuOpen)}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>
+        </button>
+        {#if moreMenuOpen}
+          <button class="menu-backdrop" aria-label="Close menu" onclick={() => (moreMenuOpen = false)}></button>
+          <div class="menu-pop right">
+            <button
+              class="menu-item"
+              class:active={tab === "sources"}
+              data-testid="notebook-tab-sources"
+              onclick={() => setTab("sources")}
+            >Sources</button>
+            <button
+              class="menu-item"
+              class:active={tab === "settings"}
+              data-testid="notebook-tab-settings"
+              onclick={() => setTab("settings")}
+            >Settings</button>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </header>
 
   <div class="nb-body">
     <!-- Ask: keep-alive layer so the conversation survives tab hops. -->
     {#if askVisited}
       <div class="ask-layer" class:hidden={tab !== "ask"} aria-hidden={tab !== "ask"}>
-        <ChatView conversationId={null} taskSteps={[]} onClearTask={() => {}} />
+        <div class="ask-chat">
+          <ChatView
+            conversationId={askConversationId}
+            taskSteps={[]}
+            onClearTask={() => {}}
+            onConversationCreated={onAskConversationCreated}
+            hideScope={true}
+          />
+        </div>
       </div>
     {/if}
 
     {#if tab === "explore"}
       {#if explorable}
         <div class="explore-surface">
-          <AtlasSurface startingCorpusId={notebook.id} />
+          <AtlasSurface startingCorpusId={notebook.id} onAskAbout={handleAskAbout} />
         </div>
       {:else if enrichJob}
         <div class="pad">
@@ -406,6 +548,7 @@
     align-items: center;
     gap: 9px;
     min-width: 0;
+    flex: 1;
   }
   .nb-kind { color: var(--text-muted); display: inline-flex; }
   .nb-title h1 {
@@ -419,30 +562,113 @@
   }
   .nb-explorable { color: var(--accent); font-size: 0.95rem; }
 
-  .nb-tabs {
+  /* The notebook's nav lives in the header now: a segmented Ask|Explore
+     toggle + a ⋯ overflow, instead of a separate tab bar. */
+  .nb-nav {
     display: flex;
-    gap: 4px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-secondary);
+    align-items: center;
+    gap: 8px;
     flex-shrink: 0;
   }
-  .nb-tabs button {
+  .seg {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .seg-btn {
     font: inherit;
     cursor: pointer;
-    padding: 5px 13px;
-    border-radius: var(--radius);
+    padding: 4px 14px;
+    border-radius: 999px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.85rem;
+    font-weight: 550;
+    font-size: 0.82rem;
   }
-  .nb-tabs button:hover { color: var(--text-primary); }
-  .nb-tabs button.active {
+  .seg-btn:hover { color: var(--text-primary); }
+  .seg-btn.active {
     background: var(--bg-elevated);
     color: var(--text-primary);
     border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  }
+
+  .menu-anchor { position: relative; display: inline-flex; }
+  .menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .menu-trigger:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .menu-trigger.icon { padding: 5px 7px; }
+  .menu-trigger .chev { opacity: 0.7; }
+
+  /* A full-viewport click-catcher so clicking anywhere dismisses the
+     menu (the popover idiom the inner-work drawer uses). */
+  .menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+  .menu-pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 41;
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 60vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  }
+  .menu-pop.right { left: auto; right: 0; }
+  .menu-item {
+    text-align: left;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .menu-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+  .menu-item.active {
+    color: var(--text-primary);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+  }
+  .menu-item.fresh {
+    color: var(--accent);
+    font-weight: 550;
+    border-bottom: 1px solid var(--border);
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 3px;
   }
 
   .nb-body {
@@ -463,6 +689,15 @@
   }
   .ask-layer.hidden { display: none; }
 
+  /* The Ask tab's conversation fills the layer; the thread switcher
+     lives in the header dropdown, not a band here. */
+  .ask-chat {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
   /* Mirror App.svelte's standalone `.atlas-surface` exactly — a flex
      column with a bounded height — so AtlasCorpusView's windowed
      `.atom-scroll` gets a real viewport to virtualize against (a plain

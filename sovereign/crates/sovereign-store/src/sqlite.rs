@@ -207,6 +207,63 @@ impl SqliteStateStore {
         Ok(rows)
     }
 
+    /// List the conversations explicitly scoped to one corpus (notebook),
+    /// newest first — a notebook's Ask-tab history. A conversation
+    /// matches when its `enabled_corpora` allow-list *contains*
+    /// `corpus_id`. "Everything" conversations (`enabled_corpora IS NULL`)
+    /// are deliberately excluded, so a notebook only shows threads the
+    /// user actually had while scoped to it. Default-chat surface only
+    /// (`skill_id IS NULL`) — these are the conversations a notebook's
+    /// Ask tab mints. Mirrors `list_conversations_for_surface`'s row map.
+    pub async fn list_conversations_for_corpus(
+        &self,
+        corpus_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let conn = self.conn.lock().await;
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Conversation> {
+            let enabled_corpora_json: Option<String> = row.get(5)?;
+            let searched_sources_json: Option<String> = row.get(6)?;
+            Ok(Conversation {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                messages: Vec::new(),
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                version: 0,
+                deleted_at: None,
+                skill_id: row.get(4)?,
+                enabled_corpora: enabled_corpora_json
+                    .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
+                searched_sources: searched_sources_json.and_then(|s| {
+                    serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()
+                }),
+            })
+        };
+        // `enabled_corpora IS NOT NULL` guards `json_each` against a NULL
+        // (and is exactly the "exclude everything-scoped" rule). `json_each`
+        // ships with SQLite ≥ 3.38.
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources \
+                 FROM conversations \
+                 WHERE skill_id IS NULL AND deleted_at IS NULL \
+                   AND enabled_corpora IS NOT NULL \
+                   AND EXISTS (SELECT 1 FROM json_each(conversations.enabled_corpora) WHERE value = ?1) \
+                 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(map_db)?;
+        let iter = stmt
+            .query_map(
+                rusqlite::params![corpus_id, limit as i64, offset as i64],
+                map_row,
+            )
+            .map_err(map_db)?;
+        let collected: std::result::Result<Vec<_>, _> = iter.collect();
+        Ok(collected.map_err(map_db)?)
+    }
+
     /// Read the (was_redirected, redirect_to) fields for the most
     /// recent `routing_log` row matching `message_hash`. Returns
     /// `None` if no row is found. Exposed for PR4 integration

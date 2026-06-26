@@ -159,6 +159,9 @@
       gpu: null,
     }),
     list_conversations: () => [],
+    // A notebook's Ask-tab history. Default empty; specs that exercise
+    // notebook conversation memory override via setHandler.
+    notebook_conversations: () => [],
     get_conversation: ({ conversationId }) => {
       throw new Error(`conversation ${conversationId} not found`);
     },

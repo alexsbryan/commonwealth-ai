@@ -95,6 +95,38 @@ pub async fn list_conversations(
         .collect())
 }
 
+/// List the conversations scoped to one notebook (corpus), newest first
+/// — the notebook's Ask-tab history. Default-chat surface only;
+/// "everything"-scoped conversations are excluded (see
+/// `SqliteStateStore::list_conversations_for_corpus`).
+#[tauri::command]
+pub async fn notebook_conversations(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<ConversationEntry>, String> {
+    let _guard = require_runtime!(state);
+    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
+        sqlite
+            .list_conversations_for_corpus(&corpus_id, limit.unwrap_or(20), offset.unwrap_or(0))
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        return Err("notebook_conversations: sqlite store unavailable".to_string());
+    };
+
+    Ok(convos
+        .into_iter()
+        .map(|c| ConversationEntry {
+            id: c.id,
+            title: c.title,
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+        })
+        .collect())
+}
+
 #[tauri::command]
 pub async fn get_conversation(
     state: State<'_, Arc<AppState>>,

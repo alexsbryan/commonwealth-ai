@@ -98,6 +98,8 @@ test.describe("corpus filter strip", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
+    // Move 1: the strip now lives behind the AskScopeBar — reveal it.
+    await page.getByTestId("ask-scope-bar").click();
 
     const strip = page.locator(".corpus-filter-strip").first();
     await expect(strip).toBeVisible();
@@ -116,6 +118,8 @@ test.describe("corpus filter strip", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
+    // Move 1: the strip now lives behind the AskScopeBar — reveal it.
+    await page.getByTestId("ask-scope-bar").click();
 
     // The strip lives in two mount points — the empty-state copy
     // and the persistent above-input copy. Both share the same
@@ -162,6 +166,8 @@ test.describe("corpus filter strip", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
+    // Move 1: the strip now lives behind the AskScopeBar — reveal it.
+    await page.getByTestId("ask-scope-bar").click();
 
     const strip = page.locator(".corpus-filter-strip").first();
     const wikiChip = strip.locator(".kb-tag", { hasText: "Wikipedia" });
@@ -213,6 +219,8 @@ test.describe("corpus filter strip", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
+    // Move 1: the strip now lives behind the AskScopeBar — reveal it.
+    await page.getByTestId("ask-scope-bar").click();
 
     const strip = page.locator(".corpus-filter-strip").first();
     const chips = strip.locator(".kb-tag");
@@ -285,6 +293,8 @@ test.describe("outer-work deep link scopes the strip", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
+    // Move 1: the strip now lives behind the AskScopeBar — reveal it.
+    await page.getByTestId("ask-scope-bar").click();
 
     // Fire the host event a mesh-app Door card triggers.
     await page.evaluate(() => {

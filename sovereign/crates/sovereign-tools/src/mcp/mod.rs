@@ -12,6 +12,7 @@ pub mod discovery;
 pub mod http;
 pub mod loader;
 pub mod reconnect;
+pub mod secret_store;
 pub mod stdio;
 pub mod transport;
 pub mod types;

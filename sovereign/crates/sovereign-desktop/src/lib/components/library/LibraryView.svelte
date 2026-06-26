@@ -20,7 +20,9 @@
   import { kindLabel, kindTitle } from "./notebookKind";
   import AddSheet from "./AddSheet.svelte";
   import NotebookDetail from "./NotebookDetail.svelte";
-  import { libraryNav } from "../../stores/libraryNav.svelte";
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+  import { cardSend, cardReceive, motionDur } from "../../motion";
 
   let {
     onOpenChatWithSeed,
@@ -54,17 +56,8 @@
     }
   }
 
-  onMount(async () => {
-    await reload();
-    // Consume a one-shot Home → Library request: open a specific
-    // notebook (on its Ask tab) or jump straight into the Add sheet.
-    const nav = libraryNav.take();
-    if (nav?.openAdd) {
-      showAdd = true;
-    } else if (nav?.notebookId) {
-      const nb = notebooks.find((n) => n.id === nav.notebookId);
-      if (nb) open(nb, "ask");
-    }
+  onMount(() => {
+    void reload();
   });
 
   function open(nb: NotebookSummary, tab: DetailTab) {
@@ -94,7 +87,9 @@
 </script>
 
 {#if showAdd}
-  <AddSheet onClose={closeAdd} {onOpenChatWithSeed} {onDropToChat} />
+  <div class="sheet-host" transition:fly={{ y: 16, duration: motionDur(240), easing: cubicOut }}>
+    <AddSheet onClose={closeAdd} {onOpenChatWithSeed} {onDropToChat} />
+  </div>
 {:else if selected}
   {#key selected.id}
     <NotebookDetail
@@ -143,7 +138,14 @@
       {:else}
         <div class="shelf" role="list">
           {#each notebooks as nb (nb.id)}
-            <div class="card" role="listitem" data-testid="notebook-card" data-notebook-id={nb.id}>
+            <div
+              class="card"
+              role="listitem"
+              data-testid="notebook-card"
+              data-notebook-id={nb.id}
+              in:cardReceive={{ key: nb.id }}
+              out:cardSend={{ key: nb.id }}
+            >
               <button class="card-open" onclick={() => open(nb, "ask")} title={`Ask ${nb.name}`}>
                 <div class="card-top">
                   <span class="card-icon" title={kindTitle(nb.source_kind)}>
@@ -157,7 +159,7 @@
                 <div class="card-meta">
                   <span class="chip">{kindLabel(nb.source_kind)}</span>
                   <span class="dot">·</span>
-                  <span>{nb.doc_count.toLocaleString()} chunks</span>
+                  <span>{nb.doc_count.toLocaleString()} passages</span>
                 </div>
                 <div class="card-fresh">{freshness(nb.updated_unix)}</div>
               </button>
@@ -174,6 +176,11 @@
 {/if}
 
 <style>
+  .sheet-host {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
   .library {
     display: flex;
     flex-direction: column;

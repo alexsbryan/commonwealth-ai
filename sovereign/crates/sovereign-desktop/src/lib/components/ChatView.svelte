@@ -59,6 +59,7 @@
   import NarrationChip from "./NarrationChip.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import CorpusFilterStrip from "./CorpusFilterStrip.svelte";
+  import AskScopeBar from "./AskScopeBar.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
   import PassageContextChip from "./reading/PassageContextChip.svelte";
@@ -71,6 +72,10 @@
     onClearTask: () => void;
     onOpenSettings?: () => void;
     onConversationCreated?: (id: string) => void;
+    /** Suppress the scope bar + filter strip. Set inside a notebook's
+     *  Ask, where scope is locked to the notebook and the header already
+     *  names it — the bar would be redundant. */
+    hideScope?: boolean;
   }
 
   let {
@@ -79,6 +84,7 @@
     onClearTask,
     onOpenSettings,
     onConversationCreated,
+    hideScope = false,
   }: Props = $props();
 
   // ── Starter questions for the empty state ────────────────────
@@ -274,6 +280,11 @@
   // and writes back through its own Tauri call. Tracked here only so
   // the strip can stay reactive across conversation switches.
   let enabledCorpora = $state<string[] | null>(null);
+
+  // Move 1: the scope bar states the active scope in plain language and
+  // reveals the toggle strip on demand. Collapsed by default so the
+  // resting state is a clean one-line "Asking ‹…›", not a row of chips.
+  let scopeExpanded = $state(false);
 
   // Document attachment (picker / legacy ingest). Kept local: nothing
   // else in the app reads it, and it's discarded at send time.
@@ -1360,9 +1371,9 @@
         {/if}
         {#if buildingCorporaCount > 0}
           <p class="empty-building">
-            Building atlas · {buildingCorporaCount} in flight
+            Building the map · {buildingCorporaCount} in progress
             <span class="empty-building-hint">
-              — questions will improve once the atlas is ready.
+              — questions will improve once the map is ready.
             </span>
           </p>
         {/if}
@@ -1461,17 +1472,25 @@
     {/if}
   </div>
 
-  <!-- Persistent corpus picker — between the messages list and the
-       input area so the user can mute Wikipedia mid-thread without
-       leaving the chat. Re-uses CorpusFilterStrip (also rendered in
-       the empty state) so the visual + state model is identical from
-       first paint through every turn. -->
-  <CorpusFilterStrip
-    conversationId={activeConversationId ?? null}
-    initialEnabled={enabledCorpora}
-    ensureConversation={ensureConversation}
-    onChange={(next) => (enabledCorpora = next)}
-  />
+  <!-- Scope, stated in plain language just above the input. The bar is
+       always present (a clean "Asking ‹…›"); clicking it reveals the
+       CorpusFilterStrip — the same toggle chips + state model — to
+       change what the next question reaches. -->
+  {#if !hideScope}
+    <AskScopeBar
+      enabledCorpora={enabledCorpora}
+      expanded={scopeExpanded}
+      onToggle={() => (scopeExpanded = !scopeExpanded)}
+    />
+    {#if scopeExpanded}
+      <CorpusFilterStrip
+        conversationId={activeConversationId ?? null}
+        initialEnabled={enabledCorpora}
+        ensureConversation={ensureConversation}
+        onChange={(next) => (enabledCorpora = next)}
+      />
+    {/if}
+  {/if}
 
   <div class="input-area">
     <PassageContextChip />

@@ -43,9 +43,10 @@ test.describe("inner work surface — Phase 1", () => {
     // Wait long enough for the debounced save to flush (400ms).
     await page.waitForTimeout(600);
 
-    // Exit via the brand-corner mark. We're back in chat.
-    await page.locator(".exit-mark").click();
-    await expect(page.locator(".app-layout")).toBeVisible();
+    // Leave via the rail — Reflect no longer has a back button (the
+    // corner mark now opens past entries). We're back on chat.
+    await page.getByTestId("nav-ask").click();
+    await expect(page.locator(".chat-view")).toBeVisible();
 
     // Re-enter the surface; the draft is restored from localStorage
     // and the same text is visible. The threshold has already played
