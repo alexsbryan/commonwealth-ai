@@ -611,9 +611,11 @@ unless the user opts in to web search or a Commonwealth mesh.
 `StateStore` is decomposed per ISP into focused sub-traits aggregated
 by a single blanket impl: `ConversationStore`, `TaskStore`,
 `MemoryStore`, `RoutingStore`, `DocumentStore`, `CorpusStateStore`,
-`BudgetStore`, `PermissionStore`, `HealthStore`,
+`BudgetStore`, `PermissionStore`, `StepExecutionStore`, `HealthStore`,
 `DocumentSessionStore`, `DocumentAssetStore`, `InsightStore`.
-Callers narrow bounds to what they need.
+Callers narrow bounds to what they need. `StepExecutionStore` is the
+durable per-attempt ledger behind executor replay-safety (below);
+its methods default to no-ops so non-durable mocks are unaffected.
 
 ### Runtime data flow
 
@@ -637,9 +639,41 @@ User message
 ```
 
 `Plan` is a flat JSON DAG (`steps`, `edges`). `StepKind`: `Reason`,
-`Tool`, `UserInput`, `Branch`, `ReasonWithTools`. Planner emits
-`[sample:N:method]` / `[eval:name]` annotations; the executor
-parses them into config.
+`Tool`, `UserInput`, `Branch`, `ReasonWithTools`, `AwaitUserInfo`,
+`Delegate`. Planner emits `[sample:N:method]` / `[eval:name]`
+annotations; the executor parses them into config.
+
+**Delegate — the context-firewall worker (§5.2).** `StepKind::Delegate {
+goal, tools, return_schema, max_iterations }`
+(`executor::Executor::execute_delegate`) runs a scoped rich-param tool loop
+in its OWN context: the worker drives the requested tool subset via the
+`<tool_call>{"name","arguments"}` protocol, the raw observations (a page
+DOM, a sheet's cells) accumulate in the worker's local transcript, and only
+a typed contract — the `return_schema` fields plus an always-present
+`anomalies` channel — flows back to the orchestrator. So the planner
+decides on a compact summary, never a wall of raw output. The
+`{name, arguments}` parser + tool-schema projection are **shared** with the
+recipe-author loop via `crate::tool_loop` (one parser, no drift) — distinct
+from the search-shaped `{tool, query}` loop in `executor.rs` that
+`ReasonWithTools` uses. Firewall proven by
+`sovereign-store/tests/delegate_firewall.rs`. (v1: the worker's internal
+tool calls go straight to `tool.execute`, bypassing the idempotency ledger
+above — threading #4 into the worker loop is a follow-on.)
+
+**Idempotency ledger (executor replay-safety).** Before a
+`NonIdempotent` tool step runs, the executor writes a durable `Started`
+`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
+idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
+after the side-effect returns. On resume the guard reads that key: a
+`Completed` row means the action already ran — a replan re-runs from an
+empty completed-set, so this is the path that would otherwise re-send —
+and is skipped with its recorded result; a `Started`-but-not-`Completed`
+row means a crash interrupted it mid-flight, so the executor halts and
+surfaces for review rather than blind-replaying a non-idempotent
+side-effect (an email sent twice). The key is content-derived, not
+`(task, step_id)`, so it matches across a replan that re-issues the same
+action under a new step id. Proven exactly-once both ways by
+`sovereign-store/tests/step_execution_replay.rs`.
 
 The router emits **facts**; the runtime applies **policy**.
 Splitting them keeps classification testable without a model and
@@ -828,7 +862,15 @@ Each MCP tool's descriptor is enriched (`McpToolAdapter` synthesizes an example
 call from the input schema + passes through any `outputSchema`) so the planner
 reliably emits a tool step instead of a reason step; tools declare
 `Permission::Network`, so the executor's approval gate fires on first use
-(add-time trust on the auto-approving CLI). The config DTO lives in
+(add-time trust on the auto-approving CLI). `McpToolAdapter` also infers each
+tool's `effect`/`idempotency` from its name (`infer_behaviour`) — read verbs
+(`get_`/`list_`/`snapshot`/`navigate`/…) → Read/Idempotent, mutation verbs
+(`create_`/`click`/`type`/`submit`/…) → Write/NonIdempotent — so a browser
+`click` that submits a form picks up the approval gate + replay ledger while a
+`snapshot` read does not. Driving a real browser via `@playwright/mcp` (the
+first heterogeneous-app actuator) is a runbook:
+[`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md), proven live by
+`sovereign-tools/tests/playwright_actuator.rs`. The config DTO lives in
 `sovereign-core::mcp_config` (so `SetupConfig` can carry it without a crate
 cycle) and is re-exported from `sovereign_tools::mcp`. `sovereign mcp
 demo-server` runs a sealed-fact reference server
@@ -953,6 +995,7 @@ traversal). The desktop app registers as the system handler.
 | Architectural-correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md), [`docs/GIT_ARCHAEOLOGY.md`](./docs/GIT_ARCHAEOLOGY.md), [`docs/ARCHAEOLOGY_EVAL.md`](./docs/ARCHAEOLOGY_EVAL.md), [`docs/PLAN_ALIGNMENT.md`](./docs/PLAN_ALIGNMENT.md) |
 | Knowledge bases + tiered retrieval | [`docs/KNOWLEDGE_BASES.md`](./docs/KNOWLEDGE_BASES.md), [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md) |
+| Browser actuation (MCP → Playwright) | [`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md) |
 | TDD machine | [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md), [`docs/TDD_MACHINE_DESIGN.md`](./docs/TDD_MACHINE_DESIGN.md) |
 | Solver design | [`docs/SOLVER_DESIGN.md`](./docs/SOLVER_DESIGN.md) |
 | Local corpora / Obsidian / watched folders | `sovereign-tools/src/local_corpus/` — invariants pinned via tests in that crate |

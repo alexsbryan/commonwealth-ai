@@ -12245,6 +12245,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "deadpool-postgres",
+ "futures",
  "postgres-types",
  "rusqlite",
  "serde",

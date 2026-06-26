@@ -77,6 +77,8 @@ pub use code::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use code::SessionReflectionTool;
 #[cfg(feature = "treesitter")]
+pub use code::CapabilityMapTool;
+#[cfg(feature = "treesitter")]
 pub use code::SymbolLookupTool;
 #[cfg(feature = "treesitter")]
 pub use code::{

@@ -180,6 +180,28 @@ pub enum StepKind {
         available_tools: Vec<ToolId>,
         max_iterations: usize,
     },
+    /// Delegate a focused subtask to a context-firewall worker. The worker
+    /// runs a scoped rich-param tool loop in its OWN context — the raw tool
+    /// observations (a page DOM, a spreadsheet's cells) accumulate inside the
+    /// worker and never reach the orchestrator. It returns ONLY a typed
+    /// summary matching `return_schema` plus an `anomalies` channel, so the
+    /// orchestrator decides on a compact contract, not a wall of raw output.
+    /// This is the §5.2 context-firewall: isolate where context is large and
+    /// coupling is low ("pull four figures out of an 80-page PDF"). Unlike
+    /// `ReasonWithTools` (a search loop keyed on `{query}`), the worker drives
+    /// rich-param tools via the `{name, arguments}` protocol, so it can
+    /// actuate (browser, etc.).
+    Delegate {
+        /// The subtask, as a self-contained instruction to the worker.
+        goal: String,
+        /// The tool subset the worker may use (least privilege).
+        tools: Vec<ToolId>,
+        /// JSON schema the worker's structured return is constrained to. An
+        /// `anomalies` string field is always added (the surprises channel).
+        return_schema: serde_json::Value,
+        /// Worker loop bound, like `ReasonWithTools`'s `max_iterations`.
+        max_iterations: usize,
+    },
     /// Asynchronously surface a structured information request to the user
     /// and suspend the task until the user either pastes relevant content
     /// or skips. Unlike `UserInput` (which asks a short free-form question),
@@ -327,6 +349,78 @@ pub enum TaskStatus {
     Paused,
     Completed,
     Failed,
+}
+
+// ─── Step Execution (durable attempt ledger) ───────────────────
+
+/// One durable record of an *attempt* to run a plan step's side effect —
+/// the replay-safety + audit anchor that [`Task::completed_steps`] (a
+/// success-only cache) cannot provide.
+///
+/// The executor writes a `Started` row **before** a write-effectful tool
+/// runs and flips it to `Completed` **after** it returns. The gap between
+/// those two writes is the crash-replay hazard: if the process dies after
+/// the side effect but before the row completes, on resume a
+/// `Started`-but-not-terminal row for a `NonIdempotent` tool tells the
+/// executor "this may already have run — do not blind-replay."
+///
+/// `summary` + `anomalies` are the compressed, decision-relevant return
+/// (the context-firewall hot path); the bulky raw observation lives as an
+/// artifact addressed by handle elsewhere, never inline here.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepExecution {
+    /// Unique per attempt; a resume that re-runs the step writes a new row.
+    pub id: String,
+    pub task_id: TaskId,
+    pub step_id: usize,
+    /// The tool whose side effect this attempt ran (empty for non-tool steps).
+    pub tool_id: String,
+    pub status: ExecutionStatus,
+    /// Stable per `(task_id, step_id)` so a replay carries the same key —
+    /// the handle a downstream service can dedupe on. v1 derives it as
+    /// `"{task_id}:{step_id}"`; tools may later supply a content-derived key.
+    pub idempotency_key: String,
+    /// Compressed, decision-relevant result. `None` until terminal.
+    pub summary: Option<String>,
+    /// Dedicated channel for surprises the next decision must see
+    /// (partial success, unexpected state, skipped sub-work).
+    pub anomalies: Option<String>,
+    pub started_at: i64,
+    /// `None` while `Started`; set when the row reaches `Completed`/`Failed`.
+    pub ended_at: Option<i64>,
+}
+
+/// Lifecycle of a single [`StepExecution`]. `Started` is the danger state
+/// on resume; `Completed` / `Failed` are terminal and replay-safe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutionStatus {
+    Started,
+    Completed,
+    Failed,
+}
+
+impl ExecutionStatus {
+    /// Canonical DB string. SSOT for the persisted form (ARCH §2.1) — the
+    /// stores call this instead of re-listing the mapping per backend.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExecutionStatus::Started => "started",
+            ExecutionStatus::Completed => "completed",
+            ExecutionStatus::Failed => "failed",
+        }
+    }
+
+    /// Parse a persisted status. An unrecognized value falls back to
+    /// `Started` — the conservative choice: an unparseable row is treated
+    /// as possibly-in-flight (suspends) rather than silently "done".
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "completed" => ExecutionStatus::Completed,
+            "failed" => ExecutionStatus::Failed,
+            _ => ExecutionStatus::Started,
+        }
+    }
 }
 
 // ─── Memory Types ──────────────────────────────────────────────

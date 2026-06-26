@@ -8,7 +8,8 @@ use tokio::sync::RwLock;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
     BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore, DocumentSessionStore,
-    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
+    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore,
+    StepExecutionStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -41,6 +42,8 @@ pub struct InMemoryStateStore {
     routing_log: RwLock<Vec<RoutingLogEntry>>,
     corpus_states: RwLock<HashMap<String, CorpusState>>,
     search_budgets: RwLock<HashMap<String, SearchBudget>>,
+    /// Durable per-attempt ledger (replay safety + audit). See `StepExecutionStore`.
+    step_executions: RwLock<Vec<StepExecution>>,
 }
 
 impl InMemoryStateStore {
@@ -55,6 +58,7 @@ impl InMemoryStateStore {
             routing_log: RwLock::new(Vec::new()),
             corpus_states: RwLock::new(HashMap::new()),
             search_budgets: RwLock::new(HashMap::new()),
+            step_executions: RwLock::new(Vec::new()),
         }
     }
 }
@@ -189,6 +193,49 @@ impl TaskStore for InMemoryStateStore {
             .get(id)
             .cloned()
             .ok_or_else(|| Error::NotFound(format!("Task {id}")))
+    }
+}
+
+#[async_trait]
+impl StepExecutionStore for InMemoryStateStore {
+    async fn record_started(&self, execution: &StepExecution) -> Result<()> {
+        self.step_executions.write().await.push(execution.clone());
+        Ok(())
+    }
+
+    async fn mark_completed(
+        &self,
+        execution_id: &str,
+        summary: Option<String>,
+        anomalies: Option<String>,
+    ) -> Result<()> {
+        let mut execs = self.step_executions.write().await;
+        if let Some(e) = execs.iter_mut().find(|e| e.id == execution_id) {
+            e.status = ExecutionStatus::Completed;
+            e.summary = summary;
+            e.anomalies = anomalies;
+            e.ended_at = Some(now());
+        }
+        Ok(())
+    }
+
+    async fn mark_failed(&self, execution_id: &str, message: &str) -> Result<()> {
+        let mut execs = self.step_executions.write().await;
+        if let Some(e) = execs.iter_mut().find(|e| e.id == execution_id) {
+            e.status = ExecutionStatus::Failed;
+            e.anomalies = Some(message.to_string());
+            e.ended_at = Some(now());
+        }
+        Ok(())
+    }
+
+    async fn find_execution(&self, idempotency_key: &str) -> Result<Option<StepExecution>> {
+        let execs = self.step_executions.read().await;
+        Ok(execs
+            .iter()
+            .filter(|e| e.idempotency_key == idempotency_key)
+            .max_by_key(|e| e.started_at)
+            .cloned())
     }
 }
 

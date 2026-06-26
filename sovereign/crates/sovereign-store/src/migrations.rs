@@ -60,6 +60,26 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
             updated_at      INTEGER NOT NULL
         );
 
+        -- Durable per-attempt ledger (replay safety + audit anchor).
+        -- A 'started' row is written before a step's side effect and
+        -- flipped to 'completed'/'failed' after — the gap between the two
+        -- is the crash-replay guard (see StepExecutionStore).
+        CREATE TABLE IF NOT EXISTS step_executions (
+            id              TEXT PRIMARY KEY,
+            task_id         TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            step_id         INTEGER NOT NULL,
+            tool_id         TEXT NOT NULL DEFAULT '',
+            status          TEXT NOT NULL CHECK(status IN ('started', 'completed', 'failed')),
+            idempotency_key TEXT NOT NULL DEFAULT '',
+            summary         TEXT,
+            anomalies       TEXT,
+            started_at      INTEGER NOT NULL,
+            ended_at        INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_step_exec_key
+            ON step_executions(idempotency_key);
+
         -- RAG: document store and embeddings
         CREATE TABLE IF NOT EXISTS documents (
             id          TEXT PRIMARY KEY,

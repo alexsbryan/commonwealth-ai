@@ -30,12 +30,17 @@
 //! corpus-engine's own internal users — `update::watch::CodeWatcher`,
 //! `enrichment::atlas::strategies::code_walk`).
 
+pub mod capability_map;
 pub mod error;
 pub mod scip_export;
 pub mod scip_graph;
 mod scip_proto;
 pub mod trace;
 
+pub use capability_map::{
+    build as build_capability_map, Capability, CapabilityMap, EntryPointProvider, MapOptions,
+    ProviderKind,
+};
 pub use error::{Error, Result};
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,

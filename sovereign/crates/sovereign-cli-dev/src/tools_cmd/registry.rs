@@ -174,6 +174,8 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
             .with_health_checker(Arc::clone(&health_checker)),
     ));
+    // Capability map — derived "what the codebase does" overview.
+    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
     // Work atlas — coordination layer for agents sharing the repo.
     // Best-effort: the canonical mesh.db (the same one the daemon
     // writes to) lives at `.sovereign/mesh.db`. Falling back to
