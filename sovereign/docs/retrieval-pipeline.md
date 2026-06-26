@@ -39,7 +39,7 @@ dated convergence/divergence log.
 | 15 | `dedupe_merged` | — |
 | 16 | `cap_and_reserve` | — |
 | 17 | `governance_active_set` | — |
-| 18 | `dim_mismatch_disclosure` | — |
+| 18 | `readiness_disclosure` | — |
 | 19 | `truncate_merged` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
@@ -63,7 +63,7 @@ dated convergence/divergence log.
 | 15 | `dedupe_merged` | — |
 | 16 | `cap_and_reserve` | — |
 | 17 | `governance_active_set` | — |
-| 18 | `dim_mismatch_disclosure` | — |
+| 18 | `readiness_disclosure` | — |
 | 19 | `truncate_merged` | — |
 | 20 | `top_sources_expand` | — |
 
@@ -83,7 +83,7 @@ dated convergence/divergence log.
 | 10 | `dedupe_merged` | — |
 | 11 | `cap_and_reserve` | — |
 | 12 | `governance_active_set` | — |
-| 13 | `dim_mismatch_disclosure` | — |
+| 13 | `readiness_disclosure` | — |
 | 14 | `truncate_merged` | — |
 | 15 | `top_sources_expand` | — |
 
@@ -107,6 +107,7 @@ asserts every step-level gate appears here.
 | atom_enum | `SOVEREIGN_ATOM_ENUM_SCORE` | see helper | Score stamped on enumerated virtual chunks. |
 | atom_enum | `SOVEREIGN_ATOM_ENUM_NOFILTER` | off | Disable the enumeration-question classifier filter. |
 | atom_enum | `SOVEREIGN_ATOM_ENUM_RELATIONS` | off | Include relation atoms in the enumeration. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_OVERVIEW` | on | Overview/summary questions ("most important thing in X", "summarize X") inject the scoped corpus's atlas Claim atoms as virtual chunks (the corpus's key points) so the answer grounds on them instead of abstaining over an anchorless pool. Default ON (set =0 to disable). Independent of SOVEREIGN_ATOM_ENUM; detected by question shape (no LLM call). |
 | raptor_grounding_early | `SOVEREIGN_RAPTOR_GROUNDING` | on | RAPTOR collapsed-tree summary nodes injected as virtual chunks. SOVEREIGN_RAPTOR_LATE picks early (pre-merge) vs late (post-rerank) injection. |
 | raptor_grounding_early | `SOVEREIGN_RAPTOR_LATE` | on | Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. |
 | raptor_grounding_early | `SOVEREIGN_RAPTOR_TOP_M` | see helper | Top-M summary nodes injected. |

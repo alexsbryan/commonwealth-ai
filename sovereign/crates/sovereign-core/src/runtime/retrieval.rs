@@ -574,7 +574,29 @@ impl Runtime {
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         use corpus_engine::enrichment::atlas::AtomEnvelope;
 
-        if std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() != Some("1") {
+        let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
+        // Default ON (parity push — surface atlas Claims for overview questions
+        // in desktop + bench). Set SOVEREIGN_ATOM_ENUM_OVERVIEW=0 to disable.
+        let overview_on =
+            std::env::var("SOVEREIGN_ATOM_ENUM_OVERVIEW").ok().as_deref() != Some("0");
+        if !atom_enum_on && !overview_on {
+            return None;
+        }
+        // Overview/summary path (default ON; SOVEREIGN_ATOM_ENUM_OVERVIEW=0 disables).
+        // An overview question ("what is the most important thing in X", "give
+        // me an overview / summary of …") names no entity to enumerate, so the
+        // entity classifier below would (correctly) decline — and the answer
+        // then abstains or confabulates over a diffuse, anchorless chunk pool.
+        // But the corpus's atlas Claim atoms ARE its key points; inject them as
+        // grounding so the answer is built from the corpus's own assertions.
+        // Detected by question shape (no LLM call); returns before the
+        // enumerate classify.
+        if overview_on && Self::looks_like_overview(message) {
+            return self
+                .enumerate_overview_claim_chunks(message, enabled_corpora)
+                .await;
+        }
+        if !atom_enum_on {
             return None;
         }
         // Need the atlas graph to enumerate against; bail before the
@@ -1164,6 +1186,156 @@ impl Runtime {
             "retrieval_audit: atom_enum directed-fetch"
         );
         Some(chunks)
+    }
+
+    /// Overview/summary grounding: inject the scoped corpus's atlas Claim
+    /// atoms as compact virtual chunks. An overview question has no entity
+    /// anchor, so normal retrieval returns a diffuse pool the grounding gate
+    /// can't tie to "the most important thing" — and the answer abstains or
+    /// confabulates a theme. The atlas Claims ARE the corpus's key points
+    /// (e.g. maple-house's 67 charter rules), pre-extracted and grounded by
+    /// construction. Tagged `source=atom-enum` so the `cap_and_reserve`
+    /// atom-enum reserve carries them through truncation (their reweight score
+    /// is irrelevant — an overview query has no lexical anchor to reweight on).
+    /// Claims that carry a verbatim `quotable_excerpt` rank first (the answer
+    /// can quote the corpus's own words); `confidence` breaks ties. Returns
+    /// `None` when the scoped corpus holds no Claim atoms (entity-only atlas,
+    /// or none) so the caller falls through to the normal pool. Gated by
+    /// `SOVEREIGN_ATOM_ENUM_OVERVIEW`.
+    async fn enumerate_overview_claim_chunks(
+        &self,
+        message: &str,
+        enabled_corpora: Option<&[String]>,
+    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
+        use corpus_engine::enrichment::atlas::AtomEnvelope;
+        let provider = self.atlas_context_provider.as_ref()?;
+        let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&k| k > 0 && k <= 100)
+            .unwrap_or(16);
+        let enum_score: f32 = std::env::var("SOVEREIGN_ATOM_ENUM_SCORE")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|&s| s > 0.0)
+            .unwrap_or(0.04);
+        let corpus_ids: Vec<String> = match enabled_corpora {
+            Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
+            _ => provider.loaded_corpus_ids(),
+        };
+        struct ClaimCand {
+            content: String,
+            excerpt: Option<String>,
+            corpus: String,
+            has_excerpt: bool,
+            confidence: f32,
+        }
+        let mut cands: Vec<ClaimCand> = Vec::new();
+        for id in &corpus_ids {
+            let Some(graph) = provider.graph(id) else {
+                continue;
+            };
+            for atom in graph.atoms_by_id.values() {
+                let AtomEnvelope::Claim(c) = atom else {
+                    continue;
+                };
+                let content = c.content.trim();
+                if content.is_empty() {
+                    continue;
+                }
+                let excerpt = c
+                    .quotable_excerpt
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                cands.push(ClaimCand {
+                    content: content.to_string(),
+                    has_excerpt: excerpt.is_some(),
+                    excerpt,
+                    corpus: id.clone(),
+                    confidence: c.confidence.unwrap_or(0.5),
+                });
+            }
+        }
+        if cands.is_empty() {
+            return None;
+        }
+        // Prefer claims with a verbatim source quote (the answer can ground in
+        // the corpus's own words), then higher extraction confidence.
+        cands.sort_by(|a, b| {
+            b.has_excerpt.cmp(&a.has_excerpt).then_with(|| {
+                b.confidence
+                    .partial_cmp(&a.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        });
+        cands.truncate(top_k);
+        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::with_capacity(cands.len());
+        for (i, c) in cands.iter().enumerate() {
+            let content = match &c.excerpt {
+                Some(q) => format!("{}\n\nSource quote: \"{}\"", c.content, q),
+                None => c.content.clone(),
+            };
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert("source".to_string(), "atom-enum".to_string());
+            metadata.insert("atom_type".to_string(), "claim".to_string());
+            chunks.push(corpus_engine::ScoredChunk {
+                content,
+                title: Some(format!("{} — key point", c.corpus)),
+                url: None,
+                corpus_id: c.corpus.clone(),
+                // Gentle taper preserves the quote-first / confidence order
+                // before reweight; the cap reserve (not the score) is what
+                // carries these through truncation.
+                score: enum_score * 0.99_f32.powi(i as i32),
+                metadata,
+                chunk_id: None,
+                source_doc_id: None,
+                vector_distance: None,
+            });
+        }
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "atom_enum_overview",
+            query = %truncate_with_ellipsis(message, 120),
+            count = chunks.len(),
+            corpora = ?corpus_ids,
+            "retrieval_audit: atom_enum overview-claim injection"
+        );
+        Some(chunks)
+    }
+
+    /// Question-shape heuristic for the overview/summary claim path. No LLM
+    /// call — a corpus-level "what matters here" ask is recognisable from
+    /// phrasing alone, and keeping it cheap means it can run on every turn the
+    /// flag is set. Deliberately broad: a false positive just augments the
+    /// pool with the corpus's key points (bounded, atom-enum-tagged), which is
+    /// harmless; a false negative falls through to normal retrieval.
+    fn looks_like_overview(message: &str) -> bool {
+        let m = message.to_lowercase();
+        const MARKERS: &[&str] = &[
+            "most important",
+            "summar", // summary / summarize / summarise
+            "overview",
+            "main point",
+            "main idea",
+            "main theme",
+            "main takeaway",
+            "key point",
+            "key idea",
+            "key theme",
+            "key takeaway",
+            "the gist",
+            "tell me about",
+            "what is this about",
+            "what's this about",
+            "what is it about",
+            "what are these about",
+            "high level",
+            "high-level",
+        ];
+        MARKERS.iter().any(|k| m.contains(k))
     }
 
     /// Re-rank conv-corpus chunks via Personalized PageRank over each
@@ -2098,15 +2270,33 @@ impl Runtime {
         // (knowledge) index serves its BM25 results.
         let query_dims = embedding.len();
         let total_indexes = indexes.len();
-        let eligible: Vec<_> = if query_dims == 0 {
-            indexes
-        } else {
-            indexes
-                .into_iter()
-                .filter(|info| {
-                    if info.embedding_dimensions == query_dims {
-                        true
-                    } else {
+        let eligible: Vec<_> = indexes
+            .into_iter()
+            .filter(|info| {
+                // Readiness: an index that never finished building (ingest
+                // stalled / sync paused) has no searchable content — skip it on
+                // EVERY path so the model can't fabricate over the void. The
+                // readiness disclosure step surfaces a rebuild prompt when the
+                // SCOPED corpus is the cause.
+                if !info.indexes_built {
+                    tracing::debug!(
+                        corpus = %info.corpus_id,
+                        "{label}: skipping corpus — index not built (rebuild/resume needed)"
+                    );
+                    return false;
+                }
+                // The vector + dimension checks apply only to the vector path
+                // (query_dims != 0); the FTS-only path keeps every built index
+                // so it can still serve its BM25 results.
+                if query_dims != 0 {
+                    if !info.vector_index_built {
+                        tracing::debug!(
+                            corpus = %info.corpus_id,
+                            "{label}: skipping corpus — vector index missing (rebuild needed)"
+                        );
+                        return false;
+                    }
+                    if info.embedding_dimensions != query_dims {
                         tracing::debug!(
                             corpus = %info.corpus_id,
                             stored_dims = info.embedding_dimensions,
@@ -2114,11 +2304,12 @@ impl Runtime {
                             embedding_model = %info.embedding_model,
                             "{label}: skipping corpus — embedding-dimension mismatch"
                         );
-                        false
+                        return false;
                     }
-                })
-                .collect()
-        };
+                }
+                true
+            })
+            .collect();
         if eligible.len() < total_indexes {
             tracing::info!(
                 eligible = eligible.len(),
@@ -4391,6 +4582,7 @@ mod allow_list_tests {
             update_manifest_url: None,
             kind: corpus_engine::CorpusKind::Knowledge,
             parent_corpus_id: parent.map(String::from),
+            indexes_built: true,
             vector_index_built: true,
             canonical_fingerprint: None,
             total_shards: None,
@@ -4468,5 +4660,34 @@ mod allow_list_tests {
         let mut bleed = corpora_outside_seal(&chunks, Some(&allow_wiki));
         bleed.sort_unstable();
         assert_eq!(bleed, vec!["atlas:sep", "sep"]);
+    }
+
+    #[test]
+    fn looks_like_overview_detects_summary_questions() {
+        use super::Runtime;
+        // Overview/summary phrasings → true: these are the anchorless
+        // "what matters here" questions that should ground on the corpus's
+        // atlas Claim atoms instead of abstaining over a diffuse pool.
+        for q in [
+            "What is the most important thing in the maple-house material, and why?",
+            "Give me an overview of this corpus.",
+            "Summarize what this material is mainly about.",
+            "What are the main points here?",
+            "Tell me about the sep corpus.",
+            "What's the gist?",
+            "Give me a high-level summary.",
+        ] {
+            assert!(Runtime::looks_like_overview(q), "expected overview: {q:?}");
+        }
+        // Specific, anchored questions → false: these retrieve normally and
+        // must NOT trip the claim-injection path.
+        for q in [
+            "What does the charter say about smoking?",
+            "In what year did the Great Depression begin?",
+            "What is the value of FILES_COLUMN_WIDTH?",
+            "Who led the negotiation?",
+        ] {
+            assert!(!Runtime::looks_like_overview(q), "expected NOT overview: {q:?}");
+        }
     }
 }

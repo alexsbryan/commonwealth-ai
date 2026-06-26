@@ -821,6 +821,7 @@ impl CorpusIndex {
             source_version: meta.source_version,
             update_manifest_url: meta.update_manifest_url,
             kind,
+            indexes_built: meta.indexes_built,
             vector_index_built: meta.vector_index_built,
             canonical_fingerprint: meta.canonical_fingerprint,
             total_shards: meta.total_shards,

@@ -363,6 +363,15 @@ pub struct IndexInfo {
     /// stand-alone corpora.
     #[serde(default)]
     pub parent_corpus_id: Option<String>,
+    /// Whether the full index build completed for this corpus. Mirrors
+    /// `IndexMeta.indexes_built` from `_corpus_meta.json`. `false` means
+    /// the ingest/build never finished (e.g. a sync that paused
+    /// mid-build): the corpus has few-or-no searchable chunks and must
+    /// be rebuilt or resumed before it can serve retrieval. Surfaced
+    /// here so the retrieval readiness gate can skip it and the desktop
+    /// can flag it, without re-reading the meta file.
+    #[serde(default)]
+    pub indexes_built: bool,
     /// Whether the IVF-PQ vector index has been built for this corpus.
     /// Mirrors `IndexMeta.vector_index_built` from
     /// `_corpus_meta.json` — exposed here so desktop callers don't
