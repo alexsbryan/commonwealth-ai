@@ -215,6 +215,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_SCORE", default: "see helper", purpose: "Score stamped on enumerated virtual chunks." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_NOFILTER", default: "off", purpose: "Disable the enumeration-question classifier filter." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_RELATIONS", default: "off", purpose: "Include relation atoms in the enumeration." }),
+        ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_OVERVIEW", default: "on", purpose: "Overview/summary questions (\"most important thing in X\", \"summarize X\") inject the scoped corpus's atlas Claim atoms as virtual chunks (the corpus's key points) so the answer grounds on them instead of abstaining over an anchorless pool. Default ON (set =0 to disable). Independent of SOVEREIGN_ATOM_ENUM; detected by question shape (no LLM call)." }),
         ("raptor_grounding_early", FLAG_RAPTOR_GROUNDING),
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_LATE", default: "on", purpose: "Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge." }),
         ("raptor_grounding_early", EnvFlag { name: "SOVEREIGN_RAPTOR_TOP_M", default: "see helper", purpose: "Top-M summary nodes injected." }),
@@ -540,18 +541,34 @@ fn step_governance_active_set<'a, 'ctx>(
     })
 }
 
-/// Dim-mismatch glassbox (2026-06-25): when retrieval comes up EMPTY, a SCOPED
-/// corpus may have been silently SKIPPED because its index was built with a
-/// different embedding model — the index dims can't compare to the loaded model,
-/// so it's excluded from `eligible` and `corpora_searched=0`. Without this the
-/// model fabricates over a corpus it never searched (KnowledgeQuery) or goes
-/// agentic and leaks `<tool_code>` (DeepQuery). Inject a synthetic disclosure
-/// chunk so EVERY synthesis path sharing this core relays the actionable cause —
-/// and the now-non-empty result also stops the deep path from going agentic. The
-/// user learns their corpus is stale instead of getting a confident wrong answer.
-/// Reuses `installed_indexes` (the same per-corpus dims the desktop startup guard
-/// probes); inert whenever retrieval found anything.
-fn step_dim_mismatch_disclosure<'a, 'ctx>(
+/// Why a scoped corpus couldn't serve retrieval — drives the readiness
+/// disclosure message below. Mirrors the skip reasons in the eligibility
+/// filter (`prepare_knowledge_context`) so what gets skipped is what gets
+/// disclosed.
+enum ReadinessIssue {
+    /// The index build never finished (ingest stalled / sync paused).
+    NotBuilt,
+    /// The build finished but the vector index was never written.
+    NoVectorIndex,
+    /// Built with a different embedding model than the one now loaded.
+    DimMismatch { built: usize },
+}
+
+/// Corpus-readiness glassbox: when retrieval comes up EMPTY, a SCOPED corpus
+/// may have been silently SKIPPED because it isn't ready to serve — its index
+/// never finished building (ingest stalled / sync paused), its vector index is
+/// missing, or it was built with a different embedding model (dims can't
+/// compare to the loaded model). Any of these excludes it from `eligible` and
+/// leaves `corpora_searched=0`. Without this the model fabricates over a corpus
+/// it never searched (KnowledgeQuery) or goes agentic and leaks `<tool_code>`
+/// (DeepQuery). Inject a synthetic disclosure chunk so EVERY synthesis path
+/// sharing this core relays the actionable cause — and the now-non-empty result
+/// also stops the deep path from going agentic. The user learns their corpus is
+/// stale/unbuilt instead of getting a confident wrong answer. Reuses
+/// `installed_indexes` (the same per-corpus readiness the desktop startup guard
+/// probes) and mirrors the eligibility filter; inert whenever retrieval found
+/// anything.
+fn step_readiness_disclosure<'a, 'ctx>(
     rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
@@ -568,41 +585,70 @@ fn step_dim_mismatch_disclosure<'a, 'ctx>(
             None => return StepOutcome::default(),
         };
         let scoped = st.enabled_corpora;
-        let mismatch = engine.installed_indexes().await.ok().and_then(|idx| {
+        // Find the SCOPED corpus (if any) that couldn't serve retrieval, and why.
+        // Only disclose a corpus the user actually SCOPED to — an unscoped
+        // (search-everything) empty result shouldn't single out one stale corpus
+        // the question may have nothing to do with.
+        let unready = engine.installed_indexes().await.ok().and_then(|idx| {
             idx.into_iter()
-                .find(|info| {
-                    // Only disclose the corpus the user actually SCOPED to — an
-                    // unscoped (search-everything) empty result shouldn't single
-                    // out one stale corpus the question may have nothing to do
-                    // with. Verified scoped case (`Some([corpus])`) is unchanged.
-                    let in_scope =
-                        scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id));
-                    in_scope
-                        && info.embedding_dimensions != 0
-                        && info.embedding_dimensions != loaded_dims
+                .filter(|info| {
+                    scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id))
                 })
-                .map(|info| (info.corpus_id, info.embedding_dimensions))
+                .find_map(|info| {
+                    let issue = if !info.indexes_built {
+                        ReadinessIssue::NotBuilt
+                    } else if !info.vector_index_built {
+                        ReadinessIssue::NoVectorIndex
+                    } else if info.embedding_dimensions != 0
+                        && info.embedding_dimensions != loaded_dims
+                    {
+                        ReadinessIssue::DimMismatch {
+                            built: info.embedding_dimensions,
+                        }
+                    } else {
+                        return None;
+                    };
+                    Some((info.corpus_id, issue))
+                })
         });
-        let (corpus, built) = match mismatch {
-            Some(m) => m,
+        let (corpus, issue) = match unready {
+            Some(u) => u,
             None => return StepOutcome::default(),
+        };
+        let (reason, cause) = match issue {
+            ReadinessIssue::NotBuilt => (
+                "index_not_built",
+                "its index has not finished building (an ingest or sync may have \
+                 paused), so it has no searchable content yet"
+                    .to_string(),
+            ),
+            ReadinessIssue::NoVectorIndex => (
+                "vector_index_missing",
+                "its search index is incomplete — the vector index was never built"
+                    .to_string(),
+            ),
+            ReadinessIssue::DimMismatch { built } => (
+                "dim_mismatch",
+                format!(
+                    "its index was built with a different embedding model \
+                     ({built}-dimensional vs the current {loaded_dims}-dimensional)"
+                ),
+            ),
         };
         tracing::info!(
             target: "retrieval.pipeline",
             corpus = %corpus,
-            built_dims = built,
+            reason,
             loaded_dims,
-            "{}: dim-mismatch glassbox — scoped corpus skipped; injecting rebuild disclosure",
+            "{}: readiness glassbox — scoped corpus skipped; injecting rebuild disclosure",
             st.label
         );
         let content = format!(
             "SYSTEM NOTE (corpus unavailable): The \"{corpus}\" material the user is \
-             asking about could NOT be searched — its index was built with a \
-             different embedding model ({built}-dimensional vs the current \
-             {loaded_dims}-dimensional), so it was skipped entirely. Tell the user \
-             this plainly and ask them to rebuild it in Settings → Knowledge → \
-             Rebuild. Do NOT answer the question from general knowledge and do NOT \
-             invent an answer."
+             asking about could NOT be searched — {cause}, so it was skipped \
+             entirely. Tell the user this plainly and ask them to rebuild it in \
+             Settings → Knowledge → Rebuild. Do NOT answer the question from \
+             general knowledge and do NOT invent an answer."
         );
         st.chunks.push(corpus_engine::ScoredChunk {
             content,
@@ -616,7 +662,7 @@ fn step_dim_mismatch_disclosure<'a, 'ctx>(
             vector_distance: None,
         });
         StepOutcome {
-            note: Some("injected dim-mismatch rebuild disclosure".to_string()),
+            note: Some("injected corpus-readiness rebuild disclosure".to_string()),
         }
     })
 }
@@ -640,10 +686,11 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         // elsewhere. After the cap, before truncate (see fn doc).
         step("governance_active_set", None, step_governance_active_set),
         // Last core step: sees the FINAL post-retrieval state, so an EMPTY
-        // result here means a scoped corpus may have been skipped for an
-        // embed-model/dims mismatch — inject a rebuild disclosure. Shared by
+        // result here means a scoped corpus may have been skipped because it
+        // isn't ready (index not built, vector index missing, or embed-model/
+        // dims mismatch) — inject a rebuild disclosure. Shared by
         // KnowledgeQuery + DeepQuery + ComparisonQuery (all run this core).
-        step("dim_mismatch_disclosure", None, step_dim_mismatch_disclosure),
+        step("readiness_disclosure", None, step_readiness_disclosure),
     ]
 }
 
@@ -1609,7 +1656,7 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
-                "dim_mismatch_disclosure",
+                "readiness_disclosure",
                 "truncate_merged",
             ]
         );
@@ -1637,7 +1684,7 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
-                "dim_mismatch_disclosure",
+                "readiness_disclosure",
                 "truncate_merged",
                 "top_sources_expand",
             ]
@@ -1652,7 +1699,7 @@ mod tests {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
         // Shared 3-step head + shared 15-step core (the 15th is
-        // `dim_mismatch_disclosure`, added 2026-06-25 — the last core step, inert
+        // `readiness_disclosure` (was `dim_mismatch_disclosure`) — the last core step, inert
         // when retrieval found anything); the pipelines differ ONLY in their tails
         // (KQ: audited truncate; deep: plain truncate + strategy-driven
         // top-sources expansion).

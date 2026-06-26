@@ -1053,11 +1053,11 @@ pub async fn bootstrap_with_progress(
         // Err => embed not configured or failed — skip validation.
         if let Ok(probe_vec) = inference.embed("probe").await {
             let dims = probe_vec.len();
-            if let Err(e) = corpus_engine.validate_embed_dimensions(dims).await {
+            if let Err(e) = corpus_engine.validate_corpus_readiness(dims).await {
                 tracing::warn!(
-                    "Embed dimension mismatch detected at startup: {} \
-                         Retrieval results may be incorrect until the affected \
-                         corpus is rebuilt (Settings → Knowledge → Rebuild).",
+                    "Corpus readiness issue detected at startup: {} \
+                         Retrieval over the affected corpus is skipped (and the \
+                         user prompted to rebuild) until it is fixed.",
                     e
                 );
             }
@@ -1282,6 +1282,26 @@ pub async fn bootstrap_with_progress(
     let mcp_manager = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
     *state.mcp_servers.write().await = Some(Arc::new(mcp_manager));
 
+    // Atlas-grounded retrieval (atom-enum / overview-claim injection): wire the
+    // per-process atlas context manager so the runtime's atom-enum path can
+    // reach the corpus atlas GRAPHS (Claim/Entity atoms). Parity with
+    // `sovereign chat` (chat_cmd/bootstrap.rs) and `sovereign serve` — the
+    // desktop previously left `atlas_context_provider` unset, so the entire
+    // atom-enum path (including the SOVEREIGN_ATOM_ENUM_OVERVIEW claim injection
+    // for "what's the most important thing in X" questions) silently no-op'd
+    // here. `graph()` lazy-PARSES a corpus's atoms on first use, but only for
+    // dirs the `init_from_cache()` scan (below) registered in `graph_dirs` — so
+    // that call is REQUIRED for the claim path, not optional. Cache-only (cold
+    // embed work deferred), so it's a bounded, predictable boot cost.
+    // `inference` must be cloned BEFORE `Runtime::new` consumes it below.
+    let atlas_ctx_mgr = Arc::new(
+        sovereign_tools::atlas_context_manager::AtlasContextManager::new(
+            corpus_engine.index_dir().to_path_buf(),
+            Arc::clone(&inference),
+            embed_model_name.clone(),
+        ),
+    );
+
     emit(BootstrapPhase::BuildingRuntime);
     let mut runtime = Runtime::new(
         inference,
@@ -1293,7 +1313,60 @@ pub async fn bootstrap_with_progress(
         approval,
         inference_config,
     )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
+    .with_corpus_engine(Arc::clone(&corpus_engine))
+    .with_atlas_context_provider(Arc::clone(&atlas_ctx_mgr)
+        as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+    // Discover + register each corpus's atlas dir (and warm any cached
+    // contexts) so the atom-enum path's `graph()` can lazy-load a corpus's
+    // atoms on first use — `graph()` only parses dirs this scan registered.
+    // Cache-only: cold embed work is deferred to the post-install hook, so this
+    // is a bounded, predictable boot cost (parity with the CLI/server).
+    atlas_ctx_mgr.init_from_cache().await;
+    // Wikipedia link graph (Atlas Layer 0) + cross-corpus meta-atlas — parity
+    // with the CLI/server bootstrap (chat_cmd/bootstrap.rs, server main.rs).
+    // Both probe LOCAL build artifacts and no-op when absent, so they're safe
+    // in attach mode (not daemon-owned). Without them the desktop dropped the
+    // wiki graph-expansion and the cross-corpus articulation boost the benches
+    // exercise. (Probe logic mirrors bootstrap.rs `load_wikipedia_graph`;
+    // dedup to a shared crate is a follow-up.)
+    if std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        tracing::debug!("wikipedia_graph: disabled via SOVEREIGN_DISABLE_WIKI_GRAPH");
+    } else if let Ok(infos) = corpus_engine.installed_indexes().await {
+        let idx_dir = corpus_engine.index_dir().to_path_buf();
+        for info in infos {
+            let db_path =
+                corpus_engine::WikipediaGraph::default_db_path(&idx_dir, &info.corpus_id);
+            if !db_path.exists() {
+                continue;
+            }
+            match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
+                Ok(g) => {
+                    runtime = runtime.with_wikipedia_graph(Arc::new(g));
+                    break;
+                }
+                Err(e) => tracing::warn!(
+                    corpus = %info.corpus_id,
+                    error = %e,
+                    "wikipedia_graph: open failed; skipping"
+                ),
+            }
+        }
+    }
+    {
+        let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
+        let meta_atlas =
+            match corpus_engine::meta_atlas::MetaAtlasIndex::load(meta_atlas_path.as_deref()) {
+                Ok(idx) => Arc::new(idx),
+                Err(e) => {
+                    tracing::warn!(error = %e, "meta-atlas: load failed; cross-corpus boost disabled");
+                    Arc::new(corpus_engine::meta_atlas::MetaAtlasIndex::empty())
+                }
+            };
+        runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
+    }
     // Tool-Mastery Layer 3 — NoteStore drives the per-conversation
     // tool_decision write hook (runtime.rs handle_message_stream's
     // post-gap-check spawn) and the Layer-2 dossier read at the

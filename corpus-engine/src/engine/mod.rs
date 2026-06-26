@@ -1643,18 +1643,41 @@ impl CorpusEngine {
         Ok(index)
     }
 
-    /// Validate that all installed indexes were built with the same embedding
-    /// dimensions as the currently loaded model produces.
+    /// Validate that every installed corpus can actually serve retrieval under
+    /// the currently-loaded embed model. Catches the three "not ready"
+    /// conditions that otherwise make a corpus return ~nothing at query time
+    /// (and the model then fabricate over the void):
+    ///   - a different embedding dimension than the loaded model (model swapped),
+    ///   - an index that never finished building (ingest / sync stalled),
+    ///   - a missing vector index.
     ///
-    /// Call this at startup after performing a probe embed to detect
-    /// switched embed models early — before a search call surfaces an
-    /// opaque LanceDB schema error at query time.
+    /// Call this at startup after a probe embed to detect these early — before
+    /// a search call surfaces an opaque error (or, worse, a confident wrong
+    /// answer) at query time.
     ///
-    /// Returns an error naming the first mismatched corpus. The caller
-    /// should surface this as a plain-language warning (not a hard abort)
-    /// so that existing users who switch embed models are not blocked.
-    pub async fn validate_embed_dimensions(&self, loaded_dims: usize) -> Result<()> {
+    /// Returns an error naming the first not-ready corpus. The caller should
+    /// surface this as a plain-language warning (not a hard abort) so users who
+    /// swapped models or have a mid-build corpus are not blocked. Mirrors the
+    /// runtime eligibility filter so the boot warning matches what retrieval
+    /// will skip.
+    pub async fn validate_corpus_readiness(&self, loaded_dims: usize) -> Result<()> {
         for info in self.installed_indexes().await? {
+            if !info.indexes_built {
+                return Err(crate::Error::Database(format!(
+                    "Corpus '{}' has not finished building its index (an ingest \
+                     or sync may have paused), so it can't be searched yet. To \
+                     fix: rebuild or resume it in Settings → Knowledge → Rebuild.",
+                    info.corpus_id,
+                )));
+            }
+            if !info.vector_index_built {
+                return Err(crate::Error::Database(format!(
+                    "Corpus '{}' is missing its vector index (the build did not \
+                     complete). To fix: rebuild it in Settings → Knowledge → \
+                     Rebuild.",
+                    info.corpus_id,
+                )));
+            }
             if info.embedding_dimensions != 0 && info.embedding_dimensions != loaded_dims {
                 return Err(crate::Error::Database(format!(
                     "Corpus '{}' was built with {} embedding dimensions but the \

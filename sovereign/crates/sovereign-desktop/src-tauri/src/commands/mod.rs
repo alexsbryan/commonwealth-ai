@@ -136,6 +136,12 @@ pub struct CorpusEntry {
     /// True when the IVF-PQ vector index is built and semantic search is available.
     /// False means FTS-only search is used (fast but keyword-only).
     pub vector_index_ready: bool,
+    /// True when this corpus is installed but its index never finished
+    /// building (e.g. an ingest or sync that paused) — it returns ~nothing at
+    /// query time, so the runtime skips it and prompts a rebuild. The UI
+    /// should badge such a corpus "needs rebuild" rather than present it as
+    /// healthy. Mirrors the retrieval readiness gate (`indexes_built`).
+    pub needs_rebuild: bool,
     /// URL of the recipe TOML in the public registry. Null for user-added corpora.
     pub registry_url: Option<String>,
     /// Recipe schema version (1 = initial). Used for compatibility checks.

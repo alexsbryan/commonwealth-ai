@@ -26,11 +26,16 @@ corpora like attached documents, by the ingest path that runs them):
 | `field_model` | **System 1 — Field Model (v1)** | 5-phase *holistic, whole-corpus* field analysis (skeleton → cluster → align → fault-lines → open-questions). `Domain` trait. | this doc |
 | `atlas` | **System 2 — Atlas (v2)** | LLM-driven **typed atom graph** (Entity/Claim/Event/Question/…) *per document*. `Pipeline` trait. Writes `atlas/atoms.json`. | [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md) |
 | `tiered` | **System 3 — Tiered retrieval (RAPTOR + GLiNER)** | 3 progressive tiers: T1 embeddings → T2 entity-graph + PPR → T3 **RAPTOR** cluster tree. SQLite-backed. **The gold standard for user-facing corpora.** | [`TIERED_RETRIEVAL.md`](../sovereign/docs/TIERED_RETRIEVAL.md) |
+| _(verb, not a `type`)_ | **System 4 — Code intelligence** | Per-**symbol** intent summaries over a SCIP-indexed *code* corpus + a SCIP call-graph trace injected into chat evidence (the `CodeQuery` route). Plain-English question → right symbol → callers/callees. | [`CODE_INTEL_CHAT.md`](../sovereign/docs/specs/CODE_INTEL_CHAT.md) |
 
 **Dispatch:** `corpus-engine/src/engine/ingest.rs:1581` branches on
 `enrichment_config.enrichment_type == "tiered"`; otherwise the
 `field_model` / `atlas` path runs. Schema: `EnrichmentConfig` in
-`corpus-engine/src/recipe.rs`.
+`corpus-engine/src/recipe.rs`. **System 4 is the exception** — it is not
+selected by `[enrichment] type` at ingest; it is a separate pass run by the
+`sovereign enrich code-intel <corpus>` verb against a corpus that already has a
+SCIP graph (`scip_graph.db`), and unlike Systems 1–3 it has a load-bearing
+*retrieval-time* half (the `CodeQuery` route), not only a build-time one.
 
 **The three are not a version ladder — they coexist by design.** A
 single corpus can even run two (SEP runs `atlas` per-article *and*
@@ -192,6 +197,64 @@ their owner. Optional T3 re-rank: the cluster-score blend
 
 ---
 
+## System 4 — Code intelligence · `sovereign enrich code-intel` · deep-dive [`CODE_INTEL_CHAT.md`](../sovereign/docs/specs/CODE_INTEL_CHAT.md)
+
+**The conceptual→code bridge.** Lets a user ask a plain-English question of a
+SCIP-indexed codebase ("how does inference run", "what calls `gate_answer`",
+"where is X implemented") and get a code-level answer grounded in the
+compiler-resolved call graph — no function names required in the question.
+
+- **Code (build-time pass):** `corpus-engine/src/enrichment/code_intel/` —
+  `mod.rs` (`SymbolEnrichment`, `enrich_symbol`, the intent-forcing prompt,
+  `extract_body`, blake3 `body_hash`), `scip_source.rs` (enumeration),
+  `store.rs` (chunk storage), `pass.rs` (the composed pass + body-hash cache).
+- **The SCIP substrate:** `corpus-engine-scip` — the **lean read crate**
+  (rusqlite + prost, **no tree-sitter grammars**, so the chat runtime can depend
+  on it; the grammars stay in the indexing path that *writes* the graph).
+  `scip_graph.rs` (`caller_qualified_names`, `find_callers`,
+  `find_callees_qualified`), `trace.rs` (`build_symbol_trace` / `render_trace`),
+  `scip_export.rs` (`export_all`; **the body span comes from the occurrence's
+  `enclosing_range`, not its name `range`** — the name range is just the
+  identifier and yields a one-line body).
+- **Enumeration is the call graph, not `kind`.** rust-analyzer's SCIP leaves most
+  Rust fns `unknown`/`trait`, so the pass enumerates the **caller set**
+  (`refs.caller_qualified` — every symbol with a body that calls something),
+  drops `#[cfg(test)] mod tests` fns (a `/tests/` SCIP path segment), and is
+  file-scopable via `--files=a,b`.
+- **What it writes:** one chunk per symbol into the corpus's existing
+  `chunks.lance` — `content` = the user-vocabulary summary + the questions it
+  answers (what retrieval matches), `source_doc_id = "codeintel:<qualified>"`
+  (stable upsert key), metadata `source = "code_intel_summary"`,
+  `content_hash = body_hash` (unchanged body ⇒ no re-embed, no model call).
+  **Unlike RAPTOR (System 3), these summaries DO surface in normal leaf
+  retrieval — that *is* the bridge.**
+- **CLI:** `sovereign enrich code-intel <corpus> [--files=a,b,…]`
+  (`sovereign-cli-llm/src/enrich_cmd/code_intel.rs`). The SCIP graph itself is
+  built/refreshed out-of-band — `sovereign project refresh --local`
+  (`sovereign-cli-dev`, in-process `export_all`) or the daemon's Reindexer.
+- **Retrieval-time half (the load-bearing difference vs Systems 1–3):** a
+  first-class `Intent::CodeQuery` route (`types/routing.rs`) → `handle_code_query`
+  (`sovereign-core/.../handlers/code_query.rs`) **scopes retrieval to code
+  corpora** (detected by `scip_graph.db` presence, kind-tag-independent) so the
+  30+ non-code corpora can't dilute it, then delegates to the knowledge path. At
+  each synthesis-evidence site (`knowledge_query.rs`, the DeepQuery path in
+  `retrieval.rs`, `metalingual.rs`) `code_trace::build_code_trace_block` opens the
+  corpus graph and appends a caller/callee trace for the matched symbols
+  (dyn-dispatch boundaries flagged). `reweight_by_query_relevance` boosts
+  `code_intel_summary` chunks on `vector_distance` (the key `cross_corpus_sort_cmp`
+  actually sorts by) so the user-vocabulary summaries out-rank the far more
+  numerous raw code chunks; a `CODE_SYNTHESIS_DIRECTIVE` steers the model to read
+  callers/callees off the trace.
+- **Status (2026-06-25):** new; validated end-to-end on `commonwealth-ai`
+  (plain-English question → `CodeQuery` → summary-bridge surfaces the right
+  symbols → call-graph trace → cited answer naming callers at file:line). Today
+  the enrichment is **scoped** (run per-file-set, `fast`/Qwopus-4B summaries), not
+  yet a full-corpus default. Distinct from System 2: these are plain-English
+  **per-symbol summaries**, not a typed-atom graph — `code_intel_summary` chunks
+  never become atoms.
+
+---
+
 ## The "atlas" name collision (read this so you don't get confused)
 
 Two unrelated mechanisms share the word **atlas**:
@@ -233,6 +296,7 @@ it was enriched:
 | **conversations-anthropic** | `tiered` (`conversational`) | **System 3 (RAPTOR + GLiNER)** | T1+T2+T3 + hybrid scorer | `sovereign-recipes/conversations-anthropic/recipe.toml` |
 | **attached documents** | `tiered` (no recipe) | System 3 | T1+T2+T3 | `sovereign-tools/src/document_asset.rs` |
 | **Obsidian / watched folders** | `tiered` (no recipe) | System 3 (folder variant + `vault_themes`) | T1+T2+T3 + vault themes | `sovereign-tools/src/local_corpus/` + `tiered.rs::run_folder_tiered_enrichment` |
+| **commonwealth-ai** (code) | _(none — `enrich code-intel` verb)_ | **System 4 — Code intelligence** | LanceDB cosine + FTS, code-intel summary chunks boosted, + SCIP call-graph trace via the `CodeQuery` route | `scip_graph.db` + `sovereign enrich code-intel` |
 
 ---
 
@@ -263,8 +327,10 @@ it was enriched:
 2. The selector: `corpus-engine/src/recipe.rs::EnrichmentConfig` +
    `engine/ingest.rs:1581` (the dispatch branch).
 3. The deep-dive for the system you're touching:
-   [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md) (atoms) or
-   [`TIERED_RETRIEVAL.md`](../sovereign/docs/TIERED_RETRIEVAL.md) (RAPTOR/GLiNER).
+   [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md) (atoms),
+   [`TIERED_RETRIEVAL.md`](../sovereign/docs/TIERED_RETRIEVAL.md) (RAPTOR/GLiNER),
+   or [`CODE_INTEL_CHAT.md`](../sovereign/docs/specs/CODE_INTEL_CHAT.md) (code
+   intelligence — the per-symbol summary bridge + SCIP call-graph trace).
 4. The injection seam if you're on tiered:
    `enrichment/tiered.rs` (trait) →
    `sovereign-tools/src/conv_tiered_provider.rs` (impl) →
