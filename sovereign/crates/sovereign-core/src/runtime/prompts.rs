@@ -790,3 +790,24 @@ pub(crate) const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 10;
 /// gemma-4-E4B's 32k context window after the system prompt and the
 /// model's own output budget.
 pub(crate) const EXPANDED_KNOWLEDGE_CHARS: usize = 16000;
+
+/// Appended to the synthesis system prompt on `CodeQuery` turns (Inc 4). The
+/// evidence on this route is per-symbol SUMMARIES (what each function does, in
+/// plain terms) plus CALL-GRAPH TRACES (compiler-resolved callers/callees), so
+/// steer the answer to USE them: name the symbols/files, and treat a trace block
+/// as the authoritative answer to "what calls X" / "what X calls" rather than
+/// guessing from prose. Keeps the base prompt's grounding discipline; this only
+/// sharpens the shape for code questions.
+pub(crate) const CODE_SYNTHESIS_DIRECTIVE: &str = "\
+This is a question about how THIS codebase works. Your evidence is per-symbol \
+SUMMARIES (what each function does, in plain terms) and CALL-GRAPH TRACES \
+(compiler-resolved). Ground every claim in them and name the specific symbols, \
+files, and lines involved.\n\
+\n\
+When a \"Call-graph trace for `X`\" block is present it is the AUTHORITATIVE \
+answer to \"what calls X\" (its callers / entry points) and \"what X calls\" \
+(its callees) — read those edges off the trace rather than inferring from prose, \
+and cite it [Source: Call-graph trace for `X`]. A `dyn-dispatch` marker is a \
+trait / dynamic boundary the call graph followed where a text search could not. \
+If the summaries and traces don't cover part of the question, say so in one line \
+instead of inventing a call edge or a symbol name.";

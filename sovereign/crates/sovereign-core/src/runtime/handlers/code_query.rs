@@ -97,7 +97,10 @@ impl Runtime {
             message,
             conversation_id,
             &scoped,
-            &Intent::KnowledgeQuery,
+            // Pass CodeQuery (not KnowledgeQuery) so the synthesis prompt picks up
+            // the code directive; CodeQuery is grouped with KnowledgeQuery in every
+            // other match (effort/operation/format), so nothing else changes.
+            &Intent::CodeQuery,
             coarse_intent,
             self_assessment,
             routing_trigger,

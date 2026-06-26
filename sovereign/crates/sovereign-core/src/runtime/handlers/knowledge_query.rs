@@ -901,6 +901,13 @@ impl Runtime {
                     &budget_note,
                     true,
                 );
+                // Inc 4: on the first-class code route, sharpen the prompt to use
+                // the per-symbol summaries + call-graph traces (see CodeQuery).
+                let base = if matches!(intent, Intent::CodeQuery) {
+                    format!("{base}\n\n{}", crate::runtime::CODE_SYNTHESIS_DIRECTIVE)
+                } else {
+                    base
+                };
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
                     prompt,
@@ -954,6 +961,13 @@ impl Runtime {
                     self.inference_config.think_budget > 0,
                     &budget_note,
                 );
+                // Inc 4: on the first-class code route, sharpen the prompt to use
+                // the per-symbol summaries + call-graph traces (see CodeQuery).
+                let base = if matches!(intent, Intent::CodeQuery) {
+                    format!("{base}\n\n{}", crate::runtime::CODE_SYNTHESIS_DIRECTIVE)
+                } else {
+                    base
+                };
                 let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
                     prompt,

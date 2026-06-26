@@ -21,7 +21,7 @@ use crate::index::CorpusIndex;
 use crate::types::EmbedFn;
 
 use super::scip_source::enumerate_symbol_sources;
-use super::store::{index_symbol_enrichments, IndexReport};
+use super::store::{index_symbol_enrichments, symbol_source_key, IndexReport};
 use super::{enrich_symbols_incremental, IncrementalReport, SymbolEnrichment};
 
 /// Sidecar that carries prior summaries across runs (keyed by body-hash) so an
@@ -66,6 +66,27 @@ pub async fn run_code_intel(
     file_filter: &[String],
 ) -> Result<CodeIntelReport> {
     let sources = enumerate_symbol_sources(scip, source_root, file_filter).await?;
+    // Inc 4 polish: test functions aren't "how does this code work" targets — they
+    // crowd the retrieval set ("tests", "*_nonempty", ...) and carry no useful
+    // call-graph answer. SCIP descriptors put `#[cfg(test)] mod tests` fns under a
+    // `/tests/` path segment. Drop them from enrichment AND prune any summary a
+    // prior pass already indexed for them, so the code-intel chunk set stays
+    // code-not-tests (re-runs converge).
+    let (sources, test_sources): (Vec<_>, Vec<_>) = sources
+        .into_iter()
+        .partition(|s| !s.meta.qualified_name.contains("/tests/"));
+    for t in &test_sources {
+        let _ = index
+            .delete_chunks_by_source_doc(&symbol_source_key(&t.meta))
+            .await;
+    }
+    if !test_sources.is_empty() {
+        tracing::info!(
+            target: "enrichment.code_intel",
+            test_symbols = test_sources.len(),
+            "code_intel: dropped test functions + pruned any prior summaries",
+        );
+    }
     let symbols = sources.len();
 
     let prior = load_cache(cache_dir);
