@@ -993,6 +993,59 @@ pub trait PermissionStore: Send + Sync {
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()>;
 }
 
+/// Durable ledger of step-execution *attempts* — the replay-safety and
+/// audit surface behind the agent control loop. A sibling of
+/// [`TaskStore`], not a widening of it (ARCH §5.3): this is a distinct
+/// concern (per-attempt history vs whole-task snapshot) that most
+/// callers and test mocks don't need.
+///
+/// Every method defaults to a no-op so non-durable contexts (test mocks,
+/// automation without a real store) are unaffected — absent a backing
+/// store the executor's resume guard simply sees no prior attempts and
+/// behaves exactly as it did before this ledger existed. The real stores
+/// (`SqliteStateStore`, `PostgresStateStore`, `InMemoryStateStore`)
+/// override with durable behaviour.
+#[async_trait]
+pub trait StepExecutionStore: Send + Sync {
+    /// Record an attempt as `Started` — written *before* the side effect so
+    /// a crash mid-step leaves a durable "may have run" marker.
+    async fn record_started(&self, _execution: &StepExecution) -> Result<()> {
+        Ok(())
+    }
+
+    /// Flip an attempt to `Completed`, attaching its compressed summary and
+    /// any anomalies. Written *after* the side effect returns.
+    async fn mark_completed(
+        &self,
+        _execution_id: &str,
+        _summary: Option<String>,
+        _anomalies: Option<String>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Flip an attempt to `Failed` with a message. Terminal and replay-safe.
+    async fn mark_failed(&self, _execution_id: &str, _message: &str) -> Result<()> {
+        Ok(())
+    }
+
+    /// The idempotency guard's query: the most recent attempt recorded for
+    /// `idempotency_key` (any status), or `None` if this action has never
+    /// run. The executor branches on the returned status — `Completed` →
+    /// the action already succeeded (a replan/duplicate; skip and reuse the
+    /// prior result); `Started` → a crash interrupted it mid-flight (do not
+    /// blind-replay a `NonIdempotent` side-effect — halt and surface). The
+    /// key is content-derived (`task:tool:hash(params)`) so it matches
+    /// across a replan that re-issues the same action under a new `step_id`,
+    /// not merely a same-plan resume.
+    async fn find_execution(
+        &self,
+        _idempotency_key: &str,
+    ) -> Result<Option<StepExecution>> {
+        Ok(None)
+    }
+}
+
 #[async_trait]
 pub trait HealthStore: Send + Sync {
     async fn save_health_report(&self, report: &crate::health::HealthReport) -> Result<()> {
@@ -1104,6 +1157,7 @@ pub trait StateStore:
     + CorpusStateStore
     + BudgetStore
     + PermissionStore
+    + StepExecutionStore
     + HealthStore
     + DocumentSessionStore
     + DocumentAssetStore

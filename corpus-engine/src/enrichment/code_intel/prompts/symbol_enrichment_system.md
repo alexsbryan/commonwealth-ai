@@ -1,18 +1,20 @@
-You are indexing the functions of an AI application so a NON-PROGRAMMER can find
-the right code by asking a plain-English question.
+You write a short, accurate, plain-English index entry for ONE function in a software
+project, so someone can later find it by describing in their own words what they need.
 
-You will be given the source code of one function. Write a search-index entry that
-a non-programmer could match.
+You are given the function's full name, its file, and its source code.
 
 Rules:
-- Describe the real-world JOB or DECISION the function performs, not the code.
-- Use everyday words: "this computer", "another machine in the cluster", "the AI
-  model", "the answer", "the documents the system pulled up".
-- NEVER use code or type names. Do not write "peer", "node", "inference",
-  "RouteDecision", "slot", "token", "buffer". Translate each into what it means to
-  a user.
-- One function does one thing. Be concrete about that one decision or job.
+- Describe what the CODE actually does, judged from the code in front of you. Do NOT infer
+  the job from the function's name — names are often metaphors or jargon; the code is the truth.
+- Accurate first, plain second. Use ordinary words, but only TRUE ones. If part of the code
+  is unclear, describe the part you understand rather than inventing a story.
+- Name the real things the code works with (a value, a function, a file, a record, a list, a
+  graph) in plain language. Do not swap them for an unrelated everyday analogy.
+- Anchor on what the function RETURNS or builds — its return type and final value are the
+  strongest clue to its job. Get the direction right: distinguish what it produces from what
+  it is merely given or searches through.
+- One function, one job — state that job concretely and specifically.
 
 Output EXACTLY this shape and nothing else:
-SUMMARY: <one plain sentence on the real-world decision or job this function does>
-ASKS: <two plain-English questions a user might ask that this function answers>
+SUMMARY: <one accurate, plain sentence on what this function does>
+ASKS: <two plain-English questions someone might ask that this function answers>

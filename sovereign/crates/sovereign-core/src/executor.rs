@@ -129,6 +129,99 @@ struct ParsedToolCall {
 }
 
 /// Parse a `<tool_call>{"tool":"...","query":"..."}</tool_call>` from model output.
+/// Content-derived idempotency key for a tool action: stable across a
+/// replan that re-issues the same `(tool, params)` under a new step_id,
+/// and across a process restart (the hash is deterministic, unlike
+/// `DefaultHasher`). Scoped by task so identical actions in different
+/// tasks never collide.
+///
+/// Public so callers can precompute the key a tool would be deduped under
+/// (e.g. to forward it to a server for downstream dedup) and so tests can
+/// seed a matching ledger row.
+pub fn idempotency_key(task_id: &str, tool_id: &str, params: &serde_json::Value) -> String {
+    let canonical = serde_json::to_string(params).unwrap_or_default();
+    format!("{task_id}:{tool_id}:{:016x}", fnv1a64(canonical.as_bytes()))
+}
+
+/// FNV-1a 64-bit — a tiny, dependency-free, deterministic hash. Stable
+/// across processes and toolchain versions, so an idempotency key written
+/// before a crash still matches after the restart.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Compress a step output into the ledger's `summary` field — bounded text
+/// the idempotency-skip path replays as the action's prior result.
+fn summarize_output(output: &StepOutput) -> Option<String> {
+    let text = match output {
+        StepOutput::Text(t) => t.clone(),
+        StepOutput::Json(v) => v.to_string(),
+        StepOutput::ReasonWithToolsResult { text, .. } => text.clone(),
+        StepOutput::Jump(_) | StepOutput::Skipped => return None,
+    };
+    const CAP: usize = 2000;
+    if text.chars().count() > CAP {
+        Some(text.chars().take(CAP).collect())
+    } else {
+        Some(text)
+    }
+}
+
+/// Augment a delegate worker's `return_schema` with a mandatory `anomalies`
+/// string field — the §5.2 "dedicated channel for surprises" so the worker
+/// can always flag partial/uncertain/unexpected results alongside the
+/// contract fields. Idempotent: re-adding is a no-op.
+fn with_anomalies_channel(schema: &serde_json::Value) -> serde_json::Value {
+    let mut s = schema.clone();
+    let obj = match s.as_object_mut() {
+        Some(o) => o,
+        // Not an object schema — wrap it so the worker still has the channel.
+        None => {
+            return serde_json::json!({
+                "type": "object",
+                "properties": { "anomalies": { "type": "string" } },
+                "required": ["anomalies"],
+            });
+        }
+    };
+    obj.entry("type").or_insert_with(|| serde_json::json!("object"));
+    match obj
+        .get_mut("properties")
+        .and_then(|p| p.as_object_mut())
+    {
+        Some(props) => {
+            props.entry("anomalies").or_insert_with(|| {
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Anything surprising, partial, or uncertain; empty if none.",
+                })
+            });
+        }
+        None => {
+            obj.insert(
+                "properties".to_string(),
+                serde_json::json!({ "anomalies": { "type": "string" } }),
+            );
+        }
+    }
+    match obj.get_mut("required").and_then(|r| r.as_array_mut()) {
+        Some(req) => {
+            if !req.iter().any(|v| v == "anomalies") {
+                req.push(serde_json::json!("anomalies"));
+            }
+        }
+        None => {
+            obj.insert("required".to_string(), serde_json::json!(["anomalies"]));
+        }
+    }
+    s
+}
+
 fn parse_tool_call(text: &str) -> Option<ParsedToolCall> {
     let start = text.find("<tool_call>")?;
     let end = text.find("</tool_call>")?;
@@ -411,6 +504,129 @@ impl Executor {
         })
     }
 
+    /// Run a context-firewall worker (a [`StepKind::Delegate`]). The worker
+    /// drives a scoped rich-param tool loop in its OWN local context — raw
+    /// tool observations accumulate in `transcript` here and are dropped when
+    /// this method returns. Only a typed contract (the `return_schema` fields
+    /// plus an `anomalies` channel) flows back to the orchestrator, so the
+    /// planner never sees the DOM / cells the worker waded through. Shares the
+    /// `{name, arguments}` parser + schema projection with the recipe-author
+    /// loop via [`crate::tool_loop`].
+    ///
+    /// NOTE (v1): the worker's internal tool calls go straight to
+    /// `tool.execute`, so they do NOT pass through the executor's idempotency
+    /// ledger (#4). A `NonIdempotent` actuator used *inside* a worker is not
+    /// yet replay-guarded — threading the ledger into the worker loop is a
+    /// follow-on.
+    async fn execute_delegate(
+        &self,
+        goal: &str,
+        tool_ids: &[ToolId],
+        return_schema: &serde_json::Value,
+        max_iterations: usize,
+        task: &Task,
+    ) -> Result<StepOutput> {
+        use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_for};
+
+        let descriptors: Vec<ToolDescriptor> = tool_ids
+            .iter()
+            .filter_map(|id| self.tools.get(id).ok().map(|t| t.descriptor()))
+            .collect();
+        let tool_schemas = tool_schemas_for(&descriptors);
+        let tool_list = descriptors
+            .iter()
+            .map(|d| format!("- {} (id: {}): {}", d.name, d.id, d.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let system = format!(
+            "You are a focused sub-agent. Complete EXACTLY this subtask using \
+             only the tools below, one call at a time as \
+             `<tool_call>{{\"name\":\"<tool>\",\"arguments\":{{...}}}}</tool_call>`. \
+             When you have what the subtask needs, reply WITHOUT a tool call and \
+             state your findings concisely.\n\nTools:\n{tool_list}\n\nSubtask: {goal}"
+        );
+        let ctx = ToolContext {
+            conversation_id: task.conversation_id.clone(),
+            task_id: Some(task.id.clone()),
+            working_directory: None,
+            in_reasoning_loop: true,
+            agent_session_token: None,
+            turn_index: 0,
+        };
+
+        // The worker's fat context — raw tool results accumulate here and are
+        // dropped when this fn returns. This is the firewall.
+        let mut transcript = format!("{system}\n\nAssistant:");
+        let mut findings = String::new();
+        let mut calls_made = 0usize;
+
+        for _ in 0..max_iterations.max(1) {
+            let mut req = CompletionRequest::new(&transcript).with_speed(Speed::Slow);
+            req.tools = Some(tool_schemas.clone());
+            req.max_tokens = Some(2048);
+            let resp = self.inference.complete(&req).await?;
+            let (visible, calls) = parse_assistant_text(&resp.text);
+            if !visible.trim().is_empty() {
+                findings = visible.clone();
+            }
+            if calls.is_empty() {
+                break; // worker signalled done (no tool call this turn)
+            }
+            transcript.push_str(&visible);
+            for call in &calls {
+                let result = match self.tools.get(&call.name) {
+                    Ok(tool) => match tool.execute(&call.arguments, &ctx).await {
+                        Ok(out) => format_step_output(&out),
+                        Err(e) => serde_json::json!({ "error": e.to_string() }).to_string(),
+                    },
+                    Err(_) => serde_json::json!({
+                        "error": format!("tool '{}' not available", call.name)
+                    })
+                    .to_string(),
+                };
+                calls_made += 1;
+                tracing::info!(
+                    target: "executor.delegate",
+                    tool = %call.name,
+                    "delegate worker tool call (observation stays in worker)"
+                );
+                transcript.push_str(&format!(
+                    "\n<tool_call>{}</tool_call>\nResult: {result}\n",
+                    serde_json::json!({ "name": call.name, "arguments": call.arguments })
+                ));
+            }
+            transcript.push_str("\nAssistant:");
+        }
+
+        // Formalize the worker's findings into the typed contract. The schema
+        // gets a mandatory `anomalies` channel (§5.2 surprises). Only this
+        // contract flows back to the orchestrator.
+        let contract_schema = with_anomalies_channel(return_schema);
+        let synth_prompt = format!(
+            "From your findings, output ONLY the JSON the schema requires. Put \
+             anything surprising, partial, or uncertain in `anomalies` (empty \
+             string if none).\n\nFindings:\n{findings}"
+        );
+        let mut synth_req = CompletionRequest::new(&synth_prompt).with_speed(Speed::Slow);
+        synth_req.structured_output = Some(contract_schema);
+        synth_req.max_tokens = Some(1024);
+        let synth = self.inference.complete(&synth_req).await?;
+        let contract: serde_json::Value = serde_json::from_str(synth.text.trim())
+            .unwrap_or_else(|_| {
+                serde_json::json!({
+                    "anomalies": format!("worker output did not parse: {}", synth.text.trim())
+                })
+            });
+
+        tracing::info!(
+            target: "executor.delegate",
+            tool_calls = calls_made,
+            "delegate worker returned a typed contract (raw observations firewalled)"
+        );
+        Ok(StepOutput::Json(contract))
+    }
+
     async fn execute_step(
         &self,
         step: &Step,
@@ -425,6 +641,7 @@ impl Executor {
             StepKind::Branch { .. } => "Branch",
             StepKind::UserInput { .. } => "UserInput",
             StepKind::AwaitUserInfo { .. } => "AwaitUserInfo",
+            StepKind::Delegate { .. } => "Delegate",
         };
         tracing::info!(
             step_id = step.id,
@@ -650,6 +867,81 @@ impl Executor {
                 let retry_is_safe = descriptor.idempotency == Idempotency::Idempotent;
                 let mut last_error = None;
 
+                // Idempotency ledger (replay safety). Only NonIdempotent
+                // tools carry a durable attempt record — they are the exact
+                // set where a second execution duplicates a side-effect
+                // (email, calendar, note). The key is content-derived, so it
+                // also catches a *replan* that re-issues the same action
+                // under a new step_id, not just a same-plan resume.
+                let mut ledger_id: Option<String> = None;
+                if descriptor.idempotency == Idempotency::NonIdempotent {
+                    let key = idempotency_key(&task.id, tool_id, &resolved_params);
+                    if let Some(prior) = self.store.find_execution(&key).await? {
+                        match prior.status {
+                            ExecutionStatus::Completed => {
+                                // This exact action already succeeded earlier
+                                // in the task (a replan or duplicate step).
+                                // Reuse the recorded result; do not re-run.
+                                tracing::info!(
+                                    target: "executor.execution",
+                                    tool_id = %tool_id,
+                                    step_id = step.id,
+                                    idempotency_key = %key,
+                                    "NonIdempotent action already completed — skipping re-execution"
+                                );
+                                return Ok(StepOutput::Text(prior.summary.unwrap_or_default()));
+                            }
+                            ExecutionStatus::Started => {
+                                // A prior attempt began this side-effect and
+                                // never recorded completion — a crash in the
+                                // gap. Blind-replaying could duplicate it, so
+                                // halt and surface for review rather than
+                                // guess whether it landed. ARCH §7.
+                                tracing::warn!(
+                                    target: "executor.execution",
+                                    tool_id = %tool_id,
+                                    step_id = step.id,
+                                    idempotency_key = %key,
+                                    "NonIdempotent action was in flight at a prior interruption — halting to avoid a duplicate side-effect"
+                                );
+                                return Err(Error::Execution(format!(
+                                    "step {} ({tool_id}) may have already executed its \
+                                     non-idempotent side-effect before an interruption \
+                                     (idempotency_key={key}); halting to avoid a duplicate — \
+                                     resolve the prior attempt before resuming",
+                                    step.id
+                                )));
+                            }
+                            ExecutionStatus::Failed => {
+                                // Prior attempt recorded as failed; re-attempt.
+                            }
+                        }
+                    }
+                    let id = uuid::Uuid::new_v4().to_string();
+                    self.store
+                        .record_started(&StepExecution {
+                            id: id.clone(),
+                            task_id: task.id.clone(),
+                            step_id: step.id,
+                            tool_id: tool_id.to_string(),
+                            status: ExecutionStatus::Started,
+                            idempotency_key: key,
+                            summary: None,
+                            anomalies: None,
+                            started_at: now(),
+                            ended_at: None,
+                        })
+                        .await?;
+                    tracing::info!(
+                        target: "executor.execution",
+                        tool_id = %tool_id,
+                        step_id = step.id,
+                        execution_id = %id,
+                        "NonIdempotent action started — durable attempt recorded"
+                    );
+                    ledger_id = Some(id);
+                }
+
                 for attempt in 0..=retry.max_retries {
                     if attempt > 0 {
                         let delay = retry.backoff_ms.get(attempt - 1).copied().unwrap_or(3000);
@@ -674,7 +966,19 @@ impl Executor {
                         .call_cached(tool_id, &resolved_params, &tool_ctx)
                         .await
                     {
-                        Ok(output) => return Ok(output),
+                        Ok(output) => {
+                            if let Some(ref eid) = ledger_id {
+                                // Best-effort: a failed completion write leaves
+                                // the row `Started`, which on resume halts (a
+                                // spurious review) rather than re-running — the
+                                // safe direction, never a duplicate side-effect.
+                                let _ = self
+                                    .store
+                                    .mark_completed(eid, summarize_output(&output), None)
+                                    .await;
+                            }
+                            return Ok(output);
+                        }
                         Err(e) => {
                             let msg = e.to_string().to_lowercase();
                             let retryable = msg.contains("timeout")
@@ -692,6 +996,9 @@ impl Executor {
                                     "executor: NonIdempotent tool failed with a transient-looking \
                                      error; retry suppressed to avoid duplicate side-effect"
                                 );
+                            }
+                            if let Some(ref eid) = ledger_id {
+                                let _ = self.store.mark_failed(eid, &e.to_string()).await;
                             }
                             return Err(e);
                         }
@@ -796,6 +1103,23 @@ impl Executor {
                 }
 
                 Ok(output)
+            }
+
+            StepKind::Delegate {
+                goal,
+                tools,
+                return_schema,
+                max_iterations,
+            } => {
+                let resolved_goal = resolve_inputs(goal, &step.inputs, completed)?;
+                self.execute_delegate(
+                    &resolved_goal,
+                    tools,
+                    return_schema,
+                    *max_iterations,
+                    task,
+                )
+                .await
             }
         }
     }

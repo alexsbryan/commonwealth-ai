@@ -354,6 +354,8 @@ impl sovereign_core::traits::DocumentAssetStore for MockStore {
     }
 }
 
+impl StepExecutionStore for MockStore {}
+
 impl StateStore for MockStore {}
 
 // ─── ToolRegistry Tests ────────────────────────────────────────

@@ -48,6 +48,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "search" => cmd_search(&args[1..]).await,
         "brief" => cmd_brief(&args[1..]).await,
         "reflect" => cmd_reflect(&args[1..]).await,
+        "capability-map" => cmd_capability_map(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -635,6 +636,178 @@ fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
 // path. The new home is the canonical spot.
 pub(crate) use sovereign_cli_shared::repo::current_branch;
 
+// ─── capability-map ───────────────────────────────────────────
+// Derive a clustered "what does this codebase do" map from the SCIP call graph.
+// Pure graph work (no model) — the deterministic foundation the narration +
+// reconciliation phases build on. Writes a JSON map + a scannable markdown
+// inventory under ~/.sovereign/capabilities/<corpus>/.
+
+async fn cmd_capability_map(args: &[String]) -> i32 {
+    use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind};
+
+    let mut corpus_id: Option<String> = None;
+    let mut jaccard: f64 = 0.5;
+    let mut provider = ProviderKind::Heuristic;
+    let mut out_dir: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--jaccard" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<f64>().ok()) {
+                    Some(v) => jaccard = v,
+                    None => {
+                        eprintln!("error: --jaccard requires a number");
+                        return 1;
+                    }
+                }
+            }
+            "--provider" => {
+                i += 1;
+                match args.get(i).map(String::as_str) {
+                    Some("heuristic") => provider = ProviderKind::Heuristic,
+                    Some("fallback") => provider = ProviderKind::Fallback,
+                    _ => {
+                        eprintln!("error: --provider must be heuristic|fallback");
+                        return 1;
+                    }
+                }
+            }
+            "--out" => {
+                i += 1;
+                out_dir = args.get(i).map(PathBuf::from);
+                if out_dir.is_none() {
+                    eprintln!("error: --out requires a value");
+                    return 1;
+                }
+            }
+            flag if flag.starts_with('-') => {
+                eprintln!("error: unknown flag {flag}");
+                return 1;
+            }
+            positional => {
+                if corpus_id.is_none() {
+                    corpus_id = Some(positional.to_string());
+                }
+            }
+        }
+        i += 1;
+    }
+
+    let corpus_id = match corpus_id {
+        Some(c) => c,
+        None => {
+            eprintln!(
+                "usage: sovereign code capability-map <corpus-id> \
+                 [--provider heuristic|fallback] [--jaccard 0.5] [--out <dir>]"
+            );
+            return 1;
+        }
+    };
+
+    let db_path = home_dir()
+        .join(".sovereign")
+        .join("indexes")
+        .join(&corpus_id)
+        .join("scip_graph.db");
+    if !db_path.exists() {
+        eprintln!(
+            "error: no SCIP graph at {} — run `sovereign project init` first",
+            db_path.display()
+        );
+        return 1;
+    }
+
+    let graph = match corpus_engine_scip::ScipGraph::open(&db_path, &corpus_id) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("error: cannot open SCIP graph: {e}");
+            return 1;
+        }
+    };
+    let symbols = match graph.iter_all_symbols().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: reading symbols: {e}");
+            return 1;
+        }
+    };
+    let refs = match graph.iter_all_refs().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: reading refs: {e}");
+            return 1;
+        }
+    };
+
+    let opts = MapOptions {
+        jaccard,
+        provider,
+        ..Default::default()
+    };
+    let map = build_capability_map(&symbols, &refs, &opts);
+
+    let out_dir = out_dir.unwrap_or_else(|| {
+        home_dir()
+            .join(".sovereign")
+            .join("capabilities")
+            .join(&corpus_id)
+    });
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        eprintln!("error: cannot create {}: {e}", out_dir.display());
+        return 1;
+    }
+    let json_path = out_dir.join("capability_map.json");
+    let md_path = out_dir.join("capability_map.md");
+    match serde_json::to_string_pretty(&map) {
+        Ok(s) => {
+            if let Err(e) = std::fs::write(&json_path, s) {
+                eprintln!("error: writing {}: {e}", json_path.display());
+                return 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("error: serializing map: {e}");
+            return 1;
+        }
+    }
+    if let Err(e) = std::fs::write(
+        &md_path,
+        corpus_engine_scip::capability_map::render_markdown(&corpus_id, &map),
+    ) {
+        eprintln!("error: writing {}: {e}", md_path.display());
+        return 1;
+    }
+
+    let s = &map.stats;
+    println!("Capability map for {corpus_id}:");
+    println!(
+        "  {} capabilities from {} entry points ({} multi-entry)",
+        s.capabilities, s.roots, s.multi_entry
+    );
+    println!(
+        "  substrate: {} first-party call edges ({} external, {} type/module, {} test dropped)",
+        s.substrate.kept_edges,
+        s.substrate.dropped_external,
+        s.substrate.dropped_nonfunction,
+        s.substrate.dropped_test
+    );
+    println!("  wrote {}", json_path.display());
+    println!("  wrote {}", md_path.display());
+    println!("\nLargest capabilities:");
+    for c in map.capabilities.iter().filter(|c| c.n_entries > 1).take(12) {
+        println!(
+            "  [{:>2} entries, {:>4} core] {}  — {}",
+            c.n_entries,
+            c.n_core,
+            c.label,
+            c.reps.join(", ")
+        );
+    }
+    0
+}
+
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
 }
@@ -705,6 +878,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "search <query>",
                 "(placeholder) Use the Sovereign chat or MCP for now",
+            ),
+            (
+                "capability-map <corpus-id>",
+                "Derive a capability map (what the codebase does) from the SCIP call graph",
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(

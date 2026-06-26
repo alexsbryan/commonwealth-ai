@@ -77,6 +77,9 @@ pub(super) async fn build_tool_registry(
             .with_health_checker(Arc::clone(&health_checker))
             .with_atlas(Arc::clone(&work_atlas_store)),
     ));
+    // Capability map — derived "what the codebase does" overview. Resolves
+    // the per-corpus SCIP graph itself (same indexes dir the runtime uses).
+    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
 
     // Deterministic land-value-tax analytics over parcel corpora
     // (e.g. sf-assessor-roll) — pre-cited figures for the "no
