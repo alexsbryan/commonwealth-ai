@@ -2954,6 +2954,8 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
             .with_health_checker(Arc::clone(&health_checker)),
     ));
+    // Capability map — derived "what the codebase does" overview.
+    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
 
     // ── Test / lint watcher tools ───────────────────────────────
 

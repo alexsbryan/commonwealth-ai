@@ -639,9 +639,26 @@ User message
 ```
 
 `Plan` is a flat JSON DAG (`steps`, `edges`). `StepKind`: `Reason`,
-`Tool`, `UserInput`, `Branch`, `ReasonWithTools`. Planner emits
-`[sample:N:method]` / `[eval:name]` annotations; the executor
-parses them into config.
+`Tool`, `UserInput`, `Branch`, `ReasonWithTools`, `AwaitUserInfo`,
+`Delegate`. Planner emits `[sample:N:method]` / `[eval:name]`
+annotations; the executor parses them into config.
+
+**Delegate — the context-firewall worker (§5.2).** `StepKind::Delegate {
+goal, tools, return_schema, max_iterations }`
+(`executor::Executor::execute_delegate`) runs a scoped rich-param tool loop
+in its OWN context: the worker drives the requested tool subset via the
+`<tool_call>{"name","arguments"}` protocol, the raw observations (a page
+DOM, a sheet's cells) accumulate in the worker's local transcript, and only
+a typed contract — the `return_schema` fields plus an always-present
+`anomalies` channel — flows back to the orchestrator. So the planner
+decides on a compact summary, never a wall of raw output. The
+`{name, arguments}` parser + tool-schema projection are **shared** with the
+recipe-author loop via `crate::tool_loop` (one parser, no drift) — distinct
+from the search-shaped `{tool, query}` loop in `executor.rs` that
+`ReasonWithTools` uses. Firewall proven by
+`sovereign-store/tests/delegate_firewall.rs`. (v1: the worker's internal
+tool calls go straight to `tool.execute`, bypassing the idempotency ledger
+above — threading #4 into the worker loop is a follow-on.)
 
 **Idempotency ledger (executor replay-safety).** Before a
 `NonIdempotent` tool step runs, the executor writes a durable `Started`
