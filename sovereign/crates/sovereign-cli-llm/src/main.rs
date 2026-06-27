@@ -84,6 +84,15 @@ async fn async_main() {
         "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
         "voice" | "search-gym" | "knowledge-gym" => init_tracing("sovereign_cli_llm=info"),
+        // The bench verbs print their own [chaos]/[parity] summaries via eprintln
+        // and stay quiet by default (no subscriber) so harnesses parsing their
+        // stderr aren't disturbed. But they gain the full tracing glassbox when
+        // RUST_LOG is explicitly set — so a measurement run can be debugged
+        // (e.g. `RUST_LOG=retrieval_audit=info` to watch the atom-enum /
+        // atlas-grounding retrieval decisions, or `agentic_kq=info`) on demand.
+        "bench" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_cli_llm=info")
+        }
         _ => {}
     }
 

@@ -63,6 +63,15 @@ pub enum Intent {
     /// loaded, the handler asks plainly what the user is working on
     /// — epistemic honesty as the natural path.
     ExpressiveQuery,
+    /// User requesting creative/generative output ("tell me a story", "write a
+    /// poem", "compose a letter", "brainstorm names"). No corpus retrieval, no
+    /// grounding gate, no tools, no situated/relational framing — the handler
+    /// streams the requested piece behind a neutral creative system prompt
+    /// (`handlers/generative.rs`). Short-circuited off the DeepQuery path by the
+    /// router's `looks_like_creative_generation` heuristic, because routing a
+    /// creative ask through retrieval+synthesis buffers every token behind the
+    /// gate (a long blank screen, then a dump grounded in irrelevant corpora).
+    GenerativeQuery,
     /// A question about how THIS codebase works — "how does inference run",
     /// "what calls gate_answer", "where is X implemented", "trace the request
     /// flow". A first-class referential route over CODE corpora: retrieval

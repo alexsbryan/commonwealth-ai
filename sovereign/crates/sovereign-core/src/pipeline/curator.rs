@@ -52,7 +52,8 @@ pub fn should_curate(classification: &RouterClassification, candidates_len: usiz
             | Intent::MetalingualQuery
             | Intent::ConationQuery
             | Intent::CommissiveQuery
-            | Intent::ExpressiveQuery,
+            | Intent::ExpressiveQuery
+            | Intent::GenerativeQuery,
     )
 }
 

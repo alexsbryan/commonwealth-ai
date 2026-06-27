@@ -19,6 +19,7 @@ mod complex_task;
 mod conation;
 mod document_op;
 mod expressive;
+mod generative;
 mod knowledge_query;
 mod metalingual;
 mod recipe_author;

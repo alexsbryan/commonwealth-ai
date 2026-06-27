@@ -407,6 +407,41 @@ pub fn strip_thinking_response(raw: &str) -> String {
     strip_think_blocks_impl(raw)
 }
 
+/// Could this leading text still be (the start of) a thinking trace —
+/// either a `<think>` block or a markdown planning preamble — and so
+/// warrant continued buffering? Used by [`strip_thinking_stream`] to
+/// decide when it is safe to STOP buffering and start streaming: a
+/// thinking trace always OPENS the output, so once the start cannot
+/// become any known marker there is nothing left to strip.
+///
+/// `trimmed` must already be `trim_start`'d. Returns true while still
+/// ambiguous — the buffer is empty, is a prefix of a marker (e.g.
+/// `"<th"`, `"Thinking Pro"`), or already opens with one (`"<think>…"`,
+/// `"Thinking Process:\n…"`); false once the start is definitively not
+/// a thinking trace and should stream verbatim.
+///
+/// The marker list mirrors `strip_thinking_response`'s `</think>` closer
+/// and `PREAMBLE_OPENERS` — keep the two in sync (a marker recognised by
+/// the terminal-flush fallback but NOT here would leak its preamble into
+/// the stream instead of being buffered and stripped).
+fn could_be_thinking_prefix(trimmed: &str) -> bool {
+    if trimmed.is_empty() {
+        return true;
+    }
+    const MARKERS: &[&str] = &[
+        "<think>",
+        "Thinking Process:",
+        "Thinking process:",
+        "thinking process:",
+        "**Thinking Process",
+        "Reasoning Process:",
+        "Internal reasoning:",
+    ];
+    MARKERS
+        .iter()
+        .any(|m| m.starts_with(trimmed) || trimmed.starts_with(m))
+}
+
 /// Streaming counterpart to [`strip_thinking_response`] for the
 /// witness path.
 ///
@@ -415,9 +450,14 @@ pub fn strip_thinking_response(raw: &str) -> String {
 /// i.e. content emitted after the model closes its planning trace
 /// with `</think>`. Behaviour:
 ///
-/// * **Buffer phase.** While no `</think>` has been observed,
-///   tokens are accumulated into an internal buffer. Nothing is
-///   emitted to the consumer.
+/// * **Buffer phase.** While the output's start could still be a
+///   thinking trace — a `<think>` block awaiting its closer, or a
+///   markdown preamble (see [`could_be_thinking_prefix`]) — tokens
+///   are accumulated into an internal buffer and nothing is emitted.
+///   The moment the start proves it is NOT a thinking trace, the
+///   strip cuts over to passthrough and streams the buffer, so a
+///   thinking-DISABLED answer is never held back as one trailing
+///   frame (the 2026-06-26 blank-screen bug).
 /// * **Cutover.** When a chunk arrives that completes a `</think>`
 ///   marker (taking buffer continuity into account, so the marker
 ///   may straddle chunk boundaries), the strip emits a single
@@ -495,7 +535,26 @@ where
                             // Emitting mode to consume next chunk.
                             continue;
                         }
-                        // No closer yet — keep buffering.
+                        // No `</think>` yet. A thinking trace, by definition,
+                        // OPENS the output — either a `<think>` block or a
+                        // markdown planning preamble (see
+                        // `strip_thinking_response`). As soon as the buffer is
+                        // enough to prove it is NEITHER, there is nothing to
+                        // strip: switch to passthrough and stream NOW.
+                        //
+                        // Without this, a thinking-DISABLED turn (enable_thinking
+                        // = false, so no `<think>` is ever emitted) stays in
+                        // Buffering for the whole generation and flushes one
+                        // trailing frame at stream close — a blank screen until
+                        // the answer is fully generated (2026-06-26 breaker:
+                        // creative GenerativeQuery turns + any non-gated
+                        // streaming path).
+                        if !could_be_thinking_prefix(buffer.trim_start()) {
+                            st.phase = Phase::Emitting;
+                            return Some((Ok(buffer), st));
+                        }
+                        // Still ambiguous (buffer is a prefix of a known thinking
+                        // marker, or already opens with one) — keep buffering.
                         st.phase = Phase::Buffering(buffer);
                         continue;
                     }
@@ -1020,13 +1079,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn strip_stream_clean_text_with_no_tags_passes_through_at_end() {
-        // No tags, no preamble. strip_thinking_response is identity in
-        // this case, so the buffer flushes verbatim at end.
+    async fn strip_stream_clean_text_with_no_tags_streams_incrementally() {
+        // No tags, no preamble (the thinking-DISABLED shape). The first
+        // chunk already proves it is not a thinking trace, so the strip
+        // must cut over to passthrough IMMEDIATELY and forward each chunk
+        // as it arrives — NOT buffer the whole answer and flush one
+        // trailing frame (the 2026-06-26 blank-screen bug).
         let inner = ok_stream(vec!["Just a clean ", "witness reply."]);
         let out = collect(strip_thinking_stream(inner)).await;
-        // Single trailing flush.
-        assert_eq!(out, vec!["Just a clean witness reply.".to_string()]);
+        assert_eq!(
+            out,
+            vec!["Just a clean ".to_string(), "witness reply.".to_string()],
+            "clean output must stream chunk-by-chunk, not arrive as one frame"
+        );
+    }
+
+    #[tokio::test]
+    async fn strip_stream_long_no_thinking_answer_first_chunk_is_not_last() {
+        // Regression for the GenerativeQuery / creative blank-screen: a
+        // long thinking-disabled answer must show its FIRST chunk well
+        // before the last, i.e. the consumer sees progress immediately.
+        let inner = ok_stream(vec![
+            "Once upon a time ",
+            "there was a houseplant ",
+            "who plotted quietly ",
+            "in the corner.",
+        ]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        assert_eq!(out.len(), 4, "every chunk should pass through as it arrives");
+        assert_eq!(out[0], "Once upon a time ");
+        assert_eq!(out[3], "in the corner.");
+    }
+
+    #[tokio::test]
+    async fn strip_stream_markdown_preamble_still_buffers_and_strips() {
+        // Guard the fix's boundary: the markdown-preamble thinking shape
+        // (no `<think>` tag) must STILL be recognised and stripped — the
+        // early-stream cutover must not leak "Thinking Process:" prose.
+        let inner = ok_stream(vec!["Thinking Pro", "cess:\nplan plan\nReply: ", "Done."]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        assert_eq!(out.len(), 1, "preamble shape flushes the stripped reply once");
+        assert_eq!(out[0], "Done.");
     }
 
     #[tokio::test]

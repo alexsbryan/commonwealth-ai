@@ -366,6 +366,7 @@ fn parse_intent(s: &str) -> std::result::Result<Intent, String> {
         "conation_query" | "ConationQuery" => Ok(Intent::ConationQuery),
         "commissive_query" | "CommissiveQuery" => Ok(Intent::CommissiveQuery),
         "expressive_query" | "ExpressiveQuery" => Ok(Intent::ExpressiveQuery),
+        "generative_query" | "GenerativeQuery" => Ok(Intent::GenerativeQuery),
         other => Err(format!("unknown intent label: {other:?}")),
     }
 }

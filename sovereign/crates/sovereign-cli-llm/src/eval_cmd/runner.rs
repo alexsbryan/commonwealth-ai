@@ -437,6 +437,7 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
         Intent::ConationQuery => "conation_query".into(),
         Intent::CommissiveQuery => "commissive_query".into(),
         Intent::ExpressiveQuery => "expressive_query".into(),
+        Intent::GenerativeQuery => "generative_query".into(),
         Intent::ComplexTask => "complex_task".into(),
         Intent::SimpleAction { .. } => "simple_action".into(),
         Intent::Continuation { .. } => "continuation".into(),
