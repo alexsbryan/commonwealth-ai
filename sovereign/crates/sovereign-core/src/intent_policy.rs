@@ -244,7 +244,9 @@ pub fn apply_witness_intent_override(intent: &Intent, register: SkillRegister) -
         return intent.clone();
     }
     match intent {
-        Intent::ExpressiveQuery | Intent::DeepQuery => intent.clone(),
+        // GenerativeQuery is its own no-retrieval creative path — don't force it
+        // onto the emotive witness path just because a relational skill is active.
+        Intent::ExpressiveQuery | Intent::DeepQuery | Intent::GenerativeQuery => intent.clone(),
         Intent::Continuation { .. } => intent.clone(),
         other => {
             tracing::info!(
@@ -372,11 +374,12 @@ fn tool_filter_for_intent(intent: &Intent) -> ToolFilter {
         // router already picked the tool; the catalog filter just
         // enforces that the planner doesn't substitute another.
         Intent::SimpleAction { tool } => ToolFilter::allow(std::iter::once(tool.clone())),
-        // Emotive / commitment / imperative — these shouldn't reach
+        // Emotive / commitment / imperative / creative — these shouldn't reach
         // for tools at all. Empty allowlist makes that structural.
-        Intent::ExpressiveQuery | Intent::ConationQuery | Intent::CommissiveQuery => {
-            ToolFilter::none()
-        }
+        Intent::ExpressiveQuery
+        | Intent::ConationQuery
+        | Intent::CommissiveQuery
+        | Intent::GenerativeQuery => ToolFilter::none(),
         // Continuation resumes a prior task — its policy comes from
         // the prior task's plan, not from this dispatch. Unrestricted
         // here lets the continuation handler decide.

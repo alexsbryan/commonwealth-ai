@@ -1229,6 +1229,13 @@ impl Runtime {
             corpus: String,
             has_excerpt: bool,
             confidence: f32,
+            // Evidence pointer (the claim's first ChunkRef) — lets the injector
+            // resolve the claim to its REAL source chunk (MAP) instead of
+            // injecting the atom's paraphrased `content` (DATA). `None` for
+            // derived claims that carry no evidence.
+            evidence_chunk_id: Option<String>,
+            evidence_preview: Option<String>,
+            has_evidence: bool,
         }
         let mut cands: Vec<ClaimCand> = Vec::new();
         for id in &corpus_ids {
@@ -1249,59 +1256,150 @@ impl Runtime {
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .map(str::to_string);
+                let ev = c.evidence.first();
                 cands.push(ClaimCand {
                     content: content.to_string(),
                     has_excerpt: excerpt.is_some(),
                     excerpt,
                     corpus: id.clone(),
                     confidence: c.confidence.unwrap_or(0.5),
+                    evidence_chunk_id: ev.map(|e| e.chunk_id.clone()),
+                    evidence_preview: ev.and_then(|e| e.passage_preview.clone()),
+                    has_evidence: ev.is_some(),
                 });
             }
         }
         if cands.is_empty() {
             return None;
         }
-        // Prefer claims with a verbatim source quote (the answer can ground in
-        // the corpus's own words), then higher extraction confidence.
+        // Rank to maximise REAL-chunk grounding in the kept top-k: claims that
+        // carry a resolvable evidence chunk (→ MAP to a real source chunk) come
+        // first, then claims with a verbatim quote, then higher extraction
+        // confidence.
         cands.sort_by(|a, b| {
-            b.has_excerpt.cmp(&a.has_excerpt).then_with(|| {
-                b.confidence
-                    .partial_cmp(&a.confidence)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            b.has_evidence
+                .cmp(&a.has_evidence)
+                .then_with(|| b.has_excerpt.cmp(&a.has_excerpt))
+                .then_with(|| {
+                    b.confidence
+                        .partial_cmp(&a.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
         });
         cands.truncate(top_k);
         let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::with_capacity(cands.len());
+        let mut seen_chunk_ids: std::collections::HashSet<(String, u64)> =
+            std::collections::HashSet::new();
+        let mut mapped = 0usize;
         for (i, c) in cands.iter().enumerate() {
-            let content = match &c.excerpt {
-                Some(q) => format!("{}\n\nSource quote: \"{}\"", c.content, q),
-                None => c.content.clone(),
+            // Gentle taper preserves the evidence/quote/confidence order before
+            // reweight; the cap reserve (not the score) carries these through
+            // truncation, and reweight overwrites it from real content on the
+            // MAP chunks.
+            let seed_score = enum_score * 0.99_f32.powi(i as i32);
+
+            // MAP-first: resolve the claim's evidence to its REAL source chunk —
+            // the SAME shape-aware resolution the entity-enumeration path uses
+            // (numeric chunk_id → direct LanceDB fetch; section-shaped id → FTS
+            // the passage_preview for the evidence chunk). The answer then
+            // grounds on the article's actual text with a real chunk_id, not the
+            // atom's propositional paraphrase, and the real chunk survives
+            // dedup + the synthesis snapshot. DATA injection is the fallback ONLY
+            // when the claim has no resolvable evidence (derived claims, stale
+            // ids) — so an overview corpus still gets its key points either way.
+            let resolved = match c
+                .evidence_chunk_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                Some(cid) => {
+                    let mut got = match cid.parse::<u64>() {
+                        Ok(n) => self.fetch_chunk_by_id(&c.corpus, n).await,
+                        Err(_) => None,
+                    };
+                    if got.is_none() {
+                        if let Some(pv) = c
+                            .evidence_preview
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|p| !p.is_empty())
+                        {
+                            got = self
+                                .search_corpus_indexes_with_overrides(
+                                    &[],
+                                    pv,
+                                    1,
+                                    "AtomEnumOverview",
+                                    None,
+                                    enabled_corpora,
+                                )
+                                .await
+                                .into_iter()
+                                .next();
+                        }
+                    }
+                    got
+                }
+                None => None,
             };
-            let mut metadata = std::collections::HashMap::new();
-            metadata.insert("source".to_string(), "atom-enum".to_string());
-            metadata.insert("atom_type".to_string(), "claim".to_string());
-            chunks.push(corpus_engine::ScoredChunk {
-                content,
-                title: Some(format!("{} — key point", c.corpus)),
-                url: None,
-                corpus_id: c.corpus.clone(),
-                // Gentle taper preserves the quote-first / confidence order
-                // before reweight; the cap reserve (not the score) is what
-                // carries these through truncation.
-                score: enum_score * 0.99_f32.powi(i as i32),
-                metadata,
-                chunk_id: None,
-                source_doc_id: None,
-                vector_distance: None,
-            });
+
+            if let Some(mut chunk) = resolved {
+                // Claims often cluster on one section — skip a duplicate evidence
+                // chunk (keep the higher-ranked claim's). dedupe_merged would
+                // catch content dupes downstream too, but this avoids a redundant
+                // fetch occupying an atom-enum reserve slot.
+                if let Some(cid) = chunk.chunk_id {
+                    if !seen_chunk_ids.insert((chunk.corpus_id.clone(), cid)) {
+                        continue;
+                    }
+                }
+                chunk.score = seed_score;
+                chunk
+                    .metadata
+                    .insert("source".to_string(), "atom-enum".to_string());
+                chunk
+                    .metadata
+                    .insert("atom_type".to_string(), "claim".to_string());
+                chunks.push(chunk);
+                mapped += 1;
+            } else {
+                // DATA fallback: inject the claim text (+ verbatim quote when
+                // present). Tagged `atom_claim_unmapped` so the glassbox shows
+                // which overview chunks are synthetic vs resolved-to-source.
+                let content = match &c.excerpt {
+                    Some(q) => format!("{}\n\nSource quote: \"{}\"", c.content, q),
+                    None => c.content.clone(),
+                };
+                let mut metadata = std::collections::HashMap::new();
+                metadata.insert("source".to_string(), "atom-enum".to_string());
+                metadata.insert("atom_type".to_string(), "claim".to_string());
+                metadata.insert("atom_claim_unmapped".to_string(), "1".to_string());
+                chunks.push(corpus_engine::ScoredChunk {
+                    content,
+                    title: Some(format!("{} — key point", c.corpus)),
+                    url: None,
+                    corpus_id: c.corpus.clone(),
+                    score: seed_score,
+                    metadata,
+                    chunk_id: None,
+                    source_doc_id: None,
+                    vector_distance: None,
+                });
+            }
+        }
+        if chunks.is_empty() {
+            return None;
         }
         tracing::info!(
             target: "retrieval_audit",
             event = "atom_enum_overview",
             query = %truncate_with_ellipsis(message, 120),
             count = chunks.len(),
+            mapped_to_real_chunks = mapped,
+            data_fallback = chunks.len() - mapped,
             corpora = ?corpus_ids,
-            "retrieval_audit: atom_enum overview-claim injection"
+            "retrieval_audit: atom_enum overview-claim injection (MAP-first; DATA fallback for unresolvable claims)"
         );
         Some(chunks)
     }
@@ -2381,13 +2479,16 @@ impl Runtime {
         }
 
         // Per-corpus fan-out. Concurrency is env-gated
-        // (`SOVEREIGN_KQ_FANOUT_CONCURRENCY`) and defaults to 1 — the historical
-        // serial loop, BEHAVIOUR-IDENTICAL: every corpus still pours into one
-        // merged pool that is sorted/capped downstream, so concurrency changes
-        // only WALL-TIME, never results. On a many-corpus unscoped turn the
-        // serial fan-out is the dominant latency (~2s/corpus × N ≈ 60s at N=29);
-        // raising concurrency collapses that toward the slowest single corpus.
-        // Bounded so a wide fan-out can't thundering-herd the big indexes
+        // (`SOVEREIGN_KQ_FANOUT_CONCURRENCY`) and defaults to 4 (2026-06-26: was
+        // the historical serial 1). This is BEHAVIOUR-IDENTICAL: every corpus
+        // still pours into one merged pool that is sorted/capped downstream, so
+        // concurrency changes only WALL-TIME, never results — which is what makes
+        // raising it the SAFE way to bound an UNSCOPED turn's latency (no corpus
+        // is dropped, so the answer's corpus is never lost). On a many-corpus
+        // unscoped turn the serial fan-out was the dominant retrieval latency
+        // (~2s/corpus × N ≈ 60s at N=29); 4-way concurrency collapses that ~4×
+        // toward the slowest single corpus. Bounded at a moderate default (not
+        // unbounded) so a wide fan-out can't thundering-herd the big indexes
         // (sep/wikipedia) on open + search. Per-corpus + total timing is emitted
         // on `retrieval_audit` so a run can prove where the latency went.
         use futures::StreamExt as _;
@@ -2395,7 +2496,7 @@ impl Runtime {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|n| *n >= 1)
-            .unwrap_or(1);
+            .unwrap_or(4);
         // Owned, shareable handles so each task captures only owned values (no
         // fn-scope borrow across the .await — that trips the higher-ranked-
         // lifetime / Send bound). We build a Vec of owned futures in a sync loop

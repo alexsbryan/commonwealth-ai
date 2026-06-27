@@ -987,3 +987,71 @@ query = "Show me how the SCIP call graph gets built in the source."
 [[example]]
 intent = "code_query"
 query = "Where is answer gating implemented and what calls it?"
+
+# ── Creative / generative requests (GENERATIVE, 2026-06-26) ──
+# Asks for the model to PRODUCE a creative artifact — story, poem, song,
+# letter, dialogue, brainstormed names. These need NO corpus retrieval and
+# NO grounding gate; routed to the GenerativeQuery streaming handler (neutral
+# prompt, no working-memory). Before these exemplars existed they mis-routed
+# to coarse REASONING → DeepQuery → retrieval over every corpus + the gate
+# buffering every token → a 1.5-3.5min blank screen (breaker finding). Kept
+# verb- and form-diverse (tell/write/compose/pen/spin/make up/brainstorm/
+# come up with/invent/draft × story/poem/sonnet/limerick/song/dialogue/names/
+# metaphor/folktale/haiku) so the embedding generalises past any one phrasing,
+# and disjoint from the bench/breaker texts per this file's discipline.
+
+[[example]]
+intent = "generative_query"
+query = "Tell me a story about a clockmaker who slowly loses track of time."
+
+[[example]]
+intent = "generative_query"
+query = "Write a short story set aboard a generation ship that forgot its destination."
+
+[[example]]
+intent = "generative_query"
+query = "Write me a poem about the first frost of autumn."
+
+[[example]]
+intent = "generative_query"
+query = "Compose a sonnet about an empty train station at midnight."
+
+[[example]]
+intent = "generative_query"
+query = "Pen a limerick about a cat who refuses to take a nap."
+
+[[example]]
+intent = "generative_query"
+query = "Spin me a long, detailed tale about a wandering tinker and a talking crow."
+
+[[example]]
+intent = "generative_query"
+query = "Write a song about leaving home for the first time."
+
+[[example]]
+intent = "generative_query"
+query = "Make up a bedtime story for a kid who's afraid of thunder."
+
+[[example]]
+intent = "generative_query"
+query = "Write a dialogue between the moon and the tide."
+
+[[example]]
+intent = "generative_query"
+query = "Brainstorm some whimsical names for a corner tea shop."
+
+[[example]]
+intent = "generative_query"
+query = "Come up with a vivid metaphor for the feeling of procrastination."
+
+[[example]]
+intent = "generative_query"
+query = "Invent a folktale that explains why owls stay awake at night."
+
+[[example]]
+intent = "generative_query"
+query = "Draft a haiku about rain drumming on a tin roof."
+
+[[example]]
+intent = "generative_query"
+query = "Give me a funny short story about a robot learning to garden."

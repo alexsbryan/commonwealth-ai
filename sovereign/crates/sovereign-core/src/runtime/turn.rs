@@ -615,6 +615,7 @@ impl Runtime {
             Intent::ConationQuery => "handle_conation_query",
             Intent::CommissiveQuery => "handle_commissive_query",
             Intent::ExpressiveQuery => "handle_expressive_query",
+            Intent::GenerativeQuery => "handle_generative_query",
             _ => "handle_simple",
         };
         tracing::info!(dispatch, "runtime: dispatching");
@@ -661,6 +662,10 @@ impl Runtime {
             }
             Intent::ExpressiveQuery => {
                 self.handle_expressive_query(message, conversation_id, &context)
+                    .await
+            }
+            Intent::GenerativeQuery => {
+                self.handle_generative_query(message, conversation_id, &context)
                     .await
             }
             _ => {

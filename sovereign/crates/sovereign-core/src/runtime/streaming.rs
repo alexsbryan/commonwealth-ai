@@ -2365,6 +2365,18 @@ impl Runtime {
                 .await;
         }
 
+        // Creative/generative requests ("tell me a story", "write a poem") stream
+        // with a neutral prompt — NO retrieval, NO grounding gate. Routed here by
+        // the router's creative heuristic instead of DeepQuery, which would
+        // retrieve over every corpus and buffer every token behind the gate
+        // (a 1.5-3.5min blank screen then a dump — 2026-06-26 breaker finding).
+        if matches!(intent, Intent::GenerativeQuery) {
+            tracing::info!(intent = ?intent, "runtime: dispatching GenerativeQuery to streaming");
+            return self
+                .handle_generative_query_stream(message, conversation_id, &context)
+                .await;
+        }
+
         // Document-attached turns are owned by the document-operation path and
         // never reach the streaming surface for synthesis — keep the explicit
         // bail.

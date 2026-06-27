@@ -55,7 +55,8 @@ impl Runtime {
             .iter()
             .rev()
             .find(|m| m.role == Role::Assistant)
-            .map(|m| m.content[..m.content.len().min(300)].to_string());
+            // char-safe: byte slice panics mid-multibyte-char (CJK/emoji/RTL).
+            .map(|m| crate::runtime::truncate_chars(&m.content, 300));
 
         let goal_str = current_goal
             .as_deref()
@@ -307,7 +308,8 @@ impl Runtime {
             .iter()
             .rev()
             .find(|m| m.role == Role::Assistant)
-            .map(|m| m.content[..m.content.len().min(300)].to_string());
+            // char-safe: byte slice panics mid-multibyte-char (CJK/emoji/RTL).
+            .map(|m| crate::runtime::truncate_chars(&m.content, 300));
 
         let goal_str = current_goal
             .as_deref()

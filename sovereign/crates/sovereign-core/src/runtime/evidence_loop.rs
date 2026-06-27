@@ -53,27 +53,71 @@ use crate::types::{CompletionRequest, Intent, Speed};
 use super::ConversationContext;
 use super::Runtime;
 
-/// Canonical entity names read directly from a corpus's atlas atoms
-/// file (`<data>/indexes/<corpus>/atlas/atoms.json`). Best-effort:
-/// missing/garbled atlas → empty vec. Used only as the gazetteer
-/// fallback when the embedded-context provider has no entry for the
-/// corpus (see call site).
-fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
+/// Process-level parse cache for a corpus's `atlas/atoms.json`, keyed by corpus
+/// id with the file mtime as the freshness token.
+///
+/// The evidence loop's gazetteer helpers (`atlas_entity_names`,
+/// `atlas_atom_records`) are consulted on every gated turn — and
+/// `atlas_atom_matches` calls BOTH, so without this it was up to FOUR full
+/// read+serde-parses of atoms.json per turn. For the 724 MB / 1.67M-atom
+/// wikipedia atlas that is 0.5–5 s **per turn** of pure parsing (the dominant
+/// cost; the per-call iteration the helpers already did is comparatively cheap
+/// and left unchanged). This caches the parsed `Value` once per (corpus, mtime):
+/// the first gated turn pays the parse, subsequent turns are an `Arc` clone, and
+/// a re-enriched corpus (newer mtime) reparses on its next turn. Returns `None`
+/// (→ empty gazetteer, the existing best-effort contract) when the file is
+/// missing or unparseable.
+fn cached_atoms_json(corpus_id: &str) -> Option<std::sync::Arc<serde_json::Value>> {
+    use std::sync::{Arc, OnceLock, RwLock};
+    use std::time::SystemTime;
+    type Cache = RwLock<std::collections::HashMap<String, (SystemTime, Arc<serde_json::Value>)>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()));
+
     let base = std::env::var("SOVEREIGN_DATA_DIR")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::home_dir().unwrap_or_default().join(".sovereign")
-        });
-    let path = base.join("indexes").join(corpus_id).join("atlas").join("atoms.json");
-    let Ok(text) = std::fs::read_to_string(&path) else {
+        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
+    let path = base
+        .join("indexes")
+        .join(corpus_id)
+        .join("atlas")
+        .join("atoms.json");
+    let mtime = std::fs::metadata(&path).ok()?.modified().ok()?;
+
+    // Fast path: present and fresh (mtime unchanged since we parsed it).
+    if let Ok(map) = cache.read() {
+        if let Some((cached_mtime, value)) = map.get(corpus_id) {
+            if *cached_mtime == mtime {
+                return Some(Arc::clone(value));
+            }
+        }
+    }
+    // Slow path: (re)parse and cache under the current mtime.
+    let text = std::fs::read_to_string(&path).ok()?;
+    let value = Arc::new(serde_json::from_str::<serde_json::Value>(&text).ok()?);
+    if let Ok(mut map) = cache.write() {
+        map.insert(corpus_id.to_string(), (mtime, Arc::clone(&value)));
+    }
+    Some(value)
+}
+
+/// Canonical entity names from a corpus's atlas atoms file
+/// (`<data>/indexes/<corpus>/atlas/atoms.json`, via the mtime-keyed
+/// [`cached_atoms_json`] cache). Best-effort: missing/garbled atlas → empty vec.
+/// Used only as the gazetteer fallback when the embedded-context provider has no
+/// entry for the corpus (see call site).
+fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
+    let Some(v) = cached_atoms_json(corpus_id) else {
         return Vec::new();
     };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    let atoms = v.get("atoms").and_then(|a| a.as_array()).cloned().unwrap_or_else(|| {
-        v.as_array().cloned().unwrap_or_default()
-    });
+    // Borrow the shared cached Value in place — no array clone (the pre-cache
+    // version cloned the whole atoms array on every call).
+    let atoms: &[serde_json::Value] = v
+        .get("atoms")
+        .and_then(|a| a.as_array())
+        .or_else(|| v.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     atoms
         .iter()
         .filter_map(|a| {
@@ -264,13 +308,14 @@ fn stem(word: &str) -> &str {
 /// atlas file — the raw material for both the lexical and the
 /// semantic matchers below.
 fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
-    let base = std::env::var("SOVEREIGN_DATA_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
-    let path = base.join("indexes").join(corpus_id).join("atlas").join("atoms.json");
-    let Ok(text) = std::fs::read_to_string(&path) else { return Vec::new() };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return Vec::new() };
-    let atoms = v.get("atoms").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+    let Some(v) = cached_atoms_json(corpus_id) else {
+        return Vec::new();
+    };
+    let atoms: &[serde_json::Value] = v
+        .get("atoms")
+        .and_then(|a| a.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     atoms
         .iter()
         .filter_map(|a| {

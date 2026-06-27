@@ -78,6 +78,12 @@ pub(crate) fn default_oicp_for_intent(
             // retrieval against the world corpus.
             (CapabilityHint::general(), LatencyClass::Fast)
         }
+        Intent::GenerativeQuery => {
+            // Creative generation — primary (Slow) slot for quality; no
+            // retrieval, no thinking budget. Extended class signals the
+            // scheduler to favour the capable slot for a long piece.
+            (CapabilityHint::general(), LatencyClass::Extended)
+        }
         Intent::SimpleQuery | Intent::SimpleAction { .. } | Intent::Continuation { .. } => {
             return None;
         }
@@ -108,6 +114,7 @@ pub(crate) fn format_interpretation(
         Intent::ConationQuery => "a tweak to my last reply",
         Intent::CommissiveQuery => "a commitment to save",
         Intent::ExpressiveQuery => "an acknowledgment + help offer",
+        Intent::GenerativeQuery => "something creative written for you",
         Intent::SimpleAction { .. } => "a tool call",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a follow-up to earlier work",
@@ -131,6 +138,7 @@ pub(crate) fn label_for_intent(intent: &Intent) -> String {
         Intent::ConationQuery => "Adjust the last reply".into(),
         Intent::CommissiveQuery => "Save this as a commitment".into(),
         Intent::ExpressiveQuery => "Hear me out and help".into(),
+        Intent::GenerativeQuery => "Write something creative".into(),
         Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
         Intent::ComplexTask => "Plan a multi-step task".into(),
         Intent::Continuation { .. } => "Continue prior task".into(),
@@ -153,6 +161,7 @@ pub(crate) fn intent_hint(intent: &Intent) -> String {
         Intent::ConationQuery => "conation_query".into(),
         Intent::CommissiveQuery => "commissive_query".into(),
         Intent::ExpressiveQuery => "expressive_query".into(),
+        Intent::GenerativeQuery => "generative_query".into(),
         Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
         Intent::ComplexTask => "complex_task".into(),
         Intent::Continuation { task_id } => format!("continuation:{task_id}"),
@@ -173,6 +182,7 @@ pub(crate) fn parse_intent_hint(hint: &str) -> Intent {
         "conation_query" => Intent::ConationQuery,
         "commissive_query" => Intent::CommissiveQuery,
         "expressive_query" => Intent::ExpressiveQuery,
+        "generative_query" => Intent::GenerativeQuery,
         "complex_task" => Intent::ComplexTask,
         _ if hint.starts_with("simple_action:") => {
             let tool = hint.trim_start_matches("simple_action:").to_string();
@@ -210,6 +220,7 @@ pub(crate) fn build_clarification_question(_message: &str, primary: &Intent) -> 
         Intent::ConationQuery => "an adjustment to my last reply",
         Intent::CommissiveQuery => "a commitment to save",
         Intent::ExpressiveQuery => "an acknowledgment + targeted help",
+        Intent::GenerativeQuery => "something creative written for you",
         Intent::SimpleAction { .. } => "an action",
         Intent::ComplexTask => "a multi-step task",
         Intent::Continuation { .. } => "a continuation",

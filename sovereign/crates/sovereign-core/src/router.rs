@@ -588,6 +588,15 @@ EXPRESSIVE
   move is "help me unstick".
   Example: "I'm stuck on this"
 
+GENERATIVE
+  Asks the assistant to PRODUCE a creative or original artifact —
+  a story, poem, song, letter, dialogue, joke, or brainstormed list.
+  The answer IS the written piece itself; no retrieval, no lookup.
+  Signals: "tell me a story", "write a poem/song/letter", "compose",
+  "make up", "brainstorm". Distinct from REASONING (which analyses
+  real facts) — GENERATIVE invents.
+  Example: "Write me a poem about the first frost"
+
 METALINGUAL
   Asks how a term is USED by a named anchor — this system, this
   conversation, or a named external source. Meta to language, not
@@ -600,7 +609,7 @@ METALINGUAL
 User message: "{message}"{corrections_note}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE|METALINGUAL"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE|GENERATIVE|METALINGUAL"}}"#,
         )
     }
 
@@ -711,7 +720,10 @@ Reply with JSON only:
             .rev()
             .find(|m| m.role == Role::Assistant);
         if let Some(m) = last_assistant {
-            let snippet = &m.content[..m.content.len().min(200)];
+            // char-safe: a byte slice (`&content[..200]`) panics when byte 200
+            // lands mid-character (CJK/emoji/RTL) — and a panic here drops the
+            // send_message_stream responder (breaker input_fuzzer, 2026-06-25).
+            let snippet = crate::runtime::truncate_chars(&m.content, 200);
             parts.push(format!("Last assistant turn: {snippet}"));
         }
 
@@ -730,7 +742,9 @@ Reply with JSON only:
                     Role::Assistant => "assistant",
                     Role::System => "system",
                 };
-                format!("{role}: {}", &m.content[..m.content.len().min(150)])
+                // char-safe truncation (byte slice panics mid-multibyte-char,
+                // dropping the responder — breaker, 2026-06-25).
+                format!("{role}: {}", crate::runtime::truncate_chars(&m.content, 150))
             })
             .collect();
 
@@ -1027,6 +1041,7 @@ Reply with JSON only:
                         "CONATION",
                         "COMMISSION",
                         "EXPRESSIVE",
+                        "GENERATIVE",
                         "METALINGUAL",
                     ],
                 },
@@ -1960,6 +1975,7 @@ impl Router for LlmRouter {
             "CONATION" => (Intent::ConationQuery, None),
             "COMMISSION" => (Intent::CommissiveQuery, None),
             "EXPRESSIVE" => (Intent::ExpressiveQuery, None),
+            "GENERATIVE" => (Intent::GenerativeQuery, None),
             "REASONING" => (Intent::DeepQuery, None),
             "ACTION" => (
                 self.pass2_refine(message, context, available_tools).await?,
