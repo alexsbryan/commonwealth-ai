@@ -22,6 +22,7 @@ mod atos_plugin;
 mod audit_extract;
 mod audit_recover;
 mod code_cmd;
+mod code_map;
 mod design_onboarding;
 mod design_session;
 mod doc_fetcher;

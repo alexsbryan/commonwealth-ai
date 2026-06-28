@@ -593,7 +593,16 @@ pub fn parse_scip_file(
         // (for unambiguous cross-crate `caller_qualified`).
         let mut def_scopes: Vec<(String, i32, i32, String)> = Vec::new(); // (qualified_caller, start, end, display_caller)
         for occ in &doc.occurrences {
-            if (occ.symbol_roles & scip_proto::SymbolRole::DEFINITION) != 0 {
+            // Skip rust-analyzer `local N` symbols (local vars / block scopes). A
+            // call's caller is the enclosing FUNCTION, never a local scope. Without
+            // this, a short function whose body reads as a local scope makes the
+            // local the innermost enclosing definition → the caller resolves to
+            // `local 0`, whose package can't be parsed → every call edge drops as
+            // "external" (we saw 0 capabilities on a fresh repo). Filtering locals
+            // here lets the enclosing function win the scope race.
+            if (occ.symbol_roles & scip_proto::SymbolRole::DEFINITION) != 0
+                && !occ.symbol.starts_with("local ")
+            {
                 let start = occ.range.first().copied().unwrap_or(0);
                 let end = if occ.enclosing_range.len() >= 3 {
                     occ.enclosing_range[2]
