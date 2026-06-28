@@ -379,7 +379,12 @@ identical schema for a full index or a shard.
     │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
     │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
     └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.2
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.2 (canonical)
+        ├── atoms.rkyv                    # zero-copy archive of the graph, mmap'd by
+        │                                # the query-path reader instead of parsing
+        │                                # atoms.json (~38s→11ms on wikipedia); built
+        │                                # at atlas write + convert-on-load. See
+        │                                # docs/specs/ATLAS_STORAGE.md
         ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
         │                                # into atoms.json on next atlas write)
         ├── asset_edges.jsonl            # EdgeType::Attaches edges

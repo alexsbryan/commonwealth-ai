@@ -572,8 +572,6 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        use corpus_engine::enrichment::atlas::AtomEnvelope;
-
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
         // in desktop + bench). Set SOVEREIGN_ATOM_ENUM_OVERVIEW=0 to disable.
@@ -800,14 +798,11 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for atom in graph.atoms_by_id.values() {
-                let AtomEnvelope::Entity(e) = atom else {
-                    continue;
-                };
-                if e.entity_type.as_str_repr() != target_type {
+            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Entity) {
+                if view.subtype() != target_type {
                     continue;
                 }
-                let name = e.canonical_name.trim();
+                let name = view.name().trim();
                 if name.is_empty() {
                     continue;
                 }
@@ -861,21 +856,27 @@ impl Runtime {
                         continue;
                     }
                 }
-                let atom_id = atom.id().as_str();
-                let degree = graph.edges_by_source.get(atom_id).map_or(0, Vec::len)
-                    + graph.edges_by_target.get(atom_id).map_or(0, Vec::len);
-                let desc = e.description.trim();
+                let degree = graph.edge_degree(view.id());
+                let desc = view.description().trim();
                 let embed_text = if desc.is_empty() {
                     name.to_string()
                 } else {
                     format!("{name}. {desc}")
                 };
+                // An Entity's evidence is its single `first_appearance` ref.
+                let first = view.evidence().next();
                 let cand = Candidate {
-                    prominence: (degree, e.aliases.len()),
-                    salience: e.salience,
+                    prominence: (degree, view.alias_count()),
+                    salience: view.salience(),
                     corpus: id.clone(),
-                    chunk_id: e.first_appearance.chunk_id.clone(),
-                    preview: e.first_appearance.passage_preview.clone(),
+                    chunk_id: first
+                        .as_ref()
+                        .map(|ev| ev.chunk_id().to_string())
+                        .unwrap_or_default(),
+                    preview: first
+                        .as_ref()
+                        .map(|ev| ev.passage_preview().to_string())
+                        .filter(|s| !s.is_empty()),
                     embed_text,
                 };
                 best.entry(name.to_string())
@@ -906,27 +907,26 @@ impl Runtime {
             // Keyed by display string so identical relations dedup without
             // colliding with entity names.
             if include_relations {
-                for atom in graph.atoms_by_id.values() {
-                    let AtomEnvelope::Relation(r) = atom else {
+                for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Relation) {
+                    let label = view.label().trim();
+                    // First evidence ref grounds the relationship; skip
+                    // relations with no label or no evidence (same guard as
+                    // the former `label.is_empty() || r.evidence.is_empty()`).
+                    let Some(ev) = view.evidence().next() else {
                         continue;
                     };
-                    let label = r.label.trim();
-                    if label.is_empty() || r.evidence.is_empty() {
+                    if label.is_empty() {
                         continue;
                     }
-                    let parts: Vec<&str> = r
-                        .participants
-                        .iter()
-                        .filter_map(|pid| graph.atoms_by_id.get(pid.as_str()))
-                        .filter_map(|a| match a {
-                            AtomEnvelope::Entity(e) => {
-                                let n = e.canonical_name.trim();
-                                (!n.is_empty()).then_some(n)
-                            }
-                            _ => None,
+                    let parts: Vec<String> = view
+                        .participants()
+                        .filter_map(|pid| graph.atom(pid))
+                        .filter(|a| a.kind() == crate::atlas_context::AtomKindTag::Entity)
+                        .filter_map(|a| {
+                            let n = a.name().trim();
+                            (!n.is_empty()).then(|| n.to_string())
                         })
                         .collect();
-                    let ev = &r.evidence[0];
                     let display = if parts.is_empty() {
                         label.to_string()
                     } else {
@@ -944,8 +944,11 @@ impl Runtime {
                         prominence: (0, 0),
                         salience: 0.5,
                         corpus: id.clone(),
-                        chunk_id: ev.chunk_id.clone(),
-                        preview: ev.passage_preview.clone(),
+                        chunk_id: ev.chunk_id().to_string(),
+                        preview: {
+                            let p = ev.passage_preview();
+                            (!p.is_empty()).then(|| p.to_string())
+                        },
                         embed_text,
                     };
                     best.entry(display).or_insert(cand);
@@ -1207,7 +1210,6 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        use corpus_engine::enrichment::atlas::AtomEnvelope;
         let provider = self.atlas_context_provider.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
             .ok()
@@ -1242,29 +1244,27 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for atom in graph.atoms_by_id.values() {
-                let AtomEnvelope::Claim(c) = atom else {
-                    continue;
-                };
-                let content = c.content.trim();
+            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Claim) {
+                let content = view.content().trim();
                 if content.is_empty() {
                     continue;
                 }
-                let excerpt = c
-                    .quotable_excerpt
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string);
-                let ev = c.evidence.first();
+                let excerpt = {
+                    let e = view.excerpt().trim();
+                    (!e.is_empty()).then(|| e.to_string())
+                };
+                let ev = view.evidence().next();
                 cands.push(ClaimCand {
                     content: content.to_string(),
                     has_excerpt: excerpt.is_some(),
                     excerpt,
                     corpus: id.clone(),
-                    confidence: c.confidence.unwrap_or(0.5),
-                    evidence_chunk_id: ev.map(|e| e.chunk_id.clone()),
-                    evidence_preview: ev.and_then(|e| e.passage_preview.clone()),
+                    confidence: view.confidence(),
+                    evidence_chunk_id: ev.as_ref().map(|e| e.chunk_id().to_string()),
+                    evidence_preview: ev.as_ref().and_then(|e| {
+                        let p = e.passage_preview();
+                        (!p.is_empty()).then(|| p.to_string())
+                    }),
                     has_evidence: ev.is_some(),
                 });
             }

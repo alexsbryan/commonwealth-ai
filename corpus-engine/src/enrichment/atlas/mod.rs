@@ -25,6 +25,7 @@
 //! this same namespace so the atlas surface is one importable module.
 
 pub mod analysis;
+pub mod archive;
 pub mod atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;

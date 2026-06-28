@@ -410,11 +410,12 @@ impl AtlasContextManager {
             dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
         }
         if context_loaded {
+            let load_started = std::time::Instant::now();
             match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
                 Ok(graph) => {
-                    let atom_count = graph.atoms_by_id.len();
-                    let edge_out_count: usize =
-                        graph.edges_by_source.values().map(|v| v.len()).sum();
+                    let load_ms = load_started.elapsed().as_millis();
+                    let atom_count = graph.atom_count();
+                    let edge_out_count: usize = graph.edge_count();
                     self.graphs
                         .write()
                         .await
@@ -423,6 +424,7 @@ impl AtlasContextManager {
                         corpus = corpus_id,
                         atoms = atom_count,
                         edges = edge_out_count,
+                        load_ms,
                         "atlas-graph: loaded"
                     );
                 }
@@ -930,15 +932,18 @@ impl AtlasContextProvider for AtlasContextManager {
             .read()
             .ok()
             .and_then(|m| m.get(atlas_corpus_id).cloned())?;
+        let load_started = std::time::Instant::now();
         match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
             atlas_corpus_id,
             &atlas_dir,
         ) {
             Ok(graph) => {
+                let load_ms = load_started.elapsed().as_millis();
                 let graph = Arc::new(graph);
                 tracing::info!(
                     corpus = atlas_corpus_id,
-                    atoms = graph.atoms_by_id.len(),
+                    atoms = graph.atom_count(),
+                    load_ms,
                     "atlas-graph: lazy-loaded on first request"
                 );
                 if let Ok(mut m) = self.graphs.try_write() {

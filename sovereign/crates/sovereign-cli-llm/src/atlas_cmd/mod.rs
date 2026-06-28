@@ -22,6 +22,7 @@
 //! gains.
 
 pub mod budget;
+pub mod build_archive;
 pub mod build_doc_index;
 pub mod enable_incremental;
 pub mod inspect;
@@ -72,6 +73,10 @@ const HELP: Help = Help {
                 "Move 6 P1: derive doc_to_atoms.json sidecar from atoms.json.",
             ),
             (
+                "build-archive",
+                "Build the zero-copy atoms.rkyv archive off the query thread (Phase 1.5).",
+            ),
+            (
                 "enable-incremental",
                 "Move 6 P5: flip per-corpus atlas_incremental_enabled flag (pre-flight checks content-hash).",
             ),
@@ -108,6 +113,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "show-atom" => inspect::run_show_atom(&args[1..]).await,
         "migrate-ids" => migrate_ids::run(&args[1..]).await,
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
+        "build-archive" => build_archive::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,
         "typed-extension" => typed_extension::run(&args[1..]).await,
         "stats" => stats::run(&args[1..]).await,

@@ -1322,6 +1322,16 @@ pub async fn bootstrap_with_progress(
     // Cache-only: cold embed work is deferred to the post-install hook, so this
     // is a bounded, predictable boot cost (parity with the CLI/server).
     atlas_ctx_mgr.init_from_cache().await;
+    // NOTE (2026-06-26): a background atlas-graph pre-warm was tried here to hide
+    // the ~38s first-query cold parse of a wiki-scale (1.6M-atom) atlas, but it
+    // REGRESSED the racing first query: `graph()` parses synchronously on the
+    // query thread, so a query arriving during the background parse double-parses
+    // the same graph under CPU contention (measured first-query gap 139s vs the
+    // 38s cold baseline). Coordinating the sync `graph()` hot path with an async
+    // pre-warm over the tokio-RwLock graph cache (a shared per-corpus parse lock)
+    // is the correct fix but not a small change; the lazy `graph()` default is
+    // kept until that lands. The cold cost is also corpus-size-specific (only
+    // wiki-scale atlases are slow; typical corpora parse in <1s).
     // Wikipedia link graph (Atlas Layer 0) + cross-corpus meta-atlas — parity
     // with the CLI/server bootstrap (chat_cmd/bootstrap.rs, server main.rs).
     // Both probe LOCAL build artifacts and no-op when absent, so they're safe

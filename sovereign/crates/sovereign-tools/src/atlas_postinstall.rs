@@ -93,6 +93,26 @@ async fn build_structural_atlas_inner(
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
     let atoms_path = atlas_dir.join("atoms.json");
     if !force && atoms_path.exists() {
+        // The atlas JSON is already present (shipped/prebuilt corpus, or a
+        // prior build that didn't go through `write_atlas_full`'s archive
+        // sidecar). Ensure the zero-copy `atoms.rkyv` exists now, off the
+        // query thread, so the first query mmaps it instead of paying the
+        // convert-on-load parse (ATLAS_STORAGE.md Phase 1.5). Best-effort —
+        // the reader self-heals via convert-on-load if this is skipped.
+        if corpus_engine::enrichment::atlas::archive::archive_needs_build(&atlas_dir) {
+            match corpus_engine::enrichment::atlas::archive::build_and_write_archive(
+                &atlas_dir, corpus_id,
+            ) {
+                Ok(p) => tracing::info!(
+                    corpus = corpus_id,
+                    path = %p.display(),
+                    "atlas archive built post-install"
+                ),
+                Err(e) => {
+                    tracing::warn!(corpus = corpus_id, "atlas archive build skipped: {e}")
+                }
+            }
+        }
         return StructuralAtlasOutcome::AlreadyPresent { atoms_path };
     }
 
