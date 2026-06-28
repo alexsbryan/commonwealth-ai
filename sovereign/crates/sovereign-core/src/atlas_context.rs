@@ -17,12 +17,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::archive::{
-    build_atlas_archive_bytes, ArchivedArchChunkRef, ArchivedArchEdgeType, ArchivedAtlasArchiveData,
-    ArchivedAtomKindTag, ArchivedAtomRecord, ATLAS_ARCHIVE_FILENAME, ATLAS_ARCHIVE_VERSION,
+    build_atlas_archive_bytes, ArchChunkRef, ArchivedArchChunkRef, ArchivedArchEdgeType,
+    ArchivedAtlasArchiveData, ArchivedAtomKindTag, ArchivedAtomRecord, AtomRecord,
+    ATLAS_ARCHIVE_FILENAME, ATLAS_ARCHIVE_VERSION,
 };
 // Re-exported so retrieval consumers (`runtime/retrieval.rs`) can name the
 // atom-kind discriminant the typed-enumeration filter selects on.
 pub use corpus_engine::enrichment::atlas::archive::AtomKindTag;
+use corpus_engine::enrichment::atlas::store::LancePreload;
 use corpus_engine::enrichment::atlas::{AtomEnvelope, Edge, EdgeType};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
 use corpus_engine::ScoredChunk;
@@ -72,10 +74,26 @@ pub struct AtlasGraph {
     /// filter FTS lookups during chunk fetch — the right SEP corpus
     /// chunk has `title == article_slug`.
     pub article_slug: String,
-    /// Owns the archive bytes and hands out the zero-copy root. `Arc`
-    /// so `AtlasGraph` stays cheaply `Clone` (the daemon hands out
-    /// `Arc<AtlasGraph>` and the eval CLI holds `Vec<AtlasGraph>`).
-    holder: Arc<AtlasArchiveHolder>,
+    /// The storage backend — v1 rkyv mmap archive, or the v2
+    /// `atoms.lance` + `edges.csr` resident preload (ATLAS_STORAGE_V2).
+    /// The method API below is identical across both, so consumers
+    /// (`atlas_navigate`, retrieval, `AtomView`) never branch on it.
+    backend: Backend,
+}
+
+/// v1 vs v2 storage behind [`AtlasGraph`]. Both arms are `Arc` so the graph
+/// stays cheaply `Clone` (the daemon hands out `Arc<AtlasGraph>` and the eval
+/// CLI holds `Vec<AtlasGraph>`).
+#[derive(Clone)]
+enum Backend {
+    /// v1: zero-copy rkyv archive (`atoms.rkyv`) — mmap or owned bytes —
+    /// handing out the archived root on demand.
+    Rkyv(Arc<AtlasArchiveHolder>),
+    /// v2: `atoms.lance` atoms read resident (projected to the same
+    /// `AtomRecord`s the rkyv archive holds) + `edges.csr` mmap. The sync
+    /// query API reads straight off the resident records + the CSR mmap —
+    /// no async ripple into `atlas_navigate`. See [`LancePreload`].
+    Lance(Arc<LancePreload>),
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -179,6 +197,31 @@ impl AtlasGraph {
     /// corpus id even when the on-disk dir uses a different layout.
     pub fn load_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
         let article_slug = derive_article_slug(atlas_corpus_id);
+
+        // v2 direct-read path (ATLAS_STORAGE_V2 Stage 1), gated per corpus. Opt-in
+        // and reversible: rkyv stays the default, and is also the fallback if the
+        // v2 store is absent or unreadable — so flipping a corpus can never strand
+        // its atlas (same resilience as the rkyv mmap → convert-on-load fallback).
+        if read_v2_enabled(atlas_corpus_id, atlas_dir) && v2_store_present(atlas_dir) {
+            match Self::load_lance_from_disk(atlas_corpus_id, atlas_dir) {
+                Ok(g) => {
+                    tracing::info!(
+                        corpus = atlas_corpus_id,
+                        backend = "lance",
+                        atoms = g.atom_count(),
+                        "atlas loaded via v2 store"
+                    );
+                    return Ok(g);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = atlas_corpus_id,
+                        "v2 store gated on but unreadable ({e}); falling back to rkyv"
+                    );
+                }
+            }
+        }
+
         let rkyv_path = atlas_dir.join(ATLAS_ARCHIVE_FILENAME);
         if rkyv_path.exists() {
             match Self::from_mmap(atlas_corpus_id, &article_slug, &rkyv_path) {
@@ -235,6 +278,30 @@ impl AtlasGraph {
         Self::from_owned_bytes(atlas_corpus_id, &article_slug, bytes)
     }
 
+    /// Build a v2 Lance-backed graph from an already-opened [`LancePreload`].
+    /// ATLAS_STORAGE_V2 Stage 1 — the production direct-read backend: atoms read
+    /// resident from `atoms.lance`, edges from the `edges.csr` mmap, the same
+    /// method API as the rkyv backend. For the eval CLI's `--atlas-backend lance`
+    /// and the daemon's gated v2 load path.
+    pub fn from_lance_preload(atlas_corpus_id: &str, preload: LancePreload) -> Self {
+        let article_slug = derive_article_slug(atlas_corpus_id);
+        Self {
+            atlas_corpus_id: atlas_corpus_id.to_string(),
+            article_slug,
+            backend: Backend::Lance(Arc::new(preload)),
+        }
+    }
+
+    /// Open the v2 store under `atlas_dir` (`atoms.lance` + `edges.csr`) and
+    /// build a Lance-backed graph. Sync (bridges the async open via
+    /// [`LancePreload::open_blocking`]) so it slots into the daemon's sync load
+    /// path; lifecycle-time only (boot / corpus load), never the hot query path.
+    pub fn load_lance_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
+        let preload = LancePreload::open_blocking(atlas_dir)
+            .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
+        Ok(Self::from_lance_preload(atlas_corpus_id, preload))
+    }
+
     fn from_mmap(atlas_corpus_id: &str, article_slug: &str, path: &Path) -> Result<Self, String> {
         let file =
             std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
@@ -246,7 +313,7 @@ impl AtlasGraph {
         Ok(Self {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug: article_slug.to_string(),
-            holder: Arc::new(holder),
+            backend: Backend::Rkyv(Arc::new(holder)),
         })
     }
 
@@ -264,36 +331,55 @@ impl AtlasGraph {
         Ok(Self {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug: article_slug.to_string(),
-            holder: Arc::new(holder),
+            backend: Backend::Rkyv(Arc::new(holder)),
         })
     }
 
-    fn root(&self) -> &ArchivedAtlasArchiveData {
-        self.holder.root()
+    /// Which storage backend is live — `"rkyv"` (v1 archive) or `"lance"` (v2
+    /// store). Diagnostic glassbox: the daemon logs it per corpus at load and
+    /// the gate test asserts the per-corpus `read_v2` flip selects the right one.
+    pub fn backend_kind(&self) -> &'static str {
+        match &self.backend {
+            Backend::Rkyv(_) => "rkyv",
+            Backend::Lance(_) => "lance",
+        }
     }
 
-    /// Number of atoms in the archive.
+    /// Number of atoms in the graph.
     pub fn atom_count(&self) -> usize {
-        self.root().atoms.len()
+        match &self.backend {
+            Backend::Rkyv(h) => h.root().atoms.len(),
+            Backend::Lance(p) => p.atom_count(),
+        }
     }
 
-    /// Number of edges in the archive.
+    /// Number of edges in the graph.
     pub fn edge_count(&self) -> usize {
-        self.root().edges.len()
+        match &self.backend {
+            Backend::Rkyv(h) => h.root().edges.len(),
+            Backend::Lance(p) => p.edge_count(),
+        }
     }
 
     /// Point lookup by atom-id. `None` if absent.
     pub fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
-        let idx: u32 = (*self.root().by_id.get(atom_id)?).into();
-        self.root()
-            .atoms
-            .get(idx as usize)
-            .map(|rec| AtomView { rec })
+        match &self.backend {
+            Backend::Rkyv(h) => {
+                let root = h.root();
+                let idx: u32 = (*root.by_id.get(atom_id)?).into();
+                root.atoms.get(idx as usize).map(AtomView::Rkyv)
+            }
+            Backend::Lance(p) => p.atom(atom_id).map(AtomView::Lance),
+        }
     }
 
-    /// All atoms, in archive (build) order.
+    /// All atoms, in graph (interned local / build) order.
     pub fn atoms(&self) -> impl Iterator<Item = AtomView<'_>> + '_ {
-        self.root().atoms.iter().map(|rec| AtomView { rec })
+        match &self.backend {
+            Backend::Rkyv(h) => Box::new(h.root().atoms.iter().map(AtomView::Rkyv))
+                as Box<dyn Iterator<Item = AtomView<'_>> + '_>,
+            Backend::Lance(p) => Box::new(p.atoms().map(AtomView::Lance)),
+        }
     }
 
     /// Atoms of one kind — the typed-enumeration filter. Reads only the
@@ -315,45 +401,75 @@ impl AtlasGraph {
     /// In + out edge count for an atom — the prominence "degree" signal.
     /// Counts adjacency-list lengths without parsing any edge payload.
     pub fn edge_degree(&self, atom_id: &str) -> usize {
-        let r = self.root();
-        r.edges_by_source.get(atom_id).map_or(0, |v| v.len())
-            + r.edges_by_target.get(atom_id).map_or(0, |v| v.len())
+        match &self.backend {
+            Backend::Rkyv(h) => {
+                let r = h.root();
+                r.edges_by_source.get(atom_id).map_or(0, |v| v.len())
+                    + r.edges_by_target.get(atom_id).map_or(0, |v| v.len())
+            }
+            Backend::Lance(p) => p.edge_degree(atom_id),
+        }
     }
 
-    /// Edges originating at `atom_id` — zero-copy [`EdgeView`]s over the
-    /// compact archived edges (no JSON parse), bounded by the BFS frontier
+    /// Edges originating at `atom_id` — [`EdgeView`]s over the compact edges
+    /// (rkyv archive or CSR mmap, no JSON parse), bounded by the BFS frontier
     /// in `atlas_navigate`.
     pub fn edges_from(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-        self.edges_adjacent(atom_id, Direction::From)
+        match &self.backend {
+            Backend::Rkyv(h) => rkyv_edges_adjacent(h.root(), atom_id, Direction::From),
+            Backend::Lance(p) => lance_edge_views(p.out_edges(atom_id)),
+        }
     }
 
     /// Edges arriving at `atom_id`.
     pub fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-        self.edges_adjacent(atom_id, Direction::To)
+        match &self.backend {
+            Backend::Rkyv(h) => rkyv_edges_adjacent(h.root(), atom_id, Direction::To),
+            Backend::Lance(p) => lance_edge_views(p.in_edges(atom_id)),
+        }
     }
+}
 
-    fn edges_adjacent(&self, atom_id: &str, dir: Direction) -> Vec<EdgeView<'_>> {
-        let r = self.root();
-        let idxs = match dir {
-            Direction::From => r.edges_by_source.get(atom_id),
-            Direction::To => r.edges_by_target.get(atom_id),
-        };
-        let Some(idxs) = idxs else {
-            return Vec::new();
-        };
-        idxs.iter()
-            .filter_map(|i| {
-                let i: u32 = (*i).into();
-                let e = r.edges.get(i as usize)?;
-                Some(EdgeView {
-                    source: e.source.as_ref(),
-                    target: e.target.as_ref(),
-                    edge_type: edge_type_from_arch(&e.edge_type),
-                    confidence: e.confidence.into(),
-                })
+/// rkyv-backend edge adjacency — the index-into-`edges` walk from the archived
+/// `edges_by_source` / `edges_by_target` maps, zero-copy over the archive.
+fn rkyv_edges_adjacent<'r>(
+    root: &'r ArchivedAtlasArchiveData,
+    atom_id: &str,
+    dir: Direction,
+) -> Vec<EdgeView<'r>> {
+    let idxs = match dir {
+        Direction::From => root.edges_by_source.get(atom_id),
+        Direction::To => root.edges_by_target.get(atom_id),
+    };
+    let Some(idxs) = idxs else {
+        return Vec::new();
+    };
+    idxs.iter()
+        .filter_map(|i| {
+            let i: u32 = (*i).into();
+            let e = root.edges.get(i as usize)?;
+            Some(EdgeView {
+                source: e.source.as_ref(),
+                target: e.target.as_ref(),
+                edge_type: edge_type_from_arch(&e.edge_type),
+                confidence: e.confidence.into(),
             })
-            .collect()
-    }
+        })
+        .collect()
+}
+
+/// Lance-backend edge adjacency — map the preload's `(src, tgt, type, conf)`
+/// tuples (endpoint strings borrowed from the resident id table) into
+/// [`EdgeView`]s, the same shape the rkyv path returns.
+fn lance_edge_views<'a>(raw: Vec<(&'a str, &'a str, EdgeType, f32)>) -> Vec<EdgeView<'a>> {
+    raw.into_iter()
+        .map(|(source, target, edge_type, confidence)| EdgeView {
+            source,
+            target,
+            edge_type,
+            confidence,
+        })
+        .collect()
 }
 
 /// Borrowing view over one compact archived edge — the four fields the
@@ -397,6 +513,39 @@ fn derive_article_slug(atlas_corpus_id: &str) -> String {
         .to_string()
 }
 
+/// Is the v2 store (`atoms.lance` + `edges.csr`) present in `atlas_dir`? Both
+/// artifacts are required — a half-present store is treated as absent so the
+/// reader falls back to rkyv rather than erroring.
+fn v2_store_present(atlas_dir: &Path) -> bool {
+    use corpus_engine::enrichment::atlas::store::{ATOMS_LANCE_DIRNAME, EDGES_CSR_FILENAME};
+    atlas_dir.join(ATOMS_LANCE_DIRNAME).exists() && atlas_dir.join(EDGES_CSR_FILENAME).exists()
+}
+
+/// Per-corpus `read_v2` gate — should this corpus read the v2 store instead of
+/// the rkyv archive? Off by default (rkyv). ATLAS_STORAGE_V2 step 3 flips
+/// corpora one at a time; two mechanisms, checked in order:
+///
+/// 1. A durable per-corpus marker file `atlas/.read_v2` — the production flip,
+///    written next to the store so it travels with the corpus and survives
+///    restarts. `touch`-ing it flips that one corpus; deleting it reverts.
+/// 2. The `SOVEREIGN_ATLAS_READ_V2` env — staged-rollout / eval convenience: a
+///    comma-separated atlas-corpus-id allowlist, or `all` / `1` for every
+///    corpus. **Do not set `all` where wikipedia is installed** — the
+///    preload-sync reader is wrong at wiki scale (see ATLAS_V2_DEPLOYMENT.md 3a);
+///    use explicit ids until wiki's paged reader lands.
+fn read_v2_enabled(atlas_corpus_id: &str, atlas_dir: &Path) -> bool {
+    if atlas_dir.join(".read_v2").exists() {
+        return true;
+    }
+    match std::env::var("SOVEREIGN_ATLAS_READ_V2") {
+        Ok(v) => {
+            let v = v.trim();
+            v == "all" || v == "1" || v.split(',').any(|c| c.trim() == atlas_corpus_id)
+        }
+        Err(_) => false,
+    }
+}
+
 /// Atomic archive write — sibling `.tmp` + rename, mirroring the JSON
 /// writers so a crash mid-write can't leave a half-archive a reader
 /// would mmap.
@@ -406,72 +555,125 @@ fn write_archive_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
-/// Borrowing, zero-copy view over one archived atom. Scalar / `Vec`
-/// fields are read straight from the mapped bytes; [`atom_envelope`]
+/// Borrowing view over one atom — a v1 archived record (`&ArchivedAtomRecord`,
+/// fields read straight from the mmap) or a v2 resident record (`&AtomRecord`,
+/// the projected `atoms.lance` row). The accessor API is identical across both,
+/// so consumers never branch on the backend; [`atom_envelope`](Self::atom_envelope)
 /// re-parses the full `AtomEnvelope` from the JSON payload for the rare
-/// deep-field read. Field borrows are tied to the graph's data (`'a`),
-/// not to the (often temporary) view, so a caller can collect
-/// [`EvidenceRef`]s out of a transient `AtomView`.
-pub struct AtomView<'a> {
-    rec: &'a ArchivedAtomRecord,
+/// deep-field read. Field borrows are tied to the graph's data (`'a`), not to
+/// the (often temporary) view, so a caller can collect [`EvidenceRef`]s out of a
+/// transient `AtomView`.
+pub enum AtomView<'a> {
+    /// v1 rkyv archived record.
+    Rkyv(&'a ArchivedAtomRecord),
+    /// v2 resident projected record.
+    Lance(&'a AtomRecord),
 }
 
 impl<'a> AtomView<'a> {
     pub fn id(&self) -> &'a str {
-        self.rec.id.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.id.as_ref(),
+            AtomView::Lance(r) => r.id.as_str(),
+        }
     }
     pub fn kind(&self) -> AtomKindTag {
-        archived_kind(&self.rec.kind)
+        match self {
+            AtomView::Rkyv(r) => archived_kind(&r.kind),
+            AtomView::Lance(r) => r.kind,
+        }
     }
     /// `Entity.canonical_name` (else `""`).
     pub fn name(&self) -> &'a str {
-        self.rec.name.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.name.as_ref(),
+            AtomView::Lance(r) => r.name.as_str(),
+        }
     }
     /// `Relation.label` (else `""`).
     pub fn label(&self) -> &'a str {
-        self.rec.label.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.label.as_ref(),
+            AtomView::Lance(r) => r.label.as_str(),
+        }
     }
     /// `Claim.content` (else `""`).
     pub fn content(&self) -> &'a str {
-        self.rec.content.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.content.as_ref(),
+            AtomView::Lance(r) => r.content.as_str(),
+        }
     }
     /// `Entity.entity_type` string repr (else `""`).
     pub fn subtype(&self) -> &'a str {
-        self.rec.subtype.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.subtype.as_ref(),
+            AtomView::Lance(r) => r.subtype.as_str(),
+        }
     }
     /// `Entity.description` (else `""`).
     pub fn description(&self) -> &'a str {
-        self.rec.description.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.description.as_ref(),
+            AtomView::Lance(r) => r.description.as_str(),
+        }
     }
     /// `Claim.quotable_excerpt` (else `""`).
     pub fn excerpt(&self) -> &'a str {
-        self.rec.excerpt.as_ref()
+        match self {
+            AtomView::Rkyv(r) => r.excerpt.as_ref(),
+            AtomView::Lance(r) => r.excerpt.as_str(),
+        }
     }
     /// `Claim.confidence` (0.5 default; 0.0 for non-claims).
     pub fn confidence(&self) -> f32 {
-        self.rec.confidence.into()
+        match self {
+            AtomView::Rkyv(r) => r.confidence.into(),
+            AtomView::Lance(r) => r.confidence,
+        }
     }
     /// `Entity.salience` (0.0 for non-entities).
     pub fn salience(&self) -> f32 {
-        self.rec.salience.into()
+        match self {
+            AtomView::Rkyv(r) => r.salience.into(),
+            AtomView::Lance(r) => r.salience,
+        }
     }
     pub fn alias_count(&self) -> usize {
-        self.rec.aliases.len()
+        match self {
+            AtomView::Rkyv(r) => r.aliases.len(),
+            AtomView::Lance(r) => r.aliases.len(),
+        }
     }
     pub fn aliases(&self) -> impl Iterator<Item = &'a str> {
-        self.rec.aliases.iter().map(|s| s.as_ref())
+        match self {
+            AtomView::Rkyv(r) => Box::new(r.aliases.iter().map(|s| s.as_ref()))
+                as Box<dyn Iterator<Item = &'a str> + 'a>,
+            AtomView::Lance(r) => Box::new(r.aliases.iter().map(|s| s.as_str())),
+        }
     }
     /// `Relation.participants` atom-ids.
     pub fn participants(&self) -> impl Iterator<Item = &'a str> {
-        self.rec.participants.iter().map(|s| s.as_ref())
+        match self {
+            AtomView::Rkyv(r) => Box::new(r.participants.iter().map(|s| s.as_ref()))
+                as Box<dyn Iterator<Item = &'a str> + 'a>,
+            AtomView::Lance(r) => Box::new(r.participants.iter().map(|s| s.as_str())),
+        }
     }
     pub fn evidence(&self) -> impl Iterator<Item = EvidenceRef<'a>> {
-        self.rec.evidence.iter().map(|rec| EvidenceRef { rec })
+        match self {
+            AtomView::Rkyv(r) => Box::new(r.evidence.iter().map(EvidenceRef::Rkyv))
+                as Box<dyn Iterator<Item = EvidenceRef<'a>> + 'a>,
+            AtomView::Lance(r) => Box::new(r.evidence.iter().map(EvidenceRef::Lance)),
+        }
     }
     /// Re-parse the full `AtomEnvelope` from the JSON payload blob.
     /// `None` only for the empty-payload edge case or a parse failure.
     pub fn atom_envelope(&self) -> Option<AtomEnvelope> {
-        let bytes: &[u8] = self.rec.payload.as_ref();
+        let bytes: &[u8] = match self {
+            AtomView::Rkyv(r) => r.payload.as_ref(),
+            AtomView::Lance(r) => r.payload.as_slice(),
+        };
         if bytes.is_empty() {
             return None;
         }
@@ -479,21 +681,35 @@ impl<'a> AtomView<'a> {
     }
 }
 
-/// Borrowing view over one archived evidence ref. The `Option` fields of
-/// the source `ChunkRef` were collapsed to `""` at build time.
-pub struct EvidenceRef<'a> {
-    rec: &'a ArchivedArchChunkRef,
+/// Borrowing view over one evidence ref — v1 archived (`&ArchivedArchChunkRef`)
+/// or v2 resident (`&ArchChunkRef`). The `Option` fields of the source
+/// `ChunkRef` were collapsed to `""` at build time. Same accessor API across
+/// both backends.
+pub enum EvidenceRef<'a> {
+    /// v1 rkyv archived evidence ref.
+    Rkyv(&'a ArchivedArchChunkRef),
+    /// v2 resident evidence ref.
+    Lance(&'a ArchChunkRef),
 }
 
 impl<'a> EvidenceRef<'a> {
     pub fn chunk_id(&self) -> &'a str {
-        self.rec.chunk_id.as_ref()
+        match self {
+            EvidenceRef::Rkyv(r) => r.chunk_id.as_ref(),
+            EvidenceRef::Lance(r) => r.chunk_id.as_str(),
+        }
     }
     pub fn passage_preview(&self) -> &'a str {
-        self.rec.passage_preview.as_ref()
+        match self {
+            EvidenceRef::Rkyv(r) => r.passage_preview.as_ref(),
+            EvidenceRef::Lance(r) => r.passage_preview.as_str(),
+        }
     }
     pub fn source_doc_id(&self) -> &'a str {
-        self.rec.source_doc_id.as_ref()
+        match self {
+            EvidenceRef::Rkyv(r) => r.source_doc_id.as_ref(),
+            EvidenceRef::Lance(r) => r.source_doc_id.as_str(),
+        }
     }
 }
 
@@ -1513,6 +1729,162 @@ mod archive_io_tests {
         }
 
         assert!(graph.atom("no-such-id").is_none());
+    }
+
+    /// ATLAS_STORAGE_V2 Stage 1: the Lance backend is **indistinguishable** from
+    /// the rkyv backend through the public `AtlasGraph` API. Same atoms + edges
+    /// loaded both ways (rkyv via `from_parts`, v2 via the on-disk store + the
+    /// sync `open_blocking` bridge the daemon uses) must answer every accessor
+    /// identically — so `atlas_navigate` and retrieval behave the same whichever
+    /// backend a corpus is flipped to.
+    #[test]
+    fn lance_backend_matches_rkyv_backend_through_public_api() {
+        use corpus_engine::enrichment::atlas::store;
+
+        let atoms = vec![
+            AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9)),
+            AtomEnvelope::Entity(sample_entity(2, "Bob", 0.4)),
+            AtomEnvelope::Entity(sample_entity(3, "Carol", 0.7)),
+        ];
+        let ids: Vec<String> = atoms.iter().map(|a| a.id().as_str().to_string()).collect();
+        let edges = vec![
+            sample_edge(1, AtomId::entity(1), AtomId::entity(2)),
+            sample_edge(2, AtomId::entity(1), AtomId::entity(3)),
+        ];
+
+        // v1 reference (in-memory archive).
+        let rkyv = AtlasGraph::from_parts("c1", &atoms, &edges).unwrap();
+
+        // v2 store written to disk, opened through the Lance backend via the
+        // same sync bridges the daemon's load path uses.
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path();
+        store::write_store_blocking(atlas_dir, "c1", &atoms, &edges).unwrap();
+        let lance = AtlasGraph::load_lance_from_disk("c1", atlas_dir).unwrap();
+
+        assert_eq!(lance.atom_count(), rkyv.atom_count());
+        assert_eq!(lance.edge_count(), rkyv.edge_count());
+        assert_eq!(lance.article_slug, rkyv.article_slug);
+
+        // Sort edge views by (source, target) so the comparison is order-free —
+        // the two backends needn't enumerate adjacency in the same order.
+        let edge_key = |vs: Vec<EdgeView<'_>>| {
+            let mut v: Vec<(String, String, EdgeType, f32)> = vs
+                .into_iter()
+                .map(|e| (e.source.to_string(), e.target.to_string(), e.edge_type, e.confidence))
+                .collect();
+            v.sort_by(|a, b| (a.0.as_str(), a.1.as_str()).cmp(&(b.0.as_str(), b.1.as_str())));
+            v
+        };
+
+        for id in &ids {
+            let a = rkyv.atom(id).expect("rkyv atom");
+            let b = lance.atom(id).expect("lance atom");
+            assert_eq!(a.id(), b.id());
+            assert_eq!(a.kind(), b.kind());
+            assert_eq!(a.name(), b.name());
+            assert_eq!(a.label(), b.label());
+            assert_eq!(a.content(), b.content());
+            assert_eq!(a.subtype(), b.subtype());
+            assert_eq!(a.description(), b.description());
+            assert_eq!(a.excerpt(), b.excerpt());
+            assert!((a.salience() - b.salience()).abs() < 1e-6);
+            assert!((a.confidence() - b.confidence()).abs() < 1e-6);
+            assert_eq!(a.alias_count(), b.alias_count());
+            assert_eq!(
+                a.aliases().collect::<Vec<_>>(),
+                b.aliases().collect::<Vec<_>>()
+            );
+            assert_eq!(
+                a.participants().collect::<Vec<_>>(),
+                b.participants().collect::<Vec<_>>()
+            );
+            let ev = |v: &AtomView<'_>| -> Vec<(String, String, String)> {
+                v.evidence()
+                    .map(|e| {
+                        (
+                            e.chunk_id().to_string(),
+                            e.passage_preview().to_string(),
+                            e.source_doc_id().to_string(),
+                        )
+                    })
+                    .collect()
+            };
+            assert_eq!(ev(&a), ev(&b), "evidence parity for {id}");
+            assert_eq!(
+                a.atom_envelope().map(|e| e.id().as_str().to_string()),
+                b.atom_envelope().map(|e| e.id().as_str().to_string()),
+            );
+            assert_eq!(rkyv.edge_degree(id), lance.edge_degree(id));
+            assert_eq!(edge_key(rkyv.edges_from(id)), edge_key(lance.edges_from(id)));
+            assert_eq!(edge_key(rkyv.edges_to(id)), edge_key(lance.edges_to(id)));
+        }
+
+        // Typed enumeration + full atom-set parity (order-free).
+        assert_eq!(
+            rkyv.atoms_of_kind(AtomKindTag::Entity).count(),
+            lance.atoms_of_kind(AtomKindTag::Entity).count(),
+        );
+        let mut rids: Vec<String> = rkyv.atoms().map(|v| v.id().to_string()).collect();
+        let mut lids: Vec<String> = lance.atoms().map(|v| v.id().to_string()).collect();
+        rids.sort();
+        lids.sort();
+        assert_eq!(rids, lids, "atom set must match across backends");
+
+        // Absent id behaves the same.
+        assert!(rkyv.atom("no-such-id").is_none());
+        assert!(lance.atom("no-such-id").is_none());
+        assert_eq!(lance.edge_degree("no-such-id"), 0);
+        assert!(lance.edges_from("no-such-id").is_empty());
+    }
+
+    /// ATLAS_STORAGE_V2 step 3 gate: `load_from_disk` reads the v2 store only
+    /// when the per-corpus `read_v2` marker is present, defaults to rkyv, and
+    /// falls back to rkyv if the store is gone — so a flip can never strand an
+    /// atlas.
+    #[test]
+    fn load_from_disk_honors_the_read_v2_gate() {
+        use corpus_engine::enrichment::atlas::store;
+        use corpus_engine::enrichment::atlas::writer::write_atlas;
+        use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+
+        // The env signal must not bleed in from a sibling test — the marker is
+        // the only gate this test exercises.
+        std::env::remove_var("SOVEREIGN_ATLAS_READ_V2");
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);
+        let id1 = AtomId::entity(1).as_str().to_string();
+
+        // rkyv archive (dual-writes atoms.json + atoms.rkyv) ...
+        let e1 = sample_entity(1, "Alice", 0.9);
+        let e2 = sample_entity(2, "Bob", 0.4);
+        let edge = sample_edge(1, AtomId::entity(1), AtomId::entity(2));
+        write_atlas(&atlas_dir, &[e1, e2], &[], std::slice::from_ref(&edge)).unwrap();
+        // ... and the v2 store beside it (rebuild the atoms — Entity needn't be Clone).
+        let atoms = vec![
+            AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9)),
+            AtomEnvelope::Entity(sample_entity(2, "Bob", 0.4)),
+        ];
+        store::write_store_blocking(&atlas_dir, "c1", &atoms, std::slice::from_ref(&edge)).unwrap();
+
+        // Gate off → rkyv (the default).
+        let g = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
+        assert_eq!(g.backend_kind(), "rkyv");
+        assert_eq!(g.atom_count(), 2);
+
+        // Per-corpus marker → lance, serving the same atoms.
+        std::fs::write(atlas_dir.join(".read_v2"), b"").unwrap();
+        let g2 = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
+        assert_eq!(g2.backend_kind(), "lance");
+        assert_eq!(g2.atom_count(), 2);
+        assert_eq!(g2.atom(&id1).unwrap().name(), "Alice");
+
+        // Marker on but the store removed → falls back to rkyv, never strands.
+        std::fs::remove_dir_all(atlas_dir.join(store::ATOMS_LANCE_DIRNAME)).unwrap();
+        let g3 = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
+        assert_eq!(g3.backend_kind(), "rkyv");
+        assert_eq!(g3.atom_count(), 2);
     }
 
     /// `write_atlas` dual-writes `atoms.rkyv` (L4); `load_from_disk` mmaps

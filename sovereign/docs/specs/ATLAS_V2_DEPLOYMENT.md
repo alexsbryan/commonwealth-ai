@@ -26,19 +26,58 @@ What remains is **deployment** — realizing the proven-correct design in the da
 - [ ] **1. Backfill.** `atlas verify-v2 --all --generate` writes `atoms.lance` +
   `edges.csr` for all 1,812 atlas-bearing corpora. Skip the 3 dead atlases;
   wikipedia is the one slow run (1.67M-atom reconstruct — run isolated, watch RSS).
-- [ ] **2. Production direct-read reader (THE hot-path stage).** Daemon's
+- [x] **2. Production direct-read reader (THE hot-path stage) — DONE + verified.** Daemon's
   `AtlasGraph` reads `atoms.lance` **directly** instead of reconstruct-to-rkyv —
   backend enum `Rkyv | Lance`, `AtomView`/`EvidenceRef` become 2-variant enums
   (pub method API preserved → callers unchanged), edges via the `CsrEdges` mmap.
   **Decision: preload-sync** (open is async; query API stays sync → no `atlas_navigate`
-  async ripple). Cheap for every corpus except wikipedia; wiki's payload-paging /
-  async-streaming RSS variant is deferred to its flip (step 3, last). Per-corpus
-  `read_v2` gate (off → rkyv). **Verify:** reader-parity test + chaos QA + SEP eval
-  in the daemon path + a non-philosophy embedding spot-check (enron).
-- [ ] **3. Flip.** Per-corpus `read_v2`: SEP → other sources → **wikipedia last**
-  (with the preload-vs-async RSS / cold-window re-measure at the wiki flip).
-- [ ] **4. Delete v1.** `resolve_atom_id_from_entry`, `AtlasContext`,
-  `atoms.embeddings.bin`, the cosine-bag seeding. After all flipped + chaos green.
+  async ripple). This reader reads every atom resident + parses each payload once at
+  open. Correct + cheap at SEP/other scale (hundreds–low-thousands of atoms);
+  **wrong for wikipedia** — see step 3a. Per-corpus `read_v2` gate (off → rkyv).
+  - [x] **2a** `pub AtomRow` + `atom_envelope` reader type (corpus-engine `store.rs`).
+  - [x] **2b** `LancePreload` (resident atoms via canonical `project` + `edges.csr` mmap,
+    sync query API, async `open` + `open_blocking` bridge) + reader-parity test —
+    *green* (resident record == rkyv projection incl. aliases/evidence from payload).
+  - [x] **2c** `AtlasGraph` backend enum + `AtomView`/`EvidenceRef` 2-variant enums +
+    `from_lance_preload`/`load_lance_from_disk`. Cross-backend parity test proves the
+    Lance backend is byte-identical to rkyv through the whole public API — *green*;
+    the existing rkyv `archive_io_tests` still pass (no v1 regression).
+  - [x] **2d** `load_from_disk` gate: per-corpus `atlas/.read_v2` marker (production
+    flip) **or** `SOVEREIGN_ATLAS_READ_V2` allowlist/`all` (eval/staging); rkyv is the
+    default **and** the fallback if the store is absent/unreadable (a flip can't strand
+    an atlas). `backend_kind()` for glassbox logging + the gate test — *green*.
+  - [x] **2e** `eval --atlas-backend lance` drives the **production** direct reader.
+    SEP neutrality re-run (rkyv+cosine vs direct-lance+ann, 57 atlases / 21 q):
+    `atlas_navigation` **byte-identical 0/21**, **0 direct-load errors** on all 57 real
+    SEP atlases. The `retrieved` churn (17/21) is the pre-existing `dedup_by_source`
+    tie-break — proven by the same-config **control** (rkyv+cosine vs itself, 2nd
+    process) churning 13/21 with `atlas_navigation` also 0/21: the churn happens with
+    *zero* changes. Reader proven retrieval-neutral (deterministically by the 2c
+    byte-parity test; on real data by this eval). The daemon-served chaos QA + enron
+    embedding spot-check move to step 3 (where the daemon actually uses the gate).
+- [ ] **3. Flip.** Per-corpus `read_v2` marker: SEP → other **embedding-bearing**
+  sources. Wikipedia is deliberately **not** flipped (see 3a). **Verify per flip
+  (daemon-served, the gate is live here — distinct from 2e's in-eval reader):** chaos
+  QA on the flipped corpus + a non-philosophy embedding spot-check (enron) + confirm
+  `backend_kind=lance` in the daemon log. Roll back by removing the marker.
+- [ ] **3a. Wikipedia → columnar-structural v2 (proper path) — see `WIKIPEDIA_ATLAS_V2.md`.**
+  rkyv is the **interim** reader for wiki, not the end-state. The dead-end was trying
+  to port SEP's *semantic atom* model (rich JSON payload + embeddings + ANN) onto Lance
+  for wiki — a model mismatch (wiki atoms are `enrichment_depth: "structural"` stubs;
+  no embeddings; the payload-parse + `&'a`-borrow is what made the reader hard). The
+  right path: bake wiki's *structural* enrichment (link graph, section_path, pov/
+  citation, QID — already computed in `wikipedia_graph.db`, today split across
+  atoms.json + 1.39 GB edges.json + SQLite) **into Lance columns** — article rows +
+  typed `edges.csr`. The reader problem dissolves (no rich payload to parse), it
+  unifies wiki's 3-store split (~3.4 GB → a few hundred MB), and removes the rkyv
+  carve-out. Increments W1–W4 in the spec; W5 (article embeddings → ANN) is the future
+  semantic-seeding upgrade. "Done" = all corpora on v2 (wiki columnar, SEP/authored
+  atom), zero rkyv carve-out.
+- [ ] **4. Delete the v1 cosine-bag seeding** (`resolve_atom_id_from_entry`,
+  `AtlasContext`, `atoms.embeddings.bin`) after production ANN seeding lands + all
+  embedding-bearing corpora flipped + chaos green. **KEEP the rkyv reader backend** —
+  wikipedia depends on it permanently (3a). This step deletes the *seeding* path, not
+  the *reader*.
 - [ ] **5. HF distribution.** Bundle ships `atoms.lance` + `edges.csr`;
   `SnapshotManifest.store_format_version`; install = drop + register (no convert).
 

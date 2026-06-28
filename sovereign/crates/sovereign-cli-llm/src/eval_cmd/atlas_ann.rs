@@ -44,8 +44,9 @@ pub enum SeedMode {
 pub enum AtlasBackend {
     /// v1: the rkyv archive (`atoms.rkyv`), or convert-on-load from `atoms.json`.
     Rkyv,
-    /// v2: the columnar store (`atoms.lance` + `edges.csr`), reconstructed to an
-    /// owned archive via `corpus_engine::…::store::reconstruct_archive_bytes`.
+    /// v2: the columnar store (`atoms.lance` + `edges.csr`), read through the
+    /// production direct-read backend (`AtlasGraph::load_lance_from_disk` →
+    /// `LancePreload`) — the same reader the daemon uses.
     Lance,
 }
 

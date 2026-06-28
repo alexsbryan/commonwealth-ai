@@ -618,6 +618,87 @@ impl WikipediaGraph {
         .ok()
     }
 
+    // ─── Columnar export (WIKIPEDIA_ATLAS_V2 W1b) ────────────
+
+    /// Export this SQLite graph to the columnar v2 store (`articles.lance` +
+    /// `edges.lance`) under `atlas_dir` — the format the
+    /// [`crate::wikipedia_columnar::ColumnarWikipediaGraph`] reader serves. A
+    /// faithful 1:1 dump: articles + the per-article `is_contested` flag
+    /// (`EXISTS` over `section_signals`), and edges joined to `articles` for the
+    /// `source_title` + the denormalised `target_in_scope` the columnar neighbor
+    /// query reads without a join. The SQLite stays the build aggregator here;
+    /// W4 makes the columnar store the build output directly + retires this DB.
+    ///
+    /// The SQLite read is scoped to drop the connection guard before the async
+    /// Lance write, so no `!Send` rusqlite handle crosses the `.await`.
+    pub async fn export_columnar(&self, atlas_dir: &Path) -> Result<()> {
+        use crate::enrichment::atlas::wiki_store::{WikiArticleRow, WikiEdgeRow};
+        let (articles, edges): (Vec<WikiArticleRow>, Vec<WikiEdgeRow>) = {
+            let conn = self.conn.lock().await;
+            let mut astmt = conn
+                .prepare(
+                    "SELECT a.title, a.wikidata_qid, a.revision_id, a.in_scope, \
+                            a.pov_total, a.citation_total, \
+                            EXISTS(SELECT 1 FROM section_signals s \
+                                   WHERE s.corpus_id = a.corpus_id AND s.article_id = a.id \
+                                     AND s.is_contested = 1) \
+                     FROM articles a WHERE a.corpus_id = ?1",
+                )
+                .map_err(|e| Error::Database(format!("export articles prepare: {e}")))?;
+            let articles: Vec<WikiArticleRow> = astmt
+                .query_map(params![self.corpus_id], |row| {
+                    Ok(WikiArticleRow {
+                        title: row.get(0)?,
+                        wikidata_qid: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                        revision_id: row.get::<_, Option<i64>>(2)?.unwrap_or(-1),
+                        in_scope: row.get::<_, i64>(3)? == 1,
+                        pov_total: row.get(4)?,
+                        citation_total: row.get(5)?,
+                        is_contested: row.get::<_, i64>(6)? == 1,
+                    })
+                })
+                .map_err(|e| Error::Database(format!("export articles query: {e}")))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(astmt);
+            let mut estmt = conn
+                .prepare(
+                    "SELECT src.title, e.target_title, e.relationship_type, e.link_text, \
+                            e.occurrence_count, e.source_section_path, \
+                            COALESCE(tgt.in_scope, 0) \
+                     FROM edges e \
+                     JOIN articles src \
+                       ON src.id = e.source_article_id AND src.corpus_id = e.corpus_id \
+                     LEFT JOIN articles tgt \
+                       ON tgt.id = e.target_article_id AND tgt.corpus_id = e.corpus_id \
+                     WHERE e.corpus_id = ?1",
+                )
+                .map_err(|e| Error::Database(format!("export edges prepare: {e}")))?;
+            let edges: Vec<WikiEdgeRow> = estmt
+                .query_map(params![self.corpus_id], |row| {
+                    Ok(WikiEdgeRow {
+                        source_title: row.get(0)?,
+                        target_title: row.get(1)?,
+                        relationship_type: row.get(2)?,
+                        link_text: row.get(3)?,
+                        occurrence_count: row.get(4)?,
+                        source_section_path: row.get(5)?,
+                        target_in_scope: row.get::<_, i64>(6)? == 1,
+                    })
+                })
+                .map_err(|e| Error::Database(format!("export edges query: {e}")))?
+                .filter_map(|r| r.ok())
+                .collect();
+            (articles, edges)
+        };
+        crate::enrichment::atlas::wiki_store::write_wikipedia_columnar_store(
+            atlas_dir, &articles, &edges,
+        )
+        .await
+        .map_err(|e| Error::Database(format!("export columnar write: {e}")))?;
+        Ok(())
+    }
+
     // ─── Stats / staleness ───────────────────────────────────
 
     /// Total articles in scope for this corpus.
@@ -1225,6 +1306,90 @@ mod tests {
         // Both targets are out-of-scope at Vital L5 minimum scale,
         // so in_scope should be false on the neighbor records.
         assert!(neighbors.iter().all(|n| !n.in_scope));
+    }
+
+    /// WIKIPEDIA_ATLAS_V2 W1b: the columnar export served by
+    /// `ColumnarWikipediaGraph` answers `neighbors` / `neighbors_for_axis` /
+    /// `has_contested_section` identically to this SQLite graph — the
+    /// gold-standard parity for the SQLite → Lance migration.
+    #[tokio::test]
+    async fn columnar_export_matches_sqlite_neighbors() {
+        use crate::wikipedia_columnar::ColumnarWikipediaGraph;
+        let g = WikipediaGraph::open_in_memory("test").unwrap();
+        // Cross-linked so some targets are themselves in-scope sources.
+        let chunks = vec![
+            chunk(
+                1,
+                "Albert Einstein",
+                meta_with(
+                    vec!["Lead"],
+                    "lead",
+                    None,
+                    vec![
+                        ("Special relativity", "special relativity"),
+                        ("Photoelectric effect", "photoelectric effect"),
+                    ],
+                ),
+            ),
+            chunk(
+                2,
+                "Albert Einstein",
+                meta_with(
+                    vec!["Criticism"],
+                    "controversy",
+                    Some(2),
+                    vec![("Special relativity", "criticism of relativity")],
+                ),
+            ),
+            chunk(
+                3,
+                "Special relativity",
+                meta_with(
+                    vec!["Lead"],
+                    "lead",
+                    None,
+                    vec![
+                        ("Albert Einstein", "Einstein"),
+                        ("Photoelectric effect", "photoelectric effect"),
+                    ],
+                ),
+            ),
+        ];
+        g.ingest_from_chunks(chunks).await.unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        g.export_columnar(tmp.path()).await.unwrap();
+        let c = ColumnarWikipediaGraph::open(tmp.path()).await.unwrap();
+
+        // Compare neighbor sets as sorted (title, rel, occ, in_scope) tuples.
+        let key = |ns: Vec<Neighbor>| {
+            let mut v: Vec<(String, String, i64, bool)> = ns
+                .into_iter()
+                .map(|n| (n.title, n.relationship_type, n.occurrence_count, n.in_scope))
+                .collect();
+            v.sort();
+            v
+        };
+        for title in ["Albert Einstein", "Special relativity"] {
+            assert_eq!(
+                key(g.neighbors(title, 50).await),
+                key(c.neighbors(title, 50).await),
+                "neighbors parity for {title}",
+            );
+        }
+        // Axis-filtered parity on a real section term.
+        let axis = vec!["criticism".to_string()];
+        assert_eq!(
+            key(g.neighbors_for_axis("Albert Einstein", &axis, 50).await),
+            key(c.neighbors_for_axis("Albert Einstein", &axis, 50).await),
+            "neighbors_for_axis parity",
+        );
+        // Contested-section parity (the Criticism/controversy section).
+        assert_eq!(
+            g.has_contested_section("Albert Einstein").await,
+            c.has_contested_section("Albert Einstein").await,
+        );
+        assert!(c.has_contested_section("Albert Einstein").await);
     }
 
     #[tokio::test]
