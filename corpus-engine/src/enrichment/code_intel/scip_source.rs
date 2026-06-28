@@ -16,7 +16,7 @@ use std::path::Path;
 
 use corpus_engine_scip::{ScipGraph, SymbolRow};
 
-use super::{extract_body, is_enrichable_kind, SymbolMeta, SymbolSource};
+use super::{extract_body_from_lines, is_enrichable_kind, SymbolMeta, SymbolSource};
 use crate::error::Result;
 
 /// Bodies shorter than this (trimmed) are skipped — one-line getters and the
@@ -46,7 +46,10 @@ pub fn enumerate_from_rows(
     file_filter: &[String],
     caller_set: &HashSet<String>,
 ) -> Vec<SymbolSource> {
-    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
+    // Cache each file's lines split ONCE (not per-symbol). Body extraction below
+    // reads from these, turning the per-file cost from O(functions × file_len) to
+    // O(file_len + bodies) — what makes the whole-corpus enumerate tractable.
+    let mut file_cache: HashMap<String, Option<Vec<String>>> = HashMap::new();
     let mut seen: HashSet<(String, i32, String)> = HashSet::new();
     let mut out = Vec::new();
     let (mut enrichable, mut emitted, mut skipped_short, mut unreadable) = (0usize, 0, 0, 0);
@@ -75,14 +78,16 @@ pub fn enumerate_from_rows(
         if !seen.insert((row.file_path.clone(), row.line_start, row.name.clone())) {
             continue; // duplicate symbol row
         }
-        let contents = file_cache
-            .entry(row.file_path.clone())
-            .or_insert_with(|| std::fs::read_to_string(source_root.join(&row.file_path)).ok());
-        let Some(contents) = contents.as_ref() else {
+        let lines = file_cache.entry(row.file_path.clone()).or_insert_with(|| {
+            std::fs::read_to_string(source_root.join(&row.file_path))
+                .ok()
+                .map(|c| c.lines().map(str::to_string).collect::<Vec<String>>())
+        });
+        let Some(lines) = lines.as_ref() else {
             unreadable += 1;
             continue;
         };
-        let body = extract_body(contents, row.line_start, row.line_end);
+        let body = extract_body_from_lines(lines, row.line_start, row.line_end);
         if body.trim().chars().count() < MIN_BODY_CHARS {
             skipped_short += 1;
             continue;
@@ -114,11 +119,20 @@ pub async fn enumerate_symbol_sources(
     source_root: &Path,
     file_filter: &[String],
 ) -> Result<Vec<SymbolSource>> {
+    // Per-step timing — the whole-corpus enumerate is the per-run setup cost
+    // (re-paid on every resume), so make each stage observable.
+    let t = std::time::Instant::now();
     let rows = scip.symbols_in_crate("", "").await?;
+    tracing::info!(target: "enrichment.code_intel", rows = rows.len(), ms = t.elapsed().as_millis() as u64, "enum step: symbols_in_crate");
     // The call-graph caller-set is the precise function population (the SCIP
     // `kind` field is unreliable). Empty for a graph with no refs → no filter.
+    let t = std::time::Instant::now();
     let caller_set = scip.caller_qualified_names().await?;
-    Ok(enumerate_from_rows(&rows, source_root, file_filter, &caller_set))
+    tracing::info!(target: "enrichment.code_intel", callers = caller_set.len(), ms = t.elapsed().as_millis() as u64, "enum step: caller_qualified_names");
+    let t = std::time::Instant::now();
+    let out = enumerate_from_rows(&rows, source_root, file_filter, &caller_set);
+    tracing::info!(target: "enrichment.code_intel", out = out.len(), ms = t.elapsed().as_millis() as u64, "enum step: enumerate_from_rows");
+    Ok(out)
 }
 
 #[cfg(test)]

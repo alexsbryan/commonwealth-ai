@@ -141,6 +141,16 @@ pub(super) async fn build_tool_registry(
         }
         tools.register(Box::new(tool));
     }
+    // Capability-reconciliation freshness + findings — siblings to drift_*,
+    // over the `enrich capability-reconcile` artifact.
+    {
+        let mut tool = sovereign_tools::CapabilityPostureTool::new();
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
+    tools.register(Box::new(sovereign_tools::CapabilityFindingsTool::new()));
     {
         let mut tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
             .with_heartbeat(Arc::clone(&watcher_heartbeat));

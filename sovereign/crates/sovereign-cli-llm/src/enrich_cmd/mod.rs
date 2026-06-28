@@ -26,6 +26,8 @@ pub mod atlas_tensions;
 pub mod workflow_primitives;
 pub mod atlas_tensions_classify;
 pub mod build;
+pub mod capability_doc;
+pub mod capability_reconcile;
 pub mod cascade;
 pub mod classify;
 pub mod code_intel;
@@ -84,6 +86,8 @@ const HELP: Help = Help {
                 ("raptor", "Retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree (additive to any existing atom-graph atlas) — powers whole-document summarization."),
                 ("raptor-index", "(Re)build the RAPTOR summary-node ANN index (raptor_summaries.lance) from conv_raptor_nodes — the query-time fast path; 'enrich raptor' builds it automatically at the end of a run."),
                 ("code-intel", "Summarize every function in a CODE corpus (plain-English intent + the questions it answers) and index them as searchable chunks — the conceptual->code retrieval bridge."),
+                ("capability-doc", "Narrate every derived capability into a grounded, file:line-cited architecture document (from `code capability-map` + `enrich code-intel`)."),
+                ("capability-reconcile", "Reconcile derived capabilities against the architecture docs: corroborated / undocumented (LLM-verified) / drifted (doc claim vs code)."),
                 ("triage-candidates", "Rank atlas entities by inbound link degree to pick Tier-1.5 / Tier-2 enrichment candidates."),
                 ("atlas-eval", "Score the structural atlas against a question bank by tokenized title-overlap retrieval."),
                 ("eval", "Score the resolved atlas against a golden-set TOML; reports per-phase precision/recall/F1."),
@@ -219,6 +223,8 @@ pub async fn run_enrich(args: &[String]) -> i32 {
 
         // ── Code intelligence (per-symbol intent summaries -> chunks) ──
         "code-intel" => code_intel::cmd_code_intel(rest).await,
+        "capability-doc" => capability_doc::cmd_capability_doc(rest).await,
+        "capability-reconcile" => capability_reconcile::cmd_capability_reconcile(rest).await,
 
         // ── Utilities ─────────────────────────────────────────
         "status" => status::cmd_status(rest).await,

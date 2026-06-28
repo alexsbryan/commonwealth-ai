@@ -344,8 +344,27 @@ impl SovereignInferenceAdapter {
         // payload rather than a chain-of-thought.
         req.think_budget = resolve_think_budget(request);
         if let Some(oicp) = &request.oicp {
+            // Translate the OICP `latency_class` into the slot picker's
+            // `preferred_speed`. Without this the class is dropped, the request
+            // defaults to `Speed::Medium`, and short/fast calls (code-intel
+            // enrich, atlas phase 1b/3/5/6) miss the FastShort continuous-batched
+            // companion — serializing on the mutex'd primary instead of batching
+            // across n_seq_max. (2026-06-27)
+            match &oicp.latency_class {
+                Some(sovereign_core::oicp::LatencyClass::Fast) => {
+                    req = req.with_speed(sovereign_core::types::Speed::Fast);
+                }
+                Some(sovereign_core::oicp::LatencyClass::Normal) => {
+                    req = req.with_speed(sovereign_core::types::Speed::Medium);
+                }
+                Some(sovereign_core::oicp::LatencyClass::Extended) => {
+                    req = req.with_speed(sovereign_core::types::Speed::Slow);
+                }
+                None => {}
+            }
             req = req.with_oicp(oicp.clone());
         }
+
         // Tool-use: carry tool schemas + tool_choice through so the
         // inference backend can inject them into the chat template
         // (`sovereign-inference::embedded::format_prompt`). When tools
