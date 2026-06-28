@@ -59,7 +59,7 @@ pub enum AtomKindTag {
 /// Flattened evidence ref (the `Option`s collapsed to `""`). Carries the fields
 /// the consumers read off `ChunkRef` (`chunk_id`, `passage_preview`,
 /// `source_doc_id`).
-#[derive(rkyv::Archive, rkyv::Serialize)]
+#[derive(rkyv::Archive, rkyv::Serialize, Clone, Debug, PartialEq)]
 pub struct ArchChunkRef {
     pub chunk_id: String,
     pub passage_preview: String,
@@ -101,7 +101,7 @@ pub struct ArchEdge {
 }
 
 /// One atom: structured hot fields + the full-fidelity JSON payload.
-#[derive(rkyv::Archive, rkyv::Serialize)]
+#[derive(rkyv::Archive, rkyv::Serialize, Clone, Debug, PartialEq)]
 pub struct AtomRecord {
     pub id: String,
     pub kind: AtomKindTag,

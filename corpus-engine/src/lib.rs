@@ -64,6 +64,12 @@ pub mod yield_hook;
 #[cfg(feature = "stores")]
 pub mod wikipedia_graph;
 
+// WIKIPEDIA_ATLAS_V2 W2 — the columnar (Lance) `WikipediaGraph` reader, serving
+// the same neighbor API over `articles.lance` + `edges.lance`. Reuses
+// `wikipedia_graph`'s `Neighbor`/`ArticleRecord`, so it shares the `stores` gate.
+#[cfg(feature = "stores")]
+pub mod wikipedia_columnar;
+
 // Test / lint result stores (rusqlite). Gated by `stores`.
 #[cfg(feature = "stores")]
 pub mod lint_results;

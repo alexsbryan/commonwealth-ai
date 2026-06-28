@@ -427,6 +427,29 @@ impl CsrEdges {
         self.read_dir(&self.inn, local_id)
     }
 
+    /// Out-degree of `local_id` — the adjacency-list length, read from the
+    /// offsets array without materialising the neighbor tuples. The cheap
+    /// half of the prominence `edge_degree` signal.
+    pub fn out_degree(&self, local_id: u32) -> usize {
+        self.degree(&self.out, local_id)
+    }
+
+    /// In-degree of `local_id`.
+    pub fn in_degree(&self, local_id: u32) -> usize {
+        self.degree(&self.inn, local_id)
+    }
+
+    fn degree(&self, d: &CsrDir, local_id: u32) -> usize {
+        if local_id >= self.n_atoms {
+            return 0;
+        }
+        let b = &self.mmap[..];
+        let rdu = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        let lo = rdu(d.off + local_id as usize * 4) as usize;
+        let hi = rdu(d.off + (local_id as usize + 1) * 4) as usize;
+        hi - lo
+    }
+
     fn read_dir(&self, d: &CsrDir, local_id: u32) -> Vec<(u32, u8, f32)> {
         if local_id >= self.n_atoms {
             return Vec::new();
@@ -499,10 +522,13 @@ pub fn write_store_blocking(
 /// Drive a Lance (tokio) future to completion from sync code. Lance requires a
 /// tokio reactor; running on a fresh, dedicated-thread multi-thread runtime
 /// avoids both the "runtime within a runtime" panic and `block_in_place`'s
-/// flavor constraints. The dormant gate means this is off the default path.
-fn run_blocking<F>(fut: F) -> Result<PathBuf, String>
+/// flavor constraints. Used by the v2-store write bridges (dormant by gate) and
+/// the [`LancePreload::open_blocking`] reader bridge (the daemon's sync
+/// `AtlasGraph::load_from_disk` opening the v2 store off the hot query path).
+fn run_blocking<T, F>(fut: F) -> Result<T, String>
 where
-    F: std::future::Future<Output = Result<PathBuf, String>> + Send,
+    T: Send,
+    F: std::future::Future<Output = Result<T, String>> + Send,
 {
     std::thread::scope(|scope| {
         scope
@@ -515,7 +541,7 @@ where
                     .block_on(fut)
             })
             .join()
-            .unwrap_or_else(|_| Err("v2 store build thread panicked".to_string()))
+            .unwrap_or_else(|_| Err("v2 store thread panicked".to_string()))
     })
 }
 
@@ -623,6 +649,199 @@ pub async fn reconstruct_archive_bytes(
 
     let slug = corpus_id.strip_prefix("sep-").unwrap_or(corpus_id);
     super::archive::build_atlas_archive_bytes(corpus_id, slug, &atoms, &edges)
+}
+
+// ── LancePreload: the production direct-read reader (Stage 1) ──────────────────
+
+/// Read every atom out of `atoms.lance` into a resident [`AtomRecord`], the
+/// **canonical** [`project`]ion of its lossless `payload`. Re-projecting the
+/// payload (rather than reading the scalar columns) is deliberate: it makes the
+/// resident record byte-identical to what the rkyv archive holds, so the
+/// daemon's `AtlasGraph` Lance backend hands out views indistinguishable from
+/// the rkyv ones (the reader-parity invariant). It also recovers the relational
+/// fields (`aliases`/`participants`/`evidence`) that the scalar columns drop and
+/// only the payload carries. Returned sorted by interned local id (== position),
+/// so CSR neighbor ids index straight into the `Vec`.
+///
+/// Parsing every payload is the SEP/other-scale "preload" cost (cheap — hundreds
+/// to low-thousands of atoms); wikipedia (1.67M) keeps the rkyv reader until its
+/// own flip, where a paged variant lands.
+async fn read_atom_records(atlas_dir: &Path) -> Result<Vec<AtomRecord>, String> {
+    let uri = atlas_dir
+        .to_str()
+        .ok_or_else(|| format!("non-utf8 atlas dir {}", atlas_dir.display()))?;
+    let db = lancedb::connect(uri)
+        .execute()
+        .await
+        .map_err(|e| format!("connect {uri}: {e}"))?;
+    let tbl = db
+        .open_table(ATOMS_TABLE)
+        .execute()
+        .await
+        .map_err(|e| format!("open atoms.lance: {e}"))?;
+    let batches: Vec<RecordBatch> = tbl
+        .query()
+        .execute()
+        .await
+        .map_err(|e| format!("scan atoms.lance: {e}"))?
+        .try_collect()
+        .await
+        .map_err(|e| format!("collect atoms.lance: {e}"))?;
+    let mut by_local: Vec<(u32, AtomRecord)> = Vec::new();
+    for b in &batches {
+        let ids = b
+            .column_by_name("id")
+            .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
+            .ok_or("atoms.lance missing id column")?;
+        let payloads = b
+            .column_by_name("payload")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or("atoms.lance missing payload column")?;
+        for i in 0..b.num_rows() {
+            let env: AtomEnvelope = serde_json::from_str(payloads.value(i))
+                .map_err(|e| format!("parse atom payload: {e}"))?;
+            by_local.push((ids.value(i), project(&env)));
+        }
+    }
+    by_local.sort_by_key(|x| x.0);
+    Ok(by_local.into_iter().map(|x| x.1).collect())
+}
+
+/// Which CSR direction an edge query walks.
+#[derive(Clone, Copy)]
+enum Dir {
+    Out,
+    In,
+}
+
+/// A resident, **sync-queryable** view over one corpus's v2 store — the
+/// production direct-read reader that replaces reconstruct-to-rkyv. Atoms live
+/// resident as projected [`AtomRecord`]s; edges stay the mmap'd `edges.csr`, so
+/// the `atlas_navigate` BFS inner loop is sync + paged (the v2 "hot BFS stays
+/// sync" invariant).
+///
+/// **Open is async, query is sync** — the ATLAS_STORAGE_V2 "preload-sync"
+/// decision. [`open`](Self::open) reads the whole atoms table once (Lance/tokio,
+/// off the hot path), then every accessor (`atom` / `atoms` / `out_edges` /
+/// `in_edges` / `edge_degree`) is a plain slice / mmap read — no async ripple
+/// into the query API. [`open_blocking`](Self::open_blocking) bridges the async
+/// open to the daemon's sync `AtlasGraph::load_from_disk` via the dedicated-
+/// thread runtime, like the write bridges.
+pub struct LancePreload {
+    /// Projected atom records; index == interned local id (sorted at open).
+    atoms: Vec<AtomRecord>,
+    /// atom-id string → local id (point lookup + edge-endpoint resolution).
+    by_str_id: HashMap<String, u32>,
+    /// local id → atom-id string, so CSR edge endpoints surface as `&str`
+    /// borrowed from resident data (mirrors the rkyv `EdgeView` `&str`s).
+    local_to_str: Vec<String>,
+    /// mmap'd CSR adjacency — sync + paged.
+    csr: CsrEdges,
+}
+
+impl LancePreload {
+    /// Open the v2 store under `atlas_dir` (`atoms.lance` + `edges.csr`).
+    /// Async (reads the atoms table); see [`open_blocking`](Self::open_blocking)
+    /// for the sync bridge.
+    pub async fn open(atlas_dir: &Path) -> Result<Self, String> {
+        let atoms = read_atom_records(atlas_dir).await?;
+        let mut by_str_id = HashMap::with_capacity(atoms.len());
+        let mut local_to_str = Vec::with_capacity(atoms.len());
+        for (i, rec) in atoms.iter().enumerate() {
+            by_str_id.insert(rec.id.clone(), i as u32);
+            local_to_str.push(rec.id.clone());
+        }
+        let csr = CsrEdges::open(&atlas_dir.join(EDGES_CSR_FILENAME))?;
+        // The CSR's interned id space is exactly the atoms table's rows; a
+        // mismatch means the two artifacts were written from different atom
+        // sets (a torn / partial build) and the neighbor ids would misindex.
+        if csr.n_atoms() as usize != atoms.len() {
+            return Err(format!(
+                "v2 store mismatch: edges.csr n_atoms={} != atoms.lance rows={}",
+                csr.n_atoms(),
+                atoms.len()
+            ));
+        }
+        Ok(Self {
+            atoms,
+            by_str_id,
+            local_to_str,
+            csr,
+        })
+    }
+
+    /// Sync bridge for [`open`](Self::open) — drives the async read on the
+    /// dedicated-thread runtime so the daemon's sync `AtlasGraph::load_from_disk`
+    /// can open the v2 store without an ambient-runtime panic. Lifecycle-time
+    /// (boot / corpus load), never the hot query path.
+    pub fn open_blocking(atlas_dir: &Path) -> Result<Self, String> {
+        let dir = atlas_dir.to_path_buf();
+        run_blocking(async move { LancePreload::open(&dir).await })
+    }
+
+    /// Number of atoms.
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    /// Number of edges (from the CSR header — dangling edges already dropped).
+    pub fn edge_count(&self) -> usize {
+        self.csr.n_edges() as usize
+    }
+
+    /// Point lookup by atom-id string. `None` if absent.
+    pub fn atom(&self, atom_id: &str) -> Option<&AtomRecord> {
+        let local = *self.by_str_id.get(atom_id)?;
+        self.atoms.get(local as usize)
+    }
+
+    /// All atoms in interned local-id order.
+    pub fn atoms(&self) -> impl Iterator<Item = &AtomRecord> + '_ {
+        self.atoms.iter()
+    }
+
+    /// In + out edge degree — the prominence signal, counted from the CSR
+    /// offsets without materialising neighbor tuples. `0` for an absent atom.
+    pub fn edge_degree(&self, atom_id: &str) -> usize {
+        match self.by_str_id.get(atom_id) {
+            Some(&local) => self.csr.out_degree(local) + self.csr.in_degree(local),
+            None => 0,
+        }
+    }
+
+    /// Edges originating at `atom_id`: `(source_str, target_str, type, conf)`,
+    /// the endpoint strings borrowed from the resident id table. Empty if the
+    /// atom is absent.
+    pub fn out_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32)> {
+        self.adjacent(atom_id, Dir::Out)
+    }
+
+    /// Edges arriving at `atom_id`.
+    pub fn in_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32)> {
+        self.adjacent(atom_id, Dir::In)
+    }
+
+    fn adjacent(&self, atom_id: &str, dir: Dir) -> Vec<(&str, &str, EdgeType, f32)> {
+        let Some(&local) = self.by_str_id.get(atom_id) else {
+            return Vec::new();
+        };
+        let raw = match dir {
+            Dir::Out => self.csr.out_edges(local),
+            Dir::In => self.csr.in_edges(local),
+        };
+        let self_str = self.local_to_str[local as usize].as_str();
+        raw.into_iter()
+            .filter_map(|(nbr, ty, conf)| {
+                let nbr_str = self.local_to_str.get(nbr as usize)?.as_str();
+                // out-CSR neighbor is the target; in-CSR neighbor is the source.
+                let (src, tgt) = match dir {
+                    Dir::Out => (self_str, nbr_str),
+                    Dir::In => (nbr_str, self_str),
+                };
+                Some((src, tgt, u8_to_edge_type(ty), conf))
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -905,5 +1124,78 @@ mod tests {
         assert_eq!(arch.edges.len(), 1); // entity1→entity3, both endpoints present
         assert!(arch.by_id.get(AtomId::entity(1).as_str()).is_some());
         assert!(arch.by_id.get(AtomId::entity(3).as_str()).is_some());
+    }
+
+    #[tokio::test]
+    async fn lance_preload_reads_back_parity_atoms_and_edges() {
+        // Stage-1 reader-parity: LancePreload reads the v2 store back into
+        // resident records identical to the rkyv projection, and the CSR edge
+        // endpoints resolve to the right atom-id strings — the daemon's Lance
+        // backend will hand out views indistinguishable from the rkyv ones.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
+        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, id: &str| Edge {
+            id: EdgeId::from_raw(id),
+            edge_type: ty,
+            source: AtomId::entity(src),
+            target: AtomId::entity(tgt),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: conf,
+            provenance: EdgeProvenance::Derived,
+        };
+        let edges = vec![
+            mk(1, 3, EdgeType::Involves, 0.9, "e1"),
+            mk(2, 3, EdgeType::Causes, 0.5, "e2"),
+        ];
+        write_store(dir, "frozen", &atoms, &edges).await.unwrap();
+
+        let pre = LancePreload::open(dir).await.unwrap();
+        assert_eq!(pre.atom_count(), 3);
+        assert_eq!(pre.edge_count(), 2);
+
+        // PARITY: each resident record == the canonical projection of the
+        // original — including aliases/evidence, which live only in the payload
+        // (the scalar columns drop them), proving the payload round-trips them.
+        for atom in &atoms {
+            let got = pre.atom(atom.id().as_str()).expect("atom present");
+            assert_eq!(*got, project(atom), "preload record != rkyv projection");
+        }
+        let alice = pre.atom(AtomId::entity(1).as_str()).unwrap();
+        assert_eq!(alice.aliases, vec!["Alice-alias".to_string()]);
+        assert_eq!(alice.evidence.len(), 1); // Entity first_appearance sec_0001
+        assert_eq!(alice.evidence[0].chunk_id, "sec_0001");
+
+        // Edges resolve to atom-id strings, directionally.
+        let (e1, e2, e3) = (
+            AtomId::entity(1).as_str().to_string(),
+            AtomId::entity(2).as_str().to_string(),
+            AtomId::entity(3).as_str().to_string(),
+        );
+        let out1 = pre.out_edges(&e1);
+        assert_eq!(out1.len(), 1);
+        assert_eq!(out1[0].0, e1); // source
+        assert_eq!(out1[0].1, e3); // target
+        assert_eq!(out1[0].2, EdgeType::Involves);
+        assert!((out1[0].3 - 0.9).abs() < 1e-6);
+
+        // entity3: two in-edges (from 1 and 2), zero out.
+        assert_eq!(pre.out_edges(&e3).len(), 0);
+        let in3 = pre.in_edges(&e3);
+        assert_eq!(in3.len(), 2);
+        assert!(in3.iter().all(|e| e.1 == e3)); // all target entity3
+        let srcs: std::collections::HashSet<&str> = in3.iter().map(|e| e.0).collect();
+        assert!(srcs.contains(e1.as_str()) && srcs.contains(e2.as_str()));
+
+        // Degree = in + out, no tuple alloc.
+        assert_eq!(pre.edge_degree(&e3), 2);
+        assert_eq!(pre.edge_degree(&e1), 1);
+
+        // Absent atom → empty / zero / None, never a panic.
+        assert!(pre.atom("nope").is_none());
+        assert_eq!(pre.out_edges("nope").len(), 0);
+        assert_eq!(pre.edge_degree("nope"), 0);
     }
 }

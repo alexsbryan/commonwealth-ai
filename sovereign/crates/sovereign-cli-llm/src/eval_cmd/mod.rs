@@ -638,20 +638,13 @@ async fn cmd_run(args: &[String]) -> i32 {
                     runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir)
                 }
                 atlas_ann::AtlasBackend::Lance => {
-                    // ATLAS_STORAGE_V2 Increment C: drive atlas_navigate over the
-                    // v2 store (atoms.lance + edges.csr) by reconstructing the
-                    // archive from it, then loading via the owned-bytes path.
-                    match corpus_engine::enrichment::atlas::store::reconstruct_archive_bytes(
-                        &atlas_dir,
-                        &ctx.atlas_corpus_id,
-                    )
-                    .await
-                    {
-                        Ok(bytes) => {
-                            runner::AtlasGraph::from_archive_bytes(&ctx.atlas_corpus_id, &bytes)
-                        }
-                        Err(e) => Err(e),
-                    }
+                    // ATLAS_STORAGE_V2 Stage 1: drive atlas_navigate over the v2
+                    // store (atoms.lance + edges.csr) through the PRODUCTION
+                    // direct-read backend — the same reader the daemon uses (atoms
+                    // resident + edges.csr mmap), not the reconstruct-to-rkyv
+                    // scaffold. Makes `--atlas-backend lance` an end-to-end check
+                    // of the production reader.
+                    runner::AtlasGraph::load_lance_from_disk(&ctx.atlas_corpus_id, &atlas_dir)
                 }
             };
             match loaded {
