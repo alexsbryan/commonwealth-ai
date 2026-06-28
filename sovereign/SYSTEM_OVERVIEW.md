@@ -916,7 +916,9 @@ lint/test watchers (`lint_status`, `get_lint_output`,
 feature lifecycle (`provision_feature`, `archive_feature`,
 `record_atos_event`, `write_redteam_finding`, `atos_plan_emit`,
 `atos_utils`, `atos_verify`, `spec`), drift (`drift`,
-`drift_posture`, `drift_findings`), project + design context
+`drift_posture`, `drift_findings`), capability docs
+(`capability_map`, `capability_posture`, `capability_findings`),
+project + design context
 (`project_context`, `design_signals_extract`, `check_doc_paths`,
 `index_health`), session reflection (`session_reflection`), and
 work-atlas coordination (`declare_scope`, `release_scope`,
@@ -928,6 +930,26 @@ the call graph. Staleness levels carry calibrated confidence:
 / `LanguageNotIndexed`. `blast_radius` does BFS over the call graph
 and appends a `macro_hints` text scan for references SCIP doesn't
 capture.
+
+**Capability docs (derived architecture).** A pipeline that derives
+*what the codebase does* from the SCIP call graph and reconciles it
+against the prose docs. `code capability-map` clusters entry points
+that share a reachable call spine into capabilities (226 on this repo,
+language-agnostic core + an entry-point seam); `enrich capability-doc`
+narrates each capability from cached `enrich code-intel` summaries into
+grounded prose, every spine function cited `file:line`; `enrich
+capability-reconcile` matches capabilities against the architecture
+docs → **corroborated / undocumented / drifted** findings (deterministic
+ident-match → meaning-based LLM verify → a precision-biased drift judge —
+drift ships biased hard toward precision, since one phantom contradiction
+destroys trust). Artifacts land in `~/.sovereign/capabilities/<corpus>/`
+(`capability_map` / `capability_doc` / `capability_findings`.{md,json}
+plus a `.fingerprint`); `capability_posture` and `capability_findings`
+are the freshness-gated read tools, siblings to `drift_*`. This is
+"drift to the next level": the drift system reconciles *names*, this
+reconciles *capabilities* — does the code do what the doc claims. The
+planned next phase (symmetric `spec-intel` → a spec↔code bipartite diff)
+is sketched in [`docs/internal/THE_SPEC_CODE_LOOP.md`](./docs/internal/THE_SPEC_CODE_LOOP.md).
 
 ### State, memory, skills
 

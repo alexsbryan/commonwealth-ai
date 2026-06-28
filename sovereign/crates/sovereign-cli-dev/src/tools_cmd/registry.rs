@@ -271,6 +271,13 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the canonical ~/.sovereign/drift/latest.md.json the
     // orchestrator now mirrors after every run.
     tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));
+    // Capability-reconciliation freshness + findings — siblings to drift_*,
+    // over the `enrich capability-reconcile` artifact (corroborated /
+    // undocumented / drifted, derived capabilities vs the architecture docs).
+    tools.register(Box::new(
+        sovereign_tools::CapabilityPostureTool::new().with_workspace_root(repo_root.clone()),
+    ));
+    tools.register(Box::new(sovereign_tools::CapabilityFindingsTool::new()));
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));

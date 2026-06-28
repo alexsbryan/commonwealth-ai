@@ -81,6 +81,8 @@ pub use code::CapabilityMapTool;
 #[cfg(feature = "treesitter")]
 pub use code::SymbolLookupTool;
 #[cfg(feature = "treesitter")]
+pub use code::{CapabilityFindingsTool, CapabilityPostureTool};
+#[cfg(feature = "treesitter")]
 pub use code::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,

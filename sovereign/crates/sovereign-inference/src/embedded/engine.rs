@@ -471,6 +471,24 @@ pub(crate) enum SlotTarget {
 /// 2. Code-hint + Code slot configured.
 /// 3. Speed-based: Fast → fast slot; Medium/Slow → primary if
 ///    configured else fast.
+/// The FastShort eligibility gate: a short-output, Fast-latency request whose
+/// prompt fits a single FastShort KV slice (`n_ctx/n_seq_max`). Shared by
+/// `pick_slot` AND the named-fast-slot fast-path in `select_slot_for_request`,
+/// so a request that addresses the fast model by `model_id` still rides the
+/// continuous-batched companion instead of serializing on the single Fast slot
+/// (the bug that made the code-intel enrich / atlas phases run serially).
+fn fits_fast_short(request: &CompletionRequest) -> bool {
+    let max_out = request.max_tokens.unwrap_or(usize::MAX);
+    let prompt_chars = request.prompt.chars().count()
+        + request
+            .system_message
+            .as_ref()
+            .map_or(0, |s| s.chars().count());
+    max_out <= 512
+        && request.preferred_speed == Speed::Fast
+        && prompt_chars <= FAST_SHORT_MAX_INPUT_CHARS
+}
+
 pub(crate) fn pick_slot(
     request: &CompletionRequest,
     has_primary: bool,
@@ -517,16 +535,7 @@ pub(crate) fn pick_slot(
     //      in the prompt (~9k chars at session-restoration time).
     //      Without this gate they land on FastShort and decode fails
     //      with `NoKvCacheSlot` mid-prefill. Forensic 2026-05-19.
-    let max_out = request.max_tokens.unwrap_or(usize::MAX);
-    let prompt_chars = request.prompt.chars().count()
-        + request
-            .system_message
-            .as_ref()
-            .map_or(0, |s| s.chars().count());
-    let fits_fast_short = max_out <= 512
-        && request.preferred_speed == Speed::Fast
-        && prompt_chars <= FAST_SHORT_MAX_INPUT_CHARS;
-    if has_fast_short && fits_fast_short {
+    if has_fast_short && fits_fast_short(request) {
         return SlotTarget::FastShort;
     }
 
@@ -1475,6 +1484,14 @@ impl EmbeddedLlamaCpp {
                 .filter(|s| !s.is_empty())
             {
                 if mid == self.fast.model_id {
+                    // A short/Fast request addressed to the fast model by name must
+                    // still ride the FastShort continuous-batched companion when it's
+                    // built and the request fits — otherwise bulk callers (code-intel
+                    // enrich, atlas phase 1b/3/5/6) serialize on the single Fast slot.
+                    // Mirrors the FastShort gate in `pick_slot`.
+                    if self.fast_short.is_some() && fits_fast_short(request) {
+                        return SlotTarget::FastShort;
+                    }
                     return SlotTarget::Fast;
                 }
                 if let Some(pid) = self

@@ -159,30 +159,54 @@ pub fn body_hash(body: &str) -> String {
 /// `const`) we fall back to the original `line_end`-bounded span. Capped at
 /// `MAX_BODY_LINES`. SCIP records line numbers 0-based, so editor line N is `N-1`.
 pub fn extract_body(content: &str, line_start: i32, line_end: i32) -> String {
-    let start = line_start.max(0) as usize;
     let lines: Vec<&str> = content.lines().collect();
+    extract_body_from_lines(&lines, line_start, line_end)
+}
+
+/// Body extraction over PRE-SPLIT lines. Whole-corpus enumeration calls this with
+/// a per-file line vector split ONCE (in `enumerate_from_rows`'s file cache) —
+/// `extract_body` above re-split the entire file on every symbol, which is
+/// O(functions × file_len) per file and dominated the whole-corpus enumerate
+/// (~22k functions, big files re-split hundreds of times). Generic over the line
+/// element so the cache can hold owned `String`s and `&str` callers still work.
+pub fn extract_body_from_lines<S: AsRef<str>>(
+    lines: &[S],
+    line_start: i32,
+    line_end: i32,
+) -> String {
+    let start = line_start.max(0) as usize;
     if start >= lines.len() {
         return String::new();
     }
     let cap = (start + MAX_BODY_LINES).min(lines.len());
     let (mut depth, mut seen_brace) = (0i32, false);
     for (i, l) in lines.iter().enumerate().take(cap).skip(start) {
+        let l = l.as_ref();
         depth += l.matches('{').count() as i32 - l.matches('}').count() as i32;
         seen_brace |= l.contains('{');
         if seen_brace && depth <= 0 {
-            return lines[start..=i].join("\n");
+            return join_lines(&lines[start..=i]);
         }
     }
     if seen_brace {
         // Opened but never balanced within the cap — return the capped window.
-        return lines[start..cap].join("\n");
+        return join_lines(&lines[start..cap]);
     }
     // Braceless symbol (or the plain-text test path): fall back to the original
     // `line_end`-bounded inclusive span.
     let end = (line_end.max(line_start) as usize)
         .min(start + MAX_BODY_LINES)
         .min(lines.len() - 1);
-    lines[start..=end].join("\n")
+    join_lines(&lines[start..=end])
+}
+
+/// Join body lines (bounded to the extracted window, never the whole file).
+fn join_lines<S: AsRef<str>>(lines: &[S]) -> String {
+    lines
+        .iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Max body lines extracted per symbol — bounds the prompt and caps any leftover
@@ -330,40 +354,83 @@ pub async fn enrich_symbols_incremental(
     symbols: Vec<SymbolSource>,
     prior: &HashMap<String, SymbolEnrichment>,
 ) -> (Vec<SymbolEnrichment>, IncrementalReport) {
-    let mut out = Vec::with_capacity(symbols.len());
-    let mut report = IncrementalReport {
-        total: symbols.len(),
-        ..Default::default()
-    };
+    use futures::StreamExt;
+    let total = symbols.len();
 
-    for src in symbols {
+    // Partition: a body whose hash is already in `prior` reuses its summary with
+    // no model call; new/changed bodies are enriched CONCURRENTLY below. Each
+    // carries its input index so the output preserves input order regardless of
+    // completion order.
+    let mut indexed: Vec<(usize, SymbolEnrichment)> = Vec::new();
+    let mut to_enrich: Vec<(usize, SymbolSource)> = Vec::new();
+    for (i, src) in symbols.into_iter().enumerate() {
         let hash = body_hash(&src.body);
         if let Some(prev) = prior.get(&hash) {
             // Body unchanged (hash-keyed) — reuse the summary, refresh meta in
             // case the symbol moved or was renamed with an identical body.
             let mut e = prev.clone();
             e.meta = src.meta;
-            report.reused += 1;
-            out.push(e);
-            continue;
-        }
-        match enrich_symbol(chat, src.meta.clone(), &src.body).await {
-            Ok(e) => {
-                report.regenerated += 1;
-                out.push(e);
-            }
-            Err(err) => {
-                report.failed += 1;
-                tracing::warn!(
-                    target: "enrichment.code_intel",
-                    symbol = %src.meta.name,
-                    file = %src.meta.file_path,
-                    error = %err,
-                    "symbol enrichment failed; skipping",
-                );
-            }
+            indexed.push((i, e));
+        } else {
+            to_enrich.push((i, src));
         }
     }
+    let reused = indexed.len();
+
+    // Bounded concurrency: a single-sequence serving slot simply queues these
+    // (no harm), while a multi-seq slot (n_seq_max>1) turns them into real
+    // parallelism — the bulk-pass speedup. Tunable via
+    // SOVEREIGN_CODE_INTEL_CONCURRENCY (default 8).
+    let conc = std::env::var("SOVEREIGN_CODE_INTEL_CONCURRENCY")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n >= 1)
+        .unwrap_or(8);
+    let results: Vec<(usize, Option<SymbolEnrichment>)> = futures::stream::iter(
+        to_enrich.into_iter().map(|(i, src)| {
+            let chat = chat.clone();
+            async move {
+                match enrich_symbol(&chat, src.meta.clone(), &src.body).await {
+                    Ok(e) => (i, Some(e)),
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "enrichment.code_intel",
+                            symbol = %src.meta.name,
+                            file = %src.meta.file_path,
+                            error = %err,
+                            "symbol enrichment failed; skipping",
+                        );
+                        (i, None)
+                    }
+                }
+            }
+        }),
+    )
+    .buffer_unordered(conc)
+    .collect()
+    .await;
+
+    let mut regenerated = 0;
+    let mut failed = 0;
+    for (i, r) in results {
+        match r {
+            Some(e) => {
+                regenerated += 1;
+                indexed.push((i, e));
+            }
+            None => failed += 1,
+        }
+    }
+    indexed.sort_by_key(|(i, _)| *i);
+    let out: Vec<SymbolEnrichment> = indexed.into_iter().map(|(_, e)| e).collect();
+
+    let mut report = IncrementalReport {
+        total,
+        ..Default::default()
+    };
+    report.reused = reused;
+    report.regenerated = regenerated;
+    report.failed = failed;
 
     tracing::info!(
         target: "enrichment.code_intel",
@@ -371,6 +438,7 @@ pub async fn enrich_symbols_incremental(
         regenerated = report.regenerated,
         reused = report.reused,
         failed = report.failed,
+        concurrency = conc,
         "code_intel incremental enrichment complete",
     );
     (out, report)

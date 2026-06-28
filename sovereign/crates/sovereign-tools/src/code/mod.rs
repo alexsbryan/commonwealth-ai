@@ -110,6 +110,14 @@ pub mod drift_posture;
 #[cfg(feature = "treesitter")]
 pub mod drift_findings;
 
+// Capability-reconciliation freshness gate + findings query — siblings to
+// drift_posture / drift_findings, over the `enrich capability-reconcile`
+// artifact (corroborated / undocumented / drifted, derived vs the docs).
+#[cfg(feature = "treesitter")]
+pub mod capability_posture;
+#[cfg(feature = "treesitter")]
+pub mod capability_findings;
+
 // Working notes tools.
 #[cfg(feature = "treesitter")]
 pub mod delete_note;
@@ -194,6 +202,10 @@ pub use drift_posture::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
+#[cfg(feature = "treesitter")]
+pub use capability_findings::CapabilityFindingsTool;
+#[cfg(feature = "treesitter")]
+pub use capability_posture::CapabilityPostureTool;
 #[cfg(feature = "treesitter")]
 pub use get_lint_output::GetLintOutputTool;
 #[cfg(feature = "treesitter")]

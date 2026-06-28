@@ -58,7 +58,7 @@ fn save_cache(cache_dir: &Path, enrichments: &[SymbolEnrichment]) -> Result<()> 
 /// the summaries, then rewrites the cache.
 pub async fn run_code_intel(
     scip: &ScipGraph,
-    index: &CorpusIndex,
+    index: Option<&CorpusIndex>,
     source_root: &Path,
     cache_dir: &Path,
     chat: &ChatCompletionFn,
@@ -68,17 +68,28 @@ pub async fn run_code_intel(
     let sources = enumerate_symbol_sources(scip, source_root, file_filter).await?;
     // Inc 4 polish: test functions aren't "how does this code work" targets — they
     // crowd the retrieval set ("tests", "*_nonempty", ...) and carry no useful
-    // call-graph answer. SCIP descriptors put `#[cfg(test)] mod tests` fns under a
-    // `/tests/` path segment. Drop them from enrichment AND prune any summary a
-    // prior pass already indexed for them, so the code-intel chunk set stays
-    // code-not-tests (re-runs converge).
-    let (sources, test_sources): (Vec<_>, Vec<_>) = sources
-        .into_iter()
-        .partition(|s| !s.meta.qualified_name.contains("/tests/"));
+    // call-graph answer. Two test shapes, two SCIP encodings:
+    //   - integration tests + their helpers/fixtures under `<crate>/tests/foo.rs`
+    //     — the SCIP qualified_name is the BARE fn name (no path segment), so they
+    //     ONLY show up in `file_path`. The prior check looked solely at
+    //     qualified_name and leaked ~2,300 of these (8% of the enriched set,
+    //     verified on commonwealth-ai 2026-06-27) into enrichment.
+    //   - inline `#[cfg(test)] mod tests` — the SCIP descriptor carries a `/tests/`
+    //     segment, which the qualified_name check catches.
+    // Drop both from enrichment AND prune any summary a prior pass already indexed,
+    // so the code-intel chunk set stays code-not-tests (re-runs converge).
+    let (sources, test_sources): (Vec<_>, Vec<_>) = sources.into_iter().partition(|s| {
+        let m = &s.meta;
+        !(m.file_path.contains("/tests/")
+            || m.file_path.starts_with("tests/")
+            || m.qualified_name.contains("/tests/"))
+    });
     for t in &test_sources {
-        let _ = index
-            .delete_chunks_by_source_doc(&symbol_source_key(&t.meta))
-            .await;
+        if let Some(idx) = index {
+            let _ = idx
+                .delete_chunks_by_source_doc(&symbol_source_key(&t.meta))
+                .await;
+        }
     }
     if !test_sources.is_empty() {
         tracing::info!(
@@ -89,14 +100,69 @@ pub async fn run_code_intel(
     }
     let symbols = sources.len();
 
+    // Chunked, checkpointing pass. The whole-corpus run is ~22k functions / many
+    // hours serially; saving the cache + index only at the very end would make a
+    // single crash cost the entire run. Instead we enrich in batches and, after
+    // each batch, index it and rewrite the cache with everything done so far — so
+    // a re-run reuses every summary already produced (body-hash gated) and only
+    // the un-done tail repeats. `reuse_pool` carries prior + completed-this-run,
+    // so a body summarized in an earlier batch (or a prior run) is never redone.
+    const CHECKPOINT_CHUNK: usize = 200;
     let prior = load_cache(cache_dir);
-    let (enrichments, enrich) = enrich_symbols_incremental(chat, sources, &prior).await;
+    let mut reuse_pool = prior;
+    // Seed `done` with the prior cache so every checkpoint rewrites the FULL cache
+    // (prior + completed-this-run), never just this run's output — otherwise the
+    // first checkpoint would overwrite the prior slice on disk and a crash before
+    // a slice fn's chunk ran would lose it. This also makes a scoped (`--files`)
+    // run merge into the cache instead of replacing it.
+    let mut done: HashMap<String, SymbolEnrichment> = reuse_pool.clone();
+    let mut enrich = IncrementalReport {
+        total: symbols,
+        ..Default::default()
+    };
+    let mut index_rep = IndexReport::default();
+    let total_chunks = sources.len().div_ceil(CHECKPOINT_CHUNK).max(1);
 
-    let index = index_symbol_enrichments(index, embed, &enrichments).await;
+    for (i, chunk) in sources.chunks(CHECKPOINT_CHUNK).enumerate() {
+        let (chunk_out, rep) =
+            enrich_symbols_incremental(chat, chunk.to_vec(), &reuse_pool).await;
+        // Cache-only mode (`index` is None when SOVEREIGN_ENRICH_SKIP_INDEX is
+        // set): produce just the body-hash cache (code_intel_cache.json) — the
+        // sole artifact capability-doc / reconcile read — and never open or write
+        // chunks.lance. A live daemon co-managing the index storms it on external
+        // access, so cache-only is the conflict-free path when the daemon stays up.
+        let irep = match index {
+            Some(idx) => index_symbol_enrichments(idx, embed, &chunk_out).await,
+            None => IndexReport::default(),
+        };
+        for e in &chunk_out {
+            reuse_pool.insert(e.body_hash.clone(), e.clone());
+            done.insert(e.body_hash.clone(), e.clone());
+        }
+        let snapshot: Vec<SymbolEnrichment> = done.values().cloned().collect();
+        save_cache(cache_dir, &snapshot)?;
+        enrich.reused += rep.reused;
+        enrich.regenerated += rep.regenerated;
+        enrich.failed += rep.failed;
+        index_rep.upserted += irep.upserted;
+        index_rep.skipped += irep.skipped;
+        index_rep.failed += irep.failed;
+        tracing::info!(
+            target: "enrichment.code_intel",
+            chunk = i + 1,
+            total_chunks,
+            done = done.len(),
+            regenerated = enrich.regenerated,
+            failed = enrich.failed,
+            "code_intel: checkpoint saved",
+        );
+    }
 
-    save_cache(cache_dir, &enrichments)?;
-
-    let report = CodeIntelReport { symbols, enrich, index };
+    let report = CodeIntelReport {
+        symbols,
+        enrich,
+        index: index_rep,
+    };
     tracing::info!(
         target: "enrichment.code_intel",
         symbols = report.symbols,
@@ -121,9 +187,19 @@ pub async fn run_code_intel_for_corpus(
     file_filter: &[String],
 ) -> Result<CodeIntelReport> {
     let source_root = corpus_source_root(corpus_dir)?;
+    let t = std::time::Instant::now();
     let scip = ScipGraph::open(&corpus_dir.join("scip_graph.db"), corpus_id)?;
-    let index = CorpusIndex::open(corpus_dir).await?;
-    run_code_intel(&scip, &index, &source_root, corpus_dir, chat, embed, file_filter).await
+    tracing::info!(target: "enrichment.code_intel", ms = t.elapsed().as_millis() as u64, "open: scip_graph");
+    let index_owned = if std::env::var("SOVEREIGN_ENRICH_SKIP_INDEX").is_ok() {
+        tracing::info!(target: "enrichment.code_intel", "SKIP_INDEX: not opening chunks.lance — cache-only pass");
+        None
+    } else {
+        let t = std::time::Instant::now();
+        let idx = CorpusIndex::open(corpus_dir).await?;
+        tracing::info!(target: "enrichment.code_intel", ms = t.elapsed().as_millis() as u64, "open: corpus_index");
+        Some(idx)
+    };
+    run_code_intel(&scip, index_owned.as_ref(), &source_root, corpus_dir, chat, embed, file_filter).await
 }
 
 /// Resolve the corpus's original source tree from its `_corpus_meta.json`
@@ -202,7 +278,7 @@ mod tests {
         let (chat, embed) = (fake_chat(), fake_embed());
 
         // First pass: one symbol, summarized + indexed.
-        let rep = run_code_intel(&scip, &index, src.path(), cache.path(), &chat, &embed, &[])
+        let rep = run_code_intel(&scip, Some(&index), src.path(), cache.path(), &chat, &embed, &[])
             .await
             .unwrap();
         assert_eq!(rep.symbols, 1);
@@ -211,7 +287,7 @@ mod tests {
         assert_eq!(index.chunk_count().await.unwrap(), 1);
 
         // Second pass: unchanged body -> cache hit (no LLM) + index skip (no write).
-        let rep2 = run_code_intel(&scip, &index, src.path(), cache.path(), &chat, &embed, &[])
+        let rep2 = run_code_intel(&scip, Some(&index), src.path(), cache.path(), &chat, &embed, &[])
             .await
             .unwrap();
         assert_eq!(rep2.enrich.reused, 1, "summary reused from the body-hash cache");
