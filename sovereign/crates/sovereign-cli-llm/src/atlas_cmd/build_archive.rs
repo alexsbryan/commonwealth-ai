@@ -102,6 +102,18 @@ pub async fn run(args: &[String]) -> i32 {
                 errors += 1;
             }
         }
+        // ATLAS_STORAGE_V2 Stage 0 (dormant, gated): also build the v2 store
+        // (atoms.lance + edges.csr). No-op unless SOVEREIGN_ATLAS_STORE_V2 is set.
+        if corpus_engine::enrichment::atlas::store::store_v2_enabled() {
+            match corpus_engine::enrichment::atlas::store::build_and_write_store(
+                &atlas_dir, &corpus_id,
+            )
+            .await
+            {
+                Ok(_) => println!("{corpus_id:<40} {:>19}  v2 store built", ""),
+                Err(e) => println!("{corpus_id:<40}  v2 store error: {e}"),
+            }
+        }
     }
     println!("\n{built} built, {skipped} current, {errors} error(s)");
     i32::from(errors > 0)

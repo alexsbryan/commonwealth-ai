@@ -200,6 +200,23 @@ fn write_atlas_archive_sidecar(atlas_dir: &Path, atoms: &[AtomEnvelope], edges: 
     if let Err(e) = fs::write(&tmp, &bytes).and_then(|_| fs::rename(&tmp, &path)) {
         tracing::warn!(corpus = corpus_id, "atlas dual-write atoms.rkyv failed: {e}");
     }
+
+    // ATLAS_STORAGE_V2 Stage 0 (dormant): dual-write the v2 store
+    // (atoms.lance + edges.csr) beside the rkyv when SOVEREIGN_ATLAS_STORE_V2
+    // is set. Best-effort and gated off by default — the reader still loads
+    // atoms.rkyv until Stage 1 swaps the read path.
+    if super::store::store_v2_enabled() {
+        match super::store::write_store_blocking(atlas_dir, corpus_id, atoms, edges) {
+            Ok(p) => tracing::info!(
+                corpus = corpus_id,
+                path = %p.display(),
+                "atlas v2 store dual-written (build sidecar)"
+            ),
+            Err(e) => {
+                tracing::warn!(corpus = corpus_id, "atlas v2 store dual-write failed: {e}")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
