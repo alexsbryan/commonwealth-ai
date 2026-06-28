@@ -24,11 +24,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, Schema};
-use arrow_array::{Float32Array, RecordBatch, StringArray, UInt32Array, UInt8Array};
+use arrow_array::{Array, Float32Array, RecordBatch, StringArray, UInt32Array, UInt8Array};
+use futures::TryStreamExt;
+use lancedb::query::ExecutableQuery;
+use memmap2::Mmap;
 
 use super::archive::{arch_edge_type, project, ArchEdgeType, AtomKindTag, AtomRecord};
-use super::edges::Edge;
-use super::AtomEnvelope;
+use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use super::{AtomEnvelope, AtomId};
 
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
 /// columns or the edges.csr binary format).
@@ -127,6 +130,29 @@ fn edge_type_u8(t: ArchEdgeType) -> u8 {
         ArchEdgeType::Concedes => 11,
         ArchEdgeType::OpposesIn => 12,
         ArchEdgeType::Attaches => 13,
+    }
+}
+
+/// Inverse of [`edge_type_u8`] — the `edges.csr` type byte back to an
+/// [`EdgeType`]. Unknown bytes fall back to `Involves` (a benign medium-weight
+/// edge) rather than panicking on a corrupt file.
+fn u8_to_edge_type(u: u8) -> EdgeType {
+    match u {
+        0 => EdgeType::Transition,
+        1 => EdgeType::Causes,
+        2 => EdgeType::Grounds,
+        3 => EdgeType::Tension,
+        4 => EdgeType::Involves,
+        5 => EdgeType::Composes,
+        6 => EdgeType::Configures,
+        7 => EdgeType::Grounding,
+        8 => EdgeType::Framing,
+        9 => EdgeType::Provenance,
+        10 => EdgeType::EvidenceFor,
+        11 => EdgeType::Concedes,
+        12 => EdgeType::OpposesIn,
+        13 => EdgeType::Attaches,
+        _ => EdgeType::Involves,
     }
 }
 
@@ -296,6 +322,115 @@ fn write_edges_csr(
     Ok(path)
 }
 
+/// mmap'd reader over `edges.csr` — the v2 CSR edge file written by
+/// [`write_edges_csr`]. Sync and paged: the `atlas_navigate` BFS inner loop
+/// (ATLAS_STORAGE_V2 Stage 1) reads adjacency without faulting the whole file
+/// resident, the v2 "edges stay sync mmap" invariant. Neighbors are interned
+/// local u32 ids; the caller maps them back to atom-id strings via the
+/// `atoms.lance` `id`/`str_id` columns.
+pub struct CsrEdges {
+    mmap: Mmap,
+    n_atoms: u32,
+    n_edges: u32,
+    out: CsrDir,
+    inn: CsrDir,
+}
+
+/// Byte offsets of one CSR direction's four arrays within the mmap.
+struct CsrDir {
+    off: usize,
+    nbr: usize,
+    typ: usize,
+    conf: usize,
+}
+
+impl CsrEdges {
+    /// Open + validate (magic, version, length). The pointer arithmetic
+    /// mirrors [`write_edges_csr`]'s layout exactly.
+    pub fn open(path: &Path) -> Result<Self, String> {
+        let file =
+            std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
+        // SAFETY: edges.csr is a build-produced artifact (atomic tmp+rename),
+        // immutable for the reader's lifetime — same trust model as the rkyv mmap.
+        let mmap =
+            unsafe { Mmap::map(&file) }.map_err(|e| format!("mmap {}: {e}", path.display()))?;
+        let b = &mmap[..];
+        if b.len() < 16 {
+            return Err(format!("edges.csr too small: {} bytes", b.len()));
+        }
+        let rd = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        if rd(0) != CSR_MAGIC {
+            return Err("edges.csr: bad magic".to_string());
+        }
+        let version = rd(4);
+        if version != CSR_VERSION {
+            return Err(format!(
+                "edges.csr schema v{version} != reader v{CSR_VERSION}"
+            ));
+        }
+        let n_atoms = rd(8);
+        let n_edges = rd(12);
+        let off_len = (n_atoms as usize + 1) * 4;
+        let nbr_len = n_edges as usize * 4;
+        let typ_len = n_edges as usize;
+        let typ_pad = (4 - (typ_len % 4)) % 4;
+        let conf_len = n_edges as usize * 4;
+        let dir_len = off_len + nbr_len + typ_len + typ_pad + conf_len;
+        let dir_at = |start: usize| CsrDir {
+            off: start,
+            nbr: start + off_len,
+            typ: start + off_len + nbr_len,
+            conf: start + off_len + nbr_len + typ_len + typ_pad,
+        };
+        let out_start = 16;
+        let in_start = out_start + dir_len;
+        let need = in_start + dir_len;
+        if b.len() < need {
+            return Err(format!("edges.csr truncated: {} < {need} bytes", b.len()));
+        }
+        Ok(CsrEdges {
+            mmap,
+            n_atoms,
+            n_edges,
+            out: dir_at(out_start),
+            inn: dir_at(in_start),
+        })
+    }
+
+    pub fn n_atoms(&self) -> u32 {
+        self.n_atoms
+    }
+
+    pub fn n_edges(&self) -> u32 {
+        self.n_edges
+    }
+
+    /// Out-edges of `local_id`: `(neighbor_local_id, edge_type_u8, confidence)`.
+    /// Empty if `local_id` is out of range.
+    pub fn out_edges(&self, local_id: u32) -> Vec<(u32, u8, f32)> {
+        self.read_dir(&self.out, local_id)
+    }
+
+    /// In-edges of `local_id` — who points at it.
+    pub fn in_edges(&self, local_id: u32) -> Vec<(u32, u8, f32)> {
+        self.read_dir(&self.inn, local_id)
+    }
+
+    fn read_dir(&self, d: &CsrDir, local_id: u32) -> Vec<(u32, u8, f32)> {
+        if local_id >= self.n_atoms {
+            return Vec::new();
+        }
+        let b = &self.mmap[..];
+        let rdu = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        let rdf = |o: usize| f32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        let lo = rdu(d.off + local_id as usize * 4) as usize;
+        let hi = rdu(d.off + (local_id as usize + 1) * 4) as usize;
+        (lo..hi)
+            .map(|j| (rdu(d.nbr + j * 4), b[d.typ + j], rdf(d.conf + j * 4)))
+            .collect()
+    }
+}
+
 // ── public lifecycle entry points ────────────────────────────────────────────
 
 /// Build the v2 store from in-memory atoms + edges and write `atoms.lance` +
@@ -390,15 +525,101 @@ pub fn store_needs_build(atlas_dir: &Path) -> bool {
     }
 }
 
+/// Reconstruct the v1 rkyv archive bytes from the v2 store (`atoms.lance` +
+/// `edges.csr`) — the ATLAS_STORAGE_V2 Increment-C eval arm.
+///
+/// Reads every atom's canonical `payload` back into an `AtomEnvelope` and the
+/// `edges.csr` adjacency back into `Edge`s (over the interned local ids), then
+/// rebuilds the archive via the SAME [`super::archive::build_atlas_archive_bytes`]
+/// the rkyv writer uses. Loading the result through the existing rkyv read path
+/// lets `atlas_navigate` run over the v2 store unchanged, proving end-to-end
+/// that the store is retrieval-complete and the v2 seeding is neutral — without
+/// touching the daemon's `AtlasGraph`. (The production direct-read reader is a
+/// follow-on; its atom-level data correctness is already covered by the B
+/// parity test.)
+pub async fn reconstruct_archive_bytes(
+    atlas_dir: &Path,
+    corpus_id: &str,
+) -> Result<Vec<u8>, String> {
+    let uri = atlas_dir
+        .to_str()
+        .ok_or_else(|| format!("non-utf8 atlas dir {}", atlas_dir.display()))?;
+    let db = lancedb::connect(uri)
+        .execute()
+        .await
+        .map_err(|e| format!("connect {uri}: {e}"))?;
+    let tbl = db
+        .open_table(ATOMS_TABLE)
+        .execute()
+        .await
+        .map_err(|e| format!("open atoms.lance: {e}"))?;
+    let batches: Vec<RecordBatch> = tbl
+        .query()
+        .execute()
+        .await
+        .map_err(|e| format!("scan atoms.lance: {e}"))?
+        .try_collect()
+        .await
+        .map_err(|e| format!("collect atoms.lance: {e}"))?;
+
+    // (local_id, str_id, atom) — re-sorted to the interned local order so the
+    // CSR neighbor ids index correctly.
+    let mut by_local: Vec<(u32, String, AtomEnvelope)> = Vec::new();
+    for b in &batches {
+        let col = |n: &str| b.column_by_name(n);
+        let ids = col("id")
+            .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
+            .ok_or("atoms.lance missing id column")?;
+        let sids = col("str_id")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or("atoms.lance missing str_id column")?;
+        let payloads = col("payload")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or("atoms.lance missing payload column")?;
+        for i in 0..b.num_rows() {
+            let env: AtomEnvelope = serde_json::from_str(payloads.value(i))
+                .map_err(|e| format!("parse atom payload: {e}"))?;
+            by_local.push((ids.value(i), sids.value(i).to_string(), env));
+        }
+    }
+    by_local.sort_by_key(|x| x.0);
+    let local_to_str: Vec<String> = by_local.iter().map(|x| x.1.clone()).collect();
+    let atoms: Vec<AtomEnvelope> = by_local.into_iter().map(|x| x.2).collect();
+
+    let csr = CsrEdges::open(&atlas_dir.join(EDGES_CSR_FILENAME))?;
+    let mut edges: Vec<Edge> = Vec::new();
+    for local in 0..csr.n_atoms() {
+        let Some(src) = local_to_str.get(local as usize) else {
+            continue;
+        };
+        for (nbr, ty, conf) in csr.out_edges(local) {
+            let Some(tgt) = local_to_str.get(nbr as usize) else {
+                continue;
+            };
+            edges.push(Edge {
+                id: EdgeId::from_raw(format!("csr-{}", edges.len())),
+                edge_type: u8_to_edge_type(ty),
+                source: AtomId::from_raw(src.clone()),
+                target: AtomId::from_raw(tgt.clone()),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: conf,
+                provenance: EdgeProvenance::Derived,
+            });
+        }
+    }
+
+    let slug = corpus_id.strip_prefix("sep-").unwrap_or(corpus_id);
+    super::archive::build_atlas_archive_bytes(corpus_id, slug, &atoms, &edges)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::enrichment::atlas::atoms::Entity;
     use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
-    use arrow_array::Array;
-    use futures::TryStreamExt;
-    use lancedb::query::ExecutableQuery;
     use crate::enrichment::atlas::{AtomId, ChunkRef, Edge, EdgeId};
 
     fn entity(idx: usize, name: &str) -> AtomEnvelope {
@@ -590,5 +811,88 @@ mod tests {
         // Sanity: without the env, the writer is dormant.
         std::env::remove_var("SOVEREIGN_ATLAS_STORE_V2");
         assert!(!store_v2_enabled());
+    }
+
+    #[test]
+    fn csr_edges_reader_roundtrips_the_writer() {
+        // Stage-1 foundation: the mmap CsrEdges reader reconstructs exactly
+        // what write_edges_csr wrote, over interned local ids.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // 3 atoms → local 0,1,2; edges entity1→entity3 (Involves) and
+        // entity2→entity3 (Causes), so local 2 has two in-edges, no out-edges.
+        let mut by_id = HashMap::new();
+        for (i, n) in [1usize, 2, 3].iter().enumerate() {
+            by_id.insert(AtomId::entity(*n).as_str().to_string(), i as u32);
+        }
+        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, id: &str| Edge {
+            id: EdgeId::from_raw(id),
+            edge_type: ty,
+            source: AtomId::entity(src),
+            target: AtomId::entity(tgt),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: conf,
+            provenance: EdgeProvenance::Derived,
+        };
+        let edges = vec![
+            mk(1, 3, EdgeType::Involves, 0.9, "e1"),
+            mk(2, 3, EdgeType::Causes, 0.5, "e2"),
+        ];
+        write_edges_csr(dir, 3, &by_id, &edges).unwrap();
+
+        let csr = CsrEdges::open(&dir.join(EDGES_CSR_FILENAME)).unwrap();
+        assert_eq!(csr.n_atoms(), 3);
+        assert_eq!(csr.n_edges(), 2);
+
+        // out-edges: local 0 → local 2 (Involves, 0.9); local 2 has none.
+        let o0 = csr.out_edges(0);
+        assert_eq!(o0.len(), 1);
+        assert_eq!(o0[0].0, 2);
+        assert_eq!(o0[0].1, edge_type_u8(ArchEdgeType::Involves));
+        assert!((o0[0].2 - 0.9).abs() < 1e-6);
+        assert_eq!(csr.out_edges(2).len(), 0);
+
+        // in-edges of local 2: from local 0 and local 1.
+        let i2 = csr.in_edges(2);
+        assert_eq!(i2.len(), 2);
+        let nbrs: std::collections::HashSet<u32> = i2.iter().map(|e| e.0).collect();
+        assert!(nbrs.contains(&0) && nbrs.contains(&1));
+        assert_eq!(csr.in_edges(0).len(), 0);
+
+        // out-of-range local id → empty, not a panic.
+        assert_eq!(csr.out_edges(99).len(), 0);
+    }
+
+    #[tokio::test]
+    async fn reconstruct_roundtrips_store_to_archive() {
+        // The Increment-C eval arm: v2 store → rkyv archive bytes → access.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
+        let edges = vec![Edge {
+            id: EdgeId::from_raw("e1"),
+            edge_type: EdgeType::Involves,
+            source: AtomId::entity(1),
+            target: AtomId::entity(3),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: 0.9,
+            provenance: EdgeProvenance::Derived,
+        }];
+        write_store(dir, "frozen", &atoms, &edges).await.unwrap();
+
+        let bytes = reconstruct_archive_bytes(dir, "frozen").await.unwrap();
+        let arch = rkyv::access::<
+            crate::enrichment::atlas::archive::ArchivedAtlasArchiveData,
+            rkyv::rancor::Error,
+        >(&bytes)
+        .unwrap();
+        assert_eq!(arch.atoms.len(), 3);
+        assert_eq!(arch.edges.len(), 1); // entity1→entity3, both endpoints present
+        assert!(arch.by_id.get(AtomId::entity(1).as_str()).is_some());
+        assert!(arch.by_id.get(AtomId::entity(3).as_str()).is_some());
     }
 }

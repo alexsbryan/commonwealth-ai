@@ -2318,6 +2318,7 @@ dependencies = [
  "lance-table",
  "lancedb",
  "mailparse",
+ "memmap2",
  "notify",
  "parquet",
  "petgraph 0.6.5",

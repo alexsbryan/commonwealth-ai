@@ -38,6 +38,17 @@ pub enum SeedMode {
     Ann,
 }
 
+/// Which on-disk store backs the `AtlasGraph` the eval loads — the
+/// ATLAS_STORAGE_V2 Increment-C reader axis (orthogonal to [`SeedMode`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtlasBackend {
+    /// v1: the rkyv archive (`atoms.rkyv`), or convert-on-load from `atoms.json`.
+    Rkyv,
+    /// v2: the columnar store (`atoms.lance` + `edges.csr`), reconstructed to an
+    /// owned archive via `corpus_engine::…::store::reconstruct_archive_bytes`.
+    Lance,
+}
+
 /// The atlas-seed ANN table (corpus-engine `AnnSeedTable`) + an in-memory
 /// `key -> embedding` map for canonical re-scoring, built once per eval run.
 pub struct AnnTable {
