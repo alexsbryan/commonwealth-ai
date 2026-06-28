@@ -49,6 +49,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "brief" => cmd_brief(&args[1..]).await,
         "reflect" => cmd_reflect(&args[1..]).await,
         "capability-map" => cmd_capability_map(&args[1..]).await,
+        "map" => crate::code_map::cmd_map(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -882,6 +883,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "capability-map <corpus-id>",
                 "Derive a capability map (what the codebase does) from the SCIP call graph",
+            ),
+            (
+                "map <path>",
+                "One-shot: index → summarize → derive → narrate → reconcile a codebase (+ optional --spec)",
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(

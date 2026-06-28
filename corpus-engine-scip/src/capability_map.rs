@@ -425,7 +425,19 @@ pub fn build(
 ) -> CapabilityMap {
     let graph = CallGraph::from_scip(symbols, refs);
     let roots = match opts.provider {
-        ProviderKind::Heuristic => HeuristicProvider.roots(&graph),
+        // Heuristic finds framework entry points (cli/tool/http keywords). A plain
+        // library crate has none → fall through to the universal in-degree-0
+        // detector so ANY repo yields a map ("just works" on an arbitrary codebase,
+        // not only framework-shaped ones). A non-empty heuristic result is kept
+        // as-is, so CLI/HTTP apps like this one are unchanged.
+        ProviderKind::Heuristic => {
+            let h = HeuristicProvider.roots(&graph);
+            if h.is_empty() {
+                FallbackProvider::default().roots(&graph)
+            } else {
+                h
+            }
+        }
         ProviderKind::Fallback => FallbackProvider::default().roots(&graph),
     };
 
