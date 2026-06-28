@@ -113,6 +113,26 @@ async fn build_structural_atlas_inner(
                 }
             }
         }
+        // ATLAS_STORAGE_V2 Stage 0 (dormant, gated): build the v2 store beside
+        // the rkyv for an already-present atlas. No-op unless the env is set.
+        if corpus_engine::enrichment::atlas::store::store_v2_enabled()
+            && corpus_engine::enrichment::atlas::store::store_needs_build(&atlas_dir)
+        {
+            match corpus_engine::enrichment::atlas::store::build_and_write_store(
+                &atlas_dir, corpus_id,
+            )
+            .await
+            {
+                Ok(p) => tracing::info!(
+                    corpus = corpus_id,
+                    path = %p.display(),
+                    "atlas v2 store built post-install"
+                ),
+                Err(e) => {
+                    tracing::warn!(corpus = corpus_id, "atlas v2 store build skipped: {e}")
+                }
+            }
+        }
         return StructuralAtlasOutcome::AlreadyPresent { atoms_path };
     }
 

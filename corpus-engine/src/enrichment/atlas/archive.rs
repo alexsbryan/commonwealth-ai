@@ -206,7 +206,11 @@ fn kind_of(atom: &AtomEnvelope) -> AtomKindTag {
     }
 }
 
-fn project(atom: &AtomEnvelope) -> AtomRecord {
+/// Project an atom to its hot-field record. Shared with the v2 store writer
+/// (`super::store`) so the columnar `atoms.lance` and the rkyv `atoms.rkyv`
+/// derive from the *same* projection — Stage-0 parity ("lance row == rkyv
+/// atom") holds by construction rather than by two functions kept in sync.
+pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
     let id = atom.id().as_str().to_string();
     let kind = kind_of(atom);
     let mut name = String::new();

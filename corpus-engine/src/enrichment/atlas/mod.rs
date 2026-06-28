@@ -41,6 +41,7 @@ pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
 pub mod section_cache;
+pub mod store;
 pub mod strategies;
 pub mod summary;
 pub mod vital_tier;
