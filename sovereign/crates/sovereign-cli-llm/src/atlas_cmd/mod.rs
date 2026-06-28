@@ -30,6 +30,7 @@ pub mod migrate_ids;
 pub mod stats;
 pub mod status;
 pub mod typed_extension;
+pub mod verify_v2;
 pub mod wikipedia;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -77,6 +78,10 @@ const HELP: Help = Help {
                 "Build the zero-copy atoms.rkyv archive off the query thread (Phase 1.5).",
             ),
             (
+                "verify-v2",
+                "ATLAS_STORAGE_V2 migration audit: prove the v2 store (atoms.lance + edges.csr) reconstructs the rkyv atlas losslessly. `--all` audits every corpus.",
+            ),
+            (
                 "enable-incremental",
                 "Move 6 P5: flip per-corpus atlas_incremental_enabled flag (pre-flight checks content-hash).",
             ),
@@ -114,6 +119,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "migrate-ids" => migrate_ids::run(&args[1..]).await,
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
         "build-archive" => build_archive::run(&args[1..]).await,
+        "verify-v2" => verify_v2::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,
         "typed-extension" => typed_extension::run(&args[1..]).await,
         "stats" => stats::run(&args[1..]).await,

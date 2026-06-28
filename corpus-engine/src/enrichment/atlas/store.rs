@@ -61,24 +61,35 @@ pub fn store_v2_enabled() -> bool {
 /// the lossless canonical JSON payload. Derived from [`AtomRecord`] so the
 /// columns match the rkyv projection field-for-field.
 #[derive(Debug, Clone, PartialEq)]
-struct StoreRow {
-    local_id: u32,
-    str_id: String,
-    kind: u8,
-    name: String,
-    label: String,
-    content: String,
-    subtype: String,
-    description: String,
-    excerpt: String,
-    salience: f32,
-    confidence: f32,
-    payload: String,
+pub struct AtomRow {
+    pub local_id: u32,
+    pub str_id: String,
+    pub kind: u8,
+    pub name: String,
+    pub label: String,
+    pub content: String,
+    pub subtype: String,
+    pub description: String,
+    pub excerpt: String,
+    pub salience: f32,
+    pub confidence: f32,
+    /// Lossless canonical `AtomEnvelope` JSON — the deep-read column.
+    pub payload: String,
 }
 
-impl StoreRow {
+impl AtomRow {
+    /// Re-parse the full [`AtomEnvelope`] from the payload column. `None` on an
+    /// empty payload or parse failure. The cold deep read for the Stage-1
+    /// direct-read reader (hot fields are the scalar columns above).
+    pub fn atom_envelope(&self) -> Option<AtomEnvelope> {
+        if self.payload.is_empty() {
+            return None;
+        }
+        serde_json::from_str(&self.payload).ok()
+    }
+
     fn from_record(local_id: u32, r: &AtomRecord) -> Self {
-        StoreRow {
+        AtomRow {
             local_id,
             str_id: r.id.clone(),
             kind: kind_u8(r.kind),
@@ -173,8 +184,8 @@ fn atoms_schema() -> Arc<Schema> {
     ]))
 }
 
-fn atoms_batch(rows: &[StoreRow], sch: &Arc<Schema>) -> Result<RecordBatch, String> {
-    let str_col = |f: &dyn Fn(&StoreRow) -> &str| {
+fn atoms_batch(rows: &[AtomRow], sch: &Arc<Schema>) -> Result<RecordBatch, String> {
+    let str_col = |f: &dyn Fn(&AtomRow) -> &str| {
         Arc::new(StringArray::from(
             rows.iter().map(f).collect::<Vec<_>>(),
         )) as arrow_array::ArrayRef
@@ -204,7 +215,7 @@ fn atoms_batch(rows: &[StoreRow], sch: &Arc<Schema>) -> Result<RecordBatch, Stri
     RecordBatch::try_new(sch.clone(), cols).map_err(|e| format!("atoms record batch: {e}"))
 }
 
-async fn write_atoms_lance(atlas_dir: &Path, rows: &[StoreRow]) -> Result<PathBuf, String> {
+async fn write_atoms_lance(atlas_dir: &Path, rows: &[AtomRow]) -> Result<PathBuf, String> {
     let lance_dir = atlas_dir.join(ATOMS_LANCE_DIRNAME);
     // Rebuild semantics: drop any prior table so this is a clean overwrite.
     if lance_dir.exists() {
@@ -443,12 +454,12 @@ pub async fn write_store(
     edges: &[Edge],
 ) -> Result<PathBuf, String> {
     let mut by_id: HashMap<String, u32> = HashMap::with_capacity(atoms.len());
-    let mut rows: Vec<StoreRow> = Vec::with_capacity(atoms.len());
+    let mut rows: Vec<AtomRow> = Vec::with_capacity(atoms.len());
     for (i, atom) in atoms.iter().enumerate() {
         let rec = project(atom);
         let local_id = i as u32;
         by_id.insert(rec.id.clone(), local_id);
-        rows.push(StoreRow::from_record(local_id, &rec));
+        rows.push(AtomRow::from_record(local_id, &rec));
     }
     let lance = write_atoms_lance(atlas_dir, &rows).await?;
     write_edges_csr(atlas_dir, atoms.len() as u32, &by_id, edges)?;
@@ -642,9 +653,9 @@ mod tests {
         })
     }
 
-    /// Read atoms.lance back into [`StoreRow`]s, sorted by local id (Lance does
+    /// Read atoms.lance back into [`AtomRow`]s, sorted by local id (Lance does
     /// not guarantee scan order).
-    async fn read_atoms_lance(atlas_dir: &Path) -> Vec<StoreRow> {
+    async fn read_atoms_lance(atlas_dir: &Path) -> Vec<AtomRow> {
         let db = lancedb::connect(atlas_dir.to_str().unwrap())
             .execute()
             .await
@@ -696,7 +707,7 @@ mod tests {
             let (sid, name, label, content) = (strc(b, "str_id"), strc(b, "name"), strc(b, "label"), strc(b, "content"));
             let (subtype, desc, exc, payload) = (strc(b, "subtype"), strc(b, "description"), strc(b, "excerpt"), strc(b, "payload"));
             for i in 0..b.num_rows() {
-                rows.push(StoreRow {
+                rows.push(AtomRow {
                     local_id: id.value(i),
                     str_id: sid.value(i).to_string(),
                     kind: kind.value(i),
@@ -783,7 +794,7 @@ mod tests {
         let rows = read_atoms_lance(dir).await;
         assert_eq!(rows.len(), atoms.len());
         for (i, atom) in atoms.iter().enumerate() {
-            let expect = StoreRow::from_record(i as u32, &project(atom));
+            let expect = AtomRow::from_record(i as u32, &project(atom));
             assert_eq!(rows[i], expect, "lance row {i} != rkyv projection");
             // Payload is lossless: it deserializes back to the original atom.
             let back: AtomEnvelope = serde_json::from_str(&rows[i].payload).unwrap();
