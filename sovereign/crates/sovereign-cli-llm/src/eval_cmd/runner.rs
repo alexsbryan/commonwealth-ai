@@ -565,6 +565,8 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
 // (`AtlasContextManager`).
 pub use sovereign_core::atlas_context::atlas_navigate;
 pub use sovereign_core::atlas_context::AtlasGraph;
+// ATLAS_STORAGE_V2 Increment A — the gated ANN-seeding variant.
+use super::atlas_ann::{atlas_navigate_ann, build_ann_table, AnnTable, SeedMode};
 
 /// Filters applied during atlas-context loading. Used to keep the
 /// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
@@ -1043,6 +1045,7 @@ pub async fn run_bank(
     graphs: &[AtlasGraph],
     loose_source_judge: bool,
     essay_judge: bool,
+    seed_mode: SeedMode,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1075,6 +1078,24 @@ pub async fn run_bank(
         ));
     }
 
+    // ATLAS_STORAGE_V2 Increment A: build the ANN seed table once (per run) when
+    // `--atlas-seed ann`. The `resolved/total` log is the join-completeness the
+    // go/no-go criterion watches (it should equal the cosine path's seedable set).
+    let ann: Option<AnnTable> = if seed_mode == SeedMode::Ann && !atlases.is_empty() {
+        match build_ann_table(atlases, graphs).await {
+            Ok(t) => {
+                eprintln!(
+                    "atlas-seed=ann: ANN seed table built — {}/{} bag entries resolved to atom-ids",
+                    t.resolved, t.total
+                );
+                Some(t)
+            }
+            Err(e) => return Err(format!("build ANN seed table: {e}")),
+        }
+    } else {
+        None
+    };
+
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
         let result = run_question(
@@ -1086,6 +1107,7 @@ pub async fn run_bank(
             graphs,
             loose_source_judge,
             essay_judge,
+            ann.as_ref(),
         )
         .await;
         results.push(result);
@@ -1109,6 +1131,7 @@ async fn run_question(
     graphs: &[AtlasGraph],
     loose_source_judge: bool,
     essay_judge: bool,
+    ann: Option<&AnnTable>,
 ) -> EvalResult {
     // 1. Embed.
     let t_embed = Instant::now();
@@ -1273,14 +1296,30 @@ async fn run_question(
         let max_seeds = atlases.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let ctx_refs: Vec<&AtlasContext> = atlases.iter().collect();
         let graph_refs: Vec<&AtlasGraph> = graphs.iter().collect();
-        atlas_navigate(
-            &q.question,
-            &embedding,
-            &ctx_refs,
-            &graph_refs,
-            max_seeds,
-            /*max_hops=*/ 2,
-        )
+        match ann {
+            // ATLAS_STORAGE_V2 Increment A: ANN-over-vector-column seeding.
+            Some(ann) => {
+                atlas_navigate_ann(
+                    &q.question,
+                    &embedding,
+                    &ctx_refs,
+                    &graph_refs,
+                    ann,
+                    max_seeds,
+                    /*max_hops=*/ 2,
+                )
+                .await
+            }
+            // Default: v1 exact-cosine-over-bag seeding, byte-identical.
+            None => atlas_navigate(
+                &q.question,
+                &embedding,
+                &ctx_refs,
+                &graph_refs,
+                max_seeds,
+                /*max_hops=*/ 2,
+            ),
+        }
     } else {
         Vec::new()
     };

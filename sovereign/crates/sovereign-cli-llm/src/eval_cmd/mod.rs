@@ -28,6 +28,7 @@
 //! routing and aggregation layers, which are tunable in their own
 //! right.
 
+pub mod atlas_ann;
 pub mod attribution;
 pub mod bank;
 pub mod report;
@@ -216,6 +217,11 @@ struct RunArgs {
     /// the unscoped run is the cross-corpus UX, scored on answer
     /// quality.
     isolate: bool,
+    /// Atom-seed source for `atlas_navigate`. `cosine` (default) = v1 exact
+    /// cosine over the embedding bag + resolve; `ann` = ATLAS_STORAGE_V2
+    /// Increment A's ANN over a co-located Lance vector column. The gate runs
+    /// both arms and diffs essay/source/fact scores.
+    atlas_seed: atlas_ann::SeedMode,
 }
 
 impl Default for RunArgs {
@@ -241,6 +247,7 @@ impl Default for RunArgs {
             thread_id_filter: None,
             judge_trials: 1,
             isolate: false,
+            atlas_seed: atlas_ann::SeedMode::Cosine,
         }
     }
 }
@@ -408,6 +415,17 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--essay-judge" => {
                 a.essay_judge = true;
+            }
+            "--atlas-seed" => {
+                i += 1;
+                match rest.get(i).map(String::as_str) {
+                    Some("cosine") => a.atlas_seed = atlas_ann::SeedMode::Cosine,
+                    Some("ann") => a.atlas_seed = atlas_ann::SeedMode::Ann,
+                    other => {
+                        eprintln!("error: --atlas-seed expects cosine|ann, got `{other:?}`");
+                        return 2;
+                    }
+                }
             }
             extra => {
                 eprintln!("error: unexpected argument `{extra}`");
@@ -637,6 +655,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             &atlas_graphs,
             a.loose_source_judge,
             a.essay_judge,
+            a.atlas_seed,
         )
         .await
         {
