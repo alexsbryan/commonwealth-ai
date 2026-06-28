@@ -161,11 +161,45 @@ pub fn write_atlas_full(
     write_atomic(&edges_path, &edges_file)?;
     write_atomic(&trajectories_path, &trajectories_file)?;
 
+    // Dual-write the zero-copy archive (`atoms.rkyv`) beside the JSON so
+    // the reader can `mmap` it instead of parsing 758 MB / 1.67M atoms on
+    // first query (ATLAS_STORAGE.md Phase 1). `atoms.json` stays canonical;
+    // a reader self-upgrades on load if this sidecar is absent or stale.
+    write_atlas_archive_sidecar(atlas_dir, &atoms_file.atoms, edges);
+
     Ok(AtlasWritten {
         atoms_path,
         edges_path,
         trajectories_path,
     })
+}
+
+/// Best-effort sibling write of `atlas/atoms.rkyv` from the just-written
+/// atoms + edges. Never fails the atlas write: `atoms.json` is canonical
+/// and the reader's convert-on-load re-derives the archive, so a `warn!`
+/// is the right severity. The archive's `corpus_id` / `article_slug` are
+/// self-description (the reader re-derives the slug from the corpus id),
+/// so deriving them from the atlas dir keeps `write_atlas_full`'s
+/// signature stable for every caller.
+fn write_atlas_archive_sidecar(atlas_dir: &Path, atoms: &[AtomEnvelope], edges: &[Edge]) {
+    let corpus_id = atlas_dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let slug = corpus_id.strip_prefix("sep-").unwrap_or(corpus_id);
+    let bytes = match super::archive::build_atlas_archive_bytes(corpus_id, slug, atoms, edges) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(corpus = corpus_id, "atlas archive build failed: {e}");
+            return;
+        }
+    };
+    let path = atlas_dir.join(super::archive::ATLAS_ARCHIVE_FILENAME);
+    let tmp = path.with_extension("rkyv.tmp");
+    if let Err(e) = fs::write(&tmp, &bytes).and_then(|_| fs::rename(&tmp, &path)) {
+        tracing::warn!(corpus = corpus_id, "atlas dual-write atoms.rkyv failed: {e}");
+    }
 }
 
 #[derive(Debug, Clone)]
