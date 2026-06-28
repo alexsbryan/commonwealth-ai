@@ -224,6 +224,17 @@ impl AtlasGraph {
         Self::from_owned_bytes(atlas_corpus_id, &article_slug, &bytes)
     }
 
+    /// Build an Owned-backed graph from prebuilt archive bytes — e.g. the v2
+    /// store reconstructed by
+    /// `corpus_engine::enrichment::atlas::store::reconstruct_archive_bytes`.
+    /// ATLAS_STORAGE_V2 Increment C: lets the eval drive `atlas_navigate` over
+    /// the v2 store (atoms.lance + edges.csr) through the existing rkyv read
+    /// path, without changing the daemon's `AtlasGraph`.
+    pub fn from_archive_bytes(atlas_corpus_id: &str, bytes: &[u8]) -> Result<Self, String> {
+        let article_slug = derive_article_slug(atlas_corpus_id);
+        Self::from_owned_bytes(atlas_corpus_id, &article_slug, bytes)
+    }
+
     fn from_mmap(atlas_corpus_id: &str, article_slug: &str, path: &Path) -> Result<Self, String> {
         let file =
             std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;

@@ -24,6 +24,10 @@ tokio = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 
+# mmap reader for the v2 `edges.csr` (ATLAS_STORAGE_V2) — the BFS edge path
+# stays sync + paged, mirroring sovereign-core's atoms.rkyv mmap.
+memmap2 = "0.9"
+
 # Logging
 tracing = { workspace = true }
 
