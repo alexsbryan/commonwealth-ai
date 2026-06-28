@@ -600,7 +600,7 @@ pub fn edge_weight(edge_type: EdgeType) -> f32 {
 /// on both sides (or string boundaries). Used by name-match seeding
 /// in [`atlas_navigate`] to avoid false positives like "form" inside
 /// "informed". Both args MUST already be lowercase.
-fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() || needle.len() > haystack.len() {
         return false;
     }
@@ -646,7 +646,7 @@ fn contains_whole_word(haystack: &str, needle: &str) -> bool {
 /// definitional sentences ("X is Y").
 const MIN_VERBATIM_EXCERPT_CHARS: usize = 60;
 
-fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
+pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
     // Deep-field read over the bounded navigation neighborhood (not a hot
     // scan path) — parse the full atom from its JSON payload blob.
     let atom = graph.atom(atom_id)?.atom_envelope()?;
@@ -1094,7 +1094,11 @@ pub fn atlas_navigate(
 /// duplicate the constant rather than depending on either loader.
 const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
 
-fn resolve_atom_id_from_entry(
+// `pub` (with `atom_verbatim_excerpt` + `contains_whole_word` below) so the
+// eval-crate ANN-seeding experiment can reuse the canonical seed-resolution
+// and rendering rather than fork it — keeping build-time (join) and query-time
+// embed_text identical. See `docs/specs/ATLAS_STORAGE_V2.md` Increment A.
+pub fn resolve_atom_id_from_entry(
     graph: &AtlasGraph,
     canonical_name: &str,
     embed_text: &str,

@@ -391,17 +391,53 @@ impl RecipeRegistry {
             tracing::debug!(corpus = %id, url = %entry.toml_url, "Fetching recipe TOML from registry");
             match fetch_text(&entry.toml_url).await {
                 Ok(text) => {
-                    if !entry.sha256.is_empty() {
-                        if let Err(e) = verify_sha256(text.as_bytes(), &entry.sha256) {
-                            tracing::warn!(
-                                corpus = %id,
-                                "Recipe URL fetched but SHA-256 mismatch ({e}); trying bundled fallback"
-                            );
-                        } else {
-                            return Recipe::from_toml(&text);
+                    // Decide remote-vs-bundled by INTEGRITY, not mere reachability.
+                    // The bundled recipe is vendored from the canonical
+                    // `sovereign-recipes/` tree at compile time (build.rs), so it
+                    // is the reviewed, committed source of truth shipped with this
+                    // binary. A remote may only OVERRIDE it when the registry
+                    // vouches for the exact bytes (sha256 present and verified) —
+                    // that's the hotfix path. An unverified remote (empty sha256)
+                    // must never silently shadow the bundled recipe; otherwise a
+                    // stale published mirror downgrades a correct in-binary recipe
+                    // (the SEP `[prebuilt]` regression: the standalone recipe repo
+                    // lagged the monorepo, dropping the prebuilt-snapshot restore).
+                    let sha_present = !entry.sha256.is_empty();
+                    let sha_verified = if sha_present {
+                        match verify_sha256(text.as_bytes(), &entry.sha256) {
+                            Ok(()) => true,
+                            Err(e) => {
+                                tracing::warn!(
+                                    corpus = %id,
+                                    "Recipe URL fetched but SHA-256 mismatch ({e}); ignoring the remote"
+                                );
+                                false
+                            }
                         }
                     } else {
-                        return Recipe::from_toml(&text);
+                        false
+                    };
+                    let bundled_present = crate::recipe_builtin::bundled_recipe_toml(id).is_some();
+                    match choose_recipe_source(sha_present, sha_verified, bundled_present) {
+                        RecipeChoice::Remote => return Recipe::from_toml(&text),
+                        RecipeChoice::Bundled => {
+                            if !sha_present {
+                                tracing::warn!(
+                                    corpus = %id,
+                                    url = %entry.toml_url,
+                                    "Recipe URL has no sha256 in the registry; preferring the \
+                                     bundled compile-time recipe over the unverified remote to \
+                                     avoid silent drift (set a sha256 in registry.toml to let a \
+                                     verified remote override the bundled recipe)"
+                                );
+                            }
+                            // fall through to the bundled fallback below.
+                        }
+                        RecipeChoice::Neither => {
+                            // sha mismatch AND no bundled fallback — already warned
+                            // above. Fall through to the terminal "no recipe
+                            // available" error rather than serve unverified bytes.
+                        }
                     }
                 }
                 Err(e) => {
@@ -490,6 +526,112 @@ fn verify_sha256(data: &[u8], expected_hex: &str) -> std::result::Result<(), Str
         return Err(format!("expected {expected_hex}, got {actual}"));
     }
     Ok(())
+}
+
+/// Which source `fetch_recipe` should serve once a remote TOML has been
+/// fetched, decided purely from integrity facts (kept side-effect-free so the
+/// policy is unit-testable without the network).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecipeChoice {
+    /// Serve the fetched remote text.
+    Remote,
+    /// Ignore the remote; serve the bundled compile-time recipe.
+    Bundled,
+    /// Remote failed integrity (sha mismatch) and there is no bundled
+    /// fallback — serve nothing (caller surfaces "no recipe available")
+    /// rather than trust unverified bytes.
+    Neither,
+}
+
+/// Resolution policy for a fetched remote recipe versus the bundled
+/// compile-time recipe.
+///
+/// Invariant (the fail-safe at the heart of the SEP-`[prebuilt]` fix): an
+/// UNVERIFIED remote — one the registry carries no `sha256` for — never
+/// overrides a bundled recipe. The bundled copy is vendored from the
+/// reviewed, committed `sovereign-recipes/` tree at build time, so a stale
+/// published mirror must not be able to silently downgrade it. A remote may
+/// override bundled ONLY when the registry vouches for its exact bytes
+/// (`sha256` present and verified) — the deliberate hotfix path. When no
+/// bundled recipe exists (a registry-only corpus not shipped in this binary),
+/// the remote is the only source and is used regardless, since refusing it
+/// would make the corpus uninstallable.
+///
+/// `sha256_verified` is only meaningful when `sha256_present` is true; callers
+/// pass `false` for it otherwise.
+fn choose_recipe_source(
+    sha256_present: bool,
+    sha256_verified: bool,
+    bundled_present: bool,
+) -> RecipeChoice {
+    match (sha256_present, sha256_verified, bundled_present) {
+        // Integrity-verified remote: the hotfix path — wins over bundled.
+        (true, true, _) => RecipeChoice::Remote,
+        // sha present but mismatched: never serve the bad bytes. Prefer
+        // bundled if we have it; otherwise refuse.
+        (true, false, true) => RecipeChoice::Bundled,
+        (true, false, false) => RecipeChoice::Neither,
+        // No sha (unverified): protect the bundled recipe from silent drift…
+        (false, _, true) => RecipeChoice::Bundled,
+        // …but a registry-only corpus has no bundled fallback, so use the
+        // remote — it's the only source available.
+        (false, _, false) => RecipeChoice::Remote,
+    }
+}
+
+#[cfg(test)]
+mod resolution_policy_tests {
+    use super::{choose_recipe_source, RecipeChoice};
+
+    #[test]
+    fn verified_remote_overrides_bundled() {
+        // A sha-verified remote is the deliberate hotfix path: it wins even
+        // when a bundled recipe ships in the binary.
+        assert_eq!(
+            choose_recipe_source(true, true, true),
+            RecipeChoice::Remote
+        );
+        assert_eq!(
+            choose_recipe_source(true, true, false),
+            RecipeChoice::Remote
+        );
+    }
+
+    #[test]
+    fn unverified_remote_yields_to_bundled() {
+        // THE FIX. Empty sha256 = no integrity guarantee → must not shadow the
+        // build-time-vendored bundled recipe. This is exactly the SEP case:
+        // stale standalone mirror (no [prebuilt]) vs correct bundled recipe.
+        assert_eq!(
+            choose_recipe_source(false, false, true),
+            RecipeChoice::Bundled
+        );
+    }
+
+    #[test]
+    fn unverified_remote_used_only_when_no_bundled() {
+        // A registry-only corpus not compiled into this binary still installs
+        // from the (unverifiable) remote — it is the only source.
+        assert_eq!(
+            choose_recipe_source(false, false, false),
+            RecipeChoice::Remote
+        );
+    }
+
+    #[test]
+    fn sha_mismatch_prefers_bundled_then_refuses() {
+        // A present-but-mismatched sha is a hard integrity failure: fall back
+        // to bundled when available, otherwise refuse rather than serve
+        // tampered/wrong content.
+        assert_eq!(
+            choose_recipe_source(true, false, true),
+            RecipeChoice::Bundled
+        );
+        assert_eq!(
+            choose_recipe_source(true, false, false),
+            RecipeChoice::Neither
+        );
+    }
 }
 
 // ── Path helper (used by engine and xtask) ───────────────────────────────────
