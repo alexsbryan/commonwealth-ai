@@ -1347,21 +1347,11 @@ pub async fn bootstrap_with_progress(
     } else if let Ok(infos) = corpus_engine.installed_indexes().await {
         let idx_dir = corpus_engine.index_dir().to_path_buf();
         for info in infos {
-            let db_path =
-                corpus_engine::WikipediaGraph::default_db_path(&idx_dir, &info.corpus_id);
-            if !db_path.exists() {
-                continue;
-            }
-            match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
-                Ok(g) => {
-                    runtime = runtime.with_wikipedia_graph(Arc::new(g));
-                    break;
-                }
-                Err(e) => tracing::warn!(
-                    corpus = %info.corpus_id,
-                    error = %e,
-                    "wikipedia_graph: open failed; skipping"
-                ),
+            // WIKIPEDIA_ATLAS_V2 W3: the shared columnar-or-sqlite gate (the
+            // "dedup to a shared crate" the comment above anticipated).
+            if let Some(g) = corpus_engine::open_wikipedia_graph(&idx_dir, &info.corpus_id).await {
+                runtime = runtime.with_wikipedia_graph(g);
+                break;
             }
         }
     }

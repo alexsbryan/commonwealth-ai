@@ -827,23 +827,13 @@ fn resolve_embed_model(inf: &config::InferenceSection) -> Option<PathBuf> {
 async fn load_wikipedia_graph_for_server(
     engine: &corpus_engine::CorpusEngine,
     indexes_dir: &std::path::Path,
-) -> Option<Arc<corpus_engine::WikipediaGraph>> {
+) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
+    // WIKIPEDIA_ATLAS_V2 W3: prefer the columnar store over SQLite via the shared
+    // `corpus_engine::open_wikipedia_graph` gate (backend-agnostic).
     let infos = engine.installed_indexes().await.ok()?;
     for info in infos {
-        let db_path = corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
-        if !db_path.exists() {
-            continue;
-        }
-        match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
-            Ok(g) => return Some(Arc::new(g)),
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %info.corpus_id,
-                    db = %db_path.display(),
-                    error = %e,
-                    "wikipedia_graph: open failed; skipping"
-                );
-            }
+        if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
+            return Some(g);
         }
     }
     None
