@@ -1,0 +1,223 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Shared atom projection — the hot-field record the v2 store derives from.
+//!
+//! `atoms.json` is the canonical source; the query-time consumers don't read it
+//! directly. They read a **flat projection** of each atom: the scalar/text
+//! fields the navigate + typed-enumeration paths touch, structured (so a typed
+//! enumeration filters on `kind` without parsing the payload), plus the full
+//! `AtomEnvelope` kept as a JSON payload blob for the rare deep read.
+//!
+//! This module is the single source of that projection. The v2 store writer
+//! (`super::store`) projects atoms through [`project`] into the columnar
+//! `atoms.lance`, and the reader ([`super::store::LancePreload`]) re-projects the
+//! lossless `payload` back into [`AtomRecord`]s — so the columns and the resident
+//! records derive from the *same* projection by construction. (Formerly this also
+//! backed the v1 `atoms.rkyv` archive; that backend was retired in
+//! ATLAS_STORAGE_V2, leaving the projection types here, rkyv-free.)
+
+use super::atoms::{AtomEnvelope, ChunkRef};
+use super::edges::EdgeType;
+
+/// Atom-type discriminant — the structured tag that lets a typed enumeration
+/// (`atoms_of_kind`) filter without parsing the payload. Mirrors
+/// [`super::atoms::AtomType`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomKindTag {
+    Entity,
+    Event,
+    State,
+    Relation,
+    Claim,
+    Question,
+    Configuration,
+    ArgumentReconstruction,
+    Position,
+    Opposition,
+    Asset,
+}
+
+/// Flattened evidence ref (the `Option`s collapsed to `""`). Carries the fields
+/// the consumers read off `ChunkRef` (`chunk_id`, `passage_preview`,
+/// `source_doc_id`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArchChunkRef {
+    pub chunk_id: String,
+    pub passage_preview: String,
+    pub source_doc_id: String,
+}
+
+/// Edge-type discriminant — a compact mirror of [`super::edges::EdgeType`] used
+/// for the `edges.csr` type byte (via [`super::store`]'s `edge_type_u8`). Keep
+/// the variants in sync with `EdgeType`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArchEdgeType {
+    Transition,
+    Causes,
+    Grounds,
+    Tension,
+    Involves,
+    Composes,
+    Configures,
+    Grounding,
+    Framing,
+    Provenance,
+    EvidenceFor,
+    Concedes,
+    OpposesIn,
+    Attaches,
+}
+
+/// One atom: structured hot fields + the full-fidelity JSON payload.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AtomRecord {
+    pub id: String,
+    pub kind: AtomKindTag,
+    /// `Entity.canonical_name` (else `""`).
+    pub name: String,
+    /// `Relation.label` (else `""`).
+    pub label: String,
+    /// `Claim.content` (else `""`).
+    pub content: String,
+    /// `Entity.entity_type` string repr (else `""`).
+    pub subtype: String,
+    /// `Entity.description` (else `""`). Feeds the atom-enumeration
+    /// `embed_text` (`"{name}. {description}"`) and the Entity branch of the
+    /// seed embed-text rendering — both are hot paths, so the field is projected
+    /// rather than payload-parsed.
+    pub description: String,
+    /// `Claim.quotable_excerpt` (else `""`).
+    pub excerpt: String,
+    /// `Claim.confidence` (0.5 default; 0.0 for non-claims).
+    pub confidence: f32,
+    /// `Entity.salience` (0.0 for non-entities). Prominence tie-break in
+    /// the atom-enumeration path.
+    pub salience: f32,
+    /// `Entity.aliases` (else empty). The enumeration uses the count as
+    /// a prominence tie-break; the seed embed-text rendering joins them
+    /// back into the Entity text.
+    pub aliases: Vec<String>,
+    /// `Relation.participants` atom ids (else empty).
+    pub participants: Vec<String>,
+    /// Normalised evidence refs (per-variant, mirrors `AtlasGraph::atom_evidence`).
+    pub evidence: Vec<ArchChunkRef>,
+    /// The full `AtomEnvelope` as canonical JSON — re-parsed only on the rare
+    /// deep/point read, never in the bulk enumeration path.
+    pub payload: Vec<u8>,
+}
+
+/// Map the corpus-engine [`EdgeType`] to its compact discriminant.
+pub fn arch_edge_type(t: EdgeType) -> ArchEdgeType {
+    match t {
+        EdgeType::Transition => ArchEdgeType::Transition,
+        EdgeType::Causes => ArchEdgeType::Causes,
+        EdgeType::Grounds => ArchEdgeType::Grounds,
+        EdgeType::Tension => ArchEdgeType::Tension,
+        EdgeType::Involves => ArchEdgeType::Involves,
+        EdgeType::Composes => ArchEdgeType::Composes,
+        EdgeType::Configures => ArchEdgeType::Configures,
+        EdgeType::Grounding => ArchEdgeType::Grounding,
+        EdgeType::Framing => ArchEdgeType::Framing,
+        EdgeType::Provenance => ArchEdgeType::Provenance,
+        EdgeType::EvidenceFor => ArchEdgeType::EvidenceFor,
+        EdgeType::Concedes => ArchEdgeType::Concedes,
+        EdgeType::OpposesIn => ArchEdgeType::OpposesIn,
+        EdgeType::Attaches => ArchEdgeType::Attaches,
+    }
+}
+
+/// Per-variant evidence refs — the single source of truth mirrored by the
+/// reader's `atom_evidence`. Keep in sync with `AtlasGraph::atom_evidence`.
+fn evidence_refs(atom: &AtomEnvelope) -> Vec<&ChunkRef> {
+    match atom {
+        AtomEnvelope::Entity(e) => vec![&e.first_appearance],
+        AtomEnvelope::Event(ev) => ev.evidence.iter().collect(),
+        AtomEnvelope::State(s) => s.evidence.iter().collect(),
+        AtomEnvelope::Relation(r) => r.evidence.iter().collect(),
+        AtomEnvelope::Claim(c) => c.evidence.iter().collect(),
+        AtomEnvelope::Question(q) => q.raised_at.iter().collect(),
+        AtomEnvelope::Configuration(cfg) => cfg.evidence.iter().collect(),
+        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
+        AtomEnvelope::Position(p) => vec![&p.first_appearance],
+        AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
+        AtomEnvelope::Asset(_) => Vec::new(),
+    }
+}
+
+fn kind_of(atom: &AtomEnvelope) -> AtomKindTag {
+    match atom {
+        AtomEnvelope::Entity(_) => AtomKindTag::Entity,
+        AtomEnvelope::Event(_) => AtomKindTag::Event,
+        AtomEnvelope::State(_) => AtomKindTag::State,
+        AtomEnvelope::Relation(_) => AtomKindTag::Relation,
+        AtomEnvelope::Claim(_) => AtomKindTag::Claim,
+        AtomEnvelope::Question(_) => AtomKindTag::Question,
+        AtomEnvelope::Configuration(_) => AtomKindTag::Configuration,
+        AtomEnvelope::ArgumentReconstruction(_) => AtomKindTag::ArgumentReconstruction,
+        AtomEnvelope::Position(_) => AtomKindTag::Position,
+        AtomEnvelope::Opposition(_) => AtomKindTag::Opposition,
+        AtomEnvelope::Asset(_) => AtomKindTag::Asset,
+    }
+}
+
+/// Project an atom to its hot-field record. Shared by the v2 store writer
+/// (`super::store::write_store`) and the reader (`LancePreload`), so the
+/// columnar `atoms.lance` and the resident records derive from the *same*
+/// projection rather than two functions kept in sync.
+pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
+    let id = atom.id().as_str().to_string();
+    let kind = kind_of(atom);
+    let mut name = String::new();
+    let mut label = String::new();
+    let mut content = String::new();
+    let mut subtype = String::new();
+    let mut description = String::new();
+    let mut excerpt = String::new();
+    let mut confidence = 0.0_f32;
+    let mut salience = 0.0_f32;
+    let mut aliases = Vec::new();
+    let mut participants = Vec::new();
+    match atom {
+        AtomEnvelope::Entity(e) => {
+            name = e.canonical_name.clone();
+            subtype = e.entity_type.as_str_repr().to_string();
+            description = e.description.clone();
+            salience = e.salience;
+            aliases = e.aliases.clone();
+        }
+        AtomEnvelope::Relation(r) => {
+            label = r.label.clone();
+            participants = r.participants.iter().map(|p| p.as_str().to_string()).collect();
+        }
+        AtomEnvelope::Claim(c) => {
+            content = c.content.clone();
+            excerpt = c.quotable_excerpt.clone().unwrap_or_default();
+            confidence = c.confidence.unwrap_or(0.5);
+        }
+        _ => {}
+    }
+    let evidence = evidence_refs(atom)
+        .into_iter()
+        .map(|c| ArchChunkRef {
+            chunk_id: c.chunk_id.clone(),
+            passage_preview: c.passage_preview.clone().unwrap_or_default(),
+            source_doc_id: c.source_doc_id.clone().unwrap_or_default(),
+        })
+        .collect();
+    let payload = serde_json::to_vec(atom).unwrap_or_default();
+    AtomRecord {
+        id,
+        kind,
+        name,
+        label,
+        content,
+        subtype,
+        description,
+        excerpt,
+        confidence,
+        salience,
+        aliases,
+        participants,
+        evidence,
+        payload,
+    }
+}

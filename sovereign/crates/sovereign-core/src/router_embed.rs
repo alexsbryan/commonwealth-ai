@@ -34,10 +34,25 @@
 //! - top similarity > `MIN_TOP_SIM` (default 0.55 — exemplar must
 //!   actually match), AND
 //! - margin between top and second intent > `MIN_MARGIN` (default
-//!   0.04 — top must be decisively ahead).
+//!   0.10 — top must be decisively ahead).
 //!
 //! Ambiguous queries (low margin or low top) fall through. The LLM
 //! classifier handles those with full-sentence context.
+//!
+//! The margin floor was 0.04 when the exemplar bank held only the
+//! original taxonomy. Adding the specialized product intents
+//! (`code_query`, `generative_query`) densified the embedding space:
+//! their topical anchors (e.g. "retrieval pipeline") now sit close to
+//! general queries that merely share a domain word, producing
+//! "decisive"-looking k=1 wins between two WRONG intents. Raising the
+//! floor to 0.10 makes those low-separation cases defer to the LLM,
+//! which reads the full sentence and disambiguates correctly. The
+//! value sits in an empirical gap measured across the routing banks:
+//! the only correct embed decisions below 0.10 have margins <= 0.061,
+//! and the lowest-margin correct decision retained is 0.110 — so a
+//! 0.10 floor sheds the ambiguous collision (margin 0.099) plus two
+//! barely-decisive cases (which the LLM re-confirms) without touching
+//! any decision that was clearly separated.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -50,7 +65,9 @@ use crate::traits::InferenceProvider;
 use crate::types::Intent;
 
 const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
-const DEFAULT_MIN_MARGIN: f32 = 0.04;
+// Raised from 0.04 → 0.10 after code_query/generative_query densified
+// the intent space (see module doc "Confidence + margin gate").
+const DEFAULT_MIN_MARGIN: f32 = 0.10;
 
 /// On-disk exemplar list. Each `[[example]]` row carries an intent
 /// name (matches `Intent` debug-format, lowercased + snake_case) and

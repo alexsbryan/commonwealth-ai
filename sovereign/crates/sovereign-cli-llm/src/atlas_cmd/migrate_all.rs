@@ -33,7 +33,7 @@ use corpus_engine::WikipediaGraph;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::eval_cmd::runner::{self, AtlasLoadFilter};
-use sovereign_core::atlas_context::{build_persistent_ann_seed_table, AtlasGraph};
+use sovereign_core::atlas_context::build_persistent_ann_seed_table;
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
@@ -183,30 +183,31 @@ pub async fn run(args: &[String]) -> i32 {
             "current"
         };
 
-        // 2) ANN — only for corpora that already carry an embeddings cache (never
-        // bulk-embed). Rebuild if the store changed or no table yet.
-        let ann_state: &str = if !atlas_dir.join("atoms.embeddings.bin").exists() {
+        // 2) ANN — scope to embedding-bearing corpora (never bulk-embed the
+        // structural set). `atoms.embeddings.bin` is no longer written
+        // (ATLAS_STORAGE_V2 Phase B retired the embed cache), but the file
+        // persists on disk as the legacy "this corpus was embedded" marker, and
+        // an existing ANN table is the forward-looking equivalent — either signal
+        // admits the corpus. Builds the stragglers (embedded but no table yet)
+        // and leaves current tables as-is; fresh corpora get their table via
+        // `sovereign atlas backfill-ann`.
+        let ann_state: &str = if !ann_table_present(&atlas_dir)
+            && !atlas_dir.join("atoms.embeddings.bin").exists()
+        {
             "n/a"
         } else if ann_table_present(&atlas_dir) && !store_built {
             "current"
         } else {
             match runner::load_atlas_context(&session, corpus_id, prod.top_k, &filter).await {
                 Ok(ctx) if !ctx.entries.is_empty() => {
-                    match AtlasGraph::load_from_disk(corpus_id, &atlas_dir) {
-                        Ok(graph) => match build_persistent_ann_seed_table(&atlas_dir, &ctx, &graph).await {
-                            Ok(_) => {
-                                anns += 1;
-                                "built"
-                            }
-                            Err(e) => {
-                                errs += 1;
-                                eprintln!("  {corpus_id}: ann build: {e}");
-                                "err"
-                            }
-                        },
+                    match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
+                        Ok(_) => {
+                            anns += 1;
+                            "built"
+                        }
                         Err(e) => {
                             errs += 1;
-                            eprintln!("  {corpus_id}: graph load: {e}");
+                            eprintln!("  {corpus_id}: ann build: {e}");
                             "err"
                         }
                     }

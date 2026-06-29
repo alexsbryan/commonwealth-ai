@@ -10,11 +10,6 @@ description = "Shared corpus ingestion and index management for Sovereign and Co
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
-# Zero-copy archive for the atlas graph (atoms.rkyv) — see
-# sovereign/docs/specs/ATLAS_STORAGE.md. Lets the reader mmap + access the
-# structural atom index without parsing the 758 MB / 1.67M-atom atoms.json
-# (measured 38s -> 11ms, 4.5 GB -> 27 MB RSS in the Phase 0 spike).
-rkyv = "0.8"
 
 # Error handling
 thiserror = { workspace = true }

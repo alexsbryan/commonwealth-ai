@@ -1838,41 +1838,25 @@ impl Runtime {
             let graph_refs: Vec<&crate::atlas_context::AtlasGraph> =
                 graphs.iter().map(|g| g.as_ref()).collect();
             let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
-            // ATLAS_STORAGE_V2 3b: take the ANN-adaptive navigate as soon as ANY
-            // participating corpus is backfilled. atlas_navigate_ann seeds each
-            // graph from its ANN table when present and from exact cosine (v1)
-            // when not, so a mixed pool is correct — backfilled corpora get the
-            // resolve-free ANN win, the rest keep their cosine seeds, none is
-            // under-seeded. When NO corpus has a table, plain atlas_navigate
-            // (sync) is the equivalent lighter path. This per-graph gate is what
-            // lets the rollout proceed corpus-by-corpus (the pool here is every
-            // LOADED atlas, so an all-or-nothing gate would never engage).
-            let use_ann = graph_refs.iter().any(|g| g.has_ann_seed_table());
-            let requests = if use_ann {
-                tracing::debug!(
-                    corpora = graph_refs.len(),
-                    max_seeds,
-                    "atlas-grounding: ANN seed path (v2)"
-                );
-                crate::atlas_context::atlas_navigate_ann(
-                    query_text,
-                    embedding,
-                    &ctx_refs,
-                    &graph_refs,
-                    max_seeds,
-                    /*max_hops=*/ 2,
-                )
-                .await
-            } else {
-                crate::atlas_context::atlas_navigate(
-                    query_text,
-                    embedding,
-                    &ctx_refs,
-                    &graph_refs,
-                    max_seeds,
-                    /*max_hops=*/ 2,
-                )
-            };
+            // ATLAS_STORAGE_V2: one navigate. Each graph seeds from its persistent
+            // ANN table (atom-ids directly, no per-query resolve) plus name-match
+            // over the bag. The v1 sync cosine `atlas_navigate` was retired with
+            // `resolve_atom_id_from_entry` — bags are derived from the ANN table,
+            // so every loaded atlas already carries one.
+            tracing::debug!(
+                corpora = graph_refs.len(),
+                max_seeds,
+                "atlas-grounding: ANN navigate (v2)"
+            );
+            let requests = crate::atlas_context::atlas_navigate_ann(
+                query_text,
+                embedding,
+                &ctx_refs,
+                &graph_refs,
+                max_seeds,
+                /*max_hops=*/ 2,
+            )
+            .await;
             // Production budget mirrors the eval-CLI's calibrated
             // value (limit * 0.6, where limit is `KQ_PER_CORPUS_LIMIT
             // = 20`). Calibrated against the SEP bank: budget=6 gave

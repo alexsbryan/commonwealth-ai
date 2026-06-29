@@ -24,7 +24,7 @@ use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
 use crate::eval_cmd::runner::{self, AtlasLoadFilter};
-use sovereign_core::atlas_context::{build_persistent_ann_seed_table, AtlasGraph};
+use sovereign_core::atlas_context::build_persistent_ann_seed_table;
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
@@ -98,15 +98,7 @@ pub async fn run(args: &[String]) -> i32 {
                 continue;
             }
         };
-        let graph = match AtlasGraph::load_from_disk(corpus_id, &atlas_dir) {
-            Ok(g) => g,
-            Err(e) => {
-                eprintln!("backfill-ann {corpus_id}: load graph: {e}");
-                failed += 1;
-                continue;
-            }
-        };
-        match build_persistent_ann_seed_table(&atlas_dir, &ctx, &graph).await {
+        match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
             Ok(stats) => {
                 println!(
                     "backfill-ann {corpus_id}: wrote {} — {}/{} bag entries resolved to atom-ids",

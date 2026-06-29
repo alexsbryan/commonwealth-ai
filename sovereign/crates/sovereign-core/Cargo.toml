@@ -21,13 +21,6 @@ corpus-engine-notes = { workspace = true }
 # the 5 grammar crates out of every sovereign-core build; the grammars stay
 # confined to the indexing path that WRITES the db (CLI `enrich` + the watcher).
 corpus-engine-scip = { workspace = true }
-# Zero-copy read of the atlas structural graph (`atlas/atoms.rkyv`): mmap
-# the archive corpus-engine builds and access it in place instead of the
-# former ~38s / ~4.5GB `serde_json` parse of `atoms.json` on the query
-# thread. See `docs/specs/ATLAS_STORAGE.md`; the write side lives in
-# `corpus-engine/.../atlas/archive.rs` (same `rkyv = "0.8"`).
-rkyv = "0.8"
-memmap2 = "0.9"
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

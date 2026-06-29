@@ -598,13 +598,17 @@ GENERATIVE
   Example: "Write me a poem about the first frost"
 
 METALINGUAL
-  Asks how a term is USED by a named anchor — this system, this
-  conversation, or a named external source. Meta to language, not
-  the fact itself.
+  Asks how a term is USED within OUR shared context — this system,
+  this codebase, or this conversation. Meta to the language of our
+  exchange, answered from local context — NOT retrieved.
   Signals: "in this codebase / conversation", "we discussed",
-  "according to <source>", "how does <source> define".
-  Example: "According to Wikipedia, what does 'recursion' mean?"
-  NOT METALINGUAL: bare definitions with no anchor are SIMPLE / LOOKUP.
+  "you mentioned earlier", "how do we define X here".
+  Example: "What does 'tier' mean in this codebase?"
+  NOT METALINGUAL: when the named anchor is an INSTALLED knowledge
+  source (see the list above), the user wants that source's CONTENT,
+  not a comment on usage — route "According to <installed source>,
+  what does X mean?" to LOOKUP (atomic definition) or REASONING
+  (open-ended). Bare definitions with no anchor are SIMPLE / LOOKUP.
 
 User message: "{message}"{corrections_note}
 
