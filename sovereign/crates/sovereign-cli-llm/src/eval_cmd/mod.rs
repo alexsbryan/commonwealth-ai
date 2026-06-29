@@ -222,9 +222,6 @@ struct RunArgs {
     /// Increment A's ANN over a co-located Lance vector column. The gate runs
     /// both arms and diffs essay/source/fact scores.
     atlas_seed: atlas_ann::SeedMode,
-    /// ATLAS_STORAGE_V2 Increment C: which on-disk store backs the AtlasGraph
-    /// the eval loads (rkyv archive vs the v2 atoms.lance + edges.csr store).
-    atlas_backend: atlas_ann::AtlasBackend,
 }
 
 impl Default for RunArgs {
@@ -251,7 +248,6 @@ impl Default for RunArgs {
             judge_trials: 1,
             isolate: false,
             atlas_seed: atlas_ann::SeedMode::Cosine,
-            atlas_backend: atlas_ann::AtlasBackend::Rkyv,
         }
     }
 }
@@ -427,17 +423,6 @@ async fn cmd_run(args: &[String]) -> i32 {
                     Some("ann") => a.atlas_seed = atlas_ann::SeedMode::Ann,
                     other => {
                         eprintln!("error: --atlas-seed expects cosine|ann, got `{other:?}`");
-                        return 2;
-                    }
-                }
-            }
-            "--atlas-backend" => {
-                i += 1;
-                match rest.get(i).map(String::as_str) {
-                    Some("rkyv") => a.atlas_backend = atlas_ann::AtlasBackend::Rkyv,
-                    Some("lance") => a.atlas_backend = atlas_ann::AtlasBackend::Lance,
-                    other => {
-                        eprintln!("error: --atlas-backend expects rkyv|lance, got `{other:?}`");
                         return 2;
                     }
                 }
@@ -633,21 +618,10 @@ async fn cmd_run(args: &[String]) -> i32 {
         for ctx in &atlas_ctxs {
             let atlas_dir = crate::enrich_cmd::paths::index_root(&ctx.atlas_corpus_id)
                 .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-            let loaded = match a.atlas_backend {
-                atlas_ann::AtlasBackend::Rkyv => {
-                    runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir)
-                }
-                atlas_ann::AtlasBackend::Lance => {
-                    // ATLAS_STORAGE_V2 Stage 1: drive atlas_navigate over the v2
-                    // store (atoms.lance + edges.csr) through the PRODUCTION
-                    // direct-read backend — the same reader the daemon uses (atoms
-                    // resident + edges.csr mmap), not the reconstruct-to-rkyv
-                    // scaffold. Makes `--atlas-backend lance` an end-to-end check
-                    // of the production reader.
-                    runner::AtlasGraph::load_lance_from_disk(&ctx.atlas_corpus_id, &atlas_dir)
-                }
-            };
-            match loaded {
+            // ATLAS_STORAGE_V2: the AtlasGraph is the v2 store (atoms.lance +
+            // edges.csr), read through the production direct-read backend — the
+            // same reader the daemon uses (atoms resident + edges.csr mmap).
+            match runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir) {
                 Ok(g) => graphs.push(g),
                 Err(e) => eprintln!("warn: atlas-graph load `{}`: {e}", ctx.atlas_corpus_id),
             }

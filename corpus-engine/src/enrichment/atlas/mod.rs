@@ -26,7 +26,6 @@
 
 pub mod analysis;
 pub mod ann_store;
-pub mod archive;
 pub mod atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;
@@ -37,6 +36,7 @@ pub mod edges;
 pub mod embeddings;
 pub mod ingestion;
 pub mod migrate_ids;
+pub mod projection;
 pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
@@ -61,9 +61,7 @@ pub use cross_corpus::{
     DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-pub use embeddings::{
-    atoms_content_hash, read_atlas_embeddings, write_atlas_embeddings, CachedAtlasEntry,
-};
+pub use embeddings::atoms_content_hash;
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{

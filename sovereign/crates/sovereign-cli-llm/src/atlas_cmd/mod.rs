@@ -24,7 +24,6 @@
 pub mod backfill_ann;
 pub mod budget;
 pub mod migrate_all;
-pub mod build_archive;
 pub mod build_doc_index;
 pub mod enable_incremental;
 pub mod inspect;
@@ -32,7 +31,6 @@ pub mod migrate_ids;
 pub mod stats;
 pub mod status;
 pub mod typed_extension;
-pub mod verify_v2;
 pub mod wikipedia;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -76,20 +74,12 @@ const HELP: Help = Help {
                 "Move 6 P1: derive doc_to_atoms.json sidecar from atoms.json.",
             ),
             (
-                "build-archive",
-                "Build the zero-copy atoms.rkyv archive off the query thread (Phase 1.5).",
-            ),
-            (
-                "verify-v2",
-                "ATLAS_STORAGE_V2 migration audit: prove the v2 store (atoms.lance + edges.csr) reconstructs the rkyv atlas losslessly. `--all` audits every corpus.",
-            ),
-            (
                 "backfill-ann",
                 "ATLAS_STORAGE_V2 3b: build the per-corpus ANN seed table (atlas/atoms_ann.lance) so atlas_navigate seeds from atom-ids directly (no per-query resolve).",
             ),
             (
                 "migrate-all",
-                "ATLAS_STORAGE_V2 full-port (idempotent, reusable across machines): every atom corpus -> atoms.lance + edges.csr + atoms_ann.lance + read_v2 flip; wiki -> columnar.",
+                "ATLAS_STORAGE_V2 full-port (idempotent, reusable across machines): every atom corpus -> atoms.lance + edges.csr + atoms_ann.lance; wiki -> columnar (articles.lance + edges.lance).",
             ),
             (
                 "enable-incremental",
@@ -128,8 +118,6 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "show-atom" => inspect::run_show_atom(&args[1..]).await,
         "migrate-ids" => migrate_ids::run(&args[1..]).await,
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
-        "build-archive" => build_archive::run(&args[1..]).await,
-        "verify-v2" => verify_v2::run(&args[1..]).await,
         "backfill-ann" => backfill_ann::run(&args[1..]).await,
         "migrate-all" => migrate_all::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,

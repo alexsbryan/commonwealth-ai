@@ -16,24 +16,26 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::archive::{
-    build_atlas_archive_bytes, ArchChunkRef, ArchivedArchChunkRef, ArchivedArchEdgeType,
-    ArchivedAtlasArchiveData, ArchivedAtomKindTag, ArchivedAtomRecord, AtomRecord,
-    ATLAS_ARCHIVE_FILENAME, ATLAS_ARCHIVE_VERSION,
-};
+use corpus_engine::enrichment::atlas::projection::{ArchChunkRef, AtomRecord};
 // Re-exported so retrieval consumers (`runtime/retrieval.rs`) can name the
 // atom-kind discriminant the typed-enumeration filter selects on.
-pub use corpus_engine::enrichment::atlas::archive::AtomKindTag;
+pub use corpus_engine::enrichment::atlas::projection::AtomKindTag;
 use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
 use corpus_engine::enrichment::atlas::store::LancePreload;
-use corpus_engine::enrichment::atlas::{AtomEnvelope, Edge, EdgeType};
+use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeType};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
 use corpus_engine::ScoredChunk;
 
-/// One pre-embedded atlas Entity available to retrieval as a virtual
+/// One pre-embedded atlas atom available to retrieval as a virtual
 /// chunk. Built by a loader, immutable after that.
 #[derive(Debug, Clone)]
 pub struct AtlasEntry {
+    /// The backing atom's id (`entity-<hash>`). First-class since
+    /// ATLAS_STORAGE_V2 Phase B: seeding reads it directly instead of
+    /// reverse-resolving from `embed_text`, so `resolve_atom_id_from_entry` is
+    /// gone. Empty only for entries with no backing atom (the non-default,
+    /// eval-only `include_tensions` edge virtual-chunks).
+    pub atom_id: String,
     pub canonical_name: String,
     pub embed_text: String,
     pub embedding: Vec<f32>,
@@ -51,22 +53,21 @@ pub struct AtlasContext {
 
 /// Sibling to [`AtlasContext`] — the structural graph layer that
 /// cosine-only retrieval ignores. The atlas is a typed knowledge
-/// graph (see `corpus-engine/ATLAS.md`); cosine matching over atom
+/// graph (see `corpus-engine/ATLAS.md`); cosine/ANN matching over atom
 /// embeddings ("bag-of-atoms") finds seeds, but the substantive
 /// structure — dialectical tensions, grounding chains, configuration
-/// constituents — lives on the edges. [`atlas_navigate`] walks that
-/// graph from cosine seeds to surface the chunk-evidence neighborhood.
+/// constituents — lives on the edges. [`atlas_navigate_ann`] walks that
+/// graph from seeded atoms to surface the chunk-evidence neighborhood.
 ///
-/// **Storage.** The graph is an mmap'd zero-copy archive
-/// (`atlas/atoms.rkyv`, a flat projection — see
-/// `corpus-engine/.../atlas/archive.rs` and `docs/specs/ATLAS_STORAGE.md`),
-/// NOT a parsed-into-RAM HashMap. The 1.67M-atom wikipedia atlas loads in
-/// ~11ms / ~27MB resident, where the former `serde_json` parse cost ~38s /
-/// ~4.5GB on the query thread. Consumers read through [`AtomView`]
-/// (zero-copy `&str` over the projected fields; `atom_envelope()`
-/// re-parses the JSON payload blob only for the rare deep-field access)
-/// and the `atom` / `atoms` / `atoms_of_kind` / `atom_evidence` /
-/// `edges_from` / `edges_to` / `edge_degree` methods.
+/// **Storage (ATLAS_STORAGE_V2).** The graph is the v2 store: atoms read
+/// resident from `atlas/atoms.lance` (the projected [`AtomRecord`]s) + the
+/// `atlas/edges.csr` mmap adjacency. Opening is async (reads the atoms table
+/// once, off the hot path); every accessor is then a sync slice / mmap read, so
+/// `atlas_navigate`'s BFS inner loop stays sync. Consumers read through
+/// [`AtomView`] (`&str` over the projected fields; `atom_envelope()` re-parses
+/// the JSON payload blob only for the rare deep-field access) and the `atom` /
+/// `atoms` / `atoms_of_kind` / `atom_evidence` / `edges_from` / `edges_to` /
+/// `edge_degree` methods. See [`LancePreload`].
 #[derive(Clone)]
 pub struct AtlasGraph {
     pub atlas_corpus_id: String,
@@ -75,33 +76,19 @@ pub struct AtlasGraph {
     /// filter FTS lookups during chunk fetch — the right SEP corpus
     /// chunk has `title == article_slug`.
     pub article_slug: String,
-    /// The storage backend — v1 rkyv mmap archive, or the v2
-    /// `atoms.lance` + `edges.csr` resident preload (ATLAS_STORAGE_V2).
-    /// The method API below is identical across both, so consumers
-    /// (`atlas_navigate`, retrieval, `AtomView`) never branch on it.
-    backend: Backend,
+    /// The v2 store backend: `atoms.lance` atoms read resident (the projected
+    /// [`AtomRecord`]s) + the `edges.csr` mmap. The sync query API reads
+    /// straight off the resident records + the CSR mmap — no async ripple into
+    /// `atlas_navigate`. `Arc` so the graph stays cheaply `Clone` (the daemon
+    /// hands out `Arc<AtlasGraph>`; the eval CLI holds `Vec<AtlasGraph>`). See
+    /// [`LancePreload`].
+    preload: Arc<LancePreload>,
     /// Persistent per-corpus ANN seed table (`atlas/atoms_ann.lance`), when the
     /// corpus has been backfilled (ATLAS_STORAGE_V2 3b). `Some` selects the ANN
-    /// seed path in [`atlas_navigate_ann`]; `None` (un-backfilled) falls back to
-    /// the v1 cosine-over-the-bag seed in [`atlas_navigate`]. Attached by the
-    /// long-lived loader (`AtlasContextManager` / eval runner) via
+    /// seed path in [`atlas_navigate_ann`]. Attached by the long-lived loader
+    /// (`AtlasContextManager` / eval runner) via
     /// [`AtlasGraph::with_ann_seed_table`], never the sync open bridge.
     ann: Option<Arc<AnnSeedTable>>,
-}
-
-/// v1 vs v2 storage behind [`AtlasGraph`]. Both arms are `Arc` so the graph
-/// stays cheaply `Clone` (the daemon hands out `Arc<AtlasGraph>` and the eval
-/// CLI holds `Vec<AtlasGraph>`).
-#[derive(Clone)]
-enum Backend {
-    /// v1: zero-copy rkyv archive (`atoms.rkyv`) — mmap or owned bytes —
-    /// handing out the archived root on demand.
-    Rkyv(Arc<AtlasArchiveHolder>),
-    /// v2: `atoms.lance` atoms read resident (projected to the same
-    /// `AtomRecord`s the rkyv archive holds) + `edges.csr` mmap. The sync
-    /// query API reads straight off the resident records + the CSR mmap —
-    /// no async ripple into `atlas_navigate`. See [`LancePreload`].
-    Lance(Arc<LancePreload>),
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -115,245 +102,62 @@ impl std::fmt::Debug for AtlasGraph {
     }
 }
 
-/// Owns the archive bytes — an `mmap` for a build-shipped `atoms.rkyv`,
-/// or an aligned in-memory buffer for the convert-on-load / `from_parts`
-/// paths — and hands out the zero-copy root on demand. Deriving `root()`
-/// from the owned bytes per call (rather than storing the `&Archived`
-/// next to them) sidesteps the self-referential borrow; see
-/// ATLAS_STORAGE.md "Lifetime/ownership".
-struct AtlasArchiveHolder {
-    backing: Backing,
-}
-
-enum Backing {
-    Mmap(memmap2::Mmap),
-    Owned(rkyv::util::AlignedVec),
-}
-
-impl AtlasArchiveHolder {
-    fn bytes(&self) -> &[u8] {
-        match &self.backing {
-            Backing::Mmap(m) => &m[..],
-            Backing::Owned(v) => v.as_slice(),
-        }
-    }
-
-    /// Construct + gate ONCE, in O(1).
+impl AtlasGraph {
+    /// Load the structural graph for a corpus from the v2 store
+    /// (`atlas/atoms.lance` + `atlas/edges.csr`). The single canonical loader
+    /// used by both the eval CLI (per-process load against `paths::index_root`)
+    /// and the daemon (`AtlasContextManager` boot).
     ///
-    /// `atoms.rkyv` is a **build-produced / convert-on-load artifact** we
-    /// write ourselves (atomic tmp+rename), so it is trusted: we skip the
-    /// full checked `rkyv::access` structural walk and keep only a size
-    /// guard + a schema-version gate. The walk is not free — on the real
-    /// 1.9 GB / 1.67M-atom wikipedia archive it measured **16 s (debug)**
-    /// and faulted the entire file into resident RSS, which would defeat
-    /// the cold-start latency *and* the RSS win this whole module exists
-    /// for (ATLAS_STORAGE.md "Validation cost vs safety"). A version
-    /// mismatch — or a corrupt file that nonetheless survives the gate —
-    /// surfaces as `Err` and `load_from_disk` re-derives from the
-    /// canonical `atoms.json`.
-    fn from_backing(backing: Backing) -> Result<Self, String> {
-        let holder = Self { backing };
-        let bytes = holder.bytes();
-        // Below the root struct's own size, the end-anchored unchecked
-        // access would underflow the root offset — reject as corrupt.
-        let min = std::mem::size_of::<ArchivedAtlasArchiveData>();
-        if bytes.len() < min {
-            return Err(format!("atlas archive too small: {} < {min} bytes", bytes.len()));
-        }
-        // SAFETY: see `root()`. Reading `version` is an in-bounds read of
-        // a direct field (no pointer-following), so it is sound even for a
-        // size-valid-but-corrupt file; the gate then rejects it.
-        let version: u32 = {
-            let root = unsafe { rkyv::access_unchecked::<ArchivedAtlasArchiveData>(bytes) };
-            root.version.into()
-        };
-        if version != ATLAS_ARCHIVE_VERSION {
+    /// **No fallback (ATLAS_STORAGE_V2).** The v1 rkyv archive + the
+    /// `atoms.json` convert-on-load path were retired once every corpus was
+    /// migrated to the v2 store. A corpus without a v2 store returns `Err`
+    /// (`atoms.json` stays the canonical export + the `sovereign atlas
+    /// migrate-all` rebuild source). Wikipedia carries no v2 atom store — it
+    /// uses the columnar `WikipediaGraph` for its structural neighbors — so it
+    /// returns `Err` here, and the caller (`AtlasContextManager::graph`) treats
+    /// that as "no atom graph for this corpus" and skips it.
+    ///
+    /// `atlas_corpus_id` controls the article-slug derivation (currently strips
+    /// a `sep-` prefix). Pass the source-side corpus id even when the on-disk
+    /// dir uses a different layout.
+    pub fn load_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
+        if !v2_store_present(atlas_dir) {
             return Err(format!(
-                "atlas archive schema v{version} != reader v{ATLAS_ARCHIVE_VERSION}"
+                "no v2 atlas store for {atlas_corpus_id} at {} (need atoms.lance + edges.csr); \
+                 rebuild with `sovereign atlas migrate-all`",
+                atlas_dir.display()
             ));
         }
-        Ok(holder)
+        let g = Self::load_lance_from_disk(atlas_corpus_id, atlas_dir)?;
+        tracing::info!(
+            corpus = atlas_corpus_id,
+            backend = "lance",
+            atoms = g.atom_count(),
+            "atlas loaded via v2 store"
+        );
+        Ok(g)
     }
 
-    /// The archived root, borrowing the owned bytes.
-    ///
-    /// SAFETY: `from_backing` validated the buffer is large enough to hold
-    /// the root and that the schema version matches the reader's, and the
-    /// backing is a trusted build-produced artifact, immutable for the
-    /// holder's lifetime — so the unchecked pointer-cast access is sound.
-    fn root(&self) -> &ArchivedAtlasArchiveData {
-        unsafe { rkyv::access_unchecked::<ArchivedAtlasArchiveData>(self.bytes()) }
-    }
-}
-
-impl AtlasGraph {
-    /// Load the structural graph for a corpus, preferring the mmap'd
-    /// archive. Single canonical loader used by both the eval CLI
-    /// (per-process load against `paths::index_root`) and the daemon
-    /// (`AtlasContextManager` boot).
-    ///
-    /// Order: if `atlas/atoms.rkyv` is present and current, `mmap` it
-    /// (~free). Otherwise **convert-on-load** — parse the canonical
-    /// `atoms.json` + `edges.json`, build the archive, write it beside
-    /// the JSON so the NEXT process mmaps it, and back this process's
-    /// holder with the freshly-built bytes. Every shipped JSON-only
-    /// corpus thus self-upgrades on first use; no re-ship required
-    /// (ATLAS_STORAGE.md Phase 1).
-    ///
-    /// `atlas_corpus_id` controls the article-slug derivation
-    /// (currently strips a `sep-` prefix). Pass the source-side
-    /// corpus id even when the on-disk dir uses a different layout.
-    pub fn load_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
-        let article_slug = derive_article_slug(atlas_corpus_id);
-
-        // v2 direct-read path (ATLAS_STORAGE_V2 Stage 1), gated per corpus. Opt-in
-        // and reversible: rkyv stays the default, and is also the fallback if the
-        // v2 store is absent or unreadable — so flipping a corpus can never strand
-        // its atlas (same resilience as the rkyv mmap → convert-on-load fallback).
-        if read_v2_enabled(atlas_corpus_id, atlas_dir) && v2_store_present(atlas_dir) {
-            match Self::load_lance_from_disk(atlas_corpus_id, atlas_dir) {
-                Ok(g) => {
-                    tracing::info!(
-                        corpus = atlas_corpus_id,
-                        backend = "lance",
-                        atoms = g.atom_count(),
-                        "atlas loaded via v2 store"
-                    );
-                    return Ok(g);
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        corpus = atlas_corpus_id,
-                        "v2 store gated on but unreadable ({e}); falling back to rkyv"
-                    );
-                }
-            }
-        }
-
-        let rkyv_path = atlas_dir.join(ATLAS_ARCHIVE_FILENAME);
-        if rkyv_path.exists() {
-            match Self::from_mmap(atlas_corpus_id, &article_slug, &rkyv_path) {
-                Ok(g) => return Ok(g),
-                Err(e) => {
-                    // A present-but-unreadable archive (truncated write,
-                    // stale schema) is non-fatal: fall through and
-                    // re-derive from the canonical JSON, which overwrites
-                    // the bad archive.
-                    tracing::warn!(
-                        corpus = atlas_corpus_id,
-                        path = %rkyv_path.display(),
-                        "atlas archive unreadable ({e}); re-deriving from atoms.json"
-                    );
-                }
-            }
-        }
-        let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(atlas_dir)
-            .map_err(|e| format!("read atoms.json for {atlas_corpus_id}: {e}"))?;
-        let edges: Vec<Edge> = corpus_engine::enrichment::atlas::read_atlas_edges(atlas_dir)
-            .map(|f| f.edges)
-            .unwrap_or_default();
-        let bytes = build_atlas_archive_bytes(atlas_corpus_id, &article_slug, &atoms.atoms, &edges)
-            .map_err(|e| format!("build atlas archive for {atlas_corpus_id}: {e}"))?;
-        if let Err(e) = write_archive_atomic(&rkyv_path, &bytes) {
-            // Best-effort: a read-only index dir just means the next
-            // process re-converts. The holder still serves this turn.
-            tracing::debug!(corpus = atlas_corpus_id, "atlas convert-on-load write skipped: {e}");
-        }
-        Self::from_owned_bytes(atlas_corpus_id, &article_slug, &bytes)
-    }
-
-    /// Build an Owned-backed graph directly from atoms + edges, without
-    /// touching disk. For the eval CLI's in-memory construction and tests.
-    pub fn from_parts(
-        atlas_corpus_id: &str,
-        atoms: &[AtomEnvelope],
-        edges: &[Edge],
-    ) -> Result<Self, String> {
-        let article_slug = derive_article_slug(atlas_corpus_id);
-        let bytes = build_atlas_archive_bytes(atlas_corpus_id, &article_slug, atoms, edges)
-            .map_err(|e| format!("build atlas archive for {atlas_corpus_id}: {e}"))?;
-        Self::from_owned_bytes(atlas_corpus_id, &article_slug, &bytes)
-    }
-
-    /// Build an Owned-backed graph from prebuilt archive bytes — e.g. the v2
-    /// store reconstructed by
-    /// `corpus_engine::enrichment::atlas::store::reconstruct_archive_bytes`.
-    /// ATLAS_STORAGE_V2 Increment C: lets the eval drive `atlas_navigate` over
-    /// the v2 store (atoms.lance + edges.csr) through the existing rkyv read
-    /// path, without changing the daemon's `AtlasGraph`.
-    pub fn from_archive_bytes(atlas_corpus_id: &str, bytes: &[u8]) -> Result<Self, String> {
-        let article_slug = derive_article_slug(atlas_corpus_id);
-        Self::from_owned_bytes(atlas_corpus_id, &article_slug, bytes)
-    }
-
-    /// Build a v2 Lance-backed graph from an already-opened [`LancePreload`].
-    /// ATLAS_STORAGE_V2 Stage 1 — the production direct-read backend: atoms read
-    /// resident from `atoms.lance`, edges from the `edges.csr` mmap, the same
-    /// method API as the rkyv backend. For the eval CLI's `--atlas-backend lance`
-    /// and the daemon's gated v2 load path.
+    /// Build a graph from an already-opened [`LancePreload`] — the v2 store
+    /// (atoms resident from `atoms.lance`, edges from the `edges.csr` mmap).
     pub fn from_lance_preload(atlas_corpus_id: &str, preload: LancePreload) -> Self {
         let article_slug = derive_article_slug(atlas_corpus_id);
         Self {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug,
-            backend: Backend::Lance(Arc::new(preload)),
+            preload: Arc::new(preload),
             ann: None,
         }
     }
 
     /// Open the v2 store under `atlas_dir` (`atoms.lance` + `edges.csr`) and
-    /// build a Lance-backed graph. Sync (bridges the async open via
+    /// build the graph. Sync (bridges the async open via
     /// [`LancePreload::open_blocking`]) so it slots into the daemon's sync load
     /// path; lifecycle-time only (boot / corpus load), never the hot query path.
     pub fn load_lance_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
         let preload = LancePreload::open_blocking(atlas_dir)
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
         Ok(Self::from_lance_preload(atlas_corpus_id, preload))
-    }
-
-    fn from_mmap(atlas_corpus_id: &str, article_slug: &str, path: &Path) -> Result<Self, String> {
-        let file =
-            std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
-        // SAFETY: the archive is a read-only build artifact; we never
-        // mutate the mapping and the holder owns it for its lifetime.
-        let mmap = unsafe { memmap2::Mmap::map(&file) }
-            .map_err(|e| format!("mmap {}: {e}", path.display()))?;
-        let holder = AtlasArchiveHolder::from_backing(Backing::Mmap(mmap))?;
-        Ok(Self {
-            atlas_corpus_id: atlas_corpus_id.to_string(),
-            article_slug: article_slug.to_string(),
-            backend: Backend::Rkyv(Arc::new(holder)),
-            ann: None,
-        })
-    }
-
-    fn from_owned_bytes(
-        atlas_corpus_id: &str,
-        article_slug: &str,
-        bytes: &[u8],
-    ) -> Result<Self, String> {
-        // Copy into a 16-aligned buffer so the unchecked `root()` access
-        // is sound regardless of the source slice's alignment (mmap is
-        // page-aligned; a heap `Vec` is not guaranteed to be).
-        let mut av = rkyv::util::AlignedVec::new();
-        av.extend_from_slice(bytes);
-        let holder = AtlasArchiveHolder::from_backing(Backing::Owned(av))?;
-        Ok(Self {
-            atlas_corpus_id: atlas_corpus_id.to_string(),
-            article_slug: article_slug.to_string(),
-            backend: Backend::Rkyv(Arc::new(holder)),
-            ann: None,
-        })
-    }
-
-    /// Which storage backend is live — `"rkyv"` (v1 archive) or `"lance"` (v2
-    /// store). Diagnostic glassbox: the daemon logs it per corpus at load and
-    /// the gate test asserts the per-corpus `read_v2` flip selects the right one.
-    pub fn backend_kind(&self) -> &'static str {
-        match &self.backend {
-            Backend::Rkyv(_) => "rkyv",
-            Backend::Lance(_) => "lance",
-        }
     }
 
     /// Attach a persistent ANN seed table (`atlas/atoms_ann.lance`) — the
@@ -383,39 +187,22 @@ impl AtlasGraph {
 
     /// Number of atoms in the graph.
     pub fn atom_count(&self) -> usize {
-        match &self.backend {
-            Backend::Rkyv(h) => h.root().atoms.len(),
-            Backend::Lance(p) => p.atom_count(),
-        }
+        self.preload.atom_count()
     }
 
     /// Number of edges in the graph.
     pub fn edge_count(&self) -> usize {
-        match &self.backend {
-            Backend::Rkyv(h) => h.root().edges.len(),
-            Backend::Lance(p) => p.edge_count(),
-        }
+        self.preload.edge_count()
     }
 
     /// Point lookup by atom-id. `None` if absent.
     pub fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
-        match &self.backend {
-            Backend::Rkyv(h) => {
-                let root = h.root();
-                let idx: u32 = (*root.by_id.get(atom_id)?).into();
-                root.atoms.get(idx as usize).map(AtomView::Rkyv)
-            }
-            Backend::Lance(p) => p.atom(atom_id).map(AtomView::Lance),
-        }
+        self.preload.atom(atom_id).map(AtomView)
     }
 
-    /// All atoms, in graph (interned local / build) order.
+    /// All atoms, in interned local-id order.
     pub fn atoms(&self) -> impl Iterator<Item = AtomView<'_>> + '_ {
-        match &self.backend {
-            Backend::Rkyv(h) => Box::new(h.root().atoms.iter().map(AtomView::Rkyv))
-                as Box<dyn Iterator<Item = AtomView<'_>> + '_>,
-            Backend::Lance(p) => Box::new(p.atoms().map(AtomView::Lance)),
-        }
+        self.preload.atoms().map(AtomView)
     }
 
     /// Atoms of one kind — the typed-enumeration filter. Reads only the
@@ -437,64 +224,23 @@ impl AtlasGraph {
     /// In + out edge count for an atom — the prominence "degree" signal.
     /// Counts adjacency-list lengths without parsing any edge payload.
     pub fn edge_degree(&self, atom_id: &str) -> usize {
-        match &self.backend {
-            Backend::Rkyv(h) => {
-                let r = h.root();
-                r.edges_by_source.get(atom_id).map_or(0, |v| v.len())
-                    + r.edges_by_target.get(atom_id).map_or(0, |v| v.len())
-            }
-            Backend::Lance(p) => p.edge_degree(atom_id),
-        }
+        self.preload.edge_degree(atom_id)
     }
 
-    /// Edges originating at `atom_id` — [`EdgeView`]s over the compact edges
-    /// (rkyv archive or CSR mmap, no JSON parse), bounded by the BFS frontier
-    /// in `atlas_navigate`.
+    /// Edges originating at `atom_id` — [`EdgeView`]s over the `edges.csr` mmap
+    /// adjacency (no JSON parse), bounded by the BFS frontier in
+    /// `atlas_navigate`.
     pub fn edges_from(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-        match &self.backend {
-            Backend::Rkyv(h) => rkyv_edges_adjacent(h.root(), atom_id, Direction::From),
-            Backend::Lance(p) => lance_edge_views(p.out_edges(atom_id)),
-        }
+        lance_edge_views(self.preload.out_edges(atom_id))
     }
 
     /// Edges arriving at `atom_id`.
     pub fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
-        match &self.backend {
-            Backend::Rkyv(h) => rkyv_edges_adjacent(h.root(), atom_id, Direction::To),
-            Backend::Lance(p) => lance_edge_views(p.in_edges(atom_id)),
-        }
+        lance_edge_views(self.preload.in_edges(atom_id))
     }
 }
 
-/// rkyv-backend edge adjacency — the index-into-`edges` walk from the archived
-/// `edges_by_source` / `edges_by_target` maps, zero-copy over the archive.
-fn rkyv_edges_adjacent<'r>(
-    root: &'r ArchivedAtlasArchiveData,
-    atom_id: &str,
-    dir: Direction,
-) -> Vec<EdgeView<'r>> {
-    let idxs = match dir {
-        Direction::From => root.edges_by_source.get(atom_id),
-        Direction::To => root.edges_by_target.get(atom_id),
-    };
-    let Some(idxs) = idxs else {
-        return Vec::new();
-    };
-    idxs.iter()
-        .filter_map(|i| {
-            let i: u32 = (*i).into();
-            let e = root.edges.get(i as usize)?;
-            Some(EdgeView {
-                source: e.source.as_ref(),
-                target: e.target.as_ref(),
-                edge_type: edge_type_from_arch(&e.edge_type),
-                confidence: e.confidence.into(),
-            })
-        })
-        .collect()
-}
-
-/// Lance-backend edge adjacency — map the preload's `(src, tgt, type, conf)`
+/// Edge adjacency — map the preload's `(src, tgt, type, conf)`
 /// tuples (endpoint strings borrowed from the resident id table) into
 /// [`EdgeView`]s, the same shape the rkyv path returns.
 fn lance_edge_views<'a>(raw: Vec<(&'a str, &'a str, EdgeType, f32)>) -> Vec<EdgeView<'a>> {
@@ -517,31 +263,6 @@ pub struct EdgeView<'a> {
     pub confidence: f32,
 }
 
-fn edge_type_from_arch(t: &ArchivedArchEdgeType) -> EdgeType {
-    match t {
-        ArchivedArchEdgeType::Transition => EdgeType::Transition,
-        ArchivedArchEdgeType::Causes => EdgeType::Causes,
-        ArchivedArchEdgeType::Grounds => EdgeType::Grounds,
-        ArchivedArchEdgeType::Tension => EdgeType::Tension,
-        ArchivedArchEdgeType::Involves => EdgeType::Involves,
-        ArchivedArchEdgeType::Composes => EdgeType::Composes,
-        ArchivedArchEdgeType::Configures => EdgeType::Configures,
-        ArchivedArchEdgeType::Grounding => EdgeType::Grounding,
-        ArchivedArchEdgeType::Framing => EdgeType::Framing,
-        ArchivedArchEdgeType::Provenance => EdgeType::Provenance,
-        ArchivedArchEdgeType::EvidenceFor => EdgeType::EvidenceFor,
-        ArchivedArchEdgeType::Concedes => EdgeType::Concedes,
-        ArchivedArchEdgeType::OpposesIn => EdgeType::OpposesIn,
-        ArchivedArchEdgeType::Attaches => EdgeType::Attaches,
-    }
-}
-
-#[derive(Clone, Copy)]
-enum Direction {
-    From,
-    To,
-}
-
 fn derive_article_slug(atlas_corpus_id: &str) -> String {
     atlas_corpus_id
         .strip_prefix("sep-")
@@ -557,211 +278,89 @@ fn v2_store_present(atlas_dir: &Path) -> bool {
     atlas_dir.join(ATOMS_LANCE_DIRNAME).exists() && atlas_dir.join(EDGES_CSR_FILENAME).exists()
 }
 
-/// Per-corpus `read_v2` gate — should this corpus read the v2 store instead of
-/// the rkyv archive? Off by default (rkyv). ATLAS_STORAGE_V2 step 3 flips
-/// corpora one at a time; two mechanisms, checked in order:
-///
-/// 1. A durable per-corpus marker file `atlas/.read_v2` — the production flip,
-///    written next to the store so it travels with the corpus and survives
-///    restarts. `touch`-ing it flips that one corpus; deleting it reverts.
-/// 2. The `SOVEREIGN_ATLAS_READ_V2` env — staged-rollout / eval convenience: a
-///    comma-separated atlas-corpus-id allowlist, or `all` / `1` for every
-///    corpus. **Do not set `all` where wikipedia is installed** — the
-///    preload-sync reader is wrong at wiki scale (see ATLAS_V2_DEPLOYMENT.md 3a);
-///    use explicit ids until wiki's paged reader lands.
-fn read_v2_enabled(atlas_corpus_id: &str, atlas_dir: &Path) -> bool {
-    if atlas_dir.join(".read_v2").exists() {
-        return true;
-    }
-    match std::env::var("SOVEREIGN_ATLAS_READ_V2") {
-        Ok(v) => {
-            let v = v.trim();
-            v == "all" || v == "1" || v.split(',').any(|c| c.trim() == atlas_corpus_id)
-        }
-        Err(_) => false,
-    }
-}
-
-/// Atomic archive write — sibling `.tmp` + rename, mirroring the JSON
-/// writers so a crash mid-write can't leave a half-archive a reader
-/// would mmap.
-fn write_archive_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let tmp = path.with_extension("rkyv.tmp");
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, path)
-}
-
-/// Borrowing view over one atom — a v1 archived record (`&ArchivedAtomRecord`,
-/// fields read straight from the mmap) or a v2 resident record (`&AtomRecord`,
-/// the projected `atoms.lance` row). The accessor API is identical across both,
-/// so consumers never branch on the backend; [`atom_envelope`](Self::atom_envelope)
-/// re-parses the full `AtomEnvelope` from the JSON payload for the rare
-/// deep-field read. Field borrows are tied to the graph's data (`'a`), not to
-/// the (often temporary) view, so a caller can collect [`EvidenceRef`]s out of a
-/// transient `AtomView`.
-pub enum AtomView<'a> {
-    /// v1 rkyv archived record.
-    Rkyv(&'a ArchivedAtomRecord),
-    /// v2 resident projected record.
-    Lance(&'a AtomRecord),
-}
+/// Borrowing view over one atom — the v2 resident projected record
+/// (`&AtomRecord`, an `atoms.lance` row re-projected at open). Field borrows are
+/// tied to the graph's data (`'a`), not to the (often temporary) view, so a
+/// caller can collect [`EvidenceRef`]s out of a transient `AtomView`.
+/// [`atom_envelope`](Self::atom_envelope) re-parses the full `AtomEnvelope` from
+/// the JSON payload for the rare deep-field read.
+pub struct AtomView<'a>(&'a AtomRecord);
 
 impl<'a> AtomView<'a> {
     pub fn id(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.id.as_ref(),
-            AtomView::Lance(r) => r.id.as_str(),
-        }
+        self.0.id.as_str()
     }
     pub fn kind(&self) -> AtomKindTag {
-        match self {
-            AtomView::Rkyv(r) => archived_kind(&r.kind),
-            AtomView::Lance(r) => r.kind,
-        }
+        self.0.kind
     }
     /// `Entity.canonical_name` (else `""`).
     pub fn name(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.name.as_ref(),
-            AtomView::Lance(r) => r.name.as_str(),
-        }
+        self.0.name.as_str()
     }
     /// `Relation.label` (else `""`).
     pub fn label(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.label.as_ref(),
-            AtomView::Lance(r) => r.label.as_str(),
-        }
+        self.0.label.as_str()
     }
     /// `Claim.content` (else `""`).
     pub fn content(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.content.as_ref(),
-            AtomView::Lance(r) => r.content.as_str(),
-        }
+        self.0.content.as_str()
     }
     /// `Entity.entity_type` string repr (else `""`).
     pub fn subtype(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.subtype.as_ref(),
-            AtomView::Lance(r) => r.subtype.as_str(),
-        }
+        self.0.subtype.as_str()
     }
     /// `Entity.description` (else `""`).
     pub fn description(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.description.as_ref(),
-            AtomView::Lance(r) => r.description.as_str(),
-        }
+        self.0.description.as_str()
     }
     /// `Claim.quotable_excerpt` (else `""`).
     pub fn excerpt(&self) -> &'a str {
-        match self {
-            AtomView::Rkyv(r) => r.excerpt.as_ref(),
-            AtomView::Lance(r) => r.excerpt.as_str(),
-        }
+        self.0.excerpt.as_str()
     }
     /// `Claim.confidence` (0.5 default; 0.0 for non-claims).
     pub fn confidence(&self) -> f32 {
-        match self {
-            AtomView::Rkyv(r) => r.confidence.into(),
-            AtomView::Lance(r) => r.confidence,
-        }
+        self.0.confidence
     }
     /// `Entity.salience` (0.0 for non-entities).
     pub fn salience(&self) -> f32 {
-        match self {
-            AtomView::Rkyv(r) => r.salience.into(),
-            AtomView::Lance(r) => r.salience,
-        }
+        self.0.salience
     }
     pub fn alias_count(&self) -> usize {
-        match self {
-            AtomView::Rkyv(r) => r.aliases.len(),
-            AtomView::Lance(r) => r.aliases.len(),
-        }
+        self.0.aliases.len()
     }
-    pub fn aliases(&self) -> impl Iterator<Item = &'a str> {
-        match self {
-            AtomView::Rkyv(r) => Box::new(r.aliases.iter().map(|s| s.as_ref()))
-                as Box<dyn Iterator<Item = &'a str> + 'a>,
-            AtomView::Lance(r) => Box::new(r.aliases.iter().map(|s| s.as_str())),
-        }
+    pub fn aliases(&self) -> impl Iterator<Item = &'a str> + 'a {
+        self.0.aliases.iter().map(|s| s.as_str())
     }
     /// `Relation.participants` atom-ids.
-    pub fn participants(&self) -> impl Iterator<Item = &'a str> {
-        match self {
-            AtomView::Rkyv(r) => Box::new(r.participants.iter().map(|s| s.as_ref()))
-                as Box<dyn Iterator<Item = &'a str> + 'a>,
-            AtomView::Lance(r) => Box::new(r.participants.iter().map(|s| s.as_str())),
-        }
+    pub fn participants(&self) -> impl Iterator<Item = &'a str> + 'a {
+        self.0.participants.iter().map(|s| s.as_str())
     }
-    pub fn evidence(&self) -> impl Iterator<Item = EvidenceRef<'a>> {
-        match self {
-            AtomView::Rkyv(r) => Box::new(r.evidence.iter().map(EvidenceRef::Rkyv))
-                as Box<dyn Iterator<Item = EvidenceRef<'a>> + 'a>,
-            AtomView::Lance(r) => Box::new(r.evidence.iter().map(EvidenceRef::Lance)),
-        }
+    pub fn evidence(&self) -> impl Iterator<Item = EvidenceRef<'a>> + 'a {
+        self.0.evidence.iter().map(EvidenceRef)
     }
     /// Re-parse the full `AtomEnvelope` from the JSON payload blob.
     /// `None` only for the empty-payload edge case or a parse failure.
     pub fn atom_envelope(&self) -> Option<AtomEnvelope> {
-        let bytes: &[u8] = match self {
-            AtomView::Rkyv(r) => r.payload.as_ref(),
-            AtomView::Lance(r) => r.payload.as_slice(),
-        };
-        if bytes.is_empty() {
+        if self.0.payload.is_empty() {
             return None;
         }
-        serde_json::from_slice(bytes).ok()
+        serde_json::from_slice(self.0.payload.as_slice()).ok()
     }
 }
 
-/// Borrowing view over one evidence ref — v1 archived (`&ArchivedArchChunkRef`)
-/// or v2 resident (`&ArchChunkRef`). The `Option` fields of the source
-/// `ChunkRef` were collapsed to `""` at build time. Same accessor API across
-/// both backends.
-pub enum EvidenceRef<'a> {
-    /// v1 rkyv archived evidence ref.
-    Rkyv(&'a ArchivedArchChunkRef),
-    /// v2 resident evidence ref.
-    Lance(&'a ArchChunkRef),
-}
+/// Borrowing view over one evidence ref (the v2 resident `&ArchChunkRef`). The
+/// `Option` fields of the source `ChunkRef` were collapsed to `""` at projection.
+pub struct EvidenceRef<'a>(&'a ArchChunkRef);
 
 impl<'a> EvidenceRef<'a> {
     pub fn chunk_id(&self) -> &'a str {
-        match self {
-            EvidenceRef::Rkyv(r) => r.chunk_id.as_ref(),
-            EvidenceRef::Lance(r) => r.chunk_id.as_str(),
-        }
+        self.0.chunk_id.as_str()
     }
     pub fn passage_preview(&self) -> &'a str {
-        match self {
-            EvidenceRef::Rkyv(r) => r.passage_preview.as_ref(),
-            EvidenceRef::Lance(r) => r.passage_preview.as_str(),
-        }
+        self.0.passage_preview.as_str()
     }
     pub fn source_doc_id(&self) -> &'a str {
-        match self {
-            EvidenceRef::Rkyv(r) => r.source_doc_id.as_ref(),
-            EvidenceRef::Lance(r) => r.source_doc_id.as_str(),
-        }
-    }
-}
-
-fn archived_kind(k: &ArchivedAtomKindTag) -> AtomKindTag {
-    match k {
-        ArchivedAtomKindTag::Entity => AtomKindTag::Entity,
-        ArchivedAtomKindTag::Event => AtomKindTag::Event,
-        ArchivedAtomKindTag::State => AtomKindTag::State,
-        ArchivedAtomKindTag::Relation => AtomKindTag::Relation,
-        ArchivedAtomKindTag::Claim => AtomKindTag::Claim,
-        ArchivedAtomKindTag::Question => AtomKindTag::Question,
-        ArchivedAtomKindTag::Configuration => AtomKindTag::Configuration,
-        ArchivedAtomKindTag::ArgumentReconstruction => AtomKindTag::ArgumentReconstruction,
-        ArchivedAtomKindTag::Position => AtomKindTag::Position,
-        ArchivedAtomKindTag::Opposition => AtomKindTag::Opposition,
-        ArchivedAtomKindTag::Asset => AtomKindTag::Asset,
+        self.0.source_doc_id.as_str()
     }
 }
 
@@ -1014,356 +613,25 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
     }
 }
 
-/// Walk the atlas graph from cosine-seeded entries, expand 1-2 hops
-/// across typed edges, and aggregate evidence chunks by score
-/// density. Returns a sorted list of [`ChunkRequest`]s — atlas's
-/// curated answer to "which source chunks should the retriever
-/// fetch for this question?".
+/// ANN-seeded atlas navigation (ATLAS_STORAGE_V2). Walk the typed graph from
+/// seeded atoms, expand 1-2 hops across weighted edges, and aggregate the
+/// evidence chunks by score density into [`ChunkRequest`]s — atlas's curated
+/// answer to "which source chunks should the retriever fetch for this question?".
 ///
-/// # Arguments
-/// * `query_text` — raw question text. Used both for embedding-based
-///   cosine seeding and for literal name-match seeding (see below).
-/// * `query_embedding` — query embedded in the same space as atlas
-///   entry embeddings.
-/// * `atlases` — pre-embedded atom contexts (for cosine seeding).
-/// * `graphs` — corresponding structural graphs (atom-by-id, edge
-///   adjacency). Indexed by `atlas_corpus_id`.
-/// * `max_seeds` — number of seed atoms to launch BFS from. Higher
-///   means broader neighborhoods; 12 is a good default.
-/// * `max_hops` — BFS depth. 2 captures direct opposing claims and
-///   their grounding chains without dilution from too-distant atoms.
+/// # Seeds
+/// - **Vector seed (1a):** each graph's persistent ANN table
+///   ([`AtlasGraph::ann_seed_table`]) returns the nearest atom-ids DIRECTLY (the
+///   embed→atom-id join ran once at backfill, never per query), re-scored with the
+///   canonical [`cosine`] so the BFS sees stable weights. One global top-`max_seeds`
+///   pool across all graphs.
+/// - **Name-match seed (1b):** every bag atom whose `canonical_name` (or trailing
+///   token, or `[Argument: …]` name) appears literally in the question is
+///   force-seeded — catches compound questions a single embedding can't rank. The
+///   `atom_id` is read straight off the [`AtlasEntry`] (first-class since Phase B),
+///   so neither seed path reverse-resolves from `embed_text`.
 ///
-/// # Seed selection
-///
-/// Cosine-top-K alone is dominated by query-term frequency: a
-/// compound question like "Reconstruct Aristotle's function argument
-/// in Nicomachean Ethics, and explain MacIntyre's communitarian
-/// update" embeds heavy on Aristotle/virtue-ethics terms and the
-/// MacIntyre-specific signal gets diluted, so MacIntyre atoms never
-/// reach the top-K. To compensate, we also force-seed every atom
-/// whose `canonical_name` appears as a literal substring (whole-word,
-/// case-insensitive) in the query. This is bank-agnostic — it works
-/// for any question that names an entity present in any loaded
-/// atlas — and lightweight (no extra embedding calls).
-pub fn atlas_navigate(
-    query_text: &str,
-    query_embedding: &[f32],
-    atlases: &[&AtlasContext],
-    graphs: &[&AtlasGraph],
-    max_seeds: usize,
-    max_hops: usize,
-) -> Vec<ChunkRequest> {
-    if query_embedding.is_empty() || atlases.is_empty() {
-        return Vec::new();
-    }
-    let graph_by_id: HashMap<&str, &AtlasGraph> = graphs
-        .iter()
-        .map(|g| (g.atlas_corpus_id.as_str(), *g))
-        .collect();
-
-    // 1a. Cosine-match question against all atom embeddings; keep
-    //     the top-`max_seeds` globally.
-    let mut all_scored: Vec<(f32, &AtlasContext, &AtlasEntry)> = Vec::new();
-    for ctx in atlases {
-        for entry in &ctx.entries {
-            let s = cosine(query_embedding, &entry.embedding);
-            all_scored.push((s, ctx, entry));
-        }
-    }
-    all_scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    all_scored.truncate(max_seeds);
-
-    // 1b. Name-match seeds: every atom whose canonical_name is
-    //     literally named in the question gets force-seeded with a
-    //     high baseline score. Catches compound-question cases
-    //     (Aristotle AND MacIntyre) where a single embedding can't
-    //     simultaneously rank both well. Bank-agnostic — relies only
-    //     on the question text and atlas atom names.
-    //
-    //     For multi-word names we also try the last token. Atlas
-    //     extraction may store "Alasdair MacIntyre" as the canonical
-    //     name while a question reads "MacIntyre's communitarian
-    //     update"; matching the last token catches that surname-form
-    //     reference. The min-length floor (4 chars) on the trailing
-    //     token is the false-positive guard ("Form" inside "Form-
-    //     Matter" wouldn't match the bare word "form" in a question
-    //     because of the 4-char floor; substantive surnames always
-    //     pass).
-    let q_lower = query_text.to_lowercase();
-    let mut name_seeds: Vec<(f32, &AtlasContext, &AtlasEntry)> = Vec::new();
-    for ctx in atlases {
-        for entry in &ctx.entries {
-            let name = entry.canonical_name.trim();
-            if name.len() < 4 {
-                continue;
-            }
-            let name_lower = name.to_lowercase();
-            let mut hit = contains_whole_word(&q_lower, &name_lower);
-            if !hit {
-                // Try last token for multi-word names.
-                if let Some(last) = name_lower.split_whitespace().last() {
-                    if last.len() >= 4 && last != name_lower {
-                        hit = contains_whole_word(&q_lower, last);
-                    }
-                }
-            }
-            // ArgumentReconstruction entries set canonical_name =
-            // article_slug (so score_sources credits the article)
-            // but the matchable handle is in the embed text prefix
-            // `[Argument: NAME] …`. Pull NAME out and try a
-            // bidirectional substring scan: any ≥2-word run that
-            // appears verbatim in *both* the question and the
-            // argument name fires the seed. Catches cases like the
-            // question saying "function argument" while the
-            // reconstruction's full name is "The Function Argument
-            // (referenced)" — whole-word match misses that;
-            // substring match doesn't.
-            if !hit {
-                if let Some(rest) = entry.embed_text.strip_prefix("[Argument: ") {
-                    if let Some(end) = rest.find(']') {
-                        let arg_name = rest[..end].trim().to_lowercase();
-                        if arg_name.len() >= 4 {
-                            // Slide a 2-token window across the
-                            // argument name; each phrase that's
-                            // ≥6 chars and appears in the question
-                            // counts as a hit. 2-token windows
-                            // catch "function argument", "knowledge
-                            // argument", "twin earth", etc. without
-                            // false-firing on bare "argument" /
-                            // "earth" (single tokens).
-                            let toks: Vec<&str> = arg_name.split_whitespace().collect();
-                            for w in toks.windows(2) {
-                                let phrase = format!("{} {}", w[0], w[1]);
-                                if phrase.len() >= 6 && q_lower.contains(&phrase) {
-                                    hit = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if !hit {
-                continue;
-            }
-            // Score on cosine for the matched atom (so downstream
-            // BFS weighting still tracks topical relevance) but
-            // floor it at 0.6 so a name-mention always seeds even
-            // if the gloss happens to embed-mismatch the question.
-            let s = cosine(query_embedding, &entry.embedding).max(0.6);
-            name_seeds.push((s, ctx, entry));
-        }
-    }
-    // Merge name-seeds into the cosine pool, then dedup by
-    // (atlas_id, embed_text) pair — same atom may already be in
-    // the cosine top-K. Take the higher of the two scores. After
-    // dedup, sort descending; do NOT re-truncate because name-seed
-    // additions are intentional broadenings beyond max_seeds.
-    let mut merged: HashMap<(String, String), (f32, &AtlasContext, &AtlasEntry)> = HashMap::new();
-    for (s, ctx, entry) in all_scored.into_iter().chain(name_seeds.into_iter()) {
-        let key = (ctx.atlas_corpus_id.clone(), entry.embed_text.clone());
-        merged
-            .entry(key)
-            .and_modify(|e| {
-                if s > e.0 {
-                    e.0 = s;
-                }
-            })
-            .or_insert((s, ctx, entry));
-    }
-    let mut all_scored: Vec<(f32, &AtlasContext, &AtlasEntry)> = merged.into_values().collect();
-    all_scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    if std::env::var("ATLAS_NAVIGATE_DEBUG").is_ok() {
-        eprintln!(
-            "  atlas_navigate DEBUG: q={:?}, seeds={}",
-            &query_text[..query_text.len().min(80)],
-            all_scored.len(),
-        );
-        for (s, ctx, entry) in all_scored.iter().take(20) {
-            eprintln!(
-                "    seed score={:.3} atlas={} canonical={}",
-                s, ctx.atlas_corpus_id, entry.canonical_name
-            );
-        }
-    }
-
-    // Resolve each seed entry to its atom_id by re-rendering atom
-    // embed_text. This side-channel avoids carrying atom_id on
-    // AtlasEntry — keeps the data model lean and the bridge logic
-    // local to this module.
-    let mut seeds: Vec<(String, String, f32, &AtlasGraph)> = Vec::new();
-    for (score, ctx, entry) in &all_scored {
-        let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) else {
-            continue;
-        };
-        if let Some(atom_id) =
-            resolve_atom_id_from_entry(graph, &entry.canonical_name, &entry.embed_text)
-        {
-            seeds.push((ctx.atlas_corpus_id.clone(), atom_id, *score, graph));
-        }
-    }
-
-    // 2. BFS expand from each seed, accumulating per-atom weights
-    //    with hop decay.
-    let mut neighborhood: HashMap<(String, String), f32> = HashMap::new();
-    for (atlas_id, atom_id, seed_score, graph) in &seeds {
-        let key = (atlas_id.clone(), atom_id.clone());
-        let entry = neighborhood.entry(key).or_insert(0.0);
-        *entry = entry.max(*seed_score);
-
-        let mut frontier: Vec<(String, f32)> = vec![(atom_id.clone(), *seed_score)];
-        let mut visited: HashSet<String> = HashSet::new();
-        visited.insert(atom_id.clone());
-        let decay = 0.6_f32;
-
-        for hop in 1..=max_hops {
-            let hop_decay = decay.powi(hop as i32);
-            let mut next_frontier: Vec<(String, f32)> = Vec::new();
-            for (current_id, current_score) in &frontier {
-                let mut consider = |neighbor_id: &str, edge_type: EdgeType, conf: f32| {
-                    if visited.contains(neighbor_id) {
-                        return;
-                    }
-                    let w = edge_weight(edge_type);
-                    if w <= 0.0 {
-                        return;
-                    }
-                    let neighbor_score = current_score * w * conf * hop_decay;
-                    if neighbor_score < 0.05 {
-                        return;
-                    }
-                    let key = (atlas_id.clone(), neighbor_id.to_string());
-                    let entry = neighborhood.entry(key).or_insert(0.0);
-                    if neighbor_score > *entry {
-                        *entry = neighbor_score;
-                    }
-                    visited.insert(neighbor_id.to_string());
-                    next_frontier.push((neighbor_id.to_string(), neighbor_score));
-                };
-                for edge in graph.edges_from(current_id) {
-                    consider(edge.target, edge.edge_type, edge.confidence);
-                }
-                for edge in graph.edges_to(current_id) {
-                    consider(edge.source, edge.edge_type, edge.confidence);
-                }
-            }
-            if next_frontier.is_empty() {
-                break;
-            }
-            frontier = next_frontier;
-        }
-    }
-
-    // 3. For each atom in the neighborhood, gather its evidence
-    //    ChunkRefs and aggregate by (article_slug, chunk_id).
-    //    Chunks that ground multiple high-relevance atoms accumulate
-    //    score (evidence-density wins). Keyed on `chunk_id` because
-    //    that's the precise lookup target — multiple atoms grounded
-    //    in the same section share evidence weight. We also collect
-    //    each atom's verbatim excerpt (defining_quote on concept
-    //    Entities, quotable_excerpt on Claims) so retrieval can
-    //    surface the article's exact words for the position the
-    //    chunk grounds — judge-visibility lift over chunk-only.
-    // Value tuple: (score, preview, motivating_atoms, verbatim, corpus_id).
-    // corpus_id is the graph's `atlas_corpus_id`, recorded on first insert
-    // — the chunk for a given (article_slug, chunk_id) lives in exactly one
-    // corpus, so first-seen is its home corpus and the fetch can scope to it.
-    let mut chunk_scores: HashMap<
-        (String, String),
-        (f32, String, Vec<String>, Vec<String>, String),
-    > = HashMap::new();
-    for ((atlas_id, atom_id), atom_weight) in &neighborhood {
-        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
-            continue;
-        };
-        let evidence = graph.atom_evidence(atom_id);
-        let verbatim = atom_verbatim_excerpt(graph, atom_id);
-        for ev in evidence {
-            let chunk_id = ev.chunk_id().trim();
-            if chunk_id.is_empty() {
-                continue;
-            }
-            let preview = ev.passage_preview().trim();
-            let key = (graph.article_slug.clone(), chunk_id.to_string());
-            let entry = chunk_scores.entry(key).or_insert((
-                0.0,
-                preview.to_string(),
-                Vec::new(),
-                Vec::new(),
-                graph.atlas_corpus_id.clone(),
-            ));
-            entry.0 += atom_weight;
-            // Take the longest preview seen for this chunk_id — more
-            // discriminating for paragraph-level targeting later.
-            if preview.len() > entry.1.len() {
-                entry.1 = preview.to_string();
-            }
-            entry.2.push(atom_id.clone());
-            if let Some(line) = verbatim.as_ref() {
-                if !entry.3.iter().any(|existing| existing == line) {
-                    entry.3.push(line.clone());
-                }
-            }
-        }
-    }
-
-    let mut requests: Vec<ChunkRequest> = chunk_scores
-        .into_iter()
-        .map(
-            |((article_slug, chunk_id), (score, preview, motivating, verbatim, corpus_id))| {
-                ChunkRequest {
-                    corpus_id,
-                    article_slug,
-                    chunk_id,
-                    passage_preview: preview,
-                    score,
-                    motivating_atoms: motivating,
-                    verbatim_excerpts: verbatim,
-                }
-            },
-        )
-        .collect();
-    requests.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    if std::env::var("ATLAS_NAVIGATE_DEBUG").is_ok() {
-        eprintln!(
-            "  atlas_navigate DEBUG: produced {} ChunkRequests",
-            requests.len()
-        );
-        for r in requests.iter().take(8) {
-            eprintln!(
-                "    req score={:.3} article={} chunk_id={} preview={:?} motivating={:?}",
-                r.score,
-                r.article_slug,
-                r.chunk_id,
-                &r.passage_preview[..r.passage_preview.len().min(60)],
-                r.motivating_atoms,
-            );
-        }
-    }
-    requests
-}
-
-/// ANN-seeded sibling of [`atlas_navigate`] — ATLAS_STORAGE_V2 step 3b. The only
-/// difference from [`atlas_navigate`] is the seed source, applied PER GRAPH so a
-/// partially-rolled-out pool works: a backfilled corpus seeds from its persistent
-/// ANN table ([`AtlasGraph::ann_seed_table`]) — nearest returns atom-ids DIRECTLY
-/// (the join `resolve` did at query time runs once at backfill instead), re-scored
-/// with the canonical `cosine()` so the BFS sees bit-identical weights; a corpus
-/// not yet backfilled seeds from exact cosine over its embedding bag, EXACTLY as
-/// v1. So for an all-backfilled pool this is pure ANN (the SEP-verified path); for
-/// an all-cosine pool it equals v1; for a mixed pool each corpus uses its best
-/// available seeding and none is under-seeded. Name-match (1b), BFS (2), and
-/// ChunkRequest emission (3) are the same logic as [`atlas_navigate`].
-///
-/// Async because the ANN query is async; the BFS inner loop stays sync (resident
-/// atoms + `edges.csr` mmap), so the "hot BFS stays sync" inference-safety
-/// invariant holds — only the ANN seed queries await. The caller picks this over
-/// [`atlas_navigate`] when ANY graph carries an ANN table (`has_ann_seed_table`);
-/// when none do, plain [`atlas_navigate`] (sync) is the equivalent, lighter path.
+/// Async only because the ANN query awaits; the BFS inner loop stays sync
+/// (resident atoms + `edges.csr` mmap) — the "hot BFS stays sync" invariant.
 pub async fn atlas_navigate_ann(
     query_text: &str,
     query_embedding: &[f32],
@@ -1380,83 +648,45 @@ pub async fn atlas_navigate_ann(
         .map(|g| (g.atlas_corpus_id.as_str(), *g))
         .collect();
 
-    // 1a. Seeds, PER-GRAPH ADAPTIVE — the incremental-rollout shape. A backfilled
-    // corpus seeds from its ANN table (atom-ids directly, no resolve, re-scored
-    // with cosine so the BFS sees v1-identical weights); a corpus not yet
-    // backfilled seeds from exact cosine over its embedding bag (v1's step 1a),
-    // so a MIXED pool never under-seeds the un-backfilled corpora. Both feed ONE
-    // global top-`max_seeds` pool (matching v1's single global truncate). Cosine
-    // candidates defer resolve until AFTER the truncate, so only the surviving
-    // top-`max_seeds` pay the resolve scan — the same cost shape as v1.
-    enum Cand<'a> {
-        /// ANN hit — already an atom-id (the resolve ran once at backfill).
-        Resolved(&'a str, String),
-        /// Cosine hit over an un-backfilled graph's bag — resolve deferred.
-        Cosine(&'a AtlasContext, &'a AtlasEntry),
-    }
-    let mut scored: Vec<(f32, Cand)> = Vec::new();
+    // 1a. Vector seeds — each graph's ANN table returns the nearest atom-ids
+    // directly (no resolve), re-scored with cosine. One global top-`max_seeds`
+    // pool. A graph without a table contributes name-match seeds only (below).
+    let mut scored: Vec<(f32, String, String)> = Vec::new(); // (score, corpus_id, atom_id)
     for graph in graphs {
         let Some(ann) = graph.ann_seed_table() else {
-            continue; // un-backfilled — handled by the cosine pass below
+            continue;
         };
         match ann.nearest_with_vectors(query_embedding, max_seeds).await {
             Ok(hits) => {
                 for (atom_id, vector) in hits {
                     let score = cosine(query_embedding, &vector);
-                    scored.push((score, Cand::Resolved(graph.atlas_corpus_id.as_str(), atom_id)));
+                    scored.push((score, graph.atlas_corpus_id.clone(), atom_id));
                 }
             }
             Err(e) => tracing::warn!(
                 corpus = %graph.atlas_corpus_id,
-                "atlas_navigate_ann: ANN nearest failed ({e}); corpus falls back to cosine seeds"
+                "atlas_navigate_ann: ANN nearest failed ({e}); corpus contributes name-match seeds only"
             ),
-        }
-    }
-    for ctx in atlases {
-        // ANN'd graphs are covered above; only scan bags for the un-backfilled.
-        let has_ann = graph_by_id
-            .get(ctx.atlas_corpus_id.as_str())
-            .map(|g| g.has_ann_seed_table())
-            .unwrap_or(false);
-        if has_ann {
-            continue;
-        }
-        for entry in &ctx.entries {
-            let score = cosine(query_embedding, &entry.embedding);
-            scored.push((score, Cand::Cosine(ctx, entry)));
         }
     }
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(max_seeds);
-    // Resolve the surviving cosine candidates (ANN hits are already atom-ids).
-    let mut primary_seeds: Vec<(String, String, f32)> = Vec::new();
-    for (score, cand) in scored {
-        match cand {
-            Cand::Resolved(cid, atom_id) => primary_seeds.push((cid.to_string(), atom_id, score)),
-            Cand::Cosine(ctx, entry) => {
-                if let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) {
-                    if let Some(atom_id) = resolve_atom_id_from_entry(
-                        graph,
-                        &entry.canonical_name,
-                        &entry.embed_text,
-                    ) {
-                        primary_seeds.push((ctx.atlas_corpus_id.clone(), atom_id, score));
-                    }
-                }
-            }
-        }
-    }
+    let primary_seeds: Vec<(String, String, f32)> =
+        scored.into_iter().map(|(s, cid, aid)| (cid, aid, s)).collect();
 
-    // 1b. Name-match seeds — identical logic to atlas_navigate, then resolve to
-    // an atom-id. Name-match is text-based and survives unchanged; only the
-    // cosine-bag seed (1a) and its per-seed resolve are replaced by the ANN.
+    // 1b. Name-match seeds — `atom_id` read straight off the bag entry (no
+    // resolve). Force-seeds every atom literally named in the question, so a
+    // compound question a single embedding can't rank still reaches its atoms.
     let q_lower = query_text.to_lowercase();
     let mut name_seeds: Vec<(String, String, f32)> = Vec::new();
     for ctx in atlases {
-        let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) else {
+        if !graph_by_id.contains_key(ctx.atlas_corpus_id.as_str()) {
             continue;
-        };
+        }
         for entry in &ctx.entries {
+            if entry.atom_id.is_empty() {
+                continue;
+            }
             let name = entry.canonical_name.trim();
             if name.len() < 4 {
                 continue;
@@ -1491,18 +721,12 @@ pub async fn atlas_navigate_ann(
                 continue;
             }
             let s = cosine(query_embedding, &entry.embedding).max(0.6);
-            if let Some(atom_id) =
-                resolve_atom_id_from_entry(graph, &entry.canonical_name, &entry.embed_text)
-            {
-                name_seeds.push((ctx.atlas_corpus_id.clone(), atom_id, s));
-            }
+            name_seeds.push((ctx.atlas_corpus_id.clone(), entry.atom_id.clone(), s));
         }
     }
 
-    // Merge ANN + name seeds, dedup by (corpus_id, atom_id), keep the max score.
-    // v1 merges by (atlas_id, embed_text) then resolves — bijective for
-    // resolvable entries, so the groups + scores match. Name additions are an
-    // intentional broadening beyond max_seeds (not re-truncated), as in v1.
+    // Merge vector + name seeds, dedup by (corpus_id, atom_id), keep the max
+    // score. Name additions are an intentional broadening beyond max_seeds.
     let mut merged: HashMap<(String, String), f32> = HashMap::new();
     for (cid, aid, s) in primary_seeds.into_iter().chain(name_seeds.into_iter()) {
         merged
@@ -1635,14 +859,9 @@ pub async fn atlas_navigate_ann(
     requests
 }
 
-/// Reverse-lookup an atom_id from an [`AtlasEntry`]'s
-/// `canonical_name + embed_text` by re-rendering each atom in the
-/// graph and comparing. Mirrors the embed_text construction logic
-/// from the loader; cheap (atlases have hundreds of atoms, not
-/// thousands).
-///
-/// Char limit must match the loaders' `ATLAS_ENTRY_CHAR_LIMIT`. We
-/// duplicate the constant rather than depending on either loader.
+/// Max chars of rendered atom text fed to the embedder — the cap
+/// [`render_atom_entry`] truncates to. The loaders share the renderer, so an
+/// entry's `embed_text` is stable across the build (embed) and read (bag) paths.
 const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
 
 /// Join-coverage diagnostic from [`build_persistent_ann_seed_table`] — the
@@ -1655,43 +874,37 @@ pub struct AnnBuildStats {
     pub total: usize,
 }
 
-/// ATLAS_STORAGE_V2 3b backfill: build the persistent per-corpus ANN seed table
-/// (`<atlas_dir>/atoms_ann.lance`) from the corpus's atlas entries. For each
-/// embedding-bearing entry, resolve it to its atom-id via the canonical
-/// [`resolve_atom_id_from_entry`] — the join the v1 cosine seed path ran at
-/// QUERY time, done ONCE here — and write `(atom_id, embedding)`. The table then
-/// lets [`atlas_navigate_ann`] seed directly from atom-ids with no per-query
-/// resolve. Idempotent: a stale table dir is removed first. Lifecycle-time only
-/// (the CLI backfill / enrich), never the hot query path.
+/// ATLAS_STORAGE_V2 backfill: write the persistent per-corpus ANN seed table
+/// (`<atlas_dir>/atoms_ann.lance`) from an already-embedded [`AtlasContext`].
+/// Each atom-bearing entry contributes `(atom_id, embedding)` — `atom_id` is
+/// first-class on the entry (Phase B), so this is a pure transform with no
+/// reverse-resolve. Idempotent: a stale table dir is removed first.
+/// Lifecycle-time only (the CLI backfill / migrate-all / enrich completion),
+/// never the hot query path.
 pub async fn build_persistent_ann_seed_table(
     atlas_dir: &Path,
     ctx: &AtlasContext,
-    graph: &AtlasGraph,
 ) -> Result<AnnBuildStats, String> {
     let mut rows: Vec<(String, Vec<f32>)> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
-    let mut total = 0usize;
+    let total = ctx.entries.len();
     for entry in &ctx.entries {
-        total += 1;
-        if entry.embedding.is_empty() {
+        // Entries with no backing atom (eval-only Tension virtual chunks) or no
+        // embedding can't seed the ANN table; the read-path bag drops them too.
+        if entry.atom_id.is_empty() || entry.embedding.is_empty() {
             continue;
         }
-        let Some(atom_id) =
-            resolve_atom_id_from_entry(graph, &entry.canonical_name, &entry.embed_text)
-        else {
-            continue;
-        };
-        // First-resolved wins (deterministic); duplicates are the same atom.
-        if !seen.insert(atom_id.clone()) {
+        // First-seen wins (deterministic); duplicates are the same atom.
+        if !seen.insert(entry.atom_id.clone()) {
             continue;
         }
-        rows.push((atom_id, entry.embedding.clone()));
+        rows.push((entry.atom_id.clone(), entry.embedding.clone()));
     }
     let resolved = rows.len();
     if resolved == 0 {
         return Err(format!(
-            "no atlas entries resolved to atom-ids for {} (0/{total}) — nothing to index",
-            graph.atlas_corpus_id
+            "no atom-bearing entries for {} (0/{total}) — nothing to index",
+            ctx.atlas_corpus_id
         ));
     }
     let dir = corpus_engine::enrichment::atlas::ann_store::ann_table_dir(atlas_dir);
@@ -1740,122 +953,126 @@ pub async fn open_and_attach_ann_seed_table(
     }
 }
 
-// `pub` (with `atom_verbatim_excerpt` + `contains_whole_word` below) so the
-// eval-crate ANN-seeding experiment can reuse the canonical seed-resolution
-// and rendering rather than fork it — keeping build-time (join) and query-time
-// embed_text identical. See `docs/specs/ATLAS_STORAGE_V2.md` Increment A.
-pub fn resolve_atom_id_from_entry(
-    graph: &AtlasGraph,
-    canonical_name: &str,
-    embed_text: &str,
-) -> Option<String> {
-    for view in graph.atoms() {
-        match view.kind() {
-            // Entity: rendered entirely from projected fields — no
-            // payload parse. Name pre-filter keeps the scan cheap.
-            AtomKindTag::Entity => {
-                if view.name() != canonical_name {
-                    continue;
-                }
-                let mut text = String::new();
-                text.push_str(view.name());
+/// Render one atom into its `(canonical_name, embed_text)` bag pair — the SINGLE
+/// source of the atlas embed-text shape, shared by the build-time embedder
+/// (eval / backfill, over `atoms.json`) and the read-time bag builder
+/// ([`build_atlas_context_from_ann`], over the resident store). `canonical_name`
+/// is the Entity's name (so rigid source-matching credits it) or the
+/// `article_slug` for the article-scoped kinds (Claim / Configuration /
+/// ArgumentReconstruction). `None` for atom kinds that never enter the bag. Both
+/// paths sharing this guarantees the embedding written to the ANN table
+/// corresponds to the bag's re-rendered `embed_text`. `pub` so the eval / backfill
+/// loaders reuse it rather than forking the rendering.
+pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(String, String)> {
+    match atom {
+        AtomEnvelope::Entity(e) => {
+            let mut text = String::new();
+            text.push_str(&e.canonical_name);
+            text.push('\n');
+            if !e.aliases.is_empty() {
+                text.push_str(&e.aliases.join(", "));
                 text.push('\n');
-                let aliases: Vec<&str> = view.aliases().collect();
-                if !aliases.is_empty() {
-                    text.push_str(&aliases.join(", "));
-                    text.push('\n');
-                }
-                text.push_str(view.description());
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                if text == embed_text {
-                    return Some(view.id().to_string());
-                }
             }
-            // Claim: `[Claim: act, status] {content}`. `content` is
-            // projected, so a content-head substring pre-filter skips the
-            // payload parse for every claim whose content can't match —
-            // the head always survives the short prefix inside the embed
-            // char limit, so a true match is never filtered out.
-            AtomKindTag::Claim => {
-                let content = view.content();
-                if content.is_empty() || !embed_text.contains(content_head(content)) {
-                    continue;
-                }
-                let Some(AtomEnvelope::Claim(c)) = view.atom_envelope() else {
-                    continue;
-                };
-                let act = serde_json::to_string(&c.discourse_act)
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-                let status = serde_json::to_string(&c.epistemic_status)
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-                let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                if text == embed_text {
-                    return Some(view.id().to_string());
-                }
+            text.push_str(&e.description);
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
-            // Configuration / ArgumentReconstruction render from fields
-            // not in the projection, so they parse the payload — but both
-            // kinds are scarce per atlas (a handful of interpretive frames
-            // / reconstructions), so the per-seed cost is negligible.
-            AtomKindTag::Configuration => {
-                let Some(AtomEnvelope::Configuration(cfg)) = view.atom_envelope() else {
-                    continue;
-                };
-                let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                if text == embed_text {
-                    return Some(view.id().to_string());
-                }
-            }
-            AtomKindTag::ArgumentReconstruction => {
-                let Some(AtomEnvelope::ArgumentReconstruction(a)) = view.atom_envelope() else {
-                    continue;
-                };
-                let mut text = String::with_capacity(256);
-                text.push_str("[Argument: ");
-                text.push_str(&a.name);
-                text.push_str("] ");
-                for p in &a.premises {
-                    text.push_str(p);
-                    text.push(' ');
-                }
-                text.push_str(&a.conclusion);
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                if text == embed_text {
-                    return Some(view.id().to_string());
-                }
-            }
-            _ => {}
+            Some((e.canonical_name.clone(), text))
         }
+        AtomEnvelope::Claim(c) => {
+            let act = serde_json::to_string(&c.discourse_act)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            let status = serde_json::to_string(&c.epistemic_status)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        AtomEnvelope::Configuration(cfg) => {
+            let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            let mut text = String::with_capacity(256);
+            text.push_str("[Argument: ");
+            text.push_str(&a.name);
+            text.push_str("] ");
+            for p in &a.premises {
+                text.push_str(p);
+                text.push(' ');
+            }
+            text.push_str(&a.conclusion);
+            for o in &a.objections {
+                if !o.content.trim().is_empty() {
+                    text.push(' ');
+                    text.push_str(o.content.trim());
+                } else if !o.name.trim().is_empty() {
+                    text.push(' ');
+                    text.push_str(o.name.trim());
+                }
+            }
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        _ => None,
     }
-    None
 }
 
-/// Leading slice of a Claim's `content` used as the cheap projected
-/// pre-filter in [`resolve_atom_id_from_entry`]. Char-safe so it never
-/// splits a multi-byte boundary. The head sits within the embed char
-/// limit after the short `[Claim: act, status] ` prefix, so a matching
-/// claim's content head is always a substring of its embed text — the
-/// filter never drops a true match, it only skips guaranteed non-matches.
-fn content_head(content: &str) -> &str {
-    const HEAD_CHARS: usize = 48;
-    match content.char_indices().nth(HEAD_CHARS) {
-        Some((byte_idx, _)) => &content[..byte_idx],
-        None => content,
+/// Build the query-time embedding bag from a corpus's persistent ANN seed table
+/// joined to its resident atoms — the ATLAS_STORAGE_V2 Phase B read path. Atom
+/// embeddings live ONLY in `atoms_ann.lance` (written once at enrich / backfill);
+/// the bag is derived here at load with no re-embed and no `atoms.embeddings.bin`
+/// sidecar. Each ANN row's `(atom_id, embedding)` joins to the resident atom for
+/// its rendered `(canonical_name, embed_text)` via [`render_atom_entry`], so the
+/// bag's text matches the text the embedding represents. Requires `graph` to
+/// carry an ANN table (attached by [`open_and_attach_ann_seed_table`]); a corpus
+/// with no table yields no bag (it then contributes only name-match seeds).
+pub async fn build_atlas_context_from_ann(
+    atlas_corpus_id: &str,
+    graph: &AtlasGraph,
+    top_k: usize,
+) -> Result<AtlasContext, String> {
+    let Some(ann) = graph.ann_seed_table() else {
+        return Err(format!(
+            "no ANN seed table for {atlas_corpus_id}; backfill with `sovereign atlas backfill-ann`"
+        ));
+    };
+    let rows = ann.all_rows().await?;
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(rows.len());
+    for (atom_id, embedding) in rows {
+        // Join the ANN row back to its resident atom for the rendered text. An
+        // atom referenced by the table but absent from the store (a torn build)
+        // is skipped rather than fatal.
+        let Some(envelope) = graph.atom(&atom_id).and_then(|v| v.atom_envelope()) else {
+            continue;
+        };
+        let Some((canonical_name, embed_text)) = render_atom_entry(&envelope, &graph.article_slug)
+        else {
+            continue;
+        };
+        entries.push(AtlasEntry {
+            atom_id,
+            canonical_name,
+            embed_text,
+            embedding,
+        });
     }
+    Ok(AtlasContext {
+        atlas_corpus_id: atlas_corpus_id.to_string(),
+        entries,
+        top_k,
+    })
 }
 
 /// Cosine similarity. Returns 0 on zero-length vectors or
@@ -1994,6 +1211,7 @@ mod tests {
 
     fn entry(name: &str, embed: Vec<f32>) -> AtlasEntry {
         AtlasEntry {
+            atom_id: format!("entity-{name}"),
             canonical_name: name.to_string(),
             embed_text: format!("{name} desc"),
             embedding: embed,
@@ -2056,6 +1274,7 @@ mod archive_io_tests {
     //! convert-on-load self-upgrade for a JSON-only corpus.
     use super::*;
     use corpus_engine::enrichment::atlas::atoms::AtomId;
+    use corpus_engine::enrichment::atlas::store;
     use corpus_engine::enrichment::atlas::{
         AtomEnvelope, ChunkRef, Edge, EdgeId, EdgeProvenance, EdgeType, Entity,
     };
@@ -2095,23 +1314,23 @@ mod archive_io_tests {
         }
     }
 
-    /// `from_parts` builds the archive in memory; the projected fields and
-    /// the edge adjacency read back through `AtomView` exactly as
-    /// constructed, and `atom_envelope()` re-parses the full atom.
+    /// The v2 store, read back through the public `AtlasGraph` API: projected
+    /// fields via `AtomView`, edge adjacency + degree, typed enumeration, and
+    /// the deep `atom_envelope` parse.
     #[test]
-    fn from_parts_projects_fields_and_edges() {
+    fn v2_store_projects_fields_and_edges() {
         let atoms = vec![
             AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9)),
             AtomEnvelope::Entity(sample_entity(2, "Bob", 0.4)),
         ];
         let id1 = atoms[0].id().as_str().to_string();
         let id2 = atoms[1].id().as_str().to_string();
-        let edge = sample_edge(
-            1,
-            AtomId::entity(1),
-            AtomId::entity(2),
-        );
-        let graph = AtlasGraph::from_parts("c1", &atoms, std::slice::from_ref(&edge)).unwrap();
+        let edge = sample_edge(1, AtomId::entity(1), AtomId::entity(2));
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path();
+        store::write_store_blocking(atlas_dir, "c1", &atoms, std::slice::from_ref(&edge)).unwrap();
+        let graph = AtlasGraph::load_lance_from_disk("c1", atlas_dir).unwrap();
 
         assert_eq!(graph.atom_count(), 2);
         assert_eq!(graph.edge_count(), 1);
@@ -2150,301 +1369,35 @@ mod archive_io_tests {
         assert!(graph.atom("no-such-id").is_none());
     }
 
-    /// ATLAS_STORAGE_V2 Stage 1: the Lance backend is **indistinguishable** from
-    /// the rkyv backend through the public `AtlasGraph` API. Same atoms + edges
-    /// loaded both ways (rkyv via `from_parts`, v2 via the on-disk store + the
-    /// sync `open_blocking` bridge the daemon uses) must answer every accessor
-    /// identically — so `atlas_navigate` and retrieval behave the same whichever
-    /// backend a corpus is flipped to.
+    /// `load_from_disk` loads the v2 store when present and errors (no
+    /// fallback) when absent — the ATLAS_STORAGE_V2 "no v2 store ⇒ Err"
+    /// invariant that lets wikipedia (no atom store) be skipped by the caller
+    /// rather than stranded.
     #[test]
-    fn lance_backend_matches_rkyv_backend_through_public_api() {
-        use corpus_engine::enrichment::atlas::store;
-
-        let atoms = vec![
-            AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9)),
-            AtomEnvelope::Entity(sample_entity(2, "Bob", 0.4)),
-            AtomEnvelope::Entity(sample_entity(3, "Carol", 0.7)),
-        ];
-        let ids: Vec<String> = atoms.iter().map(|a| a.id().as_str().to_string()).collect();
-        let edges = vec![
-            sample_edge(1, AtomId::entity(1), AtomId::entity(2)),
-            sample_edge(2, AtomId::entity(1), AtomId::entity(3)),
-        ];
-
-        // v1 reference (in-memory archive).
-        let rkyv = AtlasGraph::from_parts("c1", &atoms, &edges).unwrap();
-
-        // v2 store written to disk, opened through the Lance backend via the
-        // same sync bridges the daemon's load path uses.
-        let tmp = tempfile::tempdir().unwrap();
-        let atlas_dir = tmp.path();
-        store::write_store_blocking(atlas_dir, "c1", &atoms, &edges).unwrap();
-        let lance = AtlasGraph::load_lance_from_disk("c1", atlas_dir).unwrap();
-
-        assert_eq!(lance.atom_count(), rkyv.atom_count());
-        assert_eq!(lance.edge_count(), rkyv.edge_count());
-        assert_eq!(lance.article_slug, rkyv.article_slug);
-
-        // Sort edge views by (source, target) so the comparison is order-free —
-        // the two backends needn't enumerate adjacency in the same order.
-        let edge_key = |vs: Vec<EdgeView<'_>>| {
-            let mut v: Vec<(String, String, EdgeType, f32)> = vs
-                .into_iter()
-                .map(|e| (e.source.to_string(), e.target.to_string(), e.edge_type, e.confidence))
-                .collect();
-            v.sort_by(|a, b| (a.0.as_str(), a.1.as_str()).cmp(&(b.0.as_str(), b.1.as_str())));
-            v
-        };
-
-        for id in &ids {
-            let a = rkyv.atom(id).expect("rkyv atom");
-            let b = lance.atom(id).expect("lance atom");
-            assert_eq!(a.id(), b.id());
-            assert_eq!(a.kind(), b.kind());
-            assert_eq!(a.name(), b.name());
-            assert_eq!(a.label(), b.label());
-            assert_eq!(a.content(), b.content());
-            assert_eq!(a.subtype(), b.subtype());
-            assert_eq!(a.description(), b.description());
-            assert_eq!(a.excerpt(), b.excerpt());
-            assert!((a.salience() - b.salience()).abs() < 1e-6);
-            assert!((a.confidence() - b.confidence()).abs() < 1e-6);
-            assert_eq!(a.alias_count(), b.alias_count());
-            assert_eq!(
-                a.aliases().collect::<Vec<_>>(),
-                b.aliases().collect::<Vec<_>>()
-            );
-            assert_eq!(
-                a.participants().collect::<Vec<_>>(),
-                b.participants().collect::<Vec<_>>()
-            );
-            let ev = |v: &AtomView<'_>| -> Vec<(String, String, String)> {
-                v.evidence()
-                    .map(|e| {
-                        (
-                            e.chunk_id().to_string(),
-                            e.passage_preview().to_string(),
-                            e.source_doc_id().to_string(),
-                        )
-                    })
-                    .collect()
-            };
-            assert_eq!(ev(&a), ev(&b), "evidence parity for {id}");
-            assert_eq!(
-                a.atom_envelope().map(|e| e.id().as_str().to_string()),
-                b.atom_envelope().map(|e| e.id().as_str().to_string()),
-            );
-            assert_eq!(rkyv.edge_degree(id), lance.edge_degree(id));
-            assert_eq!(edge_key(rkyv.edges_from(id)), edge_key(lance.edges_from(id)));
-            assert_eq!(edge_key(rkyv.edges_to(id)), edge_key(lance.edges_to(id)));
-        }
-
-        // Typed enumeration + full atom-set parity (order-free).
-        assert_eq!(
-            rkyv.atoms_of_kind(AtomKindTag::Entity).count(),
-            lance.atoms_of_kind(AtomKindTag::Entity).count(),
-        );
-        let mut rids: Vec<String> = rkyv.atoms().map(|v| v.id().to_string()).collect();
-        let mut lids: Vec<String> = lance.atoms().map(|v| v.id().to_string()).collect();
-        rids.sort();
-        lids.sort();
-        assert_eq!(rids, lids, "atom set must match across backends");
-
-        // Absent id behaves the same.
-        assert!(rkyv.atom("no-such-id").is_none());
-        assert!(lance.atom("no-such-id").is_none());
-        assert_eq!(lance.edge_degree("no-such-id"), 0);
-        assert!(lance.edges_from("no-such-id").is_empty());
-    }
-
-    /// ATLAS_STORAGE_V2 step 3 gate: `load_from_disk` reads the v2 store only
-    /// when the per-corpus `read_v2` marker is present, defaults to rkyv, and
-    /// falls back to rkyv if the store is gone — so a flip can never strand an
-    /// atlas.
-    #[test]
-    fn load_from_disk_honors_the_read_v2_gate() {
-        use corpus_engine::enrichment::atlas::store;
-        use corpus_engine::enrichment::atlas::writer::write_atlas;
+    fn load_from_disk_requires_a_v2_store() {
         use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-
-        // The env signal must not bleed in from a sibling test — the marker is
-        // the only gate this test exercises.
-        std::env::remove_var("SOVEREIGN_ATLAS_READ_V2");
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas_dir).unwrap();
         let id1 = AtomId::entity(1).as_str().to_string();
 
-        // rkyv archive (dual-writes atoms.json + atoms.rkyv) ...
-        let e1 = sample_entity(1, "Alice", 0.9);
-        let e2 = sample_entity(2, "Bob", 0.4);
-        let edge = sample_edge(1, AtomId::entity(1), AtomId::entity(2));
-        write_atlas(&atlas_dir, &[e1, e2], &[], std::slice::from_ref(&edge)).unwrap();
-        // ... and the v2 store beside it (rebuild the atoms — Entity needn't be Clone).
+        // No v2 store yet → Err, never a panic or a silent empty graph.
+        assert!(AtlasGraph::load_from_disk("c1", &atlas_dir).is_err());
+
+        // Write the v2 store → load_from_disk serves it.
         let atoms = vec![
             AtomEnvelope::Entity(sample_entity(1, "Alice", 0.9)),
             AtomEnvelope::Entity(sample_entity(2, "Bob", 0.4)),
         ];
+        let edge = sample_edge(1, AtomId::entity(1), AtomId::entity(2));
         store::write_store_blocking(&atlas_dir, "c1", &atoms, std::slice::from_ref(&edge)).unwrap();
-
-        // Gate off → rkyv (the default).
-        let g = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
-        assert_eq!(g.backend_kind(), "rkyv");
-        assert_eq!(g.atom_count(), 2);
-
-        // Per-corpus marker → lance, serving the same atoms.
-        std::fs::write(atlas_dir.join(".read_v2"), b"").unwrap();
-        let g2 = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
-        assert_eq!(g2.backend_kind(), "lance");
-        assert_eq!(g2.atom_count(), 2);
-        assert_eq!(g2.atom(&id1).unwrap().name(), "Alice");
-
-        // Marker on but the store removed → falls back to rkyv, never strands.
-        std::fs::remove_dir_all(atlas_dir.join(store::ATOMS_LANCE_DIRNAME)).unwrap();
-        let g3 = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
-        assert_eq!(g3.backend_kind(), "rkyv");
-        assert_eq!(g3.atom_count(), 2);
-    }
-
-    /// `write_atlas` dual-writes `atoms.rkyv` (L4); `load_from_disk` mmaps
-    /// it; and after deleting the archive, a reload re-derives it from the
-    /// canonical `atoms.json` (convert-on-load self-upgrade) and serves the
-    /// same atoms.
-    #[test]
-    fn dual_write_then_convert_on_load_round_trips() {
-        use corpus_engine::enrichment::atlas::writer::write_atlas;
-        use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-
-        let tmp = tempfile::tempdir().unwrap();
-        // Layout <index>/<corpus>/atlas so the L4 sidecar derives the
-        // corpus id from the parent directory name.
-        let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);
-        let e1 = sample_entity(1, "Alice", 0.9);
-        let e2 = sample_entity(2, "Bob", 0.4);
-        let edge = sample_edge(1, e1.id.clone(), e2.id.clone());
-        let id1 = e1.id.as_str().to_string();
-        write_atlas(&atlas_dir, &[e1, e2], &[], std::slice::from_ref(&edge)).unwrap();
-
-        let rkyv_path = atlas_dir.join("atoms.rkyv");
-        assert!(
-            rkyv_path.exists(),
-            "write_atlas should dual-write atoms.rkyv (L4)"
-        );
-
-        // Load via mmap.
         let g = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
         assert_eq!(g.atom_count(), 2);
         assert_eq!(g.atom(&id1).unwrap().name(), "Alice");
-        drop(g);
 
-        // Convert-on-load: drop the archive, reload from JSON only.
-        std::fs::remove_file(&rkyv_path).unwrap();
-        assert!(!rkyv_path.exists());
-        let g2 = AtlasGraph::load_from_disk("c1", &atlas_dir).unwrap();
-        assert_eq!(g2.atom_count(), 2);
-        assert!(
-            rkyv_path.exists(),
-            "convert-on-load should re-create atoms.rkyv"
-        );
-        let a = g2.atom(&id1).unwrap();
-        assert_eq!(a.name(), "Alice");
-        assert_eq!(a.subtype(), EntityType::Person.as_str_repr());
-        assert_eq!(graph_edges(&g2), 1);
-    }
-
-    fn graph_edges(g: &AtlasGraph) -> usize {
-        g.edge_count()
-    }
-
-    // ── Live cold-window re-measure (ATLAS_STORAGE.md L6) ──────────────
-    // These are #[ignore]d: they read the locally-installed 758 MB / 1.67M
-    // atom wikipedia atlas and are run by hand, in SEPARATE processes for
-    // clean RSS, e.g.:
-    //   cargo test -p sovereign-core --release measure_wikipedia_archive_build -- --ignored --nocapture
-    //   cargo test -p sovereign-core --release measure_wikipedia_mmap_cold   -- --ignored --nocapture
-    // The first deletes any stale archive and times convert-on-load (the
-    // former ~38s JSON parse + build); the second times the mmap path the
-    // spec gates at <1s and reports resident RSS.
-
-    fn wikipedia_atlas_dir() -> Option<std::path::PathBuf> {
-        let home = std::env::var_os("HOME")?;
-        let d = std::path::Path::new(&home)
-            .join(".sovereign/indexes/wikipedia/atlas");
-        d.join("atoms.json").exists().then_some(d)
-    }
-
-    fn rss_mb() -> u64 {
-        let pid = std::process::id().to_string();
-        std::process::Command::new("ps")
-            .args(["-o", "rss=", "-p", &pid])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .and_then(|s| s.trim().parse::<u64>().ok())
-            .map(|kb| kb / 1024)
-            .unwrap_or(0)
-    }
-
-    #[test]
-    #[ignore = "reads the locally-installed wikipedia atlas; run by hand"]
-    fn measure_wikipedia_archive_build() {
-        let Some(dir) = wikipedia_atlas_dir() else {
-            eprintln!("SKIP: no ~/.sovereign/indexes/wikipedia/atlas/atoms.json");
-            return;
-        };
-        let rkyv = dir.join("atoms.rkyv");
-        let _ = std::fs::remove_file(&rkyv);
-        let rss0 = rss_mb();
-        let t0 = std::time::Instant::now();
-        let g = AtlasGraph::load_from_disk("wikipedia", &dir).expect("convert-on-load");
-        let ms = t0.elapsed().as_millis();
-        let atoms = g.atom_count();
-        let edges = g.edge_count();
-        let archive_mb = std::fs::metadata(&rkyv).map(|m| m.len() / (1 << 20)).unwrap_or(0);
-        eprintln!(
-            "CONVERT-ON-LOAD  parse+build+write: {ms} ms | atoms={atoms} edges={edges} \
-             | atoms.rkyv={archive_mb} MB | RSS {rss0}->{} MB",
-            rss_mb()
-        );
-        assert!(rkyv.exists(), "convert-on-load must write atoms.rkyv");
-    }
-
-    #[test]
-    #[ignore = "reads the locally-installed wikipedia atlas; run by hand"]
-    fn measure_wikipedia_mmap_cold() {
-        let Some(dir) = wikipedia_atlas_dir() else {
-            eprintln!("SKIP: no ~/.sovereign/indexes/wikipedia/atlas/atoms.json");
-            return;
-        };
-        let rkyv = dir.join("atoms.rkyv");
-        assert!(
-            rkyv.exists(),
-            "run measure_wikipedia_archive_build first to build atoms.rkyv"
-        );
-        let rss_before = rss_mb();
-        let t0 = std::time::Instant::now();
-        let g = AtlasGraph::load_from_disk("wikipedia", &dir).expect("mmap load");
-        let load_ms = t0.elapsed().as_millis();
-        let rss_loaded = rss_mb();
-
-        // Touch the graph the way the query path does: a typed full scan
-        // (the Claim/Entity enumeration) + a point lookup.
-        let t1 = std::time::Instant::now();
-        let claims = g.atoms_of_kind(AtomKindTag::Claim).count();
-        let entities = g.atoms_of_kind(AtomKindTag::Entity).count();
-        let scan_ms = t1.elapsed().as_millis();
-        let first_id = g.atoms().next().map(|v| v.id().to_string()).unwrap_or_default();
-        let got = g.atom(&first_id).map(|v| v.kind());
-
-        eprintln!(
-            "MMAP COLD LOAD: {load_ms} ms | typed scan(claims={claims},entities={entities}): {scan_ms} ms \
-             | point lookup {first_id:?}->{got:?} | RSS {rss_before}->{rss_loaded} MB (Δ {} MB)",
-            rss_loaded.saturating_sub(rss_before)
-        );
-        // The spec gate: the cold load drops from ~38s to well under 1s.
-        assert!(
-            load_ms < 1000,
-            "mmap cold load should be <1s (was {load_ms} ms)"
-        );
+        // Remove the store → Err again (the no-fallback invariant).
+        std::fs::remove_dir_all(atlas_dir.join(store::ATOMS_LANCE_DIRNAME)).unwrap();
+        assert!(AtlasGraph::load_from_disk("c1", &atlas_dir).is_err());
     }
 }

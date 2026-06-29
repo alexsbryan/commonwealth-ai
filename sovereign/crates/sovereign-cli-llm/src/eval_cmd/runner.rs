@@ -24,8 +24,7 @@
 use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::{
-    atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
-    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType, ATLAS_DIRNAME,
+    read_atlas_atoms, read_atlas_edges, AtomEnvelope, EdgeType, ATLAS_DIRNAME,
 };
 use corpus_engine::ScoredChunk;
 use futures::StreamExt;
@@ -559,13 +558,13 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
     }
 }
 
-// AtlasGraph + ChunkRequest + atlas_navigate + edge_weight live in
+// AtlasGraph + ChunkRequest + atlas_navigate_ann + edge_weight live in
 // `sovereign_core::atlas_context` — single canonical implementation
 // shared by the eval CLI and the production daemon
 // (`AtlasContextManager`).
-pub use sovereign_core::atlas_context::atlas_navigate;
-// ATLAS_STORAGE_V2 3b — the production ANN-seeding navigate (moved out of the
-// eval; the eval's `--atlas-seed ann` arm now drives this exact daemon code).
+// ATLAS_STORAGE_V2 Phase B — the sync `atlas_navigate` was deleted; the
+// production ANN-seeding navigate is now the only path. Both `--atlas-seed`
+// modes drive this exact daemon code.
 pub use sovereign_core::atlas_context::atlas_navigate_ann;
 pub use sovereign_core::atlas_context::AtlasGraph;
 use super::atlas_ann::SeedMode;
@@ -593,8 +592,7 @@ pub struct AtlasLoadFilter {
     /// the atlas corpus_id (so `score_sources` rigid title-match
     /// credits the article when the claim ranks in top-K). The embed
     /// text encodes discourse_act + epistemic_status + content. Off
-    /// by default — opt in via `--atlas-include claim`. Cache key
-    /// invalidates automatically via `filter_signature`.
+    /// by default — opt in via `--atlas-include claim`.
     pub include_claims: bool,
     /// Path 2 Phase B — also surface Tension edges as virtual chunks.
     /// Each tension fuses its `sub_question` with both endpoint atoms
@@ -619,32 +617,12 @@ pub struct AtlasLoadFilter {
     pub include_configurations: bool,
 }
 
-/// Stable string capturing the filter so the embeddings cache can
-/// invalidate when the operator changes the filter shape. Order is
-/// deterministic: depth allowlist is sorted before serialisation.
-fn filter_signature(filter: &AtlasLoadFilter) -> String {
-    let mut depths = filter.depth_allowlist.clone();
-    depths.sort();
-    format!(
-        "min_chars={};depth=[{}];max={};claims={};tensions={};configs={}",
-        filter.min_description_chars,
-        depths.join(","),
-        filter
-            .max_entries
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "none".to_string()),
-        filter.include_claims,
-        filter.include_tensions,
-        filter.include_configurations,
-    )
-}
-
 /// Read `atoms.json` for the named atlas corpus and embed each Entity's
-/// `name + aliases + description` once. Embeddings are persisted to
-/// `atoms.embeddings.bin` alongside `atoms.json` and reused when the
-/// `(atoms content, embed model, filter signature)` triple matches —
-/// re-runs against an unchanged atlas are sub-second on cache hit
-/// vs. multi-minute on cold load for wiki-scale atlases.
+/// `name + aliases + description` once per call. ATLAS_STORAGE_V2 Phase B
+/// removed the `atoms.embeddings.bin` cache, so every call re-embeds from
+/// `atoms.json` (multi-minute cold load for wiki-scale atlases); the
+/// persistent `atoms_ann.lance` seed table is now the durable cross-run
+/// artifact.
 pub async fn load_atlas_context(
     session: &ChatSession,
     atlas_corpus_id: &str,
@@ -658,41 +636,6 @@ pub async fn load_atlas_context(
              --strategy structure_first --source-corpus <id>` first",
             atlas_dir.display()
         ));
-    }
-
-    let filter_sig = filter_signature(filter);
-
-    // Try the embeddings cache first. A hit returns a fully-populated
-    // entry list and skips both the atoms.json walk and the embed
-    // loop entirely.
-    let atoms_hash = atoms_content_hash(&atlas_dir)
-        .map_err(|e| format!("hash atoms.json for cache lookup: {e}"))?;
-    match read_atlas_embeddings(&atlas_dir, &session.embed_model, &atoms_hash, &filter_sig) {
-        Ok(Some(cached)) => {
-            eprintln!(
-                "atlas-context: cache HIT — {} entries from `{atlas_corpus_id}` \
-                 (model={}, filter_sig={filter_sig}); top-K per question = {top_k}",
-                cached.len(),
-                session.embed_model,
-            );
-            let entries = cached
-                .into_iter()
-                .map(|c| AtlasEntry {
-                    canonical_name: c.canonical_name,
-                    embed_text: c.embed_text,
-                    embedding: c.embedding,
-                })
-                .collect();
-            return Ok(AtlasContext {
-                atlas_corpus_id: atlas_corpus_id.to_string(),
-                entries,
-                top_k,
-            });
-        }
-        Ok(None) => {} // soft miss; fall through to embed
-        Err(e) => {
-            eprintln!("atlas-context: cache read error ({e}) — re-embedding from atoms.json");
-        }
     }
 
     let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| format!("read atlas atoms.json: {e}"))?;
@@ -713,7 +656,10 @@ pub async fn load_atlas_context(
         .unwrap_or(atlas_corpus_id)
         .to_string();
 
-    let mut payloads: Vec<(String, String)> = Vec::new();
+    // (atom_id, canonical_name, embed_text) per virtual chunk. atom_id is the
+    // backing atom's id; it seeds the v2 persistent ANN table. Empty only for
+    // edge-derived Tension chunks, which have no single backing atom.
+    let mut payloads: Vec<(String, String, String)> = Vec::new();
     let mut total_entities = 0usize;
     let mut total_claims = 0usize;
     let mut kept_claims = 0usize;
@@ -770,7 +716,7 @@ pub async fn load_atlas_context(
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
-                payloads.push((e.canonical_name.clone(), text));
+                payloads.push((e.id.as_str().to_string(), e.canonical_name.clone(), text));
             }
             AtomEnvelope::Claim(c) if filter.include_claims => {
                 total_claims += 1;
@@ -806,7 +752,7 @@ pub async fn load_atlas_context(
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
-                payloads.push((article_slug.clone(), text));
+                payloads.push((c.id.as_str().to_string(), article_slug.clone(), text));
                 kept_claims += 1;
             }
             AtomEnvelope::Configuration(cfg) if filter.include_configurations => {
@@ -835,7 +781,7 @@ pub async fn load_atlas_context(
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
-                payloads.push((article_slug.clone(), text));
+                payloads.push((cfg.id.as_str().to_string(), article_slug.clone(), text));
                 kept_configurations += 1;
             }
             AtomEnvelope::ArgumentReconstruction(a) => {
@@ -891,7 +837,7 @@ pub async fn load_atlas_context(
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
-                payloads.push((article_slug.clone(), text));
+                payloads.push((a.id.as_str().to_string(), article_slug.clone(), text));
             }
             _ => continue,
         }
@@ -939,7 +885,7 @@ pub async fn load_atlas_context(
                     if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                         text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                     }
-                    payloads.push((article_slug.clone(), text));
+                    payloads.push((String::new(), article_slug.clone(), text));
                     kept_tensions += 1;
                 }
             }
@@ -981,9 +927,10 @@ pub async fn load_atlas_context(
 
     let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
     let t0 = Instant::now();
-    for (name, text) in payloads {
+    for (atom_id, name, text) in payloads {
         match session.inference.embed_query(&text).await {
             Ok(v) => entries.push(AtlasEntry {
+                atom_id,
                 canonical_name: name,
                 embed_text: text,
                 embedding: v,
@@ -998,36 +945,6 @@ pub async fn load_atlas_context(
         entries.len(),
         t0.elapsed().as_secs_f32()
     );
-
-    // Persist for next run. Persistence failure is non-fatal — log
-    // and continue so a write error (read-only volume, full disk)
-    // doesn't fail the eval that already produced its results.
-    if !entries.is_empty() {
-        let embed_dim = entries[0].embedding.len();
-        let cached: Vec<CachedAtlasEntry> = entries
-            .iter()
-            .map(|e| CachedAtlasEntry {
-                canonical_name: e.canonical_name.clone(),
-                embed_text: e.embed_text.clone(),
-                embedding: e.embedding.clone(),
-            })
-            .collect();
-        match write_atlas_embeddings(
-            &atlas_dir,
-            &session.embed_model,
-            embed_dim,
-            &atoms_hash,
-            &filter_sig,
-            &cached,
-        ) {
-            Ok(p) => eprintln!(
-                "atlas-context: cache WROTE {} entries to {}",
-                cached.len(),
-                p.display()
-            ),
-            Err(e) => eprintln!("atlas-context: cache write failed (non-fatal): {e}"),
-        }
-    }
 
     Ok(AtlasContext {
         atlas_corpus_id: atlas_corpus_id.to_string(),
@@ -1318,11 +1235,13 @@ async fn run_question(
         let max_seeds = atlases.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let ctx_refs: Vec<&AtlasContext> = atlases.iter().collect();
         let graph_refs: Vec<&AtlasGraph> = graphs.iter().collect();
+        // ATLAS_STORAGE_V2 Phase B: the sync `atlas_navigate` is gone — both seed
+        // modes now drive the PRODUCTION ANN-seeding navigate over graphs carrying
+        // their persistent ANN seed table (attached in `run_bank`); the same code
+        // the daemon runs. `--atlas-seed cosine` is kept for runbook compatibility
+        // but maps to the identical path.
         match seed_mode {
-            // ATLAS_STORAGE_V2 3b: ANN-over-vector-column seeding — the PRODUCTION
-            // navigate over graphs carrying their persistent ANN seed table
-            // (attached in `run_bank`). Same code the daemon runs.
-            SeedMode::Ann => {
+            SeedMode::Ann | SeedMode::Cosine => {
                 atlas_navigate_ann(
                     &q.question,
                     &embedding,
@@ -1333,15 +1252,6 @@ async fn run_question(
                 )
                 .await
             }
-            // v1 exact-cosine-over-bag seeding.
-            SeedMode::Cosine => atlas_navigate(
-                &q.question,
-                &embedding,
-                &ctx_refs,
-                &graph_refs,
-                max_seeds,
-                /*max_hops=*/ 2,
-            ),
         }
     } else {
         Vec::new()

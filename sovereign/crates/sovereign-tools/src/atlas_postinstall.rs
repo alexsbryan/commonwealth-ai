@@ -93,46 +93,13 @@ async fn build_structural_atlas_inner(
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
     let atoms_path = atlas_dir.join("atoms.json");
     if !force && atoms_path.exists() {
-        // The atlas JSON is already present (shipped/prebuilt corpus, or a
-        // prior build that didn't go through `write_atlas_full`'s archive
-        // sidecar). Ensure the zero-copy `atoms.rkyv` exists now, off the
-        // query thread, so the first query mmaps it instead of paying the
-        // convert-on-load parse (ATLAS_STORAGE.md Phase 1.5). Best-effort —
-        // the reader self-heals via convert-on-load if this is skipped.
-        if corpus_engine::enrichment::atlas::archive::archive_needs_build(&atlas_dir) {
-            match corpus_engine::enrichment::atlas::archive::build_and_write_archive(
-                &atlas_dir, corpus_id,
-            ) {
-                Ok(p) => tracing::info!(
-                    corpus = corpus_id,
-                    path = %p.display(),
-                    "atlas archive built post-install"
-                ),
-                Err(e) => {
-                    tracing::warn!(corpus = corpus_id, "atlas archive build skipped: {e}")
-                }
-            }
-        }
-        // ATLAS_STORAGE_V2 Stage 0 (dormant, gated): build the v2 store beside
-        // the rkyv for an already-present atlas. No-op unless the env is set.
-        if corpus_engine::enrichment::atlas::store::store_v2_enabled()
-            && corpus_engine::enrichment::atlas::store::store_needs_build(&atlas_dir)
-        {
-            match corpus_engine::enrichment::atlas::store::build_and_write_store(
-                &atlas_dir, corpus_id,
-            )
-            .await
-            {
-                Ok(p) => tracing::info!(
-                    corpus = corpus_id,
-                    path = %p.display(),
-                    "atlas v2 store built post-install"
-                ),
-                Err(e) => {
-                    tracing::warn!(corpus = corpus_id, "atlas v2 store build skipped: {e}")
-                }
-            }
-        }
+        // The structural atlas JSON is already present. A structural
+        // (`structure_first`) atlas's runtime read path is the columnar
+        // `WikipediaGraph` (articles.lance + edges.lance) — built by the
+        // dedicated wiki path (`sovereign atlas wikipedia` / `migrate-all`) or
+        // shipped in the HF bundle — NOT an atom store. So there is nothing to
+        // build here beyond confirming presence: structural atlases carry no
+        // atom `AtlasGraph` (ATLAS_STORAGE_V2 retired the rkyv archive).
         return StructuralAtlasOutcome::AlreadyPresent { atoms_path };
     }
 

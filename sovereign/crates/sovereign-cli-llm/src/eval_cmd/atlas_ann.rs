@@ -25,15 +25,3 @@ pub enum SeedMode {
     /// directly, no per-query resolve. Requires the corpus to be backfilled.
     Ann,
 }
-
-/// Which on-disk store backs the `AtlasGraph` the eval loads — the
-/// ATLAS_STORAGE_V2 Increment-C reader axis (orthogonal to [`SeedMode`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AtlasBackend {
-    /// v1: the rkyv archive (`atoms.rkyv`), or convert-on-load from `atoms.json`.
-    Rkyv,
-    /// v2: the columnar store (`atoms.lance` + `edges.csr`), read through the
-    /// production direct-read backend (`AtlasGraph::load_lance_from_disk` →
-    /// `LancePreload`) — the same reader the daemon uses.
-    Lance,
-}

@@ -29,13 +29,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
-use corpus_engine::enrichment::atlas::{
-    atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
-    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType, ATLAS_DIRNAME,
-};
-use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider, AtlasEntry};
+use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -45,52 +40,6 @@ use tokio::task::JoinHandle;
 /// it along) and the operator can inspect it without poking inside
 /// the daemon.
 pub const TRIAGE_BUMPS_FILE: &str = "triage_bumps.json";
-
-/// Same character cap as the eval CLI loader — see
-/// `sovereign-cli::eval_cmd::runner::ATLAS_ENTRY_CHAR_LIMIT`.
-/// Embed models cap context near ~8K tokens; entities with augmented
-/// descriptions can run 18 KB chars, so 3000 chars (~750 tokens)
-/// keeps headroom while still covering the strongest signals.
-const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
-
-/// Render a tension-edge endpoint as a single line for the virtual
-/// chunk's embed text. Mirrors the eval-CLI helper of the same name —
-/// keep them in sync so the shared embed-cache produces identical
-/// payloads on either side.
-fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
-    use AtomEnvelope::*;
-    match atom {
-        Some(Entity(e)) => format!("{}: {}", e.canonical_name, e.description),
-        Some(Claim(c)) => {
-            let act = serde_json::to_string(&c.discourse_act)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string();
-            let status = serde_json::to_string(&c.epistemic_status)
-                .unwrap_or_default()
-                .trim_matches('"')
-                .to_string();
-            format!("[Claim: {act}, {status}] {}", c.content)
-        }
-        Some(Question(q)) => format!("Question: {}", q.content),
-        Some(State(s)) => format!("State: {}", s.label),
-        Some(Relation(r)) => format!("Relation: {}", r.label),
-        Some(Event(ev)) => format!("Event: {}", ev.description),
-        Some(Configuration(cfg)) => format!("{}: {}", cfg.label, cfg.description),
-        Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
-        Some(Position(p)) => format!("Position ({}): {}", p.stance, p.canonical_name),
-        Some(Opposition(o)) => format!("Opposition: {}", o.canonical_label),
-        Some(Asset(a)) => {
-            let name = if a.original_filename.is_empty() {
-                format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])
-            } else {
-                a.original_filename.clone()
-            };
-            format!("Asset ({}): {}", a.asset_kind, name)
-        }
-        None => format!("{atom_id} (missing)"),
-    }
-}
 
 /// Filter applied during atlas-context loading. Mirrors the shape
 /// of the eval CLI's `AtlasLoadFilter` so the cache key derived
@@ -216,8 +165,8 @@ pub struct AtlasContextManager {
     filter: AtlasContextFilter,
     contexts: Arc<RwLock<HashMap<String, Arc<AtlasContext>>>>,
     /// Structural graph layer per atlas (atom-by-id + edge adjacency).
-    /// Used by [`crate::atlas_context::atlas_navigate`] for graph BFS;
-    /// without it the runtime falls back to bag-of-atoms cosine
+    /// Used by [`sovereign_core::atlas_context::atlas_navigate_ann`] for graph
+    /// BFS; without it the runtime falls back to bag-of-atoms cosine
     /// (`atlas_top_k_as_chunks`). Populated two ways: eagerly at init
     /// for corpora whose embedding context loaded (those are the only
     /// ids `atlas_navigate` can ever seed), and on-demand in
@@ -369,74 +318,92 @@ impl AtlasContextManager {
         );
     }
 
-    /// Load one corpus's atlas into the manager: embed-or-replay its
-    /// context (subject to `cache_only`), record its dir for lazy graph
-    /// parsing, and — only when the embedding context actually loaded —
-    /// parse its structural graph eagerly (those ids are the pool
-    /// `atlas_navigate` seeds from). Shared by the [`init_internal`] walk
-    /// and [`warm_one`]. Bump hydration is the caller's job (init does it
-    /// once per candidate; `warm_one` runs post-init). Returns whether
-    /// the embedding context loaded.
+    /// Load one corpus's atlas into the manager (ATLAS_STORAGE_V2 Phase B): load
+    /// the v2 store, attach its ANN seed table, and derive the embedding bag from
+    /// that table joined to the resident atoms — no re-embed, no
+    /// `atoms.embeddings.bin`. Shared by the [`init_internal`] walk and
+    /// [`warm_one`]. Returns whether a seed bag loaded.
+    ///
+    /// Only corpora with a persistent ANN table (`atoms_ann.lance`, written once
+    /// at backfill/enrich) produce a seed bag — those atoms are the pool
+    /// `atlas_navigate_ann` seeds from, so they're warmed eagerly. A corpus
+    /// without a table (structural-only, or not yet backfilled) contributes no
+    /// bag; its graph stays lazy (parsed on demand by [`graph`](Self::graph) for
+    /// the atom-enumeration path) — eager-loading every store would be needless
+    /// RSS. `cache_only` is moot now (loading only reads the table; there is no
+    /// embed path), kept for caller-signature compatibility.
     async fn load_corpus(
         &self,
         corpus_id: &str,
         atlas_dir: &std::path::Path,
         cache_only: bool,
     ) -> bool {
-        let context_loaded = match self.load_one(corpus_id, atlas_dir, cache_only).await {
+        let _ = cache_only;
+        // Record where this atlas lives so the lazy `graph()` path can parse it
+        // on first request even when there's no seed bag.
+        if let Ok(mut dirs) = self.graph_dirs.write() {
+            dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
+        }
+        if !corpus_engine::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
+            return false;
+        }
+        let load_started = std::time::Instant::now();
+        // Load the v2 store (atoms.lance + edges.csr). A corpus without one
+        // (e.g. wikipedia — columnar WikipediaGraph, no atom store) is skipped.
+        let graph = match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            corpus_id, atlas_dir,
+        ) {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
+                return false;
+            }
+        };
+        // Attach the ANN seed table on THIS long-lived runtime (the held
+        // lancedb::Table is queried later by `atlas_navigate_ann`).
+        let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
+            corpus_id, atlas_dir, graph,
+        )
+        .await;
+        // Derive the bag from the ANN table joined to the resident atoms.
+        let context_loaded = match sovereign_core::atlas_context::build_atlas_context_from_ann(
+            corpus_id,
+            &graph,
+            self.filter.top_k,
+        )
+        .await
+        {
             Ok(ctx) => {
                 let count = ctx.entries.len();
                 self.contexts
                     .write()
                     .await
                     .insert(corpus_id.to_string(), Arc::new(ctx));
-                tracing::info!(corpus = corpus_id, entries = count, "atlas-context: loaded");
+                tracing::info!(
+                    corpus = corpus_id,
+                    entries = count,
+                    "atlas-context: bag built from ANN seed table"
+                );
                 true
             }
             Err(e) => {
-                tracing::debug!(corpus = corpus_id, error = %e, "atlas-context: load skipped");
+                tracing::debug!(corpus = corpus_id, error = %e, "atlas-context: no ANN bag");
                 false
             }
         };
-        // Record where this atlas lives so `graph()` can parse it on
-        // first request. Eager parse only when the embedding context
-        // loaded: those ids are the pool `atlas_navigate` seeds from on
-        // every query, so they must be warm. Everything else (atlas-only
-        // siblings, stale embed caches) loads on demand via the atom-
-        // enumeration path's per-id pull — at wikipedia scale an unused
-        // graph costs GBs of RSS, and an unseedable graph is unreachable
-        // by every consumer.
-        if let Ok(mut dirs) = self.graph_dirs.write() {
-            dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
-        }
-        if context_loaded {
-            let load_started = std::time::Instant::now();
-            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
-                Ok(graph) => {
-                    let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
-                        corpus_id, atlas_dir, graph,
-                    )
-                    .await;
-                    let load_ms = load_started.elapsed().as_millis();
-                    let atom_count = graph.atom_count();
-                    let edge_out_count: usize = graph.edge_count();
-                    self.graphs
-                        .write()
-                        .await
-                        .insert(corpus_id.to_string(), Arc::new(graph));
-                    tracing::info!(
-                        corpus = corpus_id,
-                        atoms = atom_count,
-                        edges = edge_out_count,
-                        load_ms,
-                        "atlas-graph: loaded"
-                    );
-                }
-                Err(e) => {
-                    tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
-                }
-            }
-        }
+        let atom_count = graph.atom_count();
+        let edge_count = graph.edge_count();
+        self.graphs
+            .write()
+            .await
+            .insert(corpus_id.to_string(), Arc::new(graph));
+        tracing::info!(
+            corpus = corpus_id,
+            atoms = atom_count,
+            edges = edge_count,
+            load_ms = load_started.elapsed().as_millis(),
+            "atlas-graph: loaded"
+        );
         context_loaded
     }
 
@@ -558,327 +525,6 @@ impl AtlasContextManager {
             .unwrap_or_default()
     }
 
-    async fn load_one(
-        &self,
-        corpus_id: &str,
-        atlas_dir: &std::path::Path,
-        cache_only: bool,
-    ) -> Result<AtlasContext, String> {
-        let filter_sig = self.filter.signature();
-        let atoms_hash =
-            atoms_content_hash(atlas_dir).map_err(|e| format!("hash atoms.json: {e}"))?;
-
-        // Try cache first.
-        match read_atlas_embeddings(atlas_dir, &self.embed_model, &atoms_hash, &filter_sig) {
-            Ok(Some(cached)) => {
-                let entries = cached
-                    .into_iter()
-                    .map(|c| AtlasEntry {
-                        canonical_name: c.canonical_name,
-                        embed_text: c.embed_text,
-                        embedding: c.embedding,
-                    })
-                    .collect();
-                return Ok(AtlasContext {
-                    atlas_corpus_id: corpus_id.to_string(),
-                    entries,
-                    top_k: self.filter.top_k,
-                });
-            }
-            Ok(None) => {}
-            Err(e) => {
-                tracing::warn!(
-                    corpus = corpus_id,
-                    error = %e,
-                    "atlas-context: cache read failed; re-embedding"
-                );
-            }
-        }
-
-        if cache_only {
-            return Err("no embeddings cache (cache_only mode)".into());
-        }
-
-        let atoms = read_atlas_atoms(atlas_dir).map_err(|e| format!("read atoms.json: {e}"))?;
-
-        // The article-slug used as `canonical_name` for non-Entity
-        // atoms (Claims, Tensions, etc.). For per-article SEP atlases
-        // the corpus_id is `sep-<slug>`; strip the prefix so
-        // `score_sources` (rigid title match) credits the right slug
-        // when a virtual chunk surfaces. For other atlases the prefix
-        // strip is a no-op and the corpus_id itself flows through.
-        let article_slug: String = corpus_id
-            .strip_prefix("sep-")
-            .unwrap_or(corpus_id)
-            .to_string();
-
-        let mut payloads: Vec<(String, String)> = Vec::new();
-        for atom in &atoms.atoms {
-            match atom {
-                AtomEnvelope::Entity(e) => {
-                    let is_placeholder = e.description.is_empty() && e.salience == 0.0;
-                    if is_placeholder {
-                        continue;
-                    }
-                    if e.description.len() < self.filter.min_description_chars {
-                        continue;
-                    }
-                    if !self.filter.depth_allowlist.is_empty() {
-                        let depth_label = serde_json::to_string(&e.enrichment_depth)
-                            .unwrap_or_default()
-                            .trim_matches('"')
-                            .to_string();
-                        if !self
-                            .filter
-                            .depth_allowlist
-                            .iter()
-                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                        {
-                            continue;
-                        }
-                    }
-                    if let Some(cap) = self.filter.max_entries {
-                        if payloads.len() >= cap {
-                            break;
-                        }
-                    }
-                    let mut text = String::new();
-                    text.push_str(&e.canonical_name);
-                    text.push('\n');
-                    if !e.aliases.is_empty() {
-                        text.push_str(&e.aliases.join(", "));
-                        text.push('\n');
-                    }
-                    text.push_str(&e.description);
-                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                    }
-                    payloads.push((e.canonical_name.clone(), text));
-                }
-                AtomEnvelope::Claim(c) if self.filter.include_claims => {
-                    // Path 2 Phase A: surface Claim atoms as virtual
-                    // chunks. `canonical_name = article_slug` so
-                    // `score_sources` rigid title-match credits the
-                    // article when a claim is in top-K. The embed
-                    // text encodes discourse_act + epistemic_status
-                    // alongside the proposition itself so cosine
-                    // similarity reflects the substantive content,
-                    // not the meta-tags.
-                    if !self.filter.depth_allowlist.is_empty() {
-                        let depth_label = serde_json::to_string(&c.enrichment_depth)
-                            .unwrap_or_default()
-                            .trim_matches('"')
-                            .to_string();
-                        if !self
-                            .filter
-                            .depth_allowlist
-                            .iter()
-                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                        {
-                            continue;
-                        }
-                    }
-                    if let Some(cap) = self.filter.max_entries {
-                        if payloads.len() >= cap {
-                            break;
-                        }
-                    }
-                    let act = serde_json::to_string(&c.discourse_act)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    let status = serde_json::to_string(&c.epistemic_status)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    let mut text =
-                        format!("[Claim: {act}, {status}] {content}", content = c.content);
-                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                    }
-                    payloads.push((article_slug.clone(), text));
-                }
-                AtomEnvelope::Configuration(cfg) if self.filter.include_configurations => {
-                    if !self.filter.depth_allowlist.is_empty() {
-                        let depth_label = serde_json::to_string(&cfg.enrichment_depth)
-                            .unwrap_or_default()
-                            .trim_matches('"')
-                            .to_string();
-                        if !self
-                            .filter
-                            .depth_allowlist
-                            .iter()
-                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                        {
-                            continue;
-                        }
-                    }
-                    if let Some(cap) = self.filter.max_entries {
-                        if payloads.len() >= cap {
-                            break;
-                        }
-                    }
-                    let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
-                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                    }
-                    payloads.push((article_slug.clone(), text));
-                }
-                AtomEnvelope::ArgumentReconstruction(a) => {
-                    // Always include — these are the named-argument
-                    // reconstructions Phase 1 extracted. Embed text
-                    // is name + premises + conclusion so a question
-                    // mentioning the argument name OR matching its
-                    // content can seed the navigation onto this atom.
-                    if !self.filter.depth_allowlist.is_empty() {
-                        let depth_label = serde_json::to_string(&a.enrichment_depth)
-                            .unwrap_or_default()
-                            .trim_matches('"')
-                            .to_string();
-                        if !self
-                            .filter
-                            .depth_allowlist
-                            .iter()
-                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                        {
-                            continue;
-                        }
-                    }
-                    if let Some(cap) = self.filter.max_entries {
-                        if payloads.len() >= cap {
-                            break;
-                        }
-                    }
-                    let mut text = String::with_capacity(256);
-                    text.push_str("[Argument: ");
-                    text.push_str(&a.name);
-                    text.push_str("] ");
-                    for p in &a.premises {
-                        text.push_str(p);
-                        text.push(' ');
-                    }
-                    text.push_str(&a.conclusion);
-                    for o in &a.objections {
-                        if !o.content.trim().is_empty() {
-                            text.push(' ');
-                            text.push_str(o.content.trim());
-                        } else if !o.name.trim().is_empty() {
-                            text.push(' ');
-                            text.push_str(o.name.trim());
-                        }
-                    }
-                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                    }
-                    payloads.push((article_slug.clone(), text));
-                }
-                _ => continue,
-            }
-        }
-
-        // Path 2 Phase B — surface Tension edges as virtual chunks.
-        // Mirrors the eval-CLI loader; same embed-text shape so the
-        // shared cache key is symmetric. Missing edges.json (older
-        // atlases without Phase 6) is non-fatal — log and skip.
-        if self.filter.include_tensions {
-            let atoms_by_id: HashMap<&str, &AtomEnvelope> =
-                atoms.atoms.iter().map(|a| (a.id().as_str(), a)).collect();
-            match read_atlas_edges(atlas_dir) {
-                Ok(edges_file) => {
-                    for edge in &edges_file.edges {
-                        if edge.edge_type != EdgeType::Tension {
-                            continue;
-                        }
-                        if let Some(cap) = self.filter.max_entries {
-                            if payloads.len() >= cap {
-                                break;
-                            }
-                        }
-                        let src = atoms_by_id.get(edge.source.as_str()).copied();
-                        let tgt = atoms_by_id.get(edge.target.as_str()).copied();
-                        let sub = edge
-                            .sub_question
-                            .as_deref()
-                            .unwrap_or("(no sub_question recorded)");
-                        let mut text = format!("[Tension] {sub}\n");
-                        text.push_str(&endpoint_text(src, edge.source.as_str()));
-                        text.push_str("\n↔\n");
-                        text.push_str(&endpoint_text(tgt, edge.target.as_str()));
-                        if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                            text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                        }
-                        payloads.push((article_slug.clone(), text));
-                    }
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        corpus = corpus_id,
-                        error = %e,
-                        "atlas-context: include_tensions set but edges.json unreadable; skipping"
-                    );
-                }
-            }
-        }
-
-        if payloads.is_empty() {
-            return Err(format!(
-                "filter excluded every entity (min_chars={}, depth={:?})",
-                self.filter.min_description_chars, self.filter.depth_allowlist,
-            ));
-        }
-
-        let t0 = Instant::now();
-        let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
-        for (name, text) in payloads {
-            match self.inference.embed_query(&text).await {
-                Ok(v) => entries.push(AtlasEntry {
-                    canonical_name: name,
-                    embed_text: text,
-                    embedding: v,
-                }),
-                Err(e) => {
-                    tracing::warn!(corpus = corpus_id, entity = name, error = %e,
-                        "atlas-context: entity embed failed (skipped)");
-                }
-            }
-        }
-        tracing::info!(
-            corpus = corpus_id,
-            entries = entries.len(),
-            elapsed_s = t0.elapsed().as_secs_f32(),
-            "atlas-context: embedded (cache MISS)"
-        );
-
-        // Persist for next boot.
-        if !entries.is_empty() {
-            let embed_dim = entries[0].embedding.len();
-            let cached: Vec<CachedAtlasEntry> = entries
-                .iter()
-                .map(|e| CachedAtlasEntry {
-                    canonical_name: e.canonical_name.clone(),
-                    embed_text: e.embed_text.clone(),
-                    embedding: e.embedding.clone(),
-                })
-                .collect();
-            if let Err(e) = write_atlas_embeddings(
-                atlas_dir,
-                &self.embed_model,
-                embed_dim,
-                &atoms_hash,
-                &filter_sig,
-                &cached,
-            ) {
-                tracing::warn!(corpus = corpus_id, error = %e,
-                    "atlas-context: cache write failed (non-fatal)");
-            }
-        }
-
-        Ok(AtlasContext {
-            atlas_corpus_id: corpus_id.to_string(),
-            entries,
-            top_k: self.filter.top_k,
-        })
-    }
 }
 
 impl AtlasContextProvider for AtlasContextManager {
@@ -1135,13 +781,21 @@ mod tests {
         }
     }
 
-    /// `<indexes>/<corpus>/atlas/atoms.json` with an empty (but
-    /// schema-valid) atom set — enough for `AtlasGraph::load_from_disk`
-    /// to succeed while `load_one` fails on the missing embed cache.
+    /// `<indexes>/<corpus>/atlas/` with `atoms.json` plus the v2 store
+    /// (`atoms.lance` + `edges.csr`) so `AtlasGraph::load_from_disk` can load it
+    /// (ATLAS_STORAGE_V2 retired the `atoms.json` convert-on-load). A
+    /// deliberately-corrupt `atoms_json` (one that doesn't parse) is left
+    /// store-less on purpose — its `graph()` then Errs, which the lazy-load
+    /// eviction test relies on. No ANN table is written, so the corpus has no
+    /// seed bag (its graph stays lazy) — matching the "deferred graph" tests.
     fn write_atlas_fixture(indexes: &Path, corpus: &str, atoms_json: &str) {
+        use corpus_engine::enrichment::atlas::{store, AtomsFile};
         let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json).unwrap();
+        if let Ok(file) = serde_json::from_str::<AtomsFile>(atoms_json) {
+            store::write_store_blocking(&atlas, corpus, &file.atoms, &[]).unwrap();
+        }
     }
 
     fn manager_for(indexes: &Path) -> AtlasContextManager {

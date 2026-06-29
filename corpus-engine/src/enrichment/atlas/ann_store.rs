@@ -170,6 +170,51 @@ impl AnnSeedTable {
         Ok(out)
     }
 
+    /// Every `(key, embedding)` row in the table, unordered. The bag-build read
+    /// path (ATLAS_STORAGE_V2 Phase B): the daemon / eval derive the atlas
+    /// embedding bag by scanning the ANN table (`key` == atom-id) and joining
+    /// each row to its resident atom for the rendered text — so the atom
+    /// embeddings live ONLY here, never re-embedded at load and never in an
+    /// `atoms.embeddings.bin` sidecar.
+    pub async fn all_rows(&self) -> Result<Vec<(String, Vec<f32>)>, String> {
+        let stream = self
+            .table
+            .query()
+            .select(Select::Columns(vec!["key".into(), "embedding".into()]))
+            .execute()
+            .await
+            .map_err(|e| format!("AnnSeedTable all_rows execute: {e}"))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| format!("AnnSeedTable all_rows collect: {e}"))?;
+        let mut out: Vec<(String, Vec<f32>)> = Vec::new();
+        for b in &batches {
+            let keys = b
+                .column_by_name("key")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let embs = b
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+            let (Some(keys), Some(embs)) = (keys, embs) else {
+                continue;
+            };
+            for i in 0..keys.len() {
+                if embs.is_null(i) {
+                    continue;
+                }
+                let vals = embs
+                    .value(i)
+                    .as_any()
+                    .downcast_ref::<arrow_array::Float32Array>()
+                    .map(|a| a.values().to_vec())
+                    .unwrap_or_default();
+                out.push((keys.value(i).to_string(), vals));
+            }
+        }
+        Ok(out)
+    }
+
     /// The `k` nearest keys to `query`, ranked (closest first). No score is
     /// returned — at this scale the search is exact, so a caller wanting
     /// bit-identical scores re-computes cosine against its own vectors.
