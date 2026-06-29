@@ -21,6 +21,7 @@ mod atos_cmd;
 mod atos_plugin;
 mod audit_extract;
 mod audit_recover;
+mod code_capability_graph;
 mod code_cmd;
 mod code_map;
 mod design_onboarding;
