@@ -41,9 +41,9 @@ icon = "search"
 # Prebuilt cold-start: `sovereign corpus install uap-blue-book-index` restores
 # all 10,750 metadata records (FTS + vector, no graph) from HuggingFace in
 # seconds. Breadth companion to the enriched uap-blue-book hero install.
-# Snapshot built 2026-06-04.
+# Snapshot built 2026-06-29 (v2 atlas store).
 [prebuilt]
 hf_repo = "svrnmesh/uap-blue-book-index"
-hf_filename = "uap-blue-book-index-qwen-embedding-0.6b-2026-06-04.tar.zst"
-sha256 = "e65e19c4dd7614a741d3f1ede0fe9778f8a0f661ac7a67b9a4cc935821b49692"
+hf_filename = "uap-blue-book-index-qwen-embedding-0.6b-2026-06-29.tar.zst"
+sha256 = "ef44452ced2bf15b00e629e92a68c0da318caf760ef2e197477a455b7ef40283"
 compatible_embedding_model = "qwen-embedding-0.6b"

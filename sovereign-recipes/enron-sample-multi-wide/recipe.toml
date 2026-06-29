@@ -99,9 +99,9 @@ icon = "mail"
 # enriched index (chunks + the 6,101-atom atlas + reconciliation graph, B³ P=1.0 / F1 0.835)
 # from HuggingFace in seconds — no re-enrich. The mesh `corpus pull` path is blocked on a
 # stale canonical fingerprint after the atlas-resolve mutations; the snapshot manifest
-# carries its own sha256, so this install sidesteps that. Snapshot built 2026-06-05.
+# carries its own sha256, so this install sidesteps that. Snapshot built 2026-06-29 (v2 atlas store).
 [prebuilt]
 hf_repo = "svrnmesh/enron-sample-multi-wide"
-hf_filename = "enron-sample-multi-wide-qwen-embedding-0.6b-2026-06-05.tar.zst"
-sha256 = "27b664ee33e4c8829b0c18ac75818e0821c3a7e2eb2c47adb4334e395ae8e080"
+hf_filename = "enron-sample-multi-wide-qwen-embedding-0.6b-2026-06-29.tar.zst"
+sha256 = "9107e3a0c2017275e23f5e0e8774c6be8329006aaccef2eb8fb04a49420b34a9"
 compatible_embedding_model = "qwen-embedding-0.6b"

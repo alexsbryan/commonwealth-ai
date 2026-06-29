@@ -198,25 +198,45 @@ pub async fn run(args: &[String]) -> i32 {
         } else if ann_table_present(&atlas_dir) && !store_built {
             "current"
         } else {
-            match runner::load_atlas_context(&session, corpus_id, prod.top_k, &filter).await {
-                Ok(ctx) if !ctx.entries.is_empty() => {
-                    match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
-                        Ok(_) => {
-                            anns += 1;
-                            "built"
-                        }
-                        Err(e) => {
-                            errs += 1;
-                            eprintln!("  {corpus_id}: ann build: {e}");
-                            "err"
-                        }
+            // Load the seedable atoms. The production grounding filter
+            // (min_description_chars=200, entities) matches the manager's seeding
+            // universe, but it silently empties short-description prose corpora
+            // (enron-class). Fall back ONCE to a relaxed description floor so those
+            // still seed one-shot; a corpus that's STILL empty carries only
+            // non-Entity surfaces (investigation graphs) and is genuinely
+            // unseedable — skip it without an error rather than reporting failure.
+            let strict = runner::load_atlas_context(&session, corpus_id, prod.top_k, &filter).await;
+            let ctx = match strict {
+                Ok(ctx) if !ctx.entries.is_empty() => Some(ctx),
+                _ => {
+                    let relaxed = AtlasLoadFilter {
+                        min_description_chars: 1,
+                        depth_allowlist: filter.depth_allowlist.clone(),
+                        max_entries: filter.max_entries,
+                        include_claims: filter.include_claims,
+                        include_tensions: filter.include_tensions,
+                        include_configurations: filter.include_configurations,
+                    };
+                    runner::load_atlas_context(&session, corpus_id, prod.top_k, &relaxed)
+                        .await
+                        .ok()
+                        .filter(|c| !c.entries.is_empty())
+                }
+            };
+            match ctx {
+                Some(ctx) => match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
+                    Ok(_) => {
+                        anns += 1;
+                        "built"
                     }
-                }
-                Ok(_) => "empty", // cache present but filter admitted no atoms
-                Err(e) => {
-                    eprintln!("  {corpus_id}: ctx load: {e}");
-                    "err"
-                }
+                    Err(e) => {
+                        errs += 1;
+                        eprintln!("  {corpus_id}: ann build: {e}");
+                        "err"
+                    }
+                },
+                // No seedable atoms even at the relaxed floor (non-Entity surfaces).
+                None => "none",
             }
         };
 

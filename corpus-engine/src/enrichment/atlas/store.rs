@@ -603,11 +603,32 @@ where
     })
 }
 
-/// True if the v2 store is missing or older than `atoms.json` — i.e. it should
-/// be (re)built. Mirrors [`super::archive::archive_needs_build`].
+/// Read the `CSR_VERSION` from an `edges.csr` header without mmapping the whole
+/// file. `None` if the file is missing, truncated, or has a bad magic — any of
+/// which means the store is unreadable and must be (re)built.
+fn edges_csr_version(path: &Path) -> Option<u32> {
+    use std::io::Read;
+    let mut hdr = [0u8; 8];
+    std::fs::File::open(path).ok()?.read_exact(&mut hdr).ok()?;
+    if u32::from_le_bytes([hdr[0], hdr[1], hdr[2], hdr[3]]) != CSR_MAGIC {
+        return None;
+    }
+    Some(u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]))
+}
+
+/// True if the v2 store is missing, stale (older than `atoms.json`), or written
+/// at a superseded `edges.csr` format version — i.e. it should be (re)built.
 pub fn store_needs_build(atlas_dir: &Path) -> bool {
     let lance = atlas_dir.join(ATOMS_LANCE_DIRNAME);
     if !lance.exists() {
+        return true;
+    }
+    // A stale-version `edges.csr` (e.g. CSR v1, before the per-edge provenance
+    // byte) is rejected by `CsrEdges::open` with no fallback, so the store is
+    // unloadable even when `atoms.lance` exists and is newer than `atoms.json` —
+    // which the mtime check below would read as "current". Gate on the header
+    // version explicitly so `migrate-all` rebuilds it instead of skipping it.
+    if edges_csr_version(&atlas_dir.join(EDGES_CSR_FILENAME)) != Some(CSR_VERSION) {
         return true;
     }
     let mtime = |p: PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
@@ -1070,6 +1091,38 @@ mod tests {
 
         // out-of-range local id → empty, not a panic.
         assert_eq!(csr.out_edges(99).len(), 0);
+    }
+
+    #[test]
+    fn store_needs_build_flags_a_stale_csr_version() {
+        // A freshly written v2 store (atoms.lance + a CSR v2 edges.csr) is current.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let atoms = vec![entity(1, "Alice"), entity(2, "Bob")];
+        let edges = vec![Edge {
+            id: EdgeId::from_raw("e1"),
+            edge_type: EdgeType::Involves,
+            source: AtomId::entity(1),
+            target: AtomId::entity(2),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: 0.9,
+            provenance: EdgeProvenance::ScipStructural,
+        }];
+        write_store_blocking(dir, "c1", &atoms, &edges).unwrap();
+        assert!(!store_needs_build(dir), "a fresh CSR v2 store is current");
+
+        // Flipping the edges.csr header version byte to a superseded value makes
+        // the store unreadable (CsrEdges::open rejects it), so a rebuild is
+        // required even though atoms.lance is present. The mtime check alone
+        // can't see this; the version guard must.
+        let csr = dir.join(EDGES_CSR_FILENAME);
+        let mut bytes = std::fs::read(&csr).unwrap();
+        bytes[4] = 1; // CSR_VERSION 2 → the pre-provenance v1 format
+        std::fs::write(&csr, &bytes).unwrap();
+        assert_eq!(edges_csr_version(&csr), Some(1));
+        assert!(store_needs_build(dir), "a v1 edges.csr must force a rebuild");
     }
 
     #[tokio::test]
