@@ -440,6 +440,15 @@ struct DepthFrame {
     records: &'static str,
 }
 
+/// The assertive verb-phrase for a given enrichment depth — the public reuse
+/// seam for callers outside this crate that render their own briefs but want
+/// the SAME depth calibration (e.g. `sovereign-core`'s call-chain brief, which
+/// renders `Structural` code atoms). Keeps depth framing single-sourced rather
+/// than forked per renderer.
+pub fn depth_frame_records(depth: EnrichmentDepth) -> &'static str {
+    depth_frame(depth).records
+}
+
 fn depth_frame(depth: EnrichmentDepth) -> DepthFrame {
     match depth {
         EnrichmentDepth::Extracted => DepthFrame {

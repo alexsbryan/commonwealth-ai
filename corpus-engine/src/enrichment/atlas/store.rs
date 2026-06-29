@@ -30,7 +30,7 @@ use lancedb::query::ExecutableQuery;
 use memmap2::Mmap;
 
 use super::projection::{arch_edge_type, project, ArchEdgeType, AtomKindTag, AtomRecord};
-use super::edges::{Edge, EdgeType};
+use super::edges::{Edge, EdgeProvenance, EdgeType};
 use super::AtomEnvelope;
 
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
@@ -45,7 +45,14 @@ pub const EDGES_CSR_FILENAME: &str = "edges.csr";
 const ATOMS_TABLE: &str = "atoms";
 
 const CSR_MAGIC: u32 = 0x4353_5256; // "CSRV"
-const CSR_VERSION: u32 = 1;
+// v2 adds a per-edge provenance byte alongside the type byte. The Stage-1 BFS
+// can't distinguish a `scip_structural` call edge from a `containment_structural`
+// parent edge by `edge_type` alone (both are `Involves`); provenance is the
+// ground-truth discriminant the code-atlas CallChain filters on. Bumping the
+// version means a v1 `edges.csr` is rejected by `CsrEdges::open`; rebuild the
+// store with `sovereign atlas migrate-all <id>` (the v2 store is the only read
+// path after the v2 cleanup — there is no rkyv fallback).
+const CSR_VERSION: u32 = 2;
 
 // ── atoms.lance ──────────────────────────────────────────────────────────────
 
@@ -159,6 +166,42 @@ fn u8_to_edge_type(u: u8) -> EdgeType {
     }
 }
 
+/// Stable u8 discriminant for the edge provenance — the v2 CSR's per-edge
+/// provenance byte. Distinct from the type byte: a code-atlas edge is always
+/// `EdgeType::Involves`, so the CallChain over the CSR uses THIS to keep only
+/// `ScipStructural` (call/use/impl) edges and drop `ContainmentStructural`
+/// (Crate→Module→Item) and `CargoStructural` (dependency) edges.
+fn prov_u8(p: EdgeProvenance) -> u8 {
+    match p {
+        EdgeProvenance::LlmExtraction => 0,
+        EdgeProvenance::LlmPairwise => 1,
+        EdgeProvenance::LlmConfiguration => 2,
+        EdgeProvenance::Derived => 3,
+        EdgeProvenance::WikilinkStructural => 4,
+        EdgeProvenance::ContainmentStructural => 5,
+        EdgeProvenance::ScipStructural => 6,
+        EdgeProvenance::CargoStructural => 7,
+        EdgeProvenance::TreeSitterStructural => 8,
+    }
+}
+
+/// Inverse of [`prov_u8`]. Unknown bytes fall back to `Derived` (a benign,
+/// non-structural provenance) rather than panicking on a corrupt file.
+fn u8_to_prov(u: u8) -> EdgeProvenance {
+    match u {
+        0 => EdgeProvenance::LlmExtraction,
+        1 => EdgeProvenance::LlmPairwise,
+        2 => EdgeProvenance::LlmConfiguration,
+        3 => EdgeProvenance::Derived,
+        4 => EdgeProvenance::WikilinkStructural,
+        5 => EdgeProvenance::ContainmentStructural,
+        6 => EdgeProvenance::ScipStructural,
+        7 => EdgeProvenance::CargoStructural,
+        8 => EdgeProvenance::TreeSitterStructural,
+        _ => EdgeProvenance::Derived,
+    }
+}
+
 fn atoms_schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
         Field::new("id", DataType::UInt32, false),
@@ -241,8 +284,8 @@ async fn write_atoms_lance(atlas_dir: &Path, rows: &[AtomRow]) -> Result<PathBuf
 
 // ── edges.csr ────────────────────────────────────────────────────────────────
 
-/// A directed edge resolved to interned local ids (src, tgt, type, conf).
-type LocalEdge = (u32, u32, u8, f32);
+/// A directed edge resolved to interned local ids (src, tgt, type, conf, prov).
+type LocalEdge = (u32, u32, u8, f32, u8);
 
 /// CSR offsets prefix-sum keyed by `key(edge)`. `sorted` must already be
 /// sorted by that key so the neighbor array is grouped.
@@ -263,7 +306,9 @@ fn pad_to_4(buf: &mut Vec<u8>) {
     }
 }
 
-/// Serialize one CSR direction (offsets, neighbors, types, conf) into `buf`.
+/// Serialize one CSR direction into `buf`, in order: offsets, neighbors, type
+/// bytes, provenance bytes, [pad to 4], confidence f32s. The two byte arrays
+/// (type, prov) sit adjacent so a single pad re-aligns the f32 conf array.
 /// `neighbor` selects which endpoint is the stored neighbor for this direction.
 fn push_csr(buf: &mut Vec<u8>, offsets: &[u32], sorted: &[LocalEdge], neighbor: impl Fn(&LocalEdge) -> u32) {
     for o in offsets {
@@ -273,7 +318,10 @@ fn push_csr(buf: &mut Vec<u8>, offsets: &[u32], sorted: &[LocalEdge], neighbor: 
         buf.extend_from_slice(&neighbor(e).to_le_bytes());
     }
     for e in sorted {
-        buf.push(e.2);
+        buf.push(e.2); // edge type
+    }
+    for e in sorted {
+        buf.push(e.4); // edge provenance
     }
     pad_to_4(buf);
     for e in sorted {
@@ -295,7 +343,13 @@ fn write_edges_csr(
         else {
             continue;
         };
-        valid.push((s, t, edge_type_u8(arch_edge_type(e.edge_type)), e.confidence));
+        valid.push((
+            s,
+            t,
+            edge_type_u8(arch_edge_type(e.edge_type)),
+            e.confidence,
+            prov_u8(e.provenance),
+        ));
     }
     let n_edges = valid.len() as u32;
 
@@ -339,11 +393,12 @@ pub struct CsrEdges {
     inn: CsrDir,
 }
 
-/// Byte offsets of one CSR direction's four arrays within the mmap.
+/// Byte offsets of one CSR direction's five arrays within the mmap.
 struct CsrDir {
     off: usize,
     nbr: usize,
     typ: usize,
+    prov: usize,
     conf: usize,
 }
 
@@ -376,14 +431,17 @@ impl CsrEdges {
         let off_len = (n_atoms as usize + 1) * 4;
         let nbr_len = n_edges as usize * 4;
         let typ_len = n_edges as usize;
-        let typ_pad = (4 - (typ_len % 4)) % 4;
+        let prov_len = n_edges as usize;
+        // type + prov are adjacent byte arrays; pad once to re-align the f32 conf.
+        let byte_pad = (4 - ((typ_len + prov_len) % 4)) % 4;
         let conf_len = n_edges as usize * 4;
-        let dir_len = off_len + nbr_len + typ_len + typ_pad + conf_len;
+        let dir_len = off_len + nbr_len + typ_len + prov_len + byte_pad + conf_len;
         let dir_at = |start: usize| CsrDir {
             off: start,
             nbr: start + off_len,
             typ: start + off_len + nbr_len,
-            conf: start + off_len + nbr_len + typ_len + typ_pad,
+            prov: start + off_len + nbr_len + typ_len,
+            conf: start + off_len + nbr_len + typ_len + prov_len + byte_pad,
         };
         let out_start = 16;
         let in_start = out_start + dir_len;
@@ -408,14 +466,15 @@ impl CsrEdges {
         self.n_edges
     }
 
-    /// Out-edges of `local_id`: `(neighbor_local_id, edge_type_u8, confidence)`.
+    /// Out-edges of `local_id`:
+    /// `(neighbor_local_id, edge_type_u8, confidence, provenance_u8)`.
     /// Empty if `local_id` is out of range.
-    pub fn out_edges(&self, local_id: u32) -> Vec<(u32, u8, f32)> {
+    pub fn out_edges(&self, local_id: u32) -> Vec<(u32, u8, f32, u8)> {
         self.read_dir(&self.out, local_id)
     }
 
     /// In-edges of `local_id` — who points at it.
-    pub fn in_edges(&self, local_id: u32) -> Vec<(u32, u8, f32)> {
+    pub fn in_edges(&self, local_id: u32) -> Vec<(u32, u8, f32, u8)> {
         self.read_dir(&self.inn, local_id)
     }
 
@@ -442,7 +501,7 @@ impl CsrEdges {
         hi - lo
     }
 
-    fn read_dir(&self, d: &CsrDir, local_id: u32) -> Vec<(u32, u8, f32)> {
+    fn read_dir(&self, d: &CsrDir, local_id: u32) -> Vec<(u32, u8, f32, u8)> {
         if local_id >= self.n_atoms {
             return Vec::new();
         }
@@ -452,7 +511,14 @@ impl CsrEdges {
         let lo = rdu(d.off + local_id as usize * 4) as usize;
         let hi = rdu(d.off + (local_id as usize + 1) * 4) as usize;
         (lo..hi)
-            .map(|j| (rdu(d.nbr + j * 4), b[d.typ + j], rdf(d.conf + j * 4)))
+            .map(|j| {
+                (
+                    rdu(d.nbr + j * 4),
+                    b[d.typ + j],
+                    rdf(d.conf + j * 4),
+                    b[d.prov + j],
+                )
+            })
             .collect()
     }
 }
@@ -713,19 +779,19 @@ impl LancePreload {
         }
     }
 
-    /// Edges originating at `atom_id`: `(source_str, target_str, type, conf)`,
-    /// the endpoint strings borrowed from the resident id table. Empty if the
-    /// atom is absent.
-    pub fn out_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32)> {
+    /// Edges originating at `atom_id`:
+    /// `(source_str, target_str, type, conf, provenance)`, the endpoint strings
+    /// borrowed from the resident id table. Empty if the atom is absent.
+    pub fn out_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
         self.adjacent(atom_id, Dir::Out)
     }
 
     /// Edges arriving at `atom_id`.
-    pub fn in_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32)> {
+    pub fn in_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
         self.adjacent(atom_id, Dir::In)
     }
 
-    fn adjacent(&self, atom_id: &str, dir: Dir) -> Vec<(&str, &str, EdgeType, f32)> {
+    fn adjacent(&self, atom_id: &str, dir: Dir) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
         let Some(&local) = self.by_str_id.get(atom_id) else {
             return Vec::new();
         };
@@ -735,14 +801,14 @@ impl LancePreload {
         };
         let self_str = self.local_to_str[local as usize].as_str();
         raw.into_iter()
-            .filter_map(|(nbr, ty, conf)| {
+            .filter_map(|(nbr, ty, conf, prov)| {
                 let nbr_str = self.local_to_str.get(nbr as usize)?.as_str();
                 // out-CSR neighbor is the target; in-CSR neighbor is the source.
                 let (src, tgt) = match dir {
                     Dir::Out => (self_str, nbr_str),
                     Dir::In => (nbr_str, self_str),
                 };
-                Some((src, tgt, u8_to_edge_type(ty), conf))
+                Some((src, tgt, u8_to_edge_type(ty), conf, u8_to_prov(prov)))
             })
             .collect()
     }
@@ -873,6 +939,8 @@ mod tests {
         }
         let typ: Vec<u8> = bytes[p..p + n_edges as usize].to_vec();
         p += n_edges as usize;
+        let prov: Vec<u8> = bytes[p..p + n_edges as usize].to_vec();
+        p += n_edges as usize;
         while p % 4 != 0 {
             p += 1;
         }
@@ -884,7 +952,7 @@ mod tests {
         let mut edges = Vec::new();
         for i in 0..n_atoms as usize {
             for j in off[i] as usize..off[i + 1] as usize {
-                edges.push((i as u32, nbr[j], typ[j], conf[j]));
+                edges.push((i as u32, nbr[j], typ[j], conf[j], prov[j]));
             }
         }
         edges
@@ -938,6 +1006,8 @@ mod tests {
         assert_eq!(out[0].1, 2);
         assert_eq!(out[0].2, edge_type_u8(ArchEdgeType::Involves));
         assert!((out[0].3 - 0.9).abs() < 1e-6);
+        // v2: the provenance byte round-trips (Derived here).
+        assert_eq!(out[0].4, prov_u8(EdgeProvenance::Derived));
     }
 
     #[test]
@@ -952,20 +1022,25 @@ mod tests {
         for (i, n) in [1usize, 2, 3].iter().enumerate() {
             by_id.insert(AtomId::entity(*n).as_str().to_string(), i as u32);
         }
-        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, id: &str| Edge {
-            id: EdgeId::from_raw(id),
-            edge_type: ty,
-            source: AtomId::entity(src),
-            target: AtomId::entity(tgt),
-            evidence: vec![],
-            trigger_event: None,
-            sub_question: None,
-            confidence: conf,
-            provenance: EdgeProvenance::Derived,
+        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
+            Edge {
+                id: EdgeId::from_raw(id),
+                edge_type: ty,
+                source: AtomId::entity(src),
+                target: AtomId::entity(tgt),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: conf,
+                provenance: prov,
+            }
         };
+        // Distinct provenances prove the v2 CSR carries the discriminant the
+        // CallChain filters on — both edges are `Involves`-typed, so only the
+        // provenance byte tells `scip_structural` from `containment_structural`.
         let edges = vec![
-            mk(1, 3, EdgeType::Involves, 0.9, "e1"),
-            mk(2, 3, EdgeType::Causes, 0.5, "e2"),
+            mk(1, 3, EdgeType::Involves, 0.9, EdgeProvenance::ScipStructural, "e1"),
+            mk(2, 3, EdgeType::Causes, 0.5, EdgeProvenance::ContainmentStructural, "e2"),
         ];
         write_edges_csr(dir, 3, &by_id, &edges).unwrap();
 
@@ -973,19 +1048,24 @@ mod tests {
         assert_eq!(csr.n_atoms(), 3);
         assert_eq!(csr.n_edges(), 2);
 
-        // out-edges: local 0 → local 2 (Involves, 0.9); local 2 has none.
+        // out-edges: local 0 → local 2 (Involves, 0.9, scip); local 2 has none.
         let o0 = csr.out_edges(0);
         assert_eq!(o0.len(), 1);
         assert_eq!(o0[0].0, 2);
         assert_eq!(o0[0].1, edge_type_u8(ArchEdgeType::Involves));
         assert!((o0[0].2 - 0.9).abs() < 1e-6);
+        assert_eq!(o0[0].3, prov_u8(EdgeProvenance::ScipStructural));
         assert_eq!(csr.out_edges(2).len(), 0);
 
-        // in-edges of local 2: from local 0 and local 1.
+        // in-edges of local 2: from local 0 (scip) and local 1 (containment).
         let i2 = csr.in_edges(2);
         assert_eq!(i2.len(), 2);
         let nbrs: std::collections::HashSet<u32> = i2.iter().map(|e| e.0).collect();
         assert!(nbrs.contains(&0) && nbrs.contains(&1));
+        // Provenance survives the in-CSR direction too, keyed by source neighbor.
+        let prov_of = |from: u32| i2.iter().find(|e| e.0 == from).map(|e| e.3).unwrap();
+        assert_eq!(prov_of(0), prov_u8(EdgeProvenance::ScipStructural));
+        assert_eq!(prov_of(1), prov_u8(EdgeProvenance::ContainmentStructural));
         assert_eq!(csr.in_edges(0).len(), 0);
 
         // out-of-range local id → empty, not a panic.
@@ -1001,20 +1081,22 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
-        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, id: &str| Edge {
-            id: EdgeId::from_raw(id),
-            edge_type: ty,
-            source: AtomId::entity(src),
-            target: AtomId::entity(tgt),
-            evidence: vec![],
-            trigger_event: None,
-            sub_question: None,
-            confidence: conf,
-            provenance: EdgeProvenance::Derived,
+        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
+            Edge {
+                id: EdgeId::from_raw(id),
+                edge_type: ty,
+                source: AtomId::entity(src),
+                target: AtomId::entity(tgt),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: conf,
+                provenance: prov,
+            }
         };
         let edges = vec![
-            mk(1, 3, EdgeType::Involves, 0.9, "e1"),
-            mk(2, 3, EdgeType::Causes, 0.5, "e2"),
+            mk(1, 3, EdgeType::Involves, 0.9, EdgeProvenance::ScipStructural, "e1"),
+            mk(2, 3, EdgeType::Causes, 0.5, EdgeProvenance::ContainmentStructural, "e2"),
         ];
         write_store(dir, "frozen", &atoms, &edges).await.unwrap();
 
@@ -1046,6 +1128,7 @@ mod tests {
         assert_eq!(out1[0].1, e3); // target
         assert_eq!(out1[0].2, EdgeType::Involves);
         assert!((out1[0].3 - 0.9).abs() < 1e-6);
+        assert_eq!(out1[0].4, EdgeProvenance::ScipStructural); // provenance preserved
 
         // entity3: two in-edges (from 1 and 2), zero out.
         assert_eq!(pre.out_edges(&e3).len(), 0);

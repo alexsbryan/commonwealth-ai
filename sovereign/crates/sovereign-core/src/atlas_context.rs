@@ -22,7 +22,7 @@ use corpus_engine::enrichment::atlas::projection::{ArchChunkRef, AtomRecord};
 pub use corpus_engine::enrichment::atlas::projection::AtomKindTag;
 use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
 use corpus_engine::enrichment::atlas::store::LancePreload;
-use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeType};
+use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeProvenance, EdgeType};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
 use corpus_engine::ScoredChunk;
 
@@ -238,29 +238,382 @@ impl AtlasGraph {
     pub fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
         lance_edge_views(self.preload.in_edges(atom_id))
     }
+
+    /// Multi-hop **call chain** from `seed_atom_id` over the code atlas's
+    /// `ScipStructural` (call / use / impl) edges — the "talk to your
+    /// architecture" traversal (Inc 5). Bounded, cycle-safe BFS mirroring
+    /// `corpus_engine_scip::ScipGraph::blast_radius`: a `visited` set seeded with
+    /// the seed, a level-by-level frontier, `max_depth` hops (clamped `1..=5`),
+    /// and a per-node `max_fanout` so a hot symbol can't explode the chain.
+    /// Atoms come back in call order, each tagged with its depth from the seed.
+    ///
+    /// `direction` picks the edge orientation: [`CallDirection::Callees`]
+    /// ("what does X call / how does X work / trace the flow") walks out-edges;
+    /// [`CallDirection::Callers`] ("what calls X / where is X used") walks
+    /// in-edges. Only `ScipStructural` edges are followed —
+    /// `containment_structural` (Crate→Module→Item) and `cargo_structural`
+    /// (dependency) edges carry the same `Involves` type but are not calls, so
+    /// they're filtered by provenance. The walk reads the CSR via
+    /// `edges_from`/`edges_to`, so it scales the way `atlas_navigate` does and
+    /// the Inc-7 chat path reuses this method unchanged.
+    pub fn call_chain(
+        &self,
+        seed_atom_id: &str,
+        direction: CallDirection,
+        max_depth: usize,
+        max_fanout: usize,
+    ) -> CallChainResult {
+        let max_depth = max_depth.clamp(1, 5);
+        let max_fanout = max_fanout.clamp(1, 64);
+
+        let mut result = CallChainResult {
+            corpus_id: self.atlas_corpus_id.clone(),
+            direction,
+            max_depth,
+            nodes: Vec::new(),
+            truncated: false,
+        };
+
+        // Seed must exist; otherwise an empty chain (the caller renders a miss).
+        let Some(seed_view) = self.atom(seed_atom_id) else {
+            return result;
+        };
+        result.nodes.push(self.call_node(&seed_view, 0, None, false));
+
+        let mut visited: HashSet<String> = HashSet::new();
+        visited.insert(seed_atom_id.to_string());
+        let mut frontier: Vec<String> = vec![seed_atom_id.to_string()];
+
+        for depth in 1..=max_depth {
+            if frontier.is_empty() {
+                break;
+            }
+            let mut next: Vec<String> = Vec::new();
+            for current in &frontier {
+                // Scip neighbors in the chosen direction, deterministically
+                // ordered (by atom-id) and fanout-capped — "first N" is stable
+                // across runs, mirroring blast_radius's ORDER-BY-then-cap.
+                let mut neighbors = self.scip_neighbors(current, direction);
+                neighbors.sort_by(|a, b| a.0.cmp(&b.0));
+                if neighbors.len() > max_fanout {
+                    neighbors.truncate(max_fanout);
+                    result.truncated = true;
+                }
+                for (neighbor_id, _conf) in neighbors {
+                    if visited.contains(&neighbor_id) {
+                        continue; // cycle / re-convergence — cut here.
+                    }
+                    let Some(view) = self.atom(&neighbor_id) else {
+                        continue; // dangling endpoint (shouldn't happen post-build).
+                    };
+                    let dyn_dispatch = self.is_reciprocal_scip(current, &neighbor_id, direction);
+                    visited.insert(neighbor_id.clone());
+                    result
+                        .nodes
+                        .push(self.call_node(&view, depth, Some(current.clone()), dyn_dispatch));
+                    next.push(neighbor_id);
+                }
+            }
+            frontier = next;
+        }
+        // A non-empty frontier at the depth bound means reachable atoms remain
+        // beyond `max_depth` — flag the chain as bounded so the brief says so.
+        if !frontier.is_empty() {
+            result.truncated = true;
+        }
+        result
+    }
+
+    /// Project an [`AtomView`] into a [`CallChainNode`] — the citation handle
+    /// (content-hash id), qualified name, subtype, summary, and first-evidence
+    /// chunk id.
+    fn call_node(
+        &self,
+        view: &AtomView<'_>,
+        depth: usize,
+        via: Option<String>,
+        via_dyn_dispatch: bool,
+    ) -> CallChainNode {
+        let chunk_id = view
+            .evidence()
+            .next()
+            .map(|e| e.chunk_id().to_string())
+            .unwrap_or_default();
+        CallChainNode {
+            atom_id: view.id().to_string(),
+            name: view.name().to_string(),
+            subtype: view.subtype().to_string(),
+            description: view.description().to_string(),
+            chunk_id,
+            depth,
+            via,
+            via_dyn_dispatch,
+        }
+    }
+
+    /// Scip (call / use / impl) neighbors of `atom_id` in `direction`, as
+    /// `(neighbor_atom_id, confidence)`. Filters to `ScipStructural` provenance
+    /// so containment / dependency edges (same `Involves` type) are excluded.
+    fn scip_neighbors(&self, atom_id: &str, direction: CallDirection) -> Vec<(String, f32)> {
+        let views = match direction {
+            CallDirection::Callees => self.edges_from(atom_id),
+            CallDirection::Callers => self.edges_to(atom_id),
+        };
+        views
+            .into_iter()
+            .filter(|e| e.provenance == EdgeProvenance::ScipStructural)
+            .map(|e| {
+                let neighbor = match direction {
+                    CallDirection::Callees => e.target,
+                    CallDirection::Callers => e.source,
+                };
+                (neighbor.to_string(), e.confidence)
+            })
+            .collect()
+    }
+
+    /// True when a reciprocal `ScipStructural` edge exists between `from` and
+    /// `to` (`to` also references `from` in the same direction's sense). Trait
+    /// impls emit a Self↔Trait edge pair (see `EdgeProvenance::ScipStructural`),
+    /// so a reciprocal pair is the structural marker for a trait / dynamic-
+    /// dispatch boundary — the place a call graph beats grep, mirrored from
+    /// `trace::render_trace`'s `[dyn-dispatch]` flag. Best-effort: the atlas
+    /// dropped SCIP's per-ref `kind` when it built `Involves` edges, so this
+    /// retained signal stands in for a literal `dyn` flag.
+    fn is_reciprocal_scip(&self, from: &str, to: &str, direction: CallDirection) -> bool {
+        self.scip_neighbors(to, direction)
+            .iter()
+            .any(|(n, _)| n == from)
+    }
+
+    /// Resolve a NAMED seed atom-id by code-symbol name. Matches `query` tokens
+    /// against each atom's qualified name (e.g. `semver::eval::matches_req`):
+    ///   1. the whole qualified name appears in the query → strongest,
+    ///   2. else the last `::`-segment appears as a whole-word query token.
+    /// Among candidates it prefers (a) non-test paths, (b) the shortest
+    /// qualified name (the most public of overloaded names), then (c) atom-id
+    /// for a deterministic final tie-break. `None` when nothing matches.
+    ///
+    /// This is the code-aware analogue of the classifier's `match_entity_target`
+    /// — that keys on whitespace tokens and so never matches `::`-qualified
+    /// code symbols (`semver::matches` is one whitespace token).
+    pub fn resolve_symbol_seed(&self, query: &str) -> Option<String> {
+        let q = query.to_lowercase();
+        let q_tokens: HashSet<String> = q
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|t| t.len() >= 3)
+            .map(|t| t.to_string())
+            .collect();
+
+        // Lower key sorts to "best": `(priority, is_test, rank, atom_id)`.
+        //  - priority 0 = whole qualified-name mention, 1 = last-segment token.
+        //  - non-test (`false`) preferred over test paths.
+        //  - rank is priority-aware: for an explicit qualified mention prefer the
+        //    LONGEST name (the most specific symbol the user spelled out — so
+        //    `m::alpha` beats the module `m` that whole-word-matches inside it);
+        //    for a last-segment token match prefer the SHORTEST path (the public
+        //    top-level item over a deeply nested / overloaded one).
+        //  - atom-id is the deterministic final tie-break.
+        let mut best: Option<(u8, bool, usize, String)> = None;
+        for view in self.atoms() {
+            let name = view.name();
+            if name.is_empty() {
+                continue;
+            }
+            let lname = name.to_lowercase();
+            let last_seg = lname.rsplit("::").next().unwrap_or(lname.as_str());
+            let seg_count = lname.matches("::").count();
+            let is_test = lname.split("::").any(|s| s == "test" || s == "tests");
+
+            let (priority, rank) = if contains_whole_word(&q, &lname) {
+                (0u8, usize::MAX - lname.len()) // longer name → smaller rank → better
+            } else if !last_seg.is_empty() && q_tokens.contains(last_seg) {
+                (1u8, seg_count) // shorter path → smaller rank → better
+            } else {
+                continue;
+            };
+
+            let cand = (priority, is_test, rank, view.id().to_string());
+            if best.as_ref().map(|b| cand < *b).unwrap_or(true) {
+                best = Some(cand);
+            }
+        }
+        best.map(|(_, _, _, id)| id)
+    }
 }
 
-/// Edge adjacency — map the preload's `(src, tgt, type, conf)`
-/// tuples (endpoint strings borrowed from the resident id table) into
-/// [`EdgeView`]s.
-fn lance_edge_views<'a>(raw: Vec<(&'a str, &'a str, EdgeType, f32)>) -> Vec<EdgeView<'a>> {
+/// Lance-backend edge adjacency — map the preload's
+/// `(src, tgt, type, conf, provenance)` tuples (endpoint strings borrowed from
+/// the resident id table) into [`EdgeView`]s. The v2 store carries real
+/// per-edge provenance (from the CSR byte), so the code-atlas CallChain can
+/// filter `ScipStructural` precisely.
+fn lance_edge_views<'a>(
+    raw: Vec<(&'a str, &'a str, EdgeType, f32, EdgeProvenance)>,
+) -> Vec<EdgeView<'a>> {
     raw.into_iter()
-        .map(|(source, target, edge_type, confidence)| EdgeView {
+        .map(|(source, target, edge_type, confidence, provenance)| EdgeView {
             source,
             target,
             edge_type,
             confidence,
+            provenance,
         })
         .collect()
 }
 
-/// Borrowing view over one CSR edge — the four fields the
-/// navigate path reads. `source`/`target` are zero-copy atom-id `&str`s.
+/// Borrowing view over one stored edge — the fields the navigate +
+/// call-chain paths read. `source`/`target` are zero-copy atom-id `&str`s.
+///
+/// `provenance` is the ground-truth discriminant the code-atlas
+/// [`AtlasGraph::call_chain`] filters on (a `scip_structural` call edge vs a
+/// `containment_structural` parent edge; both are `EdgeType::Involves`). It is
+/// carried per-edge by the v2 CSR (`edges.csr`), the only atlas read path.
 pub struct EdgeView<'a> {
     pub source: &'a str,
     pub target: &'a str,
     pub edge_type: EdgeType,
     pub confidence: f32,
+    pub provenance: EdgeProvenance,
+}
+
+// ── CallChain: "talk to your architecture" (Inc 5) ─────────────────────────
+
+/// Direction of an [`AtlasGraph::call_chain`] walk over the code atlas's
+/// `ScipStructural` (call / use / impl) edges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CallDirection {
+    /// Follow OUT edges: "what does X call / how does X work / trace the flow."
+    Callees,
+    /// Follow IN edges: "what calls X / where is X used."
+    Callers,
+}
+
+/// One atom reached by [`AtlasGraph::call_chain`], in BFS (call) order.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CallChainNode {
+    /// Content-hash atom id — the citation handle.
+    pub atom_id: String,
+    /// Qualified symbol name (e.g. `semver::eval::matches_req`).
+    pub name: String,
+    /// Entity subtype: `function` / `struct` / `module` / `enum` / `const` / …
+    pub subtype: String,
+    /// Code-intel summary (may be empty for placeholder atoms).
+    pub description: String,
+    /// Evidence chunk id the atom first appears in — a citation locator.
+    pub chunk_id: String,
+    /// Hops from the seed (the seed itself is `0`).
+    pub depth: usize,
+    /// Atom this node was reached from (`None` for the seed).
+    pub via: Option<String>,
+    /// The edge into this node crossed a trait / dynamic-dispatch boundary — a
+    /// reciprocal `ScipStructural` pair, the structural signal the atlas retains
+    /// after dropping SCIP's per-ref `kind`.
+    pub via_dyn_dispatch: bool,
+}
+
+/// Result of an [`AtlasGraph::call_chain`] walk: the seed plus every atom
+/// reached, in call order with per-node depth. [`render_call_chain_brief`]
+/// narrates it; the Inc-7 chat path consumes the same struct.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CallChainResult {
+    pub corpus_id: String,
+    pub direction: CallDirection,
+    pub max_depth: usize,
+    /// BFS-ordered nodes; `nodes[0]` is the seed at depth 0. Empty when the
+    /// seed atom is absent from the atlas.
+    pub nodes: Vec<CallChainNode>,
+    /// A per-node fanout cap or the depth bound stopped the walk before the
+    /// reachable set was exhausted.
+    pub truncated: bool,
+}
+
+impl CallChainResult {
+    /// Did the walk reach any atom (the seed resolved)?
+    pub fn hit(&self) -> bool {
+        !self.nodes.is_empty()
+    }
+}
+
+/// First sentence (or a hard char cap) of a code-intel summary, single-lined —
+/// keeps a call-chain line scannable without dropping the gist.
+fn first_sentence(s: &str, max: usize) -> String {
+    let flat = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let end = flat
+        .find(". ")
+        .map(|i| i + 1)
+        .unwrap_or_else(|| flat.len().min(max));
+    let mut clipped = flat[..end.min(flat.len())].to_string();
+    if clipped.len() > max {
+        clipped.truncate(max);
+        clipped.push('…');
+    }
+    clipped
+}
+
+/// Render a [`CallChainResult`] into a cited, depth-indented brief — the
+/// human/LLM-facing surface for `enrich atlas-query`'s CallChain. Narrates in
+/// call order, indents by depth, flags `[dyn-dispatch]` boundaries (mirroring
+/// `corpus_engine_scip::trace::render_trace`), and reuses the `Structural`
+/// depth frame so phrasing matches the rest of the atlas brief stack. Each line
+/// cites its atom by qualified name + content-hash id + evidence chunk.
+pub fn render_call_chain_brief(result: &CallChainResult) -> String {
+    use corpus_engine::atlas_traversal::depth_frame_records;
+    use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+
+    let Some(seed) = result.nodes.first() else {
+        return "No atom matches that seed in this code atlas.".to_string();
+    };
+    let verb = match result.direction {
+        CallDirection::Callees => "calls",
+        CallDirection::Callers => "is called by",
+    };
+    let seed_subtype = if seed.subtype.is_empty() {
+        "code"
+    } else {
+        seed.subtype.as_str()
+    };
+    // `depth_frame_records(Structural)` = "The work records that" — code atoms
+    // are deterministic structural parse, so they assert directly.
+    let frame = depth_frame_records(EnrichmentDepth::Structural);
+    let mut out = format!(
+        "Call chain — {frame} `{}` ({seed_subtype}) {verb} (depth ≤ {}, {} atom(s)):\n",
+        seed.name,
+        result.max_depth,
+        result.nodes.len(),
+    );
+    for node in &result.nodes {
+        let indent = "  ".repeat(node.depth + 1);
+        let arrow = if node.depth == 0 { "•" } else { "→" };
+        let dyn_marker = if node.via_dyn_dispatch {
+            "  [dyn-dispatch]"
+        } else {
+            ""
+        };
+        let subtype = if node.subtype.is_empty() {
+            "code"
+        } else {
+            node.subtype.as_str()
+        };
+        let desc = first_sentence(&node.description, 160);
+        let desc_clause = if desc.is_empty() {
+            String::new()
+        } else {
+            format!(" — {desc}")
+        };
+        let cite = if node.chunk_id.is_empty() {
+            format!("  (cite: {})", node.atom_id)
+        } else {
+            format!("  (cite: {} @ {})", node.atom_id, node.chunk_id)
+        };
+        out.push_str(&format!(
+            "{indent}{arrow} `{}` [{subtype}]{dyn_marker}{desc_clause}{cite}\n",
+            node.name,
+        ));
+    }
+    if result.truncated {
+        out.push_str("  … (truncated at the depth/fanout bound)\n");
+    }
+    out
 }
 
 fn derive_article_slug(atlas_corpus_id: &str) -> String {
@@ -1030,6 +1383,69 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
     }
 }
 
+/// Resolve a CONCEPTUAL seed atom by MEANING — the seed source for a
+/// natural-language CallChain query ("how does it check whether a version
+/// satisfies a requirement"). Prefers the persistent ANN seed table (atom-ids
+/// directly, re-scored with the canonical [`cosine`] so the ranking matches the
+/// cosine path); falls back to exact cosine over the embedding bag and reads the
+/// matched [`AtlasEntry`]'s first-class `atom_id` when a corpus isn't backfilled
+/// — the same ANN-or-cosine adaptivity [`atlas_navigate_ann`] uses for its seeds,
+/// factored here so the CallChain (the `atlas-query` CLI and, later, chat) seeds
+/// identically rather than forking it. Returns `(atom_id, cosine_score)`; `None`
+/// when the query doesn't embed or nothing resolves.
+pub async fn seed_atom_by_meaning(
+    query_embedding: &[f32],
+    graph: &AtlasGraph,
+    fallback_ctx: Option<&AtlasContext>,
+) -> Option<(String, f32)> {
+    if query_embedding.is_empty() {
+        return None;
+    }
+    // Prefer the ANN seed table when the corpus has been backfilled.
+    if let Some(ann) = graph.ann_seed_table() {
+        match ann.nearest_with_vectors(query_embedding, 8).await {
+            Ok(hits) => {
+                let mut best: Option<(String, f32)> = None;
+                for (atom_id, vector) in hits {
+                    let s = cosine(query_embedding, &vector);
+                    if best.as_ref().map(|(_, b)| s > *b).unwrap_or(true) {
+                        best = Some((atom_id, s));
+                    }
+                }
+                if best.is_some() {
+                    return best;
+                }
+            }
+            Err(e) => tracing::warn!(
+                corpus = %graph.atlas_corpus_id,
+                "seed_atom_by_meaning: ANN nearest failed ({e}); falling back to cosine bag"
+            ),
+        }
+    }
+    // Fallback: exact cosine over the embedding bag, then read the matched
+    // entry's first-class atom-id (ATLAS_STORAGE_V2 Phase B — the `atom_id` is
+    // resident on the entry, so the old reverse-resolve join is gone).
+    let ctx = fallback_ctx?;
+    let mut best: Option<(&AtlasEntry, f32)> = None;
+    for entry in &ctx.entries {
+        if entry.embedding.is_empty() {
+            continue;
+        }
+        let s = cosine(query_embedding, &entry.embedding);
+        if best.as_ref().map(|(_, b)| s > *b).unwrap_or(true) {
+            best = Some((entry, s));
+        }
+    }
+    let (entry, score) = best?;
+    // Entries with no backing atom (the eval-only edge virtual-chunks) carry an
+    // empty `atom_id`; treat that as "nothing resolved", preserving the prior
+    // `resolve_atom_id_from_entry(...)?` bail-to-`None` semantics.
+    if entry.atom_id.is_empty() {
+        return None;
+    }
+    Some((entry.atom_id.clone(), score))
+}
+
 /// Build the query-time embedding bag from a corpus's persistent ANN seed table
 /// joined to its resident atoms — the ATLAS_STORAGE_V2 Phase B read path. Atom
 /// embeddings live ONLY in `atoms_ann.lance` (written once at enrich / backfill);
@@ -1416,5 +1832,121 @@ mod store_io_tests {
         // Remove the store → Err again (the no-fallback invariant).
         std::fs::remove_dir_all(atlas_dir.join(store::ATOMS_LANCE_DIRNAME)).unwrap();
         assert!(AtlasGraph::load_from_disk("c1", &atlas_dir).is_err());
+    }
+
+    /// Inc 5: `call_chain` BFSs only `ScipStructural` (call) edges, skips
+    /// `ContainmentStructural` parents, is cycle-safe + depth-bounded, marks
+    /// reciprocal trait-pair edges `[dyn-dispatch]`, and `resolve_symbol_seed`
+    /// snaps a `::`-qualified code symbol from natural language. Runs over the
+    /// v2 Lance backend — the only backend that carries edge provenance.
+    #[test]
+    fn call_chain_walks_scip_edges_over_the_v2_store() {
+        use corpus_engine::enrichment::atlas::store;
+        use corpus_engine::enrichment::pipeline::atlas::EntityType;
+
+        let code = |n: usize, name: &str, ty: &str| -> AtomEnvelope {
+            AtomEnvelope::Entity(Entity {
+                id: AtomId::entity(n),
+                canonical_name: name.into(),
+                aliases: vec![],
+                entity_type: EntityType::Other(ty.into()),
+                first_appearance: ChunkRef::new("m", Some("src".into())),
+                description: format!("does {name}"),
+                defining_quote: None,
+                salience: 0.0,
+                enrichment_depth: EnrichmentDepth::Structural,
+                affiliation: None,
+                role: None,
+                participants: vec![],
+                provenance: Default::default(),
+                attributes: serde_json::Map::new(),
+                concept_kind: None,
+            })
+        };
+        // module `m` contains alpha/beta/gamma/delta (containment); scip calls:
+        // alpha→beta→gamma→alpha (cycle) and alpha↔delta (reciprocal trait pair).
+        let atoms = vec![
+            code(1, "m", "module"),
+            code(2, "m::alpha", "function"),
+            code(3, "m::beta", "function"),
+            code(4, "m::gamma", "function"),
+            code(5, "m::delta", "function"),
+        ];
+        let edge = |n: usize, s: usize, t: usize, prov: EdgeProvenance| Edge {
+            id: EdgeId::new(n),
+            edge_type: EdgeType::Involves,
+            source: AtomId::entity(s),
+            target: AtomId::entity(t),
+            evidence: vec![],
+            trigger_event: None,
+            sub_question: None,
+            confidence: 1.0,
+            provenance: prov,
+        };
+        let edges = vec![
+            edge(1, 1, 2, EdgeProvenance::ContainmentStructural),
+            edge(2, 1, 3, EdgeProvenance::ContainmentStructural),
+            edge(3, 1, 4, EdgeProvenance::ContainmentStructural),
+            edge(4, 1, 5, EdgeProvenance::ContainmentStructural),
+            edge(5, 2, 3, EdgeProvenance::ScipStructural), // alpha → beta
+            edge(6, 3, 4, EdgeProvenance::ScipStructural), // beta → gamma
+            edge(7, 4, 2, EdgeProvenance::ScipStructural), // gamma → alpha (cycle)
+            edge(8, 2, 5, EdgeProvenance::ScipStructural), // alpha → delta
+            edge(9, 5, 2, EdgeProvenance::ScipStructural), // delta → alpha (reciprocal)
+        ];
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        store::write_store_blocking(dir, "code1", &atoms, &edges).unwrap();
+        let graph = AtlasGraph::load_lance_from_disk("code1", dir).unwrap();
+
+        let alpha = AtomId::entity(2).as_str().to_string();
+
+        // CALLEES from alpha, depth 3. Containment parent `m` is never followed.
+        let chain = graph.call_chain(&alpha, CallDirection::Callees, 3, 16);
+        assert!(chain.hit());
+        let names: Vec<&str> = chain.nodes.iter().map(|n| n.name.as_str()).collect();
+        // alpha(0) → beta,delta(1) → gamma(2); cycle back to alpha is cut.
+        assert_eq!(names, vec!["m::alpha", "m::beta", "m::delta", "m::gamma"]);
+        assert!(!names.contains(&"m"), "containment parent must not appear");
+        assert_eq!(chain.nodes[0].depth, 0);
+        assert_eq!(chain.nodes[1].depth, 1); // beta
+        assert_eq!(chain.nodes[3].depth, 2); // gamma
+
+        // delta is reached over a reciprocal scip pair → dyn-dispatch flagged;
+        // beta is a one-way call → not flagged.
+        let delta = chain.nodes.iter().find(|n| n.name == "m::delta").unwrap();
+        let beta = chain.nodes.iter().find(|n| n.name == "m::beta").unwrap();
+        assert!(delta.via_dyn_dispatch, "alpha↔delta reciprocal = dyn-dispatch");
+        assert!(!beta.via_dyn_dispatch);
+
+        // CALLERS of gamma, 1 hop: only beta (scip). The containment parent `m`
+        // is NOT a caller (wrong provenance).
+        let gamma = AtomId::entity(4).as_str().to_string();
+        let callers = graph.call_chain(&gamma, CallDirection::Callers, 1, 16);
+        let caller_names: Vec<&str> = callers.nodes.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(caller_names, vec!["m::gamma", "m::beta"]);
+
+        // Depth bound: depth=1 stops after one hop and flags truncation.
+        let shallow = graph.call_chain(&alpha, CallDirection::Callees, 1, 16);
+        assert_eq!(shallow.nodes.len(), 3); // alpha + beta + delta
+        assert!(shallow.truncated);
+
+        // Named seed resolution from natural language.
+        assert_eq!(
+            graph.resolve_symbol_seed("what does the beta function call").as_deref(),
+            Some(AtomId::entity(3).as_str()),
+            "last-segment token `beta` resolves to m::beta",
+        );
+        assert_eq!(
+            graph.resolve_symbol_seed("trace m::alpha please").as_deref(),
+            Some(alpha.as_str()),
+            "whole qualified-name mention resolves",
+        );
+        assert_eq!(
+            graph.resolve_symbol_seed("how does the parser work"),
+            None,
+            "no symbol mentioned → no named seed (conceptual path takes over)",
+        );
     }
 }

@@ -24,7 +24,11 @@
 //! No LLM calls. Output is byte-deterministic across runs against the
 //! same workspace state (modulo metadata timestamps in
 //! `schema_validation.json`): all collections are BTreeMap/BTreeSet,
-//! atom ids are assigned by sorted-key iteration.
+//! and every atom id is a `AtomId::entity_content_hash` of the atom's
+//! stable identity (crate/module canonical name, item qualified_name)
+//! — NOT a positional counter — so rebuilding the same workspace yields
+//! byte-identical ids, which is what lets the Inc-6 atoms-delta patch
+//! dedup by id and upsert per-symbol without orphaning prior atoms.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -34,8 +38,10 @@ use serde::Deserialize;
 
 use crate::engine::CorpusEngine;
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
+use crate::enrichment::atlas::atoms_delta::AtomsDelta;
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 use crate::enrichment::atlas::ingestion::AtlasData;
+use crate::enrichment::code_intel::SymbolEnrichment;
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use crate::error::{Error, Result};
 use crate::progress::{IngestProgress, ProgressCallback};
@@ -533,12 +539,11 @@ async fn aggregate_chunks(
 
 // ── Entity emission ─────────────────────────────────────────
 
-/// Maps logical entity keys to assigned `AtomId`s. The key formats
-/// are picked so they stay readable in the JSON output:
-///   `entity-c-<crate>`
-///   `entity-m-<crate>-<module>` (`module = "crate"` when empty)
-///   `entity-i-<crate>-<module>-<symbol>`
-///   `entity-x-<external-crate>`
+/// Maps each tier's logical key to its assigned `AtomId`. The ids
+/// themselves are content-hashes (`entity-<16 hex>`) of the atom's
+/// stable identity + entity_type + corpus_id (see [`emit_entities`]);
+/// this map is the local crate/module/item/external → id lookup the
+/// edge pass resolves source/target atoms through.
 #[derive(Debug, Default)]
 struct AtomIndex {
     crates: BTreeMap<String, AtomId>,
@@ -607,18 +612,64 @@ fn preview_text(text: &str, max_chars: usize) -> String {
     }
 }
 
+/// Load the corpus's code-intel summary cache (`code_intel_cache.json`,
+/// a `Vec<SymbolEnrichment>` written by the code-intel enrichment pass)
+/// keyed by `meta.qualified_name` — the SAME SCIP descriptor that
+/// `attach_qualified_names` stamps onto items (both read the symbols
+/// table's `qualified_name` column), so a summary joins to its item by
+/// exact qualified-name match. Best-effort + graceful: a missing or
+/// unparseable cache yields an empty map and the walker falls back to
+/// the rustdoc first-paragraph (no error). Mirrors `code_intel::pass`'s
+/// loader but re-keys by qualified_name instead of body_hash.
+fn load_code_intel_summaries(
+    index_dir: &Path,
+    canonical_corpus_id: &str,
+) -> HashMap<String, SymbolEnrichment> {
+    let path = index_dir
+        .join(canonical_corpus_id)
+        .join("code_intel_cache.json");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => serde_json::from_str::<Vec<SymbolEnrichment>>(&s)
+            .map(|v| {
+                v.into_iter()
+                    .map(|e| (e.meta.qualified_name.clone(), e))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        Err(_) => HashMap::new(),
+    }
+}
+
 /// Produce all entity atoms (crate, module, item, external) and the
-/// AtomIndex used by edge emission. AtomIds are assigned in a stable
-/// order: crates first (sorted by name), then modules (sorted), then
-/// items, then externals.
+/// AtomIndex used by edge emission.
+///
+/// Every atom id is `AtomId::entity_content_hash(stable_name,
+/// entity_type, canonical_corpus_id)` — a content hash, NOT a positional
+/// counter — so rebuilding the same workspace yields byte-identical ids
+/// (Inc 1, the patchability invariant). `stable_name` per tier:
+///   - crate  → crate name
+///   - module → `module_canonical(crate, module_path)`
+///   - item   → `qualified_name` when SCIP carried it, else `item_canonical`
+///   - external → the external crate name
+///
+/// `first_appearance.chunk_id` is set to the STABLE per-symbol doc-id
+/// (what `doc_to_atoms::extract_doc_id` returns and Inc-6 upserts by),
+/// NOT the numeric lance chunk id — the latter is preserved in
+/// `attributes["chunk_id"]` so source retrieval still works.
+///
+/// Item descriptions prefer the code-intel plain-English `summary`
+/// (joined by qualified_name through `code_intel`) and fall back to the
+/// rustdoc first paragraph (Inc 2). Iteration stays on the sorted
+/// BTreeMaps so atom *ordering* in the file is also deterministic.
 fn emit_entities(
     workspace: &WorkspaceMap,
     groups: &ChunkGroups,
     referenced_externals: &BTreeSet<String>,
+    canonical_corpus_id: &str,
+    code_intel: &HashMap<String, SymbolEnrichment>,
 ) -> (Vec<Entity>, AtomIndex) {
     let mut entities: Vec<Entity> = Vec::new();
     let mut idx = AtomIndex::default();
-    let mut next: usize = 1;
 
     // Crates.
     for (name, krate) in &workspace.crates {
@@ -626,7 +677,7 @@ fn emit_entities(
         let (chunk_id, preview) = match group {
             Some(g) => (g.first_chunk_id, g.first_preview.clone()),
             // Crate has no chunks (empty crate / not yet indexed).
-            // Pin first_appearance to chunk 0; description still usable.
+            // Description still usable; the doc-anchor is the crate name.
             None => (0, String::new()),
         };
         let description = krate
@@ -636,9 +687,17 @@ fn emit_entities(
             .filter(|s| !s.is_empty())
             .or_else(|| krate.cargo_description.clone())
             .unwrap_or_default();
-        let atom_id = AtomId::entity(next);
-        next += 1;
+        let entity_type = entity_type_for_crate();
+        let atom_id = AtomId::entity_content_hash(name, &entity_type, canonical_corpus_id);
         idx.crates.insert(name.clone(), atom_id.clone());
+        // Preserve source retrieval: first_appearance now carries the stable
+        // doc-anchor (the crate name), so stash the numeric lance chunk id of
+        // the crate's representative chunk here — same treatment as items.
+        let mut attributes = serde_json::Map::new();
+        attributes.insert(
+            "chunk_id".to_string(),
+            serde_json::Value::String(chunk_id.to_string()),
+        );
         entities.push(Entity {
             id: atom_id,
             canonical_name: name.replace('-', "_"),
@@ -647,8 +706,9 @@ fn emit_entities(
             } else {
                 Vec::new()
             },
-            entity_type: entity_type_for_crate(),
-            first_appearance: ChunkRef::new(chunk_id.to_string(), Some(preview)),
+            entity_type,
+            // Stable doc-anchor: the crate name (NOT the numeric chunk id).
+            first_appearance: ChunkRef::new(name.clone(), Some(preview)),
             description,
             defining_quote: None,
             salience: 0.5, // overwritten by compute_salience
@@ -657,7 +717,7 @@ fn emit_entities(
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
-            attributes: serde_json::Map::new(),
+            attributes,
             concept_kind: None,
         });
     }
@@ -670,19 +730,25 @@ fn emit_entities(
             .as_deref()
             .map(|s| first_doc_paragraph(s, 280))
             .unwrap_or_default();
-        let atom_id = AtomId::entity(next);
-        next += 1;
+        let entity_type = entity_type_for_module();
+        let atom_id = AtomId::entity_content_hash(&canonical, &entity_type, canonical_corpus_id);
         idx.modules
             .insert((crate_name.clone(), module_path.clone()), atom_id.clone());
+        // Preserve source retrieval: stash the module's representative lance
+        // chunk id (first_appearance now holds the stable module_canonical
+        // doc-anchor) — same treatment as items + crates.
+        let mut attributes = serde_json::Map::new();
+        attributes.insert(
+            "chunk_id".to_string(),
+            serde_json::Value::String(group.first_chunk_id.to_string()),
+        );
         entities.push(Entity {
             id: atom_id,
-            canonical_name: canonical,
+            canonical_name: canonical.clone(),
             aliases: Vec::new(),
-            entity_type: entity_type_for_module(),
-            first_appearance: ChunkRef::new(
-                group.first_chunk_id.to_string(),
-                Some(group.first_preview.clone()),
-            ),
+            entity_type,
+            // Stable doc-anchor: module_canonical (NOT the numeric chunk id).
+            first_appearance: ChunkRef::new(canonical, Some(group.first_preview.clone())),
             description,
             defining_quote: None,
             salience: 0.5,
@@ -691,7 +757,7 @@ fn emit_entities(
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
-            attributes: serde_json::Map::new(),
+            attributes,
             concept_kind: None,
         });
     }
@@ -699,23 +765,76 @@ fn emit_entities(
     // Items.
     for (key, item) in &groups.by_item {
         let canonical = item_canonical(&key.crate_name, &key.module_path, &key.symbol_name);
-        let description = item
-            .doc_comment
+        let entity_type = entity_type_for_item(&key.symbol_kind);
+
+        // Stable identity for the content-hash id: the SCIP qualified_name
+        // (survives line shifts; the join key the code-intel cache + the
+        // Inc-6 patch key by), falling back to the module-qualified
+        // canonical name when SCIP didn't carry this item.
+        let id_name = item
+            .qualified_name
+            .clone()
+            .unwrap_or_else(|| canonical.clone());
+        // Stable per-symbol doc-id for first_appearance.chunk_id — exactly
+        // what `extract_doc_id(Entity)` returns and the Inc-6 patch upserts
+        // by: qualified_name, or `<file>#<symbol>` when SCIP is silent.
+        let doc_anchor = item
+            .qualified_name
+            .clone()
+            .unwrap_or_else(|| format!("{}#{}", item.file_path, key.symbol_name));
+
+        // Inc 2: prefer the code-intel plain-English summary (joined by
+        // qualified_name) over the rustdoc first paragraph.
+        let summary = item
+            .qualified_name
             .as_deref()
-            .map(|s| first_doc_paragraph(s, 280))
-            .unwrap_or_default();
-        let atom_id = AtomId::entity(next);
-        next += 1;
+            .and_then(|q| code_intel.get(q));
+        let description = match summary {
+            Some(e) => e.summary.clone(),
+            None => item
+                .doc_comment
+                .as_deref()
+                .map(|s| first_doc_paragraph(s, 280))
+                .unwrap_or_default(),
+        };
+
+        let mut attributes = serde_json::Map::new();
+        // Preserve source retrieval: the numeric lance chunk id no longer
+        // lives in first_appearance (now the stable doc-id), so stash it
+        // here for any reader that needs to fetch the symbol's raw chunk.
+        attributes.insert(
+            "chunk_id".to_string(),
+            serde_json::Value::String(item.chunk_id.to_string()),
+        );
+        if let Some(e) = summary {
+            attributes.insert(
+                "asks".to_string(),
+                serde_json::Value::Array(
+                    e.asks
+                        .iter()
+                        .map(|a| serde_json::Value::String(a.clone()))
+                        .collect(),
+                ),
+            );
+            attributes.insert(
+                "summary_body_hash".to_string(),
+                serde_json::Value::String(e.body_hash.clone()),
+            );
+            attributes.insert(
+                "source".to_string(),
+                serde_json::Value::String("code_intel_summary".to_string()),
+            );
+        }
+
+        let atom_id = AtomId::entity_content_hash(&id_name, &entity_type, canonical_corpus_id);
         idx.items.insert(key.clone(), atom_id.clone());
         entities.push(Entity {
             id: atom_id,
             canonical_name: canonical,
             aliases: vec![key.symbol_name.clone()],
-            entity_type: entity_type_for_item(&key.symbol_kind),
-            first_appearance: ChunkRef::new(
-                item.chunk_id.to_string(),
-                Some(item.content_preview.clone()),
-            ),
+            entity_type,
+            first_appearance: ChunkRef::new(doc_anchor, Some(item.content_preview.clone()))
+                .with_source_doc(Some(item.file_path.clone())),
             description,
             defining_quote: None,
             salience: 0.5,
@@ -724,25 +843,28 @@ fn emit_entities(
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
-            attributes: serde_json::Map::new(),
+            attributes,
             concept_kind: None,
         });
     }
 
     // Externals (placeholders). Match the Wikipedia off-corpus pattern:
-    // empty description, salience 0, enrichment_depth = Structural.
+    // empty description, salience 0, enrichment_depth = Structural. The id
+    // is content-hashed on the external name so it too is stable across
+    // rebuilds; first_appearance stays a synthetic "0" (externals are
+    // off-corpus — they have no source doc to anchor to).
     for ext_name in referenced_externals {
         if workspace.crates.contains_key(ext_name) {
             continue; // It's actually a workspace member.
         }
-        let atom_id = AtomId::entity(next);
-        next += 1;
+        let entity_type = entity_type_for_external_crate();
+        let atom_id = AtomId::entity_content_hash(ext_name, &entity_type, canonical_corpus_id);
         idx.externals.insert(ext_name.clone(), atom_id.clone());
         entities.push(Entity {
             id: atom_id,
             canonical_name: ext_name.clone(),
             aliases: Vec::new(),
-            entity_type: entity_type_for_external_crate(),
+            entity_type,
             first_appearance: ChunkRef::new("0".to_string(), None),
             description: String::new(),
             defining_quote: None,
@@ -833,14 +955,18 @@ async fn emit_edges(
     // that successfully picked up a qualified_name during the
     // SCIP-attach pass. Items that didn't (SCIP doesn't index them
     // — macro-generated, uncovered language) get no SCIP edges.
-    let mut qualified_to_atom: HashMap<String, AtomId> = HashMap::new();
-    for (key, atom) in &atom_index.items {
-        if let Some(item) = groups.by_item.get(key) {
-            if let Some(q) = &item.qualified_name {
-                qualified_to_atom.insert(q.clone(), atom.clone());
-            }
-        }
-    }
+    let qualified_to_atom = build_qualified_to_atom(atom_index, groups);
+    // Inc 3 fanout bound. A single function references stdlib + helpers
+    // dozens of times; with the function tier enabled (~22k functions ×
+    // their refs) an uncapped SCIP edge pass explodes the graph. Two
+    // deterministic guards:
+    //   1. Cap emitted callee edges per source symbol at MAX_CALLEE_FANOUT.
+    //      `find_callees_qualified` returns rows ORDER BY (file_path, line),
+    //      so "the first N" is stable across rebuilds.
+    //   2. For function-tier sources, drop edges whose target is an EXTERNAL
+    //      placeholder — keep first-party fn→fn edges; the Crate→ExternalCrate
+    //      Cargo edges below still record the dependency structurally.
+    // `MAX_CALLEE_FANOUT` is module-level (shared with the Inc-6 scoped path).
     let mut scip_seen: BTreeSet<(AtomId, AtomId)> = BTreeSet::new();
     if let Some(graph) = scip {
         for (key, item) in &groups.by_item {
@@ -850,32 +976,35 @@ async fn emit_edges(
             let Some(caller_q) = &item.qualified_name else {
                 continue; // not in SCIP, no callees to query
             };
+            let source_is_function =
+                key.symbol_kind == "function" || key.symbol_kind == "method";
             let callees = match graph.find_callees_qualified(caller_q).await {
                 Ok(v) => v,
                 Err(_) => continue,
             };
+            let mut emitted_for_source = 0usize;
             for callee in callees {
-                let target_atom = if !callee.callee_qualified.is_empty() {
-                    // Qualified-name match takes precedence — exact
-                    // and unambiguous.
-                    if let Some(a) = qualified_to_atom.get(&callee.callee_qualified) {
-                        a.clone()
-                    } else if let Some(ext_atom) =
-                        scip_descriptor_to_external(atom_index, workspace, &callee.callee_qualified)
-                    {
-                        // Callee resolves to an external crate
-                        // (stdlib, third-party). Wire to the
-                        // external placeholder.
-                        ext_atom
-                    } else {
-                        continue;
-                    }
-                } else {
+                if emitted_for_source >= MAX_CALLEE_FANOUT {
+                    break;
+                }
+                if callee.callee_qualified.is_empty() {
                     // Legacy/v2 ref with no qualified — skip rather
                     // than fall back to bare-name (avoids the
                     // disambiguation problem we built v3 to fix).
                     continue;
+                }
+                let Some((target_atom, target_is_external)) = resolve_callee_target(
+                    &qualified_to_atom,
+                    atom_index,
+                    workspace,
+                    &callee.callee_qualified,
+                ) else {
+                    continue;
                 };
+                // Function tier: skip fn→external edges (guard #2).
+                if source_is_function && target_is_external {
+                    continue;
+                }
                 let pair = (source_atom.clone(), target_atom.clone());
                 if !scip_seen.insert(pair) {
                     continue;
@@ -893,6 +1022,7 @@ async fn emit_edges(
                 });
                 next_idx += 1;
                 stats.scip += 1;
+                emitted_for_source += 1;
             }
         }
     }
@@ -930,6 +1060,58 @@ async fn emit_edges(
     }
 
     Ok((edges, stats))
+}
+
+/// Reverse index `qualified_name -> AtomId` over items that picked up a
+/// qualified_name during the SCIP-attach pass. The exact + unambiguous
+/// resolution key for SCIP cross-reference edges (two `Error`s in different
+/// modules have different qualified_names → different atoms). Shared by the
+/// full-build [`emit_edges`] and the Inc-6 scoped delta builder
+/// [`extract_atoms_for_symbols`].
+fn build_qualified_to_atom(
+    atom_index: &AtomIndex,
+    groups: &ChunkGroups,
+) -> HashMap<String, AtomId> {
+    let mut qualified_to_atom: HashMap<String, AtomId> = HashMap::new();
+    for (key, atom) in &atom_index.items {
+        if let Some(item) = groups.by_item.get(key) {
+            if let Some(q) = &item.qualified_name {
+                qualified_to_atom.insert(q.clone(), atom.clone());
+            }
+        }
+    }
+    qualified_to_atom
+}
+
+/// Resolve a SCIP callee descriptor to its target atom + an `is_external`
+/// flag. First-party items win by exact qualified-name match; otherwise the
+/// descriptor's package field routes to an external-crate placeholder. `None`
+/// when neither resolves (skip the edge). Shared by [`emit_edges`] and the
+/// Inc-6 scoped delta builder so a patched function's edges resolve targets
+/// byte-identically to a full rebuild.
+fn resolve_callee_target(
+    qualified_to_atom: &HashMap<String, AtomId>,
+    atom_index: &AtomIndex,
+    workspace: &WorkspaceMap,
+    callee_qualified: &str,
+) -> Option<(AtomId, bool)> {
+    if let Some(a) = qualified_to_atom.get(callee_qualified) {
+        Some((a.clone(), false))
+    } else {
+        scip_descriptor_to_external(atom_index, workspace, callee_qualified).map(|a| (a, true))
+    }
+}
+
+/// Deterministic, collision-free edge id for an Inc-6 delta-re-emitted edge.
+/// Derived from `(tag, source, target)` — the endpoints are already
+/// content-hash atom ids, so the pair is unique per edge and STABLE across
+/// re-patches of the same symbol (re-emitting the same edge yields the same
+/// id → `apply_atom_delta` replaces in place rather than duplicating). The
+/// `tag` prefix (`cont` / `scip`) keeps these out of the full build's
+/// sequential `edge-NNNNN` namespace, so a delta never accidentally
+/// overwrites an unrelated full-build edge.
+fn stable_edge_id(tag: &str, source: &AtomId, target: &AtomId) -> EdgeId {
+    EdgeId::from_raw(format!("{tag}:{}>{}", source.as_str(), target.as_str()))
 }
 
 /// Bulk-attach `qualified_name` from SCIP to every item in
@@ -1095,12 +1277,37 @@ fn entity_kind_str(t: &EntityType) -> &'static str {
 
 // ── Public entry ────────────────────────────────────────────
 
-/// Run the code-corpus structural pass end-to-end.
-pub async fn extract_code_corpus(
-    corpus: Arc<CorpusEngine>,
+/// The deterministic, no-LLM result of phases 1-5 of the code-walk: the
+/// workspace map, the per-tier chunk groups (with SCIP qualified_names
+/// attached), the full crate/module/item/external [`AtomIndex`], every
+/// entity atom (pre-salience), the open SCIP graph, and the canonical corpus
+/// id. Shared by the full build ([`extract_code_corpus`]) and the Inc-6
+/// scoped delta builder ([`extract_atoms_for_symbols`]) so both derive
+/// byte-identical atom ids + edge targets — the whole point of the
+/// content-hash id scheme is that a patch can rebuild a single symbol's atom
+/// and have it line up against the live atlas.
+struct PreparedCodeAtlas {
+    workspace: WorkspaceMap,
+    groups: ChunkGroups,
+    atom_index: AtomIndex,
+    /// Entity atoms in deterministic (BTreeMap) order, BEFORE
+    /// `compute_salience` overwrites the per-tier in-degree salience. The
+    /// delta path keeps the 0.5 default (salience is a GLOBAL in-degree
+    /// statistic — see the module note + Inc-6 limitation: a per-symbol
+    /// patch does not recompute it).
+    entities: Vec<Entity>,
+    scip: Option<ScipGraph>,
+}
+
+/// Run code-walk phases 1-5 (read meta → discover workspace → aggregate
+/// chunks → open SCIP + attach qualified_names → collect externals → emit
+/// entities). Pure data derivation, no LLM, no edges, no salience. Both the
+/// full build and the scoped delta start here so the atom universe + ids
+/// match exactly.
+async fn prepare_code_atlas(
+    corpus: &CorpusEngine,
     cfg: &CodeWalkConfig,
-    progress: Arc<ProgressCallback>,
-) -> Result<AtlasData> {
+) -> Result<PreparedCodeAtlas> {
     // Phase 1: read the corpus's source root + canonical corpus_id
     // from `_corpus_meta.json`, then walk the source for Cargo.toml
     // manifests. The canonical corpus_id may differ from the
@@ -1122,10 +1329,7 @@ pub async fn extract_code_corpus(
     );
 
     // Phase 2: aggregate chunks into crate / module / item groups.
-    let mut groups = aggregate_chunks(&corpus, &workspace, cfg).await?;
-    (progress)(IngestProgress::Extracting {
-        documents_processed: groups.chunks_with_metadata as u64,
-    });
+    let mut groups = aggregate_chunks(corpus, &workspace, cfg).await?;
     tracing::info!(
         crates = groups.by_crate.len(),
         modules = groups.by_module.len(),
@@ -1210,12 +1414,53 @@ pub async fn extract_code_corpus(
         collect_referenced_externals(&workspace)
     };
 
-    // Phase 5: emit entities.
-    let (entities, atom_index) = emit_entities(&workspace, &groups, &referenced_externals);
+    // Phase 5: emit entities. Load the code-intel summary cache
+    // (best-effort) so item descriptions prefer the plain-English summary
+    // over rustdoc (Inc 2); thread the canonical corpus id so every atom
+    // id is content-hashed and stable across rebuilds (Inc 1).
+    let code_intel = load_code_intel_summaries(corpus.index_dir(), &canonical_corpus_id);
+    tracing::info!(
+        summaries = code_intel.len(),
+        "code_walk: code-intel summaries loaded"
+    );
+    let (entities, atom_index) = emit_entities(
+        &workspace,
+        &groups,
+        &referenced_externals,
+        &canonical_corpus_id,
+        &code_intel,
+    );
     tracing::info!(
         total_entities = entities.len(),
         "code_walk: entities emitted"
     );
+
+    Ok(PreparedCodeAtlas {
+        workspace,
+        groups,
+        atom_index,
+        entities,
+        scip,
+    })
+}
+
+/// Run the code-corpus structural pass end-to-end.
+pub async fn extract_code_corpus(
+    corpus: Arc<CorpusEngine>,
+    cfg: &CodeWalkConfig,
+    progress: Arc<ProgressCallback>,
+) -> Result<AtlasData> {
+    // Phases 1-5: the shared deterministic derivation.
+    let PreparedCodeAtlas {
+        workspace,
+        groups,
+        atom_index,
+        entities,
+        scip,
+    } = prepare_code_atlas(&corpus, cfg).await?;
+    (progress)(IngestProgress::Extracting {
+        documents_processed: groups.chunks_with_metadata as u64,
+    });
 
     // Phase 6: emit edges.
     let (edges, edge_stats) = emit_edges(&workspace, &groups, &atom_index, scip.as_ref()).await?;
@@ -1241,9 +1486,18 @@ pub async fn extract_code_corpus(
     let atoms_file = AtomsFile::new(atom_envelopes);
     let edges_file = EdgesFile::new(edges);
 
+    // Record the source-corpus linkage + the visibility config in
+    // schema_validation so the Inc-6 `enrich atlas-patch-code` verb can
+    // resolve the source code corpus from a freshly-built atlas and
+    // reproduce the same atom universe (without it the verb falls back to
+    // the `<source>-self-atlas` naming convention). Forward-looking: atlases
+    // built before this field fall back to the convention.
     let schema_validation = serde_json::json!({
         "strategy": "structure_first",
         "branch": "code",
+        "source_corpus_id": cfg.source_corpus_id,
+        "include_functions": cfg.include_functions,
+        "include_private": cfg.include_private,
         "stats": {
             "crates": atom_index.crates.len(),
             "modules": atom_index.modules.len(),
@@ -1268,6 +1522,247 @@ pub async fn extract_code_corpus(
         schema_validation,
         dominant_depth: EnrichmentDepth::Structural,
     })
+}
+
+// ── Inc 6: first-class patchability ──────────────────────────
+//
+// `extract_atoms_for_symbols` is the code analogue of
+// `structure_first::extract_atoms_for_articles` (the wiki per-doc delta
+// template). Given the set of changed + disappeared qualified-names (the
+// change-set computed by diffing the source corpus's prior vs refreshed
+// `code_intel_cache.json`), it re-derives ONLY those symbols' atoms + edges
+// and returns an `AtomsDelta` ready for `apply_atom_delta`.
+//
+// The win is incremental: it runs the cheap, deterministic phases 1-5
+// (chunk metadata aggregation + SCIP qualified_name attach + content-hash
+// entity emission — no LLM) so the patched atom's id, kind, description, and
+// edge targets are byte-identical to a full rebuild, but it scopes the
+// expensive per-symbol SCIP callee queries to the CHANGED symbols only
+// (a full build queries every one of ~22k functions). The atom id is stable
+// across body edits (qualified_name + kind + corpus_id don't change when a
+// body changes), so `apply_atom_delta` replaces the changed symbol's atom
+// in place rather than orphaning it.
+//
+// Re-emitted per changed item: its containment `Module → Item` edge + its
+// outgoing `ScipStructural` callee edges (bounded fanout, same resolution as
+// `emit_edges`). Both are dropped by `apply_atom_delta` when the item's atom
+// is dropped for the upsert, so they must be re-added to keep the item's
+// downward neighborhood intact.
+//
+// KNOWN LIMITS (see report): (1) salience is a global in-degree statistic and
+// is NOT recomputed on a patch — the patched atom keeps the 0.5 default.
+// (2) INCOMING `ScipStructural` edges (unchanged-caller → changed-symbol) are
+// dropped with the upsert and not re-added — "what calls X" can under-report
+// X's callers until the next full rebuild. The outgoing direction (the
+// primary "how does this work" lens) stays fresh.
+
+/// Re-derive atoms + edges for a scoped set of changed/removed symbols and
+/// return an [`AtomsDelta`]. `changed_qnames` / `removed_qnames` are SCIP
+/// qualified-names == the item atoms' stable doc-anchors == `apply_atom_delta`
+/// doc-ids. Symbols not present in the live atlas's item universe (e.g.
+/// excluded by `include_functions`) are skipped. Empty change-set → empty
+/// (no-op) delta.
+pub async fn extract_atoms_for_symbols(
+    corpus: Arc<CorpusEngine>,
+    cfg: &CodeWalkConfig,
+    changed_qnames: &BTreeSet<String>,
+    removed_qnames: &BTreeSet<String>,
+) -> Result<AtomsDelta> {
+    if changed_qnames.is_empty() && removed_qnames.is_empty() {
+        return Ok(AtomsDelta::default());
+    }
+
+    let PreparedCodeAtlas {
+        workspace,
+        groups,
+        atom_index,
+        entities,
+        scip,
+    } = prepare_code_atlas(&corpus, cfg).await?;
+
+    // Entity by stable doc-anchor (== qualified_name for SCIP-resolved
+    // items). Crate/module/external doc-anchors are their canonical names,
+    // which never collide with a SCIP descriptor, so looking a changed
+    // qualified-name up here only ever resolves to an item entity.
+    let mut entity_by_anchor: HashMap<&str, &Entity> = HashMap::with_capacity(entities.len());
+    for e in &entities {
+        entity_by_anchor.insert(e.first_appearance.chunk_id.as_str(), e);
+    }
+
+    // qualified_name → ItemKey, for resolving the changed symbol's module
+    // (containment) + driving its SCIP callee query.
+    let mut qname_to_key: HashMap<&str, &ItemKey> = HashMap::new();
+    for (key, item) in &groups.by_item {
+        if let Some(q) = &item.qualified_name {
+            qname_to_key.insert(q.as_str(), key);
+        }
+    }
+
+    let qualified_to_atom = build_qualified_to_atom(&atom_index, &groups);
+
+    let mut upserted_docs: Vec<(String, Vec<AtomEnvelope>)> = Vec::new();
+    let mut added_edges: Vec<Edge> = Vec::new();
+    let mut edge_seen: BTreeSet<EdgeId> = BTreeSet::new();
+    let mut matched = 0usize;
+    let mut unmatched = 0usize;
+
+    for qname in changed_qnames {
+        let Some(ent) = entity_by_anchor.get(qname.as_str()) else {
+            // The changed symbol isn't an atom in this atlas (e.g. a private
+            // fn with include_private off, or a test fn). Nothing to upsert.
+            unmatched += 1;
+            continue;
+        };
+        matched += 1;
+        upserted_docs.push((qname.clone(), vec![AtomEnvelope::Entity((*ent).clone())]));
+
+        let Some(key) = qname_to_key.get(qname.as_str()).copied() else {
+            continue;
+        };
+        let Some(item_atom) = atom_index.items.get(key) else {
+            continue;
+        };
+
+        // Containment Module → Item (dropped with the item on upsert; re-add).
+        if let Some(module_atom) = atom_index
+            .modules
+            .get(&(key.crate_name.clone(), key.module_path.clone()))
+        {
+            let id = stable_edge_id("cont", module_atom, item_atom);
+            if edge_seen.insert(id.clone()) {
+                added_edges.push(Edge {
+                    id,
+                    edge_type: EdgeType::Involves,
+                    source: module_atom.clone(),
+                    target: item_atom.clone(),
+                    evidence: Vec::new(),
+                    trigger_event: None,
+                    sub_question: None,
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::ContainmentStructural,
+                });
+            }
+        }
+
+        // Outgoing ScipStructural callee edges — same resolution + fanout
+        // bound + function→external guard as `emit_edges`, scoped to this
+        // one symbol.
+        let source_is_function = key.symbol_kind == "function" || key.symbol_kind == "method";
+        if let Some(graph) = scip.as_ref() {
+            let callees = match graph.find_callees_qualified(qname).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(qname = %qname, error = %e, "atlas_patch_code: find_callees_qualified failed; skipping outgoing edges");
+                    Vec::new()
+                }
+            };
+            let mut emitted = 0usize;
+            for callee in callees {
+                if emitted >= MAX_CALLEE_FANOUT {
+                    break;
+                }
+                if callee.callee_qualified.is_empty() {
+                    continue;
+                }
+                let Some((target_atom, target_is_external)) = resolve_callee_target(
+                    &qualified_to_atom,
+                    &atom_index,
+                    &workspace,
+                    &callee.callee_qualified,
+                ) else {
+                    continue;
+                };
+                if source_is_function && target_is_external {
+                    continue;
+                }
+                let id = stable_edge_id("scip", item_atom, &target_atom);
+                if !edge_seen.insert(id.clone()) {
+                    continue;
+                }
+                added_edges.push(Edge {
+                    id,
+                    edge_type: EdgeType::Involves,
+                    source: item_atom.clone(),
+                    target: target_atom,
+                    evidence: Vec::new(),
+                    trigger_event: None,
+                    sub_question: None,
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::ScipStructural,
+                });
+                emitted += 1;
+            }
+        }
+    }
+
+    tracing::info!(
+        changed = changed_qnames.len(),
+        removed = removed_qnames.len(),
+        matched_atoms = matched,
+        unmatched_symbols = unmatched,
+        upserted_docs = upserted_docs.len(),
+        added_edges = added_edges.len(),
+        "atlas_patch_code: scoped delta built"
+    );
+
+    Ok(AtomsDelta {
+        added: Vec::new(),
+        removed_doc_ids: removed_qnames.iter().cloned().collect(),
+        upserted_docs,
+        added_edges,
+    })
+}
+
+/// Inc 3 fanout bound, shared by the full-build [`emit_edges`] and the Inc-6
+/// scoped [`extract_atoms_for_symbols`]: cap emitted callee edges per source
+/// symbol so a hot function referencing stdlib + helpers dozens of times
+/// can't explode the graph. `find_callees_qualified` returns rows ORDER BY
+/// (file_path, line), so "the first N" is stable across rebuilds.
+const MAX_CALLEE_FANOUT: usize = 12;
+
+/// Recover the `(include_functions, include_private)` config the atlas was
+/// built with, so an Inc-6 patch reproduces the SAME item universe (a patch
+/// that aggregated with `include_functions = true` against an atlas built
+/// without functions would wrongly inject brand-new function atoms). Reads
+/// the fields [`extract_code_corpus`] records in `schema_validation.json`;
+/// for a pre-Inc-6 atlas that lacks them, INFERS `include_functions` from the
+/// presence of function/method item atoms (private items are
+/// indistinguishable in the atom shape, so it assumes the build default,
+/// `false`). The verb's `--include-functions` / `--include-private` flags
+/// override this.
+pub fn read_code_walk_visibility(atlas_dir: &Path) -> (bool, bool) {
+    if let Ok(s) = std::fs::read_to_string(atlas_dir.join("schema_validation.json")) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+            let inc_fn = v.get("include_functions").and_then(|b| b.as_bool());
+            let inc_priv = v.get("include_private").and_then(|b| b.as_bool());
+            if let (Some(f), Some(p)) = (inc_fn, inc_priv) {
+                return (f, p);
+            }
+        }
+    }
+    let has_functions = crate::enrichment::atlas::read_atlas_atoms(atlas_dir)
+        .map(|af| {
+            af.atoms.iter().any(|a| {
+                matches!(a, AtomEnvelope::Entity(e)
+                    if matches!(&e.entity_type, EntityType::Other(k) if k == "function" || k == "method"))
+            })
+        })
+        .unwrap_or(true);
+    (has_functions, false)
+}
+
+/// Read the original source tree root from a code corpus's
+/// `_corpus_meta.json` `source_path`. Shared with the watcher's code-atlas
+/// delta (which re-enumerates current symbol bodies to detect changes).
+pub fn read_corpus_source_root(corpus_dir: &Path) -> Result<PathBuf> {
+    let raw = std::fs::read_to_string(corpus_dir.join("_corpus_meta.json"))
+        .map_err(|e| Error::Database(format!("read _corpus_meta.json: {e}")))?;
+    let v: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| Error::Serialization(format!("parse _corpus_meta.json: {e}")))?;
+    v.get("source_path")
+        .and_then(|s| s.as_str())
+        .map(PathBuf::from)
+        .ok_or_else(|| Error::InvalidInput("corpus has no `source_path` in _corpus_meta.json".into()))
 }
 
 /// Build the set of external-crate placeholder names. The SCIP

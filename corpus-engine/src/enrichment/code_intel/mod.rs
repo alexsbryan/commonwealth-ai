@@ -444,6 +444,95 @@ pub async fn enrich_symbols_incremental(
     (out, report)
 }
 
+// ── Inc 6: change-set between two cache snapshots ────────────
+
+/// The set of symbols whose code-intel summary changed between two
+/// `code_intel_cache.json` snapshots, keyed by their atlas **doc-anchor**
+/// (== SCIP qualified_name, or `<file>#<name>` when SCIP is silent — the
+/// exact anchor `atlas::code_walk::emit_entities` stamps on an item atom's
+/// `first_appearance.chunk_id`). The Inc-6 patch upserts `changed` and drops
+/// `removed`; both sets are doc-ids `apply_atom_delta` understands.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CodeIntelChangeSet {
+    /// New or body-changed symbols → upsert their atom.
+    pub changed: std::collections::BTreeSet<String>,
+    /// Symbols present in `prior` but gone from `refreshed` → drop their atom.
+    pub removed: std::collections::BTreeSet<String>,
+}
+
+impl CodeIntelChangeSet {
+    pub fn is_empty(&self) -> bool {
+        self.changed.is_empty() && self.removed.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.changed.len() + self.removed.len()
+    }
+}
+
+/// The atlas doc-anchor for a code symbol: the SCIP qualified_name when
+/// present, else `<file>#<name>`. Mirrors `atlas::code_walk::emit_entities`'
+/// `doc_anchor` exactly, so a change-set keyed by these anchors lines up with
+/// the live atlas's item doc-ids (and `code_intel::store::symbol_source_key`,
+/// which is this string namespaced under `codeintel:`).
+pub fn symbol_doc_anchor(meta: &SymbolMeta) -> String {
+    if meta.qualified_name.is_empty() {
+        format!("{}#{}", meta.file_path, meta.name)
+    } else {
+        meta.qualified_name.clone()
+    }
+}
+
+/// Diff two `code_intel_cache.json` snapshots by `(symbol_source_key →
+/// body_hash)` (the §3.4 patchability cost model): a symbol whose body_hash
+/// changed — or that is new — is `changed`; one that vanished is `removed`.
+/// Returns atlas doc-anchors ready for `code_walk::extract_atoms_for_symbols`
+/// + `apply_atom_delta`. Keyed on the stable per-symbol source key (survives
+/// body edits) so a body change is a hash-mismatch on the SAME key, not a
+/// remove+add.
+///
+/// Per key we compare the SET of body_hashes, not a single value — a cache
+/// written before the stale-eviction fix can carry more than one entry for a
+/// symbol (old + new body_hash), in nondeterministic Vec order. Comparing
+/// sets makes the diff order-insensitive and idempotent: identical snapshots
+/// (the no-op re-run) always diff to nothing, regardless of duplicates.
+pub fn diff_code_intel_caches(
+    prior: &[SymbolEnrichment],
+    refreshed: &[SymbolEnrichment],
+) -> CodeIntelChangeSet {
+    use std::collections::{BTreeSet, HashSet};
+    // symbol_source_key → (doc_anchor, set of body_hashes seen for it).
+    type Index = HashMap<String, (String, HashSet<String>)>;
+    let index = |v: &[SymbolEnrichment]| -> Index {
+        let mut m: Index = HashMap::new();
+        for e in v {
+            let entry = m
+                .entry(store::symbol_source_key(&e.meta))
+                .or_insert_with(|| (symbol_doc_anchor(&e.meta), HashSet::new()));
+            entry.1.insert(e.body_hash.clone());
+        }
+        m
+    };
+    let prior_map = index(prior);
+    let refreshed_map = index(refreshed);
+
+    let mut changed = BTreeSet::new();
+    for (key, (anchor, hashes)) in &refreshed_map {
+        match prior_map.get(key) {
+            Some((_, prior_hashes)) if prior_hashes == hashes => {} // unchanged
+            _ => {
+                changed.insert(anchor.clone()); // new or body-hash set changed
+            }
+        }
+    }
+    let mut removed = BTreeSet::new();
+    for (key, (anchor, _)) in &prior_map {
+        if !refreshed_map.contains_key(key) {
+            removed.insert(anchor.clone());
+        }
+    }
+    CodeIntelChangeSet { changed, removed }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -628,5 +717,37 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 0, "rename with same body is free");
         assert_eq!(set2[0].meta.name, "renamed", "meta refreshed to the new name");
         assert_eq!(set2[0].summary, "a job.", "summary carried over");
+    }
+
+    fn enr_for(name: &str, body_hash: &str) -> SymbolEnrichment {
+        SymbolEnrichment {
+            meta: meta(name),
+            body_hash: body_hash.to_string(),
+            summary: format!("summary of {name}"),
+            asks: vec![],
+        }
+    }
+
+    #[test]
+    fn change_set_detects_changed_new_and_removed() {
+        // prior: f@h1, g@h2 ; refreshed: f@h1 (unchanged), g@h2b (body changed),
+        // h@h3 (new). g removed-from-prior? no — gone is `x`.
+        let prior = vec![enr_for("f", "h1"), enr_for("g", "h2"), enr_for("x", "hx")];
+        let refreshed = vec![enr_for("f", "h1"), enr_for("g", "h2b"), enr_for("h", "h3")];
+        let cs = diff_code_intel_caches(&prior, &refreshed);
+        // f unchanged → absent; g body changed + h new → changed; x vanished → removed.
+        // doc-anchor for meta(name) is the qualified_name `crate::<name>`.
+        assert!(cs.changed.contains("crate::g"), "g body changed: {:?}", cs.changed);
+        assert!(cs.changed.contains("crate::h"), "h is new: {:?}", cs.changed);
+        assert!(!cs.changed.contains("crate::f"), "f unchanged must not appear");
+        assert_eq!(cs.changed.len(), 2);
+        assert_eq!(cs.removed.iter().cloned().collect::<Vec<_>>(), vec!["crate::x"]);
+    }
+
+    #[test]
+    fn change_set_empty_when_identical() {
+        let snap = vec![enr_for("f", "h1"), enr_for("g", "h2")];
+        let cs = diff_code_intel_caches(&snap, &snap);
+        assert!(cs.is_empty(), "identical snapshots → no change: {cs:?}");
     }
 }

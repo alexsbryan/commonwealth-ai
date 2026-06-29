@@ -469,7 +469,14 @@ means one thing.
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
   `engineering_atlas`, `conversation_atlas`. State at
   `~/.sovereign/indexes/<corpus>/atlas/`. Deep-dive:
-  [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md).
+  [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
+  pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
+  **code** corpus into this same typed-atom graph (content-hash atoms, code-intel
+  summaries as descriptions, bounded function + call edges) — now **queryable**
+  (multi-hop `AtlasGraph::call_chain` via `enrich atlas-query` + the chat) and
+  **patchable** (`enrich atlas-patch-code` → delta → v2-store rebuild) on the v2
+  `atoms.lance` / `edges.csr` store. See ENRICHMENT.md "Code as a queryable,
+  patchable Atlas (v2)".
 - **`tiered` — System 3, the RAPTOR + GLiNER gold standard** — three
   progressive tiers (T1 embeddings → T2 entity-graph + PPR → T3 RAPTOR
   cluster tree). The single RAPTOR builder lives in
