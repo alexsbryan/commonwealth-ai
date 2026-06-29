@@ -71,21 +71,128 @@ What remains is **deployment** — realizing the proven-correct design in the da
   (845 MB vs 5.25 GB). Remaining wiki tail: retire `atoms.json`/`edges.json`/`atoms.rkyv`/
   SQLite (folds into step 4) + daemon chaos QA (step 3). W5 (article embeddings → ANN)
   is a future upgrade, not required for done.
-- [ ] **3b. Production ANN seeding (THE biggest remaining push).** The
-  ANN-over-vector-column seeding is proven in the *eval* (`eval_cmd/atlas_ann.rs`) but
-  production `atlas_navigate` still uses the v1 cosine-bag + `resolve_atom_id_from_entry`.
-  Move it into production: co-locate the atom embeddings as a vector column in
-  `atoms.lance` (+ IVF-PQ index), and replace the cosine-bag seed step with ANN that
-  returns atom-ids directly. This is the SEP track's actual retrieval-quality + scaling
-  win, and the prerequisite for deleting `resolve`. Gated per-corpus (the flipped ones).
-  **Verify:** the SEP+essay eval in the daemon path (== the A/C+D harness) + chaos QA.
-- [ ] **4. Delete v1** (`resolve_atom_id_from_entry`, `AtlasContext`,
-  `atoms.embeddings.bin`, the cosine-bag) after 3b lands + all embedding-bearing corpora
-  flipped + chaos green; and retire wiki's `atoms.json`/`edges.json`/`atoms.rkyv`/SQLite
-  (3a). The rkyv `AtlasGraph` backend retires once **every** atom-corpus is on Lance —
-  wiki no longer needs it (it's on `ColumnarWikipediaGraph`, a separate reader).
-- [ ] **5. HF distribution.** Bundle ships `atoms.lance` + `edges.csr`;
-  `SnapshotManifest.store_format_version`; install = drop + register (no convert).
+- [x] **3b. Production ANN seeding (THE biggest remaining push) — DONE + VERIFIED.**
+  The ANN-over-vector seeding was proven in the *eval*; this moves it into production.
+  **Design choice: a persistent SIBLING table, not a column in `atoms.lance`.** Each
+  corpus gets `atlas/atoms_ann.lance` (a flat Lance `key=atom_id → embedding` vector
+  table, `corpus_engine::…::ann_store::AnnSeedTable`), built ONCE at backfill by the
+  resolve-join (`resolve_atom_id_from_entry` runs at build, never per query). This kills
+  `resolve` on the hot path **without** an `atoms.lance` schema change or IVF-PQ — flat
+  search equals exact cosine at SEP/other scale, which is what the A-gate proved.
+  - **Reader/seed (`sovereign-core/atlas_context.rs`):** `AtlasGraph` carries
+    `Option<Arc<AnnSeedTable>>`; new async `atlas_navigate_ann` = v1 `atlas_navigate` with a
+    **per-graph adaptive** seed step: a backfilled graph seeds from its ANN table
+    (`nearest_with_vectors` → atom-ids directly, re-scored with the canonical `cosine` so the
+    BFS sees v1-identical weights), an un-backfilled graph seeds from exact cosine over its
+    bag (exactly v1) — both feed one global top-`max_seeds` pool, so a MIXED pool never
+    under-seeds. Name-match + BFS + emit are the same logic. BFS stays sync (only the ANN
+    seed queries await → invariant 4 holds). All-backfilled → pure ANN (SEP-verified);
+    all-cosine → equals v1.
+  - **Attach (single shared path):** `open_and_attach_ann_seed_table` opens the table on
+    the CALLER's long-lived runtime (daemon `AtlasContextManager` eager load + eval runner)
+    — never the sync `load_from_disk` bridge, whose throwaway runtime would invalidate the
+    held `lancedb::Table`. The lazy `graph()` path (atom-enumeration siblings, not the seed
+    pool) intentionally skips it.
+  - **Gate (`retrieval.rs apply_atlas_grounding`):** take `atlas_navigate_ann` as soon as
+    ANY pool graph `has_ann_seed_table()` (the adaptive navigate handles the mix); when none
+    do, plain sync `atlas_navigate` is the equivalent lighter path. **Why any, not all:** the
+    daemon's pool is `provider.loaded_corpus_ids()` (every LOADED atlas, accumulating), so an
+    all-or-nothing gate would be poisoned by a single un-backfilled atlas and never engage —
+    the per-graph gate is what lets the rollout proceed corpus-by-corpus.
+  - **Backfill (`atlas backfill-ann <corpus>…`):** `build_persistent_ann_seed_table`, a
+    cheap transform of existing data (no LLM/re-embed). Default atlas filter = a no-flag
+    `eval run` so the ANN table covers the cosine bag's atom universe.
+  - **Verify (DONE, 2026-06-28):** backfilled 63 SEP atlases (1 — `sep-substance` —
+    is empty under the default filter, so neutral in both arms), then `eval run
+    --with-atlas <63> --atlas-seed cosine|ann` (+ a cosine control), all default flags.
+    Result: **total source recall ann 56 == cosine 56** (control 55); per-question recall
+    churn ann-vs-cosine 2/21 vs the cosine-vs-cosine **control 1/21** — and the shared
+    `dialectical_putnam` diff occurs with *identical* seeding, i.e. pure `dedup_by_source`
+    tie-break, not seeding (the other ann diff is ann *gaining* a source); `retrieved`
+    churn 14/21 ≈ control 11/21 (the tie-break noise floor). This reproduces the A-gate
+    (56/66, churn 14≈12) **through the production `atlas_navigate_ann`** — the eval drives
+    the exact code the daemon runs, with 63/63 graphs seeding from their persistent ANN
+    tables. Neutral → GO. After switching to the per-graph adaptive design, RE-VERIFIED:
+    full re-run (63/63) recall diff 1/21 == the cosine-vs-cosine control (same `dialectical_
+    putnam` tie-break question), churn 12≈11; and a MIXED pool (10 ANN tables hidden → 53
+    ANN'd + 10 cosine) recall diff 1/21 == control (sources stable; churn 15 = chunk-level
+    tie-break).
+  - **Live pipeline deploy + verify (DONE, 2026-06-28).** Two findings the deploy surfaced:
+    (1) **Atlas grounding runs in-process** in the consumer's Runtime (the desktop's
+    `state.rs`, and the eval/CLI's `build_session`), NOT in `sovereign-cli-daemon` (which is
+    inference-only — no atlas provider). The daemon serves synthesis; the client grounds.
+    (2) **The backfill must use the PRODUCTION grounding filter.** The manager grounds with
+    `AtlasContextFilter::default()` (`depth=["extracted"]`); the backfill originally used the
+    eval's all-depths default, so the embed-cache key mismatched and `init_from_cache` loaded
+    0 contexts (empty grounding pool). Fixed: `atlas backfill-ann` now derives its filter from
+    `AtlasContextFilter::default()` (single source of truth, env-aware). After re-backfilling
+    the 63 SEP atlases at the production filter, `eval run --synth --isolate` (grounding
+    in-process via the new code, synthesis via the daemon) shows the **full pipeline engaging
+    ANN**: `init complete contexts=63 graphs=63`, gate log `atlas-grounding: ANN seed path
+    (v2) corpora=63 max_seeds=12`, `post-apply_atlas_grounding n_chunks=35 {"sep":35}`. The
+    broader daemon-served chaos QA is step 3.
+- [ ] **4. Delete v1 — a REFACTOR, not a quick clear (scoped 2026-06-28).** The deploy proved
+  this is bigger than "delete some files." Call-site audit: `resolve_atom_id_from_entry` has 4
+  live callers, all in `atlas_navigate_ann` (name-match seed + the adaptive cosine branch) +
+  `build_persistent_ann_seed_table` (backfill) — it is NOT v1-only. `AtlasContext` (the
+  embedding bag) is likewise load-bearing for name-match scoring + the cosine fallback for
+  un-backfilled corpora. So removing them requires **re-architecting name-match + seeding off
+  the v2 store** (`atoms.lance` names + `atoms_ann.lance` vectors, atom-ids direct — no
+  resolve), not a deletion. Separately, **wiki is not fully off rkyv**: its NEIGHBORS use the
+  columnar graph, but typed-enumeration (`enumerate_typed_atom_chunks` → `graph.atoms_of_kind`)
+  still reads wiki's `AtlasGraph` (rkyv) — fully retiring wiki's rkyv needs either wiki
+  `atoms.lance` (the slow 1.67M build) or re-pointing typed-enum at the columnar. And deleting
+  the rkyv backend removes the `load_from_disk` fallback that makes every flip reversible.
+  **Recommendation: let v2 bake in real desktop use before this refactor** — the migration is
+  fully reversible today (delete the `.read_v2` markers); deleting v1 forecloses that. Safe
+  subset doable now: remove the 3 dead-atlas dirs (below).
+- [ ] **5. HF distribution.** `sovereign corpus snapshot publish <corpus> --upload
+  svrnmesh/<repo>` (zstd snapshot + `hf upload`, `--include-atlas` default-on) ships the v2
+  artifacts (`atoms.lance` + `edges.csr` + `atoms_ann.lance`; wiki `articles.lance` +
+  `edges.lance`). `SnapshotManifest.store_format_version` so install = drop + register (no
+  convert). Additive — does not require step 4 (the bundle is data; the v1 fallback code can
+  stay). HF_TOKEN from `~/.cache/huggingface/token` (private repos).
+
+## Reusable migration — any machine (the one-command port)
+
+The whole atom + wiki port is one idempotent command, so a fresh dev machine migrates with
+no hand-holding:
+
+```
+sovereign atlas migrate-all            # every atom corpus -> atoms.lance + edges.csr
+                                       #   (+ atoms_ann.lance where embedded) + .read_v2 flip;
+                                       #   wiki-class -> articles.lance + edges.lance (columnar)
+sovereign atlas migrate-all --no-flip  # build v2 artifacts but DON'T flip (for a v1-vs-v2 bench)
+sovereign atlas migrate-all <corpus>   # one corpus
+```
+
+Idempotent (skips current stores/tables), reversible (`rm <corpus>/atlas/.read_v2`), and the
+ANN step uses the production grounding filter (`AtlasContextFilter::default()`) so the table
+matches what the daemon seeds from. It only ANN-indexes corpora that already carry an
+embeddings cache (never bulk-embeds the resident set).
+
+**Verify the port (no-regression gate), all headless:**
+
+```
+# SEP retrieval neutrality (v2 reader+seeding == v1), markers off for a clean rkyv baseline:
+sovereign atlas migrate-all --no-flip
+find ~/.sovereign/indexes -maxdepth 3 -name .read_v2 -delete
+sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \
+  --atlas-backend rkyv  --atlas-seed cosine --atlas-depth extracted --output /tmp/v1.json
+sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \
+  --atlas-backend lance --atlas-seed ann    --atlas-depth extracted --output /tmp/v2.json
+# expect: source recall identical (modulo the dedup_by_source tie-break), retrieved churn
+#         at the cosine-vs-cosine noise floor.
+sovereign atlas wikipedia neighbors wikipedia <hub-title>   # expect "PARITY: MATCH" vs SQLite
+sovereign bench chaos-monkey run --bank sovereign/bench/chaos_monkey/secret_agent.toml \
+  --transport direct --corpus chaos-secret-agent --out /tmp/chaos.jsonl
+sovereign bench gate chaos-monkey /tmp/chaos.jsonl          # baseline-relative QA gate
+# then flip:
+sovereign atlas migrate-all            # (re-run; flips read_v2, skips built artifacts)
+```
+
+**Fresh machine (no prior atlases):** `sovereign corpus install <id>` restores the HF snapshot,
+which already ships the v2 artifacts (no convert) — migrate-all is for in-place upgrades.
 
 ## Cleanup / notes from the audit
 

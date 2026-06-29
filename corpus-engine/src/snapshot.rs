@@ -432,11 +432,28 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     manifest.source_recipe_sha256 = opts.source_recipe_sha256.clone();
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
-    manifest.bundled_corpora = opts
+    // Bundlable siblings = atlas-only (no chunks.lance). A prefix match that
+    // carries its own Lance dataset (a `<prefix>-partition-node-*` mesh shard,
+    // or a full corpus sharing the prefix) can't be captured by sibling
+    // bundling, so it is skipped here (with a warning) — from BOTH the manifest
+    // and the tar — rather than failing the whole publish on a prefix collision.
+    let bundlable_siblings: Vec<(String, PathBuf)> = opts
         .sibling_index_dirs
         .iter()
-        .map(|(id, _)| id.clone())
+        .filter(|(id, dir)| {
+            if dir.join("chunks.lance").is_dir() {
+                eprintln!(
+                    "  skip sibling '{id}': carries a chunks.lance dataset \
+                     (mesh shard / full corpus, not an atlas-only sibling)"
+                );
+                false
+            } else {
+                true
+            }
+        })
+        .cloned()
         .collect();
+    manifest.bundled_corpora = bundlable_siblings.iter().map(|(id, _)| id.clone()).collect();
 
     // Anchor a transactional view of any LanceDB datasets under
     // index_dir BEFORE the (slow) tar pass. The view is just a list of
@@ -450,8 +467,12 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     };
 
     // Tar + zstd are blocking I/O over multi-GB data; offload from the
-    // tokio reactor so the runtime stays responsive.
-    let opts_for_tar = opts.clone();
+    // tokio reactor so the runtime stays responsive. The tar bundles exactly
+    // the siblings the manifest advertises — `bundlable_siblings`, the single
+    // filtered set — so the archive and `manifest.bundled_corpora` can never
+    // disagree.
+    let mut opts_for_tar = opts.clone();
+    opts_for_tar.sibling_index_dirs = bundlable_siblings;
     let manifest_for_tar = manifest.clone();
     let lance_for_tar = lance_view.clone();
     tokio::task::spawn_blocking(move || {
@@ -646,16 +667,13 @@ fn write_snapshot_archive(
     // — but the common case (per-article-atlas pipelines) has no Lance
     // dataset, so naive walk is correct and cheap. Surface a hard error
     // if we see one, rather than silently risk fragment-drop.
+    // PRECONDITION: `opts.sibling_index_dirs` is already the atlas-only set —
+    // `publish_snapshot` filtered out any chunks-bearing match (e.g. a
+    // `<prefix>-partition-node-*` mesh shard) and built `manifest.bundled_corpora`
+    // from the same filtered set. So every entry here is safe for the naive walk
+    // and the tar matches the manifest exactly.
     for (sibling_id, sibling_dir) in &opts.sibling_index_dirs {
         let sibling_prefix = snapshot_index_path(sibling_id);
-        let sibling_lance = sibling_dir.join("chunks.lance");
-        if sibling_lance.is_dir() {
-            return Err(Error::InvalidInput(format!(
-                "sibling corpus '{sibling_id}' has a chunks.lance dataset; \
-                 sibling bundling currently only supports atlas-only siblings \
-                 (no Lance-aware capture for siblings yet)"
-            )));
-        }
         append_dir_recursive(&mut tar, &sibling_prefix, sibling_dir)?;
     }
 
@@ -1274,24 +1292,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn publish_with_sibling_carrying_lance_dataset_errors() {
-        // SEP-style siblings are atlas-only. A sibling with a
-        // chunks.lance dir would need Lance-aware capture which isn't
-        // wired for siblings yet — fail loudly rather than risk
-        // silent fragment-drop.
+    async fn publish_with_sibling_carrying_lance_dataset_skips_it() {
+        // SEP-style siblings are atlas-only. A sibling that carries a
+        // chunks.lance dir (a `<prefix>-partition-node-*` mesh shard, or a full
+        // corpus sharing the prefix) can't be captured by sibling bundling, so
+        // it is SKIPPED with a warning — publish succeeds and bundles the
+        // atlas-only siblings — rather than failing the whole release on a
+        // prefix collision. (Regression: `--include-siblings sep-` once matched
+        // a `sep-partition-node-*` shard and errored the entire publish.)
         let tmp = tempfile::tempdir().unwrap();
         let index_dir = tmp.path().join("indexes/parent");
-        let sibling = tmp.path().join("indexes/parent-child");
+        let atlas_sibling = tmp.path().join("indexes/parent-article");
+        let lance_sibling = tmp.path().join("indexes/parent-shard");
         let output_path = tmp.path().join("out.tar.zst");
         write_fake_index_dir(&index_dir, "parent", "qwen3-embedding-0.6b", 1024);
-        // Sibling with a (fake) chunks.lance dir present.
-        std::fs::create_dir_all(sibling.join("chunks.lance")).unwrap();
-        std::fs::write(sibling.join("_corpus_meta.json"), b"{}").unwrap();
+        write_fake_sibling_index_dir(&atlas_sibling, "parent-article");
+        // A sibling with a (fake) chunks.lance dataset present -> must be skipped.
+        std::fs::create_dir_all(lance_sibling.join("chunks.lance")).unwrap();
+        std::fs::write(lance_sibling.join("_corpus_meta.json"), b"{}").unwrap();
 
-        let err = publish_snapshot(PublishOptions {
+        let outcome = publish_snapshot(PublishOptions {
             index_dir,
             enrichment_dir: None,
-            output_path,
+            output_path: output_path.clone(),
             snapshot_id: "parent-2026-05-22".into(),
             chunk_count: 1,
             residual_gap_pct: None,
@@ -1299,15 +1322,36 @@ mod tests {
             source_recipe_sha256: None,
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
-            sibling_index_dirs: vec![("parent-child".into(), sibling)],
+            sibling_index_dirs: vec![
+                ("parent-article".into(), atlas_sibling),
+                ("parent-shard".into(), lance_sibling),
+            ],
         })
         .await
-        .unwrap_err();
-        let msg = format!("{err}");
-        assert!(
-            msg.contains("parent-child") && msg.contains("chunks.lance"),
-            "error must name the sibling and the offending dir: {msg}"
+        .expect("publish must succeed, skipping the lance-bearing sibling");
+
+        // Manifest bundles ONLY the atlas-only sibling.
+        assert_eq!(
+            outcome.manifest.bundled_corpora,
+            vec!["parent-article".to_string()]
         );
+
+        // Restore: the atlas-only sibling lands; the lance-bearing one does not.
+        let restore_tmp = tempfile::tempdir().unwrap();
+        restore_snapshot_archive(
+            &output_path,
+            restore_tmp.path(),
+            "parent",
+            Some(&outcome.archive_sha256),
+            "qwen3-embedding-0.6b",
+            1024,
+        )
+        .unwrap();
+        assert!(restore_tmp
+            .path()
+            .join("indexes/parent-article/atlas/atoms.json")
+            .exists());
+        assert!(!restore_tmp.path().join("indexes/parent-shard").exists());
     }
 
     #[tokio::test]

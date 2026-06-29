@@ -9,13 +9,32 @@
 //! it is reusable rather than throwaway. The caller owns the key semantics
 //! (e.g. `"{corpus_id}\u{1f}{atom_id}"`) and the directory lifetime.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{types::Float32Type, Array, FixedSizeListArray, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
+
+/// Directory name (under a corpus's `atlas/` dir) of the persistent ANN seed
+/// table — ATLAS_STORAGE_V2 3b. A Lance DB directory holding the `seeds` table,
+/// written once by the backfill and reopened read-only at runtime. Shared by
+/// the writer (backfill) and the readers (the daemon's `AtlasContextManager`
+/// and the eval runner) so the on-disk location can never drift between them.
+pub const ANN_TABLE_DIRNAME: &str = "atoms_ann.lance";
+
+/// The persistent ANN seed table directory for a corpus's `atlas/` directory.
+pub fn ann_table_dir(atlas_dir: &Path) -> PathBuf {
+    atlas_dir.join(ANN_TABLE_DIRNAME)
+}
+
+/// Whether a corpus has been backfilled with an ANN seed table. Cheap existence
+/// gate (the directory is present); [`AnnSeedTable::open_for_atlas`] does the
+/// real validation and is the authority on readability.
+pub fn ann_table_present(atlas_dir: &Path) -> bool {
+    ann_table_dir(atlas_dir).is_dir()
+}
 
 /// A flat Lance vector table over opaque string keys. Cheap to build at the
 /// hundreds-to-thousands scale of pooled atlas seeds; `nearest` brute-forces
@@ -74,6 +93,83 @@ impl AnnSeedTable {
         Ok(Self { table })
     }
 
+    /// Open a table previously [`build`](Self::build)t under `dir` — the
+    /// production path: the ANN seed table is built ONCE at backfill (so the
+    /// `resolve_atom_id_from_entry` join runs at build time, not per query) and
+    /// reopened read-only at runtime. ATLAS_STORAGE_V2 step 3b.
+    pub async fn open(dir: &Path) -> Result<Self, String> {
+        let db = lancedb::connect(dir.to_str().ok_or("AnnSeedTable: non-utf8 dir")?)
+            .execute()
+            .await
+            .map_err(|e| format!("AnnSeedTable open connect: {e}"))?;
+        let table = db
+            .open_table("seeds")
+            .execute()
+            .await
+            .map_err(|e| format!("AnnSeedTable open: {e}"))?;
+        Ok(Self { table })
+    }
+
+    /// Open the persistent ANN seed table living under a corpus's `atlas/`
+    /// directory (`<atlas_dir>/atoms_ann.lance`). The runtime convenience over
+    /// [`open`](Self::open) — pairs with [`ann_table_present`] for the gate.
+    pub async fn open_for_atlas(atlas_dir: &Path) -> Result<Self, String> {
+        Self::open(&ann_table_dir(atlas_dir)).await
+    }
+
+    /// Like [`nearest`](Self::nearest) but returns each hit's stored vector
+    /// alongside its key. The production seed path (ATLAS_STORAGE_V2 3b)
+    /// re-scores ANN hits with the canonical `cosine()` so the BFS sees the
+    /// same seed scores v1 produced — and this returns the vectors to score
+    /// against WITHOUT keeping an in-memory embedding bag resident: only the
+    /// `k` hit vectors come back. The ANN supplies the candidate ranking; the
+    /// re-score supplies the bit-identical seed weights.
+    pub async fn nearest_with_vectors(
+        &self,
+        query: &[f32],
+        k: usize,
+    ) -> Result<Vec<(String, Vec<f32>)>, String> {
+        let stream = self
+            .table
+            .query()
+            .nearest_to(query.to_vec())
+            .map_err(|e| format!("AnnSeedTable nearest_to: {e}"))?
+            .limit(k)
+            .select(Select::Columns(vec!["key".into(), "embedding".into()]))
+            .execute()
+            .await
+            .map_err(|e| format!("AnnSeedTable execute: {e}"))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| format!("AnnSeedTable collect: {e}"))?;
+        let mut out: Vec<(String, Vec<f32>)> = Vec::new();
+        for b in &batches {
+            let keys = b
+                .column_by_name("key")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let embs = b
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+            let (Some(keys), Some(embs)) = (keys, embs) else {
+                continue;
+            };
+            for i in 0..keys.len() {
+                if embs.is_null(i) {
+                    continue;
+                }
+                let vec_ref = embs.value(i);
+                let vals = vec_ref
+                    .as_any()
+                    .downcast_ref::<arrow_array::Float32Array>()
+                    .map(|a| a.values().to_vec())
+                    .unwrap_or_default();
+                out.push((keys.value(i).to_string(), vals));
+            }
+        }
+        Ok(out)
+    }
+
     /// The `k` nearest keys to `query`, ranked (closest first). No score is
     /// returned — at this scale the search is exact, so a caller wanting
     /// bit-identical scores re-computes cosine against its own vectors.
@@ -104,5 +200,42 @@ impl AnnSeedTable {
             }
         }
         Ok(keys)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// build -> persist -> reopen -> query: the production lifecycle (ANN table
+    /// is written once at backfill, reopened read-only at runtime). Proves
+    /// `open` round-trips `build` and both query shapes rank by the stored
+    /// vectors. Unit basis vectors make L2-nearest == cosine-nearest, so the
+    /// expected order is unambiguous.
+    #[tokio::test]
+    async fn build_open_roundtrip_ranks_by_vector() {
+        let dir = tempfile::tempdir().unwrap();
+        let rows = vec![
+            ("a".to_string(), vec![1.0_f32, 0.0, 0.0]),
+            ("b".to_string(), vec![0.0, 1.0, 0.0]),
+            ("c".to_string(), vec![0.0, 0.0, 1.0]),
+        ];
+        AnnSeedTable::build(dir.path(), &rows).await.unwrap();
+
+        // Reopen the persisted table — the runtime path, distinct from the
+        // in-process handle `build` returns.
+        let table = AnnSeedTable::open(dir.path()).await.unwrap();
+
+        let near = table.nearest(&[0.9, 0.1, 0.0], 1).await.unwrap();
+        assert_eq!(near, vec!["a".to_string()]);
+
+        let with_vecs = table
+            .nearest_with_vectors(&[0.05, 0.9, 0.05], 2)
+            .await
+            .unwrap();
+        assert_eq!(with_vecs.len(), 2);
+        assert_eq!(with_vecs[0].0, "b");
+        // The vector comes back verbatim so the caller can re-score with cosine.
+        assert_eq!(with_vecs[0].1, vec![0.0, 1.0, 0.0]);
     }
 }
