@@ -271,6 +271,20 @@ impl CorpusUpdater {
             return Ok(());
         }
 
+        // ── Inc 6: code-atlas branch ────────────────────────
+        // When the corpus is a CODE corpus (its own scip_graph.db) with a
+        // v2-flipped atlas (`atlas/.read_v2`), the reindex just rebuilt the
+        // SCIP graph; re-derive the changed/removed symbols' atoms+edges and
+        // — crucially — rebuild the v2 store so the .read_v2 reader never
+        // sees stale atoms.lance/edges.csr. Best-effort, behind the same
+        // `atlas_incremental_enabled` flag; the wiki path below is unchanged.
+        #[cfg(feature = "treesitter")]
+        if index_dir.join("scip_graph.db").exists() && atlas_dir.join(".read_v2").exists() {
+            return self
+                .apply_code_atlas_delta(corpus_id, &index_dir, &atlas_dir)
+                .await;
+        }
+
         let started = std::time::Instant::now();
 
         // ── Build the delta ─────────────────────────────────
@@ -325,6 +339,23 @@ impl CorpusUpdater {
         let summary = apply_atom_delta(&atlas_dir, delta)
             .map_err(|e| Error::Database(format!("apply_atom_delta: {e}")))?;
 
+        // Rebuild the v2 store when the atlas is v2-flipped, so a `.read_v2`
+        // reader never serves stale atoms.lance/edges.csr after the delta
+        // (Inc 6's load-bearing invariant — applies to any flipped atlas,
+        // not just code). Best-effort: a failure leaves the JSON correct and
+        // a full rebuild recovers the store.
+        if atlas_dir.join(".read_v2").exists() {
+            if let Err(e) =
+                crate::enrichment::atlas::store::build_and_write_store(&atlas_dir, corpus_id).await
+            {
+                tracing::warn!(
+                    corpus_id,
+                    error = %e,
+                    "delta.atlas_v2_store_rebuild_failed — v2 store may be stale until a full rebuild"
+                );
+            }
+        }
+
         // Refresh meta-atlas anchors for this corpus only. Best-effort.
         let indexes_dir = self.engine.index_dir().to_path_buf();
         let meta_outcome =
@@ -354,6 +385,135 @@ impl CorpusUpdater {
             meta_atlas = meta_outcome,
             wall_ms = started.elapsed().as_millis() as u64,
             "delta.atlas_incremental_complete"
+        );
+        Ok(())
+    }
+
+    /// Inc 6 — incremental patch of a v2-flipped CODE atlas after a reindex.
+    ///
+    /// Computes the change-set by comparing the source corpus's current
+    /// symbol bodies (re-enumerated from the freshly-rebuilt SCIP graph + the
+    /// source tree — NO LLM) against the `code_intel_cache.json` body hashes,
+    /// re-derives just the changed/removed symbols' atoms+edges via
+    /// `code_walk::extract_atoms_for_symbols`, applies the delta, and rebuilds
+    /// the v2 store (atoms.lance + edges.csr) so the `.read_v2` reader stays
+    /// current. Summaries for changed bodies lag until the LLM-bearing
+    /// `enrich atlas-patch-code` / `enrich code-intel` runs (this path has no
+    /// chat model); structure + call edges stay fresh on every reindex.
+    ///
+    /// Best-effort throughout — every failure is logged and swallowed so the
+    /// reindex (already committed) is never rolled back.
+    #[cfg(feature = "treesitter")]
+    async fn apply_code_atlas_delta(
+        &self,
+        corpus_id: &str,
+        corpus_dir: &std::path::Path,
+        atlas_dir: &std::path::Path,
+    ) -> Result<()> {
+        use crate::enrichment::atlas::atoms_delta::apply_atom_delta;
+        use crate::enrichment::atlas::doc_to_atoms;
+        use crate::enrichment::atlas::store::build_and_write_store;
+        use crate::enrichment::atlas::strategies::code_walk::{
+            extract_atoms_for_symbols, read_code_walk_visibility, read_corpus_source_root,
+            CodeWalkConfig,
+        };
+        use crate::enrichment::code_intel::scip_source::enumerate_symbol_sources;
+        use crate::enrichment::code_intel::{body_hash, diff_code_intel_caches, SymbolEnrichment};
+        use crate::error::Error;
+        use corpus_engine_scip::ScipGraph;
+
+        let started = std::time::Instant::now();
+
+        // Prior: the last summarized cache (body-hash keyed).
+        let prior: Vec<SymbolEnrichment> =
+            std::fs::read_to_string(corpus_dir.join("code_intel_cache.json"))
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
+        // Current: re-enumerate symbol bodies from the fresh SCIP graph +
+        // source tree and hash them (no LLM). A body whose hash differs from
+        // the cache is a real change; one gone from the source is a removal.
+        let source_root = read_corpus_source_root(corpus_dir)?;
+        let scip = ScipGraph::open(&corpus_dir.join("scip_graph.db"), corpus_id)
+            .map_err(|e| Error::Database(format!("open scip_graph.db: {e}")))?;
+        let sources = enumerate_symbol_sources(&scip, &source_root, &[]).await?;
+        drop(scip); // extract_atoms_for_symbols re-opens it.
+        let current: Vec<SymbolEnrichment> = sources
+            .into_iter()
+            .map(|s| SymbolEnrichment {
+                body_hash: body_hash(&s.body),
+                meta: s.meta,
+                summary: String::new(),
+                asks: Vec::new(),
+            })
+            .collect();
+
+        let change = diff_code_intel_caches(&prior, &current);
+        if change.is_empty() {
+            tracing::info!(
+                corpus_id,
+                "delta.code_atlas_noop — no source body changed since the code-intel cache"
+            );
+            return Ok(());
+        }
+
+        let (include_functions, include_private) = read_code_walk_visibility(atlas_dir);
+        let cfg = CodeWalkConfig {
+            source_corpus_id: corpus_id.to_string(),
+            include_functions,
+            include_private,
+        };
+        let delta = extract_atoms_for_symbols(
+            self.engine.clone(),
+            &cfg,
+            &change.changed,
+            &change.removed,
+        )
+        .await?;
+        if delta.is_empty() {
+            tracing::info!(
+                corpus_id,
+                changed = change.changed.len(),
+                removed = change.removed.len(),
+                "delta.code_atlas_noop — change-set matched no atlas atoms (visibility filter)"
+            );
+            return Ok(());
+        }
+
+        // Ensure the doc→atoms sidecar exists so `removed_doc_ids` can find
+        // the atoms to drop (the ingest path doesn't write it).
+        if let Err(e) = doc_to_atoms::build_and_write(atlas_dir) {
+            tracing::warn!(corpus_id, error = %e, "delta.code_atlas_doc_index_failed");
+        }
+
+        let summary = apply_atom_delta(atlas_dir, delta)
+            .map_err(|e| Error::Database(format!("apply_atom_delta: {e}")))?;
+
+        // Load-bearing: rebuild the v2 store so the .read_v2 reader reflects
+        // the patched atoms + edges instead of a stale snapshot.
+        if let Err(e) = build_and_write_store(atlas_dir, corpus_id).await {
+            tracing::warn!(corpus_id, error = %e, "delta.code_atlas_store_rebuild_failed — v2 store may be stale until a full rebuild");
+        }
+
+        // Refresh meta-atlas anchors (best-effort).
+        let indexes_dir = self.engine.index_dir().to_path_buf();
+        if let Err(e) = crate::meta_atlas::rebuild_for_corpus(&indexes_dir, corpus_id, None) {
+            tracing::warn!(corpus_id, error = %e, "delta.code_atlas_meta_rebuild_failed");
+        }
+
+        tracing::info!(
+            corpus_id,
+            changed = change.changed.len(),
+            removed = change.removed.len(),
+            atoms_before = summary.atoms_before,
+            atoms_after = summary.atoms_after,
+            atoms_added = summary.atoms_added,
+            atoms_removed = summary.atoms_removed,
+            docs_upserted = summary.docs_upserted,
+            docs_removed = summary.docs_removed,
+            wall_ms = started.elapsed().as_millis() as u64,
+            "delta.code_atlas_incremental_complete (summaries for changed bodies lag until the LLM pass)"
         );
         Ok(())
     }

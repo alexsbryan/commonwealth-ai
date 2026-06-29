@@ -249,9 +249,44 @@ compiler-resolved call graph — no function names required in the question.
   (plain-English question → `CodeQuery` → summary-bridge surfaces the right
   symbols → call-graph trace → cited answer naming callers at file:line). Today
   the enrichment is **scoped** (run per-file-set, `fast`/Qwopus-4B summaries), not
-  yet a full-corpus default. Distinct from System 2: these are plain-English
-  **per-symbol summaries**, not a typed-atom graph — `code_intel_summary` chunks
-  never become atoms.
+  yet a full-corpus default. The summaries **also feed System 2**: the
+  `structure_first` code branch uses them as Entity descriptions, so code is now a
+  queryable + patchable typed-atom graph (see the next section) — not only the
+  retrieval-surfaced per-symbol summaries this section describes.
+
+---
+
+## System 2 ∩ System 4 — Code as a queryable, patchable Atlas (v2)
+
+The `structure_first` strategy (`atlas/strategies/code_walk.rs`) lifts a SCIP-indexed
+code corpus into a **System-2 typed-atom graph** (Crate→Module→Item containment +
+`ScipStructural` call edges + Cargo edges, no LLM) and joins it to the **System-4**
+code-intel summaries — code as a first-class, v2-backed, incrementally-patchable Atlas
+you can ask architecture questions of.
+
+- **Patch-ready atoms:** content-hash ids (`AtomId::entity_content_hash`, stable across
+  rebuilds) anchored to the qualified-name doc-id, so `apply_atom_delta` patches in place
+  and the CSR interns stably. Item descriptions are the System-4 **summaries** (rustdoc
+  fallback); functions are persisted, bounded (callee fanout ≤ `MAX_CALLEE_FANOUT`).
+- **v2 store + flip:** `atoms.lance` + `edges.csr` (`CSR_VERSION 2` carries per-edge
+  **provenance**, so call edges are distinguishable from containment) + an ANN seed table
+  over the summary embeddings; read behind `AtlasGraph` when flipped (`atlas/.read_v2`).
+  `atlas verify-v2` audits lossless v1↔v2.
+- **Query — multi-hop CallChain:** `AtlasGraph::call_chain` BFS-walks the CSR call edges
+  (callees = "how does X work", callers = "what calls X"), bounded + cycle-safe, cited in
+  call order with `[dyn-dispatch]` markers. Two surfaces: the deterministic
+  `enrich atlas-query <corpus> "…" [--depth N] [--callers]` brief (named seed via symbol
+  match, conceptual seed via ANN over the summaries), and the **chat**
+  (`code_trace::build_code_trace_block` emits the N-hop chain as evidence when a v2 code
+  atlas exists, 1-hop fallback otherwise).
+- **Patch:** `enrich atlas-patch-code <atlas-corpus>` diffs the code-intel cache by
+  `(qualified_name → body_hash)`, re-derives only changed symbols' atoms+edges
+  (`extract_atoms_for_symbols`), `apply_atom_delta`s `atoms.json`, **then rebuilds
+  `atoms.lance`/`edges.csr` and refreshes the ANN** — the load-bearing step that keeps a
+  flipped corpus from reading stale. The watcher (`update/delta.rs`) does the structural
+  slice automatically. *Limit:* salience + incoming call edges are full-build-only.
+- **Live:** `semver-self-atlas` (built, flipped, ANN-backfilled, `verify-v2` PASS);
+  generalizes to any SCIP-indexed corpus.
 
 ---
 

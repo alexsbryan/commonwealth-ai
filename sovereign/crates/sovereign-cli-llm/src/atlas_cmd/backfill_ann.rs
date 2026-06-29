@@ -34,21 +34,88 @@ pub async fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
-    // Positional corpus ids (comma- or space-separated), skipping any stray
-    // flag tokens parse_globals left behind.
-    let corpora: Vec<String> = rest
+    // Parse the filter-override flags out of `rest` (each is flag + value),
+    // leaving plain positional tokens as corpus ids. The atlas-context filter
+    // already supports these knobs (`AtlasLoadFilter`); we just surface them so
+    // a CODE atlas — `structural` depth, short/empty summaries — can be indexed.
+    // Without them the default prose profile (`extracted` depth, min 200 chars)
+    // excludes every code atom and the backfill resolves 0 entries.
+    let mut depth_override: Option<Vec<String>> = None;
+    let mut min_chars_override: Option<usize> = None;
+    let mut include_override: Option<(bool, bool, bool)> = None;
+    let mut positionals: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        let take_value = |i: &mut usize, name: &str| -> Result<String, ()> {
+            match rest.get(*i + 1) {
+                Some(v) => {
+                    *i += 2;
+                    Ok(v.clone())
+                }
+                None => {
+                    eprintln!("atlas backfill-ann: {name} needs a value");
+                    Err(())
+                }
+            }
+        };
+        match arg {
+            "--atlas-depth" => {
+                let Ok(v) = take_value(&mut i, "--atlas-depth") else {
+                    return 2;
+                };
+                depth_override = Some(csv(&v));
+            }
+            "--atlas-min-description-chars" => {
+                let Ok(v) = take_value(&mut i, "--atlas-min-description-chars") else {
+                    return 2;
+                };
+                match v.parse::<usize>() {
+                    Ok(n) => min_chars_override = Some(n),
+                    Err(_) => {
+                        eprintln!("atlas backfill-ann: --atlas-min-description-chars not a number: {v}");
+                        return 2;
+                    }
+                }
+            }
+            "--atlas-include" => {
+                let Ok(v) = take_value(&mut i, "--atlas-include") else {
+                    return 2;
+                };
+                let (mut c, mut t, mut g) = include_override.unwrap_or((false, false, false));
+                for tok in csv(&v) {
+                    match tok.as_str() {
+                        "claim" | "claims" => c = true,
+                        "tension" | "tensions" => t = true,
+                        "config" | "configuration" | "configurations" => g = true,
+                        other => {
+                            eprintln!("atlas backfill-ann: unknown --atlas-include value: {other} (claim|tension|configuration)");
+                            return 2;
+                        }
+                    }
+                }
+                include_override = Some((c, t, g));
+            }
+            flag if flag.starts_with('-') => {
+                // Unknown flag parse_globals left behind — skip (don't treat as a corpus).
+                i += 1;
+            }
+            _ => {
+                positionals.push(rest[i].clone());
+                i += 1;
+            }
+        }
+    }
+    // Positional corpus ids (comma- or space-separated).
+    let corpora: Vec<String> = positionals
         .iter()
-        .filter(|a| !a.starts_with('-'))
-        .flat_map(|a| {
-            a.split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(String::from)
-        })
+        .flat_map(|a| csv(a))
         .collect();
     if corpora.is_empty() {
-        eprintln!("usage: sovereign atlas backfill-ann <corpus-id>[,<corpus-id>...]");
+        eprintln!("usage: sovereign atlas backfill-ann <corpus-id>[,<corpus-id>...] \\");
+        eprintln!("         [--atlas-depth <csv>] [--atlas-min-description-chars <n>] [--atlas-include <csv>]");
         eprintln!("  builds <corpus>/atlas/atoms_ann.lance (ATLAS_STORAGE_V2 3b ANN seed table)");
+        eprintln!("  code atlases: --atlas-depth structural --atlas-min-description-chars 1");
         return 2;
     }
 
@@ -69,16 +136,22 @@ pub async fn run(args: &[String]) -> i32 {
     // seed path never sees (and key the embed cache the manager can't read).
     // Single source of truth, so the table can never drift from grounding.
     let prod = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
+    let (inc_claims, inc_tensions, inc_configs) = include_override
+        .unwrap_or((prod.include_claims, prod.include_tensions, prod.include_configurations));
     let filter = AtlasLoadFilter {
-        min_description_chars: prod.min_description_chars,
-        depth_allowlist: prod.depth_allowlist.clone(),
+        min_description_chars: min_chars_override.unwrap_or(prod.min_description_chars),
+        depth_allowlist: depth_override.clone().unwrap_or_else(|| prod.depth_allowlist.clone()),
         max_entries: prod.max_entries,
-        include_claims: prod.include_claims,
-        include_tensions: prod.include_tensions,
-        include_configurations: prod.include_configurations,
+        include_claims: inc_claims,
+        include_tensions: inc_tensions,
+        include_configurations: inc_configs,
     };
+    let overridden = depth_override.is_some()
+        || min_chars_override.is_some()
+        || include_override.is_some();
     eprintln!(
-        "atlas backfill-ann: production grounding filter — min_chars={} depth={:?} claims={} tensions={} configs={}",
+        "atlas backfill-ann: {} filter — min_chars={} depth={:?} claims={} tensions={} configs={}",
+        if overridden { "overridden" } else { "production grounding" },
         filter.min_description_chars,
         filter.depth_allowlist,
         filter.include_claims,
@@ -116,4 +189,15 @@ pub async fn run(args: &[String]) -> i32 {
     }
     println!("atlas backfill-ann: {built} built, {failed} failed");
     i32::from(failed > 0)
+}
+
+/// Split a comma- (or whitespace-) separated value into trimmed, non-empty
+/// tokens. Used for `--atlas-depth`, `--atlas-include`, and comma-joined
+/// corpus-id positionals.
+fn csv(s: &str) -> Vec<String> {
+    s.split([',', ' '])
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(String::from)
+        .collect()
 }

@@ -137,6 +137,21 @@ pub async fn run_code_intel(
         };
         for e in &chunk_out {
             reuse_pool.insert(e.body_hash.clone(), e.clone());
+            // Evict any STALE entry for this same symbol — a prior body_hash
+            // for the same qualified_name. The cache is body-hash-keyed (so
+            // identical bodies across DIFFERENT symbols dedup), but a single
+            // symbol whose body changed would otherwise leave its old
+            // body_hash entry behind forever. That stale duplicate makes the
+            // qualified_name-keyed `load_code_intel_summaries` (and the Inc-6
+            // change-set) nondeterministic. Keep exactly one entry per symbol
+            // identity. Guarded on a non-empty qualified_name so SCIP-silent
+            // symbols (file#name fallback, all sharing an empty qualified_name)
+            // don't evict each other.
+            if !e.meta.qualified_name.is_empty() {
+                done.retain(|h, v| {
+                    h == &e.body_hash || v.meta.qualified_name != e.meta.qualified_name
+                });
+            }
             done.insert(e.body_hash.clone(), e.clone());
         }
         let snapshot: Vec<SymbolEnrichment> = done.values().cloned().collect();
@@ -294,5 +309,48 @@ mod tests {
         assert_eq!(rep2.enrich.regenerated, 0, "no model call for an unchanged body");
         assert_eq!(rep2.index.skipped, 1, "chunk unchanged");
         assert_eq!(index.chunk_count().await.unwrap(), 1, "no new rows");
+    }
+
+    #[tokio::test]
+    async fn changed_body_leaves_no_stale_cache_duplicate() {
+        // A symbol whose body changes must leave ONE cache entry (the new
+        // body_hash), not accumulate the prior one — otherwise the
+        // qualified_name-keyed summary join + the Inc-6 change-set go
+        // nondeterministic. Regression for the stale-eviction in the
+        // checkpoint loop.
+        let src = tempfile::tempdir().unwrap();
+        let f = src.path().join("z.rs");
+        std::fs::write(&f, "fn handle() {\n    first_version();\n}\n").unwrap();
+
+        let scip = ScipGraph::open_in_memory("c").unwrap();
+        scip.ingest_symbols_and_refs(vec![fn_symbol("handle", "z.rs", 0, 2)], vec![])
+            .await
+            .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let (chat, embed) = (fake_chat(), fake_embed());
+
+        // Pass 1: summarize the original body.
+        run_code_intel(&scip, None, src.path(), cache.path(), &chat, &embed, &[])
+            .await
+            .unwrap();
+
+        // Edit the body in place (same line span; brace-match still works).
+        std::fs::write(&f, "fn handle() {\n    second_version();\n}\n").unwrap();
+
+        // Pass 2: re-summarize the changed body.
+        let rep2 = run_code_intel(&scip, None, src.path(), cache.path(), &chat, &embed, &[])
+            .await
+            .unwrap();
+        assert_eq!(rep2.enrich.regenerated, 1, "changed body re-summarized");
+
+        // The cache must hold exactly ONE entry for `handle` — the stale
+        // prior-body entry was evicted.
+        let raw = std::fs::read_to_string(cache.path().join(CACHE_FILE)).unwrap();
+        let entries: Vec<SymbolEnrichment> = serde_json::from_str(&raw).unwrap();
+        let handle_entries = entries
+            .iter()
+            .filter(|e| e.meta.qualified_name == "crate::handle")
+            .count();
+        assert_eq!(handle_entries, 1, "exactly one cache entry per symbol (no stale dup)");
     }
 }

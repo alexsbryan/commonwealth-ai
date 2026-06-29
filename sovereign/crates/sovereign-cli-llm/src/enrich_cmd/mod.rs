@@ -18,6 +18,7 @@ pub mod atlas_cross_corpus;
 pub mod atlas_drift_report;
 pub mod atlas_eval;
 pub mod atlas_gaps;
+pub mod atlas_patch_code;
 pub mod atlas_phase_cmd;
 pub mod atlas_query;
 pub mod atlas_reconcile;
@@ -88,6 +89,7 @@ const HELP: Help = Help {
                 ("raptor", "Retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree (additive to any existing atom-graph atlas) — powers whole-document summarization."),
                 ("raptor-index", "(Re)build the RAPTOR summary-node ANN index (raptor_summaries.lance) from conv_raptor_nodes — the query-time fast path; 'enrich raptor' builds it automatically at the end of a run."),
                 ("code-intel", "Summarize every function in a CODE corpus (plain-English intent + the questions it answers) and index them as searchable chunks — the conceptual->code retrieval bridge."),
+                ("atlas-patch-code", "Incrementally patch a CODE atlas for the functions that changed: refresh summaries, re-derive only those atoms+edges, apply the delta, and rebuild the v2 store (atoms.lance + edges.csr). No full rebuild."),
                 ("spec-intel", "Extract conditioned claims from a spec .md (split on `## ` headers) — validated findings (contract) + planned behavior (proposal), grammar-constrained, resumable per section."),
                 ("spec-reconcile", "Reconcile a spec's conditioned claims (from `enrich spec-intel`) against what the corpus code actually does: corroborated / todo / drift / gap / unverifiable, per-condition adjudicated."),
                 ("capability-doc", "Narrate every derived capability into a grounded, file:line-cited architecture document (from `code capability-map` + `enrich code-intel`)."),
@@ -227,6 +229,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
 
         // ── Code intelligence (per-symbol intent summaries -> chunks) ──
         "code-intel" => code_intel::cmd_code_intel(rest).await,
+        "atlas-patch-code" => atlas_patch_code::cmd_atlas_patch_code(rest).await,
         "spec-intel" => spec_intel::cmd_spec_intel(rest).await,
         "spec-reconcile" => spec_reconcile::cmd_spec_reconcile(rest).await,
         "capability-doc" => capability_doc::cmd_capability_doc(rest).await,
