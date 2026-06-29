@@ -242,7 +242,7 @@ impl AtlasGraph {
 
 /// Edge adjacency — map the preload's `(src, tgt, type, conf)`
 /// tuples (endpoint strings borrowed from the resident id table) into
-/// [`EdgeView`]s, the same shape the rkyv path returns.
+/// [`EdgeView`]s.
 fn lance_edge_views<'a>(raw: Vec<(&'a str, &'a str, EdgeType, f32)>) -> Vec<EdgeView<'a>> {
     raw.into_iter()
         .map(|(source, target, edge_type, confidence)| EdgeView {
@@ -254,7 +254,7 @@ fn lance_edge_views<'a>(raw: Vec<(&'a str, &'a str, EdgeType, f32)>) -> Vec<Edge
         .collect()
 }
 
-/// Borrowing view over one compact archived edge — the four fields the
+/// Borrowing view over one CSR edge — the four fields the
 /// navigate path reads. `source`/`target` are zero-copy atom-id `&str`s.
 pub struct EdgeView<'a> {
     pub source: &'a str,
@@ -271,8 +271,9 @@ fn derive_article_slug(atlas_corpus_id: &str) -> String {
 }
 
 /// Is the v2 store (`atoms.lance` + `edges.csr`) present in `atlas_dir`? Both
-/// artifacts are required — a half-present store is treated as absent so the
-/// reader falls back to rkyv rather than erroring.
+/// artifacts are required — a half-present store is treated as absent, so
+/// `load_from_disk` returns the clean "no v2 store" `Err` instead of reading a
+/// torn store.
 fn v2_store_present(atlas_dir: &Path) -> bool {
     use corpus_engine::enrichment::atlas::store::{ATOMS_LANCE_DIRNAME, EDGES_CSR_FILENAME};
     atlas_dir.join(ATOMS_LANCE_DIRNAME).exists() && atlas_dir.join(EDGES_CSR_FILENAME).exists()
@@ -1268,10 +1269,9 @@ mod tests {
 }
 
 #[cfg(test)]
-mod archive_io_tests {
-    //! L5 — the archive read path end to end: projection fidelity through
-    //! [`AtomView`], the dual-write of `atoms.rkyv`, the mmap load, and the
-    //! convert-on-load self-upgrade for a JSON-only corpus.
+mod store_io_tests {
+    //! L5 — the v2 store read path end to end: projection fidelity through
+    //! [`AtomView`] and the `atoms.lance` + `edges.csr` load.
     use super::*;
     use corpus_engine::enrichment::atlas::atoms::AtomId;
     use corpus_engine::enrichment::atlas::store;
