@@ -176,9 +176,9 @@ pub fn write_atlas_full(
 }
 
 /// Write the v2 store (`atoms.lance` + `edges.csr`) from the just-written atoms
-/// + edges (ATLAS_STORAGE_V2). This is the runtime read path, so unlike the old
-/// best-effort rkyv sidecar it is **fail-hard**: an unwritable store fails the
-/// atlas write rather than silently leaving a corpus with no loadable graph.
+/// + edges (ATLAS_STORAGE_V2). This is the runtime read path, so it is
+/// **fail-hard**: an unwritable store fails the atlas write rather than silently
+/// leaving a corpus with no loadable graph.
 /// `atoms.json` is already written and remains the canonical export + the
 /// `migrate-all` rebuild source, so a failed store is always recoverable. The
 /// store's `corpus_id` is self-description (derived from the atlas dir's

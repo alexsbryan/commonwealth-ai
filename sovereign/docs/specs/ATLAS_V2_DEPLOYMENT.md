@@ -18,14 +18,21 @@ the load-bearing risk before touching the tuned inference daemon — is proven:
 
 What remains is **deployment** — realizing the proven-correct design in the daemon.
 
+**STATUS: COMPLETE (2026-06-29).** Every step below is done. The v2 store is the sole
+atom backend — v1 (`atoms.rkyv` + `atoms.embeddings.bin` + `resolve_atom_id_from_entry`)
+was deleted in step 4 (commit `edeca426`), every flippable corpus reads v2, and the
+v2-only wikipedia + SEP snapshots are published to HF. The migration is no longer
+reversible by design — that was step 4's explicit tradeoff, taken after v2 baked in use.
+
 ## Steps (each gated, reversible)
 
 - [x] **0. Increments A–D landed + committed.** Store writer (B) wired at the 3
   lifecycle points, gated `SOVEREIGN_ATLAS_STORE_V2` (off). Eval `--atlas-backend
   lance` + `--atlas-seed ann` prove neutrality. `atlas verify-v2` audit/backfill tool.
-- [ ] **1. Backfill.** `atlas verify-v2 --all --generate` writes `atoms.lance` +
-  `edges.csr` for all 1,812 atlas-bearing corpora. Skip the 3 dead atlases;
-  wikipedia is the one slow run (1.67M-atom reconstruct — run isolated, watch RSS).
+- [x] **1. Backfill — DONE.** `atoms.lance` + `edges.csr` written for every atlas-bearing
+  corpus (1808 flippable live atlases; the 3 dead atlases skipped). Reusable as one
+  command, `sovereign atlas migrate-all` (below). Wikipedia took the columnar-structural
+  path (step 3a), not an atom-store reconstruct.
 - [x] **2. Production direct-read reader (THE hot-path stage) — DONE + verified.** Daemon's
   `AtlasGraph` reads `atoms.lance` **directly** instead of reconstruct-to-rkyv —
   backend enum `Rkyv | Lance`, `AtomView`/`EvidenceRef` become 2-variant enums
@@ -55,11 +62,10 @@ What remains is **deployment** — realizing the proven-correct design in the da
     *zero* changes. Reader proven retrieval-neutral (deterministically by the 2c
     byte-parity test; on real data by this eval). The daemon-served chaos QA + enron
     embedding spot-check move to step 3 (where the daemon actually uses the gate).
-- [ ] **3. Flip.** Per-corpus `read_v2` marker: SEP → other **embedding-bearing**
-  sources. Wikipedia is deliberately **not** flipped (see 3a). **Verify per flip
-  (daemon-served, the gate is live here — distinct from 2e's in-eval reader):** chaos
-  QA on the flipped corpus + a non-philosophy embedding spot-check (enron) + confirm
-  `backend_kind=lance` in the daemon log. Roll back by removing the marker.
+- [x] **3. Flip — DONE.** All 1808 flippable live atom corpora carry `atlas/.read_v2`
+  (via `atlas migrate-all`); wikipedia deliberately not flipped (it serves structural
+  neighbors from the columnar graph — see 3a). The per-corpus `read_v2` marker was then
+  retired entirely in step 4 — v2 is the only backend now, so there is no gate.
 - [x] **3a. Wikipedia → columnar-structural v2 — W1–W4 DONE + verified on real wiki.**
   See `WIKIPEDIA_ATLAS_V2.md`. Wiki's *structural* enrichment (link graph, section_path,
   pov/citation, QID) baked into Lance: `articles.lance` (catalog, 3.1 MB / 51,845
@@ -131,27 +137,32 @@ What remains is **deployment** — realizing the proven-correct design in the da
     ANN**: `init complete contexts=63 graphs=63`, gate log `atlas-grounding: ANN seed path
     (v2) corpora=63 max_seeds=12`, `post-apply_atlas_grounding n_chunks=35 {"sep":35}`. The
     broader daemon-served chaos QA is step 3.
-- [ ] **4. Delete v1 — a REFACTOR, not a quick clear (scoped 2026-06-28).** The deploy proved
-  this is bigger than "delete some files." Call-site audit: `resolve_atom_id_from_entry` has 4
-  live callers, all in `atlas_navigate_ann` (name-match seed + the adaptive cosine branch) +
-  `build_persistent_ann_seed_table` (backfill) — it is NOT v1-only. `AtlasContext` (the
-  embedding bag) is likewise load-bearing for name-match scoring + the cosine fallback for
-  un-backfilled corpora. So removing them requires **re-architecting name-match + seeding off
-  the v2 store** (`atoms.lance` names + `atoms_ann.lance` vectors, atom-ids direct — no
-  resolve), not a deletion. Separately, **wiki is not fully off rkyv**: its NEIGHBORS use the
-  columnar graph, but typed-enumeration (`enumerate_typed_atom_chunks` → `graph.atoms_of_kind`)
-  still reads wiki's `AtlasGraph` (rkyv) — fully retiring wiki's rkyv needs either wiki
-  `atoms.lance` (the slow 1.67M build) or re-pointing typed-enum at the columnar. And deleting
-  the rkyv backend removes the `load_from_disk` fallback that makes every flip reversible.
-  **Recommendation: let v2 bake in real desktop use before this refactor** — the migration is
-  fully reversible today (delete the `.read_v2` markers); deleting v1 forecloses that. Safe
-  subset doable now: remove the 3 dead-atlas dirs (below).
-- [ ] **5. HF distribution.** `sovereign corpus snapshot publish <corpus> --upload
-  svrnmesh/<repo>` (zstd snapshot + `hf upload`, `--include-atlas` default-on) ships the v2
-  artifacts (`atoms.lance` + `edges.csr` + `atoms_ann.lance`; wiki `articles.lance` +
-  `edges.lance`). `SnapshotManifest.store_format_version` so install = drop + register (no
-  convert). Additive — does not require step 4 (the bundle is data; the v1 fallback code can
-  stay). HF_TOKEN from `~/.cache/huggingface/token` (private repos).
+- [x] **4. Delete v1 — DONE (2026-06-29, commit `edeca426`).** Done as the scoped refactor
+  the 2026-06-28 audit called for, not a file delete. **Phase A (rkyv storage backend):**
+  `archive.rs` split into `projection.rs` (the shared `AtomRecord`/`project` types, rkyv
+  derives stripped); `AtlasGraph` collapsed to a single `Arc<LancePreload>` (backend enum
+  gone; `AtomView`/`EvidenceRef` are now single structs); `load_from_disk` is v2-only and
+  **Err on absent** — the `read_v2` gate and the rkyv fallback are removed (no fallback by
+  design); writers are fail-hard; the `rkyv` dep is dropped from both crates. **Phase B
+  (seeding re-arch):** `AtlasEntry` carries `atom_id` first-class; the embedding bag is
+  derived from `atoms_ann.lance` + resident atoms (no load-time re-embed); name-match reads
+  resident atoms directly; `resolve_atom_id_from_entry`, the sync cosine `atlas_navigate`,
+  and `atoms.embeddings.bin` are all deleted (grounding routes through `atlas_navigate_ann`).
+  Wiki's typed-enumeration resolves cleanly: with rkyv gone `graph("wikipedia")` returns
+  `None` and the typed-enum call sites `filter_map`/`continue` — a net fix for the ~38s
+  on-query convert-on-load. **Verified:** lint green, full suite **7152/0**, SEP eval
+  **60/66 (+4 vs v1** — Phase B fixed a latent resolve bug), wiki CI retrieval gate
+  **0 regressed**. The 3 dead-atlas dirs remain for manual removal (out-of-repo path).
+- [x] **5. HF distribution — DONE.** `sovereign corpus snapshot publish <corpus> --upload
+  svrnmesh/<repo>` ships the v2 artifacts (`atoms.lance` + `edges.csr` + `atoms_ann.lance`;
+  wiki `articles.lance` + `edges.lance`). SEP pushed to `svrnmesh/sep-index` (additive);
+  **wikipedia pushed v2-only to `svrnmesh/wikipedia-index`** (2026-06-29, 9.43 GB, commit
+  `0c3ee0f5`, sha256 `9a47a9b7…`) — the v2-only bundle was produced by moving wiki's 4 v1
+  atlas files aside, building, then restoring (tar-verified no v1 leak). **Use
+  `--zstd-level 3` for vector corpora** — the level-19 default is catastrophic on the
+  ~incompressible embedding columns (~2 MB/min, ~100h ETA). HF_TOKEN from
+  `~/.cache/huggingface/token` (private repos). Follow-up: repoint the recipes at the new
+  snapshot sha256s so fresh installs pull v2-only.
 
 ## Reusable migration — any machine (the one-command port)
 

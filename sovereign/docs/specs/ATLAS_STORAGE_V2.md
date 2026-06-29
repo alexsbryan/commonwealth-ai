@@ -1,10 +1,10 @@
 # Spec: Atlas Storage v2 — federate, don't merge
 
-> Status: **proposal / from-scratch design** (2026-06-27). Successor to
-> `ATLAS_STORAGE.md` (v1, shipped). A contract per `ARCH_PRINCIPLES §1.1`
-> once accepted. Owner-crates: `corpus-engine` (store format + write path +
-> meta-atlas), `sovereign-core` (read path), `sovereign-tools`
-> (`atlas_context_manager`, install).
+> Status: **SHIPPED (2026-06-29)** — the sole atom storage backend. Successor to
+> `ATLAS_STORAGE.md` (v1, now **deleted**, commit `edeca426`). See
+> `ATLAS_V2_DEPLOYMENT.md` for the migration record. Owner-crates: `corpus-engine`
+> (store format + write path + meta-atlas), `sovereign-core` (read path),
+> `sovereign-tools` (`atlas_context_manager`, install).
 
 ## Why this exists
 

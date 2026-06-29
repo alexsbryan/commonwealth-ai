@@ -1,8 +1,15 @@
 # Spec: Atlas Storage — off the big-JSON, lightest lift first
 
-> Status: **proposal** (2026-06-27). A contract per `ARCH_PRINCIPLES §1.1` once
-> accepted. Owner-crates: `corpus-engine` (write path + data model,
-> `src/enrichment/atlas/atoms.rs`), `sovereign-core` (read path,
+> Status: **SUPERSEDED (2026-06-29)** by `ATLAS_STORAGE_V2.md` and its shipped
+> implementation. This document proposed the v1 `atoms.rkyv` zero-copy archive;
+> that backend was **deleted** in the ATLAS_STORAGE_V2 finish-line (commit
+> `edeca426`). The atom store is now `atoms.lance` + `edges.csr` (+ `atoms_ann.lance`
+> for ANN seeding), with no rkyv path and no convert-on-load fallback. Kept for
+> historical context only — do not implement against it. See
+> `ATLAS_V2_DEPLOYMENT.md` for the migration record.
+>
+> _Original status: proposal (2026-06-27)._ Owner-crates: `corpus-engine` (write
+> path + data model, `src/enrichment/atlas/atoms.rs`), `sovereign-core` (read path,
 > `src/atlas_context.rs` + `src/runtime/retrieval.rs`).
 
 ## Why this exists

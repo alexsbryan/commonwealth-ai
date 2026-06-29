@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! ATLAS_STORAGE_V2 — Stage 0: the v2 store **writer** (dormant).
+//! ATLAS_STORAGE_V2 — the per-corpus v2 store (writer + reader).
 //!
-//! Writes the per-corpus v2 store beside the v1 rkyv archive at the same
-//! lifecycle points (`build sidecar / post-install / CLI`), gated by the
-//! `SOVEREIGN_ATLAS_STORE_V2` env so it is a no-op until explicitly enabled.
-//! The reader is **unchanged** in this stage — `AtlasGraph` still loads
-//! `atoms.rkyv`; Stage 1 swaps the read path. Building here, dormant, lets us
-//! generate real v2 stores and prove parity ("lance row == rkyv atom") before
-//! anything touches the hot read path.
+//! The v2 store is the sole atom backend. It is written at every atlas
+//! lifecycle point (`build sidecar / post-install / CLI`) and read directly by
+//! `AtlasGraph`. It replaced the v1 `atoms.rkyv` archive, which was retired once
+//! every corpus had migrated (see `ATLAS_STORAGE_V2.md`); there is no fallback —
+//! a corpus without a v2 store reports no atlas. Writes are fail-hard, with
+//! `atoms.json` retained as the canonical export and `sovereign atlas
+//! migrate-all` as the rebuild path.
 //!
 //! Two artifacts, per `ATLAS_STORAGE_V2.md` §A/§B:
 //! - `atoms.lance` — columnar atom store. The hot scalar columns (the
 //!   `atlas_navigate`/enumeration projection) + an interned local `id` (u32,
 //!   for CSR compactness) + the lossless canonical `payload` JSON (deep reads,
-//!   so `atoms.lance` can replace `atoms.json`). Atoms are projected through
-//!   the SAME [`super::archive::project`] the rkyv writer uses.
+//!   so `atoms.lance` replaces `atoms.json` for the reader). Atoms are projected
+//!   through [`super::projection::project`].
 //! - `edges.csr` — a plain little-endian CSR triple (offsets / neighbors /
 //!   types / conf), out-edges and a symmetric in-edge CSR, over the interned
-//!   local ids. mmap-friendly so the Stage-1 BFS inner loop stays sync.
+//!   local ids. mmap-friendly so the BFS inner loop stays sync.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -51,7 +51,7 @@ const CSR_VERSION: u32 = 1;
 
 /// One atom as v2 columns: the interned local id, the hot scalar fields, and
 /// the lossless canonical JSON payload. Derived from [`AtomRecord`] so the
-/// columns match the rkyv projection field-for-field.
+/// columns track the canonical projection field-for-field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomRow {
     pub local_id: u32,
@@ -71,8 +71,8 @@ pub struct AtomRow {
 
 impl AtomRow {
     /// Re-parse the full [`AtomEnvelope`] from the payload column. `None` on an
-    /// empty payload or parse failure. The cold deep read for the Stage-1
-    /// direct-read reader (hot fields are the scalar columns above).
+    /// empty payload or parse failure. The cold deep read for the direct-read
+    /// reader (hot fields are the scalar columns above).
     pub fn atom_envelope(&self) -> Option<AtomEnvelope> {
         if self.payload.is_empty() {
             return None;
@@ -98,8 +98,8 @@ impl AtomRow {
     }
 }
 
-/// Stable u8 discriminant for the atom kind. Order matches [`AtomKindTag`] and
-/// the rkyv archive's tag, so the `kind` column round-trips losslessly.
+/// Stable u8 discriminant for the atom kind. Order matches [`AtomKindTag`], so
+/// the `kind` column round-trips losslessly.
 fn kind_u8(k: AtomKindTag) -> u8 {
     match k {
         AtomKindTag::Entity => 0,
@@ -327,7 +327,7 @@ fn write_edges_csr(
 
 /// mmap'd reader over `edges.csr` — the v2 CSR edge file written by
 /// [`write_edges_csr`]. Sync and paged: the `atlas_navigate` BFS inner loop
-/// (ATLAS_STORAGE_V2 Stage 1) reads adjacency without faulting the whole file
+/// reads adjacency without faulting the whole file
 /// resident, the v2 "edges stay sync mmap" invariant. Neighbors are interned
 /// local u32 ids; the caller maps them back to atom-id strings via the
 /// `atoms.lance` `id`/`str_id` columns.
@@ -354,7 +354,7 @@ impl CsrEdges {
         let file =
             std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
         // SAFETY: edges.csr is a build-produced artifact (atomic tmp+rename),
-        // immutable for the reader's lifetime — same trust model as the rkyv mmap.
+        // immutable for the reader's lifetime (atomic tmp+rename, never rewritten in place).
         let mmap =
             unsafe { Mmap::map(&file) }.map_err(|e| format!("mmap {}: {e}", path.display()))?;
         let b = &mmap[..];
@@ -514,7 +514,7 @@ pub fn write_store_blocking(
 /// Drive a Lance (tokio) future to completion from sync code. Lance requires a
 /// tokio reactor; running on a fresh, dedicated-thread multi-thread runtime
 /// avoids both the "runtime within a runtime" panic and `block_in_place`'s
-/// flavor constraints. Used by the v2-store write bridges (dormant by gate) and
+/// flavor constraints. Used by the v2-store write bridges and
 /// the [`LancePreload::open_blocking`] reader bridge (the daemon's sync
 /// `AtlasGraph::load_from_disk` opening the v2 store off the hot query path).
 fn run_blocking<T, F>(fut: F) -> Result<T, String>
@@ -558,17 +558,18 @@ pub fn store_needs_build(atlas_dir: &Path) -> bool {
 
 /// Read every atom out of `atoms.lance` into a resident [`AtomRecord`], the
 /// **canonical** [`project`]ion of its lossless `payload`. Re-projecting the
-/// payload (rather than reading the scalar columns) is deliberate: it makes the
-/// resident record byte-identical to what the rkyv archive holds, so the
-/// daemon's `AtlasGraph` Lance backend hands out views indistinguishable from
-/// the rkyv ones (the reader-parity invariant). It also recovers the relational
-/// fields (`aliases`/`participants`/`evidence`) that the scalar columns drop and
-/// only the payload carries. Returned sorted by interned local id (== position),
-/// so CSR neighbor ids index straight into the `Vec`.
+/// payload (rather than reading the scalar columns) is deliberate: it keeps the
+/// payload the single source of truth, so the scalar columns stay a pure read
+/// optimization and the resident record is always the canonical projection. It
+/// also recovers the relational fields (`aliases`/`participants`/`evidence`)
+/// that the scalar columns drop and only the payload carries. Returned sorted
+/// by interned local id (== position), so CSR neighbor ids index straight into
+/// the `Vec`.
 ///
 /// Parsing every payload is the SEP/other-scale "preload" cost (cheap — hundreds
-/// to low-thousands of atoms); wikipedia (1.67M) keeps the rkyv reader until its
-/// own flip, where a paged variant lands.
+/// to low-thousands of atoms). Wikipedia carries no atom store of its own — it
+/// serves structural neighbors from the columnar `WikipediaGraph`
+/// (`articles.lance` + `edges.lance`), not this reader.
 async fn read_atom_records(atlas_dir: &Path) -> Result<Vec<AtomRecord>, String> {
     let uri = atlas_dir
         .to_str()
@@ -618,7 +619,7 @@ enum Dir {
 }
 
 /// A resident, **sync-queryable** view over one corpus's v2 store — the
-/// production direct-read reader that replaces reconstruct-to-rkyv. Atoms live
+/// production direct-read reader. Atoms live
 /// resident as projected [`AtomRecord`]s; edges stay the mmap'd `edges.csr`, so
 /// the `atlas_navigate` BFS inner loop is sync + paged (the v2 "hot BFS stays
 /// sync" invariant).
@@ -636,7 +637,7 @@ pub struct LancePreload {
     /// atom-id string → local id (point lookup + edge-endpoint resolution).
     by_str_id: HashMap<String, u32>,
     /// local id → atom-id string, so CSR edge endpoints surface as `&str`
-    /// borrowed from resident data (mirrors the rkyv `EdgeView` `&str`s).
+    /// borrowed from resident data.
     local_to_str: Vec<String>,
     /// mmap'd CSR adjacency — sync + paged.
     csr: CsrEdges,
@@ -890,7 +891,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lance_row_equals_rkyv_atom_on_a_frozen_fixture() {
+    async fn lance_row_equals_projection_on_a_frozen_fixture() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         let atoms = vec![
@@ -912,12 +913,12 @@ mod tests {
 
         write_store(dir, "frozen", &atoms, &edges).await.unwrap();
 
-        // PARITY: each lance row equals the rkyv projection of the same atom.
+        // PARITY: each lance row equals the canonical projection of the same atom.
         let rows = read_atoms_lance(dir).await;
         assert_eq!(rows.len(), atoms.len());
         for (i, atom) in atoms.iter().enumerate() {
             let expect = AtomRow::from_record(i as u32, &project(atom));
-            assert_eq!(rows[i], expect, "lance row {i} != rkyv projection");
+            assert_eq!(rows[i], expect, "lance row {i} != canonical projection");
             // Payload is lossless: it deserializes back to the original atom.
             let back: AtomEnvelope = serde_json::from_str(&rows[i].payload).unwrap();
             assert_eq!(back.id().as_str(), atom.id().as_str());
@@ -941,7 +942,7 @@ mod tests {
 
     #[test]
     fn csr_edges_reader_roundtrips_the_writer() {
-        // Stage-1 foundation: the mmap CsrEdges reader reconstructs exactly
+        // The mmap CsrEdges reader reconstructs exactly
         // what write_edges_csr wrote, over interned local ids.
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
@@ -993,10 +994,10 @@ mod tests {
 
     #[tokio::test]
     async fn lance_preload_reads_back_parity_atoms_and_edges() {
-        // Stage-1 reader-parity: LancePreload reads the v2 store back into
-        // resident records identical to the rkyv projection, and the CSR edge
-        // endpoints resolve to the right atom-id strings — the daemon's Lance
-        // backend will hand out views indistinguishable from the rkyv ones.
+        // Reader-parity: LancePreload reads the v2 store back into resident
+        // records identical to the canonical projection, and the CSR edge
+        // endpoints resolve to the right atom-id strings — so the daemon's
+        // `AtlasGraph` hands out views straight from resident data.
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
@@ -1026,7 +1027,7 @@ mod tests {
         // (the scalar columns drop them), proving the payload round-trips them.
         for atom in &atoms {
             let got = pre.atom(atom.id().as_str()).expect("atom present");
-            assert_eq!(*got, project(atom), "preload record != rkyv projection");
+            assert_eq!(*got, project(atom), "preload record != canonical projection");
         }
         let alice = pre.atom(AtomId::entity(1).as_str()).unwrap();
         assert_eq!(alice.aliases, vec!["Alice-alias".to_string()]);
