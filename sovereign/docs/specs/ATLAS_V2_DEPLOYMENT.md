@@ -60,24 +60,30 @@ What remains is **deployment** — realizing the proven-correct design in the da
   (daemon-served, the gate is live here — distinct from 2e's in-eval reader):** chaos
   QA on the flipped corpus + a non-philosophy embedding spot-check (enron) + confirm
   `backend_kind=lance` in the daemon log. Roll back by removing the marker.
-- [ ] **3a. Wikipedia → columnar-structural v2 (proper path) — see `WIKIPEDIA_ATLAS_V2.md`.**
-  rkyv is the **interim** reader for wiki, not the end-state. The dead-end was trying
-  to port SEP's *semantic atom* model (rich JSON payload + embeddings + ANN) onto Lance
-  for wiki — a model mismatch (wiki atoms are `enrichment_depth: "structural"` stubs;
-  no embeddings; the payload-parse + `&'a`-borrow is what made the reader hard). The
-  right path: bake wiki's *structural* enrichment (link graph, section_path, pov/
-  citation, QID — already computed in `wikipedia_graph.db`, today split across
-  atoms.json + 1.39 GB edges.json + SQLite) **into Lance columns** — article rows +
-  typed `edges.csr`. The reader problem dissolves (no rich payload to parse), it
-  unifies wiki's 3-store split (~3.4 GB → a few hundred MB), and removes the rkyv
-  carve-out. Increments W1–W4 in the spec; W5 (article embeddings → ANN) is the future
-  semantic-seeding upgrade. "Done" = all corpora on v2 (wiki columnar, SEP/authored
-  atom), zero rkyv carve-out.
-- [ ] **4. Delete the v1 cosine-bag seeding** (`resolve_atom_id_from_entry`,
-  `AtlasContext`, `atoms.embeddings.bin`) after production ANN seeding lands + all
-  embedding-bearing corpora flipped + chaos green. **KEEP the rkyv reader backend** —
-  wikipedia depends on it permanently (3a). This step deletes the *seeding* path, not
-  the *reader*.
+- [x] **3a. Wikipedia → columnar-structural v2 — W1–W4 DONE + verified on real wiki.**
+  See `WIKIPEDIA_ATLAS_V2.md`. Wiki's *structural* enrichment (link graph, section_path,
+  pov/citation, QID) baked into Lance: `articles.lance` (catalog, 3.1 MB / 51,845
+  in-scope) + predicate-queryable `edges.lance` (7.85M links, BTree-indexed on
+  source_title). `ColumnarWikipediaGraph` serves the `WikipediaGraph` neighbor API; the
+  runtime gate (`open_wikipedia_graph`) picks columnar-if-present across all 3 loaders.
+  **Real-wiki verify:** full-set neighbor parity vs SQLite (MATCH; limited-set diffs are
+  equal-occurrence tie-break noise) + **~17× faster** (720 ms vs 13.5 s) + ~6× smaller
+  (845 MB vs 5.25 GB). Remaining wiki tail: retire `atoms.json`/`edges.json`/`atoms.rkyv`/
+  SQLite (folds into step 4) + daemon chaos QA (step 3). W5 (article embeddings → ANN)
+  is a future upgrade, not required for done.
+- [ ] **3b. Production ANN seeding (THE biggest remaining push).** The
+  ANN-over-vector-column seeding is proven in the *eval* (`eval_cmd/atlas_ann.rs`) but
+  production `atlas_navigate` still uses the v1 cosine-bag + `resolve_atom_id_from_entry`.
+  Move it into production: co-locate the atom embeddings as a vector column in
+  `atoms.lance` (+ IVF-PQ index), and replace the cosine-bag seed step with ANN that
+  returns atom-ids directly. This is the SEP track's actual retrieval-quality + scaling
+  win, and the prerequisite for deleting `resolve`. Gated per-corpus (the flipped ones).
+  **Verify:** the SEP+essay eval in the daemon path (== the A/C+D harness) + chaos QA.
+- [ ] **4. Delete v1** (`resolve_atom_id_from_entry`, `AtlasContext`,
+  `atoms.embeddings.bin`, the cosine-bag) after 3b lands + all embedding-bearing corpora
+  flipped + chaos green; and retire wiki's `atoms.json`/`edges.json`/`atoms.rkyv`/SQLite
+  (3a). The rkyv `AtlasGraph` backend retires once **every** atom-corpus is on Lance —
+  wiki no longer needs it (it's on `ColumnarWikipediaGraph`, a separate reader).
 - [ ] **5. HF distribution.** Bundle ships `atoms.lance` + `edges.csr`;
   `SnapshotManifest.store_format_version`; install = drop + register (no convert).
 

@@ -635,6 +635,15 @@ impl WikipediaGraph {
         use crate::enrichment::atlas::wiki_store::{WikiArticleRow, WikiEdgeRow};
         let (articles, edges): (Vec<WikiArticleRow>, Vec<WikiEdgeRow>) = {
             let conn = self.conn.lock().await;
+            // Flush the WAL into the main db ONCE up front. The ingest commits
+            // one giant transaction, leaving a multi-GB WAL; reading back through
+            // it merges WAL+db pages per read — brutal at full-wiki scale. Best
+            // effort (a read-only / busy db just keeps the WAL).
+            let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+            // Only **in-scope** articles need a row in `articles.lance` — at
+            // full wiki, in-scope is ~52k of 1.67M (the rest are dangling link
+            // targets, represented via `edges.target_in_scope`, not their own
+            // rows). The neighbor API never reads a dangling target's record.
             let mut astmt = conn
                 .prepare(
                     "SELECT a.title, a.wikidata_qid, a.revision_id, a.in_scope, \
@@ -642,7 +651,7 @@ impl WikipediaGraph {
                             EXISTS(SELECT 1 FROM section_signals s \
                                    WHERE s.corpus_id = a.corpus_id AND s.article_id = a.id \
                                      AND s.is_contested = 1) \
-                     FROM articles a WHERE a.corpus_id = ?1",
+                     FROM articles a WHERE a.corpus_id = ?1 AND a.in_scope = 1",
                 )
                 .map_err(|e| Error::Database(format!("export articles prepare: {e}")))?;
             let articles: Vec<WikiArticleRow> = astmt
@@ -1229,6 +1238,74 @@ fn classify_relationship(section_path: &[String], link_text: &str) -> String {
     }
 
     "topical".to_string()
+}
+
+// ─── WikipediaGraphApi: backend-agnostic neighbor surface (W3) ────────────────
+
+/// The query surface the runtime consumes from a Wikipedia link graph —
+/// implemented by both the SQLite [`WikipediaGraph`] and the columnar
+/// [`crate::wikipedia_columnar::ColumnarWikipediaGraph`], so the runtime can hold
+/// `Arc<dyn WikipediaGraphApi>` and stay backend-agnostic. `#[async_trait]` keeps
+/// it `dyn`-safe (the methods are async). WIKIPEDIA_ATLAS_V2 W3 — the seam the
+/// columnar store is swapped in behind, before W4 retires the SQLite.
+#[async_trait::async_trait]
+pub trait WikipediaGraphApi: Send + Sync {
+    async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor>;
+    async fn neighbors_for_axis(
+        &self,
+        title: &str,
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor>;
+    async fn co_neighbors(
+        &self,
+        titles: &[String],
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor>;
+    async fn reverse_neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor>;
+    async fn has_contested_section(&self, title: &str) -> bool;
+    async fn record(&self, title: &str) -> Option<ArticleRecord>;
+    async fn article_count(&self) -> usize;
+    async fn edge_count(&self) -> usize;
+}
+
+#[async_trait::async_trait]
+impl WikipediaGraphApi for WikipediaGraph {
+    async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
+        WikipediaGraph::neighbors(self, title, limit).await
+    }
+    async fn neighbors_for_axis(
+        &self,
+        title: &str,
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor> {
+        WikipediaGraph::neighbors_for_axis(self, title, axis_terms, limit).await
+    }
+    async fn co_neighbors(
+        &self,
+        titles: &[String],
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor> {
+        WikipediaGraph::co_neighbors(self, titles, axis_terms, limit).await
+    }
+    async fn reverse_neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
+        WikipediaGraph::reverse_neighbors(self, title, limit).await
+    }
+    async fn has_contested_section(&self, title: &str) -> bool {
+        WikipediaGraph::has_contested_section(self, title).await
+    }
+    async fn record(&self, title: &str) -> Option<ArticleRecord> {
+        WikipediaGraph::record(self, title).await
+    }
+    async fn article_count(&self) -> usize {
+        WikipediaGraph::article_count(self).await
+    }
+    async fn edge_count(&self) -> usize {
+        WikipediaGraph::edge_count(self).await
+    }
 }
 
 #[cfg(test)]

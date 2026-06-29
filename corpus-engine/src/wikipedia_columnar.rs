@@ -17,13 +17,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 
 use arrow_array::{Array, BooleanArray, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::enrichment::atlas::wiki_store::{ARTICLES_TABLE, EDGES_TABLE};
-use crate::wikipedia_graph::{ArticleRecord, Neighbor};
+use crate::wikipedia_graph::{ArticleRecord, Neighbor, WikipediaGraph, WikipediaGraphApi};
 
 /// Columnar (`articles.lance` + `edges.lance`) reader for the wiki link graph —
 /// the v2 replacement for the SQLite `WikipediaGraph`, same query API.
@@ -211,7 +212,11 @@ impl ColumnarWikipediaGraph {
                 in_scope: a.in_scope,
             })
             .collect();
-        out.sort_by(|x, y| y.occurrence_count.cmp(&x.occurrence_count));
+        out.sort_by(|x, y| {
+        y.occurrence_count
+            .cmp(&x.occurrence_count)
+            .then_with(|| x.title.cmp(&y.title))
+    });
         out.truncate(limit);
         out
     }
@@ -236,7 +241,11 @@ impl ColumnarWikipediaGraph {
                 in_scope: true,
             })
             .collect();
-        out.sort_by(|x, y| y.occurrence_count.cmp(&x.occurrence_count));
+        out.sort_by(|x, y| {
+        y.occurrence_count
+            .cmp(&x.occurrence_count)
+            .then_with(|| x.title.cmp(&y.title))
+    });
         out.truncate(limit);
         out
     }
@@ -293,6 +302,58 @@ impl ColumnarWikipediaGraph {
             citation_total: i("citation_total").unwrap_or(0),
         })
     }
+
+    /// Articles in scope. Mirrors `WikipediaGraph::article_count`.
+    pub async fn article_count(&self) -> usize {
+        self.articles
+            .count_rows(Some("in_scope = true".to_string()))
+            .await
+            .unwrap_or(0)
+    }
+
+    /// Total edge rows (per `(source, section, target)`). Mirrors
+    /// `WikipediaGraph::edge_count`.
+    pub async fn edge_count(&self) -> usize {
+        self.edges.count_rows(None).await.unwrap_or(0)
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::wikipedia_graph::WikipediaGraphApi for ColumnarWikipediaGraph {
+    async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
+        ColumnarWikipediaGraph::neighbors(self, title, limit).await
+    }
+    async fn neighbors_for_axis(
+        &self,
+        title: &str,
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor> {
+        ColumnarWikipediaGraph::neighbors_for_axis(self, title, axis_terms, limit).await
+    }
+    async fn co_neighbors(
+        &self,
+        titles: &[String],
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor> {
+        ColumnarWikipediaGraph::co_neighbors(self, titles, axis_terms, limit).await
+    }
+    async fn reverse_neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
+        ColumnarWikipediaGraph::reverse_neighbors(self, title, limit).await
+    }
+    async fn has_contested_section(&self, title: &str) -> bool {
+        ColumnarWikipediaGraph::has_contested_section(self, title).await
+    }
+    async fn record(&self, title: &str) -> Option<ArticleRecord> {
+        ColumnarWikipediaGraph::record(self, title).await
+    }
+    async fn article_count(&self) -> usize {
+        ColumnarWikipediaGraph::article_count(self).await
+    }
+    async fn edge_count(&self) -> usize {
+        ColumnarWikipediaGraph::edge_count(self).await
+    }
 }
 
 fn lower_terms(axis_terms: &[String]) -> Vec<String> {
@@ -333,9 +394,55 @@ fn fold_by_target_rel(rows: Vec<EdgeLite>, limit: usize) -> Vec<Neighbor> {
             in_scope,
         })
         .collect();
-    out.sort_by(|x, y| y.occurrence_count.cmp(&x.occurrence_count));
+    out.sort_by(|x, y| {
+        y.occurrence_count
+            .cmp(&x.occurrence_count)
+            .then_with(|| x.title.cmp(&y.title))
+    });
     out.truncate(limit);
     out
+}
+
+/// Open the wiki link graph for `corpus_id` as a backend-agnostic
+/// [`WikipediaGraphApi`] — the v2 columnar store (`atlas/articles.lance` +
+/// `atlas/edges.lance`) if present, else the SQLite `wikipedia_graph.db`. The
+/// per-corpus gate the runtime loaders (chat / server / desktop) share (W3):
+/// once W4 writes the columnar store for a corpus, the runtime reads it; until
+/// then, the SQLite. `None` if neither is present (or both fail to open).
+pub async fn open_wikipedia_graph(
+    indexes_dir: &Path,
+    corpus_id: &str,
+) -> Option<Arc<dyn WikipediaGraphApi>> {
+    let atlas_dir = indexes_dir
+        .join(corpus_id)
+        .join(crate::enrichment::atlas::ATLAS_DIRNAME);
+    let columnar_present = atlas_dir
+        .join(crate::enrichment::atlas::wiki_store::ARTICLES_LANCE_DIRNAME)
+        .exists()
+        && atlas_dir
+            .join(crate::enrichment::atlas::wiki_store::EDGES_LANCE_DIRNAME)
+            .exists();
+    if columnar_present {
+        match ColumnarWikipediaGraph::open(&atlas_dir).await {
+            Ok(g) => {
+                tracing::info!(corpus = %corpus_id, backend = "columnar", "wikipedia graph loaded (v2)");
+                return Some(Arc::new(g) as Arc<dyn WikipediaGraphApi>);
+            }
+            Err(e) => {
+                tracing::warn!(corpus = %corpus_id, error = %e, "columnar wiki graph open failed; falling back to sqlite");
+            }
+        }
+    }
+    let db_path = WikipediaGraph::default_db_path(indexes_dir, corpus_id);
+    if db_path.exists() {
+        match WikipediaGraph::open(&db_path, corpus_id) {
+            Ok(g) => return Some(Arc::new(g) as Arc<dyn WikipediaGraphApi>),
+            Err(e) => {
+                tracing::warn!(corpus = %corpus_id, error = %e, "sqlite wiki graph open failed");
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -422,5 +529,67 @@ mod tests {
         assert!(rec.in_scope);
         assert_eq!(rec.pov_total, 0);
         assert!(g.record("nope").await.is_none());
+    }
+
+    /// W3 gate: `open_wikipedia_graph` returns `None` when nothing's present,
+    /// and selects the columnar backend once `atlas/articles.lance` +
+    /// `atlas/edges.lance` exist for the corpus.
+    #[tokio::test]
+    async fn open_wikipedia_graph_prefers_columnar_when_present() {
+        use crate::enrichment::atlas::wiki_store::{
+            write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes_dir = tmp.path();
+        let corpus_id = "wiki-test";
+
+        // Nothing present yet → None (no columnar store, no SQLite db).
+        assert!(open_wikipedia_graph(indexes_dir, corpus_id).await.is_none());
+
+        // Write a columnar store at <indexes>/<corpus>/atlas/.
+        let atlas_dir = indexes_dir
+            .join(corpus_id)
+            .join(crate::enrichment::atlas::ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let articles = vec![
+            WikiArticleRow {
+                title: "A".into(),
+                wikidata_qid: String::new(),
+                revision_id: -1,
+                in_scope: true,
+                pov_total: 0,
+                citation_total: 0,
+                is_contested: false,
+            },
+            WikiArticleRow {
+                title: "B".into(),
+                wikidata_qid: String::new(),
+                revision_id: -1,
+                in_scope: true,
+                pov_total: 0,
+                citation_total: 0,
+                is_contested: false,
+            },
+        ];
+        let edges = vec![WikiEdgeRow {
+            source_title: "A".into(),
+            target_title: "B".into(),
+            relationship_type: "topical".into(),
+            link_text: "b".into(),
+            occurrence_count: 1,
+            source_section_path: "Lead".into(),
+            target_in_scope: true,
+        }];
+        write_wikipedia_columnar_store(&atlas_dir, &articles, &edges)
+            .await
+            .unwrap();
+
+        // Now the gate picks the columnar backend and serves neighbors.
+        let g = open_wikipedia_graph(indexes_dir, corpus_id)
+            .await
+            .expect("columnar graph selected");
+        let n = g.neighbors("A", 10).await;
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].title, "B");
     }
 }

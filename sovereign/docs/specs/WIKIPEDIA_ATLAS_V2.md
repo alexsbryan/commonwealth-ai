@@ -44,15 +44,20 @@ adjacency. The columnar store is therefore the **drop-in replacement for the SQL
 - **W1b** — `WikipediaGraph::export_columnar(atlas_dir)` (SQLite → Lance dump) + a
   **gold-standard parity test**: the columnar reader answers `neighbors` /
   `neighbors_for_axis` / `has_contested_section` **identically** to the SQLite graph.
+- **W3** — `WikipediaGraphApi` trait (`#[async_trait]`, `dyn`-safe) implemented by both
+  backends; the runtime holds `Option<Arc<dyn WikipediaGraphApi>>`
+  (`runtime.rs::with_wikipedia_graph`); a shared `corpus_engine::open_wikipedia_graph`
+  per-corpus gate (columnar-store-present → columnar, else SQLite) routes **all three**
+  loaders (chat/bootstrap, server, desktop — previously duplicated). Gate unit test +
+  lint clean across 24 crates. **Live verify (chaos QA over wiki-grounded questions)
+  pending** — needs a backfilled wiki columnar store, so it rides with W4.
 
 **Remaining:**
-- **W3** — swap `ColumnarWikipediaGraph` into the runtime's `wikipedia_graph` handle
-  behind a `WikipediaGraphApi` trait (`Arc<dyn …>`), gated/selected by columnar-store
-  presence. Verify chaos QA over wiki-grounded questions.
 - **W4** — make the columnar store the build output directly + retire the SQLite +
   `atoms.json`/`edges.json`/`atoms.rkyv` for wiki (the ~3.4 GB → few-hundred-MB
-  unification). Open question still: whether wiki's `atoms.rkyv`/`AtlasGraph` is used
-  elsewhere (typed-enumeration) and must also move before the rkyv delete.
+  unification). Then the live W3 chaos-QA verify. Open question still: whether wiki's
+  `atoms.rkyv`/`AtlasGraph` is used elsewhere (typed-enumeration) and must also move
+  before the rkyv delete.
 
 ## Current state — the same structure stored three times (~3.4 GB)
 

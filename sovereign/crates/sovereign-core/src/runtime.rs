@@ -163,7 +163,7 @@ pub struct Runtime {
     /// `(contested)` markers on chunks whose source has at least
     /// one editor-flagged contested section. `None` preserves the
     /// pre-graph behaviour.
-    pub wikipedia_graph: Option<Arc<corpus_engine::WikipediaGraph>>,
+    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
     /// Optional note store. Populated by the daemon bootstrap; absent
     /// in the chat-CLI path where commitment persistence isn't wired.
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
@@ -523,7 +523,7 @@ impl Runtime {
     /// when a graph DB is found alongside a corpus's LanceDB table;
     /// callers that don't wire one (e.g. tests, code-corpus chat)
     /// leave it `None` and retrieval behaves exactly as before.
-    pub fn with_wikipedia_graph(mut self, graph: Arc<corpus_engine::WikipediaGraph>) -> Self {
+    pub fn with_wikipedia_graph(mut self, graph: Arc<dyn corpus_engine::WikipediaGraphApi>) -> Self {
         self.wikipedia_graph = Some(graph);
         self
     }

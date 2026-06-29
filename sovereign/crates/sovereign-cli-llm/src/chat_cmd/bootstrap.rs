@@ -805,7 +805,7 @@ async fn log_installed_corpora(engine: &corpus_engine::CorpusEngine) {
 async fn load_wikipedia_graph(
     engine: &corpus_engine::CorpusEngine,
     indexes_dir: &std::path::Path,
-) -> Option<Arc<corpus_engine::WikipediaGraph>> {
+) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
     // Memory-pressure escape hatch. The graph is a 7M-edge sqlite
     // mmap; on a host already running the daemon, loading it twice
     // (daemon + bench) has tipped past available RAM in practice. Set
@@ -819,22 +819,14 @@ async fn load_wikipedia_graph(
         eprintln!("Wiki graph:  disabled via SOVEREIGN_DISABLE_WIKI_GRAPH");
         return None;
     }
+    // WIKIPEDIA_ATLAS_V2 W3: per corpus, prefer the columnar store
+    // (atlas/articles.lance + edges.lance) over the SQLite graph — the shared
+    // `corpus_engine::open_wikipedia_graph` gate, returning a backend-agnostic
+    // `Arc<dyn WikipediaGraphApi>`.
     let infos = engine.installed_indexes().await.ok()?;
     for info in infos {
-        let db_path = corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
-        if !db_path.exists() {
-            continue;
-        }
-        match corpus_engine::WikipediaGraph::open(&db_path, &info.corpus_id) {
-            Ok(g) => return Some(Arc::new(g)),
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %info.corpus_id,
-                    db = %db_path.display(),
-                    error = %e,
-                    "wikipedia_graph: open failed; skipping"
-                );
-            }
+        if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
+            return Some(g);
         }
     }
     None

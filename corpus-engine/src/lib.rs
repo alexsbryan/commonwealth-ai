@@ -165,7 +165,10 @@ pub use yield_hook::YieldHook;
 pub use wikipedia_graph::{
     ArticleRecord as WikipediaArticleRecord, IngestSummary as WikipediaGraphIngestSummary,
     Neighbor as WikipediaNeighbor, StalenessCaution as WikipediaStaleness, WikipediaGraph,
+    WikipediaGraphApi,
 };
+#[cfg(feature = "stores")]
+pub use wikipedia_columnar::{open_wikipedia_graph, ColumnarWikipediaGraph};
 
 // `watcher_coordinator` re-exports — gated on `stores` since the
 // coordinator depends only on `notify` (and notify lives in

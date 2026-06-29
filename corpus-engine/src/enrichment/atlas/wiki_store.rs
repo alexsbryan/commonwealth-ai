@@ -168,6 +168,7 @@ async fn write_table(
     table: &str,
     sch: Arc<Schema>,
     batches: Vec<RecordBatch>,
+    scalar_index: Option<&str>,
 ) -> Result<PathBuf, String> {
     let lance_dir = atlas_dir.join(dirname);
     if lance_dir.exists() {
@@ -192,6 +193,19 @@ async fn write_table(
             .await
             .map_err(|e| format!("{dirname} add: {e}"))?;
     }
+    // A scalar BTree index turns the neighbor query's `WHERE source_title = ?`
+    // (and `IN (...)`) from a full columnar scan into a point lookup — the
+    // difference between ~700 ms and ~ms on the 7.85M-edge wiki graph.
+    if let Some(col) = scalar_index {
+        tbl.create_index(
+            &[col],
+            lancedb::index::Index::BTree(lancedb::index::scalar::BTreeIndexBuilder::default()),
+        )
+        .replace(true)
+        .execute()
+        .await
+        .map_err(|e| format!("{dirname} index {col}: {e}"))?;
+    }
     Ok(lance_dir)
 }
 
@@ -211,14 +225,24 @@ pub async fn write_wikipedia_columnar_store(
         .chunks(BATCH)
         .map(|c| articles_batch(c, &asch))
         .collect::<Result<Vec<_>, _>>()?;
-    let articles_path = write_table(atlas_dir, ARTICLES_LANCE_DIRNAME, ARTICLES_TABLE, asch, abatches).await?;
+    let articles_path =
+        write_table(atlas_dir, ARTICLES_LANCE_DIRNAME, ARTICLES_TABLE, asch, abatches, None).await?;
 
     let esch = edges_schema();
     let ebatches = edges
         .chunks(BATCH)
         .map(|c| edges_batch(c, &esch))
         .collect::<Result<Vec<_>, _>>()?;
-    write_table(atlas_dir, EDGES_LANCE_DIRNAME, EDGES_TABLE, esch, ebatches).await?;
+    // Index `source_title` — the neighbor query's predicate column.
+    write_table(
+        atlas_dir,
+        EDGES_LANCE_DIRNAME,
+        EDGES_TABLE,
+        esch,
+        ebatches,
+        Some("source_title"),
+    )
+    .await?;
 
     Ok(articles_path)
 }
