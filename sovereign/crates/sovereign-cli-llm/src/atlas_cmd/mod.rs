@@ -21,7 +21,9 @@
 //! as additional sub-commands once Layer 0 has demonstrated bench
 //! gains.
 
+pub mod backfill_ann;
 pub mod budget;
+pub mod migrate_all;
 pub mod build_archive;
 pub mod build_doc_index;
 pub mod enable_incremental;
@@ -82,6 +84,14 @@ const HELP: Help = Help {
                 "ATLAS_STORAGE_V2 migration audit: prove the v2 store (atoms.lance + edges.csr) reconstructs the rkyv atlas losslessly. `--all` audits every corpus.",
             ),
             (
+                "backfill-ann",
+                "ATLAS_STORAGE_V2 3b: build the per-corpus ANN seed table (atlas/atoms_ann.lance) so atlas_navigate seeds from atom-ids directly (no per-query resolve).",
+            ),
+            (
+                "migrate-all",
+                "ATLAS_STORAGE_V2 full-port (idempotent, reusable across machines): every atom corpus -> atoms.lance + edges.csr + atoms_ann.lance + read_v2 flip; wiki -> columnar.",
+            ),
+            (
                 "enable-incremental",
                 "Move 6 P5: flip per-corpus atlas_incremental_enabled flag (pre-flight checks content-hash).",
             ),
@@ -120,6 +130,8 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
         "build-archive" => build_archive::run(&args[1..]).await,
         "verify-v2" => verify_v2::run(&args[1..]).await,
+        "backfill-ann" => backfill_ann::run(&args[1..]).await,
+        "migrate-all" => migrate_all::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,
         "typed-extension" => typed_extension::run(&args[1..]).await,
         "stats" => stats::run(&args[1..]).await,

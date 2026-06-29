@@ -564,9 +564,11 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
 // shared by the eval CLI and the production daemon
 // (`AtlasContextManager`).
 pub use sovereign_core::atlas_context::atlas_navigate;
+// ATLAS_STORAGE_V2 3b — the production ANN-seeding navigate (moved out of the
+// eval; the eval's `--atlas-seed ann` arm now drives this exact daemon code).
+pub use sovereign_core::atlas_context::atlas_navigate_ann;
 pub use sovereign_core::atlas_context::AtlasGraph;
-// ATLAS_STORAGE_V2 Increment A — the gated ANN-seeding variant.
-use super::atlas_ann::{atlas_navigate_ann, build_ann_table, AnnTable, SeedMode};
+use super::atlas_ann::SeedMode;
 
 /// Filters applied during atlas-context loading. Used to keep the
 /// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
@@ -1078,22 +1080,42 @@ pub async fn run_bank(
         ));
     }
 
-    // ATLAS_STORAGE_V2 Increment A: build the ANN seed table once (per run) when
-    // `--atlas-seed ann`. The `resolved/total` log is the join-completeness the
-    // go/no-go criterion watches (it should equal the cosine path's seedable set).
-    let ann: Option<AnnTable> = if seed_mode == SeedMode::Ann && !atlases.is_empty() {
-        match build_ann_table(atlases, graphs).await {
-            Ok(t) => {
-                eprintln!(
-                    "atlas-seed=ann: ANN seed table built — {}/{} bag entries resolved to atom-ids",
-                    t.resolved, t.total
-                );
-                Some(t)
+    // ATLAS_STORAGE_V2 3b: when `--atlas-seed ann`, attach each corpus's
+    // PERSISTENT ANN seed table (built by `sovereign atlas backfill-ann`) to its
+    // graph, then drive the PRODUCTION `atlas_navigate_ann` over the
+    // ann-attached graphs — the daemon's exact runtime shape, not a fork. The
+    // owned graphs must outlive the per-question loop (each holds a live
+    // `lancedb::Table` opened on THIS runtime; see
+    // `open_and_attach_ann_seed_table`).
+    let ann_graphs: Vec<AtlasGraph> = if seed_mode == SeedMode::Ann {
+        let mut out = Vec::with_capacity(graphs.len());
+        let mut attached = 0usize;
+        for g in graphs {
+            let atlas_dir = paths::index_root(&g.atlas_corpus_id).join(ATLAS_DIRNAME);
+            let g = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
+                &g.atlas_corpus_id,
+                &atlas_dir,
+                g.clone(),
+            )
+            .await;
+            if g.has_ann_seed_table() {
+                attached += 1;
             }
-            Err(e) => return Err(format!("build ANN seed table: {e}")),
+            out.push(g);
         }
+        eprintln!(
+            "atlas-seed=ann: attached persistent ANN seed tables to {attached}/{} graphs \
+             (run `sovereign atlas backfill-ann <corpus>` for any missing)",
+            out.len()
+        );
+        out
     } else {
-        None
+        Vec::new()
+    };
+    let graphs: &[AtlasGraph] = if seed_mode == SeedMode::Ann {
+        &ann_graphs
+    } else {
+        graphs
     };
 
     let mut results = Vec::with_capacity(bank.questions.len());
@@ -1107,7 +1129,7 @@ pub async fn run_bank(
             graphs,
             loose_source_judge,
             essay_judge,
-            ann.as_ref(),
+            seed_mode,
         )
         .await;
         results.push(result);
@@ -1131,7 +1153,7 @@ async fn run_question(
     graphs: &[AtlasGraph],
     loose_source_judge: bool,
     essay_judge: bool,
-    ann: Option<&AnnTable>,
+    seed_mode: SeedMode,
 ) -> EvalResult {
     // 1. Embed.
     let t_embed = Instant::now();
@@ -1296,22 +1318,23 @@ async fn run_question(
         let max_seeds = atlases.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let ctx_refs: Vec<&AtlasContext> = atlases.iter().collect();
         let graph_refs: Vec<&AtlasGraph> = graphs.iter().collect();
-        match ann {
-            // ATLAS_STORAGE_V2 Increment A: ANN-over-vector-column seeding.
-            Some(ann) => {
+        match seed_mode {
+            // ATLAS_STORAGE_V2 3b: ANN-over-vector-column seeding — the PRODUCTION
+            // navigate over graphs carrying their persistent ANN seed table
+            // (attached in `run_bank`). Same code the daemon runs.
+            SeedMode::Ann => {
                 atlas_navigate_ann(
                     &q.question,
                     &embedding,
                     &ctx_refs,
                     &graph_refs,
-                    ann,
                     max_seeds,
                     /*max_hops=*/ 2,
                 )
                 .await
             }
-            // Default: v1 exact-cosine-over-bag seeding, byte-identical.
-            None => atlas_navigate(
+            // v1 exact-cosine-over-bag seeding.
+            SeedMode::Cosine => atlas_navigate(
                 &q.question,
                 &embedding,
                 &ctx_refs,

@@ -413,6 +413,10 @@ impl AtlasContextManager {
             let load_started = std::time::Instant::now();
             match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
                 Ok(graph) => {
+                    let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
+                        corpus_id, atlas_dir, graph,
+                    )
+                    .await;
                     let load_ms = load_started.elapsed().as_millis();
                     let atom_count = graph.atom_count();
                     let edge_out_count: usize = graph.edge_count();
@@ -933,6 +937,16 @@ impl AtlasContextProvider for AtlasContextManager {
             .ok()
             .and_then(|m| m.get(atlas_corpus_id).cloned())?;
         let load_started = std::time::Instant::now();
+        // NB: the ANN seed table (ATLAS_STORAGE_V2 3b) is intentionally NOT
+        // attached on this lazy path — it is sync (a `Provider` trait method),
+        // and the ANN table must be opened on the long-lived async runtime that
+        // queries it (see `attach_ann_seed_table`). Lazy graphs are the
+        // atom-enumeration / atlas-only siblings, not the `atlas_navigate` seed
+        // pool (that pool has embedding context and is eager-loaded WITH the ANN
+        // in `load_corpus`). If a seed-pool corpus ever reaches here (a
+        // pre-init-completion query), it loads without ANN and the retrieval
+        // gate (`has_ann_seed_table` over the whole pool) falls back to the v1
+        // cosine seed — correct, just not the ANN win until the eager warm.
         match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
             atlas_corpus_id,
             &atlas_dir,
@@ -968,7 +982,11 @@ impl AtlasContextProvider for AtlasContextManager {
 }
 
 // Graph loader lives in `sovereign_core::atlas_context::AtlasGraph::load_from_disk`
-// — single canonical implementation shared with the eval CLI.
+// — single canonical implementation shared with the eval CLI. The persistent
+// ANN seed table (ATLAS_STORAGE_V2 3b) is opened + attached by
+// `sovereign_core::atlas_context::open_and_attach_ann_seed_table` (the single
+// attach path shared with the eval), called from `load_corpus` on the daemon's
+// long-lived async runtime.
 
 /// Persisted shape of `triage_bumps.json`. `schema_version` lets a
 /// future change to the bump weighting cleanly invalidate cached

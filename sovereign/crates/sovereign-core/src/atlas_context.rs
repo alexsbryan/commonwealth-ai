@@ -24,6 +24,7 @@ use corpus_engine::enrichment::atlas::archive::{
 // Re-exported so retrieval consumers (`runtime/retrieval.rs`) can name the
 // atom-kind discriminant the typed-enumeration filter selects on.
 pub use corpus_engine::enrichment::atlas::archive::AtomKindTag;
+use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
 use corpus_engine::enrichment::atlas::store::LancePreload;
 use corpus_engine::enrichment::atlas::{AtomEnvelope, Edge, EdgeType};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
@@ -79,6 +80,13 @@ pub struct AtlasGraph {
     /// The method API below is identical across both, so consumers
     /// (`atlas_navigate`, retrieval, `AtomView`) never branch on it.
     backend: Backend,
+    /// Persistent per-corpus ANN seed table (`atlas/atoms_ann.lance`), when the
+    /// corpus has been backfilled (ATLAS_STORAGE_V2 3b). `Some` selects the ANN
+    /// seed path in [`atlas_navigate_ann`]; `None` (un-backfilled) falls back to
+    /// the v1 cosine-over-the-bag seed in [`atlas_navigate`]. Attached by the
+    /// long-lived loader (`AtlasContextManager` / eval runner) via
+    /// [`AtlasGraph::with_ann_seed_table`], never the sync open bridge.
+    ann: Option<Arc<AnnSeedTable>>,
 }
 
 /// v1 vs v2 storage behind [`AtlasGraph`]. Both arms are `Arc` so the graph
@@ -289,6 +297,7 @@ impl AtlasGraph {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug,
             backend: Backend::Lance(Arc::new(preload)),
+            ann: None,
         }
     }
 
@@ -314,6 +323,7 @@ impl AtlasGraph {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug: article_slug.to_string(),
             backend: Backend::Rkyv(Arc::new(holder)),
+            ann: None,
         })
     }
 
@@ -332,6 +342,7 @@ impl AtlasGraph {
             atlas_corpus_id: atlas_corpus_id.to_string(),
             article_slug: article_slug.to_string(),
             backend: Backend::Rkyv(Arc::new(holder)),
+            ann: None,
         })
     }
 
@@ -343,6 +354,31 @@ impl AtlasGraph {
             Backend::Rkyv(_) => "rkyv",
             Backend::Lance(_) => "lance",
         }
+    }
+
+    /// Attach a persistent ANN seed table (`atlas/atoms_ann.lance`) — the
+    /// ATLAS_STORAGE_V2 3b seed source. The table MUST be opened on the
+    /// caller's long-lived runtime (the daemon's `AtlasContextManager` or the
+    /// eval runner), never the sync open bridge: that bridge runs the open on a
+    /// transient runtime it then drops, which would invalidate the held
+    /// `lancedb::Table`. Builder-style so loaders can do
+    /// `AtlasGraph::load_from_disk(..)?.with_ann_seed_table(ann)`.
+    pub fn with_ann_seed_table(mut self, ann: Arc<AnnSeedTable>) -> Self {
+        self.ann = Some(ann);
+        self
+    }
+
+    /// The attached ANN seed table, or `None` for an un-backfilled corpus
+    /// (whose seeding falls back to the v1 cosine-over-the-bag path).
+    pub fn ann_seed_table(&self) -> Option<&Arc<AnnSeedTable>> {
+        self.ann.as_ref()
+    }
+
+    /// Whether this graph has an ANN seed table — the per-corpus gate the
+    /// retrieval caller checks to pick [`atlas_navigate_ann`] over the v1
+    /// cosine seed in [`atlas_navigate`].
+    pub fn has_ann_seed_table(&self) -> bool {
+        self.ann.is_some()
     }
 
     /// Number of atoms in the graph.
@@ -1311,6 +1347,294 @@ pub fn atlas_navigate(
     requests
 }
 
+/// ANN-seeded sibling of [`atlas_navigate`] — ATLAS_STORAGE_V2 step 3b. The only
+/// difference from [`atlas_navigate`] is the seed source, applied PER GRAPH so a
+/// partially-rolled-out pool works: a backfilled corpus seeds from its persistent
+/// ANN table ([`AtlasGraph::ann_seed_table`]) — nearest returns atom-ids DIRECTLY
+/// (the join `resolve` did at query time runs once at backfill instead), re-scored
+/// with the canonical `cosine()` so the BFS sees bit-identical weights; a corpus
+/// not yet backfilled seeds from exact cosine over its embedding bag, EXACTLY as
+/// v1. So for an all-backfilled pool this is pure ANN (the SEP-verified path); for
+/// an all-cosine pool it equals v1; for a mixed pool each corpus uses its best
+/// available seeding and none is under-seeded. Name-match (1b), BFS (2), and
+/// ChunkRequest emission (3) are the same logic as [`atlas_navigate`].
+///
+/// Async because the ANN query is async; the BFS inner loop stays sync (resident
+/// atoms + `edges.csr` mmap), so the "hot BFS stays sync" inference-safety
+/// invariant holds — only the ANN seed queries await. The caller picks this over
+/// [`atlas_navigate`] when ANY graph carries an ANN table (`has_ann_seed_table`);
+/// when none do, plain [`atlas_navigate`] (sync) is the equivalent, lighter path.
+pub async fn atlas_navigate_ann(
+    query_text: &str,
+    query_embedding: &[f32],
+    atlases: &[&AtlasContext],
+    graphs: &[&AtlasGraph],
+    max_seeds: usize,
+    max_hops: usize,
+) -> Vec<ChunkRequest> {
+    if query_embedding.is_empty() || atlases.is_empty() {
+        return Vec::new();
+    }
+    let graph_by_id: HashMap<&str, &AtlasGraph> = graphs
+        .iter()
+        .map(|g| (g.atlas_corpus_id.as_str(), *g))
+        .collect();
+
+    // 1a. Seeds, PER-GRAPH ADAPTIVE — the incremental-rollout shape. A backfilled
+    // corpus seeds from its ANN table (atom-ids directly, no resolve, re-scored
+    // with cosine so the BFS sees v1-identical weights); a corpus not yet
+    // backfilled seeds from exact cosine over its embedding bag (v1's step 1a),
+    // so a MIXED pool never under-seeds the un-backfilled corpora. Both feed ONE
+    // global top-`max_seeds` pool (matching v1's single global truncate). Cosine
+    // candidates defer resolve until AFTER the truncate, so only the surviving
+    // top-`max_seeds` pay the resolve scan — the same cost shape as v1.
+    enum Cand<'a> {
+        /// ANN hit — already an atom-id (the resolve ran once at backfill).
+        Resolved(&'a str, String),
+        /// Cosine hit over an un-backfilled graph's bag — resolve deferred.
+        Cosine(&'a AtlasContext, &'a AtlasEntry),
+    }
+    let mut scored: Vec<(f32, Cand)> = Vec::new();
+    for graph in graphs {
+        let Some(ann) = graph.ann_seed_table() else {
+            continue; // un-backfilled — handled by the cosine pass below
+        };
+        match ann.nearest_with_vectors(query_embedding, max_seeds).await {
+            Ok(hits) => {
+                for (atom_id, vector) in hits {
+                    let score = cosine(query_embedding, &vector);
+                    scored.push((score, Cand::Resolved(graph.atlas_corpus_id.as_str(), atom_id)));
+                }
+            }
+            Err(e) => tracing::warn!(
+                corpus = %graph.atlas_corpus_id,
+                "atlas_navigate_ann: ANN nearest failed ({e}); corpus falls back to cosine seeds"
+            ),
+        }
+    }
+    for ctx in atlases {
+        // ANN'd graphs are covered above; only scan bags for the un-backfilled.
+        let has_ann = graph_by_id
+            .get(ctx.atlas_corpus_id.as_str())
+            .map(|g| g.has_ann_seed_table())
+            .unwrap_or(false);
+        if has_ann {
+            continue;
+        }
+        for entry in &ctx.entries {
+            let score = cosine(query_embedding, &entry.embedding);
+            scored.push((score, Cand::Cosine(ctx, entry)));
+        }
+    }
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(max_seeds);
+    // Resolve the surviving cosine candidates (ANN hits are already atom-ids).
+    let mut primary_seeds: Vec<(String, String, f32)> = Vec::new();
+    for (score, cand) in scored {
+        match cand {
+            Cand::Resolved(cid, atom_id) => primary_seeds.push((cid.to_string(), atom_id, score)),
+            Cand::Cosine(ctx, entry) => {
+                if let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) {
+                    if let Some(atom_id) = resolve_atom_id_from_entry(
+                        graph,
+                        &entry.canonical_name,
+                        &entry.embed_text,
+                    ) {
+                        primary_seeds.push((ctx.atlas_corpus_id.clone(), atom_id, score));
+                    }
+                }
+            }
+        }
+    }
+
+    // 1b. Name-match seeds — identical logic to atlas_navigate, then resolve to
+    // an atom-id. Name-match is text-based and survives unchanged; only the
+    // cosine-bag seed (1a) and its per-seed resolve are replaced by the ANN.
+    let q_lower = query_text.to_lowercase();
+    let mut name_seeds: Vec<(String, String, f32)> = Vec::new();
+    for ctx in atlases {
+        let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) else {
+            continue;
+        };
+        for entry in &ctx.entries {
+            let name = entry.canonical_name.trim();
+            if name.len() < 4 {
+                continue;
+            }
+            let name_lower = name.to_lowercase();
+            let mut hit = contains_whole_word(&q_lower, &name_lower);
+            if !hit {
+                if let Some(last) = name_lower.split_whitespace().last() {
+                    if last.len() >= 4 && last != name_lower {
+                        hit = contains_whole_word(&q_lower, last);
+                    }
+                }
+            }
+            if !hit {
+                if let Some(rest) = entry.embed_text.strip_prefix("[Argument: ") {
+                    if let Some(end) = rest.find(']') {
+                        let arg_name = rest[..end].trim().to_lowercase();
+                        if arg_name.len() >= 4 {
+                            let toks: Vec<&str> = arg_name.split_whitespace().collect();
+                            for w in toks.windows(2) {
+                                let phrase = format!("{} {}", w[0], w[1]);
+                                if phrase.len() >= 6 && q_lower.contains(&phrase) {
+                                    hit = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !hit {
+                continue;
+            }
+            let s = cosine(query_embedding, &entry.embedding).max(0.6);
+            if let Some(atom_id) =
+                resolve_atom_id_from_entry(graph, &entry.canonical_name, &entry.embed_text)
+            {
+                name_seeds.push((ctx.atlas_corpus_id.clone(), atom_id, s));
+            }
+        }
+    }
+
+    // Merge ANN + name seeds, dedup by (corpus_id, atom_id), keep the max score.
+    // v1 merges by (atlas_id, embed_text) then resolves — bijective for
+    // resolvable entries, so the groups + scores match. Name additions are an
+    // intentional broadening beyond max_seeds (not re-truncated), as in v1.
+    let mut merged: HashMap<(String, String), f32> = HashMap::new();
+    for (cid, aid, s) in primary_seeds.into_iter().chain(name_seeds.into_iter()) {
+        merged
+            .entry((cid, aid))
+            .and_modify(|e| {
+                if s > *e {
+                    *e = s;
+                }
+            })
+            .or_insert(s);
+    }
+    let seeds: Vec<(String, String, f32)> = merged
+        .into_iter()
+        .filter(|((cid, _), _)| graph_by_id.contains_key(cid.as_str()))
+        .map(|((cid, aid), s)| (cid, aid, s))
+        .collect();
+
+    // 2. BFS expand from each seed — identical logic to atlas_navigate.
+    let mut neighborhood: HashMap<(String, String), f32> = HashMap::new();
+    for (atlas_id, atom_id, seed_score) in &seeds {
+        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
+            continue;
+        };
+        let key = (atlas_id.clone(), atom_id.clone());
+        let entry = neighborhood.entry(key).or_insert(0.0);
+        *entry = entry.max(*seed_score);
+
+        let mut frontier: Vec<(String, f32)> = vec![(atom_id.clone(), *seed_score)];
+        let mut visited: HashSet<String> = HashSet::new();
+        visited.insert(atom_id.clone());
+        let decay = 0.6_f32;
+
+        for hop in 1..=max_hops {
+            let hop_decay = decay.powi(hop as i32);
+            let mut next_frontier: Vec<(String, f32)> = Vec::new();
+            for (current_id, current_score) in &frontier {
+                let mut consider = |neighbor_id: &str, edge_type: EdgeType, conf: f32| {
+                    if visited.contains(neighbor_id) {
+                        return;
+                    }
+                    let w = edge_weight(edge_type);
+                    if w <= 0.0 {
+                        return;
+                    }
+                    let neighbor_score = current_score * w * conf * hop_decay;
+                    if neighbor_score < 0.05 {
+                        return;
+                    }
+                    let key = (atlas_id.clone(), neighbor_id.to_string());
+                    let entry = neighborhood.entry(key).or_insert(0.0);
+                    if neighbor_score > *entry {
+                        *entry = neighbor_score;
+                    }
+                    visited.insert(neighbor_id.to_string());
+                    next_frontier.push((neighbor_id.to_string(), neighbor_score));
+                };
+                for edge in graph.edges_from(current_id) {
+                    consider(edge.target, edge.edge_type, edge.confidence);
+                }
+                for edge in graph.edges_to(current_id) {
+                    consider(edge.source, edge.edge_type, edge.confidence);
+                }
+            }
+            if next_frontier.is_empty() {
+                break;
+            }
+            frontier = next_frontier;
+        }
+    }
+
+    // 3. Emit ChunkRequests — identical logic to atlas_navigate.
+    let mut chunk_scores: HashMap<
+        (String, String),
+        (f32, String, Vec<String>, Vec<String>, String),
+    > = HashMap::new();
+    for ((atlas_id, atom_id), atom_weight) in &neighborhood {
+        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
+            continue;
+        };
+        let evidence = graph.atom_evidence(atom_id);
+        let verbatim = atom_verbatim_excerpt(graph, atom_id);
+        for ev in evidence {
+            let chunk_id = ev.chunk_id().trim();
+            if chunk_id.is_empty() {
+                continue;
+            }
+            let preview = ev.passage_preview().trim();
+            let key = (graph.article_slug.clone(), chunk_id.to_string());
+            let entry = chunk_scores.entry(key).or_insert((
+                0.0,
+                preview.to_string(),
+                Vec::new(),
+                Vec::new(),
+                graph.atlas_corpus_id.clone(),
+            ));
+            entry.0 += atom_weight;
+            if preview.len() > entry.1.len() {
+                entry.1 = preview.to_string();
+            }
+            entry.2.push(atom_id.clone());
+            if let Some(line) = verbatim.as_ref() {
+                if !entry.3.iter().any(|existing| existing == line) {
+                    entry.3.push(line.clone());
+                }
+            }
+        }
+    }
+
+    let mut requests: Vec<ChunkRequest> = chunk_scores
+        .into_iter()
+        .map(
+            |((article_slug, chunk_id), (score, preview, motivating, verbatim, corpus_id))| {
+                ChunkRequest {
+                    corpus_id,
+                    article_slug,
+                    chunk_id,
+                    passage_preview: preview,
+                    score,
+                    motivating_atoms: motivating,
+                    verbatim_excerpts: verbatim,
+                }
+            },
+        )
+        .collect();
+    requests.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    requests
+}
+
 /// Reverse-lookup an atom_id from an [`AtlasEntry`]'s
 /// `canonical_name + embed_text` by re-rendering each atom in the
 /// graph and comparing. Mirrors the embed_text construction logic
@@ -1320,6 +1644,101 @@ pub fn atlas_navigate(
 /// Char limit must match the loaders' `ATLAS_ENTRY_CHAR_LIMIT`. We
 /// duplicate the constant rather than depending on either loader.
 const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
+
+/// Join-coverage diagnostic from [`build_persistent_ann_seed_table`] — the
+/// glassbox number the 3b go/no-go watches: `resolved` of `total` bag entries
+/// became ANN rows (the rest had no embedding or didn't resolve to an atom-id,
+/// which the v1 cosine path also drops, so the seedable set matches).
+#[derive(Debug, Clone, Copy)]
+pub struct AnnBuildStats {
+    pub resolved: usize,
+    pub total: usize,
+}
+
+/// ATLAS_STORAGE_V2 3b backfill: build the persistent per-corpus ANN seed table
+/// (`<atlas_dir>/atoms_ann.lance`) from the corpus's atlas entries. For each
+/// embedding-bearing entry, resolve it to its atom-id via the canonical
+/// [`resolve_atom_id_from_entry`] — the join the v1 cosine seed path ran at
+/// QUERY time, done ONCE here — and write `(atom_id, embedding)`. The table then
+/// lets [`atlas_navigate_ann`] seed directly from atom-ids with no per-query
+/// resolve. Idempotent: a stale table dir is removed first. Lifecycle-time only
+/// (the CLI backfill / enrich), never the hot query path.
+pub async fn build_persistent_ann_seed_table(
+    atlas_dir: &Path,
+    ctx: &AtlasContext,
+    graph: &AtlasGraph,
+) -> Result<AnnBuildStats, String> {
+    let mut rows: Vec<(String, Vec<f32>)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut total = 0usize;
+    for entry in &ctx.entries {
+        total += 1;
+        if entry.embedding.is_empty() {
+            continue;
+        }
+        let Some(atom_id) =
+            resolve_atom_id_from_entry(graph, &entry.canonical_name, &entry.embed_text)
+        else {
+            continue;
+        };
+        // First-resolved wins (deterministic); duplicates are the same atom.
+        if !seen.insert(atom_id.clone()) {
+            continue;
+        }
+        rows.push((atom_id, entry.embedding.clone()));
+    }
+    let resolved = rows.len();
+    if resolved == 0 {
+        return Err(format!(
+            "no atlas entries resolved to atom-ids for {} (0/{total}) — nothing to index",
+            graph.atlas_corpus_id
+        ));
+    }
+    let dir = corpus_engine::enrichment::atlas::ann_store::ann_table_dir(atlas_dir);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| format!("remove stale ANN table {}: {e}", dir.display()))?;
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create ANN table dir: {e}"))?;
+    AnnSeedTable::build(&dir, &rows).await?;
+    Ok(AnnBuildStats { resolved, total })
+}
+
+/// ATLAS_STORAGE_V2 3b: open the persistent ANN seed table under `atlas_dir` and
+/// attach it to `graph`. MUST run on the caller's long-lived async runtime — the
+/// held `lancedb::Table` is queried later by [`atlas_navigate_ann`], so opening
+/// it on a throwaway runtime (e.g. the sync `load_from_disk` bridge) would
+/// invalidate it; see [`AtlasGraph::with_ann_seed_table`]. No-op when no table
+/// is present; a present-but-unreadable table is non-fatal (the graph keeps its
+/// v1 cosine seed path). The single attach path shared by the daemon's
+/// `AtlasContextManager` and the eval's `--atlas-seed ann` verify, so both load
+/// the ANN exactly as the daemon does.
+pub async fn open_and_attach_ann_seed_table(
+    corpus_id: &str,
+    atlas_dir: &Path,
+    graph: AtlasGraph,
+) -> AtlasGraph {
+    if !corpus_engine::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
+        return graph;
+    }
+    match AnnSeedTable::open_for_atlas(atlas_dir).await {
+        Ok(ann) => {
+            tracing::info!(
+                corpus = corpus_id,
+                "atlas-graph: ANN seed table attached (v2 seeding)"
+            );
+            graph.with_ann_seed_table(Arc::new(ann))
+        }
+        Err(e) => {
+            tracing::warn!(
+                corpus = corpus_id,
+                error = %e,
+                "atlas-graph: ANN seed table present but unreadable; using v1 cosine seeding"
+            );
+            graph
+        }
+    }
+}
 
 // `pub` (with `atom_verbatim_excerpt` + `contains_whole_word` below) so the
 // eval-crate ANN-seeding experiment can reuse the canonical seed-resolution
