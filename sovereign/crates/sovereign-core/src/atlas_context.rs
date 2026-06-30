@@ -1174,6 +1174,7 @@ pub fn atlas_top_k_across(
 /// inside the chunk-retrieval path; the daemon's
 /// `AtlasContextManager` is the production implementation, while
 /// the eval CLI builds one inline from `ChatSession`.
+#[async_trait::async_trait]
 pub trait AtlasContextProvider: Send + Sync {
     /// Look up a pre-loaded context by its atlas corpus id. Returns
     /// `None` when no atlas has been loaded for that id (e.g. the
@@ -1203,6 +1204,22 @@ pub trait AtlasContextProvider: Send + Sync {
     /// back to [`atlas_top_k_as_chunks`].
     fn graph(&self, _atlas_corpus_id: &str) -> Option<Arc<AtlasGraph>> {
         None
+    }
+
+    /// Ensure the given atlas corpora are loaded (bag + graph + ANN seed
+    /// table), loading any not already resident. The lazy-load hook for
+    /// scoped grounding: the runtime derives the query-relevant corpus set
+    /// from the retrieved chunks and calls this before grounding, so boot
+    /// no longer eager-loads every atlas. Ids without an atlas dir are
+    /// skipped. Default: no-op (providers that pre-load need nothing).
+    async fn ensure_loaded(&self, _ids: &[String]) {}
+
+    /// Every atlas corpus the provider can serve — loaded OR lazily
+    /// loadable. The atom-enumeration path uses this (it walks graphs,
+    /// which lazy-load, not bags). Default: the loaded set, for back-compat
+    /// with providers that pre-load.
+    fn discoverable_corpus_ids(&self) -> Vec<String> {
+        self.loaded_corpus_ids()
     }
 }
 

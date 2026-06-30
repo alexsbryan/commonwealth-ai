@@ -97,10 +97,15 @@ impl Default for AtlasContextFilter {
         // The cache signature (`signature()`) bakes all three, so a cache
         // populated under one filter is correctly ignored under
         // another — no risk of cross-contaminating loaded atoms.
+        // Floor on an atom's FULL embed signal (name + aliases + description),
+        // not description alone — names are first-class grounding signal, so a
+        // 10-char floor admits every real atom and drops only empty fragments.
+        // (Was 200, which silently nuked name-rich/short-description atoms —
+        // ~85% of SEP — and "filtered to zero" small-corpus schemas.)
         let min_chars = std::env::var("SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(200);
+            .unwrap_or(10);
         let depth_allowlist = match std::env::var("SOVEREIGN_ATLAS_INCLUDE_DEPTHS") {
             Ok(v) if v.trim() == "*" => Vec::new(),
             Ok(v) => v
@@ -248,7 +253,7 @@ impl AtlasContextManager {
         self.init_internal(false).await
     }
 
-    async fn init_internal(&self, cache_only: bool) {
+    async fn init_internal(&self, _cache_only: bool) {
         // Walk the indexes dir directly. Atlases live at
         // `<indexes_dir>/<dir>/atlas/atoms.json` — `<dir>` may be a
         // proper installed corpus (with `_corpus_meta.json`) or an
@@ -301,7 +306,14 @@ impl AtlasContextManager {
                     .counts
                     .extend(state.counts);
             }
-            self.load_corpus(&corpus_id, &atlas_dir, cache_only).await;
+            // Lazy boot: register the dir (so `graph()` + `ensure_loaded` can
+            // find it) but do NOT build the bag here. Scoped grounding warms
+            // only the query-relevant atlases on demand via `ensure_loaded`,
+            // so boot no longer pays the O(N-corpora) eager-load cost (~15s at
+            // SEP's 1778-atlas scale).
+            if let Ok(mut dirs) = self.graph_dirs.write() {
+                dirs.insert(corpus_id.clone(), atlas_dir.clone());
+            }
         }
         let loaded = self.contexts.read().await.len();
         let graphs_loaded = self.graphs.read().await.len();
@@ -527,6 +539,7 @@ impl AtlasContextManager {
 
 }
 
+#[async_trait::async_trait]
 impl AtlasContextProvider for AtlasContextManager {
     fn get(&self, atlas_corpus_id: &str) -> Option<Arc<AtlasContext>> {
         // Best-effort: the lock is async, but provider callers are
@@ -546,6 +559,31 @@ impl AtlasContextProvider for AtlasContextManager {
             .try_read()
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default()
+    }
+
+    fn discoverable_corpus_ids(&self) -> Vec<String> {
+        // Every registered atlas dir (the cheap path map filled at boot), not
+        // just the bags warmed so far — the atom-enumeration path walks graphs,
+        // which load lazily on first `graph()`.
+        self.graph_dirs
+            .read()
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    async fn ensure_loaded(&self, ids: &[String]) {
+        for id in ids {
+            if self.contexts.read().await.contains_key(id) {
+                continue; // bag already resident
+            }
+            let atlas_dir = self.indexes_dir.join(id).join(ATLAS_DIRNAME);
+            if atlas_dir.join("atoms.json").exists() {
+                // `load_corpus` is idempotent + ANN-gated (a fast no-op for a
+                // corpus with no seed table), so warming the scoped set per
+                // query is cheap after the first hit.
+                self.load_corpus(id, &atlas_dir, false).await;
+            }
+        }
     }
 
     fn record_match(&self, atlas_corpus_id: &str, canonical_name: &str) {

@@ -673,12 +673,28 @@ pub async fn load_atlas_context(
         match atom {
             AtomEnvelope::Entity(e) => {
                 total_entities += 1;
-                let is_placeholder = e.description.is_empty() && e.salience == 0.0;
+                // A NAMED atom is never a placeholder — names are first-class
+                // grounding signal. Drop only atoms with no name AND no
+                // description (truly empty); the signal_len floor below governs
+                // the rest. (Was `description.is_empty() && salience == 0.0`,
+                // which discarded named-but-unscored entities — exactly the
+                // baked-in signal the v2 migration must not lose.)
+                let is_placeholder =
+                    e.canonical_name.trim().is_empty() && e.description.is_empty();
                 if is_placeholder {
                     drop_placeholder += 1;
                     continue;
                 }
-                if e.description.len() < filter.min_description_chars {
+                // Measure the atom's FULL embed signal — name + aliases +
+                // description — not the description alone. The embed text
+                // (render_atom_entry) is name+aliases+description, so a
+                // richly-named entity with a terse description ("Pierre
+                // Abelard", "abductive reasoning") is strong grounding signal
+                // and must NOT be dropped. Names are first-class.
+                let signal_len = e.canonical_name.len()
+                    + e.aliases.iter().map(|a| a.len()).sum::<usize>()
+                    + e.description.len();
+                if signal_len < filter.min_description_chars {
                     drop_short_desc += 1;
                     continue;
                 }

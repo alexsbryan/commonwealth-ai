@@ -77,8 +77,8 @@ dedup_by_source = true
 # works on a fresh install with no re-enrichment.
 [prebuilt]
 hf_repo = "svrnmesh/sep-index"
-hf_filename = "sep-qwen-embedding-0.6b-2026-06-08.tar.zst"
-sha256 = "3e55a7cf75eb72f641ee48b355c9a3867ef1fe714ea87a6d9536fb98fdb96386"
+hf_filename = "sep-qwen-embedding-0.6b-2026-06-29.tar.zst"
+sha256 = "13781fac9c992fcb4376139d3f4618bfaa33fa361a06ca3fd49bcd8029c3ea2e"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # ── Atlas enrichment (v2, per-article) ───────────────────────────────
