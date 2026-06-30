@@ -680,6 +680,30 @@ print(n)" 2>/dev/null || echo 0)
   done
 }
 
+# P3 — controlled cross-layer probe at an orchestrator-chosen moment (the victim's
+# node was JUST killed, or JUST healed). Runs ONE turn against the victim's
+# desktop bridge and folds the verdict directly into $FINDINGS + FAILS. expect:
+#   fail-fast — outage: the turn must error FAST (not hang on the dead daemon).
+#   complete  — recovery: a fresh turn must complete cleanly after restart.
+# This is the HARD cross-layer assertion (the autonomous driver is the backdrop).
+probe_user() {  # probe_user <node> <label> <fail-fast|complete> <timeout_secs>
+  local i="$1" label="$2" expect="$3" tmo="$4" out ok detail bp; bp=$(bridge_port "$i")
+  out=$(SOVEREIGN_BRIDGE_URL="http://127.0.0.1:$bp" SOVEREIGN_DRIVER_NODE="$i" \
+        node "$ROOT/scripts/mesh-app-driver.mjs" --probe --label "$label" --expect "$expect" --timeout "$tmo" 2>/dev/null)
+  [ -n "$out" ] && printf '%s\n' "$out" >> "$FINDINGS"
+  ok=$(printf '%s' "$out" | python3 -c 'import sys,json
+try: print("yes" if json.load(sys.stdin).get("ok") else "no")
+except Exception: print("err")' 2>/dev/null)
+  detail=$(printf '%s' "$out" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("detail",""))
+except Exception: print("no probe output")' 2>/dev/null)
+  if [ "$ok" = "yes" ]; then
+    echo "  ✓ $label node$i: $detail"
+  else
+    FAILS=$((FAILS+1)); echo "  ✗ $label node$i: $detail"; capture_forensics "$label-node$i"
+  fi
+}
+
 teardown() { log "teardown"
   for i in $(seq 0 $((NODES-1))); do
     [ -n "${DRIVER_PIDS[$i]:-}" ] && kill "${DRIVER_PIDS[$i]}" 2>/dev/null
@@ -728,10 +752,19 @@ else
 DEADLINE=$(( $(date +%s) + MINUTES*60 )); CYCLE=0
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   CYCLE=$((CYCLE+1))
-  victim=$(( RANDOM % (NODES-1) + 1 ))         # never the founder (node0)
+  # With desktops attached, ROTATE the victim so every non-founder user gets
+  # disrupted over the run (a random seed can otherwise hit the same node every
+  # cycle — seed=1 picked node2 all 3 times, leaving node1's user untested).
+  # Plain crash lane keeps the seeded-random pick for victim-choice fuzzing.
+  if [ "$DESKTOPS" = 1 ]; then victim=$(( (CYCLE-1) % (NODES-1) + 1 )); else victim=$(( RANDOM % (NODES-1) + 1 )); fi
   log "cycle $CYCLE — crash node$victim (kill -9)"
   kill -9 "${PIDS[$victim]}" 2>/dev/null
   finding "{\"kind\":\"fault\",\"action\":\"kill-9\",\"node\":$victim,\"cycle\":$CYCLE}"
+
+  # P3 cross-layer assertion — node$victim's daemon is DOWN: its user's turn must
+  # fail FAST (graceful error), not hang on the dead daemon. (Runs ≤30s inside the
+  # decay window below.)
+  [ "$DESKTOPS" = 1 ] && probe_user "$victim" "app-outage-graceful" "fail-fast" 30
 
   echo "  waiting ${DECAY_WAIT}s for offline-decay…"; sleep "$DECAY_WAIT"
   # survivors must now show the victim OFFLINE (decayed, not a live ghost)
@@ -761,6 +794,11 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   NODE_IDS[$victim]=$(robust_self_id "$victim"); ALL_IDS=$(IFS=,; echo "${NODE_IDS[*]}")
   echo "  reconverged: node0 online=$(online_count 0)/$NODES"
   check "healed" "$ALL_NODES" "$ALL_IDS"
+
+  # P3 cross-layer assertion — node$victim is back: its user's surface must
+  # RECOVER (a fresh turn completes cleanly; the daemon reloads its model cold on
+  # the first request, so allow a generous window).
+  [ "$DESKTOPS" = 1 ] && probe_user "$victim" "app-outage-recovered" "complete" 180
 
   # load: timed /v1/mesh/status queries (latency SLIs for the gate)
   for _ in $(seq 1 20); do
