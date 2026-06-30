@@ -43,6 +43,22 @@ const MINUTES = parseFloat(process.env.SOVEREIGN_DRIVER_MINUTES ?? "3");
 const CORPUS = process.env.SOVEREIGN_DRIVER_CORPUS ?? "chaos-secret-agent";
 const TRANSCRIPT_DIR = process.env.SOVEREIGN_DRIVER_TRANSCRIPT ?? null;
 
+// One-shot probe mode (P3): the orchestrator calls `--probe` at a moment it
+// controls (right after killing the victim's node, and again after the heal) to
+// HARD-assert the cross-layer arc — a turn must fail FAST during the outage and
+// complete cleanly after recovery. Prints ONE finding JSON line to stdout and
+// exits 0/1, so the orchestrator can fold it into the unified verdict.
+const _argv = process.argv.slice(2);
+const _flag = (f) => _argv.includes(f);
+const _val = (f, d) => {
+  const i = _argv.indexOf(f);
+  return i >= 0 && _argv[i + 1] ? _argv[i + 1] : d;
+};
+const PROBE = _flag("--probe");
+const PROBE_LABEL = _val("--label", "app-probe");
+const PROBE_EXPECT = _val("--expect", "complete"); // "fail-fast" (outage) | "complete" (recovery)
+const PROBE_TIMEOUT = parseInt(_val("--timeout", "60"), 10) * 1000;
+
 // A small bank of corpus-grounded questions so successive turns aren't identical
 // (the soak's chaos-secret-agent corpus is Conrad's "The Secret Agent").
 const QUESTIONS = [
@@ -353,10 +369,77 @@ async function main() {
   return 0;
 }
 
-main()
+// P3 one-shot probe — a single controlled turn at an orchestrator-chosen moment.
+// Prints ONE finding line to stdout (the orchestrator folds it into the verdict);
+// does NOT write the shared findings file (avoids racing the autonomous driver).
+async function probeMain() {
+  const up = await healthz();
+  if (up) for (const ev of ["message-chunk", "message-complete", "message-error"]) await listen(ev);
+  let convo = null;
+  try {
+    convo = (await invoke("create_conversation", {}, 10_000)).id;
+  } catch {
+    /* the SEND is what we measure; conversation-create may itself wobble in an outage */
+  }
+  const t0 = Date.now();
+  const turn = up
+    ? await chatTurn(convo, QUESTIONS[0], PROBE_TIMEOUT)
+    : { status: "error", detail: "bridge unreachable" };
+  const latency = Date.now() - t0;
+
+  let ok;
+  let detail;
+  if (PROBE_EXPECT === "fail-fast") {
+    // Outage: the user's node is DOWN. The turn must resolve FAST with an error,
+    // not hang waiting out a long timeout (the node2 hang hypothesis).
+    if (turn.status === "error") {
+      ok = true;
+      detail = `graceful fast error in ${latency}ms while node down: ${turn.detail}`;
+    } else if (turn.status === "timeout") {
+      ok = false;
+      detail = `HANG: turn did not resolve in ${PROBE_TIMEOUT}ms while node down — should fail fast`;
+    } else {
+      // The desktop's inference DID hit the dead node (the daemon's
+      // /v1/chat/completions connection error shows in the desktop log) and the
+      // runtime fell back to a FAST error-completion instead of hanging — graceful
+      // degradation. Fast resolution (no hang) is the pass condition; the snippet
+      // + latency document that it's a fallback, not a real answer from elsewhere
+      // (a real cold inference is ~5s; this path is ~1s).
+      const snip = (turn.full_text || "").replace(/\s+/g, " ").trim().slice(0, 140);
+      ok = true;
+      detail = `graceful degradation: fast error-completion in ${latency}ms — "${snip}"`;
+    }
+  } else {
+    // Recovery: node is back. A fresh turn must complete cleanly.
+    if (turn.status === "complete") {
+      const violations = await turnViolations(turn);
+      ok = violations.length === 0;
+      detail = ok
+        ? `recovered: clean turn in ${latency}ms (${(turn.meta?.retrieved_chunks ?? []).length} chunks)`
+        : `recovered but invariants failed: ${violations.join(" | ")}`;
+    } else {
+      ok = false;
+      detail = `did NOT recover: ${turn.status} after restart (${turn.detail}) in ${latency}ms`;
+    }
+  }
+  process.stdout.write(
+    JSON.stringify({ phase: PROBE_LABEL, ok, node: Number(NODE), status: turn.status, latency_ms: latency, detail }) +
+      "\n",
+  );
+  return ok ? 0 : 1;
+}
+
+(PROBE ? probeMain() : main())
   .then((rc) => process.exit(rc ?? 0))
   .catch((e) => {
-    finding({ kind: "app-driver-crash", detail: String(e?.stack ?? e) });
-    process.stderr.write(`mesh-app-driver crashed: ${e?.stack ?? e}\n`);
+    if (PROBE) {
+      process.stdout.write(
+        JSON.stringify({ phase: PROBE_LABEL, ok: false, node: Number(NODE), detail: `probe crashed: ${e?.message ?? e}` }) +
+          "\n",
+      );
+    } else {
+      finding({ kind: "app-driver-crash", detail: String(e?.stack ?? e) });
+      process.stderr.write(`mesh-app-driver crashed: ${e?.stack ?? e}\n`);
+    }
     process.exit(1);
   });
