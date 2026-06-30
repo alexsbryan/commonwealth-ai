@@ -450,6 +450,16 @@ pub fn run_index_readiness_migration(conn: &Connection) -> rusqlite::Result<()> 
     Ok(())
 }
 
+/// Add per-corpus visibility for multi-user hubs. `visibility` holds a JSON
+/// `CorpusVisibility`; a `NULL` column — every pre-migration row — reads back
+/// as the default `Org` (shared), so single-user and operator-curated
+/// deployments are unaffected. The `let _ =` swallows the duplicate-column
+/// error on a DB that already has it (idempotent, mirrors the migration above).
+pub fn run_corpus_visibility_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE corpus_state ADD COLUMN visibility TEXT");
+    Ok(())
+}
+
 /// KnowledgeView v1 additive columns.
 ///
 /// - `memories.source_conversation_id` — links an extracted memory

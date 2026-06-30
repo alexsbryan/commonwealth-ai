@@ -35,15 +35,37 @@ const INVITE_TTL_SECS: u64 = 24 * 60 * 60;
 /// which forwards to this loopback listener, is the sole network path
 /// in (including for `/internal/join`), so a plaintext LAN caller is
 /// refused. A plaintext mesh keeps the historical `0.0.0.0` bind.
-fn internal_bind_addr(require_encryption: bool, internal_port: u16) -> std::net::SocketAddr {
+fn internal_bind_addr(
+    require_encryption: bool,
+    internal_bind: &str,
+    internal_port: u16,
+) -> std::net::SocketAddr {
+    // Encryption forces loopback regardless of the configured interface:
+    // the iroh acceptor is the sole network ingress on an encrypted mesh.
     let host = if require_encryption {
         "127.0.0.1"
     } else {
-        "0.0.0.0"
+        internal_bind
     };
     format!("{host}:{internal_port}")
         .parse()
-        .expect("internal bind addr is always valid")
+        .unwrap_or_else(|_| {
+            warn!("invalid [daemon] internal_bind '{internal_bind}'; falling back to 0.0.0.0");
+            format!("0.0.0.0:{internal_port}")
+                .parse()
+                .expect("0.0.0.0 bind addr is always valid")
+        })
+}
+
+/// Effective mDNS-on decision: the `[discovery] mdns` config flag, with
+/// `SOVEREIGN_DISABLE_MDNS` (`=1`/`=true`) as a force-off override for
+/// container/VPC deploys whose network namespace can't bind the multicast
+/// socket. Config-on + env-unset reproduces the historical behaviour.
+fn mdns_enabled_effective(cfg_mdns: bool) -> bool {
+    let env_force_off = std::env::var("SOVEREIGN_DISABLE_MDNS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    cfg_mdns && !env_force_off
 }
 
 use crate::admin_http::{ConfigDiff, ProviderFactory};
@@ -188,11 +210,14 @@ enum DaemonState {
         client_addr: SocketAddr,
         /// Live mDNS advertiser + discovery — kept to drive
         /// `discovered_peers()` and (in Phase B) the join handshake.
-        mdns: Arc<MdnsDiscovery>,
+        /// `None` when mDNS is disabled (`[discovery] mdns = false` /
+        /// `SOVEREIGN_DISABLE_MDNS`) — the daemon then forms the mesh from
+        /// static seeds only and never advertises/browses.
+        mdns: Option<Arc<MdnsDiscovery>>,
         /// Dropping this handle stops the background browse task.
         /// Underscore-prefixed because it's held purely for its Drop
-        /// impl.
-        _browse_handle: BrowseHandle,
+        /// impl. `None` when mDNS is disabled (no browse task to stop).
+        _browse_handle: Option<BrowseHandle>,
         /// Aborts the gossip heartbeat loop on Drop. Same pattern
         /// as `_browse_handle` — tying the task's lifetime to the
         /// Running variant means stopping the daemon also stops
@@ -1011,7 +1036,7 @@ impl EmbeddedDaemon {
         let mdns = {
             let state = self.state.read().await;
             match &*state {
-                DaemonState::Running { mdns, .. } => Arc::clone(mdns),
+                DaemonState::Running { mdns, .. } => mdns.clone(),
                 DaemonState::Stopped => unreachable!("just started above"),
             }
         };
@@ -1055,7 +1080,7 @@ impl EmbeddedDaemon {
                 node_name,
                 addrs,
                 relay_hint.as_deref(),
-                mdns.as_ref(),
+                mdns.as_deref(),
                 std::time::Duration::from_secs(5),
                 // Propose our stable NodeId. Founder keeps it if free
                 // or matches our name; else mints a fresh one (first
@@ -1327,7 +1352,9 @@ impl EmbeddedDaemon {
     pub async fn discovered_peers(&self) -> Vec<DiscoveredPeer> {
         let state = self.state.read().await;
         match &*state {
-            DaemonState::Running { mdns, .. } => mdns.discovered_peers(),
+            DaemonState::Running { mdns, .. } => {
+                mdns.as_ref().map(|m| m.discovered_peers()).unwrap_or_default()
+            }
             DaemonState::Stopped => Vec::new(),
         }
     }
@@ -1802,11 +1829,15 @@ impl EmbeddedDaemon {
         // the layer (which reads it from `AppState`) has it before the
         // first request. The internal port (`:9742`, mTLS) is unrelated
         // and always binds `0.0.0.0`.
-        let (mut client_bind, configured_token) = {
+        let (mut client_bind, configured_token, internal_bind) = {
             let guard = self.setup_config.read().await;
             match guard.as_ref() {
-                Some(c) => (c.daemon.client_bind.clone(), c.daemon.client_token.clone()),
-                None => ("127.0.0.1".to_string(), None),
+                Some(c) => (
+                    c.daemon.client_bind.clone(),
+                    c.daemon.client_token.clone(),
+                    c.daemon.internal_bind.clone(),
+                ),
+                None => ("127.0.0.1".to_string(), None, "0.0.0.0".to_string()),
             }
         };
         let mut bind_is_loopback = client_bind == "127.0.0.1"
@@ -1888,27 +1919,49 @@ impl EmbeddedDaemon {
         // router is loopback-only too — the iroh acceptor (which forwards
         // here) is the sole network path in, including for
         // `/internal/join`. Plaintext LAN callers get connection-refused.
-        let internal_addr: SocketAddr = internal_bind_addr(require_encryption, internal_port);
+        let internal_addr: SocketAddr =
+            internal_bind_addr(require_encryption, &internal_bind, internal_port);
 
         let mesh_state = Arc::new(RwLock::new(MeshState::from_app_state(&app_state).await));
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
 
-        // Register on mDNS and start browsing. Both are load-bearing:
-        // advertise lets remote peers find us; browse populates the
-        // discovered-peers table that `perform_join` (Phase B) uses
-        // to locate handshake targets.
-        let mdns = MdnsDiscovery::new(node_id, &mesh_id_hex, &mesh_name, &node_name, internal_port)
-            .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
-        let mdns = Arc::new(mdns);
-        // A 32-slot channel is plenty — the browse loop pushes on
-        // ServiceResolved and we don't actively consume. If the buffer
-        // fills (many peers on a busy LAN), the background task drops
-        // extras; the discovered-peers hash map is still authoritative.
-        let (peer_tx, _peer_rx) = tokio::sync::mpsc::channel::<DiscoveredPeer>(32);
-        let browse_handle = mdns
-            .browse(peer_tx)
-            .map_err(|e| MeshError::Network(format!("mDNS browse failed: {e}")))?;
+        // Register on mDNS and start browsing — but only when discovery
+        // is enabled. Both are load-bearing on a LAN: advertise lets
+        // remote peers find us; browse populates the discovered-peers
+        // table that `perform_join` (Phase B) uses to locate handshake
+        // targets. On a VPC/hardened host (`[discovery] mdns = false` or
+        // `SOVEREIGN_DISABLE_MDNS`) we skip both — and crucially never
+        // touch the multicast socket, whose bind is otherwise fatal at
+        // boot — forming the mesh from static seeds (`?relay=` /
+        // `[discovery] seed_addrs`) instead.
+        let mdns_enabled = {
+            let guard = self.setup_config.read().await;
+            mdns_enabled_effective(guard.as_ref().map(|c| c.discovery.mdns).unwrap_or(true))
+        };
+        let (mdns, browse_handle): (Option<Arc<MdnsDiscovery>>, Option<BrowseHandle>) =
+            if mdns_enabled {
+                let mdns =
+                    MdnsDiscovery::new(node_id, &mesh_id_hex, &mesh_name, &node_name, internal_port)
+                        .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
+                let mdns = Arc::new(mdns);
+                // A 32-slot channel is plenty — the browse loop pushes on
+                // ServiceResolved and we don't actively consume. If the
+                // buffer fills (many peers on a busy LAN), the background
+                // task drops extras; the discovered-peers hash map is
+                // still authoritative.
+                let (peer_tx, _peer_rx) = tokio::sync::mpsc::channel::<DiscoveredPeer>(32);
+                let browse_handle = mdns
+                    .browse(peer_tx)
+                    .map_err(|e| MeshError::Network(format!("mDNS browse failed: {e}")))?;
+                (Some(mdns), Some(browse_handle))
+            } else {
+                info!(
+                    "mesh: mDNS discovery disabled — forming mesh from static \
+                     seeds only (no multicast advertise/browse)"
+                );
+                (None, None)
+            };
 
         // Snapshot the MCP mount + installed mesh HTTP router (if any)
         // before moving app_state into the spawn. Both are cheap:
@@ -2672,18 +2725,25 @@ mod tests {
         // WS-C receiver lockout: an encrypted mesh binds the internal
         // router loopback-only (iroh acceptor is the sole network path);
         // a plaintext mesh keeps the historical wildcard bind.
-        let encrypted = internal_bind_addr(true, 9742);
+        let encrypted = internal_bind_addr(true, "0.0.0.0", 9742);
         assert!(
             encrypted.ip().is_loopback(),
             "encrypted mesh must bind internal router loopback-only, got {encrypted}"
         );
         assert_eq!(encrypted.port(), 9742);
 
-        let plaintext = internal_bind_addr(false, 9742);
+        let plaintext = internal_bind_addr(false, "0.0.0.0", 9742);
         assert!(
             plaintext.ip().is_unspecified(),
             "plaintext mesh keeps the 0.0.0.0 internal bind, got {plaintext}"
         );
+
+        // A configured private bind is honoured on a plaintext mesh...
+        let pinned = internal_bind_addr(false, "10.0.1.4", 9742);
+        assert_eq!(pinned.to_string(), "10.0.1.4:9742");
+        // ...but encryption still forces loopback, ignoring the config.
+        let pinned_encrypted = internal_bind_addr(true, "10.0.1.4", 9742);
+        assert!(pinned_encrypted.ip().is_loopback());
     }
 
     /// Regression for: after `sovereign setup`, `GET /v1/models`
@@ -2726,6 +2786,7 @@ mod tests {
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: Vec::new(),
         };
 

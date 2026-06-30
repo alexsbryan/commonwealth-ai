@@ -359,7 +359,7 @@ pub async fn perform_join(
     joining_node_name: &str,
     joining_node_addresses: Vec<SocketAddr>,
     direct_peer_hint: Option<&str>,
-    mdns: &MdnsDiscovery,
+    mdns: Option<&MdnsDiscovery>,
     timeout: Duration,
     proposed_node_id: Option<NodeId>,
     // (pubkey, hex proof-of-possession) — see `JoinRequestWire`.
@@ -467,6 +467,20 @@ pub async fn perform_join(
             );
         }
     }
+
+    // mDNS disabled (headless / VPC host): the direct hint above was our
+    // only discovery path. If it didn't already return, we have no way to
+    // locate a peer — surface the same not-found error the timeout would.
+    let Some(mdns) = mdns else {
+        let direct_hint_msg = match direct_failure {
+            Some(msg) => format!(". Direct seed also failed: {msg}"),
+            None => ". mDNS is disabled and no reachable seed address was provided".to_string(),
+        };
+        return Err(JoinError::NoPeerFound {
+            mesh_name: mesh_name.to_string(),
+            direct_hint_msg,
+        });
+    };
 
     let start = Instant::now();
     // Track attempted peer addresses so we don't spam the same node

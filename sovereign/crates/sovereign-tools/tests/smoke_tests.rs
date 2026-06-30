@@ -348,6 +348,7 @@ async fn full_pipeline_query_finds_corpus_and_records_provenance() {
             version: 0,
             deleted_at: None,
             vector_index_ready: false,
+            visibility: CorpusVisibility::Org,
         })
         .await
         .unwrap();
@@ -439,6 +440,7 @@ async fn full_pipeline_multi_topic_queries_find_different_sources() {
             version: 0,
             deleted_at: None,
             vector_index_ready: false,
+            visibility: CorpusVisibility::Org,
         })
         .await
         .unwrap();
@@ -511,6 +513,7 @@ async fn full_pipeline_provenance_persists_across_store_roundtrip() {
             version: 0,
             deleted_at: None,
             vector_index_ready: false,
+            visibility: CorpusVisibility::Org,
         })
         .await
         .unwrap();

@@ -264,6 +264,7 @@ mod tests {
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: Vec::new(),
         };
         cfg.save_to(&path).unwrap();

@@ -44,6 +44,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         memory: Default::default(),
         iroh: Default::default(),
         shared_model: Default::default(),
+        discovery: Default::default(),
         mcp_servers: Vec::new(),
     };
 
