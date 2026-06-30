@@ -4,6 +4,7 @@ mod approval;
 mod auth;
 mod busy;
 mod config;
+mod corpus_upload;
 mod iroh_access;
 mod narration;
 mod projection;
@@ -726,6 +727,7 @@ async fn main() {
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .merge(routes_documents::document_router())
+        .merge(corpus_upload::corpus_upload_router())
         .merge(routes_tdd::tdd_router())
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(Extension(auth_state));
