@@ -55,12 +55,23 @@ pub struct RecentContributionsResp {
 }
 
 #[tauri::command]
-pub async fn get_contribution_status() -> Result<ContributionStatus, String> {
+pub async fn get_contribution_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<ContributionStatus, String> {
+    get_contribution_status_at(&state.internal_base_url()).await
+}
+
+/// HTTP implementation behind `get_contribution_status`, with the
+/// daemon's internal base URL passed explicitly so the tray poller
+/// (which holds an `AppHandle`, not a `tauri::State`) can call it.
+pub(crate) async fn get_contribution_status_at(
+    base_url: &str,
+) -> Result<ContributionStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/status");
+    let url = format!("{base_url}/internal/contribution/status");
     let resp = client
         .get(&url)
         .send()
@@ -79,12 +90,27 @@ pub async fn get_contribution_status() -> Result<ContributionStatus, String> {
 }
 
 #[tauri::command]
-pub async fn set_contribution_ceiling(max: Option<usize>) -> Result<ContributionStatus, String> {
+pub async fn set_contribution_ceiling(
+    state: State<'_, Arc<AppState>>,
+    max: Option<usize>,
+) -> Result<ContributionStatus, String> {
+    set_contribution_ceiling_at(&state.internal_base_url(), max).await
+}
+
+/// HTTP implementation behind `set_contribution_ceiling`, with the
+/// daemon's internal base URL passed explicitly. Split out so the
+/// non-command boot/consent callers (which hold an `AppState` rather
+/// than a `tauri::State`) can resolve the URL via
+/// `AppState::internal_base_url()` and share the same request path.
+pub(crate) async fn set_contribution_ceiling_at(
+    base_url: &str,
+    max: Option<usize>,
+) -> Result<ContributionStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/ceiling");
+    let url = format!("{base_url}/internal/contribution/ceiling");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "max": max }))
@@ -104,12 +130,25 @@ pub async fn set_contribution_ceiling(max: Option<usize>) -> Result<Contribution
 }
 
 #[tauri::command]
-pub async fn pause_contributions(duration_secs: u64) -> Result<ContributionStatus, String> {
+pub async fn pause_contributions(
+    state: State<'_, Arc<AppState>>,
+    duration_secs: u64,
+) -> Result<ContributionStatus, String> {
+    pause_contributions_at(&state.internal_base_url(), duration_secs).await
+}
+
+/// HTTP implementation behind `pause_contributions`, with the daemon's
+/// internal base URL passed explicitly so the tray menu (which holds
+/// an `AppHandle`, not a `tauri::State`) can call it.
+pub(crate) async fn pause_contributions_at(
+    base_url: &str,
+    duration_secs: u64,
+) -> Result<ContributionStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/pause");
+    let url = format!("{base_url}/internal/contribution/pause");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "duration_secs": duration_secs }))
@@ -129,12 +168,23 @@ pub async fn pause_contributions(duration_secs: u64) -> Result<ContributionStatu
 }
 
 #[tauri::command]
-pub async fn resume_contributions() -> Result<ContributionStatus, String> {
+pub async fn resume_contributions(
+    state: State<'_, Arc<AppState>>,
+) -> Result<ContributionStatus, String> {
+    resume_contributions_at(&state.internal_base_url()).await
+}
+
+/// HTTP implementation behind `resume_contributions`, with the daemon's
+/// internal base URL passed explicitly so the tray menu (which holds
+/// an `AppHandle`, not a `tauri::State`) can call it.
+pub(crate) async fn resume_contributions_at(
+    base_url: &str,
+) -> Result<ContributionStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/resume");
+    let url = format!("{base_url}/internal/contribution/resume");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({}))
@@ -154,12 +204,16 @@ pub async fn resume_contributions() -> Result<ContributionStatus, String> {
 }
 
 #[tauri::command]
-pub async fn get_recent_contributions(limit: Option<usize>) -> Result<Vec<LedgerEventDto>, String> {
+pub async fn get_recent_contributions(
+    state: State<'_, Arc<AppState>>,
+    limit: Option<usize>,
+) -> Result<Vec<LedgerEventDto>, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/recent");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/contribution/recent");
     let mut req = client.get(&url);
     if let Some(n) = limit {
         req = req.query(&[("limit", n.to_string())]);
@@ -194,12 +248,16 @@ pub async fn get_recent_contributions(limit: Option<usize>) -> Result<Vec<Ledger
 // The first two return raw JSON; the Svelte side owns the typed shape.
 
 #[tauri::command]
-pub async fn get_activity_summary(window_days: Option<u32>) -> Result<serde_json::Value, String> {
+pub async fn get_activity_summary(
+    state: State<'_, Arc<AppState>>,
+    window_days: Option<u32>,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/activity/summary");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/activity/summary");
     let mut req = client.get(&url);
     if let Some(d) = window_days {
         req = req.query(&[("window_days", d.to_string())]);
@@ -221,7 +279,10 @@ pub async fn get_activity_summary(window_days: Option<u32>) -> Result<serde_json
 }
 
 #[tauri::command]
-pub async fn get_activity_recent(limit: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_activity_recent(
+    state: State<'_, Arc<AppState>>,
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
     #[derive(serde::Deserialize)]
     struct Resp {
         events: Vec<serde_json::Value>,
@@ -230,7 +291,8 @@ pub async fn get_activity_recent(limit: Option<usize>) -> Result<Vec<serde_json:
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/activity/recent");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/activity/recent");
     let mut req = client.get(&url);
     if let Some(n) = limit {
         req = req.query(&[("limit", n.to_string())]);
@@ -323,7 +385,7 @@ pub async fn record_first_mesh_consent(
     // isn't reachable yet (early-boot race), the cfg already records
     // the user's intent and a follow-up apply_first_mesh_consent at
     // boot can re-issue. For v1 we just log + continue.
-    if let Err(e) = set_contribution_ceiling(Some(ceiling)).await {
+    if let Err(e) = set_contribution_ceiling_at(&state.internal_base_url(), Some(ceiling)).await {
         tracing::warn!(
             error = %e,
             ceiling,

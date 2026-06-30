@@ -23,8 +23,6 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
-
 const CANONICAL_FILE: &str = "conversations.json";
 
 /// Which chat vendor's export we're importing. The import flow is
@@ -308,7 +306,8 @@ async fn run_conversation_import(
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/install");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/install");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({

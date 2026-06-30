@@ -321,7 +321,11 @@ fn main() -> ExitCode {
                             .as_ref()
                             .map(|c| c.ceiling);
                         if let Some(ceiling) = consent_ceiling {
-                            if let Err(e) = commands::set_contribution_ceiling(Some(ceiling)).await
+                            if let Err(e) = commands::set_contribution_ceiling_at(
+                                &state_clone.internal_base_url(),
+                                Some(ceiling),
+                            )
+                            .await
                             {
                                 tracing::warn!(
                                     error = %e,
@@ -341,9 +345,9 @@ fn main() -> ExitCode {
                         // when not available — `lc_ocr_available`
                         // tells the UI to hide the OCR offer.
                         if let Some(mgr) = state_clone.local_corpus.read().await.as_ref().cloned() {
-                            // Default daemon URL — same one the
-                            // existing inference path uses.
-                            let daemon_url = "http://127.0.0.1:9741".to_string();
+                            // Daemon client URL — resolved from the
+                            // bootstrap mode so a non-default port works.
+                            let daemon_url = state_clone.client_base_url();
                             // Resolve the chat model's name (file stem)
                             // so the cleanup pass can target it by name.
                             // The daemon registers each loaded slot under

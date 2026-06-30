@@ -75,8 +75,11 @@ pub async fn save_config(
     // when the user hit Save. Background it: the daemon will pick up
     // the new SetupConfig before the user's next inference turn, and
     // the desktop's local cache is already correct.
-    tokio::spawn(async {
-        if let Err(e) = request_daemon_reload().await {
+    // Resolve the client base URL in sync code BEFORE the spawn — the
+    // async block can't borrow `state` (it may outlive this function).
+    let reload_base = state.client_base_url();
+    tokio::spawn(async move {
+        if let Err(e) = request_daemon_reload(reload_base).await {
             tracing::warn!("save_config: admin/reload failed (background): {e}");
         }
     });
@@ -279,14 +282,16 @@ async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// POST `http://127.0.0.1:9741/v1/admin/reload` so a CLI-started
-/// daemon picks up the `SetupConfig` changes we just wrote. When the
-/// daemon replies `{restart_required: true}` — typically a port or
-/// data_dir change — fall back to `launchctl kickstart` / `systemctl
-/// --user restart`. Swallows all errors: if no daemon is running,
-/// the next `sovereign daemon run` will read the fresh config anyway.
-async fn request_daemon_reload() -> Result<(), String> {
-    let url = "http://127.0.0.1:9741/v1/admin/reload";
+/// POST `<base_url>/v1/admin/reload` so a CLI-started daemon picks up
+/// the `SetupConfig` changes we just wrote. `base_url` is the
+/// caller-resolved client base (`state.client_base_url()`) so a
+/// non-default port works. When the daemon replies
+/// `{restart_required: true}` — typically a port or data_dir change —
+/// fall back to `launchctl kickstart` / `systemctl --user restart`.
+/// Swallows all errors: if no daemon is running, the next `sovereign
+/// daemon run` will read the fresh config anyway.
+async fn request_daemon_reload(base_url: String) -> Result<(), String> {
+    let url = format!("{base_url}/v1/admin/reload");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -495,8 +500,11 @@ pub async fn set_setup_context_size(
         "set_setup_context_size: SetupConfig written"
     );
 
-    tokio::spawn(async {
-        if let Err(e) = request_daemon_reload().await {
+    // Resolve the client base URL in sync code BEFORE the spawn — the
+    // async block can't borrow `state` (it may outlive this function).
+    let reload_base = state.client_base_url();
+    tokio::spawn(async move {
+        if let Err(e) = request_daemon_reload(reload_base).await {
             tracing::warn!(
                 error = %e,
                 "set_setup_context_size: daemon admin/reload failed (background)"
@@ -630,7 +638,7 @@ pub async fn complete_setup(
     if let Err(e) = mirror_to_setup_config(&config_for_mirror).await {
         tracing::warn!("complete_setup: could not mirror to SetupConfig: {e}");
     }
-    if let Err(e) = request_daemon_reload().await {
+    if let Err(e) = request_daemon_reload(state.client_base_url()).await {
         tracing::warn!("complete_setup: admin/reload failed: {e}");
     }
 
