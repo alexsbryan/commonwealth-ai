@@ -1036,6 +1036,7 @@ mod tests {
             memories: vec![],
             working_memory: None,
             installed_corpora: vec![],
+            corpus_ceiling: None,
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,

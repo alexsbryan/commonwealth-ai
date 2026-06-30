@@ -42,6 +42,7 @@ impl Runtime {
         chunks: &[corpus_engine::ScoredChunk],
         message: &str,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND")
             .ok()
@@ -151,6 +152,7 @@ impl Runtime {
                     "GraphExpand",
                     None,
                     enabled_corpora,
+                    corpus_ceiling,
                 )
                 .await;
             for mut c in hits {
@@ -288,6 +290,7 @@ impl Runtime {
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> usize {
         // Score-decay for fanned-out (sub-query) hits. Default 1.0 keeps
         // the original "compete on equal footing" behaviour. A value <1
@@ -315,6 +318,7 @@ impl Runtime {
                     label,
                     None,
                     enabled_corpora,
+                    corpus_ceiling,
                 )
                 .await;
             if decay < 1.0 {
@@ -571,6 +575,7 @@ impl Runtime {
         &self,
         message: &str,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
@@ -591,7 +596,7 @@ impl Runtime {
         // enumerate classify.
         if overview_on && Self::looks_like_overview(message) {
             return self
-                .enumerate_overview_claim_chunks(message, enabled_corpora)
+                .enumerate_overview_claim_chunks(message, enabled_corpora, corpus_ceiling)
                 .await;
         }
         if !atom_enum_on {
@@ -1143,6 +1148,7 @@ impl Runtime {
                             "AtomEnum",
                             None,
                             enabled_corpora,
+                            corpus_ceiling,
                         )
                         .await
                         .into_iter()
@@ -1209,6 +1215,7 @@ impl Runtime {
         &self,
         message: &str,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let provider = self.atlas_context_provider.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
@@ -1333,6 +1340,7 @@ impl Runtime {
                                     "AtomEnumOverview",
                                     None,
                                     enabled_corpora,
+                                    corpus_ceiling,
                                 )
                                 .await
                                 .into_iter()
@@ -1774,6 +1782,7 @@ impl Runtime {
         label: &str,
         scope: Option<&str>,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) {
         if !atlas_grounding_enabled() {
             return;
@@ -1982,6 +1991,7 @@ impl Runtime {
                         "AtlasNavigate",
                         None,
                         Some(&req_scope),
+                        corpus_ceiling,
                     )
                     .await;
                 for hit in fts_hits {
@@ -2329,6 +2339,7 @@ impl Runtime {
         label: &str,
         per_corpus_limits: Option<&HashMap<String, usize>>,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -2506,6 +2517,39 @@ impl Runtime {
                 eligible = eligible.len(),
                 allow_skipped = eligible_pre_allow - eligible.len(),
                 "{label}: corpus allow-list filtered index set"
+            );
+        }
+
+        // Filter 5 — per-principal retrieval ceiling (multi-tenant hub).
+        //
+        // The AIRTIGHT upper bound, and the ONLY corpus filter that is a
+        // security boundary. On a multi-tenant hub the server injects a
+        // `PrincipalResolver`; `build_context` then stamps this conversation's
+        // ceiling = `{Org corpora} ∪ {Private corpora the principal owns}`.
+        // We re-apply the SAME parent-aware allow-list filter — but with the
+        // ceiling, INDEPENDENT of the user-controlled `enabled_corpora`
+        // (Filter 4). That independence is the whole point: Filter 4 is a
+        // no-op on `None` (the default), so a client that sends no selection —
+        // or forges one naming another tenant's Private corpus — is bounded
+        // ONLY here. Filter 5 drops every index whose corpus (or parent
+        // corpus) is outside the ceiling, so cross-tenant content can never
+        // enter the merged pool regardless of what Filter 4 let through.
+        //
+        // `None` (single-user / desktop — no principal injected) ⇒ no-op, so
+        // retrieval is bit-identical to pre-multi-tenant behaviour. A
+        // `Some(empty)` ceiling (a principal with zero visible corpora)
+        // correctly yields zero eligible indexes — fail-closed, not fail-open.
+        // See `ConversationContext::corpus_ceiling`.
+        let eligible_pre_ceiling = eligible.len();
+        let eligible = apply_corpus_allow_list(eligible, corpus_ceiling);
+        if eligible.len() < eligible_pre_ceiling {
+            tracing::info!(
+                target: "retrieval.isolation",
+                label = %label,
+                ceiling = ?corpus_ceiling,
+                eligible_after = eligible.len(),
+                ceiling_dropped = eligible_pre_ceiling - eligible.len(),
+                "retrieval.isolation: principal-ceiling excluded cross-tenant indexes"
             );
         }
 
@@ -2723,6 +2767,7 @@ impl Runtime {
         name_match: Option<&str>,
         label: &str,
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -2769,6 +2814,13 @@ impl Runtime {
         // See `apply_corpus_allow_list` for the parent-aware filter
         // contract.
         let eligible = apply_corpus_allow_list(eligible, enabled_corpora);
+        // Filter 5 — per-principal retrieval ceiling (multi-tenant hub).
+        // The independent, airtight bound — twin of the one in
+        // `search_corpus_indexes_with_overrides`. `None` (single-user) ⇒
+        // no-op. A forged/over-broad `name_match` or `enabled_corpora` (and
+        // even a deliberate exemption like `bridge_boost`'s) cannot widen
+        // retrieval past the principal's `{Org} ∪ {owned Private}` corpora.
+        let eligible = apply_corpus_allow_list(eligible, corpus_ceiling);
 
         if eligible.is_empty() {
             tracing::info!(
@@ -2842,6 +2894,7 @@ impl Runtime {
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         entities: &[String],
         enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
     ) -> Vec<MetaAtlasHitRecord> {
         let Some(index) = self.meta_atlas.as_ref() else {
             return Vec::new();
@@ -2898,6 +2951,7 @@ impl Runtime {
                         Some(&anchor.corpus_id),
                         "MetaAtlasBoost",
                         enabled_corpora,
+                        corpus_ceiling,
                     )
                     .await;
                 let stability_tag = anchor.stability.map(|s| s.as_str().to_string());
@@ -2942,6 +2996,12 @@ impl Runtime {
         // Intentionally unused: the bridge reaches the linked corpus even
         // when the turn is scoped (see the fetch below).
         _enabled_corpora: Option<&[String]>,
+        // NOT exempt, unlike `_enabled_corpora` above. The per-principal
+        // ceiling is a security boundary, not a display scope: a bridge edge
+        // may steer retrieval to a LINKED corpus the user didn't select, but
+        // it must never cross into a corpus the principal doesn't own. So the
+        // ceiling is forwarded to Filter 5 in `search_corpora_filtered`.
+        corpus_ceiling: Option<&[String]>,
     ) -> usize {
         // Topic-vs-query mix for the cross-corpus fetch embedding. 0.5 =
         // equal weight: the topic anchor keeps the pull inside the linked
@@ -3021,6 +3081,7 @@ impl Runtime {
                         Some(&other.corpus_id),
                         "BridgeBoost",
                         None,
+                        corpus_ceiling,
                     )
                     .await;
                 let relation = edge.relation.as_str();

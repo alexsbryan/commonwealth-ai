@@ -63,6 +63,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
         migrations::run_corpus_visibility_migration(&conn)
             .map_err(|e| Error::Storage(format!("Corpus visibility migration failed: {e}")))?;
+        migrations::run_document_owner_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Document owner migration failed: {e}")))?;
         migrations::run_insight_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
@@ -381,6 +383,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
         migrations::run_corpus_visibility_migration(&conn)
             .map_err(|e| Error::Storage(format!("Corpus visibility migration failed: {e}")))?;
+        migrations::run_document_owner_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Document owner migration failed: {e}")))?;
         migrations::run_insight_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
@@ -2259,8 +2263,8 @@ impl DocumentAssetStore for SqliteStateStore {
         conn.execute(
             "INSERT OR REPLACE INTO document_assets
              (id, title, filename, file_size_mb, word_count, chunk_count,
-              document_type, ingested_at, index_id, state_json, skeleton_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+              document_type, ingested_at, index_id, state_json, skeleton_json, owner)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 asset.id,
                 asset.title,
@@ -2273,6 +2277,7 @@ impl DocumentAssetStore for SqliteStateStore {
                 asset.index_id,
                 state_json,
                 skeleton_json,
+                asset.owner,
             ],
         )
         .map_err(map_db)?;
@@ -2313,7 +2318,7 @@ impl DocumentAssetStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         conn.query_row(
             "SELECT id, title, filename, file_size_mb, word_count, chunk_count,
-                    document_type, ingested_at, index_id, state_json, skeleton_json
+                    document_type, ingested_at, index_id, state_json, skeleton_json, owner
              FROM document_assets WHERE id = ?1",
             rusqlite::params![id],
             |row| Ok(row_to_document_asset(row)),
@@ -2327,7 +2332,7 @@ impl DocumentAssetStore for SqliteStateStore {
         let mut stmt = conn
             .prepare(
                 "SELECT id, title, filename, file_size_mb, word_count, chunk_count,
-                        document_type, ingested_at, index_id, state_json, skeleton_json
+                        document_type, ingested_at, index_id, state_json, skeleton_json, owner
                  FROM document_assets
                  ORDER BY ingested_at DESC",
             )
@@ -2631,6 +2636,7 @@ fn row_to_document_asset(row: &rusqlite::Row) -> DocumentAsset {
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok()),
         state: serde_json::from_str(&state_json).unwrap_or(AssetState::Pending),
+        owner: row.get::<_, Option<String>>(11).unwrap_or(None),
     }
 }
 

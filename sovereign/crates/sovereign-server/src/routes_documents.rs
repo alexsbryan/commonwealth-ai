@@ -87,23 +87,34 @@ fn manager_from_runtime(runtime: &Runtime) -> DocumentAssetManager {
 
 // ─── Handlers ────────────────────────────────────────────────
 
+/// A document is visible to `tenant` unless it is owned by a DIFFERENT
+/// principal. Unowned (legacy / single-user) and own documents are visible —
+/// the same deny-set rule the corpus surfaces use (`forbidden_corpora`).
+fn asset_visible_to(asset: &DocumentAsset, tenant: &str) -> bool {
+    match &asset.owner {
+        Some(owner) => owner == tenant,
+        None => true,
+    }
+}
+
 /// GET /v1/documents
 async fn list_assets(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
 ) -> ApiResult<Vec<DocumentAsset>> {
-    runtime
+    let mut assets = runtime
         .store
         .list_document_assets()
         .await
-        .map(Json)
-        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    assets.retain(|a| asset_visible_to(a, &tenant.0));
+    Ok(Json(assets))
 }
 
 /// POST /v1/documents/upload
 async fn upload_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Json(body): Json<UploadRequest>,
 ) -> ApiResult<AssetResponse> {
     let path = std::path::Path::new(&body.file_path);
@@ -116,7 +127,7 @@ async fn upload_asset(
 
     let manager = manager_from_runtime(&runtime);
 
-    let asset = manager
+    let mut asset = manager
         .ingest(path, |progress| {
             // Log progress server-side. In the desktop app, Tauri events
             // push these to the frontend; the HTTP API is polled via
@@ -137,13 +148,22 @@ async fn upload_asset(
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
 
+    // Stamp ownership so this document is private to the uploading tenant on
+    // a multi-user hub (re-saves the asset row with `owner` set).
+    asset.owner = Some(tenant.0.clone());
+    runtime
+        .store
+        .save_document_asset(&asset)
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+
     Ok(Json(AssetResponse { asset }))
 }
 
 /// GET /v1/documents/:id
 async fn get_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<AssetResponse> {
     let asset = runtime
@@ -153,15 +173,31 @@ async fn get_asset(
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
 
+    if !asset_visible_to(&asset, &tenant.0) {
+        return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
+    }
+
     Ok(Json(AssetResponse { asset }))
 }
 
 /// DELETE /v1/documents/:id
 async fn delete_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<serde_json::Value> {
+    // Only the owner may delete. Treat another principal's document as
+    // not-found rather than revealing that it exists.
+    let asset = runtime
+        .store
+        .get_document_asset(&id)
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
+    if !asset_visible_to(&asset, &tenant.0) {
+        return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
+    }
+
     let manager = manager_from_runtime(&runtime);
     manager
         .delete(&id)
@@ -174,7 +210,7 @@ async fn delete_asset(
 /// POST /v1/documents/:id/ask
 async fn ask_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
     Json(body): Json<AskRequest>,
 ) -> ApiResult<AskResponse> {
@@ -184,6 +220,10 @@ async fn ask_asset(
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
+
+    if !asset_visible_to(&asset, &tenant.0) {
+        return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
+    }
 
     if !asset.state.is_queryable() {
         return Err(api_error(
@@ -224,7 +264,7 @@ async fn ask_asset(
 /// GET /v1/documents/:id/state
 async fn get_asset_state(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<AssetStateResponse> {
     let asset = runtime
@@ -233,6 +273,10 @@ async fn get_asset_state(
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Document not found"))?;
+
+    if !asset_visible_to(&asset, &tenant.0) {
+        return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
+    }
 
     Ok(Json(AssetStateResponse { state: asset.state }))
 }
