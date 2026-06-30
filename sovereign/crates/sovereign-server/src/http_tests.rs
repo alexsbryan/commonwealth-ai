@@ -199,6 +199,7 @@ fn build_isolation_app(
         )
         .route("/v1/search", post(crate::routes::search))
         .route("/v1/corpora", get(crate::routes::list_corpora))
+        .merge(crate::routes_documents::document_router())
         .layer(middleware::from_fn(crate::auth::auth_middleware))
         .layer(Extension(auth));
     let (narration_tx, _narration_rx) =
@@ -320,6 +321,92 @@ async fn search_does_not_leak_across_tenants() {
         "ISOLATION LEAK: Bob's /v1/search returned Alice's secret — \
          routes::search ignores the tenant and queries the store globally. \
          Response: {bob_hits}"
+    );
+}
+
+/// A3a: Alice's uploaded document is invisible to Bob — `list` omits it and a
+/// direct `get` 404s rather than revealing it exists. (Ingest needs a real
+/// file + inference, so the asset is seeded directly with an owner.)
+#[tokio::test]
+async fn documents_do_not_leak_across_tenants() {
+    use axum::http::StatusCode;
+    use sovereign_core::traits::*;
+
+    let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
+    let (runtime, store, approval) = build_runtime(inference);
+
+    let asset = sovereign_core::types::DocumentAsset {
+        id: "alice-doc-1".to_string(),
+        title: "Alice secret plan".to_string(),
+        filename: "secret.txt".to_string(),
+        file_size_mb: 0.1,
+        word_count: 10,
+        chunk_count: 1,
+        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: "doc-alice-1".to_string(),
+        skeleton: None,
+        state: sovereign_core::types::AssetState::Ready,
+        owner: Some("alice".to_string()),
+    };
+    store.save_document_asset(&asset).await.unwrap();
+
+    let app = build_isolation_app(
+        runtime,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+        two_tenant_auth(),
+    );
+
+    // Bob's document list must NOT include Alice's.
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents",
+            "key-bob",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bob_list = body_json(resp).await;
+    assert!(
+        !bob_list.to_string().contains("alice-doc-1"),
+        "ISOLATION LEAK: Bob's document list includes Alice's document: {bob_list}"
+    );
+
+    // Bob fetching Alice's document by id → 404 (don't reveal it exists).
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents/alice-doc-1",
+            "key-bob",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "Bob must not be able to GET Alice's document"
+    );
+
+    // Sanity: Alice sees her own document.
+    let resp = app
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents",
+            "key-alice",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    let alice_list = body_json(resp).await;
+    assert!(
+        alice_list.to_string().contains("alice-doc-1"),
+        "Alice should see her own document: {alice_list}"
     );
 }
 

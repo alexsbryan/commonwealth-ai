@@ -129,6 +129,28 @@ pub struct ConversationContext {
     /// to tell the model what local knowledge is available.
     #[serde(default)]
     pub installed_corpora: Vec<String>,
+    /// Per-principal retrieval ceiling: the corpus IDs this conversation's
+    /// principal (the end-user on a multi-tenant hub) may EVER retrieve
+    /// from — `{Org corpora} ∪ {Private corpora they own}`. Computed by
+    /// `build_context` from the injected `PrincipalResolver` and applied
+    /// as an independent hard filter at every corpus-chunk search (the
+    /// `corpus_ceiling` "Filter 5" in `retrieval.rs`), so a forged or
+    /// absent `enabled_corpora` selection can never widen retrieval past
+    /// it. This is the in-process twin of the server's read-surface
+    /// deny-set (`TenantRuntime::forbidden_corpora`).
+    ///
+    /// Unlike `installed_corpora` (which already folds in the user's
+    /// per-turn `enabled_corpora` selection), the ceiling is the PURE
+    /// principal bound — independent of selection — so the two filters
+    /// compose orthogonally: selection refines *within* the ceiling.
+    ///
+    /// `None` on the single-user / desktop path (no principal injected).
+    /// Retrieval is then bit-identical to pre-multi-tenant behaviour: no
+    /// ceiling, so `None` `enabled_corpora` still searches every index.
+    ///
+    /// `#[serde(skip)]` — a per-request security value, never persisted.
+    #[serde(skip)]
+    pub corpus_ceiling: Option<Vec<String>>,
     /// Active document session for this conversation (if any).
     /// When present, follow-up questions can reference the structured
     /// output without re-running the full map-reduce operation.

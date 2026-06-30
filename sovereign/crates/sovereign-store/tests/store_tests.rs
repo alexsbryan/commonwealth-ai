@@ -78,6 +78,14 @@ async fn build_context_scopes_corpora_by_principal() {
         .unwrap();
     assert!(alice.installed_corpora.contains(&"shared".to_string()));
     assert!(alice.installed_corpora.contains(&"alice-secret".to_string()));
+    // A3b: the PURE principal ceiling (independent of selection) is what
+    // Filter 5 enforces at every corpus-chunk search. Alice owns the private
+    // corpus → both are in her ceiling.
+    let alice_ceiling = alice
+        .corpus_ceiling
+        .expect("a principal was supplied ⇒ ceiling must be Some");
+    assert!(alice_ceiling.contains(&"shared".to_string()));
+    assert!(alice_ceiling.contains(&"alice-secret".to_string()));
 
     // Bob does NOT own it → he retrieves over the shared `Org` corpus only.
     let bob = sovereign_core::context::build_context(&store, "bob:c", "q", Some("bob"))
@@ -89,6 +97,17 @@ async fn build_context_scopes_corpora_by_principal() {
         "ISOLATION LEAK: Bob's retrieval scope includes Alice's private corpus: {:?}",
         bob.installed_corpora
     );
+    // A3b: and his CEILING — the airtight Filter-5 bound, which a forged or
+    // absent `enabled_corpora` cannot widen past — excludes it too.
+    let bob_ceiling = bob
+        .corpus_ceiling
+        .expect("a principal was supplied ⇒ ceiling must be Some");
+    assert!(bob_ceiling.contains(&"shared".to_string()));
+    assert!(
+        !bob_ceiling.contains(&"alice-secret".to_string()),
+        "ISOLATION LEAK: Bob's retrieval CEILING includes Alice's private corpus: {:?}",
+        bob_ceiling
+    );
 
     // No principal (single-user / desktop) → nothing is hidden.
     let solo = sovereign_core::context::build_context(&store, "c", "q", None)
@@ -96,6 +115,13 @@ async fn build_context_scopes_corpora_by_principal() {
         .unwrap();
     assert!(solo.installed_corpora.contains(&"shared".to_string()));
     assert!(solo.installed_corpora.contains(&"alice-secret".to_string()));
+    // A3b: a `None` principal carries NO ceiling, so Filter 5 is a no-op and
+    // retrieval is bit-identical to pre-multi-tenant behaviour.
+    assert!(
+        solo.corpus_ceiling.is_none(),
+        "single-user path must carry no ceiling (None), got {:?}",
+        solo.corpus_ceiling
+    );
 }
 
 fn make_task(id: &str, convo: &str) -> Task {
@@ -705,6 +731,7 @@ fn make_asset(id: &str) -> DocumentAsset {
         index_id: format!("asset:{id}"),
         skeleton: None,
         state: AssetState::Pending,
+        owner: None,
     }
 }
 

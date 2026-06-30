@@ -77,6 +77,16 @@ pub async fn build_context(
         })
         .map(|s| s.corpus_id)
         .collect();
+    // The PURE principal ceiling — the corpora this principal may ever
+    // retrieve from, independent of the per-conversation `enabled_corpora`
+    // selection. `Some(..)` only when a principal is present (a multi-tenant
+    // hub injected a PrincipalResolver); `None` on the single-user / desktop
+    // path, where retrieval stays bit-identical to pre-feature behaviour
+    // (`None` enabled_corpora ⇒ every index searched). Applied as the
+    // independent `corpus_ceiling` Filter 5 at every corpus-chunk search —
+    // the airtight backstop that a forged or absent `enabled_corpora` cannot
+    // widen past. See `ConversationContext::corpus_ceiling`.
+    let corpus_ceiling: Option<Vec<String>> = principal.map(|_| all_installed.clone());
     let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
         Some(allow) => {
             let allow_set: std::collections::HashSet<&str> =
@@ -100,6 +110,7 @@ pub async fn build_context(
         memories,
         working_memory: None,
         installed_corpora,
+        corpus_ceiling,
         document_session,
         topic_context: None,
         // None here is intentional: landscape digests are spliced

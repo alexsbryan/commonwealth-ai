@@ -360,7 +360,14 @@ pub fn run_document_asset_migration(conn: &Connection) -> rusqlite::Result<()> {
             state_json      TEXT NOT NULL,
             -- DocumentSkeleton as JSON. NULL until skeleton extraction
             -- completes. Can be large (50–200 KB for a novel).
-            skeleton_json   TEXT
+            skeleton_json   TEXT,
+            -- Uploading principal on a multi-tenant hub (A3a). NULL — every
+            -- single-user / pre-multi-tenant row — is visible to all, the
+            -- back-compat default. Declared in the CREATE so a FRESH db has
+            -- the column irrespective of migration order; the idempotent
+            -- `run_document_owner_migration` ALTER upgrades existing on-disk
+            -- DBs created before this column existed.
+            owner           TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_document_assets_ingested
@@ -457,6 +464,16 @@ pub fn run_index_readiness_migration(conn: &Connection) -> rusqlite::Result<()> 
 /// error on a DB that already has it (idempotent, mirrors the migration above).
 pub fn run_corpus_visibility_migration(conn: &Connection) -> rusqlite::Result<()> {
     let _ = conn.execute_batch("ALTER TABLE corpus_state ADD COLUMN visibility TEXT");
+    Ok(())
+}
+
+/// Add per-document owner for multi-user hubs. `owner` is the uploading
+/// principal; a `NULL` column (every pre-migration row) is visible to all —
+/// the back-compat default, so single-user deployments are unaffected.
+/// Idempotent (the duplicate-column error on an already-migrated DB is
+/// swallowed, mirroring the migrations above).
+pub fn run_document_owner_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE document_assets ADD COLUMN owner TEXT");
     Ok(())
 }
 

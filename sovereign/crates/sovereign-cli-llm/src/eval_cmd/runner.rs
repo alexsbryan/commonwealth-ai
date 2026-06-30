@@ -350,6 +350,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         memories: vec![],
         working_memory: None,
         installed_corpora: installed,
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,

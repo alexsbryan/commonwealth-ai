@@ -84,6 +84,7 @@ impl Runtime {
                 name_match.as_deref(),
                 "MetalingualQuery",
                 context.conversation.enabled_corpora.as_deref(),
+                context.corpus_ceiling.as_deref(),
             )
             .await;
 
