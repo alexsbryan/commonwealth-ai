@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench flywheel run …` — the Fidelity-Flywheel loop's READ side.
+//! `svrn bench flywheel run …` — the Fidelity-Flywheel loop's READ side.
 //!
 //! Drives an autonomously-generated probe set (I1 corpus self-supervision)
 //! through the SAME live chat path the chaos bench uses (`run_live`, sealed to
@@ -34,11 +34,11 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench flywheel",
+    command: "svrn bench flywheel",
     summary: "Fidelity-Flywheel read side: generate probes from a corpus, run them through the live chat path, verify groundedness/abstention, capture failures as regression cases.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench flywheel run --corpus <id> [--mine-path <dir>] [--absent-bank <bank.toml>] [--withheld-path <dir>] [--n N] [--seed N] [--judge-model <stem>] [--out <jsonl>] [--regressions <jsonl>] [--no-capture]",
+            "svrn bench flywheel run --corpus <id> [--mine-path <dir>] [--absent-bank <bank.toml>] [--withheld-path <dir>] [--n N] [--seed N] [--judge-model <stem>] [--out <jsonl>] [--regressions <jsonl>] [--no-capture]",
         ),
         HelpSection::Subcommands(&[(
             "run",

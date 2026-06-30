@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich build` — one-shot atlas pipeline driver.
+//! `svrn enrich build` — one-shot atlas pipeline driver.
 //!
 //! Runs the full atlas flow against a corpus in the expected order
 //! with step-by-step progress:
@@ -33,11 +33,11 @@ use corpus_engine::enrichment::pipeline::{
 use std::sync::Arc;
 
 const HELP: Help = Help {
-    command: "sovereign enrich build",
+    command: "svrn enrich build",
     summary: "Run the full atlas enrichment flow for a corpus in one command.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich build <corpus-id> [--chapters <ids> | --full] [--skip <step>...] [--dry-run]",
+            "svrn enrich build <corpus-id> [--chapters <ids> | --full] [--skip <step>...] [--dry-run]",
         ),
         HelpSection::Flags(&[
             (
@@ -63,20 +63,20 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich build brothers_karamazov --full",
+                "svrn enrich build brothers_karamazov --full",
                 "Full end-to-end build on the whole corpus.",
             ),
             (
-                "sovereign enrich build process_philosophy --chapters sec_0001,sec_0002,sec_0003",
+                "svrn enrich build process_philosophy --chapters sec_0001,sec_0002,sec_0003",
                 "Subset build — useful for iterating on a tiny validation slice.",
             ),
             (
-                "sovereign enrich build bk --skip configure",
+                "svrn enrich build bk --skip configure",
                 "Skip the LLM Phase 8 configuration step (fastest path to resolved atlas + report).",
             ),
         ]),
         HelpSection::Notes(
-            "Requires `sovereign enrich init <corpus>` first. Phase 8 (configure) is \
+            "Requires `svrn enrich init <corpus>` first. Phase 8 (configure) is \
              skipped automatically if the pipeline hasn't opted in via \
              `runs_configuration_phase()`. Any step failure stops the flow with that \
              step's exit code.",
@@ -812,8 +812,8 @@ fn load_pipeline_capabilities(corpus_id: &str) -> Result<PipelineCapabilities, (
             2,
             format!(
                 "pipeline `{}` is a legacy (non-atlas) pipeline; `build` only supports \
-                 atlas pipelines. Re-init with `sovereign enrich reset {corpus_id} --full \
-                 --yes` followed by `sovereign enrich init {corpus_id} --source <path> \
+                 atlas pipelines. Re-init with `svrn enrich reset {corpus_id} --full \
+                 --yes` followed by `svrn enrich init {corpus_id} --source <path> \
                  --pipeline literary_atlas` (or `--pipeline philosophy_atlas`), then \
                  retry.",
                 cfg.pipeline_id

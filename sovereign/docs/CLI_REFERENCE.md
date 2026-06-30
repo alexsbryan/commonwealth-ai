@@ -10,13 +10,13 @@ Full flag and subcommand reference for the `sovereign` CLI. For a walk-through o
 sovereign <subcommand> [flags]
 ```
 
-Run `sovereign --help` for the live list of subcommands. There is no interactive REPL — bare `sovereign` prints usage and exits; use `sovereign chat` for an interactive shell.
+Run `svrn --help` for the live list of subcommands. There is no interactive REPL — bare `sovereign` prints usage and exits; use `svrn chat` for an interactive shell.
 
 Under the hood, `sovereign` is a thin dispatcher over four binaries; that split only matters when you're building from source — see [DEVELOPMENT.md](DEVELOPMENT.md#the-cli-binaries).
 
 ## Subcommand reference
 
-### `sovereign setup`
+### `svrn setup`
 
 First-run onboarding. Detects hardware, downloads models, starts the daemon.
 
@@ -26,13 +26,13 @@ First-run onboarding. Detects hardware, downloads models, starts the daemon.
 | `--reset` | Wipe config and re-run (uninstalls service first) |
 | `--data-dir <path>` | Override the default data root (`~/.sovereign`) |
 
-### `sovereign project`
+### `svrn project`
 
 Per-project code intelligence **and** the project-layer half of ATOS (charter + phases). See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow and [ATOS.md](ATOS.md) for the charter flow.
 
 | Subcommand | Description |
 |---|---|
-| `init [--name <id>] [--no-scip] [--no-hooks] [--no-claude-config] [--workspace-root <dir>] [--port <port>]` | Set up code intelligence for the current workspace: symbol index, SCIP call graph, generated `.sovereign/`, `.claude`/`.opencode` wiring, daemon registration. Also available as `sovereign init`. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md). |
+| `init [--name <id>] [--no-scip] [--no-hooks] [--no-claude-config] [--workspace-root <dir>] [--port <port>]` | Set up code intelligence for the current workspace: symbol index, SCIP call graph, generated `.sovereign/`, `.claude`/`.opencode` wiring, daemon registration. Also available as `svrn init`. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md). |
 | `design [--import <path>] [--via <agent>] [--solo\|--stopgap] [--port <port>]` | Agent-collaborative `DESIGN.md` session against the Commonwealth daemon. Default launches opencode with the session brief primed; `--solo` drives structural-parser CLI prompts and writes `OPEN_QUESTIONS.md`; `--stopgap` is a provisional in-terminal chat (always flagged as such); `--import <path>` copies an existing doc into `<repo>/DESIGN.md` with diff-confirm |
 | `plan [--allow-open]` | Compose `IMPLEMENTATION_PLAN.md` from `DESIGN.md` + `OPEN_QUESTIONS.md`; upsert rows into `.sovereign/plan.db` (`plan_items` table); defer stale rows from prior generations. Unanswered `OPEN_QUESTIONS.md` entries block unless `--allow-open` (then they surface as `Open risks` on the matching phase) |
 | `charter [--print]` | Create or edit `.sovereign/CHARTER.md` — the team's free-form governance/onboarding doc. First invocation writes a minimal skeleton and opens `$EDITOR`; subsequent invocations just open the existing file. `--print` outputs the current file without spawning the editor |
@@ -40,7 +40,7 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 | `refresh [--rebuild-index]` | Re-export the SCIP call graph. Auto-rebuilds the LanceDB corpus index when the on-disk meta is stale (missing `_corpus_meta.json`, or `embedding_dimensions == 768` from the legacy zero-vector code-index path); otherwise keeps LanceDB work fast by skipping it. `--rebuild-index` forces a full LanceDB rebuild even when the meta looks current. |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
-| `found` | **Retired** — founding is implicit now: `sovereign init` plus a committed spec is sufficient |
+| `found` | **Retired** — founding is implicit now: `svrn init` plus a committed spec is sufficient |
 | `amend [charter\|design]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash. `amend design`: track edits to `DESIGN.md`'s curated sections (`Anchors`, `Data & interfaces`, `Open questions`), ask targeted adversarial questions, append the Q&A to `DESIGN.md`'s inline `## Amendment log` (newest on top; does NOT bump `charter_version`) |
 | `phase status` | Show founding state + current phase |
 | `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
@@ -51,9 +51,9 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 | `watch status\|restart\|logs` | Inspect or control the daemon's watcher for this project |
 | `install-hooks` | **Deprecated** — daemon now owns freshness. Still installs the post-commit hook for legacy workflows |
 
-> `sovereign project status` now forwards to top-level `sovereign status` (old name still works; set `SOVEREIGN_QUIET_DEPRECATIONS=1` to silence the hint).
+> `svrn project status` now forwards to top-level `svrn status` (old name still works; set `SOVEREIGN_QUIET_DEPRECATIONS=1` to silence the hint).
 
-### `sovereign mesh`
+### `svrn mesh`
 
 Manage the local Commonwealth mesh.
 
@@ -69,7 +69,7 @@ Manage the local Commonwealth mesh.
 | `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
 | `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
 
-### `sovereign corpus`
+### `svrn corpus`
 
 Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier details.
 
@@ -81,7 +81,7 @@ Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier 
 | `status` | Show shard status for all corpora |
 | `reconstruct-manifest <id>` | Rebuild source-file manifest before collaborative ingestion |
 
-### `sovereign alignment`
+### `svrn alignment`
 
 Mesh-replicate the user's `~/.claude/` workspace state (plans, auto-memory entries, plan template) and `~/.sovereign/notes.db` between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan or note converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon, so a fresh machine reaches parity in one ingest. See [PLAN_ALIGNMENT.md](PLAN_ALIGNMENT.md) for the design rationale.
 
@@ -103,7 +103,7 @@ sovereign alignment status               # check progress
 
 **Sync mechanics.** This CLI lands the local state on the alignment corpus. The cross-machine merge happens via the daemon's existing hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull); the projector then writes received chunks back to `~/.claude/` and upserts `notes://...` rows into `~/.sovereign/notes.db` automatically.
 
-### `sovereign mobile`
+### `svrn mobile`
 
 Serve the phone-facing API, riding on the daemon's already-loaded models. The phone talks HTTP + WebSocket to this bridge; no separate model load.
 
@@ -113,7 +113,7 @@ Serve the phone-facing API, riding on the daemon's already-loaded models. The ph
 | `status` | Show the mobile bridge status |
 | `pair` | Print the pairing string a phone uses to connect |
 
-### `sovereign code`
+### `svrn code`
 
 Lower-level code-intelligence primitives. `project init` wraps these for the typical flow.
 
@@ -122,9 +122,9 @@ Lower-level code-intelligence primitives. `project init` wraps these for the typ
 | `index <path>` | Index a local repository with tree-sitter |
 | `watch <corpus-id>` | Run a filesystem watcher that re-indexes on save |
 | `mcp-status` | Ping the local MCP server and list exposed tools |
-| `search <query>` | (placeholder — use `sovereign chat ask` or the MCP `code_search` tool for now) |
+| `search <query>` | (placeholder — use `svrn chat ask` or the MCP `code_search` tool for now) |
 
-### `sovereign doctor`
+### `svrn doctor`
 
 Diagnose setup and daemon health across Sovereign / Commonwealth / OmO layers.
 
@@ -134,11 +134,11 @@ Diagnose setup and daemon health across Sovereign / Commonwealth / OmO layers.
 | `--watch` | Re-run periodically (every 5s) |
 | `--json` | Emit structured JSON for scripting |
 
-### `sovereign status`
+### `svrn status`
 
-Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `sovereign project status` (old name still forwards here).
+Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
 
-### `sovereign reflect` (alias: `sovereign notes`)
+### `svrn reflect` (alias: `svrn notes`)
 
 Review session reflections and retire ones that are no longer relevant. The canonical name is now `notes`; `reflect` still works.
 
@@ -150,7 +150,7 @@ Review session reflections and retire ones that are no longer relevant. The cano
 | `--todos` | List open todo notes only |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
-### `sovereign recipe`
+### `svrn recipe`
 
 Run and curate corpus ingestion recipes.
 
@@ -161,7 +161,7 @@ Run and curate corpus ingestion recipes.
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
 | `publish <path>` | Add a recipe to `~/.sovereign/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
 
-### `sovereign pipeline`
+### `svrn pipeline`
 
 Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. Drives any recipe whose `[enrich].command` is a `{key}`-templated shell command.
 
@@ -176,9 +176,9 @@ Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. D
 
 Global flags: `--db <path>` (default `~/.sovereign/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
 
-### `sovereign atlas`
+### `svrn atlas`
 
-Atlas-style structural enrichment of an installed corpus (Wikipedia today). Operates against an already-installed corpus index; install first via `sovereign corpus install <id>` or `sovereign recipe`.
+Atlas-style structural enrichment of an installed corpus (Wikipedia today). Operates against an already-installed corpus index; install first via `svrn corpus install <id>` or `svrn recipe`.
 
 | Subcommand | Description |
 |---|---|
@@ -188,7 +188,7 @@ Atlas-style structural enrichment of an installed corpus (Wikipedia today). Oper
 
 The graph DB lives at `<data-dir>/indexes/<corpus-id>/wikipedia_graph.db`.
 
-### `sovereign bench`
+### `svrn bench`
 
 Throughput + correctness benchmarks for enrichment LLM tasks. Operates against the running daemon at `localhost:9741`; the model under test is whichever `[models].primary` the daemon was started with.
 
@@ -198,7 +198,7 @@ Throughput + correctness benchmarks for enrichment LLM tasks. Operates against t
 
 See [BENCHMARKING.md](BENCHMARKING.md) for the broader embed-throughput runbook.
 
-### `sovereign search-gym`
+### `svrn search-gym`
 
 Correctness harness for web-search-during-inference, scored against recorded mock-replay fixtures (no live network).
 
@@ -207,7 +207,7 @@ Correctness harness for web-search-during-inference, scored against recorded moc
 | `run` | Run the search-gym bank against the configured model; score tool-use correctness |
 | `calibrate-judge` | Calibrate the LLM judge against a labeled set before scoring |
 
-### `sovereign knowledge-gym`
+### `svrn knowledge-gym`
 
 Correctness harness for the unified `knowledge_lookup` tool (mock-replay).
 
@@ -215,7 +215,7 @@ Correctness harness for the unified `knowledge_lookup` tool (mock-replay).
 |---|---|
 | `run` | Run the knowledge-gym bank and score `knowledge_lookup` tool-use correctness |
 
-### `sovereign eval`
+### `svrn eval`
 
 Run a question bank against a corpus and measure retrieval quality. Retrieval-only — does not call the chat model.
 
@@ -225,9 +225,9 @@ Run a question bank against a corpus and measure retrieval quality. Retrieval-on
 
 Bank format lives at `sovereign-recipes/<corpus>/eval/*.toml`. Daemon at `localhost:9741` required; override with `--daemon`.
 
-### `sovereign git-archaeology`
+### `svrn git-archaeology`
 
-Walk a code corpus' git history and emit per-atom provenance + co-evolution edges. Standalone surface; also called from `sovereign drift detect` to fold provenance into the unified drift digest. See [GIT_ARCHAEOLOGY.md](GIT_ARCHAEOLOGY.md).
+Walk a code corpus' git history and emit per-atom provenance + co-evolution edges. Standalone surface; also called from `svrn drift detect` to fold provenance into the unified drift digest. See [GIT_ARCHAEOLOGY.md](GIT_ARCHAEOLOGY.md).
 
 ```
 sovereign git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] [--threshold N] [--min-joint N]
@@ -240,9 +240,9 @@ sovereign git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] [--t
 | `--threshold N` | Co-evolution jaccard threshold in `[0.0, 1.0]`. Default `0.5` |
 | `--min-joint N` | Minimum joint-commit count for a co-evolution pair. Default `5` — drops scaffolding-era false positives |
 
-Reads the structural atlas from `~/.sovereign/indexes/<corpus>/atlas/atoms.json` — build it first via `sovereign enrich ingest <id> --source-corpus <id>`.
+Reads the structural atlas from `~/.sovereign/indexes/<corpus>/atlas/atoms.json` — build it first via `svrn enrich ingest <id> --source-corpus <id>`.
 
-### `sovereign archaeology-eval`
+### `svrn archaeology-eval`
 
 Re-verify the claims `git-archaeology` makes against git itself. Witness checks + baseline diff + curated regression cases (inquiries). See [ARCHAEOLOGY_EVAL.md](ARCHAEOLOGY_EVAL.md).
 
@@ -259,12 +259,12 @@ sovereign archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] [--baseline <
 
 Appends one CSV row per run to `~/.sovereign/eval/history.csv`. Exit code is non-zero on any inquiry failure or fabrication — CI-friendly.
 
-### `sovereign drift`
+### `svrn drift`
 
 Two surfaces under one verb:
 
-- **`sovereign drift <feature-id>`** / **`sovereign drift accept <feature-id> --reason X`** — ATOS spec drift. Diff approved vs. on-disk `spec.md`; accept current spec as new approved content. Replaces `sovereign atos spec diff` / `spec accept`.
-- **`sovereign drift detect --code <path> --narrative <doc>...`** — narrative-vs-code architectural drift. Produces a unified drift digest. See [DRIFT_DETECTION.md](DRIFT_DETECTION.md).
+- **`svrn drift <feature-id>`** / **`svrn drift accept <feature-id> --reason X`** — ATOS spec drift. Diff approved vs. on-disk `spec.md`; accept current spec as new approved content. Replaces `svrn atos spec diff` / `spec accept`.
+- **`svrn drift detect --code <path> --narrative <doc>...`** — narrative-vs-code architectural drift. Produces a unified drift digest. See [DRIFT_DETECTION.md](DRIFT_DETECTION.md).
 
 | `drift detect` flag | Description |
 |---|---|
@@ -274,7 +274,7 @@ Two surfaces under one verb:
 | `--project-id <id>` | Override the project id (default: derived from `--code`) |
 | `--chat-model <slot>` | Chat-slot probe. Default `fast` (scales without primary); pass `primary` for peak quality at ~5–10× wall time |
 
-### `sovereign mcp`
+### `svrn mcp`
 
 Inspect and test configured MCP servers.
 
@@ -284,7 +284,7 @@ Inspect and test configured MCP servers.
 | `test <server>` | Test connection to a named server |
 | `tools [server]` | List available MCP tools |
 
-### `sovereign tools`
+### `svrn tools`
 
 Invoke the 24 sovereign code-intelligence tools directly from the shell. Same `Tool::execute()` as the MCP path — use this when the daemon isn't running, when scripting, or for self-documenting `--help`. See [ARCH_PRINCIPLES.md](../ARCH_PRINCIPLES.md) §2 for the behavioural properties each tool declares.
 
@@ -296,7 +296,7 @@ Invoke the 24 sovereign code-intelligence tools directly from the shell. Same `T
 
 Output is plain text by default, shaped for LLM consumption (fenced code blocks, markdown lists) — no JSON to parse. Agents running in a terminal can call these as primitives alongside `rg` / `cargo check`.
 
-### `sovereign chat`
+### `svrn chat`
 
 Terminal mirror of the desktop chat flow. Streams through the same `Runtime::handle_message_stream` path the Tauri app uses — same intent classification, same multi-source retrieval (conversation-history + folder corpora + `sep` + web), same conversation persistence — so a flailing chat case in the GUI can be reproduced and diagnosed at the command line. Talks to the daemon over HTTP (no in-process model load).
 
@@ -333,7 +333,7 @@ Model ids default to the filename stems of the files the daemon actually loaded 
 
 The daemon at `localhost:9741` must be reachable — `chat` probes `/v1/models` on bootstrap and exits with a remediation hint (`Start it with sovereign daemon run, or pass --daemon <url>`) if the probe fails. Chat + embed + MCP tool calls all flow through the daemon's OpenAI-compatible surface; no model is loaded in-process.
 
-### `sovereign enrich`
+### `svrn enrich`
 
 Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.sovereign/enrichment/<corpus>/` (phase caches + run outputs) and `~/.sovereign/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).
 
@@ -384,7 +384,7 @@ The Commonwealth daemon at `localhost:9741` is required for LLM phases (`seed`, 
 
 The pre-atlas command set (`cluster-questions`, `name-concerns`, `cluster-chunks`, `extract-positions`, `detect-tensions`, `detect-gaps`, `cascade`, `legacy-query`, `validate`, `promote`, `diff`) remains callable by exact name for corpora mid-flight on the v1 questions/concerns/positions path. It is hidden from the default `--help` and scheduled to retire once no active corpus depends on it.
 
-### `sovereign govern`
+### `svrn govern`
 
 Common-law governance over a corpus — an event-sourced oplog of tensions and resolutions, with grounded Q&A over the active (non-superseded) rule set. Daemon at `localhost:9741` required for `ask`.
 
@@ -396,7 +396,7 @@ Common-law governance over a corpus — an event-sourced oplog of tensions and r
 | `accept` | Accept a resolution into the active rule set |
 | `ask "<question>"` | Grounded Q&A over the active rule set (dead/superseded law excluded) |
 
-### `sovereign atos`
+### `svrn atos`
 
 Feature-layer orchestration — the Agent Task Orchestration System CLI. See [ATOS.md](ATOS.md) for the full flow; this is the command reference only.
 
@@ -420,24 +420,24 @@ Feature-layer orchestration — the Agent Task Orchestration System CLI. See [AT
 | `doctor` | Health check: repo, `.sovereign/`, DB schemas, plugin freshness, per-feature approval + drift |
 | `install-plugin` | (Re)install the opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
 
-Related project-layer commands (under `sovereign project`) for the charter-level flow: `found`, `amend`, `phase pass N`, `audit`.
+Related project-layer commands (under `svrn project`) for the charter-level flow: `found`, `amend`, `phase pass N`, `audit`.
 
-### `sovereign daemon`
+### `svrn daemon`
 
-Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `sovereign install-service` registers it with the OS service manager. You don't normally invoke this directly.
+Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `svrn install-service` registers it with the OS service manager. You don't normally invoke this directly.
 
 | Subcommand | Description |
 |---|---|
 | `run` (or bare `daemon`) | Run in the foreground; exits on SIGINT/SIGTERM |
 | `start` / `stop` / `status` / `restart` | Lifecycle management against the installed service |
 | `reload` | Apply config changes without a restart |
-| `--setup-only` | Run the first-boot wizard and exit (what `sovereign setup` aliases to) |
+| `--setup-only` | Run the first-boot wizard and exit (what `svrn setup` aliases to) |
 
 Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
 
-### `sovereign install-service`
+### `svrn install-service`
 
-Register the daemon with the OS service manager — launchd on macOS, systemd on Linux — so it starts at login and stays running across logouts. Run once after `sovereign setup`. Lives in the `sovereign-cli-daemon` sibling.
+Register the daemon with the OS service manager — launchd on macOS, systemd on Linux — so it starts at login and stays running across logouts. Run once after `svrn setup`. Lives in the `sovereign-cli-daemon` sibling.
 
 ## HTTP endpoints
 

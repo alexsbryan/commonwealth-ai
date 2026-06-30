@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign milestone <feature-id> <N> [--project]` — close a milestone.
+//! `svrn milestone <feature-id> <N> [--project]` — close a milestone.
 //!
 //! Demo shape:
 //!
@@ -10,11 +10,11 @@
 //!
 //! Merges the older milestone surfaces:
 //!
-//! - `sovereign atos start-milestone` + `end-milestone` → unified
+//! - `svrn atos start-milestone` + `end-milestone` → unified
 //!   here. The new flow runs the stop condition once; explicit
 //!   start/end is no longer required for the common case (the demo
 //!   never invokes `start-milestone` separately).
-//! - `sovereign project phase pass <N>`                → `--project`.
+//! - `svrn project phase pass <N>`                → `--project`.
 //!
 //! Phase 1 (this file): a thin dispatcher. Feature path forwards to
 //! [`crate::atos_cmd::milestone::cmd_end_milestone`] with `--ordinal
@@ -31,7 +31,7 @@ pub async fn run(args: &[String]) -> i32 {
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
 
     if project_mode {
-        // `sovereign milestone --project <N>` — single positional N.
+        // `svrn milestone --project <N>` — single positional N.
         let Some(n) = positional.first().and_then(|s| s.parse::<u32>().ok()) else {
             eprintln!(
                 "  sovereign milestone --project <N> requires N to be an integer.\n\
@@ -44,7 +44,7 @@ pub async fn run(args: &[String]) -> i32 {
         return crate::dev_bin::exec("project-phase-pass", &[n_str]);
     }
 
-    // Feature path: `sovereign milestone <feature-id> <N>`.
+    // Feature path: `svrn milestone <feature-id> <N>`.
     if positional.len() < 2 {
         eprintln!(
             "  sovereign milestone <feature-id> <N> requires both args.\n\
@@ -78,16 +78,16 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign milestone",
+    command: "svrn milestone",
     summary: "Close a feature milestone (runs its stop condition; writes the report).",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign milestone <feature-id> <N>          Close milestone N for the feature\n\
+            "svrn milestone <feature-id> <N>          Close milestone N for the feature\n\
              sovereign milestone --project <N>             Close project-level phase N",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces the older `sovereign atos start-milestone` / `end-milestone` and \
-             `sovereign project phase pass` triple. Old names still work and forward here.",
+            "Replaces the older `svrn atos start-milestone` / `end-milestone` and \
+             `svrn project phase pass` triple. Old names still work and forward here.",
         ),
     ],
 };

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich delta <corpus-id> --chapters <ids>` — incremental
+//! `svrn enrich delta <corpus-id> --chapters <ids>` — incremental
 //! atoms-delta merge into an EXISTING referential atlas.
 //!
 //! The referential/LLM analogue of the structural `apply_incremental`
@@ -15,7 +15,7 @@
 //!   1. Pre-flight the live atlas. If its atoms carry sequential ids
 //!      (`entity-0001`), `apply_atom_delta` would orphan them against
 //!      the content-hash staged atoms — so migrate first (`--yes`) or
-//!      abort with a pointer to `sovereign atlas migrate-ids`.
+//!      abort with a pointer to `svrn atlas migrate-ids`.
 //!   2. Back up `atoms.json` / `edges.json` / `doc_to_atoms.json`
 //!      (+ `cross_corpus_edges.json` when present) into
 //!      `<atlas>/.delta-backup-<suffix>/`.
@@ -33,7 +33,7 @@
 //!      best-effort.
 //!   8. Clean up the staging tempdir unless `--keep-staging`.
 //!
-//! Sibling: `sovereign enrich delta-manifest <corpus-id>
+//! Sibling: `svrn enrich delta-manifest <corpus-id>
 //! --source-prefix <p>` mints `sec_NNNNN` ids for newly-appended
 //! chunks (whose `source_doc_id` starts with `<p>` and aren't yet in
 //! `chapters.json`) and appends them to the manifest, so a subsequent
@@ -58,11 +58,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich delta",
+    command: "svrn enrich delta",
     summary: "Incrementally enrich a chapter subset and merge the atoms into the existing atlas.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich delta <corpus-id> --chapters <sec_ids> \\\n  [--phase 3a|all] [--yes] [--dry-run] [--keep-staging]",
+            "svrn enrich delta <corpus-id> --chapters <sec_ids> \\\n  [--phase 3a|all] [--yes] [--dry-run] [--keep-staging]",
         ),
         HelpSection::Flags(&[
             (
@@ -83,7 +83,7 @@ const HELP: Help = Help {
                 "If the live atlas still has sequential ids, migrate it \
                  to content-hash ids in place (idempotent) before \
                  merging. Without this the command aborts and points \
-                 you at `sovereign atlas migrate-ids`.",
+                 you at `svrn atlas migrate-ids`.",
             ),
             (
                 "--dry-run",
@@ -99,11 +99,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich delta enron-sample-multi-wide --chapters sec_00321,sec_00322",
+                "svrn enrich delta enron-sample-multi-wide --chapters sec_00321,sec_00322",
                 "Enrich two newly-appended chapters and merge their atoms into the live atlas.",
             ),
             (
-                "sovereign enrich delta bk --chapters sec_00010 --phase 3a --keep-staging",
+                "svrn enrich delta bk --chapters sec_00010 --phase 3a --keep-staging",
                 "3a-only delta, keeping the staging dir to inspect the resolved atoms.",
             ),
         ]),
@@ -111,7 +111,7 @@ const HELP: Help = Help {
             "Additive only: the live atlas is backed up to \
              <atlas>/.delta-backup-<suffix>/ and mutated once via \
              apply_atom_delta — never rebuilt. Requires a prior \
-             `sovereign enrich init` + that the `--chapters` exist in \
+             `svrn enrich init` + that the `--chapters` exist in \
              chapters.json (see `enrich delta-manifest` to mint ids \
              for freshly-appended chunks). Requires the daemon for the \
              extract/name LLM phases.",
@@ -197,7 +197,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
                     eprintln!(
                         "error: live atlas at {} still has sequential ids. Merging \
                          content-hash delta atoms into it would orphan the legacy \
-                         atoms.\n  Run `sovereign atlas migrate-ids --corpus {}` first, \
+                         atoms.\n  Run `svrn atlas migrate-ids --corpus {}` first, \
                          or re-run this command with --yes to migrate in place.",
                         real_atlas_dir.display(),
                         cfg.corpus_id
@@ -211,7 +211,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             // existing atlas (that's the whole point — don't rebuild).
             eprintln!(
                 "error: reading live atlas atoms.json at {}: {e}\n  A delta merges into \
-                 an EXISTING atlas. Run `sovereign enrich build {}` to create one first.",
+                 an EXISTING atlas. Run `svrn enrich build {}` to create one first.",
                 real_atlas_dir.display(),
                 cfg.corpus_id
             );
@@ -517,11 +517,11 @@ fn resolve_indexes_dir() -> PathBuf {
 // ── delta-manifest sibling ───────────────────────────────────────
 
 const MANIFEST_HELP: Help = Help {
-    command: "sovereign enrich delta-manifest",
+    command: "svrn enrich delta-manifest",
     summary: "Mint sec_NNNNN ids for freshly-appended chunks and append them to chapters.json.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich delta-manifest <corpus-id> [--source-prefix <prefix>] [--dry-run]",
+            "svrn enrich delta-manifest <corpus-id> [--source-prefix <prefix>] [--dry-run]",
         ),
         HelpSection::Flags(&[
             (
@@ -540,13 +540,13 @@ const MANIFEST_HELP: Help = Help {
             ),
         ]),
         HelpSection::Examples(&[(
-            "sovereign enrich delta-manifest enron-sample-multi-wide --source-prefix symes-k",
+            "svrn enrich delta-manifest enron-sample-multi-wide --source-prefix symes-k",
             "After `corpus expand` appended symes-k mailbox chunks, mint chapter ids for them.",
         )]),
         HelpSection::Notes(
             "New chapters continue the `sec_NNNNN` numbering past the \
              existing manifest length. Feed the printed ids into \
-             `sovereign enrich delta <corpus> --chapters <ids>`. The \
+             `svrn enrich delta <corpus> --chapters <ids>`. The \
              corpus must already be indexed (this reads its LanceDB \
              chunks).",
         ),
@@ -579,7 +579,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
         Ok(Some(m)) => m,
         Ok(None) => {
             eprintln!(
-                "error: no chapter manifest at {} — run `sovereign enrich init {} \
+                "error: no chapter manifest at {} — run `svrn enrich init {} \
                  --from-corpus <id>` first to create one.",
                 manifest_path.display(),
                 parsed.corpus_id

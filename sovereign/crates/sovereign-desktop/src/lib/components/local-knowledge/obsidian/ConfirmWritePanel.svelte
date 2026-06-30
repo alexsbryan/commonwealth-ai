@@ -62,7 +62,7 @@
     <div class="git">
       <p class="git-line">
         <span class="lk-label git-label">Git</span>
-        Branch <code>{git.current_branch}</code>. Sovereign can commit your
+        Branch <code>{git.current_branch}</code>. svrnmesh can commit your
         current state before writing.
         {#if git.has_uncommitted_changes}
           Uncommitted changes will be bundled into that commit.
@@ -77,7 +77,7 @@
 
   <p class="assurance">
     All changes can be reversed from the Restore section. Obsidian's File
-    Recovery plugin, if enabled, is an independent backup Sovereign doesn't
+    Recovery plugin, if enabled, is an independent backup svrnmesh doesn't
     touch.
   </p>
 

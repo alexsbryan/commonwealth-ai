@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign init` — workspace setup for code intelligence.
+//! `svrn init` — workspace setup for code intelligence.
 //!
 //! The new top-level entry point in the flat CLI namespace, renamed
-//! from `sovereign project init`. After indexing finishes we
-//! auto-spawn `sovereign serve --background` so the user gets a live
+//! from `svrn project init`. After indexing finishes we
+//! auto-spawn `svrn serve --background` so the user gets a live
 //! MCP server on `:9741` without typing a second command. The
 //! daemon-takes-over check happens inside `serve_cmd::spawn_background`
 //! — if the daemon already owns the port, we skip the spawn and tell
@@ -11,17 +11,17 @@
 //!
 //! ## Why the spawn lives here, not in cmd_init
 //!
-//! `cmd_init` is also the alias target for `sovereign project init`.
-//! We don't want both `sovereign init` and `sovereign project init`
+//! `cmd_init` is also the alias target for `svrn project init`.
+//! We don't want both `svrn init` and `svrn project init`
 //! to spawn a server — only the new flat path should. Putting the
-//! spawn here, in the `sovereign init` wrapper, keeps the alias path
+//! spawn here, in the `svrn init` wrapper, keeps the alias path
 //! a pure no-op on top of the original handler.
 
 pub async fn run(args: &[String]) -> i32 {
     // `--help` is answered here, by the dispatcher, before any sibling
     // spawn — matching every other flat verb (serve_cmd, drift_cmd, …).
     // Help must never require the 240 MB sovereign-cli-dev sibling to be
-    // built: before this guard, `sovereign init --help` blindly spawned
+    // built: before this guard, `svrn init --help` blindly spawned
     // it and died with "cannot find sibling binary" when it wasn't.
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP);
@@ -38,7 +38,7 @@ pub async fn run(args: &[String]) -> i32 {
     {
         Ok(s) => s.code().unwrap_or(1),
         Err(e) => {
-            eprintln!("sovereign init: spawn sovereign-cli-dev: {e}");
+            eprintln!("svrn init: spawn sovereign-cli-dev: {e}");
             return 126;
         }
     };
@@ -65,15 +65,15 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign init",
+    command: "svrn init",
     summary: "Index the current workspace for code intelligence, then start the MCP server.",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign init [--no-serve] [--port N] [--data-dir DIR]   Index, then serve --background",
+            "svrn init [--no-serve] [--port N] [--data-dir DIR]   Index, then serve --background",
         ),
         crate::util::help::HelpSection::Notes(
-            "Renamed from `sovereign project init` (the old name still works and forwards here). \
-             After indexing succeeds, auto-spawns `sovereign serve --background` so a live MCP \
+            "Renamed from `svrn project init` (the old name still works and forwards here). \
+             After indexing succeeds, auto-spawns `svrn serve --background` so a live MCP \
              server comes up on :9741 — pass --no-serve to skip that.",
         ),
     ],
@@ -106,7 +106,7 @@ fn locate_dev_bin() -> std::path::PathBuf {
 /// - `SOVEREIGN_SPAWNED_BY_INIT=1` env var so a recursive invocation
 ///   from inside the spawned child can't trigger nested spawns. The
 ///   child sets this before exec'ing serve, but if anyone wedges
-///   `sovereign init` inside the child for some reason, this stops
+///   `svrn init` inside the child for some reason, this stops
 ///   the loop.
 fn should_skip_spawn(args: &[String]) -> bool {
     if std::env::var("SOVEREIGN_SPAWNED_BY_INIT").ok().as_deref() == Some("1") {

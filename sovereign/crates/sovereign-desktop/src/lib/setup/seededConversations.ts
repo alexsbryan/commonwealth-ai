@@ -17,7 +17,7 @@ import {
 export const SEEDED_STARTERS: { title: string; prompt: string }[] = [
   {
     title: "What is this?",
-    prompt: "What is Sovereign, and what's it for?",
+    prompt: "What is svrnmesh, and what's it for?",
   },
   {
     title: "How private is this?",

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus ingest <folder>` — build a corpus by running the shipped
+//! `svrn corpus ingest <folder>` — build a corpus by running the shipped
 //! `notebook` workflow (`extract → chunk → embed → store`) over a folder of
 //! documents, on the Step·Artifact·Runner substrate.
 //!
@@ -51,7 +51,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
 
     let Some(folder) = folder else {
         eprintln!(
-            "Usage: sovereign corpus ingest <folder> [--corpus <id>] [--glob '*.pdf,*.md'] \
+            "Usage: svrn corpus ingest <folder> [--corpus <id>] [--glob '*.pdf,*.md'] \
              [--concurrency N] [--no-cache]"
         );
         return 1;

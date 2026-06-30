@@ -64,7 +64,7 @@ pub struct LiveRunOptions {
     pub skills_dir: Option<PathBuf>,
     /// Override the daemon-resolved chat model id for the runtime
     /// turn. When `None`, the daemon's configured chat model is used
-    /// (matches a no-flag `sovereign chat` invocation). Setting this
+    /// (matches a no-flag `svrn chat` invocation). Setting this
     /// is how a model A/B baseline is driven.
     pub chat_model: Option<String>,
     /// Override the chat model id used for the LLM-as-judge call.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign project design` — the agent-collaborative main event.
+//! `svrn project design` — the agent-collaborative main event.
 //!
 //! ## Role in the ATOS onboarding flow
 //!
@@ -73,7 +73,7 @@ pub struct SessionRequest {
     /// at repo root, or drop a fresh template if none is there."
     pub import_path: Option<PathBuf>,
     /// Port the Commonwealth daemon is serving at. Default 9741 —
-    /// matches `sovereign setup`'s canonical port.
+    /// matches `svrn setup`'s canonical port.
     pub daemon_port: u16,
     /// Project id, used for session-dir naming and the brief.
     pub project_id: String,
@@ -182,7 +182,7 @@ enum OpencodeState {
     /// Binary missing.
     BinaryMissing,
     /// Binary present, but the ATOS plugin file isn't in the project
-    /// tree — user needs to run `sovereign atos install-plugin`.
+    /// tree — user needs to run `svrn atos install-plugin`.
     PluginMissing,
     /// User never intended to use opencode (--stopgap / --solo).
     Skipped,
@@ -211,7 +211,7 @@ async fn preflight(req: &SessionRequest) -> Result<PreflightResult, i32> {
         eprintln!("    ({reason})");
         eprintln!();
         eprintln!("    Start it with:    commonwealth daemon start");
-        eprintln!("    Or run `sovereign project design --solo` to continue without the agent.");
+        eprintln!("    Or run `svrn project design --solo` to continue without the agent.");
         return Err(2);
     }
     eprintln!(
@@ -247,7 +247,7 @@ async fn preflight(req: &SessionRequest) -> Result<PreflightResult, i32> {
             } else {
                 eprintln!();
                 eprintln!("  \u{2026} opencode isn't fully set up — falling back to the provisional stopgap.");
-                eprintln!("    For the full experience, fix the gap below and re-run `sovereign project design`.");
+                eprintln!("    For the full experience, fix the gap below and re-run `svrn project design`.");
                 explain_opencode_gap(&opencode);
                 TransportChoice::Stopgap
             }
@@ -319,7 +319,7 @@ fn explain_opencode_gap(state: &OpencodeState) {
             eprintln!();
             eprintln!("    opencode isn't on your PATH. Two options:");
             eprintln!("      1. Install opencode: https://opencode.ai (blessed path)");
-            eprintln!("      2. `sovereign project design --stopgap` for a provisional CLI chat");
+            eprintln!("      2. `svrn project design --stopgap` for a provisional CLI chat");
             eprintln!("         (you'll see a banner reminding you to install opencode later)");
         }
         OpencodeState::PluginMissing => {
@@ -516,7 +516,7 @@ fn run_opencode(req: &SessionRequest, session: &BootstrappedSession) -> i32 {
     // so the plugin's `X-Feature-Id` tagging lines up with the session
     // id. We exec the child and wait; opencode takes over the TTY.
     // On exit, we print a summary line so the user knows how to
-    // continue (`sovereign project plan`).
+    // continue (`svrn project plan`).
     eprintln!();
     eprintln!("  Launching opencode — session {}.", session.id);
     eprintln!(
@@ -540,7 +540,7 @@ fn run_opencode(req: &SessionRequest, session: &BootstrappedSession) -> i32 {
         Ok(s) if s.success() => {
             eprintln!();
             eprintln!(
-                "  \u{2713} Session {} closed. Run `sovereign project plan` to turn answered",
+                "  \u{2713} Session {} closed. Run `svrn project plan` to turn answered",
                 session.id
             );
             eprintln!("    OPEN_QUESTIONS.md entries into IMPLEMENTATION_PLAN.md.");
@@ -582,12 +582,12 @@ fn run_stopgap(_req: &SessionRequest, session: &BootstrappedSession) -> i32 {
     eprintln!();
     eprintln!("    Until the stopgap ships, your options are:");
     eprintln!(
-        "      \u{00b7} Install opencode, then re-run `sovereign project design` (blessed path)."
+        "      \u{00b7} Install opencode, then re-run `svrn project design` (blessed path)."
     );
-    eprintln!("      \u{00b7} Run `sovereign project design --solo` for structural-parser-driven");
+    eprintln!("      \u{00b7} Run `svrn project design --solo` for structural-parser-driven");
     eprintln!("        CLI prompts against your DESIGN.md (no agent, but real gaps get captured).");
     eprintln!();
-    eprintln!("    — stopgap mode · `sovereign project design --via opencode` when you're ready —");
+    eprintln!("    — stopgap mode · `svrn project design --via opencode` when you're ready —");
     2
 }
 
@@ -613,7 +613,7 @@ async fn run_solo(req: &SessionRequest, session: &BootstrappedSession, design_pa
     if signals.gaps.is_empty() {
         eprintln!();
         eprintln!("  \u{2713} No structural gaps found. DESIGN.md looks complete to the parser.");
-        eprintln!("    Next: `sovereign project plan` when you're ready to draft the phase plan.");
+        eprintln!("    Next: `svrn project plan` when you're ready to draft the phase plan.");
         return 0;
     }
 
@@ -642,7 +642,7 @@ async fn run_solo(req: &SessionRequest, session: &BootstrappedSession, design_pa
             .unwrap_or(&open_questions_path)
             .display()
     );
-    eprintln!("    Next: `sovereign project plan` to fold answers into IMPLEMENTATION_PLAN.md.");
+    eprintln!("    Next: `svrn project plan` to fold answers into IMPLEMENTATION_PLAN.md.");
     0
 }
 
@@ -753,7 +753,7 @@ fn append_open_questions(
         out.push_str(&format!("**Anchor:** {}\n", a.anchor));
         out.push_str(&format!("**Answer:**\n{}\n\n", a.answer));
         out.push_str(&format!(
-            "_Captured by `sovereign project design --solo` · session `{}` · {}_\n",
+            "_Captured by `svrn project design --solo` · session `{}` · {}_\n",
             session_id,
             iso_date_utc(unix_now_secs())
         ));
@@ -762,7 +762,7 @@ fn append_open_questions(
 }
 
 fn open_questions_header() -> &'static str {
-    "# Open questions\n\nEach question below is a load-bearing gap in DESIGN.md. Answers are\nappend-only — never edit DESIGN.md directly to hide a gap, because the\nlog of resolutions *is* the provenance. Run `sovereign project plan` when\nyou're ready to fold answered questions into the implementation plan.\n"
+    "# Open questions\n\nEach question below is a load-bearing gap in DESIGN.md. Answers are\nappend-only — never edit DESIGN.md directly to hide a gap, because the\nlog of resolutions *is* the provenance. Run `svrn project plan` when\nyou're ready to fold answered questions into the implementation plan.\n"
 }
 
 // ─── Small helpers ─────────────────────────────────────────────────

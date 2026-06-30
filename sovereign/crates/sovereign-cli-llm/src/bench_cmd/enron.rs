@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench enron run …` — Phase 5 measurement command for
+//! `svrn bench enron run …` — Phase 5 measurement command for
 //! the architecture-over-Enron substrate.
 //!
 //! Reads the corpus's `atlas/atoms.json` (produced by the regular
@@ -34,12 +34,12 @@ use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutio
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench enron",
+    command: "svrn bench enron",
     summary:
         "Phase 5 measurement loop for the architecture-over-Enron substrate.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench enron run --corpus <id> --split {train|test|holdout} [--policy {pre_reconciliation|tuned}] [--judge-trials N] [--name-similarity-threshold <0..1>] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
+            "svrn bench enron run --corpus <id> --split {train|test|holdout} [--policy {pre_reconciliation|tuned}] [--judge-trials N] [--name-similarity-threshold <0..1>] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
         ),
         HelpSection::Subcommands(&[
             ("run", "Score a corpus's reconciled atoms against the ground-truth split."),
@@ -47,7 +47,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "Reads atlas/atoms.json from ~/.sovereign/indexes/<corpus>. Run \
-             `sovereign corpus install enron-sample-onemailbox` and let the \
+             `svrn corpus install enron-sample-onemailbox` and let the \
              daemon enrich it before measuring. `--policy pre_reconciliation` \
              skips the multi-origin merger; `--policy tuned` (default) re-runs \
              reconciliation with the recipe's policy and computes the delta \
@@ -355,7 +355,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             .map_err(|e| format!("load peek_budget ({}): {e}", budget_path.display()))?;
         let n = budget.burn(
             format!(
-                "--unseal-holdout from `sovereign bench enron run`; corpus={}, policy={}",
+                "--unseal-holdout from `svrn bench enron run`; corpus={}, policy={}",
                 parsed.corpus,
                 parsed.policy.as_str()
             ),
@@ -381,7 +381,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
     let atoms_path = atlas_dir.join("atoms.json");
     if !atoms_path.exists() {
         eprintln!(
-            "error: no atoms.json at {}. Run `sovereign corpus install {}` \
+            "error: no atoms.json at {}. Run `svrn corpus install {}` \
              and let the daemon enrich it before measuring.",
             atoms_path.display(),
             parsed.corpus
@@ -558,7 +558,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         surface_form_collapse_rate,
         delta_from_pre_reconciliation_f1: delta,
         notes: format!(
-            "Written by `sovereign bench enron run`. Reads {}; ground truth at {}.",
+            "Written by `svrn bench enron run`. Reads {}; ground truth at {}.",
             atoms_path.display(),
             gt_path.display()
         ),
@@ -585,7 +585,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
     Ok(0)
 }
 
-/// `sovereign bench enron diagnose` — glass-box view of WHY the tuned
+/// `svrn bench enron diagnose` — glass-box view of WHY the tuned
 /// B³ is what it is, without re-deriving it by hand. For each gold
 /// entity in the split it reports coverage (forms present verbatim in
 /// the atoms) and how many predicted clusters those forms scatter

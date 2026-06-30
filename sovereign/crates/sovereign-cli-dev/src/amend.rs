@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign project amend` — the post-founding charter edit flow.
+//! `svrn project amend` — the post-founding charter edit flow.
 //!
 //! ## Shape
 //!
@@ -344,7 +344,7 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         );
         let _ = writeln!(
             stderr,
-            "    That means someone edited it outside `sovereign project amend`."
+            "    That means someone edited it outside `svrn project amend`."
         );
         let _ = writeln!(stderr, "    {diff_hint}");
         let _ = writeln!(stderr);
@@ -591,7 +591,7 @@ pub fn invoke_editor(path: &Path) -> Option<String> {
     let editor = std::env::var("EDITOR").unwrap_or_default();
     if editor.is_empty() {
         eprintln!(
-            "  $EDITOR is unset. Open {} in your editor and re-run `sovereign project amend`,\n\
+            "  $EDITOR is unset. Open {} in your editor and re-run `svrn project amend`,\n\
              OR set $EDITOR and retry — we'll auto-reopen the same file.",
             path.display()
         );
@@ -914,7 +914,7 @@ The original design.
 
 ## Amendment log
 
-_(Empty at founding. Amendments land here via `sovereign project amend`, each carrying the adversarial review + the reasoning that overrode it.)_
+_(Empty at founding. Amendments land here via `svrn project amend`, each carrying the adversarial review + the reasoning that overrode it.)_
 "#;
 
     // ── Parsing ────────────────────────────────────────────────
@@ -1086,7 +1086,7 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
     #[test]
     fn apply_amendment_preserves_prior_entries() {
         let with_one_entry = FOUNDED_CHARTER.replace(
-            "_(Empty at founding. Amendments land here via `sovereign project amend`, each carrying the adversarial review + the reasoning that overrode it.)_",
+            "_(Empty at founding. Amendments land here via `svrn project amend`, each carrying the adversarial review + the reasoning that overrode it.)_",
             "### Amendment 1 — 2026-04-25\n\nChanged sections: system-design\n\n_Committed by: First. New charter_hash: zzz._",
         );
         let entry = sample_entry();

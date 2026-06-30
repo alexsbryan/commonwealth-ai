@@ -80,14 +80,14 @@
   <div class="plan-scroll">
     <div class="plan-body">
       <div class="mark"><BrandMark size={48} /></div>
-      <h1>Setting up Sovereign</h1>
+      <h1>Setting up svrnmesh</h1>
       <p class="intro">
         Here's exactly what this will do. Nothing is downloaded or changed on
         your machine until you choose to proceed — and you can change all of it
         later.
       </p>
 
-      <ul class="values" aria-label="How Sovereign works with you">
+      <ul class="values" aria-label="How svrnmesh works with you">
         <li><b>Provenance</b> — where everything comes from and lives.</li>
         <li><b>Transparency</b> — every action named before it happens.</li>
         <li><b>Consent</b> — we ask first; you stay in control.</li>
@@ -192,7 +192,7 @@
   <footer class="plan-actions">
     <button type="button" class="btn-back" onclick={onBack}>← Back</button>
     <button type="button" class="btn-go" onclick={confirm} disabled={loading}>
-      Set up Sovereign
+      Set up svrnmesh
     </button>
   </footer>
 </div>

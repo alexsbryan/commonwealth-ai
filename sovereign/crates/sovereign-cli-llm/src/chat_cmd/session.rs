@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat session` — multi-turn interactive REPL.
+//! `svrn chat session` — multi-turn interactive REPL.
 //!
 //! Every iteration:
 //!   1. Read a line from stdin.
@@ -23,10 +23,10 @@ use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat session",
+    command: "svrn chat session",
     summary: "Interactive REPL over a single conversation.",
     sections: &[
-        HelpSection::Usage("sovereign chat session [flags]"),
+        HelpSection::Usage("svrn chat session [flags]"),
         HelpSection::Flags(&[
             (
                 "--conversation <id>",

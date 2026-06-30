@@ -297,7 +297,7 @@
   async function handleExport() {
     try {
       const path = await save({
-        defaultPath: "sovereign-answer.md",
+        defaultPath: "svrnmesh-answer.md",
         filters: [
           { name: "Markdown", extensions: ["md"] },
           { name: "PDF", extensions: ["pdf"] },
@@ -460,7 +460,7 @@
   data-message-id={messageId}
 >
   <div class="role-label">
-    &#x25C8; SOVEREIGN
+    &#x25C8; SVRNMESH
     {#if redirectedAway}
       <span class="redirected-note">• redirected to a different approach</span>
     {/if}
@@ -628,7 +628,7 @@
 <style>
   /* Assistant messages used to carry a 2px lavender border-left and
      a 14px gutter to keep prose off the rail. The role-label row
-     ("◈ SOVEREIGN") already announces who's speaking, so the rail
+     ("◈ SVRNMESH") already announces who's speaking, so the rail
      was redundant chrome that ate ~16px of horizontal real estate
      on every message. Dropping it lets the prose breathe to the
      full conversation width. Per-state signals that used to ride

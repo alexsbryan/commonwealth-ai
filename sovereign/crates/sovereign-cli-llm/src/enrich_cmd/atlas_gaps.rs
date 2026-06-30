@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-gaps` — Phase A Step 4 (Landing 3,
+//! `svrn enrich atlas-gaps` — Phase A Step 4 (Landing 3,
 //! gap detection half).
 //!
 //! Reads the resolved atlas (atoms.json + edges.json) and runs the
@@ -26,17 +26,17 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-gaps",
+    command: "svrn enrich atlas-gaps",
     summary: "Detect structural gaps in the resolved atlas (deterministic).",
     sections: &[
-        HelpSection::Usage("sovereign enrich atlas-gaps <corpus-id>"),
+        HelpSection::Usage("svrn enrich atlas-gaps <corpus-id>"),
         HelpSection::Examples(&[(
-            "sovereign enrich atlas-gaps brothers_karamazov",
+            "svrn enrich atlas-gaps brothers_karamazov",
             "Scan atoms + edges, detect transitions without triggers / ungrounded claims \
              / open questions, write gaps.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `sovereign enrich atlas-resolve <corpus> --phase all` so the \
+            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
              atlas directory exists. Produces \
              `~/.sovereign/indexes/<corpus>/atlas/gaps.json` as a flat list of Gap records \
              with `kind`, `description`, `referenced_atoms`, `evidence`, and `significance`.",
@@ -73,7 +73,7 @@ pub async fn cmd_atlas_gaps(args: &[String]) -> i32 {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id
@@ -85,7 +85,7 @@ pub async fn cmd_atlas_gaps(args: &[String]) -> i32 {
         Ok(e) => e,
         Err(err) => {
             eprintln!(
-                "error: reading {}/edges.json: {err}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id

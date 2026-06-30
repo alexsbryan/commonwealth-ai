@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus extract-entities <corpus_id>` — run GliNER NER
+//! `svrn corpus extract-entities <corpus_id>` — run GliNER NER
 //! across a corpus's chunks, persist results into `chunk_entities`.
 //!
 //! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md` §"Phase 1 —
@@ -425,7 +425,7 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
 }
 
 fn print_help() {
-    eprintln!("sovereign corpus extract-entities <corpus_id>");
+    eprintln!("svrn corpus extract-entities <corpus_id>");
     eprintln!("  Run GliNER per-chunk NER and persist into chunk_entities.");
     eprintln!();
     eprintln!("  Flags:");

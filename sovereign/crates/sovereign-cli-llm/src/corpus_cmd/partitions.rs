@@ -10,13 +10,13 @@ use corpus_engine::{CorpusEngine, ReconstructionMethod};
 
 use super::fmt::human_bytes;
 
-/// `sovereign corpus pull <id> [--from <peer-url>] [--expected-fingerprint <hex>]`
+/// `svrn corpus pull <id> [--from <peer-url>] [--expected-fingerprint <hex>]`
 ///
 /// Stream a peer's canonical index over HTTP, validate the
 /// content fingerprint, and atomically rename it into place at
 /// `<index_dir>/<id>/`. Refuses if a canonical already exists at
 /// the destination — the user must explicitly remove it first
-/// (`sovereign corpus remove <id> --canonical-only --yes`).
+/// (`svrn corpus remove <id> --canonical-only --yes`).
 ///
 /// `--from <peer-url>` supplies the peer's mesh API base URL
 /// (e.g. `http://100.64.0.2:9742`). Required for v1 — peer
@@ -55,13 +55,13 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus pull <corpus_id> --from <peer-url> \
+                    "Usage: svrn corpus pull <corpus_id> --from <peer-url> \
                      [--expected-fingerprint <hex>]\n\n\
                      Stream a peer's canonical index over the mesh and atomically \
                      install it locally.\n\n\
                      Refuses when a canonical already exists at \
                      <data_dir>/indexes/<corpus_id>/. Run \
-                     `sovereign corpus remove <id> --canonical-only --yes` first.\n\n\
+                     `svrn corpus remove <id> --canonical-only --yes` first.\n\n\
                      The peer URL is the mesh API base (port 9742). The \
                      X-Canonical-Fingerprint header on the response is \
                      validated against --expected-fingerprint (if given) AND \
@@ -84,7 +84,7 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus pull <corpus_id> --from <peer-url>");
+        eprintln!("Missing corpus ID. Usage: svrn corpus pull <corpus_id> --from <peer-url>");
         return 1;
     };
     let Some(peer_url) = peer_url else {
@@ -193,7 +193,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
             "--remove-partitions" => remove_partitions = true,
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus merge-partitions <corpus_id> [--yes] [--remove-partitions]\n\n\
+                    "Usage: svrn corpus merge-partitions <corpus_id> [--yes] [--remove-partitions]\n\n\
                      Merge every <corpus>-partition-*/ dir on this node into \
                      a canonical <corpus>/ index, deduping by content_hash + \
                      (unit_id, source_doc_id) during merge. Builds vector + \
@@ -229,7 +229,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus merge-partitions <corpus_id>");
+        eprintln!("Missing corpus ID. Usage: svrn corpus merge-partitions <corpus_id>");
         return 1;
     };
 
@@ -644,7 +644,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
             }
             other => {
                 eprintln!("Unknown flag: {other}");
-                eprintln!("Usage: sovereign corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
+                eprintln!("Usage: svrn corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
                 return 1;
             }
         }
@@ -652,7 +652,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     let Some(corpus_id) = corpus_id else {
         eprintln!("Missing corpus ID");
-        eprintln!("Usage: sovereign corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
+        eprintln!("Usage: svrn corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
         return 1;
     };
 
@@ -796,7 +796,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
             "--dry-run" => dry_run = true,
             "--help" | "-h" => {
                 eprintln!(
-                    "Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]\n\
+                    "Usage: svrn corpus migrate-to-partition <corpus_id> [--dry-run]\n\
                      \n\
                      Renames ~/.sovereign/indexes/<id>/ to\n\
                      ~/.sovereign/indexes/<id>-partition-<self_node_id>/ and\n\
@@ -817,7 +817,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
             }
             other => {
                 eprintln!("Unknown flag: {other}");
-                eprintln!("Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]");
+                eprintln!("Usage: svrn corpus migrate-to-partition <corpus_id> [--dry-run]");
                 return 1;
             }
         }
@@ -825,7 +825,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
 
     let Some(corpus_id) = corpus_id else {
         eprintln!("Missing corpus ID");
-        eprintln!("Usage: sovereign corpus migrate-to-partition <corpus_id> [--dry-run]");
+        eprintln!("Usage: svrn corpus migrate-to-partition <corpus_id> [--dry-run]");
         return 1;
     };
 
@@ -839,7 +839,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "Failed to load setup config ({e}).\n\
-                 Run `sovereign setup` first so the migration knows which\n\
+                 Run `svrn setup` first so the migration knows which\n\
                  data_dir your daemon uses."
             );
             return 1;
@@ -859,8 +859,8 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
             Ok(Some(persisted)) => persisted.self_node_id,
             Ok(None) => {
                 eprintln!(
-                    "No mesh state at {} — run `sovereign mesh create` or\n\
-                     `sovereign mesh join …` before migrating a corpus so the\n\
+                    "No mesh state at {} — run `svrn mesh create` or\n\
+                     `svrn mesh join …` before migrating a corpus so the\n\
                      daemon has a stable node id.",
                     data_dir.display()
                 );
@@ -912,7 +912,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
                    pick up the partition within 30 s and resume ingest."
             );
             println!(
-                "  - If the daemon is not running, start it with `sovereign daemon start`\n\
+                "  - If the daemon is not running, start it with `svrn daemon start`\n\
                    (or reopen Sovereign Desktop)."
             );
             0

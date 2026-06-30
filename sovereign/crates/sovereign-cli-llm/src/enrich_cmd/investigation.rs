@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich investigation` — drive the investigation
+//! `svrn enrich investigation` — drive the investigation
 //! enrichment pipeline against an installed corpus.
 //!
 //! Two subcommands:
@@ -16,7 +16,7 @@
 //! - `show <corpus_id>` — render the persisted findings as plain
 //!   text. Read-only, no network.
 //!
-//! Distinct from `sovereign enrich build` which dispatches the
+//! Distinct from `svrn enrich build` which dispatches the
 //! atlas pipeline. The investigation pipeline has different shape
 //! (typed entity / relationship graph + graph-pattern detectors)
 //! so it lives behind its own verb. See
@@ -55,7 +55,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS: u32 = 8192;
 
 pub async fn cmd_investigation(args: &[String]) -> i32 {
     if args.is_empty() {
-        eprintln!("Usage: sovereign enrich investigation <build|show> <corpus_id> [args]");
+        eprintln!("Usage: svrn enrich investigation <build|show> <corpus_id> [args]");
         return 2;
     }
     match args[0].as_str() {
@@ -76,7 +76,7 @@ pub async fn cmd_investigation(args: &[String]) -> i32 {
 
 fn print_help() {
     println!(
-        "Usage: sovereign enrich investigation <subcommand> <corpus_id> [args]\n\
+        "Usage: svrn enrich investigation <subcommand> <corpus_id> [args]\n\
          \n\
          Subcommands:\n\
            build <id>        Run the investigation pipeline (extract → coalesce → detect)\n\
@@ -150,12 +150,12 @@ async fn cmd_build(args: &[String]) -> i32 {
     }
     let Some(corpus_id) = corpus_id else {
         return arg_error(
-            "missing corpus id (e.g. `sovereign enrich investigation build sec-investigation`)",
+            "missing corpus id (e.g. `svrn enrich investigation build sec-investigation`)",
         );
     };
 
     // ── Resolve recipe (registry + bundled fallback + local user
-    //     registry merge so a `sovereign recipe publish`-ed recipe
+    //     registry merge so a `svrn recipe publish`-ed recipe
     //     is reachable). ─────────────────────────────────────────
     let local_dir = RecipeRegistry::default_local_recipes_dir();
     let mut registry = RecipeRegistry::from_bundled(local_dir.clone());
@@ -241,7 +241,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     if total == 0 {
         eprintln!(
             "error: corpus `{corpus_id}` has no chunks indexed yet. Re-run \
-             `sovereign corpus install {corpus_id}` first."
+             `svrn corpus install {corpus_id}` first."
         );
         return 1;
     }
@@ -434,7 +434,7 @@ fn json_brief(v: &serde_json::Value) -> String {
 async fn cmd_recoalesce(args: &[String]) -> i32 {
     let Some(corpus_id) = args.first() else {
         return arg_error(
-            "missing corpus id (e.g. `sovereign enrich investigation recoalesce uap-blue-book`)",
+            "missing corpus id (e.g. `svrn enrich investigation recoalesce uap-blue-book`)",
         );
     };
     let index_dir = sovereign_cli_shared::dirs::sovereign_indexes().join(corpus_id);
@@ -563,7 +563,7 @@ fn parse_param_spec(
 
 fn arg_error(msg: &str) -> i32 {
     eprintln!("error: {msg}");
-    eprintln!("Run `sovereign enrich investigation --help` for usage.");
+    eprintln!("Run `svrn enrich investigation --help` for usage.");
     2
 }
 

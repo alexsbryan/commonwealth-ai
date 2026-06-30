@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench all` — cross-bench rollup driver.
+//! `svrn bench all` — cross-bench rollup driver.
 //!
 //! Discovers every bench under `sovereign/bench/`, scores each
 //! against its baseline, renders a two-pane scoreboard
@@ -9,7 +9,7 @@
 //! - **Enrichment lane** — in-process call to
 //!   `enrich_cmd::eval::score_corpus`. Reads atoms.json directly;
 //!   no daemon dependency.
-//! - **Retrieval lane** — subprocess `sovereign eval run`. The
+//! - **Retrieval lane** — subprocess `svrn eval run`. The
 //!   retrieval path needs a live `ChatSession` (intent classifier,
 //!   embed slot, atlas-context manager) and replicating that boot
 //!   path here would couple `bench all` to every retrieval-stack
@@ -35,11 +35,11 @@ use super::baselines::{read_latest, write_dated_and_update_latest};
 use super::discover::{discover_benches, BenchSurface, CorpusState, DiscoveredBench};
 
 const HELP: Help = Help {
-    command: "sovereign bench all",
+    command: "svrn bench all",
     summary: "Run every discovered bench (enrichment + retrieval), diff vs baseline, exit 0/1.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench all [--bench-root <path>] [--filter <pattern>] [--update-baseline] [--report <path>]",
+            "svrn bench all [--bench-root <path>] [--filter <pattern>] [--update-baseline] [--report <path>]",
         ),
         HelpSection::Flags(&[
             (
@@ -64,24 +64,24 @@ const HELP: Help = Help {
             ),
             (
                 "--rebuild",
-                "Before scoring, re-extract the enrichment-lane corpus's atlas via `sovereign enrich build <id>`. \
+                "Before scoring, re-extract the enrichment-lane corpus's atlas via `svrn enrich build <id>`. \
                  GPU-bound, sequential. No-op for retrieval-lane benches (index is owned by the daemon).",
             ),
             (
                 "--retrieval-limit <N>",
-                "Top-K cap passed to `sovereign eval run --limit` on retrieval-lane benches. Default 30 \
+                "Top-K cap passed to `svrn eval run --limit` on retrieval-lane benches. Default 30 \
                  (matches the chunk counts the synced pre-monorepo baselines were captured at).",
             ),
             (
                 "--synth",
                 "Drive the FULL chat pipeline (intent classifier → router → search → synthesis) via \
-                 `sovereign eval run --synth` instead of bare retrieval. Most faithful proxy for \
+                 `svrn eval run --synth` instead of bare retrieval. Most faithful proxy for \
                  desktop-chat propagation — same `runtime.handle_message_stream` entry point. Costs \
                  one LLM chat call per question. Synth baselines stored at `baselines/<bench>-synth/`.",
             ),
             (
                 "--routing-only",
-                "Drive ONLY the intent classifier (no retrieval, no synthesis) via `sovereign eval \
+                "Drive ONLY the intent classifier (no retrieval, no synthesis) via `svrn eval \
                  run --routing-only`. Fastest iteration loop for classifier-prompt tuning: ~0.5-2s \
                  per question. Mutually exclusive with --synth. Baselines stored at \
                  `baselines/<bench>-routing/`.",
@@ -97,9 +97,9 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "Enrichment lane reads ~/.sovereign/indexes/<corpus>/atlas/atoms.json directly. \
-             Retrieval lane subprocesses `sovereign eval run` which needs a live daemon at \
+             Retrieval lane subprocesses `svrn eval run` which needs a live daemon at \
              localhost:9741. Retrieval-lane benches whose corpus index is missing get marked \
-             stale; the report prints `sovereign corpus install <id>` hints.",
+             stale; the report prints `svrn corpus install <id>` hints.",
         ),
     ],
 };
@@ -171,7 +171,7 @@ struct Opts {
     rebuild: bool,
     report: Option<PathBuf>,
     regression_threshold: f32,
-    /// Top-K cap passed to `sovereign eval run --limit` on retrieval
+    /// Top-K cap passed to `svrn eval run --limit` on retrieval
     /// lane subprocess invocations. Default 30 to match the chunk
     /// counts the pre-monorepo baselines were captured at; CLI
     /// default (10) was producing apples-to-oranges source_recall
@@ -179,7 +179,7 @@ struct Opts {
     retrieval_limit: usize,
     /// When true, retrieval-lane benches drive the FULL chat pipeline
     /// (intent classifier → router → search tools → synthesis) via
-    /// `sovereign eval run --synth` instead of the bare embed→search
+    /// `svrn eval run --synth` instead of the bare embed→search
     /// path. Synth mode is the most faithful proxy for "does this
     /// bench improvement propagate to the desktop chat experience?"
     /// — same `runtime.handle_message_stream` entry point.
@@ -192,7 +192,7 @@ struct Opts {
     synth: bool,
     /// When true, retrieval-lane benches drive ONLY the router
     /// classifier (no retrieval, no synthesis) via
-    /// `sovereign eval run --routing-only`. Fastest possible
+    /// `svrn eval run --routing-only`. Fastest possible
     /// iteration loop for classifier-prompt tuning — ~0.5-2s per
     /// question (one fast-slot call). Mutually exclusive with
     /// --synth.
@@ -356,7 +356,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     } else if opts.rebuild {
         eprintln!(
             "warn: --rebuild has no effect on retrieval-lane bench {}/{} \
-             (index ownership lives in the daemon; run `sovereign corpus refresh` or \
+             (index ownership lives in the daemon; run `svrn corpus refresh` or \
              restart the daemon to re-index)",
             bench.group, bench.id
         );
@@ -390,7 +390,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     }
 }
 
-/// Routing-only mode: drives `sovereign eval run --routing-only`,
+/// Routing-only mode: drives `svrn eval run --routing-only`,
 /// captures the per-question intent decision, renders a compact
 /// accuracy line. No retrieval, no synthesis — ~0.5-2s per question.
 async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
@@ -517,7 +517,7 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
     outcome
 }
 
-/// Shell out to `sovereign enrich build <corpus_id>`. Sequential
+/// Shell out to `svrn enrich build <corpus_id>`. Sequential
 /// because LLM workers are GPU-bound. Captures duration; pipes stdout
 /// to a log file under `target/sov-bench/runs/<ts>/<bench-id>.log`.
 async fn rebuild_corpus(bench: &DiscoveredBench) -> Result<(), String> {
@@ -620,7 +620,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
 }
 
 async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
-    // Subprocess into `sovereign eval run`. The cli binary is the
+    // Subprocess into `svrn eval run`. The cli binary is the
     // current executable; assume `current_exe` is the canonical
     // path. Daemon must already be running at localhost:9741 — we
     // surface a clear error if not.
@@ -889,11 +889,11 @@ fn corpus_state_tag(s: CorpusState) -> &'static str {
 fn stale_hint(bench: &DiscoveredBench) -> String {
     match bench.corpus_state {
         CorpusState::Unindexed => format!(
-            "corpus `{}` not installed locally. Run `sovereign corpus install {}` (or sync from a mesh peer).",
+            "corpus `{}` not installed locally. Run `svrn corpus install {}` (or sync from a mesh peer).",
             bench.corpus_id, bench.corpus_id
         ),
         CorpusState::IndexedNoAtlas => format!(
-            "corpus `{}` indexed but no atlas. Run `sovereign enrich build {}` to extract.",
+            "corpus `{}` indexed but no atlas. Run `svrn enrich build {}` to extract.",
             bench.corpus_id, bench.corpus_id
         ),
         CorpusState::Ready => format!("corpus `{}` ready but bench errored", bench.corpus_id),

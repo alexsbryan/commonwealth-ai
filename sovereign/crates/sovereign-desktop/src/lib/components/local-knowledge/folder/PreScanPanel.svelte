@@ -56,7 +56,7 @@
     <header class="head">
       <h2 class="title">No readable documents</h2>
       <p class="lede">
-        Sovereign reads PDFs and text files.
+        svrnmesh reads PDFs and text files.
         {#if result.ignored_types > 0}
           The files here are in formats it doesn't yet handle.
         {/if}
@@ -140,7 +140,7 @@
                 with text recognition
               </button>
               <p class="ocr-explainer">
-                Sovereign can read scanned and image-based pages with a
+                svrnmesh can read scanned and image-based pages with a
                 small built-in text-recognition engine. Slower than
                 indexing typed PDFs — your other documents are searchable
                 as soon as they finish.

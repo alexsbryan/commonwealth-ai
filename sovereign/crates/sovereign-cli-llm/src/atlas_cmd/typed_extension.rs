@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas typed-extension <corpus>` — operator surface for
+//! `svrn atlas typed-extension <corpus>` — operator surface for
 //! the tiered typed-extension pass over RAPTOR cluster summaries.
 //!
 //! Spec: `sovereign/docs/specs/TYPED_EXTENSION_PASS.md`.
@@ -184,7 +184,7 @@ pub async fn run(args: &[String]) -> i32 {
         ExtractionStatus::SkippedManifestMatch => 0,
         ExtractionStatus::SkippedNoInputs => {
             eprintln!(
-                "  ⚠ no leaves or themes for this corpus — run `sovereign enrich build` \
+                "  ⚠ no leaves or themes for this corpus — run `svrn enrich build` \
                  with the tiered pipeline first, or confirm the corpus has Ready conv_skeletons"
             );
             0
@@ -234,7 +234,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 
 fn print_help() {
     println!(
-        "sovereign atlas typed-extension <corpus> [--endpoint <url>]\n\
+        "svrn atlas typed-extension <corpus> [--endpoint <url>]\n\
          \n\
          Run the tiered typed-extension LLM pass over an already-built corpus's\n\
          RAPTOR leaves + vault_themes. Writes atoms.json + atoms.meta.json into\n\

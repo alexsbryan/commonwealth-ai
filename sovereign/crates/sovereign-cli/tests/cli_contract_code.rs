@@ -15,7 +15,7 @@
 //!   are instead asserted INTERCEPTED (exit 2 + the `--features dev-tools`
 //!   pointer), reusing the default_build_gate contract.
 //!
-//! Direction 2 (binary -> manifest): `sovereign __dump-commands` enumerates
+//! Direction 2 (binary -> manifest): `svrn __dump-commands` enumerates
 //!   every dispatched top-level verb; that set must equal the manifest's verb
 //!   set — no untracked verb in the binary, no orphaned verb in the manifest.
 //!
@@ -133,7 +133,7 @@ fn direction1_dev_build_every_canonical_command_dispatches() {
         let out = run(&refs(&argv));
         if looks_like_miss(&combined(&out)) {
             fails.push(format!(
-                "`sovereign {} --help` was not recognized (dispatcher miss)",
+                "`svrn {} --help` was not recognized (dispatcher miss)",
                 cmd.path
             ));
         }
@@ -164,7 +164,7 @@ fn direction1_default_build_gates_dev_and_dispatches_public() {
                 let intercepted = !out.status.success() && text.contains("dev-tools");
                 if !intercepted {
                     fails.push(format!(
-                        "`sovereign {}` is not gated in the default build \
+                        "`svrn {}` is not gated in the default build \
                          (expected exit 2 + a `--features dev-tools` pointer)",
                         cmd.path
                     ));
@@ -176,7 +176,7 @@ fn direction1_default_build_gates_dev_and_dispatches_public() {
             Feature::Default => {
                 if looks_like_miss(&text) {
                     fails.push(format!(
-                        "`sovereign {} --help` was not recognized (dispatcher miss)",
+                        "`svrn {} --help` was not recognized (dispatcher miss)",
                         cmd.path
                     ));
                 }
@@ -199,7 +199,7 @@ fn direction2_dump_commands_matches_manifest_verbs() {
     let out = run(&["__dump-commands"]);
     assert!(
         out.status.success(),
-        "`sovereign __dump-commands` failed:\n{}",
+        "`svrn __dump-commands` failed:\n{}",
         combined(&out)
     );
     let dumped: BTreeSet<String> = String::from_utf8_lossy(&out.stdout)

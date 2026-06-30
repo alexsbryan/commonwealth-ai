@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Built-in philosophy templates for `sovereign enrich init
+//! Built-in philosophy templates for `svrn enrich init
 //! --from-template <name>`.
 //!
 //! Each template is a self-contained TOML fixture: meta block plus a

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign archaeology-eval <atlas-corpus> [--inquiry <toml>...] [--baseline <path>]`
+//! `svrn archaeology-eval <atlas-corpus> [--inquiry <toml>...] [--baseline <path>]`
 //!
 //! Witness-checks-and-baseline-diff eval for the
 //! [`git_archaeology`] sidecar. Run-measure-iterate-improve loop:
 //!
-//! 1. Run archaeology (today: `sovereign git-archaeology …`).
+//! 1. Run archaeology (today: `svrn git-archaeology …`).
 //! 2. Run this — get a witness rate, fabrication count, inquiry
 //!    verdicts, and a diff vs. last saved baseline.
 //! 3. Save the current run as the new baseline (`--save-baseline`)
@@ -61,7 +61,7 @@ pub async fn run(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("✗ {e}");
             eprintln!(
-                "  hint: run `sovereign git-archaeology {}` first.",
+                "  hint: run `svrn git-archaeology {}` first.",
                 parsed.atlas_corpus_id
             );
             return 1;
@@ -550,11 +550,11 @@ fn witness_label(k: WitnessKind) -> &'static str {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign archaeology-eval",
+    command: "svrn archaeology-eval",
     summary: "Eval the git-archaeology sidecar — witness checks, baseline diff, inquiry verdicts.",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] \
+            "svrn archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] \
              [--baseline <path>] [--output <md>] [--save-baseline]",
         ),
         crate::util::help::HelpSection::Flags(&[
@@ -583,7 +583,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ]),
         crate::util::help::HelpSection::Notes(
             "Reads `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json` produced by \
-             `sovereign git-archaeology`. Appends one CSV row per run to \
+             `svrn git-archaeology`. Appends one CSV row per run to \
              `~/.sovereign/eval/history.csv` so trends are visible across iterations. \
              Exit code is non-zero when any inquiry fails or any fabrication is detected — \
              CI-friendly.",

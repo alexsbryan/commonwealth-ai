@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat ask "<question>"` — one-shot streaming turn.
+//! `svrn chat ask "<question>"` — one-shot streaming turn.
 //!
 //! Same shape as the desktop's `sendMessageStream` flow:
 //!   1. Bootstrap the Runtime.
@@ -25,10 +25,10 @@ use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat ask",
+    command: "svrn chat ask",
     summary: "Ask a question once. Streams the answer, then prints provenance.",
     sections: &[
-        HelpSection::Usage("sovereign chat ask \"<question>\" [flags]"),
+        HelpSection::Usage("svrn chat ask \"<question>\" [flags]"),
         HelpSection::Flags(&[
             (
                 "--conversation <id>",
@@ -115,7 +115,7 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
     }
 
     let Some(question) = question else {
-        eprintln!("error: missing question. Usage: sovereign chat ask \"<question>\"");
+        eprintln!("error: missing question. Usage: svrn chat ask \"<question>\"");
         return 2;
     };
 

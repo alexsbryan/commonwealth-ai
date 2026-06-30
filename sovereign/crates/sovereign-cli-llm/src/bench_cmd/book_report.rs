@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench book-report` — attach-document benchmark.
+//! `svrn bench book-report` — attach-document benchmark.
 //!
 //! See `sovereign/bench/book-report/README.md` for the full design.
 //!
@@ -44,10 +44,10 @@ const BENCH_TOML: &str = include_str!("../../../../bench/book-report/bench.toml"
 const GUTENBERG_URL: &str = "https://www.gutenberg.org/cache/epub/974/pg974.txt";
 
 const HELP: Help = Help {
-    command: "sovereign bench book-report",
+    command: "svrn bench book-report",
     summary: "Attach-document benchmark on Conrad's The Secret Agent. Fetch → attach → state-stream → tier dispatch → mechanical + LLM-judge scoring.",
     sections: &[
-        HelpSection::Usage("sovereign bench book-report [--transport direct|desktop-bridge] [--bridge-url <url>] [--compare <timings.json>] [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
+        HelpSection::Usage("svrn bench book-report [--transport direct|desktop-bridge] [--bridge-url <url>] [--compare <timings.json>] [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
         HelpSection::Flags(&[
             (
                 "--transport <direct|desktop-bridge>",

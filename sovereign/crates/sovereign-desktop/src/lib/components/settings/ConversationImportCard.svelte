@@ -313,13 +313,13 @@
   >
     <h3 id="{testidPrefix}-reset-title" class="confirm-title">Start fresh for the best results</h3>
     <p class="confirm-body">
-      A previous {sourceName} import didn't finish. Sovereign reads conversations
+      A previous {sourceName} import didn't finish. svrnmesh reads conversations
       better now than it did then — picking up where you left off would mix
       old and new results.
     </p>
     <p class="confirm-body">
       Better to start over with all {importState.pendingReset.totalMessages.toLocaleString()} messages.
-      Your export file stays put; only the search data Sovereign built so far
+      Your export file stays put; only the search data svrnmesh built so far
       gets cleared.
     </p>
     <div class="actions confirm-actions">

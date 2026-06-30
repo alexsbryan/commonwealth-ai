@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat show <conversation_id>` — dump a conversation's turns
+//! `svrn chat show <conversation_id>` — dump a conversation's turns
 //! with their persisted provenance + retrieved-chunks metadata.
 
 use crate::chat_cmd::bootstrap::build_session;
@@ -8,10 +8,10 @@ use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat show",
+    command: "svrn chat show",
     summary: "Dump a conversation — turns + provenance + retrieved chunks.",
     sections: &[
-        HelpSection::Usage("sovereign chat show <conversation_id> [--show-reasoning]"),
+        HelpSection::Usage("svrn chat show <conversation_id> [--show-reasoning]"),
         HelpSection::Flags(&[
             (
                 "--show-reasoning",
@@ -52,7 +52,7 @@ pub async fn cmd_show(args: &[String]) -> i32 {
     }
 
     let Some(cid) = conversation_id else {
-        eprintln!("error: missing conversation id. Usage: sovereign chat show <id>");
+        eprintln!("error: missing conversation id. Usage: svrn chat show <id>");
         return 2;
     };
 

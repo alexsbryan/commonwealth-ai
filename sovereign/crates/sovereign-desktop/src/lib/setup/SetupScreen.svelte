@@ -106,7 +106,7 @@
       <button class="retry" onclick={onRetry}>Try again</button>
       {#if !failed.recoverable}
         <p class="report-hint">
-          If this keeps happening, please share <code>~/.sovereign/logs</code>
+          If this keeps happening, please share <code>~/.svrnmesh/logs</code>
           when reporting.
         </p>
       {/if}

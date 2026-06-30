@@ -29,10 +29,10 @@ use sovereign_core::types::{
 // ── cluster-atlas ───────────────────────────────────────────
 
 const CLUSTER_HELP: Help = Help {
-    command: "sovereign enrich cluster-atlas",
+    command: "svrn enrich cluster-atlas",
     summary: "Phase 2 (atlas): cluster atlas sketches by facet.",
     sections: &[
-        HelpSection::Usage("sovereign enrich cluster-atlas <corpus-id>"),
+        HelpSection::Usage("svrn enrich cluster-atlas <corpus-id>"),
         HelpSection::Notes(
             "Reads the Phase 1 cache (must carry section_extraction payloads; re-run \
              extract with literary_atlas if not) and writes atlas-clusters cache + run \
@@ -102,11 +102,11 @@ pub async fn cmd_cluster_atlas(args: &[String]) -> i32 {
 // ── name-atlas-clusters ─────────────────────────────────────
 
 const NAME_HELP: Help = Help {
-    command: "sovereign enrich name-atlas-clusters",
+    command: "svrn enrich name-atlas-clusters",
     summary:
         "Phase 3 (atlas): name each facet cluster with a position / trajectory / thread label.",
     sections: &[
-        HelpSection::Usage("sovereign enrich name-atlas-clusters <corpus-id>"),
+        HelpSection::Usage("svrn enrich name-atlas-clusters <corpus-id>"),
         HelpSection::Notes(
             "Reads the Phase 2 (atlas) cache and calls the atlas pipeline's \
              compose_phase3_facet per cluster. Writes atlas-named-clusters cache + run \
@@ -149,7 +149,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         Ok(Some(p)) => p,
         Ok(None) => {
             eprintln!(
-                "error: no Phase 1 cache — run `sovereign enrich extract {} --full` first",
+                "error: no Phase 1 cache — run `svrn enrich extract {} --full` first",
                 corpus_id
             );
             return 1;
@@ -163,7 +163,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         Ok(Some(p)) => p,
         Ok(None) => {
             eprintln!(
-                "error: no Phase 2 (atlas) cache — run `sovereign enrich cluster-atlas \
+                "error: no Phase 2 (atlas) cache — run `svrn enrich cluster-atlas \
                  {}` first",
                 corpus_id
             );
@@ -542,7 +542,7 @@ fn _compile_time_reexport_guard() {
 /// sketch embeddings).
 ///
 /// One atomic op wrapping the *exact* bespoke `PhaseRunner::phase_2_cluster_atlas`
-/// — so a workflow-built clustering is faithful to `sovereign enrich
+/// — so a workflow-built clustering is faithful to `svrn enrich
 /// cluster-atlas`. It reuses the same `build_runner` (which wires the daemon
 /// embed closure), which is why this leaf lives here in `enrich_cmd` rather than
 /// in `sovereign-tools`. Reads cache/questions.json, writes cache/atlas-clusters.json.

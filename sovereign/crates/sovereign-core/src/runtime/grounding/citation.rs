@@ -73,8 +73,10 @@ pub async fn citation_grounded_answer(
          Find the ONE sentence in the PASSAGES above that answers the QUESTION \
          and copy it word for word. Then answer from it. Use exactly this format:\n\
          QUOTE: <the sentence, copied verbatim from a passage>\n\
-         ANSWER: <the answer in as few words as possible — the specific fact \
-         (a name, term, number, or short phrase) taken from the quote>\n\n\
+         ANSWER: <the answer, taken only from the quote and as concise as the \
+         question allows: the single specific fact (a name, term, number, or short \
+         phrase) for a single-answer question, OR every item for a question that \
+         asks for several (e.g. \"the three methods\" — list all three)>\n\n\
          If no passage answers the QUESTION, reply with exactly:\n\
          QUOTE: NONE\nANSWER: NONE",
         q = question.chars().take(300).collect::<String>(),

@@ -65,7 +65,7 @@
         phase = { kind: "idle" };
         toastStore.notify({
           title: "You're up to date",
-          body: appVersion ? `Sovereign ${appVersion}` : undefined,
+          body: appVersion ? `svrnmesh ${appVersion}` : undefined,
         });
       }
     } catch (e) {
@@ -112,7 +112,7 @@
       <div class="banner-head">
         <span class="banner-marker" aria-hidden="true">●</span>
         <div class="banner-text">
-          <p class="banner-title">Sovereign {phase.info.version} is available</p>
+          <p class="banner-title">svrnmesh {phase.info.version} is available</p>
           {#if phase.info.date}
             <p class="banner-meta">Published {formatDate(phase.info.date)}</p>
           {/if}

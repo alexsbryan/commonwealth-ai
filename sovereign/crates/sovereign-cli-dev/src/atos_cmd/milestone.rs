@@ -448,7 +448,7 @@ fn spawn_auto_redteam(feature_id: &str, milestone_id: &str, ordinal: i64) {
 
 // ─── next (seamless handoff) ─────────────────────────────────────────────────
 
-/// `sovereign atos next [<feature-id>]` — the seamless-handoff entry
+/// `svrn atos next [<feature-id>]` — the seamless-handoff entry
 /// point. Finds the next unfinished milestone, prints a summary, asks
 /// for driver confirmation, and spawns.
 pub(crate) async fn cmd_next(args: &[String]) -> i32 {
@@ -492,7 +492,7 @@ pub(crate) async fn cmd_next(args: &[String]) -> i32 {
             feature.id
         );
         println!(
-            "Run `sovereign atos teardown {}` to wrap it up.",
+            "Run `svrn atos teardown {}` to wrap it up.",
             feature.id
         );
         return 0;

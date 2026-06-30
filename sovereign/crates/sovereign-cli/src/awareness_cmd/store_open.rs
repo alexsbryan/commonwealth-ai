@@ -86,7 +86,7 @@ pub(super) fn try_open_notes() -> Option<Arc<NoteStore>> {
 }
 
 /// Open the FeatureStore. Returns `None` if `features.db` is absent
-/// (the user hasn't run `sovereign atos provision`).
+/// (the user hasn't run `svrn atos provision`).
 pub(super) fn try_open_features() -> Option<Arc<FeatureStore>> {
     let path = features_db_path();
     if !path.exists() {

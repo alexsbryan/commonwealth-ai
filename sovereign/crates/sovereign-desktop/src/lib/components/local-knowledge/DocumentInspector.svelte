@@ -106,7 +106,7 @@
           <h4 class="preview-title">First chunk preview</h4>
           <pre class="preview">{doc.first_chunk_preview}</pre>
           <p class="preview-foot">
-            Showing the first chunk only. Sovereign indexes the entire
+            Showing the first chunk only. svrnmesh indexes the entire
             document; the preview is a sanity check on what extraction
             actually saw.
           </p>

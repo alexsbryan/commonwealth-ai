@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign reflect` — developer-facing session reflection summary.
+//! `svrn reflect` — developer-facing session reflection summary.
 //!
 //! Reads accumulated reflections and tool call logs from the notes database
 //! and prints a prioritised improvement backlog. Agents write structured
@@ -28,17 +28,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine_notes::{NoteRow, NoteStore, ToolCallLogRow};
 
-/// Old top-level `sovereign reflect` entry point. Prints the
+/// Old top-level `svrn reflect` entry point. Prints the
 /// deprecation banner and forwards to the canonical view handler.
-/// `sovereign notes` (the new name) calls [`run_reflect_view`]
+/// `svrn notes` (the new name) calls [`run_reflect_view`]
 /// directly so it doesn't trigger the banner.
 pub async fn run_reflect(args: &[String]) -> i32 {
-    crate::util::deprecation::announce("sovereign reflect", "sovereign notes");
+    crate::util::deprecation::announce("svrn reflect", "svrn notes");
     run_reflect_view(args).await
 }
 
 /// Canonical reflection-view handler. Both the legacy `reflect`
-/// alias and the new `sovereign notes` default view forward here.
+/// alias and the new `svrn notes` default view forward here.
 pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP);
@@ -102,7 +102,7 @@ pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
         Some(p) => p,
         None => {
             eprintln!(
-                "error: could not find notes.db — run `sovereign project serve` at least once, \
+                "error: could not find notes.db — run `svrn project serve` at least once, \
                  or pass --data-dir <path> to the directory containing notes.db"
             );
             return 1;
@@ -323,15 +323,15 @@ async fn run_summary(
             let preview = truncate(&t.content, 80);
             println!("  [todo] {preview}");
         }
-        println!("  Run `sovereign reflect --todos` to see full list with context.");
+        println!("  Run `svrn reflect --todos` to see full list with context.");
     }
 
     // ── Footer ────────────────────────────────────────────────────────────────
     println!();
-    println!("Run `sovereign reflect --raw` to see full reflection text.");
-    println!("Run `sovereign reflect --since 7d` to narrow the period.");
+    println!("Run `svrn reflect --raw` to see full reflection text.");
+    println!("Run `svrn reflect --since 7d` to narrow the period.");
     if !include_history {
-        println!("Run `sovereign reflect --history` to include retired reflections.");
+        println!("Run `svrn reflect --history` to include retired reflections.");
     }
 
     0
@@ -525,7 +525,7 @@ async fn run_retire(
                 if ids.len() == 1 { "" } else { "s" }
             );
             println!("These reflections will no longer surface to agents or in reflect output.");
-            println!("Run `sovereign reflect --history --tool {tool}` to see them.");
+            println!("Run `svrn reflect --history --tool {tool}` to see them.");
         }
         Err(e) => {
             eprintln!("error: {e}");
@@ -791,10 +791,10 @@ fn confirm(prompt: &str) -> bool {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign reflect",
+    command: "svrn reflect",
     summary: "Review session reflections and retire ones that are no longer relevant.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign reflect [flags]"),
+        crate::util::help::HelpSection::Usage("svrn reflect [flags]"),
         crate::util::help::HelpSection::Flags(&[
             ("--since <Nd|Nh>",    "Period to analyse (default: 30d)"),
             ("--tool <name>",      "Filter signals to one tool"),
@@ -809,9 +809,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--data-dir <path>",  "Directory containing notes.db (default: ~/.sovereign/indexes)"),
         ]),
         crate::util::help::HelpSection::Examples(&[
-            ("sovereign reflect",                                           "30-day backlog summary"),
-            ("sovereign reflect --since 7d --tool blast_radius",            "Last week, one tool only"),
-            ("sovereign reflect --retire --tool blast_radius --reason \"macro support added in v0.4.2\"",
+            ("svrn reflect",                                           "30-day backlog summary"),
+            ("svrn reflect --since 7d --tool blast_radius",            "Last week, one tool only"),
+            ("svrn reflect --retire --tool blast_radius --reason \"macro support added in v0.4.2\"",
              "Retire all blast_radius reflections"),
         ]),
     ],

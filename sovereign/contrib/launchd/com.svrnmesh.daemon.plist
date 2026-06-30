@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-    Sovereign user daemon — launched by launchd on login.
+    svrnmesh user daemon — launched by launchd on login.
 
     {BINARY} is substituted by service_install.rs with the absolute path
     to the sovereign binary at install time. {HOME} is substituted with
     the user's home directory so logs and working dir are per-user.
 
-    Install:  sovereign setup
-    Stop:     sovereign daemon stop
-    Restart:  sovereign daemon restart
+    Install:  svrn setup
+    Stop:     svrn daemon stop
+    Restart:  svrn daemon restart
 -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.sovereign.daemon</string>
+    <string>com.svrnmesh.daemon</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -34,13 +34,13 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>{HOME}/.sovereign/logs/daemon.log</string>
+    <string>{DATA_DIR}/logs/daemon.log</string>
 
     <key>StandardErrorPath</key>
-    <string>{HOME}/.sovereign/logs/daemon.err</string>
+    <string>{DATA_DIR}/logs/daemon.err</string>
 
     <key>WorkingDirectory</key>
-    <string>{HOME}/.sovereign</string>
+    <string>{DATA_DIR}</string>
 
     <!-- Environment: keep PATH usable so child processes (e.g. llama-server
          if the embedded inference falls back to spawning one) can find the

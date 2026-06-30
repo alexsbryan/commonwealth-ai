@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign alignment` — operator-facing migration + status entry
+//! `svrn alignment` — operator-facing migration + status entry
 //! point for the mesh-replicated alignment workspace recipe.
 //!
 //! ## What lands here
@@ -15,7 +15,7 @@
 //!   it's been ingested, and surface anything anomalous (no daemon
 //!   running, ~/.claude missing, etc.).
 //!
-//! Why a separate command rather than `sovereign corpus install
+//! Why a separate command rather than `svrn corpus install
 //! alignment`: the alignment recipe is a sync transport, not a
 //! browseable knowledge corpus; its operator workflow has a backup
 //! step the regular install path doesn't, and `migrate --dry-run` is
@@ -52,10 +52,10 @@ pub async fn run_alignment(args: &[String]) -> i32 {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign alignment",
+    command: "svrn alignment",
     summary: "Manage the mesh-replicated alignment workspace (~/.claude/ + notes.db).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign alignment <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn alignment <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "migrate [--dry-run]",
@@ -89,7 +89,7 @@ async fn cmd_migrate(args: &[String]) -> i32 {
             "--dry-run" | "-n" => dry_run = true,
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign alignment migrate [--dry-run]\n\n\
+                    "Usage: svrn alignment migrate [--dry-run]\n\n\
                      With --dry-run: walks the alignment scope and prints what \
                      would be exported (files + notes rows), without writing a \
                      backup or touching the daemon. Useful as a sanity check \
@@ -162,7 +162,7 @@ async fn cmd_migrate(args: &[String]) -> i32 {
     println!("Ingest submitted to the daemon. Cross-machine convergence happens");
     println!("automatically: peers gossip the new partition, pull each other's");
     println!("state, and the post-merge projector materializes received chunks");
-    println!("back to ~/.claude/ + ~/.sovereign/notes.db. Run `sovereign alignment");
+    println!("back to ~/.claude/ + ~/.sovereign/notes.db. Run `svrn alignment");
     println!("status` later to confirm the chunk count matches your peer.");
     0
 }
@@ -211,7 +211,7 @@ async fn cmd_status(_args: &[String]) -> i32 {
         } else {
             println!();
             println!(
-                "No local alignment corpus yet. Run `sovereign alignment migrate` \
+                "No local alignment corpus yet. Run `svrn alignment migrate` \
                  to ingest the local state."
             );
         }

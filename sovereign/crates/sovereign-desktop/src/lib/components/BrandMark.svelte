@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
-  // Sovereign brand mark — "Crinkled Gold" asymmetric pentagon.
+  // svrnmesh brand mark — "Crinkled Gold" asymmetric pentagon.
   // Source of truth is `src-tauri/icons/icon-source.svg`; this
   // component carries the same polygons inline so the React/Svelte
   // runtime can scale it via `size=` and the surrounding chrome can

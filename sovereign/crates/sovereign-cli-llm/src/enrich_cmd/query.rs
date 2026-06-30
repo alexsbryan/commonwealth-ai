@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich query <corpus> "<text>" [--show-traversal]` —
+//! `svrn enrich query <corpus> "<text>" [--show-traversal]` —
 //! one-off atlas traversal. Loads the atlas from the phase cache,
 //! embeds the query via the daemon, prints LOCATE / TRAVERSE /
 //! grounding sections.
@@ -12,11 +12,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich query",
+    command: "svrn enrich query",
     summary: "Run one query against the assembled atlas and print the traversal.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich query <corpus-id> \"<text>\" [--show-traversal] [--threshold <f>]",
+            "svrn enrich query <corpus-id> \"<text>\" [--show-traversal] [--threshold <f>]",
         ),
         HelpSection::Flags(&[
             (

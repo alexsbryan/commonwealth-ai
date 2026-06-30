@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat ...` — CLI mirror of the desktop chat surface.
+//! `svrn chat ...` — CLI mirror of the desktop chat surface.
 //!
 //! Why this exists
 //! ---------------
@@ -16,10 +16,10 @@
 //! search plan is never surfaced at all. Debugging it means
 //! screenshot-copy-pasting out of a GUI.
 //!
-//! `sovereign chat` runs the same `Runtime::handle_message_stream`
+//! `svrn chat` runs the same `Runtime::handle_message_stream`
 //! path from a terminal, streams the tokens to stdout, and prints
 //! the provenance + retrieved chunks + reasoning inline. It shares
-//! the daemon-backed bootstrap with `sovereign enrich` (HTTP to
+//! the daemon-backed bootstrap with `svrn enrich` (HTTP to
 //! `localhost:9741`) — no embedded llama.cpp, no Tauri, just the
 //! runtime and the same daemon your desktop app already talks to.
 //!
@@ -41,10 +41,10 @@ pub mod show;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat",
+    command: "svrn chat",
     summary: "CLI mirror of the desktop chat flow — same Runtime, same retrieval, stdout-friendly.",
     sections: &[
-        HelpSection::Usage("sovereign chat <subcommand> [args]"),
+        HelpSection::Usage("svrn chat <subcommand> [args]"),
         HelpSection::SubcommandsTitled(
             "Primary",
             &[
@@ -81,7 +81,7 @@ const HELP: Help = Help {
             ("--help, -h",        "Show this message."),
         ]),
         HelpSection::Notes(
-            "Requires `sovereign daemon` at the configured client port (default 9741). \
+            "Requires `svrn daemon` at the configured client port (default 9741). \
              Bootstrap probes /v1/models before any subcommand runs — if the probe fails \
              the command exits 2 with a remediation hint.",
         ),

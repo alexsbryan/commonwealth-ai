@@ -60,7 +60,7 @@
       } else if (!v.is_dir) {
         status = "Pick a folder, not a file.";
       } else if (!v.readable) {
-        status = "Sovereign can't read that folder.";
+        status = "svrnmesh can't read that folder.";
       } else {
         status = "";
       }

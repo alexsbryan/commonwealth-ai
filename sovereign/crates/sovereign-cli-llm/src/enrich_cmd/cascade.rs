@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich cascade <corpus> --from <phase>` — run every
+//! `svrn enrich cascade <corpus> --from <phase>` — run every
 //! phase downstream of (and including) `<phase>` in ordinal order.
 //!
 //! Used for the medium iteration loop: "I edited phase 5 exemplars;
@@ -22,16 +22,16 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich cascade",
+    command: "svrn enrich cascade",
     summary: "Rerun a phase and every downstream phase that depends on it.",
     sections: &[
-        HelpSection::Usage("sovereign enrich cascade <corpus-id> --from <phase>"),
+        HelpSection::Usage("svrn enrich cascade <corpus-id> --from <phase>"),
         HelpSection::Flags(&[
             ("--from <phase>", "Starting phase: questions | question-clusters | concerns | chunk-clusters | positions | tensions | gaps"),
         ]),
         HelpSection::Examples(&[
-            ("sovereign enrich cascade ak --from positions", "Rerun phases 5, 6, 7."),
-            ("sovereign enrich cascade ak --from questions", "Full pipeline from phase 1 (uses --full)."),
+            ("svrn enrich cascade ak --from positions", "Rerun phases 5, 6, 7."),
+            ("svrn enrich cascade ak --from questions", "Full pipeline from phase 1 (uses --full)."),
         ]),
         HelpSection::Notes(
             "When `--from questions`, phase 1 runs with `--full`. Subset runs must go through `extract` directly.",

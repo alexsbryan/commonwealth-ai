@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands for mesh operations.
 //!
-//! These are called from the Sovereign frontend (the Tauri webview) when
+//! These are called from the svrnmesh frontend (the Tauri webview) when
 //! users interact with the Community Mesh section of the settings UI.
 
 use std::sync::Arc;

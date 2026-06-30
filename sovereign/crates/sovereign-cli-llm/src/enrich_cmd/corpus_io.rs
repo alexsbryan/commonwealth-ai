@@ -64,7 +64,7 @@ pub fn rebuild_corpus_state(cfg: &EnrichConfig) -> Result<(Vec<ChapterInput>, Ch
 
     if sections.is_empty() {
         return Err(Error::InvalidInput(format!(
-            "no sections detected in {} — re-run `sovereign enrich init {} --source <path> \
+            "no sections detected in {} — re-run `svrn enrich init {} --source <path> \
              --dry-run` to see the loaded text and adjust --chapter-regex or --toc markers.",
             cfg.source_path.display(),
             cfg.corpus_id
@@ -186,7 +186,7 @@ fn rebuild_corpus_state_from_corpus(
     let manifest_path = paths::chapters_manifest_path(&cfg.corpus_id);
     let manifest = ChapterManifest::load(&manifest_path)?.ok_or_else(|| {
         Error::InvalidInput(format!(
-            "no chapter manifest at {} — re-run `sovereign enrich init {} --from-corpus {} \
+            "no chapter manifest at {} — re-run `svrn enrich init {} --from-corpus {} \
              [--limit-articles N]` to create it.",
             manifest_path.display(),
             cfg.corpus_id,

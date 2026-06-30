@@ -4,17 +4,25 @@
 // Reads a chaos field journal (chaos-journal.jsonl) and prints ONE comparable
 // scorecard per run: the bench-grounding verdict distribution, the DISENTANGLED
 // hallucination breakdown (evidence-present real fabrication vs empty-evidence
-// measurement artifact vs synthesis/theme), latency by verdict (the slow-
-// abstention signal), raw-error leaks, abrasive declines, hangs, and a single
-// composite POSITIVE-EXPERIENCE rate.
+// measurement artifact vs synthesis/theme), the responsiveness/latency axis,
+// raw-error leaks, abrasive declines, true stalls, and a single composite
+// POSITIVE-EXPERIENCE rate.
 //
-// The composite is deliberately NOT gameable by one lever: a turn is POSITIVE
-// only if the bench did not flag a fabrication AND the UX judge did not call it
-// broken AND it did not hang. Driving the app to abstain on everything would
-// cut hallucinations but would NOT raise positiveRate beyond the honest-decline
-// ceiling and would SINK groundedRate — which this card reports alongside, with
-// a DEGENERATE flag, so an all-declines "win" is visible as the gaming it is.
-// The agent, the question stream, and the oracle are frozen; this only reads.
+// POSITIVE = the user got a good answer: ANSWERED and the UX judge did not call
+// it broken (broken || score>=6). Two things are deliberately NOT in this binary:
+//   - LATENCY. A slow-but-correct answer is a latency problem, reported on its
+//     own axis — not a non-positive experience. Folding a 60s threshold in here
+//     was the "hang" mislabel: every "hang" last run returned an answer. A
+//     genuine STALL (no answer at all, not a user cancel) IS negative and sits
+//     in the denominator (nAttempts).
+//   - The raw `hallucination` verdict. Fabrication is confirmedFabrication —
+//     where BOTH oracles agree (bench verdict + UX judge), which is ⊆ broke. The
+//     5-of-6 faithful syntheses the bench flagged but the UX judge approved are
+//     NOT counted against the experience; the confirmed-fab count is the headline.
+// The composite is still not gameable by one lever: abstaining on everything
+// would NOT raise positiveRate past the honest-decline ceiling and would SINK
+// groundedRate (reported alongside with a DEGENERATE flag). The agent, the
+// question stream, and the oracle are frozen; this only reads.
 //
 // Usage: node chaos-scorecard.mjs [journal.jsonl] [--label "iter-1"] [--json]
 import fs from "node:fs";
@@ -54,6 +62,32 @@ const rows = fs
 // A scored chat turn carries an `aligned` verdict.
 const chats = rows.filter((r) => r.aligned && r.aligned.verdict);
 const n = chats.length;
+
+// ── chat attempts vs answered vs true stalls ───────────────────────
+// `chats` is ANSWERED+scored turns. A chat attempt that returned NOTHING (the
+// app hung, the invoke aborted) carries no `aligned` verdict, so it was silently
+// dropped from the denominator — a "user got nothing" failure made invisible.
+// Recover it here, while EXCLUDING the two non-failures that also yield a null
+// answer: deliberate user cancels (the breaker spams cancel_stream) and harness
+// arg-validation rejects (a bad conversationId before a conversation exists).
+// What remains is a genuine STALL — the worst outcome, and it belongs in the
+// composite denominator as a negative.
+const CHAT_CMDS = new Set(["send_message_stream", "ask_document"]);
+const chatAttempts = rows.filter((r) => CHAT_CMDS.has(r.cmd));
+const cancelledNear = (r) => rows.some((x) => x.cmd === "cancel_stream" && x.step > r.step && x.step <= r.step + 2);
+// A genuine STALL = the app accepted the request but the user never got an
+// answer. Two shapes: the call aborted/timed out, or it returned ok but no
+// answer ever streamed (and the user did not cancel). A fast, specific rejection
+// (bad conversationId, "Document not found", an oversize-message notice) is the
+// app correctly handling a bad request — NOT a stall, so it is excluded.
+const isStall = (r) => {
+  if (r.aligned && r.aligned.verdict) return false; // answered + scored
+  if (cancelledNear(r)) return false; // deliberate user cancel
+  if (/abort|timed?\s*out/i.test(String(r.error ?? ""))) return true; // aborted / timed out
+  return r.ok === true && (r.answer == null || r.answer.length === 0); // accepted but silent
+};
+const trueStalls = chatAttempts.filter(isStall);
+const nAttempts = n + trueStalls.length; // answered + genuine no-answer stalls
 const median = (xs) => {
   if (!xs.length) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -87,7 +121,14 @@ const declines = honestAbst + caveatedOod;
 //                     the asserted value absent. Either a gate-miss fabrication
 //                     (userJudge broke=true) or strict-oracle-on-synthesis
 //                     (userJudge broke=false, e.g. a themed summary).
-const broke = (c) => c.userJudge && c.userJudge.broken === true;
+// A turn is "broken" if the UX judge flagged it OR scored it >=6 — matching the
+// harness's own scoreSurprise threshold. Reading only `.broken` missed
+// inconsistent judge outputs (broken:false, score:10) — a real bad answer
+// mislabeled as fine (e.g. the run's step-99 fabrication). This makes
+// confirmedFabrication STRICTER, not looser.
+const broke = (c) =>
+  !!c.userJudge &&
+  (c.userJudge.broken === true || (typeof c.userJudge.score === "number" && c.userJudge.score >= 6));
 const hbuckets = { empty_retrieval: [], resolve_failed: [], had_evidence: [], no_evidence_field: [] };
 const hallRows = chats.filter((c) => c.aligned.verdict === "hallucination");
 for (const c of hallRows) {
@@ -128,9 +169,25 @@ const rawErrors = chats.filter((c) => (c.signals ?? []).some((s) => /raw error s
 const abrasiveDeclines = chats.filter(
   (c) => (c.aligned.verdict === "honest_abstention" || c.aligned.verdict === "caveated_ood") && broke(c),
 ).length;
-const hangs = chats.filter((c) => typeof c.latencyMs === "number" && c.latencyMs >= HANG_MS).length;
+// Slow COMPLETIONS: answers that arrived but took >=HANG_MS. A latency problem,
+// NOT a hang — the user got a real (often correct) answer. Reported on the
+// latency axis; they no longer sink the composite (that was the "14 hangs"
+// mislabel — every one returned an answer). True stalls (no answer at all) are
+// counted separately, above.
+const slowCompletions = chats.filter((c) => typeof c.latencyMs === "number" && c.latencyMs >= HANG_MS).length;
 const brokeCount = chats.filter(broke).length;
 const appDown = rows.some((r) => r.kind === "app_down");
+// Responsiveness percentiles over ALL answered turns (the latency axis the
+// composite no longer folds in).
+const pctl = (xs, p) => {
+  const s = xs.filter((x) => typeof x === "number").sort((a, b) => a - b);
+  if (!s.length) return null;
+  return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
+};
+const latsAll = chats.map((c) => c.latencyMs);
+const latP90 = pctl(latsAll, 90);
+const over30 = chats.filter((c) => c.latencyMs >= 30_000).length;
+const over120 = chats.filter((c) => c.latencyMs >= 120_000).length;
 
 // ── subset-conditional rates (the mix-robust per-iteration signal) ──
 // The whole-sample composite is noise-dominated at feasible run lengths AND
@@ -152,11 +209,20 @@ const longReal = groundedPath.filter((c) => (c.answerLen ?? 0) > 200 && c.answer
 const cutoff = { n: longReal.length, midSentence: longReal.filter((c) => !isTerminal(c.answerTail)).length };
 
 // ── composite positive-experience rate ─────────────────────────────
-// POSITIVE = not a fabrication AND UX-judge not broken AND not a hang.
-const positive = chats.filter(
-  (c) => c.aligned.verdict !== "hallucination" && !broke(c) && (typeof c.latencyMs !== "number" || c.latencyMs < HANG_MS),
-).length;
-const positiveRate = n ? positive / n : 0;
+// POSITIVE = the user got a good answer: ANSWERED and the UX judge did not call
+// it broken. Two corrections from the prior definition, both about accuracy not
+// inflation:
+//   - Latency is NOT in this binary. A slow-but-correct answer is a latency
+//     problem (reported on its own axis), not a non-positive experience —
+//     folding a 60s threshold in here was the "14 hangs" mislabel (every one
+//     returned an answer). A genuine STALL (no answer) IS negative: it sits in
+//     the denominator (nAttempts) but never in `positive`.
+//   - Fabrication is judged by confirmedFabrication (both oracles agree), which
+//     is ⊆ broke, so `!broke(c)` already excludes it. The raw `hallucination`
+//     verdict is NOT used here — 5 of 6 last run were faithful syntheses the UX
+//     judge approved. The confirmed-fab count is still reported as the headline.
+const positive = chats.filter((c) => !broke(c)).length;
+const positiveRate = nAttempts ? positive / nAttempts : 0;
 const groundedRate = n ? grounded / n : 0;
 const declineRate = n ? declines / n : 0;
 // Degenerate-improvement guard: a high positiveRate built on a collapsed
@@ -168,6 +234,8 @@ const card = {
   label: LABEL,
   journal: JOURNAL,
   scoredChats: n,
+  chatAttempts: nAttempts,
+  trueStalls: trueStalls.length,
   totalRows: rows.length,
   appDown,
   verdicts,
@@ -184,8 +252,8 @@ const card = {
     measurementArtifact,
     buckets: Object.fromEntries(Object.entries(hbuckets).map(([k, v]) => [k, v.length])),
   },
-  latencyMs: { all: latAll, grounded: latGrounded, decline: latDecline, hallucination: latHall },
-  ux: { rawErrors, abrasiveDeclines, hangs, brokeTurns: brokeCount },
+  latencyMs: { all: latAll, grounded: latGrounded, decline: latDecline, hallucination: latHall, p90: latP90, over30s: over30, over120s: over120 },
+  ux: { rawErrors, abrasiveDeclines, slowCompletions, trueStalls: trueStalls.length, brokeTurns: brokeCount },
   conditional: {
     haveEvidenceField: withEv.length,
     emptyRetrieval: { n: emptyChats.length, brokeRate: brokeRate(emptyChats) },
@@ -214,13 +282,15 @@ console.log(`    theme/synthesis strictness (frozen)   ${String(themeStrict).pad
 console.log(`    measurement artifact (empty evidence) ${String(measurementArtifact).padStart(3)}   ← harness/retrieval, not a fabrication`);
 console.log(`      buckets: empty_retrieval=${hbuckets.empty_retrieval.length} resolve_failed=${hbuckets.resolve_failed.length} had_evidence=${hbuckets.had_evidence.length} no_evidence_field=${hbuckets.no_evidence_field.length}`);
 
-console.log(`\n  ── latency (median ms) — slow-abstention signal ──`);
-console.log(`    grounded ${latGrounded ?? "—"}   decline ${latDecline ?? "—"}   hallucination ${latHall ?? "—"}   all ${latAll ?? "—"}`);
+console.log(`\n  ── responsiveness (latency axis — its OWN signal, not in the composite) ──`);
+console.log(`    median ${latAll ?? "—"}ms   p90 ${latP90 ?? "—"}ms   |   grounded ${latGrounded ?? "—"}   decline ${latDecline ?? "—"}   hallucination ${latHall ?? "—"}`);
+console.log(`    slow answers: ${over30}/${n} >=30s   ${slowCompletions}/${n} >=60s   ${over120}/${n} >=120s   (all returned an answer)`);
 if (latDecline && latGrounded && latDecline > latGrounded * 1.3)
   console.log(`    ⚠ declines are ${(latDecline / latGrounded).toFixed(1)}× slower than grounded answers (slow-abstention)`);
 
 console.log(`\n  ── UX / robustness ──`);
-console.log(`    raw errors shown: ${rawErrors}   abrasive declines: ${abrasiveDeclines}   hangs(>${HANG_MS / 1000}s): ${hangs}   broke turns: ${brokeCount}`);
+console.log(`    raw errors shown: ${rawErrors}   abrasive declines: ${abrasiveDeclines}   broke turns: ${brokeCount}`);
+console.log(`    true stalls (no answer, not cancelled): ${trueStalls.length}   slow completions (>=${HANG_MS / 1000}s, answered): ${slowCompletions}`);
 
 const fmtRate = (r) => (r == null ? "—" : `${(100 * r).toFixed(0)}%`);
 console.log(`\n  ── subset-conditional (mix-robust — the per-iteration lever) ──`);
@@ -233,7 +303,7 @@ if (withEv.length) {
 }
 
 console.log(`\n  ── composite (anti-gaming: all must move TOGETHER) ──`);
-console.log(`    POSITIVE EXPERIENCE   ${(100 * positiveRate).toFixed(1)}%   (not-fabrication ∧ not-broken ∧ not-hang)`);
+console.log(`    POSITIVE EXPERIENCE   ${(100 * positiveRate).toFixed(1)}%   (answered ∧ not-broken; of ${nAttempts} attempts incl. ${trueStalls.length} stall)`);
 console.log(`    grounded rate         ${(100 * groundedRate).toFixed(1)}%   (must hold/rise — not collapse into declines)`);
 console.log(`    hallucination rate    ${(100 * (n ? hallucination / n : 0)).toFixed(1)}%   confirmed-only ${(100 * (n ? confirmedFab / n : 0)).toFixed(1)}%`);
 console.log(`    decline rate          ${(100 * declineRate).toFixed(1)}%`);

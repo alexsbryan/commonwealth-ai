@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness extract` — run entity extraction over the
+//! `svrn awareness extract` — run entity extraction over the
 //! current StateStore contents and write atoms.json + edges.json.
 //!
 //! Bypasses the production CorpusEngine ingest path (which would
@@ -53,7 +53,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
     if phase == "all" {
         eprintln!(
             "awareness extract: --phase all routes through the production CorpusEngine \
-             ingest pipeline and is not yet wired up — defer to `sovereign chat` or the \
+             ingest pipeline and is not yet wired up — defer to `svrn chat` or the \
              daemon to drive ingestion. --phase entity (default) is the supported path."
         );
         return 2;
@@ -247,7 +247,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
 
     println!();
     println!(
-        "Run `sovereign awareness entities` or `sovereign awareness timeline <name>` to inspect."
+        "Run `svrn awareness entities` or `svrn awareness timeline <name>` to inspect."
     );
     0
 }

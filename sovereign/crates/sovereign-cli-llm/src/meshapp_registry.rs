@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign meshapp {publish,install,list}` — the curated registry client.
+//! `svrn meshapp {publish,install,list}` — the curated registry client.
 //!
 //! A mesh app is distributed as a self-contained `tar.zst`: the bundle (its
 //! `index.html` / `app.js` / `meshapp.json` / `recipe.toml`) plus a copy of the
@@ -311,7 +311,7 @@ pub fn list(_args: &[String]) -> i32 {
     }
     println!("\nInstalled ({}):", sovereign_meshapps().display());
     if installed.is_empty() {
-        println!("  (none yet — `sovereign meshapp install <id>`)");
+        println!("  (none yet — `svrn meshapp install <id>`)");
     }
     for id in &installed {
         println!("  {id}");

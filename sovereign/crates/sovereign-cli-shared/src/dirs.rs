@@ -19,14 +19,17 @@ use std::path::PathBuf;
 /// sovereign state lives underneath: models, corpora, mesh.json,
 /// notes.db, per-project indexes, logs.
 pub fn sovereign_root() -> PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from("."))
+    // Prefer `~/.svrnmesh`; fall back to a populated legacy `~/.sovereign`
+    // so this resolves correctly whether or not the rename migration has run.
+    match dirs::home_dir() {
+        Some(home) => resolve_branded_dir(home.join(".svrnmesh"), home.join(".sovereign")),
+        None => PathBuf::from("."),
+    }
 }
 
 /// Where per-project code intelligence indexes live
 /// (`~/.sovereign/indexes/<corpus-id>/`). The path that
-/// `sovereign project init` writes into and `sovereign project serve`
+/// `svrn project init` writes into and `svrn project serve`
 /// reads from.
 pub fn sovereign_indexes() -> PathBuf {
     sovereign_root().join("indexes")
@@ -34,7 +37,7 @@ pub fn sovereign_indexes() -> PathBuf {
 
 /// Where installed third-party mesh apps live (`~/.sovereign/meshapps/<id>/`),
 /// alongside a shared `_sdk/` and the local `registry.toml` of published apps.
-/// `sovereign meshapp install` unpacks here; `meshapp dev <id>` runs from here.
+/// `svrn meshapp install` unpacks here; `meshapp dev <id>` runs from here.
 pub fn sovereign_meshapps() -> PathBuf {
     sovereign_root().join("meshapps")
 }
@@ -45,9 +48,10 @@ pub fn sovereign_meshapps() -> PathBuf {
 /// `dirs::data_dir()` (platform-native data dir) rather than our
 /// `sovereign_root()` so it matches the desktop app's storage.
 pub fn mesh_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
+    match dirs::data_dir() {
+        Some(data) => resolve_branded_dir(data.join("svrnmesh"), data.join("sovereign")),
+        None => PathBuf::from("."),
+    }
 }
 
 /// Same shape as `project_cmd::default_data_dir` before the split:
@@ -62,15 +66,37 @@ pub fn default_data_dir() -> Option<PathBuf> {
     }
 }
 
+/// Prefer the rebranded dir when it holds data; fall back to a populated
+/// legacy dir; else (fresh install) use the new dir. Mirrors
+/// `sovereign_core::rebrand::resolve_branded_dir` (duplicated because this
+/// crate has no dependency on `sovereign-core`).
+fn resolve_branded_dir(new: PathBuf, legacy: PathBuf) -> PathBuf {
+    if dir_is_populated(&new) {
+        new
+    } else if legacy.exists() {
+        legacy
+    } else {
+        new
+    }
+}
+
+fn dir_is_populated(p: &std::path::Path) -> bool {
+    std::fs::read_dir(p)
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn sovereign_root_ends_in_sovereign() {
+    fn sovereign_root_uses_brand_dir() {
         let p = sovereign_root();
         assert!(
-            p.ends_with(".sovereign") || p == std::path::Path::new("."),
+            p.ends_with(".svrnmesh")
+                || p.ends_with(".sovereign")
+                || p == std::path::Path::new("."),
             "unexpected root: {}",
             p.display()
         );
@@ -90,7 +116,8 @@ mod tests {
     }
 
     #[test]
-    fn mesh_data_dir_ends_with_sovereign() {
-        assert!(mesh_data_dir().ends_with("sovereign"));
+    fn mesh_data_dir_uses_brand_dir() {
+        let p = mesh_data_dir();
+        assert!(p.ends_with("svrnmesh") || p.ends_with("sovereign"));
     }
 }

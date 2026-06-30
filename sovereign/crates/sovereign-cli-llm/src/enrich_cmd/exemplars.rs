@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich exemplars <corpus>` — exemplar-bank status + lint.
+//! `svrn enrich exemplars <corpus>` — exemplar-bank status + lint.
 //!
 //! Walks every per-phase bank file under the corpus's exemplars
 //! directory and prints `(positive, corrected, negative)` counts
@@ -14,14 +14,14 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich exemplars",
+    command: "svrn enrich exemplars",
     summary: "Report exemplar-bank counts and lint findings per phase.",
     sections: &[
-        HelpSection::Usage("sovereign enrich exemplars <corpus-id>"),
+        HelpSection::Usage("svrn enrich exemplars <corpus-id>"),
         HelpSection::Notes(
             "Missing bank files are reported as '(no bank file)'. Each phase's file lives at \
              ~/.sovereign/enrichment/<corpus>/exemplars/<phase-id>.json. Hand-edit the JSON \
-             or use `sovereign enrich promote` (Landing 4) to append curated exemplars.",
+             or use `svrn enrich promote` (Landing 4) to append curated exemplars.",
         ),
     ],
 };

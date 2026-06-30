@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign project found` — the four-stage founding conversation.
+//! `svrn project found` — the four-stage founding conversation.
 //!
 //! M6.3 delivers **Stage 1 (Understanding)**. Later stages land in
 //! M6.4 (fault lines), M6.5 (CHARTER.md + PHASES.md), M6.6 (doc
@@ -7,7 +7,7 @@
 //!
 //! ## Stage 1 — what we're doing
 //!
-//! The user runs `sovereign project found [--design <path>]` once,
+//! The user runs `svrn project found [--design <path>]` once,
 //! after `project init`, before the agent starts writing code. This
 //! stage's job is to turn ambient knowledge into explicit,
 //! durable decisions — things that are expensive to change later.
@@ -1258,7 +1258,7 @@ pub fn compose_charter(inputs: &FoundingInputs) -> String {
     if invariants.is_empty() {
         out.push_str(
             "_(No invariants named at founding. Add them via \
-             `sovereign project amend` as they crystallize.)_\n\n",
+             `svrn project amend` as they crystallize.)_\n\n",
         );
     } else {
         for inv in &invariants {
@@ -1328,11 +1328,11 @@ pub fn compose_charter(inputs: &FoundingInputs) -> String {
     out.push('\n');
 
     // 5. Amendment log — explicitly empty. Amendments write here
-    // via `sovereign project amend` (M6.7).
+    // via `svrn project amend` (M6.7).
     out.push_str("## Amendment log\n\n");
     out.push_str(
         "_(Empty at founding. Amendments land here via \
-         `sovereign project amend`, each carrying the adversarial \
+         `svrn project amend`, each carrying the adversarial \
          review + the reasoning that overrode it.)_\n",
     );
 
@@ -1483,7 +1483,7 @@ pub fn compose_phases(inputs: &FoundingInputs) -> String {
          When Phase 2 lands, revisit this document and fill Phase 3+ \
          with conditions informed by the actual system's telemetry, \
          failure modes, and user feedback.\n\n\
-         Add phases here via `sovereign project amend` as you go.\n",
+         Add phases here via `svrn project amend` as you go.\n",
     );
 
     out
@@ -1616,7 +1616,7 @@ impl ApprovalInterlocutor for StdinApprovalInterlocutor {
         let editor = std::env::var("EDITOR").unwrap_or_default();
         if editor.is_empty() {
             eprintln!(
-                "  $EDITOR is unset. Drafts saved at:\n    {}\n    {}\n  Edit them, then re-run `sovereign project found` to continue.",
+                "  $EDITOR is unset. Drafts saved at:\n    {}\n    {}\n  Edit them, then re-run `svrn project found` to continue.",
                 charter_path.display(),
                 phases_path.display()
             );

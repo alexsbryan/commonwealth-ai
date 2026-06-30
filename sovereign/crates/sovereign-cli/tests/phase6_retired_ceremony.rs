@@ -80,7 +80,7 @@ fn assert_exit_zero(out: &Output, label: &str) {
     }
 }
 
-/// `sovereign project found` is retired — the banner fires and the
+/// `svrn project found` is retired — the banner fires and the
 /// command exits 0 without touching the filesystem. (No
 /// `.sovereign/project.toml` is required; the old gate that
 /// demanded it is gone with the rest of the body.)
@@ -91,7 +91,7 @@ fn project_found_is_retired_no_op() {
     assert_exit_zero(&out, "project found");
     let err = stderr(&out);
     assert!(
-        err.contains("`sovereign project found`"),
+        err.contains("`svrn project found`"),
         "retirement banner should reference the old name; got:\n{err}"
     );
     assert!(
@@ -106,7 +106,7 @@ fn project_found_is_retired_no_op() {
     );
 }
 
-/// Same retirement contract for `sovereign atos provision`.
+/// Same retirement contract for `svrn atos provision`.
 #[test]
 fn atos_provision_is_retired_no_op() {
     require_siblings!();
@@ -114,7 +114,7 @@ fn atos_provision_is_retired_no_op() {
     assert_exit_zero(&out, "atos provision");
     let err = stderr(&out);
     assert!(
-        err.contains("`sovereign atos provision`"),
+        err.contains("`svrn atos provision`"),
         "retirement banner should reference the old name; got:\n{err}"
     );
     assert!(

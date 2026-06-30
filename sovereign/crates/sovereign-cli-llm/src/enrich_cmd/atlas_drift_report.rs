@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-drift-report` — narrative-vs-structural
+//! `svrn enrich atlas-drift-report` — narrative-vs-structural
 //! drift detector.
 //!
 //! Compares N narrative atlases (markdown-derived: ARCH_PRINCIPLES,
@@ -42,11 +42,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-drift-report",
+    command: "svrn enrich atlas-drift-report",
     summary: "Generate a severity-ranked drift report comparing narrative atlases to a structural atlas.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-drift-report --narrative <id> [--narrative <id>...] \
+            "svrn enrich atlas-drift-report --narrative <id> [--narrative <id>...] \
              --structural <id> [--output <path>] [--max-findings <N>]",
         ),
         HelpSection::Flags(&[
@@ -69,13 +69,13 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-drift-report --narrative arch-principles-atlas --narrative system-overview-atlas --structural commonwealth-ai-self-atlas",
+                "svrn enrich atlas-drift-report --narrative arch-principles-atlas --narrative system-overview-atlas --structural commonwealth-ai-self-atlas",
                 "Compare two narrative streams against the unified monorepo structural atlas.",
             ),
         ]),
         HelpSection::Notes(
             "Each narrative atlas must already have a cross_corpus_edges.json produced by \
-             `sovereign enrich atlas-cross-corpus <narrative-id> <structural-id>`. The drift \
+             `svrn enrich atlas-cross-corpus <narrative-id> <structural-id>`. The drift \
              report consumes that file as the matching layer; it does not re-run name matching.",
         ),
     ],
@@ -860,7 +860,7 @@ fn render_markdown(
 
 // ── Rough-edges integration ─────────────────────────────────────
 //
-// We re-deserialize the JSON sidecar that `sovereign rough-edges`
+// We re-deserialize the JSON sidecar that `svrn rough-edges`
 // emits. Keeping a separate type here (rather than depending on
 // corpus_engine_archaeology::rough_edges directly) decouples the renderer from
 // the producer's internals — the JSON shape is the contract.

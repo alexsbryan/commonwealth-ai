@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich raptor <corpus>` — retrofit an already-installed
+//! `svrn enrich raptor <corpus>` — retrofit an already-installed
 //! corpus with a RAPTOR tier-3 summary tree: one tree per source
 //! document, persisted into `conv_raptor_nodes` keyed
 //! `(corpus_id, source_doc_id)`.
@@ -565,7 +565,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         match provider.finalize_corpus(&parsed.corpus_id).await {
             Ok(()) => println!("  finalize complete (vault_themes + atlas/atoms.json refreshed)"),
             Err(e) => eprintln!(
-                "  finalize failed (non-fatal — re-run `sovereign atlas typed-extension {}` \
+                "  finalize failed (non-fatal — re-run `svrn atlas typed-extension {}` \
                  after fixing): {e}",
                 parsed.corpus_id
             ),
@@ -719,7 +719,7 @@ fn is_sep_furniture(content: &str) -> bool {
 
 fn print_usage() {
     eprintln!(
-        "sovereign enrich raptor — retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree."
+        "svrn enrich raptor — retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree."
     );
     eprintln!();
     eprintln!("USAGE:");

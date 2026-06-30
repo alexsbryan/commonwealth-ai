@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Formatters for `sovereign tools` stdout.
+//! Formatters for `svrn tools` stdout.
 //!
 //! The CLI is agent-primary: output is plain text, shaped for an LLM
 //! to read without a JSON-parse step. `--format json` is available for

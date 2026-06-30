@@ -190,7 +190,7 @@ impl EnrichConfig {
     pub fn require(corpus_id: &str) -> Result<Self> {
         Self::load(corpus_id)?.ok_or_else(|| {
             Error::InvalidInput(format!(
-                "no enrichment config for corpus '{corpus_id}' — run `sovereign enrich init {corpus_id} --source <path>` first"
+                "no enrichment config for corpus '{corpus_id}' — run `svrn enrich init {corpus_id} --source <path>` first"
             ))
         })
     }

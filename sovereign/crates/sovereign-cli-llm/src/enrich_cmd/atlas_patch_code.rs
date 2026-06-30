@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-patch-code <atlas-corpus>` — Inc 6, first-class
+//! `svrn enrich atlas-patch-code <atlas-corpus>` — Inc 6, first-class
 //! patchability for a CODE atlas.
 //!
 //! When N functions change, re-derive ONLY those functions' atoms + edges and
@@ -54,11 +54,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-patch-code",
+    command: "svrn enrich atlas-patch-code",
     summary: "Incrementally patch a CODE atlas for the functions that changed (no full rebuild).",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-patch-code <atlas-corpus> \\\n  [--source-corpus <id>] [--files a.rs,b.rs] [--include-functions] [--include-private]",
+            "svrn enrich atlas-patch-code <atlas-corpus> \\\n  [--source-corpus <id>] [--files a.rs,b.rs] [--include-functions] [--include-private]",
         ),
         HelpSection::Flags(&[
             (
@@ -86,7 +86,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Examples(&[(
-            "sovereign enrich atlas-patch-code semver-self-atlas",
+            "svrn enrich atlas-patch-code semver-self-atlas",
             "Refresh semver's code-intel summaries, patch the changed functions' atoms+edges, rebuild the v2 store.",
         )]),
         HelpSection::Notes(
@@ -133,7 +133,7 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
     let atlas_dir = paths::index_root(&atlas_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         eprintln!(
-            "error: no atlas at {}. Build it first (e.g. `sovereign enrich ingest {atlas_id} --source-corpus <code> --include-functions`).",
+            "error: no atlas at {}. Build it first (e.g. `svrn enrich ingest {atlas_id} --source-corpus <code> --include-functions`).",
             atlas_dir.display()
         );
         return 1;
@@ -150,7 +150,7 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
     {
         eprintln!(
             "error: atlas `{atlas_id}` has sequential-id atoms; merging a content-hash delta \
-             would orphan them.\n  Run `sovereign atlas migrate-ids --corpus {atlas_id}` first."
+             would orphan them.\n  Run `svrn atlas migrate-ids --corpus {atlas_id}` first."
         );
         return 1;
     }
@@ -306,7 +306,7 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: rebuilding v2 store: {e}\n  atoms.json/edges.json ARE patched; \
-                 `sovereign atlas migrate-all {atlas_id}` will rebuild the store."
+                 `svrn atlas migrate-all {atlas_id}` will rebuild the store."
             );
             return 1;
         }

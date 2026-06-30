@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench scaffold <corpus-id>` — draft a golden TOML
+//! `svrn bench scaffold <corpus-id>` — draft a golden TOML
 //! from an existing resolved atlas.
 //!
 //! Reads `~/.sovereign/indexes/<corpus-id>/atlas/atoms.json`, samples
@@ -25,10 +25,10 @@ use crate::enrich_cmd::paths::index_root;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench scaffold",
+    command: "svrn bench scaffold",
     summary: "Draft a golden TOML from an existing resolved atlas — populate; prune; commit.",
     sections: &[
-        HelpSection::Usage("sovereign bench scaffold <corpus-id> [--per-axis N] [--output <path>]"),
+        HelpSection::Usage("svrn bench scaffold <corpus-id> [--per-axis N] [--output <path>]"),
         HelpSection::Flags(&[
             (
                 "--per-axis N",
@@ -41,11 +41,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign bench scaffold obsidian-vault --output /tmp/draft.toml",
+                "svrn bench scaffold obsidian-vault --output /tmp/draft.toml",
                 "Sample obsidian-vault atoms.json, emit a draft golden.",
             ),
             (
-                "sovereign bench scaffold sep --per-axis 5",
+                "svrn bench scaffold sep --per-axis 5",
                 "Tighter sample for a quick read.",
             ),
         ]),
@@ -80,7 +80,7 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
         .join("atoms.json");
     if !atoms_path.exists() {
         eprintln!(
-            "error: {} not found. Build the atlas first: `sovereign enrich build {}`.",
+            "error: {} not found. Build the atlas first: `svrn enrich build {}`.",
             atoms_path.display(),
             parsed.corpus_id
         );
@@ -116,7 +116,7 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
             }
             eprintln!("wrote scaffold to {}", path.display());
             eprintln!(
-                "review + prune + add forbidden_* blocks before running `sovereign bench all`",
+                "review + prune + add forbidden_* blocks before running `svrn bench all`",
             );
             0
         }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 /// only the four owner-only routes documented in
 /// `sovereign/docs/EPHEMERAL_WORKER_PODS.md`.
 ///
-/// Triggered by `sovereign daemon run --worker-mode`. The bootstrap
+/// Triggered by `svrn daemon run --worker-mode`. The bootstrap
 /// blob is read from `SOVEREIGN_BOOTSTRAP` env or `--bootstrap-blob
 /// <file>`. Falls through to the foreground worker daemon; exits when
 /// the owner sends `DELETE /internal/worker/job` (TBD: wire shutdown

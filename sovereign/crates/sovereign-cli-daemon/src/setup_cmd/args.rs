@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign setup` argument parsing + usage — extracted from
+//! `svrn setup` argument parsing + usage — extracted from
 //! `setup_cmd` (§3.2). Still a hand-rolled loop; adopting
 //! `sovereign_cli_shared::args` is a separate, opportunistic change.
 
@@ -39,12 +39,12 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign setup",
+    command: "svrn setup",
     summary: "First-run onboarding wizard: detect hardware, download models, write config. \
-         Now an alias for `sovereign daemon --setup-only`.",
+         Now an alias for `svrn daemon --setup-only`.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign setup [--yes] [--reset] [--data-dir <path>]",
+            "svrn setup [--yes] [--reset] [--data-dir <path>]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--yes, -y", "Non-interactive; accept recommended choices"),
@@ -63,8 +63,8 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
              sovereign state). Older installs that wrote to the XDG config dir are migrated\n\
              automatically on first load. Phase 4 split: this command no longer registers a\n\
              system service. To register the daemon with launchd/systemd so it survives logout,\n\
-             run `sovereign install-service` after the wizard completes. To start the daemon\n\
-             once without registering it, run `sovereign daemon`.",
+             run `svrn install-service` after the wizard completes. To start the daemon\n\
+             once without registering it, run `svrn daemon`.",
         ),
     ],
 };

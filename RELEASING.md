@@ -102,8 +102,8 @@ regardless of which stream published most recently. The unauthenticated
 CLI release. To pin a specific version: `SOVEREIGN_VERSION=cli-v0.1.18`.
 
 The installer downloads the three binaries into `~/.local/bin` (override with
-`SOVEREIGN_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
-checksum against `SHA256SUMS`, and prints `sovereign setup` as the next step.
+`SVRNMESH_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
+checksum against `SHA256SUMS`, and prints `svrn setup` as the next step.
 
 ---
 

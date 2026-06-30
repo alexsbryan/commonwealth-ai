@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign portfolio …` — a user's named set of corpus_ids (FR-11).
+//! `svrn portfolio …` — a user's named set of corpus_ids (FR-11).
 //!
 //! A portfolio is a named set of installed `corpus_id`s (today: the
 //! per-issuer `proxy-cik…` corpora; the set generalizes to fund corpora
@@ -185,7 +185,7 @@ fn cmd_list() -> i32 {
         }
     };
     if entries.is_empty() {
-        println!("no portfolios yet — create one with `sovereign portfolio create <name> <corpus-id ...>`");
+        println!("no portfolios yet — create one with `svrn portfolio create <name> <corpus-id ...>`");
         return 0;
     }
     println!("portfolios ({}):", entries.len());

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign code map <path> [--spec <spec.md>]` — one-shot orchestrator that
+//! `svrn code map <path> [--spec <spec.md>]` — one-shot orchestrator that
 //! collapses the whole capability/spec pipeline into a single command with every
 //! prerequisite handled. The "just works on my codebase" experience.
 //!
@@ -40,10 +40,10 @@ use std::time::Duration;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const MAP_HELP: Help = Help {
-    command: "sovereign code map",
+    command: "svrn code map",
     summary: "One-shot: index a codebase, then derive + narrate + reconcile its capabilities.",
     sections: &[
-        HelpSection::Usage("sovereign code map [<path>] [--spec <spec.md>]"),
+        HelpSection::Usage("svrn code map [<path>] [--spec <spec.md>]"),
         HelpSection::Flags(&[
             (
                 "<path>",
@@ -65,7 +65,7 @@ const MAP_HELP: Help = Help {
              4. capability-doc      — narrate each capability, citing file:line\n\
              5. capability-reconcile— derived capabilities vs the repo's architecture docs\n\
              6-7. (with --spec) spec-intel + spec-reconcile\n\n\
-             Requires the Sovereign daemon (run `sovereign setup` once). The enrichment \
+             Requires the Sovereign daemon (run `svrn setup` once). The enrichment \
              config at <data_dir>/enrichment/<corpus>/config.json is written automatically \
              if absent. Re-running skips indexing/cached work and just refreshes the map.",
         ),
@@ -166,7 +166,7 @@ pub async fn cmd_map(args: &[String]) -> i32 {
         }
         _ => {
             println!();
-            eprintln!("No Sovereign daemon running — run `sovereign setup` first.");
+            eprintln!("No Sovereign daemon running — run `svrn setup` first.");
             return 1;
         }
     };
@@ -480,7 +480,7 @@ async fn build_scip_graph(
                 m.language_id, m.command, m.install_hint
             ));
         }
-        msg.push_str("  Install one of the above, then re-run `sovereign code map`.");
+        msg.push_str("  Install one of the above, then re-run `svrn code map`.");
         return Err((msg, 1));
     }
     for e in &check.available {

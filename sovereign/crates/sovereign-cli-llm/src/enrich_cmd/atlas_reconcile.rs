@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich reconcile <corpus>` — Phase 4 multi-origin entity
+//! `svrn enrich reconcile <corpus>` — Phase 4 multi-origin entity
 //! reconciliation as a PRODUCTION pipeline step.
 //!
 //! Until now the multi-origin merger ([`reconcile`]) was exercised only
-//! by `sovereign bench enron` — it never ran in the enrichment pipeline,
+//! by `svrn bench enron` — it never ran in the enrichment pipeline,
 //! so a desktop user querying a multi-inbox corpus saw the raw, un-merged
 //! per-mention atoms while the strong reconciliation numbers lived only
 //! in the bench. This command closes that gap: it loads the resolved
@@ -31,18 +31,18 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich reconcile",
+    command: "svrn enrich reconcile",
     summary: "Run Phase 4 multi-origin reconciliation over a resolved atlas; persist the canonical clustering.",
     sections: &[
-        HelpSection::Usage("sovereign enrich reconcile <corpus-id>"),
+        HelpSection::Usage("svrn enrich reconcile <corpus-id>"),
         HelpSection::Examples(&[(
-            "sovereign enrich reconcile enron-sample-multi-wide",
+            "svrn enrich reconcile enron-sample-multi-wide",
             "Merge cross-inbox entity variants; write atlas/reconciliation.json + oplog.",
         )]),
         HelpSection::Notes(
             "Deterministic (no LLM/daemon). Non-destructive — atoms.json is preserved; the \
              merged clustering is written alongside it. Runs the same merger \
-             `sovereign bench enron` scores.",
+             `svrn bench enron` scores.",
         ),
     ],
 };
@@ -77,10 +77,10 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
     };
 
     // The only precondition is a resolved atlas. We deliberately do NOT
-    // gate on `EnrichConfig` (the `sovereign enrich init` flow): corpora
+    // gate on `EnrichConfig` (the `svrn enrich init` flow): corpora
     // enriched by the daemon's recipe pipeline — like the Enron samples —
     // have an atoms.json but no enrich-init config, and reconciliation
-    // reads atoms.json directly, exactly as `sovereign bench enron` does.
+    // reads atoms.json directly, exactly as `svrn bench enron` does.
     let atlas_dir = paths::index_root(&corpus_id).join(ATLAS_DIRNAME);
     let atoms_path = atlas_dir.join("atoms.json");
     if !atoms_path.exists() {

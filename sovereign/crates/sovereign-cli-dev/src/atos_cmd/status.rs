@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos status|promote|report` — read-only and mutation
+//! `svrn atos status|promote|report` — read-only and mutation
 //! commands for inspecting and manipulating feature state.
 //!
 //! - **`status`** prints the feature + milestone table. When invoked

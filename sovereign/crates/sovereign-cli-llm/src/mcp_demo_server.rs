@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A tiny reference MCP server for the end-to-end demo (`sovereign mcp
+//! A tiny reference MCP server for the end-to-end demo (`svrn mcp
 //! demo-server`).
 //!
 //! It exposes one tool, `get_clearance_code(agent)`, returning a **sealed**
 //! code that exists nowhere else — not in any model's weights, not in any
-//! corpus. So when `sovereign chat "what is Vega's clearance code?"` answers
+//! corpus. So when `svrn chat "what is Vega's clearance code?"` answers
 //! `TR-7741-Q`, that answer is *proof* the model actually selected and called
 //! the MCP tool rather than fabricating — the whole point of grounding the
 //! feature in a demonstrable use case.
@@ -152,7 +152,7 @@ pub fn reference_mcp_router() -> Router {
     Router::new().route("/mcp", post(handle))
 }
 
-/// `sovereign mcp demo-server [--port N]` — run the reference server until the
+/// `svrn mcp demo-server [--port N]` — run the reference server until the
 /// process exits.
 pub async fn run_demo_server(args: &[String]) -> i32 {
     let mut port: u16 = 4319;

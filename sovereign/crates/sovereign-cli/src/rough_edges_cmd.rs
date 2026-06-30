@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign rough-edges <code-corpus> [--source-path <path>] [--output <md>]`
+//! `svrn rough-edges <code-corpus> [--source-path <path>] [--output <md>]`
 //!
 //! Scans a code corpus' source tree for `TODO/FIXME/HACK/XXX`
 //! markers and renders a one-page digest. JSON sidecar carries the
@@ -123,7 +123,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// Source path comes from one of:
 /// 1. Explicit `--source-path <path>` (highest priority).
 /// 2. The corpus's `_corpus_meta.json` `source_path` field (set by
-///    `sovereign code index` for code corpora).
+///    `svrn code index` for code corpora).
 /// 3. Fall back to error if neither is present.
 fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
     if let Some(p) = &args.source_path {
@@ -148,7 +148,7 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
         partition_meta
     } else {
         return Err(format!(
-            "corpus '{}' not found at {} (or {}) — run `sovereign code index` \
+            "corpus '{}' not found at {} (or {}) — run `svrn code index` \
              first or pass --source-path",
             args.corpus_id,
             canonical_meta.display(),
@@ -165,7 +165,7 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
         .ok_or_else(|| {
             format!(
                 "corpus '{}' has no source_path stamped — pass --source-path \
-                 explicitly. (Only code-corpus installs from `sovereign code \
+                 explicitly. (Only code-corpus installs from `svrn code \
                  index` stamp a source_path.)",
                 args.corpus_id
             )
@@ -371,17 +371,17 @@ fn relativize(path: &Path, root: &Path) -> PathBuf {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign rough-edges",
+    command: "svrn rough-edges",
     summary: "Scan a code corpus for FIXME/TODO/HACK/XXX markers (rough-edge inventory).",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign rough-edges <corpus-id> [--source-path <dir>] [--output <md>]",
+            "svrn rough-edges <corpus-id> [--source-path <dir>] [--output <md>]",
         ),
         crate::util::help::HelpSection::Notes(
             "Reads source path from the corpus's _corpus_meta.json by default. \
              Writes a markdown digest plus a .json sidecar (full per-finding detail \
              for downstream tools). Standalone surface; also called from \
-             `sovereign drift detect` to enrich the unified drift digest.",
+             `svrn drift detect` to enrich the unified drift digest.",
         ),
     ],
 };

@@ -3,7 +3,7 @@
 //! (workbench: ATOS workflow + project lifecycle + code intel +
 //! tools).
 //!
-//! When the user runs `sovereign atos ...` (or any verb that
+//! When the user runs `svrn atos ...` (or any verb that
 //! delegates into the workbench — `notes promote`, `audit teardown`,
 //! `drift accept`, `status`, `charter`, ...), the parent `sovereign`
 //! dispatcher locates its sibling `sovereign-cli-dev` binary and

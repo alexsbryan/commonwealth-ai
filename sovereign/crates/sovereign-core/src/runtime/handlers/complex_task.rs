@@ -315,6 +315,9 @@ impl Runtime {
         let gated_text: String = if gate_surface.enabled() && !step_summaries.is_empty() {
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
                 chunks: step_summaries.clone(),
+                // Step summaries are synthesized prose, not retrieved chunks — no
+                // source labels to widen the citation check; it runs body-only.
+                source_labels: Vec::new(),
                 searcher: None,
                 entity_anchored: false,
                 top_similarity: None,

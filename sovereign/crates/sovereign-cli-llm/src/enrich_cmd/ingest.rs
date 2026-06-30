@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich ingest <corpus> [--strategy <id>] [--source-corpus <id>] [--limit-articles <N>]`
+//! `svrn enrich ingest <corpus> [--strategy <id>] [--source-corpus <id>] [--limit-articles <N>]`
 //!
 //! Drives an `AtlasIngestion` strategy end-to-end: open the source
 //! corpus index, run the strategy, write the resulting `AtlasData`
@@ -21,11 +21,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich ingest",
+    command: "svrn enrich ingest",
     summary: "Run an atlas ingestion strategy end-to-end (today: structure_first for Wikipedia).",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich ingest <corpus-id> --source-corpus <id> [--strategy structure_first] [--limit-articles <N>]",
+            "svrn enrich ingest <corpus-id> --source-corpus <id> [--strategy structure_first] [--limit-articles <N>]",
         ),
         HelpSection::Flags(&[
             (
@@ -55,15 +55,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich ingest wiki-rep-struct --source-corpus wikipedia --limit-articles 25",
+                "svrn enrich ingest wiki-rep-struct --source-corpus wikipedia --limit-articles 25",
                 "Validate the structure-first parser on a 25-article slice.",
             ),
             (
-                "sovereign enrich ingest wikipedia --source-corpus wikipedia",
+                "svrn enrich ingest wikipedia --source-corpus wikipedia",
                 "Build the structural atlas over the full installed corpus.",
             ),
             (
-                "sovereign enrich ingest sovereign-self-atlas --source-corpus commonwealth-ai",
+                "svrn enrich ingest sovereign-self-atlas --source-corpus commonwealth-ai",
                 "Build the structural code atlas over the workspace's indexed source.",
             ),
         ]),

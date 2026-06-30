@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus search <id> <query> [--limit N]` — embed the query via the
+//! `svrn corpus search <id> <query> [--limit N]` — embed the query via the
 //! daemon's embed slot and search a corpus index, closing the ingest→query loop
 //! for a workflow-built corpus (or any installed one). Vector + FTS hybrid.
 
@@ -27,11 +27,11 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
     }
     let query = terms.join(" ");
     let Some(id) = id else {
-        eprintln!("Usage: sovereign corpus search <id> <query> [--limit N]");
+        eprintln!("Usage: svrn corpus search <id> <query> [--limit N]");
         return 1;
     };
     if query.is_empty() {
-        eprintln!("Usage: sovereign corpus search <id> <query> [--limit N]");
+        eprintln!("Usage: svrn corpus search <id> <query> [--limit N]");
         return 1;
     }
 
@@ -42,7 +42,7 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
         Ok(m) => m,
         Err(e) => {
             eprintln!(
-                "Daemon not reachable at {DEFAULT_DAEMON} ({e}). Start it with `sovereign daemon`."
+                "Daemon not reachable at {DEFAULT_DAEMON} ({e}). Start it with `svrn daemon`."
             );
             return 1;
         }

@@ -262,7 +262,7 @@
                       {/each}
                     </ul>
                     <p class="hint">
-                      Run <code>sovereign memory expand {mem.id}</code> to print the originals.
+                      Run <code>svrn memory expand {mem.id}</code> to print the originals.
                     </p>
                   </details>
                 {/if}

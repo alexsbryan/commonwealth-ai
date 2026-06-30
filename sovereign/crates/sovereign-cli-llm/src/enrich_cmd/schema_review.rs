@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich schema-report` and `schema-review` —
+//! `svrn enrich schema-report` and `schema-review` —
 //! Phase C Step 9 diagnostic drivers.
 //!
 //! **`schema-report <corpus>`** computes the §12 schema
@@ -31,20 +31,20 @@ use sovereign_cli_shared::help::{self, Help, HelpSection};
 // ── schema-report ────────────────────────────────────────────
 
 const REPORT_HELP: Help = Help {
-    command: "sovereign enrich schema-report",
+    command: "svrn enrich schema-report",
     summary: "Compute + print the §12 schema validation report for one corpus.",
     sections: &[
-        HelpSection::Usage("sovereign enrich schema-report <corpus-id> [--json]"),
+        HelpSection::Usage("svrn enrich schema-report <corpus-id> [--json]"),
         HelpSection::Flags(&[(
             "--json",
             "Emit the SchemaValidationReport as JSON instead of the human-readable table.",
         )]),
         HelpSection::Examples(&[(
-            "sovereign enrich schema-report brothers_karamazov",
+            "svrn enrich schema-report brothers_karamazov",
             "Print the §12.4 diagnostic table: coverage / depth / confidence / orphans / gaps.",
         )]),
         HelpSection::Notes(
-            "Requires a resolved atlas (run `sovereign enrich atlas-resolve <corpus> \
+            "Requires a resolved atlas (run `svrn enrich atlas-resolve <corpus> \
              --phase all` first). The report is computed on demand — retrofitting \
              incremental writes into each phase is a follow-up. Also writes \
              `atlas/schema_validation.json` alongside the other atlas files.",
@@ -134,12 +134,12 @@ fn parse_report_args(args: &[String]) -> Result<ParsedReport, String> {
 // ── schema-review ────────────────────────────────────────────
 
 const REVIEW_HELP: Help = Help {
-    command: "sovereign enrich schema-review",
+    command: "svrn enrich schema-review",
     summary: "Compare schema validation reports across N corpora; flag systematic gaps.",
     sections: &[
-        HelpSection::Usage("sovereign enrich schema-review <corpus-a> <corpus-b> [<corpus-c> ...]"),
+        HelpSection::Usage("svrn enrich schema-review <corpus-a> <corpus-b> [<corpus-c> ...]"),
         HelpSection::Examples(&[(
-            "sovereign enrich schema-review brothers_karamazov compatibilism",
+            "svrn enrich schema-review brothers_karamazov compatibilism",
             "Compute both reports; flag gaps present in both as schema-revision candidates.",
         )]),
         HelpSection::Notes(
@@ -254,7 +254,7 @@ fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, i32> {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
                  {corpus_id} --phase all` first.",
                 atlas_dir.display()
             );
@@ -265,7 +265,7 @@ fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, i32> {
         Ok(e) => e,
         Err(err) => {
             eprintln!(
-                "error: reading {}/edges.json: {err}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
                  {corpus_id} --phase all` first.",
                 atlas_dir.display()
             );
@@ -441,7 +441,7 @@ fn print_human_report(r: &SchemaValidationReport) {
         );
     } else {
         println!(
-            "      (cross_corpus_edges.json not present — run `sovereign enrich \
+            "      (cross_corpus_edges.json not present — run `svrn enrich \
              atlas-cross-corpus <this> <peer>` to populate)"
         );
     }

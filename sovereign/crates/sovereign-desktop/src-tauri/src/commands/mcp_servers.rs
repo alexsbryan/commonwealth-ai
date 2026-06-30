@@ -6,7 +6,7 @@
 //! serve` read, so a server added here is available on every surface. These
 //! commands mutate that one file; the new server is connected on the next
 //! backend start by the bootstrap loader (`load_from_setup_config`). HTTP-only
-//! by design — Sovereign does not spawn/supervise stdio subprocesses.
+//! by design — svrnmesh does not spawn/supervise stdio subprocesses.
 
 use std::sync::Arc;
 

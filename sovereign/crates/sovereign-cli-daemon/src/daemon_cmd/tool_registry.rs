@@ -222,7 +222,7 @@ pub(super) async fn build_tool_registry(
     tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
 
     // Wikipedia on-demand fetch — operates against the catalog corpus
-    // installed on this daemon. Wired here so `sovereign tools call
+    // installed on this daemon. Wired here so `svrn tools call
     // wikipedia_fetch --title=…` and the MCP /mcp surface can drive
     // catalog-hit → fetch end-to-end without a live chat session.
     tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(

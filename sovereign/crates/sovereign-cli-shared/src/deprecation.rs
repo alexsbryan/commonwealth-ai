@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deprecation banner for renamed CLI surfaces.
 //!
-//! The CLI refactor collapses `sovereign project *` / `sovereign atos *`
-//! / `sovereign tools *` into a flat `sovereign *` namespace. Old names keep working forever —
+//! The CLI refactor collapses `svrn project *` / `svrn atos *`
+//! / `svrn tools *` into a flat `svrn *` namespace. Old names keep working forever —
 //! they dispatch to the new modules and print a one-time-per-process
 //! banner pointing at the new name.
 //!
@@ -10,7 +10,7 @@
 //!
 //! ```ignore
 //! use crate::util::deprecation;
-//! deprecation::announce("sovereign project init", "sovereign init");
+//! deprecation::announce("svrn project init", "svrn init");
 //! // …continue with normal behaviour…
 //! ```
 //!

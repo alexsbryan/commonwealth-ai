@@ -40,7 +40,7 @@
   async function confirmRollback(snap: SnapshotMeta) {
     const ok = window.confirm(
       `Restore your vault to the state from ${formatRelative(snap.taken_at)}? ` +
-        `This removes all Sovereign tags written in that run and restores ` +
+        `This removes all svrnmesh tags written in that run and restores ` +
         `${snap.file_count} notes to their previous state.`,
     );
     if (!ok) return;
@@ -59,13 +59,13 @@
 
   async function confirmClean() {
     const ok = window.confirm(
-      "Remove all Sovereign tags and generated index notes from your vault? " +
+      "Remove all svrnmesh tags and generated index notes from your vault? " +
         "Your own notes and tags are not affected.",
     );
     if (!ok) return;
     try {
       const r = await lcClean(corpusId);
-      statusMessage = `Removed Sovereign tags from ${r.tags_removed_from} notes, deleted ${r.index_notes_deleted} index notes.`;
+      statusMessage = `Removed svrnmesh tags from ${r.tags_removed_from} notes, deleted ${r.index_notes_deleted} index notes.`;
       onReset?.();
     } catch (e) {
       error = `Clean failed: ${e}`;
@@ -89,7 +89,7 @@
         <header class="section-head">
           <h4 class="section-title">Restore to an earlier state</h4>
           <p class="section-desc">
-            Before every write, Sovereign saves a snapshot of your notes'
+            Before every write, svrnmesh saves a snapshot of your notes'
             frontmatter. Restoring rolls back all tags from that run and
             restores the previous state exactly.
           </p>
@@ -122,7 +122,7 @@
 
     <section class="section clean-section">
       <div class="clean-text">
-        <h4 class="section-title">Remove Sovereign tags</h4>
+        <h4 class="section-title">Remove svrnmesh tags</h4>
         <p class="section-desc">
           Strips every <code>sovereign/*</code> tag and deletes the generated
           index notes. Your own notes and tags are untouched.
