@@ -40,6 +40,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
         memory: Default::default(),
         iroh: Default::default(),
         shared_model: Default::default(),
+        discovery: Default::default(),
         mcp_servers: Vec::new(),
     }
 }

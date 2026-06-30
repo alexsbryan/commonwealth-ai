@@ -167,7 +167,7 @@ crates/
 ├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints; IP today, iroh-ready
 ├── commonwealth-discovery    # mDNS, gossip, latency probe, hardware, TLS, peering
 ├── commonwealth-inference    # Scheduling + orchestration
-├── commonwealth-api          # HTTP servers (client 9741 + internal 9742 mTLS)
+├── commonwealth-api          # HTTP servers (client 9741 + internal 9742, plaintext)
 ├── commonwealth-knowledge    # corpus-engine integration over the mesh
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
 ├── commonwealth-state        # MeshStore — gossip-replicated SQLite KV w/ TTL GC
@@ -1326,7 +1326,15 @@ needs peer reachability)
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + same no-auth posture as `/v1/*` (documented in-module); incremental streaming + per-request auth are tracked follow-ups. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
-**Internal API — :9742, mTLS**
+**Internal API — :9742, plaintext (perimeter-trust)**
+
+No per-request auth: the internal routes (gossip, scheduling, model/index
+transfer, knowledge fan-out) trust the network boundary. Binds `0.0.0.0`
+by default — set `[daemon] internal_bind` to pin it to a private interface,
+or create the mesh with `require_encryption` to force all traffic onto the
+iroh QUIC transport (which binds the internal router loopback-only). The
+historical per-session-cert/`TrustStore` mTLS scaffolding was removed
+2026-06-15 (see §5 "TLS / mesh encryption"); never describe `:9742` as mTLS.
 
 | Path                                | Purpose                          |
 |-------------------------------------|----------------------------------|
@@ -1779,7 +1787,7 @@ Default ports:
 | Port  | Service                                                       |
 |-------|---------------------------------------------------------------|
 | 9741  | Commonwealth/Sovereign client API (OpenAI-compatible)         |
-| 9742  | Commonwealth/Sovereign internal API (mTLS)                    |
+| 9742  | Commonwealth/Sovereign internal API (plaintext; network-isolation trust) |
 | 9743+ | `llama-server` instances                                      |
 | 50051+| `rpc-server` instances for layer shards                       |
 | 8080  | Sovereign HTTP server (configurable)                          |

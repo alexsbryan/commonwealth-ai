@@ -26,6 +26,78 @@ fn make_message(id: &str, convo: &str, role: Role, content: &str) -> Message {
     }
 }
 
+fn corpus_state(id: &str, visibility: CorpusVisibility) -> CorpusState {
+    CorpusState {
+        corpus_id: id.to_string(),
+        installed_at: now(),
+        source_date: "test".to_string(),
+        chunks_count: 1,
+        index_size_mb: 0,
+        last_updated: now(),
+        version: 0,
+        deleted_at: None,
+        vector_index_ready: false,
+        visibility,
+    }
+}
+
+/// A1 + A2b: `Private { owner }` round-trips through the store's new
+/// `visibility` column, and `build_context` scopes the corpus set per
+/// principal — another principal's Private corpus never enters
+/// `installed_corpora`, while the owner's and shared `Org` corpora do, and a
+/// `None` principal (single-user / desktop) hides nothing.
+#[tokio::test]
+async fn build_context_scopes_corpora_by_principal() {
+    let store = SqliteStateStore::open_in_memory().unwrap();
+    store
+        .save_corpus_state(&corpus_state("shared", CorpusVisibility::Org))
+        .await
+        .unwrap();
+    store
+        .save_corpus_state(&corpus_state(
+            "alice-secret",
+            CorpusVisibility::Private {
+                owner: "alice".to_string(),
+            },
+        ))
+        .await
+        .unwrap();
+
+    // A1: the `Private` visibility round-trips through the column.
+    let got = store.get_corpus_state("alice-secret").await.unwrap();
+    assert_eq!(
+        got.visibility,
+        CorpusVisibility::Private {
+            owner: "alice".to_string()
+        }
+    );
+
+    // A2b: Alice owns the private corpus → she retrieves over both.
+    let alice = sovereign_core::context::build_context(&store, "alice:c", "q", Some("alice"))
+        .await
+        .unwrap();
+    assert!(alice.installed_corpora.contains(&"shared".to_string()));
+    assert!(alice.installed_corpora.contains(&"alice-secret".to_string()));
+
+    // Bob does NOT own it → he retrieves over the shared `Org` corpus only.
+    let bob = sovereign_core::context::build_context(&store, "bob:c", "q", Some("bob"))
+        .await
+        .unwrap();
+    assert!(bob.installed_corpora.contains(&"shared".to_string()));
+    assert!(
+        !bob.installed_corpora.contains(&"alice-secret".to_string()),
+        "ISOLATION LEAK: Bob's retrieval scope includes Alice's private corpus: {:?}",
+        bob.installed_corpora
+    );
+
+    // No principal (single-user / desktop) → nothing is hidden.
+    let solo = sovereign_core::context::build_context(&store, "c", "q", None)
+        .await
+        .unwrap();
+    assert!(solo.installed_corpora.contains(&"shared".to_string()));
+    assert!(solo.installed_corpora.contains(&"alice-secret".to_string()));
+}
+
 fn make_task(id: &str, convo: &str) -> Task {
     Task {
         id: id.to_string(),

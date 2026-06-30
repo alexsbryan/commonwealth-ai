@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use sovereign_core::error::Result;
 use sovereign_core::runtime::{Runtime, StreamHandle};
-use sovereign_core::types::Response;
+use sovereign_core::types::{CorpusVisibility, Response};
 
 /// Wraps a Runtime with tenant-scoped conversation IDs.
 /// Each tenant's conversations are prefixed to prevent cross-tenant access.
@@ -22,6 +23,30 @@ impl TenantRuntime {
     /// runtime wrote it.
     pub fn scoped_id(&self, conversation_id: &str) -> String {
         format!("{}:{}", self.tenant_id, conversation_id)
+    }
+
+    /// Corpora this tenant must NOT retrieve from, list, or read: every
+    /// `Private` corpus owned by a *different* principal. Everything else —
+    /// shared `Org` corpora, this tenant's own `Private` uploads, and
+    /// untracked/legacy corpora with no `CorpusState` row — is permitted,
+    /// so single-user and pre-existing deployments are unaffected.
+    ///
+    /// Computed fresh from the store each call (no staleness). The caller
+    /// MUST treat an `Err` as fail-closed (reject the request) rather than
+    /// proceeding with an empty deny-set — a transient store error would
+    /// otherwise open the gate.
+    pub async fn forbidden_corpora(&self) -> Result<HashSet<String>> {
+        let states = self.runtime.store.list_corpus_states().await?;
+        Ok(states
+            .into_iter()
+            .filter(|s| s.deleted_at.is_none())
+            .filter_map(|s| match s.visibility {
+                CorpusVisibility::Private { owner } if owner != self.tenant_id => {
+                    Some(s.corpus_id)
+                }
+                _ => None,
+            })
+            .collect())
     }
 
     pub async fn handle_message(&self, message: &str, conversation_id: &str) -> Result<Response> {
@@ -87,5 +112,22 @@ impl TenantRuntime {
         self.runtime
             .seed_conversation(&scoped, created_at, skill_id)
             .await
+    }
+}
+
+/// Resolves the tenant (principal) that owns a conversation from its
+/// `"{tenant}:{conv}"` scoped id — the inverse of [`TenantRuntime::scoped_id`].
+/// Injected into the `Runtime` so corpus retrieval is scoped per principal
+/// (another tenant's `Private` corpora never enter a turn's evidence) without
+/// the Runtime knowing tenancy exists. A conversation id with no prefix
+/// resolves to `None` (no scoping) — but server-issued ids are always
+/// prefixed, so on the hub the principal is always present.
+pub struct TenantPrincipalResolver;
+
+impl sovereign_core::traits::PrincipalResolver for TenantPrincipalResolver {
+    fn principal_for(&self, conversation_id: &str) -> Option<String> {
+        conversation_id
+            .split_once(':')
+            .map(|(tenant, _)| tenant.to_string())
     }
 }

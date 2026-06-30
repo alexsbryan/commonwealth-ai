@@ -86,6 +86,22 @@ impl SensitiveCorpusOracle for NoSensitiveCorpora {
     }
 }
 
+/// Resolves an opaque per-request **principal** from a conversation id, so
+/// the retrieval seam (`build_context`) can scope corpus visibility without
+/// the Runtime ever knowing what a "tenant" is. The server — which owns the
+/// tenant-prefix convention on conversation ids — provides the
+/// implementation; desktop / CLI / tests leave it unset, and then no corpus
+/// is ever hidden (single-user behaviour, unchanged).
+///
+/// The returned string is compared against `CorpusVisibility::Private {
+/// owner }`: equality means "this principal owns it" (visible), inequality
+/// means "another principal's private corpus" (hidden).
+pub trait PrincipalResolver: Send + Sync {
+    /// The principal that owns this conversation, or `None` when there is no
+    /// tenancy (single-user) — in which case no corpus is hidden.
+    fn principal_for(&self, conversation_id: &str) -> Option<String>;
+}
+
 /// Snapshot of one watched-folder corpus's user-facing metadata.
 ///
 /// Fed by [`FolderMetadataOracle`] into the prompt-assembly seam

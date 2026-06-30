@@ -57,6 +57,12 @@ pub struct SetupConfig {
     /// Off by default; see [`SharedModelSection`].
     #[serde(default)]
     pub shared_model: SharedModelSection,
+    /// How this node finds + joins mesh peers (mDNS vs. static seeds).
+    /// Defaults reproduce the zero-config LAN behaviour; enterprise/VPC
+    /// fleets that block multicast turn mDNS off and list seed addresses
+    /// here. See [`DiscoverySection`].
+    #[serde(default)]
+    pub discovery: DiscoverySection,
     /// External MCP servers whose tools are loaded into the agent's tool
     /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
     /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
@@ -589,6 +595,17 @@ pub struct DaemonSection {
     /// `SOVEREIGN_CLIENT_TOKEN`.
     #[serde(default)]
     pub client_token: Option<String>,
+
+    /// Interface the internal mesh API (`:9742`) binds to. Defaults to
+    /// `0.0.0.0` (every interface) — the historical behaviour, and the
+    /// right choice when a cloud firewall / security group already scopes
+    /// who can reach the port. Pin it to a specific private address (e.g.
+    /// the VPC NIC `10.0.1.4`) to keep the **unauthenticated** internal API
+    /// off any other interface — defense-in-depth on a multi-homed host.
+    /// Ignored under `require_encryption`, which forces the internal router
+    /// loopback-only (the iroh acceptor is then the sole network ingress).
+    #[serde(default = "default_internal_bind")]
+    pub internal_bind: String,
 }
 
 /// Filesystem paths for mutable state.
@@ -615,6 +632,7 @@ impl Default for DaemonSection {
             alternation_grammar: default_alternation_grammar(),
             client_bind: default_client_bind(),
             client_token: None,
+            internal_bind: default_internal_bind(),
         }
     }
 }
@@ -625,6 +643,54 @@ impl Default for DataSection {
             dir: default_data_dir(),
         }
     }
+}
+
+/// How this node discovers and joins mesh peers. Defaults reproduce the
+/// historical zero-config LAN behaviour (mDNS on, no static seeds). An
+/// enterprise/VPC fleet that blocks multicast sets `mdns = false` and
+/// lists the founder/seed `host:port` addresses in `seed_addrs`; the
+/// daemon then forms the mesh entirely from those static seeds and never
+/// touches the multicast socket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverySection {
+    /// Advertise + browse `_commonwealth._tcp` over mDNS for zero-config
+    /// LAN peer discovery. Default `true`. Set `false` on hosts where
+    /// multicast is unavailable or undesirable (cloud VPCs, hardened
+    /// network namespaces): the daemon skips the multicast socket entirely
+    /// (its bind is otherwise fatal at boot) and relies on `seed_addrs` /
+    /// `?relay=` hints. Force-off env override: `SOVEREIGN_DISABLE_MDNS=1`.
+    #[serde(default = "default_mdns_enabled")]
+    pub mdns: bool,
+    /// Static internal-API `host:port` addresses (e.g. `"10.0.1.4:9742"`)
+    /// to join at boot when mDNS is off or finds nothing. Each is tried
+    /// as a direct `/internal/join` target — the same path a `?relay=`
+    /// hint uses — until one accepts. Empty by default: the founder needs
+    /// none, a joiner lists at least one reachable seed.
+    #[serde(default)]
+    pub seed_addrs: Vec<String>,
+    /// Shared mesh join key (`cwth-XXXX-XXXX-XXXX`) presented to each
+    /// `seed_addrs` peer at boot. Set on a fleet JOINER; leave unset on the
+    /// founder / a standalone node (which then forms its own solo mesh).
+    /// Same trust model as a join link shared out-of-band — keep this file
+    /// readable only by the daemon user. A joiner with a `join_key` but no
+    /// reachable `seed_addrs` fails to boot rather than split-braining into
+    /// its own mesh.
+    #[serde(default)]
+    pub join_key: Option<String>,
+}
+
+impl Default for DiscoverySection {
+    fn default() -> Self {
+        Self {
+            mdns: default_mdns_enabled(),
+            seed_addrs: Vec::new(),
+            join_key: None,
+        }
+    }
+}
+
+fn default_mdns_enabled() -> bool {
+    true
 }
 
 /// Defaults for watched-folder corpora (`sovereign corpus watch`).
@@ -694,6 +760,11 @@ fn default_client_bind() -> String {
 }
 fn default_internal_port() -> u16 {
     9742
+}
+fn default_internal_bind() -> String {
+    // Historical behaviour: the internal mesh API binds every interface.
+    // Operators on multi-homed hosts can pin it to a private NIC.
+    "0.0.0.0".to_string()
 }
 fn default_autostart() -> bool {
     true
@@ -965,6 +1036,7 @@ embed = "/models/embed.gguf"
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: Vec::new(),
         };
         let tmp = tempfile::tempdir().unwrap();
@@ -1001,6 +1073,7 @@ embed = "/models/embed.gguf"
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: vec![McpServerConfig {
                 name: "vision".into(),
                 description: Some("Describe images".into()),

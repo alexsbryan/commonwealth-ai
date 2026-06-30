@@ -388,12 +388,20 @@ pub async fn list_tools(
 /// POST /v1/search
 pub async fn search(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tenant): Extension<TenantId>,
     Json(body): Json<SearchRequest>,
 ) -> ApiResult<SearchResponse> {
+    // Scope the cross-conversation search to THIS tenant: every row a tenant
+    // owns is stored under a `"{tenant}:"`-prefixed conversation id (see
+    // `TenantRuntime::scoped_id`). Without this filter the search runs over
+    // every tenant's messages — the cross-tenant leak that
+    // `http_tests::search_does_not_leak_across_tenants` guards against.
+    let prefix = format!("{}:", tenant.0);
     match runtime.store.search_messages(&body.query).await {
         Ok(messages) => Ok(Json(SearchResponse {
             results: messages
                 .into_iter()
+                .filter(|m| m.conversation_id.starts_with(&prefix))
                 .take(50)
                 .map(|m| SearchResultEntry {
                     r#type: "message".to_string(),
@@ -447,7 +455,7 @@ pub struct CorpusRefEntry {
 /// corpus engine is wired or none are installed.
 pub async fn list_corpora(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
 ) -> ApiResult<CorpusListResponse> {
     let Some(engine) = runtime.corpus_engine.as_ref() else {
         return Ok(Json(CorpusListResponse {
@@ -455,11 +463,20 @@ pub async fn list_corpora(
         }));
     };
 
+    // Hide corpora this tenant may not see (another principal's Private
+    // uploads). Fail closed: a store error rejects the request rather than
+    // listing everything.
+    let forbidden = tenant_runtime(&runtime, &tenant)
+        .forbidden_corpora()
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+
     match engine.installed_indexes().await {
         Ok(indexes) => {
             let corpora = indexes
                 .into_iter()
                 .filter(|i| matches!(i.kind, corpus_engine::CorpusKind::Knowledge))
+                .filter(|i| !forbidden.contains(&i.corpus_id))
                 .map(|i| {
                     let (category, icon) = i
                         .display
@@ -520,11 +537,24 @@ pub struct ReadingWindowResponse {
 /// GET /v1/corpora/:corpus_id/chunks/:chunk_id?radius=1
 pub async fn read_chunk(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Path((corpus_id, chunk_id)): Path<(String, u64)>,
     Query(params): Query<ReadingQuery>,
 ) -> ApiResult<ReadingWindowResponse> {
     let radius = params.radius.unwrap_or(1).min(5);
+    // A tenant may only read chunks from corpora it can see. Treat a
+    // forbidden (another principal's Private) corpus as not-found — don't
+    // reveal that it exists. Fail closed on a store error.
+    let forbidden = tenant_runtime(&runtime, &tenant)
+        .forbidden_corpora()
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    if forbidden.contains(&corpus_id) {
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            &format!("corpus '{corpus_id}' not found"),
+        ));
+    }
     let Some(engine) = runtime.corpus_engine.as_ref() else {
         return Err(api_error(
             StatusCode::SERVICE_UNAVAILABLE,

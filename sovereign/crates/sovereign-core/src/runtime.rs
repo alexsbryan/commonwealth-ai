@@ -236,6 +236,10 @@ pub struct Runtime {
     /// which matches the pre-v1 behaviour exactly. The bootstrap
     /// wires sovereign-tools' `LocalCorpusManager` here.
     pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
+    /// Resolves the per-request principal from a conversation id so
+    /// `build_context` can hide other principals' `Private` corpora on a
+    /// multi-user hub. `None` (desktop / CLI / tests) ⇒ no corpus is hidden.
+    pub corpus_principal: Option<Arc<dyn crate::traits::PrincipalResolver>>,
     /// Per-folder metadata oracle. Folder-ingest v1 §6.3 — when
     /// retrieval pulls chunks from a watched-folder corpus, this
     /// provides the user-typed display name and the "what I don't
@@ -397,6 +401,7 @@ impl Runtime {
             routing_events: Arc::new(NoOpRoutingEventSink),
             atlas_context_provider: None,
             sensitive_corpora: None,
+            corpus_principal: None,
             folder_metadata: None,
             rerank_fn: None,
             rerank_config: corpus_engine::RerankConfig::default(),
@@ -602,6 +607,17 @@ impl Runtime {
         self
     }
 
+    /// Install the principal resolver that scopes corpus retrieval per
+    /// principal on a multi-user hub (see [`crate::traits::PrincipalResolver`]).
+    /// Unset by default — single-user surfaces hide nothing.
+    pub fn with_corpus_principal(
+        mut self,
+        resolver: Arc<dyn crate::traits::PrincipalResolver>,
+    ) -> Self {
+        self.corpus_principal = Some(resolver);
+        self
+    }
+
     /// Install the per-folder metadata oracle (Folder-ingest v1
     /// §6.3 source attribution + coverage). The runtime uses the
     /// snapshot to (a) replace `corpus_id`-as-label with the user's
@@ -661,7 +677,9 @@ impl Runtime {
     /// Extract long-term memories from a conversation and save them.
     /// Call this when a conversation ends (user quits or session ends).
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
-        let context = build_context(self.store.as_ref(), conversation_id, "").await?;
+        // Memory-extraction pass at conversation end — no retrieval, so no
+        // principal scoping is needed.
+        let context = build_context(self.store.as_ref(), conversation_id, "", None).await?;
         if context.conversation.messages.len() < 4 {
             return Ok(());
         }

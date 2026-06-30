@@ -61,6 +61,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
         migrations::run_index_readiness_migration(&conn)
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
+        migrations::run_corpus_visibility_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Corpus visibility migration failed: {e}")))?;
         migrations::run_insight_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
@@ -377,6 +379,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Metacognition log migration failed: {e}")))?;
         migrations::run_index_readiness_migration(&conn)
             .map_err(|e| Error::Storage(format!("Index readiness migration failed: {e}")))?;
+        migrations::run_corpus_visibility_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Corpus visibility migration failed: {e}")))?;
         migrations::run_insight_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Insight migration failed: {e}")))?;
         migrations::run_document_session_migration(&conn)
@@ -1753,13 +1757,21 @@ impl DocumentStore for SqliteStateStore {
     }
 }
 
+/// Decode the JSON `corpus_state.visibility` column. `NULL` or a parse
+/// failure (a pre-migration row) maps to the default `Org` (shared).
+fn decode_visibility(raw: Option<String>) -> CorpusVisibility {
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 #[async_trait]
 impl CorpusStateStore for SqliteStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
         let conn = self.conn.lock().await;
+        let visibility_json = serde_json::to_string(&state.visibility).ok();
         conn.execute(
-            "INSERT OR REPLACE INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR REPLACE INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready, visibility)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 state.corpus_id,
                 state.installed_at,
@@ -1768,6 +1780,7 @@ impl CorpusStateStore for SqliteStateStore {
                 state.index_size_mb,
                 state.last_updated,
                 state.vector_index_ready as i64,
+                visibility_json,
             ],
         )
         .map_err(map_db)?;
@@ -1777,7 +1790,7 @@ impl CorpusStateStore for SqliteStateStore {
     async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
         let conn = self.conn.lock().await;
         let result = conn.query_row(
-            "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0)
+            "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0), visibility
              FROM corpus_state WHERE corpus_id = ?1 AND deleted_at IS NULL",
             rusqlite::params![corpus_id],
             |row| {
@@ -1791,6 +1804,7 @@ impl CorpusStateStore for SqliteStateStore {
                     version: 0,
                     deleted_at: None,
                     vector_index_ready: row.get::<_, i64>(6)? != 0,
+                    visibility: decode_visibility(row.get::<_, Option<String>>(7)?),
                 })
             },
         );
@@ -1808,7 +1822,7 @@ impl CorpusStateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0)
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0), visibility
                  FROM corpus_state WHERE deleted_at IS NULL ORDER BY installed_at DESC",
             )
             .map_err(map_db)?;
@@ -1825,6 +1839,7 @@ impl CorpusStateStore for SqliteStateStore {
                     version: 0,
                     deleted_at: None,
                     vector_index_ready: row.get::<_, i64>(6)? != 0,
+                    visibility: decode_visibility(row.get::<_, Option<String>>(7)?),
                 })
             })
             .map_err(map_db)?

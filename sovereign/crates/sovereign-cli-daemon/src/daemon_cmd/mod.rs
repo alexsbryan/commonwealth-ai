@@ -703,19 +703,75 @@ async fn run_daemon(args: &[String]) -> i32 {
             tracing::info!("mesh resumed from persisted state");
         }
         Ok(false) => {
-            // First boot after setup — create a silent solo mesh.
+            // First boot, no persisted mesh. A fleet JOINER (config carries a
+            // `[discovery] join_key`) joins an existing mesh through its static
+            // seed addresses; a founder / standalone node (no join_key) creates
+            // a silent solo mesh so the listener comes up.
             let hostname = hostname::get()
                 .ok()
                 .and_then(|h| h.into_string().ok())
                 .unwrap_or_else(|| "sovereign".to_string());
-            let mesh_name = format!("{hostname}'s Mesh");
-            match daemon.create_mesh(&mesh_name, &hostname).await {
-                Ok(_result) => {
-                    tracing::info!(%mesh_name, "solo mesh created");
+            let disc = &config.discovery;
+            match disc.join_key.as_deref() {
+                // Configured fleet joiner: try each static seed as a direct
+                // `/internal/join` target (no mDNS needed) until one accepts.
+                // Hard-fail rather than fall back to a solo mesh — that would
+                // split-brain the fleet.
+                Some(join_key) if !disc.seed_addrs.is_empty() => {
+                    let mut joined = false;
+                    for seed in &disc.seed_addrs {
+                        let link = sovereign_mesh::DeepLink::Join {
+                            join_key: join_key.to_string(),
+                            relay_hint: Some(seed.clone()),
+                            mesh_name: None,
+                            iroh_dial: None,
+                            expires_at: None,
+                        };
+                        match daemon.join_mesh(&link, &hostname).await {
+                            Ok(_) => {
+                                tracing::info!(seed = %seed, "joined fleet via configured seed");
+                                joined = true;
+                                break;
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    seed = %seed,
+                                    error = %e,
+                                    "seed join failed; trying next seed"
+                                );
+                            }
+                        }
+                    }
+                    if !joined {
+                        eprintln!(
+                            "error: could not join the mesh via any of the {} configured \
+                             [discovery] seed_addrs — check the addresses are reachable and \
+                             the join_key matches the founder's mesh",
+                            disc.seed_addrs.len()
+                        );
+                        return 1;
+                    }
                 }
-                Err(e) => {
-                    eprintln!("error: could not create initial mesh: {e}");
+                // join_key set but nowhere to send it — a joiner with no way in.
+                Some(_) => {
+                    eprintln!(
+                        "error: [discovery] join_key is set but seed_addrs is empty — \
+                         a fleet joiner needs at least one reachable seed address"
+                    );
                     return 1;
+                }
+                // No join credential: founder / standalone node.
+                None => {
+                    let mesh_name = format!("{hostname}'s Mesh");
+                    match daemon.create_mesh(&mesh_name, &hostname).await {
+                        Ok(_result) => {
+                            tracing::info!(%mesh_name, "solo mesh created");
+                        }
+                        Err(e) => {
+                            eprintln!("error: could not create initial mesh: {e}");
+                            return 1;
+                        }
+                    }
                 }
             }
         }
