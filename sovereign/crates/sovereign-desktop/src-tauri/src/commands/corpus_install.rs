@@ -28,13 +28,6 @@ pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, 
     Ok(engine.diagnose_indexes().await)
 }
 
-/// Local daemon URL used by corpus install/cancel/progress commands.
-/// The internal API is always bound on `127.0.0.1:9742` (see
-/// `sovereign-mesh::daemon`). Keeping this constant here rather than
-/// threading a config value means a stale Desktop build can never
-/// point at the wrong port after a daemon update.
-pub(crate) const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
-
 /// Kick off a corpus install via the daemon's unified install
 /// endpoint. The daemon is the single owner of ingest lifecycle —
 /// Desktop is a thin client that says "start" and then watches. The
@@ -57,7 +50,8 @@ pub async fn install_corpus(
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
 
-    let install_url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/install");
+    let daemon = state.internal_base_url();
+    let install_url = format!("{daemon}/internal/corpus/install");
     let resp = client
         .post(&install_url)
         .json(&serde_json::json!({ "corpus_id": corpus_id }))
@@ -108,7 +102,8 @@ pub async fn lc_expand_corpus(
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
 
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/expand");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/expand");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "corpus_id": corpus_id }))
@@ -197,12 +192,16 @@ pub async fn lc_can_expand(corpus_id: String) -> Result<bool, String> {
 /// `_enrichment_state.json` — watched folders, structural atlas
 /// post-install, conversation RAPTOR, future pipelines.
 #[tauri::command]
-pub async fn lc_enrichment_status(corpus_id: String) -> Result<serde_json::Value, String> {
+pub async fn lc_enrichment_status(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/enrichment/status");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/enrichment/status");
     let resp = client
         .get(&url)
         .query(&[("corpus_id", corpus_id.as_str())])
@@ -227,12 +226,15 @@ pub async fn lc_enrichment_status(corpus_id: String) -> Result<serde_json::Value
 /// recover from a stale snapshot or kick off the first portal ingest
 /// after this node becomes leader.
 #[tauri::command]
-pub async fn lc_newsworthy_tick() -> Result<serde_json::Value, String> {
+pub async fn lc_newsworthy_tick(
+    state: State<'_, Arc<AppState>>,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/newsworthy/tick");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/newsworthy/tick");
     let resp = client
         .post(&url)
         .send()
@@ -259,12 +261,15 @@ pub async fn lc_newsworthy_tick() -> Result<serde_json::Value, String> {
 /// without a duplicated TypeScript schema; the backend route is the
 /// source of truth.
 #[tauri::command]
-pub async fn lc_newsworthy_status() -> Result<serde_json::Value, String> {
+pub async fn lc_newsworthy_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/newsworthy/status");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/newsworthy/status");
     let resp = client
         .get(&url)
         .send()
@@ -330,7 +335,8 @@ pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppSt
                 return;
             }
         };
-        let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/status");
+        let daemon = state.internal_base_url();
+        let url = format!("{daemon}/internal/corpus/status");
         // Track what was seen last tick so we can detect terminations
         // (corpus disappeared from the snapshot → emit complete).
         let mut last_seen: std::collections::HashSet<String> = Default::default();
@@ -625,7 +631,8 @@ pub async fn remove_corpus(
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
 
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/cancel");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/cancel");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({
@@ -667,7 +674,8 @@ pub async fn pause_corpus(
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
 
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/pause");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/pause");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "corpus_id": corpus_id }))

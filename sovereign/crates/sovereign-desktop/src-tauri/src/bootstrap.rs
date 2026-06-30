@@ -36,7 +36,7 @@ pub enum BootstrapMode {
     /// The desktop should proxy inference through `RemoteApiProvider`
     /// and mesh mutations through the daemon's `/v1/mesh/*` HTTP API
     /// (see the mesh_http module in sovereign-mesh, when landed).
-    Attach { client_port: u16 },
+    Attach { client_port: u16, internal_port: u16 },
     /// Nothing is listening. The desktop should start its own
     /// `EmbeddedDaemon` and load models from `source`.
     Local { source: ConfigSource },
@@ -77,7 +77,7 @@ pub struct BootstrapSnapshot {
 impl From<&BootstrapMode> for BootstrapSnapshot {
     fn from(mode: &BootstrapMode) -> Self {
         match mode {
-            BootstrapMode::Attach { client_port } => Self {
+            BootstrapMode::Attach { client_port, .. } => Self {
                 daemon_running: true,
                 cli_config_present: SetupConfig::exists(),
                 desktop_setup_complete: false, // unused in Attach path
@@ -119,23 +119,29 @@ pub async fn detect() -> BootstrapMode {
     // don't care whether it's CLI-started, a prior desktop instance
     // that somehow survived, or a user-launched `sovereign daemon run`.
     // Either way, using it is safer than trying to bind on top.
-    let port = SetupConfig::load()
-        .ok()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741);
+    // Load the CLI `SetupConfig` ONCE; both the Attach-mode port
+    // resolution and the Local/CliSetup branch below reuse it (no
+    // second `SetupConfig::load()` round-trip).
+    let cfg = SetupConfig::load().ok();
+    let port = cfg.as_ref().map(|c| c.daemon.client_port).unwrap_or(9741);
+    let internal_port = cfg.as_ref().map(|c| c.daemon.internal_port).unwrap_or(9742);
 
     if is_daemon_live(port).await {
         tracing::info!(
             target: "bootstrap",
             port,
+            internal_port,
             "bootstrap: daemon answered on client port — Attach mode \
              (Members + activity read from the running daemon)"
         );
-        return BootstrapMode::Attach { client_port: port };
+        return BootstrapMode::Attach {
+            client_port: port,
+            internal_port,
+        };
     }
 
     // Nothing listening. Pick the best available config source.
-    let (mode, label) = if let Ok(cfg) = SetupConfig::load() {
+    let (mode, label) = if let Some(cfg) = cfg {
         (
             BootstrapMode::Local {
                 source: ConfigSource::CliSetup(cfg),
@@ -306,7 +312,10 @@ mod tests {
 
     #[test]
     fn snapshot_from_attach_signals_daemon_running() {
-        let mode = BootstrapMode::Attach { client_port: 9741 };
+        let mode = BootstrapMode::Attach {
+            client_port: 9741,
+            internal_port: 9742,
+        };
         let snap = BootstrapSnapshot::from(&mode);
         assert!(snap.daemon_running);
         assert_eq!(snap.client_port, 9741);

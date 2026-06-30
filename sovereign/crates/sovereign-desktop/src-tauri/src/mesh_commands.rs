@@ -22,7 +22,7 @@ use crate::state::{resolve_node_name, AppState};
 /// daemon instead.
 fn attached_port(state: &AppState) -> Option<u16> {
     match &state.bootstrap_mode {
-        BootstrapMode::Attach { client_port } => Some(*client_port),
+        BootstrapMode::Attach { client_port, .. } => Some(*client_port),
         BootstrapMode::Local { .. } => None,
     }
 }
@@ -599,12 +599,15 @@ pub async fn mesh_get_contributions(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<NodeContributionsDto>, String> {
     if attached_port(&state).is_some() {
-        // Internal API is loopback-only on the fixed internal port —
-        // matches the pinning used by every other `/internal/*` fetch
-        // in this crate (see `DAEMON_INTERNAL_URL` in commands.rs).
+        // Internal API is loopback-only on the daemon's internal port —
+        // resolved via `state.internal_base_url()`, matching every other
+        // `/internal/*` fetch in this crate.
         let client = http_client()?;
         let resp = client
-            .get("http://127.0.0.1:9742/internal/contribution/view")
+            .get(format!(
+                "{}/internal/contribution/view",
+                state.internal_base_url()
+            ))
             .send()
             .await
             .map_err(|e| format!("GET /internal/contribution/view: {e}"))?;

@@ -45,12 +45,15 @@ pub struct MeshQuiesceState {
 }
 
 #[tauri::command]
-pub async fn get_ingest_budget() -> Result<IngestBudgetState, DesktopError> {
+pub async fn get_ingest_budget(
+    state: State<'_, Arc<AppState>>,
+) -> Result<IngestBudgetState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/ingest/budget");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/ingest/budget");
     let resp = client
         .get(&url)
         .send()
@@ -69,12 +72,16 @@ pub async fn get_ingest_budget() -> Result<IngestBudgetState, DesktopError> {
 }
 
 #[tauri::command]
-pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState, DesktopError> {
+pub async fn set_ingest_budget(
+    state: State<'_, Arc<AppState>>,
+    throttle_factor: f32,
+) -> Result<IngestBudgetState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/ingest/budget");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/ingest/budget");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "throttle_factor": throttle_factor }))
@@ -94,12 +101,15 @@ pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState
 }
 
 #[tauri::command]
-pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, DesktopError> {
+pub async fn get_mesh_quiesced(
+    state: State<'_, Arc<AppState>>,
+) -> Result<MeshQuiesceState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/mesh/quiesce");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/mesh/quiesce");
     let resp = client
         .get(&url)
         .send()
@@ -118,12 +128,16 @@ pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, DesktopError> {
 }
 
 #[tauri::command]
-pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, DesktopError> {
+pub async fn set_mesh_quiesced(
+    state: State<'_, Arc<AppState>>,
+    quiesced: bool,
+) -> Result<MeshQuiesceState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/mesh/quiesce");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/mesh/quiesce");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "quiesced": quiesced }))
@@ -191,7 +205,8 @@ pub async fn get_storage_budget(
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/storage/budget");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/storage/budget");
 
     let fetch = || async {
         let resp = client
@@ -293,7 +308,8 @@ pub async fn set_storage_budget(
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/storage/budget");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/storage/budget");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({ "budget_bytes": budget_bytes }))

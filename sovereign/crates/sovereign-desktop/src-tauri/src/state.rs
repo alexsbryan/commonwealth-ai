@@ -138,6 +138,29 @@ impl AppState {
         )
     }
 
+    /// Client port (`/v1/*`) of the daemon this desktop talks to. Attach: the
+    /// port the standalone daemon bound. Local: the CliSetup config's port, else
+    /// 9741 by convention.
+    pub fn client_port(&self) -> u16 {
+        use crate::bootstrap::{BootstrapMode, ConfigSource};
+        match &self.bootstrap_mode {
+            BootstrapMode::Attach { client_port, .. } => *client_port,
+            BootstrapMode::Local { source: ConfigSource::CliSetup(c) } => c.daemon.client_port,
+            BootstrapMode::Local { .. } => 9741,
+        }
+    }
+    /// Internal port (`/internal/*`) of that daemon. Same resolution as client_port; 9742 by convention.
+    pub fn internal_port(&self) -> u16 {
+        use crate::bootstrap::{BootstrapMode, ConfigSource};
+        match &self.bootstrap_mode {
+            BootstrapMode::Attach { internal_port, .. } => *internal_port,
+            BootstrapMode::Local { source: ConfigSource::CliSetup(c) } => c.daemon.internal_port,
+            BootstrapMode::Local { .. } => 9742,
+        }
+    }
+    pub fn client_base_url(&self) -> String { format!("http://127.0.0.1:{}", self.client_port()) }
+    pub fn internal_base_url(&self) -> String { format!("http://127.0.0.1:{}", self.internal_port()) }
+
     /// Typed accessor for the chat `Runtime` (§2D-3 DesktopError). Returns
     /// `DesktopError::not_ready` while bootstrap is still loading it, so a
     /// handler can `state.runtime().await?` instead of the stringly
@@ -717,9 +740,11 @@ pub async fn bootstrap_with_progress(
                     .map(id_from_path)
                     .unwrap_or_default();
                 if !chat_model.is_empty() && !embed_model.is_empty() {
-                    // Loopback URL — Local mode runs the embedded
-                    // daemon on the standard `:9741` port.
-                    let base_url = "http://127.0.0.1:9741".to_string();
+                    // Loopback URL — resolved from the bootstrap mode
+                    // so a non-default client port works. Local mode
+                    // runs the embedded daemon on the configured port
+                    // (9741 by convention).
+                    let base_url = state.client_base_url();
                     mgr.set_enrichment_defaults(
                         sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
                             chat_model,
@@ -1310,10 +1335,11 @@ pub async fn bootstrap_with_progress(
     // errors on TLS config, which doesn't apply to localhost HTTP);
     // if something truly goes wrong, skip mesh injection and log —
     // the local-only retrieval path is still functional.
+    let mesh_client_base = state.client_base_url();
     let mesh_knowledge: Option<Arc<dyn sovereign_core::traits::MeshKnowledgeSource>> =
-        match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new("http://127.0.0.1:9741") {
+        match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new(&mesh_client_base) {
             Ok(c) => {
-                tracing::info!("mesh knowledge client: wired to http://127.0.0.1:9741");
+                tracing::info!(base_url = %mesh_client_base, "mesh knowledge client: wired");
                 Some(Arc::new(c))
             }
             Err(e) => {
@@ -1506,14 +1532,16 @@ pub async fn bootstrap_with_progress(
             Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>
         );
     } else if state.is_attach_mode() && config.knowledge_view_enabled {
+        let digest_base = state.client_base_url();
         match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
-            "http://127.0.0.1:9741",
+            &digest_base,
             local_only_skill_ids_for_digests,
         ) {
             Ok(client) => {
                 tracing::info!(
+                    base_url = %digest_base,
                     "knowledge_view: attach mode — landscape digest client wired \
-                     to http://127.0.0.1:9741/v1/knowledge/landscape_digest"
+                     to {digest_base}/v1/knowledge/landscape_digest"
                 );
                 runtime = runtime
                     .with_landscape_digests(Arc::new(client)

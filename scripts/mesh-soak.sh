@@ -33,6 +33,15 @@
 # Usage:
 #   scripts/mesh-soak.sh [--nodes N] [--minutes M] [--seed S]
 #                        [--workload crash|ingest|corrupt] [--keep] [--gate]
+#                        [--with-desktops] [--driver-minutes M]
+#
+#   --with-desktops (P2) hangs a headless desktop (attach-mode) + an app-user
+#     persona driver on EACH node, in the netns, so user-visible TURN invariants
+#     (stream integrity, intent, finish_reason, citation resolution, post-chaos
+#     recovery) are asserted WHILE the soak kills/restarts the node underneath.
+#     Forces a generative primary (set MESH_SOAK_MODEL). Pairs with --workload
+#     crash (users on the app while the mesh is savaged). Needs a built desktop
+#     binary (cargo build -p sovereign-desktop) at target/debug/sovereign-desktop.
 #
 #   --workload corrupt pre-writes garbage into a node's durable mesh.json then
 #     resumes it — the daemon must fail-safe (regenerate/reject, no id collision).
@@ -56,12 +65,19 @@ BACKEND="${MESH_SOAK_BACKEND:-local}"
 # Workload: `crash` (default — kill-9/churn/decay) or `ingest` (ingest×inference
 # contention lane: a real generative primary + concurrent corpus ingest + chat).
 WORKLOAD="${WORKLOAD:-crash}"
+# --with-desktops (P2): hang a headless desktop (attach-mode) + an app-user
+# persona driver on EACH node, in the shared netns, so user-visible TURN
+# invariants are asserted WHILE the node is killed/restarted underneath. Forces a
+# generative primary (chat must work). DRIVER_MINUTES defaults to MINUTES.
+DESKTOPS="${DESKTOPS:-0}"; DRIVER_MINUTES="${DRIVER_MINUTES:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --nodes)    NODES="$2"; shift 2;;
     --minutes)  MINUTES="$2"; shift 2;;
     --seed)     SEED="$2"; shift 2;;
     --workload) WORKLOAD="$2"; shift 2;;
+    --with-desktops) DESKTOPS=1; shift;;
+    --driver-minutes) DRIVER_MINUTES="$2"; shift 2;;
     --keep)     KEEP=1; shift;;
     --gate)     GATE=1; shift;;
     -h|--help)  sed -n '3,44p' "$0"; exit 0;;
@@ -74,7 +90,8 @@ case "$WORKLOAD" in crash|ingest|corrupt) ;; *) echo "bad --workload: $WORKLOAD 
 if [ "$BACKEND" = "local" ] && [ -z "${MESH_SOAK_IN_NETNS:-}" ]; then
   exec unshare -rn env MESH_SOAK_IN_NETNS=1 \
     NODES="$NODES" MINUTES="$MINUTES" SEED="$SEED" KEEP="$KEEP" GATE="$GATE" \
-    MESH_SOAK_BACKEND="$BACKEND" WORKLOAD="$WORKLOAD" bash "$0"
+    MESH_SOAK_BACKEND="$BACKEND" WORKLOAD="$WORKLOAD" \
+    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" bash "$0"
 fi
 [ "$BACKEND" = "local" ] && ip link set lo up
 
@@ -88,12 +105,19 @@ CLI="${SOVEREIGN_CLI:-$ROOT/target/debug/sovereign-cli}"
 # window < 30s (mandatory — else the 30s health-ping starves ingest; see
 # setup-chaos-corpus.sh / chaos_monkey README).
 EMBED_DEFAULT="$ROOT/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf"
-if [ "$WORKLOAD" = "ingest" ]; then
+if [ "$WORKLOAD" = "ingest" ] || [ "$DESKTOPS" = 1 ]; then
+  # A generative primary is required: the ingest lane chats, and --with-desktops
+  # runs real app users that chat. The embed model stays the small 0.6B (for the
+  # embeddings the knowledge path needs).
   PRIMARY_MODEL="${MESH_SOAK_MODEL:-$ROOT/models/Qwen3.5-2B.Q6_K.gguf}"
   EMBED_MODEL="${MESH_SOAK_EMBED_MODEL:-$EMBED_DEFAULT}"
-  YIELD_SECS="${MESH_SOAK_YIELD_SECS:-5}"
-  case "$YIELD_SECS" in ''|*[!0-9]*) echo "MESH_SOAK_YIELD_SECS must be an integer"; exit 2;; esac
-  [ "$YIELD_SECS" -lt 30 ] || { echo "yield_to_foreground_secs=$YIELD_SECS must be < 30 (else ingest starves)"; exit 2; }
+  if [ "$WORKLOAD" = "ingest" ]; then
+    YIELD_SECS="${MESH_SOAK_YIELD_SECS:-5}"
+    case "$YIELD_SECS" in ''|*[!0-9]*) echo "MESH_SOAK_YIELD_SECS must be an integer"; exit 2;; esac
+    [ "$YIELD_SECS" -lt 30 ] || { echo "yield_to_foreground_secs=$YIELD_SECS must be < 30 (else ingest starves)"; exit 2; }
+  else
+    YIELD_SECS=""   # crash + desktops: no ingest contention, default yield is fine
+  fi
 else
   PRIMARY_MODEL="${MESH_SOAK_MODEL:-$EMBED_DEFAULT}"
   EMBED_MODEL="$PRIMARY_MODEL"
@@ -291,6 +315,85 @@ chat_once() {  # chat_once <node> <slo_ms> → echoes "<http_code> <elapsed_ms>"
     -d '{"model":"primary","stream":false,"max_tokens":32,"messages":[{"role":"user","content":"Reply in one short sentence: who is Mr Verloc?"}]}' 2>/dev/null)
   t1=$(date +%s%3N); echo "${code:-000} $(( t1 - t0 ))"
 }
+
+# ── grounding oracle (ingest lane) ────────────────────────────────────────────
+# The contention lane proves chat STAYS LIVE under ingest; this proves the
+# knowledge path stays CORRECT under it. There is no one-shot RAG route on the
+# daemon, so a grounded turn is a 3-call path on the client port — embed →
+# /v1/knowledge/search (returns chunk TEXT) → /v1/chat/completions (synthesize
+# from ONLY those chunks). scripts/grounded-turn.py does that and writes the
+# {question,answer,chunks} triple; `bench chaos-monkey score-answer` then judges
+# it with the SAME gold-free primitive the live grounding gate uses. Two signals:
+#   GroundingIntegrity — the deterministic backbone: after a completed ingest the
+#                        corpus is actually queryable (chunks come back, corpus is
+#                        in corpora_searched, not corpora_unavailable). A node that
+#                        ingested under load but can't serve its own corpus is a
+#                        real failure the progress-only check cannot see.
+#   GroundingVerdict   — a conservative confabulation red-line: verdict ==
+#                        "hallucination" (the answer asserts a value ABSENT from
+#                        the retrieved evidence). The judge runs on the node's own
+#                        primary — weak on a 2B, so Integrity is the backbone and
+#                        the verdict the spice. "grounded" is NOT required: hedged/
+#                        discursive answers score honest_abstention, which is fine.
+GQUESTION="${MESH_SOAK_GQUESTION:-who is Mr Verloc?}"
+GCORPUS="${MESH_SOAK_GCORPUS:-chaos-secret-agent}"
+GTURN="$ROOT/scripts/grounded-turn.py"
+
+# grounded_retrieval <node> — A→B only (embed + knowledge/search, NO generation,
+# so it never competes with foreground chat for the primary slot), echoes n_chunks.
+grounded_retrieval() {
+  python3 "$GTURN" --base-url "http://127.0.0.1:$(cport "$1")" --corpus "$GCORPUS" \
+    --question "$GQUESTION" --limit 6 2>/dev/null \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin).get("n_chunks",0))' 2>/dev/null
+}
+
+# grounding_verdict <node> <hard|soft> — hard mode (post-completed-ingest) emits
+# counted phase checkpoints that can FAIL; soft mode (ingest still in flight, so a
+# partial index is legitimate) records only observational findings, never fails.
+grounding_verdict() {
+  local i="$1" mode="$2" base si js n searched unavail err verdict t
+  base="http://127.0.0.1:$(cport "$i")"; si="$WORK/score-input-node$i.json"
+  # Retrieval can lag a beat behind ingest-complete (index open) — retry briefly.
+  for t in 1 2 3 4 5; do
+    js=$(python3 "$GTURN" --base-url "$base" --corpus "$GCORPUS" --question "$GQUESTION" \
+           --synthesize --score-input "$si" --limit 6 2>/dev/null)
+    n=$(printf '%s' "$js" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("n_chunks",0))' 2>/dev/null)
+    [ "${n:-0}" -gt 0 ] && break; sleep 2
+  done
+  searched=$(printf '%s' "$js" | python3 -c "import sys,json;d=json.load(sys.stdin);print('yes' if '$GCORPUS' in (d.get('corpora_searched') or []) else 'no')" 2>/dev/null)
+  unavail=$(printf '%s' "$js" | python3 -c "import sys,json;d=json.load(sys.stdin);print('yes' if '$GCORPUS' in (d.get('corpora_unavailable') or []) else 'no')" 2>/dev/null)
+  err=$(printf '%s' "$js" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("error") or "")' 2>/dev/null)
+
+  # ── retrieval integrity (deterministic; no judge) ──
+  if [ "${n:-0}" -le 0 ] || [ "$searched" != "yes" ] || [ "$unavail" = "yes" ]; then
+    if [ "$mode" = hard ]; then
+      FAILS=$((FAILS+1))
+      finding "{\"phase\":\"grounding-integrity\",\"ok\":false,\"detail\":\"corpus '$GCORPUS' not queryable after ingest (n_chunks=${n:-0} searched=$searched unavailable=$unavail err=${err:-none})\"}"
+      echo "  ✗ GroundingIntegrity: $GCORPUS not queryable post-ingest (n_chunks=${n:-0} err=${err:-none})"
+    else
+      finding "{\"kind\":\"grounding-probe\",\"node\":$i,\"soft\":true,\"n_chunks\":${n:-0},\"detail\":\"ingest incomplete — retrieval not asserted\"}"
+      echo "  ~ GroundingIntegrity (soft): n_chunks=${n:-0} (ingest incomplete — not asserted)"
+    fi
+    return
+  fi
+  finding "{\"phase\":\"grounding-integrity\",\"ok\":true,\"detail\":\"corpus queryable (n_chunks=$n)\"}"
+  echo "  ✓ GroundingIntegrity: $GCORPUS queryable (n_chunks=$n)"
+
+  # ── confabulation red-line (bench gold-free primitive; judge = node primary) ──
+  verdict=$(SOVEREIGN_NO_STALE_WARN=1 "$CLI" bench chaos-monkey score-answer --input "$si" \
+              --base-url "$base" --judge-model primary --critic-model primary 2>/dev/null \
+              | python3 -c 'import sys,json;print(json.load(sys.stdin).get("verdict","?"))' 2>/dev/null)
+  verdict="${verdict:-?}"
+  if [ "$verdict" = "hallucination" ]; then
+    FAILS=$((FAILS+1))
+    finding "{\"phase\":\"grounding-verdict\",\"ok\":false,\"verdict\":\"$verdict\",\"detail\":\"confabulation — answer asserted a value absent from the retrieved evidence\"}"
+    echo "  ✗ GroundingVerdict: HALLUCINATION (confabulated beyond the evidence)"
+  else
+    finding "{\"phase\":\"grounding-verdict\",\"ok\":true,\"verdict\":\"$verdict\"}"
+    echo "  ✓ GroundingVerdict: $verdict (no confabulation)"
+  fi
+}
+
 run_ingest_workload() {
   local target=0
   setup_ingest_recipe || { FAILS=$((FAILS+1)); finding '{"phase":"ingest-setup","ok":false,"detail":"recipe/source unavailable"}'; return; }
@@ -336,6 +439,12 @@ run_ingest_workload() {
     esac
     finding "{\"kind\":\"contention\",\"node\":$target,\"active_ingests\":$ing,\"prog_changes\":$prog_changes,\"chat_code\":\"$code\",\"chat_ms\":$ms}"
     echo "  ingest=$ing prog_advances=$prog_changes chat=$code ${ms}ms (ok=$chat_ok slow=$chat_slow fail=$chat_fail)"
+    # Observational retrieval probe (embed + knowledge/search only, no generation):
+    # watch the corpus become queryable as ingest advances. Never fails here — a
+    # partial index mid-ingest is legitimate; the post-ingest check is the gate.
+    gp_n=$(grounded_retrieval "$target")
+    finding "{\"kind\":\"grounding-probe\",\"node\":$target,\"n_chunks\":${gp_n:-0},\"ingest_active\":$ing}"
+    echo "  retrieval probe: corpus chunks queryable = ${gp_n:-0}"
     wait_online_eq "$NODES" >/dev/null 2>&1 || true
     check "ingest-cycle" "$ALL_NODES" "$ALL_IDS"     # base invariants must hold DURING ingest
     [ "$ing_done" = 1 ] && { log "ingest completed (active→0, progress cleared)"; break; }
@@ -364,6 +473,25 @@ run_ingest_workload() {
   else
     finding "{\"phase\":\"foreground-liveness\",\"ok\":true,\"detail\":\"ok=$chat_ok slow=$chat_slow fail=$chat_fail of $total\"}"
     echo "  ✓ ForegroundLiveness: ok=$chat_ok slow=$chat_slow fail=$chat_fail"
+  fi
+
+  # ── grounding under contention: did the corpus ingested under load stay correct? ──
+  # Hard-assert once the ingest TASK is idle (active_corpus_ingests==0) — the true
+  # completion signal. NB the lane's ing_done ALSO requires the per-corpus progress
+  # entry to go null, but the daemon leaves a terminal (non-null) progress record
+  # after a completed ingest, so ing_done under-reports completion (a finished,
+  # fully-queryable corpus never latches it). active==0 is the robust signal, and
+  # keying the hard gate on it makes "ingest finished but corpus NOT queryable" a
+  # real, catchable failure. Still-active (ing>0) at loop exit ⇒ soft: the index is
+  # legitimately partial (chat throttled it), so don't false-fail on it.
+  if [ "$ing_seen" = 1 ]; then
+    if [ "${ing:-1}" = 0 ]; then
+      log "grounding check (ingest idle — authoritative) on node$target"
+      grounding_verdict "$target" hard
+    else
+      log "grounding probe (ingest still active — soft) on node$target"
+      grounding_verdict "$target" soft
+    fi
   fi
 }
 
@@ -409,7 +537,155 @@ run_corrupt_state_workload() {
   check "corrupt-state-healed" "$ALL_NODES" "$ALL_IDS"   # UniqueIds: no garbage/colliding id adopted
 }
 
-teardown() { log "teardown"; for i in $(seq 0 $((NODES-1))); do kill -9 "${PIDS[$i]:-0}" 2>/dev/null; done
+# ── P2: app-user desktops on nodes (--with-desktops) ──────────────────────────
+# Each node also runs a headless desktop (attach-mode, in this netns) + an app-
+# user persona driver, so user-visible TURN invariants are asserted WHILE the
+# soak kills/restarts the node underneath it. The desktop attaches to its node
+# via a baked SetupConfig whose [daemon] ports ARE the node's: detect() probes
+# the client port, finds the live node, and Attaches; internal_port then flows to
+# /internal/* calls through the desktop's AppState accessors (P2.1). The driver
+# speaks ONLY the command bridge (the production webview.on_message dispatch
+# path) and emits findings in THIS script's JSONL schema, so the verdict folds
+# them in. Headline cross-layer assertion: a user's turns survive a peer-daemon
+# kill (graceful incomplete, then recovery), and completed turns never violate a
+# turn invariant.
+DESKTOP_BIN="${SOVEREIGN_DESKTOP_BIN:-$ROOT/target/debug/sovereign-desktop}"
+declare -a DESK_PIDS DRIVER_PIDS
+bridge_port() { echo $((9745 + $1)); }
+
+bake_desktop_config() {  # <i> — write the desktop's SetupConfig, echo its HOME
+  local i="$1" home="$WORK/desktop$i/home"
+  mkdir -p "$home/.sovereign" "$WORK/desktop$i/data"
+  cat > "$home/.sovereign/config.toml" <<EOF
+[models]
+primary = "$PRIMARY_MODEL"
+embed = "$EMBED_MODEL"
+context_size = 4096
+[daemon]
+client_port = $(cport "$i")
+internal_port = $(iport "$i")
+client_bind = "127.0.0.1"
+[data]
+dir = "$WORK/desktop$i/data"
+EOF
+  # The desktop ALSO reads a DesktopConfig at $XDG_CONFIG_HOME/sovereign/desktop.toml.
+  # bootstrap_with_progress() requires config.model_path to EXIST and loads it
+  # even in attach mode (state.rs:309) — the default "models/fast.gguf" doesn't
+  # exist in a scratch profile, so without this bootstrap returns Err early and
+  # the chat Runtime never builds ("Backend is still loading" on every turn).
+  mkdir -p "$home/.config/sovereign"
+  cat > "$home/.config/sovereign/desktop.toml" <<EOF
+model_path = "$PRIMARY_MODEL"
+embed_model_path = "$EMBED_MODEL"
+data_dir = "$WORK/desktop$i/data"
+setup_complete = true
+EOF
+  printf '%s' "$home"
+}
+
+spawn_desktop_for_node() {  # <i>
+  local i="$1" home bp up=0 _; home=$(bake_desktop_config "$i"); bp=$(bridge_port "$i")
+  # setsid → own process group so teardown can group-kill the desktop + children.
+  # Display env carries through the netns re-exec (Wayland pathname socket
+  # survives — verified by the Phase-0 probe). No SOVEREIGN_USE_SUPERVISOR:
+  # detect() finds the live node on its client port and pure-Attaches.
+  setsid env \
+    HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
+    XDG_CACHE_HOME="$home/.cache" \
+    DISPLAY="${DISPLAY:-}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-}" \
+    DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}" \
+    SOVEREIGN_COMMAND_BRIDGE=1 SOVEREIGN_COMMAND_BRIDGE_PORT="$bp" \
+    "$DESKTOP_BIN" > "$WORK/desktop$i/desktop.log" 2>&1 &
+  DESK_PIDS[$i]=$!
+  for _ in $(seq 1 60); do
+    curl -s -m 2 -o /dev/null "http://127.0.0.1:$bp/healthz" 2>/dev/null && { up=1; break; }
+    kill -0 "${DESK_PIDS[$i]}" 2>/dev/null || break; sleep 1; done
+  if [ "$up" = 1 ]; then
+    echo "  desktop$i bridge up :$bp (attached to node$i client :$(cport "$i") internal :$(iport "$i"))"
+    return 0
+  fi
+  echo "  desktop$i FAILED to bring up its bridge on :$bp (see $WORK/desktop$i/desktop.log)"
+  finding "{\"phase\":\"app-desktop-spawn\",\"ok\":false,\"node\":$i,\"detail\":\"bridge never came up on :$bp\"}"
+  FAILS=$((FAILS+1)); return 1
+}
+
+spawn_driver_for_node() {  # <i>
+  local i="$1" bp; bp=$(bridge_port "$i")
+  : > "$WORK/driver$i-findings.jsonl"
+  SOVEREIGN_BRIDGE_URL="http://127.0.0.1:$bp" \
+  SOVEREIGN_DRIVER_FINDINGS="$WORK/driver$i-findings.jsonl" \
+  SOVEREIGN_DRIVER_NODE="$i" \
+  SOVEREIGN_DRIVER_MINUTES="${DRIVER_MINUTES:-$MINUTES}" \
+  SOVEREIGN_DRIVER_CORPUS="${MESH_SOAK_GCORPUS:-chaos-secret-agent}" \
+  SOVEREIGN_DRIVER_TRANSCRIPT="$REPRO_DIR/seed${SEED}-app-node$i" \
+    node "$ROOT/scripts/mesh-app-driver.mjs" > "$WORK/driver$i.log" 2>&1 &
+  DRIVER_PIDS[$i]=$!
+  echo "  driver$i → bridge :$bp (findings $WORK/driver$i-findings.jsonl)"
+}
+
+wait_drivers() {  # block until every app driver exits (they run ~DRIVER_MINUTES)
+  local i
+  for i in $(seq 0 $((NODES-1))); do
+    [ -n "${DRIVER_PIDS[$i]:-}" ] && wait "${DRIVER_PIDS[$i]}" 2>/dev/null
+  done
+}
+
+# Let the app surface ESTABLISH before chaos: each driver's warm turn triggers a
+# cold model load (~tens of seconds) on its node. If the crash loop's first kill
+# lands during a victim's warm load, app-warm would false-fail. Barrier on each
+# driver having logged its app-warm finding (capped) before we start killing.
+_has_warm() { python3 -c "
+import sys
+try: sys.exit(0 if any('\"phase\": \"app-warm\"' in l or '\"phase\":\"app-warm\"' in l for l in open(sys.argv[1])) else 1)
+except Exception: sys.exit(1)" "$1"; }
+wait_drivers_warm() {
+  local i ready _
+  echo "  waiting for app drivers to warm (establish the surface before chaos)…"
+  for _ in $(seq 1 80); do ready=1
+    for i in $(seq 0 $((NODES-1))); do
+      [ -n "${DRIVER_PIDS[$i]:-}" ] || continue
+      _has_warm "$WORK/driver$i-findings.jsonl" || ready=0
+    done
+    [ "$ready" = 1 ] && { echo "  ✓ all app drivers warmed — starting chaos"; return 0; }
+    sleep 3
+  done
+  echo "  (warm-up barrier timed out after ~240s; proceeding to chaos anyway)"
+}
+
+# P2.3 — fold each driver's turn findings into the unified stream + verdict. A
+# `phase` finding with ok:false is a counted checkpoint failure (a real turn-
+# invariant violation, or the post-chaos recovery turn failing); `kind` findings
+# (chaos-incomplete turns, summaries) are observational and never fail the run.
+fold_driver_findings() {
+  local i f fails
+  for i in $(seq 0 $((NODES-1))); do
+    f="$WORK/driver$i-findings.jsonl"; [ -f "$f" ] || continue
+    cat "$f" >> "$FINDINGS"
+    fails=$(python3 -c "
+import json,sys
+n=0
+for line in open('$f'):
+    try: d=json.loads(line)
+    except Exception: continue
+    if 'phase' in d and d.get('ok') is False: n+=1
+print(n)" 2>/dev/null || echo 0)
+    if [ "${fails:-0}" -gt 0 ]; then
+      FAILS=$((FAILS+fails))
+      echo "  ✗ node$i app-driver: $fails turn-invariant/recovery failure(s)"
+      capture_forensics "app-node$i"
+    else
+      echo "  ✓ node$i app-driver: turn invariants held"
+    fi
+  done
+}
+
+teardown() { log "teardown"
+  for i in $(seq 0 $((NODES-1))); do
+    [ -n "${DRIVER_PIDS[$i]:-}" ] && kill "${DRIVER_PIDS[$i]}" 2>/dev/null
+    [ -n "${DESK_PIDS[$i]:-}" ] && kill -- "-${DESK_PIDS[$i]}" 2>/dev/null  # group-kill the setsid desktop
+    kill -9 "${PIDS[$i]:-0}" 2>/dev/null
+  done
   [ "$KEEP" = 0 ] && rm -rf "$WORK"; }
 trap teardown EXIT
 
@@ -431,6 +707,17 @@ ALL_NODES=$(for i in $(seq 0 $((NODES-1))); do printf '127.0.0.1:%s,' "$(cport $
 ALL_IDS=$(IFS=,; echo "${NODE_IDS[*]}")
 echo "  converged: node0 online=$(online_count 0)/$NODES"
 check "healthy" "$ALL_NODES" "$ALL_IDS"
+
+# ── P2: bring up app-user desktops + persona drivers on every node, BEFORE the
+# chaos starts, so real users are operating the app while the mesh is savaged. ──
+if [ "$DESKTOPS" = 1 ]; then
+  [ -x "$DESKTOP_BIN" ] || { echo "  --with-desktops: desktop binary missing at $DESKTOP_BIN (build it or set SOVEREIGN_DESKTOP_BIN)"; FAILS=$((FAILS+1)); }
+  log "P2: spawning $NODES app desktops + persona drivers (attach-mode, in-netns)"
+  for i in $(seq 0 $((NODES-1))); do
+    spawn_desktop_for_node "$i" && spawn_driver_for_node "$i"
+  done
+  wait_drivers_warm   # barrier: surface established before chaos starts
+fi
 
 # ── workload: ingest×inference contention, or repeated crash/churn cycles ─────
 if [ "$WORKLOAD" = "ingest" ]; then
@@ -483,6 +770,13 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
 done
 fi
 
+# ── P2: collect the app-user drivers + fold their turn findings into the verdict ──
+if [ "$DESKTOPS" = 1 ]; then
+  log "P2: waiting for app drivers to finish; folding turn findings into the verdict"
+  wait_drivers
+  fold_driver_findings
+fi
+
 # ── verdict ───────────────────────────────────────────────────────────────────
 log "VERDICT — $CYCLE cycle(s), $FAILS checkpoint failure(s); findings=$FINDINGS"
 # Coverage accounting: fold the findings into a fault × invariant grid so a run
@@ -511,7 +805,8 @@ print("                    " + ", ".join(INV))
 if workload == "ingest":
     print("  live this lane  : admission_safety + bounded_fan_out (chat fan-out drives")
     print("                    peer_inflight / fanout_inflight > 0) + IngestProgress +")
-    print("                    ForegroundLiveness (real generative primary under ingest).")
+    print("                    ForegroundLiveness + GroundingIntegrity/GroundingVerdict")
+    print("                    (real generative primary under ingest; grounded RAG turn).")
 else:
     print("  inert here      : admission_safety + bounded_fan_out + shared_model_single_host")
     print("                    (cheap embed-only daemons take no peer-inference / run no")
