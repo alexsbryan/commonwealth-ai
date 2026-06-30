@@ -756,7 +756,7 @@ impl Runtime {
         // unscoped fallback to loaded contexts is still safe.
         let corpus_ids: Vec<String> = match enabled_corpora {
             Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
-            _ => provider.loaded_corpus_ids(),
+            _ => provider.discoverable_corpus_ids(),
         };
 
         // Prominence per atom: graph degree (in + out edges), tie-broken
@@ -1223,7 +1223,7 @@ impl Runtime {
             .unwrap_or(0.04);
         let corpus_ids: Vec<String> = match enabled_corpora {
             Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
-            _ => provider.loaded_corpus_ids(),
+            _ => provider.discoverable_corpus_ids(),
         };
         struct ClaimCand {
             content: String,
@@ -1785,7 +1785,27 @@ impl Runtime {
             return;
         }
 
-        let mut corpus_ids = provider.loaded_corpus_ids();
+        // Scope atlas grounding to the corpora retrieval actually hit — not
+        // every loaded atlas (at SEP's 1778-atlas scale that meant a
+        // brute-force ANN seed over all of them, every query). Per retrieved
+        // chunk the candidate atlas is its own `corpus_id` plus
+        // `<corpus_id>-<title>` for parent / per-article splits (SEP: the "sep"
+        // chunk corpus -> "sep-<article>" atlases). `ensure_loaded` lazily
+        // warms only these; `provider.get(id)` below drops any with no atlas.
+        // `enabled_corpora` (conversation scope) is folded in so an explicitly
+        // scoped corpus grounds even if its chunks didn't rank this turn.
+        let mut scoped: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for c in chunks.iter() {
+            scoped.insert(c.corpus_id.clone());
+            if let Some(t) = c.title.as_deref().filter(|t| !t.is_empty()) {
+                scoped.insert(format!("{}-{}", c.corpus_id, t));
+            }
+        }
+        if let Some(enabled) = enabled_corpora {
+            scoped.extend(enabled.iter().cloned());
+        }
+        let mut corpus_ids: Vec<String> = scoped.into_iter().collect();
+        provider.ensure_loaded(&corpus_ids).await;
         // Scope-driven atlas filtering. When the router classifies
         // the query against a `scope = "personal"`-tagged exemplar
         // (conversation-history / personal-vault shapes), restrict
