@@ -632,7 +632,7 @@ pub async fn load_atlas_context(
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         return Err(format!(
-            "no atlas at {} — `sovereign enrich ingest {atlas_corpus_id} \
+            "no atlas at {} — `svrn enrich ingest {atlas_corpus_id} \
              --strategy structure_first --source-corpus <id>` first",
             atlas_dir.display()
         ));
@@ -995,7 +995,7 @@ pub async fn run_bank(
 
     if indexes.is_empty() {
         return Err(format!(
-            "no corpora installed — `sovereign corpus install {}` before running this bank",
+            "no corpora installed — `svrn corpus install {}` before running this bank",
             bank.bank.corpus
         ));
     }
@@ -1014,7 +1014,7 @@ pub async fn run_bank(
     }
 
     // ATLAS_STORAGE_V2 3b: when `--atlas-seed ann`, attach each corpus's
-    // PERSISTENT ANN seed table (built by `sovereign atlas backfill-ann`) to its
+    // PERSISTENT ANN seed table (built by `svrn atlas backfill-ann`) to its
     // graph, then drive the PRODUCTION `atlas_navigate_ann` over the
     // ann-attached graphs — the daemon's exact runtime shape, not a fork. The
     // owned graphs must outlive the per-question loop (each holds a live
@@ -1038,7 +1038,7 @@ pub async fn run_bank(
         }
         eprintln!(
             "atlas-seed=ann: attached persistent ANN seed tables to {attached}/{} graphs \
-             (run `sovereign atlas backfill-ann <corpus>` for any missing)",
+             (run `svrn atlas backfill-ann <corpus>` for any missing)",
             out.len()
         );
         out

@@ -123,7 +123,7 @@ impl TokenUsageLedger {
 
 /// Plain snapshot of the ledger. Returned by [`DaemonInferenceClient::usage_snapshot`]
 /// and serialized to `<workspace>/_tokens.json` by the extract loop
-/// so `sovereign corpus status` / `/internal/atlas/status` can show
+/// so `svrn corpus status` / `/internal/atlas/status` can show
 /// per-corpus token spend without re-counting from logs.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Default)]
 pub struct TokenUsageSnapshot {

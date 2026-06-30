@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich promote <corpus> --phase <id> --run <path>
+//! `svrn enrich promote <corpus> --phase <id> --run <path>
 //!  --finding <id> --type positive|corrected|negative --rationale <text>`
 //!
 //! Lifts a specific finding from a run output JSON into the exemplar
@@ -16,11 +16,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich promote",
+    command: "svrn enrich promote",
     summary: "Lift a run finding into the per-phase exemplar bank.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich promote <corpus-id> --phase <phase-id> --run <path> \\\n  --finding <id> --type <positive|corrected|negative> --rationale <text> \\\n  [--selector <text>] [--model-output <inline-json>]",
+            "svrn enrich promote <corpus-id> --phase <phase-id> --run <path> \\\n  --finding <id> --type <positive|corrected|negative> --rationale <text> \\\n  [--selector <text>] [--model-output <inline-json>]",
         ),
         HelpSection::Flags(&[
             ("--phase <id>", "Which phase's bank to append to (questions | concerns | positions | tensions | gaps)."),

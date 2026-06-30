@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas migrate-all` — the reusable ATLAS_STORAGE_V2 full-port.
+//! `svrn atlas migrate-all` — the reusable ATLAS_STORAGE_V2 full-port.
 //!
 //! One idempotent command that migrates EVERY atlas-bearing corpus on this
 //! machine to the v2 system, so the port is repeatable on any dev machine with
@@ -190,7 +190,7 @@ pub async fn run(args: &[String]) -> i32 {
         // an existing ANN table is the forward-looking equivalent — either signal
         // admits the corpus. Builds the stragglers (embedded but no table yet)
         // and leaves current tables as-is; fresh corpora get their table via
-        // `sovereign atlas backfill-ann`.
+        // `svrn atlas backfill-ann`.
         let ann_state: &str = if !ann_table_present(&atlas_dir)
             && !atlas_dir.join("atoms.embeddings.bin").exists()
         {
@@ -283,7 +283,7 @@ fn newer_than(a: &Path, b: &Path) -> bool {
 }
 
 fn print_help() {
-    println!("sovereign atlas migrate-all — reusable ATLAS_STORAGE_V2 full-port (idempotent)\n");
+    println!("svrn atlas migrate-all — reusable ATLAS_STORAGE_V2 full-port (idempotent)\n");
     println!("  sovereign atlas migrate-all                 migrate every atlas-bearing corpus + flip read_v2");
     println!("  sovereign atlas migrate-all --no-flip       build v2 artifacts but do NOT flip read_v2");
     println!("  sovereign atlas migrate-all --skip-wiki     skip wiki-class (columnar) corpora");

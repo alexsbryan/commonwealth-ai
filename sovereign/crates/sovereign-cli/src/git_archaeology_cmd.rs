@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign git-archaeology <code-corpus> [--source-path <path>] [--output <md>]`
+//! `svrn git-archaeology <code-corpus> [--source-path <path>] [--output <md>]`
 //!
 //! Walks the code corpus' git history once and produces a temporal
 //! enrichment sidecar: per-atom provenance (first-seen / last-modified
@@ -8,7 +8,7 @@
 //! per-atom + per-pair detail; markdown digest is the human surface
 //! and the input the drift-report renderer folds in.
 //!
-//! Standalone command + the workhorse for `sovereign drift detect`'s
+//! Standalone command + the workhorse for `svrn drift detect`'s
 //! Step 3.5. Mirrors `rough_edges_cmd.rs` line-for-line in shape.
 
 use std::collections::HashMap;
@@ -105,7 +105,7 @@ pub async fn run(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("✗ read {}: {e}", atlas_dir.join("atoms.json").display());
             eprintln!(
-                "  hint: build the structural atlas first via `sovereign enrich ingest \
+                "  hint: build the structural atlas first via `svrn enrich ingest \
                  {} --source-corpus {}`.",
                 parsed.atlas_corpus_id, source_corpus_id
             );
@@ -307,7 +307,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// Source path comes from one of:
 /// 1. Explicit `--source-path <path>` (highest priority).
 /// 2. The corpus's `_corpus_meta.json` `source_path` field (set by
-///    `sovereign code index` for code corpora).
+///    `svrn code index` for code corpora).
 /// 3. Fall back to error if neither is present.
 ///
 /// Mirrors [`crate::rough_edges_cmd::resolve_source_path`] — the two
@@ -335,7 +335,7 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
         partition_meta
     } else {
         return Err(format!(
-            "corpus '{source_corpus_id}' not found at {} (or {}) — run `sovereign code index` \
+            "corpus '{source_corpus_id}' not found at {} (or {}) — run `svrn code index` \
              first or pass --source-path",
             canonical_meta.display(),
             partition_meta.display()
@@ -351,7 +351,7 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
         .ok_or_else(|| {
             format!(
                 "corpus '{source_corpus_id}' has no source_path stamped — pass --source-path \
-                 explicitly. (Only code-corpus installs from `sovereign code \
+                 explicitly. (Only code-corpus installs from `svrn code \
                  index` stamp a source_path.)"
             )
         })?;
@@ -425,7 +425,7 @@ async fn build_chunk_path_map(corpus_id: &str) -> Result<HashMap<String, PathBuf
     } else {
         return Err(format!(
             "no chunk index for corpus '{corpus_id}' at {} (or partition-local sibling) — \
-             run `sovereign code index <path> --corpus-id {corpus_id}` first",
+             run `svrn code index <path> --corpus-id {corpus_id}` first",
             home_dir().join(".sovereign/indexes").display()
         ));
     };
@@ -626,11 +626,11 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign git-archaeology",
+    command: "svrn git-archaeology",
     summary: "Walk a code corpus' git history and emit per-atom provenance + co-evolution edges.",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] \
+            "svrn git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] \
              [--threshold N] [--min-joint N]",
         ),
         crate::util::help::HelpSection::Flags(&[
@@ -659,8 +659,8 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ]),
         crate::util::help::HelpSection::Notes(
             "Reads the structural atlas from ~/.sovereign/indexes/<corpus>/atlas/atoms.json. \
-             Build it first via `sovereign enrich ingest <id> --source-corpus <id>` if you \
-             haven't. Standalone surface; also called from `sovereign drift detect` to fold \
+             Build it first via `svrn enrich ingest <id> --source-corpus <id>` if you \
+             haven't. Standalone surface; also called from `svrn drift detect` to fold \
              provenance into the unified drift digest.",
         ),
     ],

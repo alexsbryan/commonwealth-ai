@@ -736,9 +736,10 @@ fn default_alternation_grammar() -> bool {
 /// Falls back to `.` if the home directory can't be resolved — matches
 /// the prior behaviour.
 fn default_data_dir() -> PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from("."))
+    // Prefer `~/.svrnmesh`, falling back to a populated legacy `~/.sovereign`
+    // (and to `.` if home can't be resolved). The rename back-compat layer
+    // lives in `crate::rebrand`.
+    crate::rebrand::svrnmesh_root()
 }
 
 impl SetupConfig {

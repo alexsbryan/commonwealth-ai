@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-tensions` — Phase A Step 4 (Landing 3,
+//! `svrn enrich atlas-tensions` — Phase A Step 4 (Landing 3,
 //! deterministic half).
 //!
 //! Reads the resolved atlas (atoms.json + edges.json) and
@@ -40,16 +40,16 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-tensions",
+    command: "svrn enrich atlas-tensions",
     summary: "Select tension candidates from the resolved atlas (deterministic).",
     sections: &[
-        HelpSection::Usage("sovereign enrich atlas-tensions <corpus-id>"),
+        HelpSection::Usage("svrn enrich atlas-tensions <corpus-id>"),
         HelpSection::Examples(&[(
-            "sovereign enrich atlas-tensions brothers_karamazov",
+            "svrn enrich atlas-tensions brothers_karamazov",
             "Scan atoms.json, enumerate entity-overlap candidate pairs, write tension_candidates.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `sovereign enrich atlas-resolve <corpus> --phase all` so the \
+            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
              atlas directory exists. Produces \
              `~/.sovereign/indexes/<corpus>/atlas/tension_candidates.json`. Does NOT call \
              the LLM — the classifier that promotes candidates to real Tension edges lands \
@@ -87,7 +87,7 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id

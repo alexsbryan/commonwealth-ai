@@ -48,6 +48,10 @@ fn main() {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
 
+    // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
+    sovereign_core::rebrand::promote_legacy_env();
+    sovereign_core::rebrand::run_startup_migration();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench flywheel redteam` — Phase 1b live harness for the gate
+//! `svrn bench flywheel redteam` — Phase 1b live harness for the gate
 //! red-team.
 //!
 //! Purpose: prove the Fidelity-Flywheel gate can tell an HONEST mechanism from a
@@ -43,11 +43,11 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench flywheel redteam",
+    command: "svrn bench flywheel redteam",
     summary: "Gate red-team: run honest + cheat answer transforms through the real judge + gate, prove the gate separates them.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench flywheel redteam --corpus <id> --bank <main.toml> [--fresh-bank <fresh.toml>] [--atlas <dir>] [--captures-dir <dir>] [--replay] [--judge-model <stem>] [--base-url <url>]",
+            "svrn bench flywheel redteam --corpus <id> --bank <main.toml> [--fresh-bank <fresh.toml>] [--atlas <dir>] [--captures-dir <dir>] [--replay] [--judge-model <stem>] [--base-url <url>]",
         ),
         HelpSection::Subcommands(&[]),
         HelpSection::Notes(

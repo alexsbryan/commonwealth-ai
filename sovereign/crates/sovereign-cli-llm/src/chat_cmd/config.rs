@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Shared argument parsing for `sovereign chat` subcommands.
+//! Shared argument parsing for `svrn chat` subcommands.
 //!
 //! Every subcommand takes the same global flags (`--daemon`, `--data-dir`,
 //! `--chat-model`, `--embed-model`). This module parses them out of the

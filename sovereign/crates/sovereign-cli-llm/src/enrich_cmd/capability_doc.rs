@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich capability-doc <corpus>` — narrate each derived capability
+//! `svrn enrich capability-doc <corpus>` — narrate each derived capability
 //! into a grounded, `file:line`-cited architecture document.
 //!
 //! Inputs (both already on disk):
@@ -45,15 +45,15 @@ Write a clear, accurate prose section (2-4 short paragraphs):
 Ground every statement in the functions and summaries provided. Do NOT invent functions, types, or behaviour that are not listed. Be accurate and specific, not flowery.";
 
 const HELP: Help = Help {
-    command: "sovereign enrich capability-doc",
+    command: "svrn enrich capability-doc",
     summary: "Narrate every derived capability into a grounded, file:line-cited architecture document.",
     sections: &[
-        HelpSection::Usage("sovereign enrich capability-doc <corpus-id> [--filter=<label-substring>]"),
+        HelpSection::Usage("svrn enrich capability-doc <corpus-id> [--filter=<label-substring>]"),
         HelpSection::Flags(&[
             (
                 "<corpus-id>",
-                "An installed code corpus with a capability map (run `sovereign code capability-map \
-                 <corpus>` first) and code-intel summaries (run `sovereign enrich code-intel <corpus>`).",
+                "An installed code corpus with a capability map (run `svrn code capability-map \
+                 <corpus>` first) and code-intel summaries (run `svrn enrich code-intel <corpus>`).",
             ),
             (
                 "--filter=<s>",
@@ -204,7 +204,7 @@ fn parse_flag(args: &[String], key: &str) -> Option<String> {
 
 pub fn load_caps(path: &Path) -> Result<Vec<Cap>, String> {
     let s = fs::read_to_string(path)
-        .map_err(|_| format!("no capability map at {} — run `sovereign code capability-map` first", path.display()))?;
+        .map_err(|_| format!("no capability map at {} — run `svrn code capability-map` first", path.display()))?;
     let doc: CapMapDoc = serde_json::from_str(&s).map_err(|e| format!("parsing {}: {e}", path.display()))?;
     Ok(doc.capabilities)
 }
@@ -322,7 +322,7 @@ fn render_markdown(doc: &CapabilityDoc) -> String {
     s.push_str(&format!("# {} — Capability Architecture (derived)\n\n", doc.corpus_id));
     s.push_str(&format!(
         "_Derived from the SCIP call graph + code-intel summaries — {} capabilities. Every spine \
-         function cites `file:line`. Regenerate with `sovereign enrich capability-doc {}`._\n\n",
+         function cites `file:line`. Regenerate with `svrn enrich capability-doc {}`._\n\n",
         doc.capabilities.len(),
         doc.corpus_id,
     ));
@@ -394,7 +394,7 @@ pub async fn cmd_capability_doc(args: &[String]) -> i32 {
     let cache = load_cache_by_qn(&corpus_dir.join("code_intel_cache.json"));
     if cache.is_empty() {
         eprintln!(
-            "error: no code-intel summaries for '{corpus_id}' — run `sovereign enrich code-intel {corpus_id}` first"
+            "error: no code-intel summaries for '{corpus_id}' — run `svrn enrich code-intel {corpus_id}` first"
         );
         return 1;
     }

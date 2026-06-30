@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign router-cache {check,rebuild}` — manage the pre-built router
+//! `svrn router-cache {check,rebuild}` — manage the pre-built router
 //! exemplar embedding cache (`sovereign/router/router-embed-cache.json`).
 //!
 //! - `check`  — pure, no-inference freshness gate over the WORKING TREE

@@ -310,7 +310,7 @@
     }
     if (!JOIN_LINK_PATTERN.test(link)) {
       joinLinkError =
-        "That doesn't look like a Sovereign join link. Expected `sovereign://join/cwth-xxxx-xxxx-xxxx`.";
+        "That doesn't look like a svrnmesh join link. Expected `sovereign://join/cwth-xxxx-xxxx-xxxx`.";
       return;
     }
     joinLinkStore.set(link);

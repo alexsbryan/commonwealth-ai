@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich validate <corpus> --questions <path>` — runs a
+//! `svrn enrich validate <corpus> --questions <path>` — runs a
 //! QueryBattery against the corpus's atlas and prints a score table.
 //! Does NOT ask the model to generate answers; this validates the
 //! atlas + traversal only.
@@ -14,11 +14,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich validate",
+    command: "svrn enrich validate",
     summary: "Run a QueryBattery against the corpus atlas and print a score table.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich validate <corpus-id> --questions <path> [--threshold <f>] [--pass <f>]",
+            "svrn enrich validate <corpus-id> --questions <path> [--threshold <f>] [--pass <f>]",
         ),
         HelpSection::Flags(&[
             ("--questions <path>", "JSON file (bare array of strings, or `{\"questions\":[…]}`)."),

@@ -55,7 +55,7 @@ fn dev_verbs_are_intercepted_with_rebuild_pointer() {
         assert_eq!(
             out.status.code(),
             Some(2),
-            "`sovereign {verb}` should exit 2 in the default build, got {:?}\nstdout:\n{}\nstderr:\n{}",
+            "`svrn {verb}` should exit 2 in the default build, got {:?}\nstdout:\n{}\nstderr:\n{}",
             out.status.code(),
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr),
@@ -63,7 +63,7 @@ fn dev_verbs_are_intercepted_with_rebuild_pointer() {
         let err = String::from_utf8_lossy(&out.stderr);
         assert!(
             err.contains("--features dev-tools"),
-            "`sovereign {verb}` intercept should point at dev-tools; got:\n{err}"
+            "`svrn {verb}` intercept should point at dev-tools; got:\n{err}"
         );
     }
 }

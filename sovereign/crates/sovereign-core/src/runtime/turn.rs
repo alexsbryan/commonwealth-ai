@@ -167,6 +167,14 @@ impl Runtime {
             );
             return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
         }
+        // A turn with no actual question (empty / punctuation-only like "?")
+        // used to route into the generative path and produce a generic essay;
+        // return a graceful clarification instead. Doc-prefix turns always carry
+        // text, so they never trip this.
+        if is_degenerate_message(message) {
+            tracing::info!("runtime: degenerate (contentless) message — returning clarification");
+            return Err(Error::InvalidInput(DEGENERATE_MESSAGE_HINT.to_string()));
+        }
 
         // 1. Build context from store (use message text for memory retrieval).
         //    The user message is already persisted so it shows up here.

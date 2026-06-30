@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign memory` — glassbox for the long-term memory store.
+//! `svrn memory` — glassbox for the long-term memory store.
 //!
 //! The rolling-summary compaction worker (`crate::memory_compaction`)
 //! folds oldest non-superseded memories per conversation into
@@ -50,7 +50,7 @@ pub async fn run_memory(args: &[String]) -> i32 {
 
 fn print_help() {
     println!(
-        "sovereign memory — long-term memory store glassbox\n\
+        "svrn memory — long-term memory store glassbox\n\
          \n\
          USAGE:\n  \
          sovereign memory <subcommand> [flags]\n\

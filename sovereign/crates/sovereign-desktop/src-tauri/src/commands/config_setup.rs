@@ -334,7 +334,7 @@ fn kickstart_daemon() -> Result<(), String> {
             .output()
             .map_err(|e| format!("spawn id: {e}"))?;
         let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
-        let label = format!("gui/{uid}/com.sovereign.daemon");
+        let label = format!("gui/{uid}/com.svrnmesh.daemon");
         let out = Command::new("launchctl")
             .args(["kickstart", "-k", &label])
             .output()
@@ -351,12 +351,12 @@ fn kickstart_daemon() -> Result<(), String> {
     {
         use std::process::Command;
         let out = Command::new("systemctl")
-            .args(["--user", "restart", "sovereign"])
+            .args(["--user", "restart", "svrnmesh"])
             .output()
             .map_err(|e| format!("spawn systemctl: {e}"))?;
         if !out.status.success() {
             return Err(format!(
-                "systemctl --user restart sovereign failed: {}",
+                "systemctl --user restart svrnmesh failed: {}",
                 String::from_utf8_lossy(&out.stderr)
             ));
         }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign project` subcommand — one-shot workspace setup for code intelligence.
+//! `svrn project` subcommand — one-shot workspace setup for code intelligence.
 //!
-//! Run `sovereign project init` from any repo root and the entire code
+//! Run `svrn project init` from any repo root and the entire code
 //! intelligence stack is wired up: tree-sitter symbol index, SCIP call
 //! graph, `.claude/settings.json`, `SOVEREIGN.md`, git hooks, and a
 //! filesystem watcher. Two minutes from first run to fully working tools.
@@ -20,7 +20,7 @@ use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 /// (e.g. `qwen3-embedding-0.6b-q8_0`) instead of the engine's default.
 ///
 /// Sources `SetupConfig::load()` and falls back to the default when
-/// the user hasn't run `sovereign setup` yet (in which case the
+/// the user hasn't run `svrn setup` yet (in which case the
 /// engine's default is harmless — code indexes are FTS-only).
 fn configured_embed_model_name() -> String {
     if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
@@ -55,41 +55,41 @@ pub async fn run_project(args: &[String]) -> i32 {
     use sovereign_cli_shared::deprecation::announce;
     match args[0].as_str() {
         "init" => {
-            announce("sovereign project init", "sovereign init");
+            announce("svrn project init", "svrn init");
             cmd_init(&args[1..]).await
         }
         "design" => {
-            announce("sovereign project design", "sovereign design");
+            announce("svrn project design", "svrn design");
             cmd_design(&args[1..]).await
         }
         "plan" => {
-            announce("sovereign project plan", "sovereign plan");
+            announce("svrn project plan", "svrn plan");
             cmd_plan(&args[1..]).await
         }
         "charter" => {
-            announce("sovereign project charter", "sovereign charter");
+            announce("svrn project charter", "svrn charter");
             cmd_charter(&args[1..]).await
         }
         "found" => cmd_found(&args[1..]).await,
         "amend" => {
-            announce("sovereign project amend", "sovereign amend");
+            announce("svrn project amend", "svrn amend");
             cmd_amend(&args[1..]).await
         }
         "phase" => cmd_phase(&args[1..]).await,
         "audit" => {
-            announce("sovereign project audit", "sovereign audit");
+            announce("svrn project audit", "svrn audit");
             cmd_audit(&args[1..]).await
         }
         "status" => {
-            announce("sovereign project status", "sovereign status");
+            announce("svrn project status", "svrn status");
             cmd_status(&args[1..]).await
         }
         "refresh" => {
-            announce("sovereign project refresh", "sovereign refresh");
+            announce("svrn project refresh", "svrn refresh");
             cmd_refresh(&args[1..]).await
         }
         "serve" => {
-            announce("sovereign project serve", "sovereign serve");
+            announce("svrn project serve", "svrn serve");
             cmd_serve(&args[1..]).await
         }
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
@@ -106,10 +106,10 @@ pub async fn run_project(args: &[String]) -> i32 {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project",
+    command: "svrn project",
     summary: "Per-project code intelligence: indexes, call graphs, and the MCP tool server.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
             ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
@@ -129,17 +129,17 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("install-hooks",  "Deprecated — the daemon now owns freshness; prints migration hint"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Run `sovereign project <subcommand> --help` for subcommand-specific flags.",
+            "Run `svrn project <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
 };
 
 const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project init",
+    command: "svrn project init",
     summary: "Set up code intelligence for the workspace in the current directory.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign project init [--name <id>] [--port <port>]\n    \
+            "svrn project init [--name <id>] [--port <port>]\n    \
              [--data-dir <dir>] [--workspace-root <path>]\n    \
              [--watcher-ignore <component>]...\n    \
              [--no-scip] [--no-hooks] [--no-claude-config]",
@@ -155,20 +155,20 @@ const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             ("--no-claude-config",   "Skip writing .claude/settings.json (overrides harness prompt)"),
         ]),
         sovereign_cli_shared::help::HelpSection::Examples(&[
-            ("sovereign project init",                                   "Index the current workspace"),
-            ("sovereign project init --workspace-root ..",               "Index a monorepo from a sibling dir"),
-            ("sovereign project init --watcher-ignore .sovereign --watcher-ignore generated", "Add custom ignores at the FS watcher seam"),
-            ("sovereign project init --no-scip",                         "Skip call graph (no exporter installed)"),
+            ("svrn project init",                                   "Index the current workspace"),
+            ("svrn project init --workspace-root ..",               "Index a monorepo from a sibling dir"),
+            ("svrn project init --watcher-ignore .sovereign --watcher-ignore generated", "Add custom ignores at the FS watcher seam"),
+            ("svrn project init --no-scip",                         "Skip call graph (no exporter installed)"),
         ]),
     ],
 };
 
 const HELP_DESIGN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project design",
+    command: "svrn project design",
     summary: "Agent-collaborative DESIGN.md session. opencode is the blessed path; --solo and --stopgap are fallbacks.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign project design [--import <path>] [--via <agent>]\n    \
+            "svrn project design [--import <path>] [--via <agent>]\n    \
              [--solo] [--stopgap] [--port <port>]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
@@ -179,9 +179,9 @@ const HELP_DESIGN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
             ("--port <port>",    "Commonwealth daemon port (default: 9741)"),
         ]),
         sovereign_cli_shared::help::HelpSection::Examples(&[
-            ("sovereign project design",                         "Launch opencode with the session brief primed"),
-            ("sovereign project design --import ./design.md",    "Import an existing doc, then start the session"),
-            ("sovereign project design --solo",                  "No agent — CLI prompts driven by the structural parser"),
+            ("svrn project design",                         "Launch opencode with the session brief primed"),
+            ("svrn project design --import ./design.md",    "Import an existing doc, then start the session"),
+            ("svrn project design --solo",                  "No agent — CLI prompts driven by the structural parser"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Requires the Commonwealth daemon (start it with `commonwealth daemon start`).\n\
@@ -192,11 +192,11 @@ const HELP_DESIGN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
 };
 
 const HELP_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project plan",
+    command: "svrn project plan",
     summary: "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; upsert rows into .sovereign/plan.db.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign project plan [--allow-open] [--no-enrich] [--enrich-model <id>] [--daemon-url <url>]",
+            "svrn project plan [--allow-open] [--no-enrich] [--enrich-model <id>] [--daemon-url <url>]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--allow-open",        "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
@@ -217,10 +217,10 @@ const HELP_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
 };
 
 const HELP_CHARTER: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project charter",
+    command: "svrn project charter",
     summary: "Create or edit the team's free-form CHARTER.md (governance, culture, onboarding). Distinct from DESIGN.md.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign project charter [--print]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn project charter [--print]"),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--print", "Print the current CHARTER.md to stdout and exit without opening $EDITOR"),
         ]),
@@ -230,7 +230,7 @@ const HELP_CHARTER: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
              we're building; CHARTER.md says how we work together on it.\n\n\
              First invocation writes a minimal skeleton and opens $EDITOR. Subsequent invocations \
              just open the existing file. The file lives at `.sovereign/CHARTER.md` (the path \
-             `sovereign project amend` already uses for drift detection).",
+             `svrn project amend` already uses for drift detection).",
         ),
     ],
 };
@@ -260,15 +260,15 @@ const CHARTER_SKELETON: &str = r#"# Charter
 
 ## Amendment log
 
-<!-- Appended to by `sovereign project amend`. -->
+<!-- Appended to by `svrn project amend`. -->
 "#;
 
 const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project serve",
+    command: "svrn project serve",
     summary: "Start a lightweight MCP server for locally-indexed projects (no model required).",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign project serve [--port <port>] [--data-dir <dir>]\n    \
+            "svrn project serve [--port <port>] [--data-dir <dir>]\n    \
              [--sovereign-dir <dir>]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
@@ -286,19 +286,19 @@ const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
 };
 
 const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project status",
+    command: "svrn project status",
     summary: "Show the status of code intelligence for the current project.",
     sections: &[sovereign_cli_shared::help::HelpSection::Usage(
-        "sovereign project status",
+        "svrn project status",
     )],
 };
 
 const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project refresh",
+    command: "svrn project refresh",
     summary: "Re-export the SCIP call graph + rebuild the LanceDB index when embeddings are stale.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign project refresh [--quiet] [--rebuild-index]",
+            "svrn project refresh [--quiet] [--rebuild-index]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             (
@@ -322,13 +322,13 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
 };
 
 const HELP_INSTALL_HOOKS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign project install-hooks",
+    command: "svrn project install-hooks",
     summary: "Upgrade (or install) the post-commit hook in the current repo.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign project install-hooks"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn project install-hooks"),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Use this when you've upgraded sovereign-cli and want the hook to pick up the new\n\
-             binary without re-running `sovereign project init`.",
+             binary without re-running `svrn project init`.",
         ),
     ],
 };
@@ -378,7 +378,7 @@ fn binary_on_path(name: &str) -> bool {
 /// Prompt `Detected <harness>. Write config automatically? [Y/n]` with
 /// `Y` as the default. In non-TTY environments (CI, pipes) returns
 /// `true` without prompting — matches the `--yes` semantics used by
-/// `sovereign setup`.
+/// `svrn setup`.
 fn confirm_write_config(harness: &str) -> bool {
     if !io::stdin().is_terminal() {
         return true;
@@ -611,7 +611,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // Persist observations BEFORE any indexing/SCIP work so the
     // durable record survives even if downstream init steps fail.
     // Read-modify-write: preserve any existing lifecycle fields so
-    // re-running init after `sovereign project found` doesn't reset
+    // re-running init after `svrn project found` doesn't reset
     // `founded`, `charter_version`, or `current_phase`.
     let project_toml_path = repo_root.join(".sovereign").join("project.toml");
     if let Err(e) =
@@ -662,15 +662,15 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         // structural over stateful.
         if design_exists {
             println!();
-            println!("    \u{2026} Pre-code project — indexing deferred. Re-run `sovereign project init`");
-            println!("      once source lands, or start with `sovereign project design` now.");
+            println!("    \u{2026} Pre-code project — indexing deferred. Re-run `svrn project init`");
+            println!("      once source lands, or start with `svrn project design` now.");
         } else if !no_scip {
             // True empty directory: observation report already flagged
             // "no supported languages" as actionable. Repeat only the
             // bail path, but point at the design-first alternative.
             println!();
             println!("    Pass --no-scip to skip indexing and write agent configs anyway,");
-            println!("    or run `sovereign project design --import <path-to-doc>` to start");
+            println!("    or run `svrn project design --import <path-to-doc>` to start");
             println!("    from an existing design document.");
             return 1;
         } else {
@@ -728,7 +728,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         r#"[corpus]
 id = "{corpus_id}"
 name = "{corpus_id}"
-description = "Code corpus generated by `sovereign project init`"
+description = "Code corpus generated by `svrn project init`"
 license = "private"
 mesh_sharing = false
 size_compressed_gb = 0
@@ -922,7 +922,7 @@ vector = false
                 Err(e) => {
                     eprintln!("    \u{2717} SCIP export failed: {e}");
                     eprintln!("      Call graph tools will not be available.");
-                    eprintln!("      Run `sovereign project refresh` after fixing the issue.");
+                    eprintln!("      Run `svrn project refresh` after fixing the issue.");
                 }
             }
         }
@@ -993,7 +993,7 @@ vector = false
             .canonicalize()
             .unwrap_or_else(|_| repo_root.clone());
         let toml_stub = format!(
-            "# sovereign.toml — background watcher config for `sovereign project serve`.\n\
+            "# sovereign.toml — background watcher config for `svrn project serve`.\n\
              #\n\
              # Uncomment and fill in test_runner / lint_runner to enable the\n\
              # test_status, run_tests, lint_status MCP tools.\n\
@@ -1027,7 +1027,7 @@ vector = false
         detected.claude_code && !no_claude_config && confirm_write_config("Claude Code");
     let write_opencode = detected.opencode && confirm_write_config("opencode");
 
-    // Commonwealth URL: after `sovereign setup`, the local daemon always
+    // Commonwealth URL: after `svrn setup`, the local daemon always
     // lives at http://localhost:9741 and serves both /v1 and /mcp. Users
     // who want to point at a remote Commonwealth can override via the
     // legacy `[commonwealth]` section in sovereign.toml.
@@ -1189,7 +1189,7 @@ vector = false
     // ── Step 5: Legacy git-hook cleanup ─────────────────────────
     //
     // Earlier sovereign versions installed a post-commit hook that
-    // shelled out to `sovereign project refresh`. The daemon now
+    // shelled out to `svrn project refresh`. The daemon now
     // owns freshness (FS watcher + git HEAD poll + startup
     // catch-up), so the hook is redundant and has been a common
     // source of silent staleness when the binary path drifted.
@@ -1213,7 +1213,7 @@ vector = false
     //
     // The daemon's Reindexer picks this up immediately — no
     // restart needed. If the daemon isn't running we fall through
-    // silently; the next `sovereign daemon restart` (or startup)
+    // silently; the next `svrn daemon restart` (or startup)
     // will pick up the registry entry via `Registry::load()`.
     if !no_scip {
         println!();
@@ -1240,7 +1240,7 @@ vector = false
             Err(e) => {
                 println!("    \u{26a0} Could not reach the daemon ({e}).");
                 println!("      The registry entry was still written; the daemon will");
-                println!("      pick it up on next start. Try `sovereign daemon status`.");
+                println!("      pick it up on next start. Try `svrn daemon status`.");
             }
         }
     }
@@ -1275,7 +1275,7 @@ vector = false
     // someone who's already past that stage).
     if !design_exists && !project_toml.lifecycle.founded {
         println!(
-            "  Next: `sovereign project design` — I'll work with the agent on your DESIGN.md."
+            "  Next: `svrn project design` — I'll work with the agent on your DESIGN.md."
         );
         println!("        Bring a path to an existing doc with `--import <path>`, or start blank.");
         println!();
@@ -1428,7 +1428,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
                 "  \u{2717} No DESIGN.md at repo root ({}).",
                 design_path.display()
             );
-            eprintln!("    Run `sovereign project design` first to author or import one.");
+            eprintln!("    Run `svrn project design` first to author or import one.");
             return 2;
         }
     };
@@ -1619,7 +1619,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         );
     }
     eprintln!();
-    eprintln!("    Next: iterate on DESIGN.md; re-run `sovereign project plan` to regenerate.");
+    eprintln!("    Next: iterate on DESIGN.md; re-run `svrn project plan` to regenerate.");
     0
 }
 
@@ -1635,7 +1635,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
 /// design (pun intended). The provenance is the log + git history.
 async fn cmd_amend_design(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("sovereign project amend design");
+        println!("svrn project amend design");
         println!();
         println!("Opens <repo>/DESIGN.md in $EDITOR. On save, section-level diff");
         println!("against the curated DESIGN catalog. For each changed section,");
@@ -1653,7 +1653,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
         Ok(s) => s,
         Err(_) => {
             eprintln!("  \u{2717} No DESIGN.md at repo root ({}).", path.display());
-            eprintln!("    Run `sovereign project design` first.");
+            eprintln!("    Run `svrn project design` first.");
             return 2;
         }
     };
@@ -1739,7 +1739,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
         &new_hash[..new_hash.len().min(12)],
     );
     eprintln!("    Amendment log updated inline at top of the section.");
-    eprintln!("    Next: re-run `sovereign project plan` if DESIGN.md structure changed.");
+    eprintln!("    Next: re-run `svrn project plan` if DESIGN.md structure changed.");
     0
 }
 
@@ -1752,7 +1752,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
 // the existing file.
 //
 // The existing canonical path (`.sovereign/CHARTER.md`) is
-// preserved so `sovereign project amend` and its drift detection
+// preserved so `svrn project amend` and its drift detection
 // stay wired up. (The plan's longer-term repo-root-move is a
 // separate migration that affects amend + drift detection and
 // hasn't landed yet.)
@@ -2029,7 +2029,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
         } else if contents.contains("sovereign") && contents.contains("project refresh") {
             println!(
                 "  Git hook      \u{26a0} prior version (refreshes SCIP only) — run \
-                 `sovereign project install-hooks` to upgrade"
+                 `svrn project install-hooks` to upgrade"
             );
         } else {
             println!("  Git hook      \u{2717} exists but missing sovereign refresh");
@@ -2051,7 +2051,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     }
 
     println!();
-    println!("  Run `sovereign project refresh` to update the call graph.");
+    println!("  Run `svrn project refresh` to update the call graph.");
     println!();
 
     0
@@ -2120,7 +2120,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                 if !quiet {
                     println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
                     println!(
-                        "    Check progress with `sovereign project watch status {corpus_id}`."
+                        "    Check progress with `svrn project watch status {corpus_id}`."
                     );
                 }
                 // SCIP is nudged; now gate the LanceDB corpus
@@ -2208,7 +2208,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                     m.language_id, m.command
                 );
                 eprintln!("    {}", m.install_hint);
-                eprintln!("    Install it and re-run `sovereign project refresh`");
+                eprintln!("    Install it and re-run `svrn project refresh`");
             }
         }
     }
@@ -2216,7 +2216,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     // Use the integrity-checking open so a v1 / corrupt DB left over
     // from a past schema is self-healed into a fresh v2 DB rather than
     // wedging on `no such column: corpus_id` at index-creation time —
-    // which is exactly what `sovereign doctor`'s `scip_integrity`
+    // which is exactly what `svrn doctor`'s `scip_integrity`
     // repair hint used to run into. Mirrors `Reindexer::register`.
     let graph =
         match corpus_engine_scip::ScipGraph::open_with_integrity(&scip_graph_path, &corpus_id) {
@@ -2266,7 +2266,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             }
             Err(e) => {
                 eprintln!("error: cannot open SCIP graph: {e}");
-                eprintln!("Run `sovereign project init` first.");
+                eprintln!("Run `svrn project init` first.");
                 return 1;
             }
         };
@@ -2578,7 +2578,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // start and redirect to the daemon workflow.
     if daemon_is_running().await {
         eprintln!();
-        eprintln!("  `sovereign project serve` is superseded.");
+        eprintln!("  `svrn project serve` is superseded.");
         eprintln!();
         eprintln!("  The running sovereign daemon already serves MCP on :9741 and");
         eprintln!("  owns freshness (FS watcher + git HEAD poll + startup catch-up).");
@@ -2592,7 +2592,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         eprintln!();
         eprintln!("  If you really want the legacy in-process server (e.g. the daemon");
         eprintln!("  is broken and you need a fallback), stop the daemon first:");
-        eprintln!("    launchctl stop com.sovereign.daemon   # macOS");
+        eprintln!("    launchctl stop com.svrnmesh.daemon   # macOS");
         eprintln!("    systemctl --user stop sovereign       # Linux");
         return 1;
     }
@@ -2638,7 +2638,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             "error: index directory does not exist: {}",
             data_dir.display()
         );
-        eprintln!("Run `sovereign project init` in at least one project first.");
+        eprintln!("Run `svrn project init` in at least one project first.");
         return 1;
     }
 
@@ -2710,7 +2710,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // ── Repo root + sovereign config ────────────────────────────
     //
     // Priority: nearest ancestor with .sovereign/ > git root > cwd.
-    // This allows `sovereign project serve` to be launched from a monorepo
+    // This allows `svrn project serve` to be launched from a monorepo
     // root that is not itself a git repository.
 
     let cwd = std::env::current_dir()
@@ -2765,7 +2765,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let notes_store = match corpus_engine_notes::NoteStore::open(&notes_db_path) {
         Ok(s) => {
             eprintln!("  notes.db         ✓");
-            // Write a pointer file so `sovereign reflect` can find this
+            // Write a pointer file so `svrn reflect` can find this
             // database from any working directory, regardless of where the
             // user invokes it from.
             let pointer_dir = dirs::home_dir()
@@ -3101,7 +3101,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         &notes_store,
     ))));
     // ReadNoteDigestTool runs in fallback (header-only) mode here —
-    // `sovereign project serve` doesn't load a model, so the Fast-slot
+    // `svrn project serve` doesn't load a model, so the Fast-slot
     // summarization path is unavailable. The banner in the fallback
     // digest makes the degraded state visible to agents. The daemon
     // binary wires inference in via `.with_inference(...)`.
@@ -3206,7 +3206,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // calls from the same sovereign project serve invocation.
     let mcp_session_id = format!("serve-{}", uuid::Uuid::new_v4());
 
-    // Phase 5: standalone `sovereign serve` always knows its project
+    // Phase 5: standalone `svrn serve` always knows its project
     // root (resolved above as `repo_root`). Pass it as the
     // FeatureRoot so `tools/list` consults
     // `.sovereign/features/*/spec.md` and only advertises the
@@ -3330,21 +3330,21 @@ async fn scip_graph_reloader(handle: sovereign_tools::ScipGraphHandle, data_dir:
 //                    →   work
 //
 // Founding is implicit — the first `init` + commit is sufficient.
-// `sovereign charter` remains as the explicit team-conventions
+// `svrn charter` remains as the explicit team-conventions
 // surface for projects that want one. The legacy questionnaire
 // flow (Stage 1/2 elicitation, fault-line selection, charter
 // composition, approval gate) lives on under
-// [`crate::found`] for `sovereign project amend` and the audit's
+// [`crate::found`] for `svrn project amend` and the audit's
 // charter-hash check; only the user-facing entry point is gone.
 //
 // `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
 // IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
-// favour of the explicit `sovereign design` / `sovereign charter`
-// / `sovereign plan` triad.
+// favour of the explicit `svrn design` / `svrn charter`
+// / `svrn plan` triad.
 async fn cmd_found(_args: &[String]) -> i32 {
     sovereign_cli_shared::deprecation::announce_retired(
-        "sovereign project found",
-        "Founding is implicit now: `sovereign init` + a committed          spec is sufficient. Use `sovereign charter` if you want          to define team conventions, or `sovereign plan` to write          PHASES.md from a design doc.",
+        "svrn project found",
+        "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions, or `svrn plan` to write          PHASES.md from a design doc.",
     );
     0
 }
@@ -3376,7 +3376,7 @@ pub(crate) async fn cmd_phase(args: &[String]) -> i32 {
         "status" => cmd_phase_status(rest).await,
         "pass" => cmd_phase_pass(rest).await,
         "--help" | "-h" => {
-            println!("sovereign project phase <status|pass [N]>");
+            println!("svrn project phase <status|pass [N]>");
             println!();
             println!("status       Show current phase and what's next per PHASES.md");
             println!("pass [N]     Run (or manually confirm) Phase N's stop condition,");
@@ -3431,7 +3431,7 @@ pub(crate) async fn cmd_phase_status(_args: &[String]) -> i32 {
         .iter()
         .find(|p| !p.deferred && p.ordinal > project_toml.lifecycle.current_phase);
     match next {
-        Some(p) => println!("  Next: `sovereign project phase pass {}`", p.ordinal),
+        Some(p) => println!("  Next: `svrn project phase pass {}`", p.ordinal),
         None => println!("  All numbered phases complete."),
     }
     0
@@ -3481,7 +3481,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
             eprintln!(
                 "phase pass: no numbered Phase {target_ordinal} in PHASES.md. \
                  Deferred phases (3+) aren't passed via this command — add them \
-                 via `sovereign project amend` first, or use a different ordinal."
+                 via `svrn project amend` first, or use a different ordinal."
             );
             return 1;
         }
@@ -3636,7 +3636,7 @@ fn load_phase_context() -> Result<(PathBuf, crate::project_toml::ProjectTomlFile
         eprintln!();
         eprintln!(
             "  sovereign project phase: no .sovereign/project.toml found.\n\
-             Run `sovereign project init` then `sovereign project found` first."
+             Run `svrn project init` then `svrn project found` first."
         );
         return Err(1);
     }
@@ -3651,7 +3651,7 @@ fn load_phase_context() -> Result<(PathBuf, crate::project_toml::ProjectTomlFile
         eprintln!();
         eprintln!(
             "  sovereign project phase: this project hasn't been founded yet.\n\
-             Run `sovereign project found` first — PHASES.md is produced at founding."
+             Run `svrn project found` first — PHASES.md is produced at founding."
         );
         return Err(1);
     }
@@ -3699,10 +3699,10 @@ fn already_passed(repo_root: &Path, ordinal: u32) -> bool {
 
 pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("sovereign project audit");
+        println!("svrn project audit");
         println!();
         println!("Prints a reviewer-ready rollup of project state to stdout.");
-        println!("Pipe it to a file or a PR description: `sovereign project audit > audit.md`.");
+        println!("Pipe it to a file or a PR description: `svrn project audit > audit.md`.");
         return 0;
     }
     let repo_root = find_repo_root()
@@ -3712,7 +3712,7 @@ pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     if !project_toml_path.exists() {
         eprintln!(
             "  sovereign project audit: no .sovereign/project.toml found. \
-             Run `sovereign project init` first."
+             Run `svrn project init` first."
         );
         return 1;
     }
@@ -3907,7 +3907,7 @@ async fn build_audit_report(
     //     exists. Source of truth for the new flat-namespace flow.
     //   - `features.db` rows → state machine (active/archived) and
     //     auto-redteam preference. Still useful for projects that
-    //     ran `sovereign atos provision`, but no longer required.
+    //     ran `svrn atos provision`, but no longer required.
     //
     // Both sources are merged on `id`. A directory-only feature
     // shows `state = "(directory only)"`; a db-only feature
@@ -3949,12 +3949,12 @@ async fn build_audit_report(
     // ── Footer ────────────────────────────────────────────────
     out.push_str("---\n\n");
     out.push_str(
-        "_Generated by `sovereign project audit`. Re-run to refresh; this document is not committed automatically._\n",
+        "_Generated by `svrn project audit`. Re-run to refresh; this document is not committed automatically._\n",
     );
 
     // ── Publish-recipe nudge (Phase 7) ─────────────────────────
     // Fires once when a user-authored recipe has been driven to
-    // findings via `sovereign enrich investigation build`. The
+    // findings via `svrn enrich investigation build`. The
     // condition gate suppresses the nudge for already-published
     // and explicitly-dismissed entries; it costs ~one filesystem
     // read per investigation corpus and never fires for recipes
@@ -4079,8 +4079,8 @@ fn compose_publish_recipe_nudge() -> Option<String> {
         nudge.push_str("  sovereign recipe publish ~/.sovereign/recipes/<id>/recipe.toml\n\n");
     }
     nudge.push_str(
-        "_Shown once. Dismiss forever: `sovereign nudge dismiss recipe-publish` \
-         — or per-recipe: `sovereign nudge dismiss recipe-publish:<id>`._\n",
+        "_Shown once. Dismiss forever: `svrn nudge dismiss recipe-publish` \
+         — or per-recipe: `svrn nudge dismiss recipe-publish:<id>`._\n",
     );
     Some(nudge)
 }
@@ -4378,7 +4378,7 @@ struct FeatureRow {
     /// "(directory only)" when the feature is on disk but absent
     /// from features.db; the db state ("active", "archived", …)
     /// otherwise. Phase 6: directory-only is the new default —
-    /// users no longer need to run `sovereign atos provision` to
+    /// users no longer need to run `svrn atos provision` to
     /// have a feature exist for the audit.
     state: String,
     /// True iff `<id>/spec.md` is present at the canonical path.
@@ -4540,7 +4540,7 @@ fn relative(path: &Path, base: &Path) -> String {
 ///    Q&A so readers six weeks later can find "why".
 pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("sovereign project amend [design|charter]");
+        println!("svrn project amend [design|charter]");
         println!();
         println!("Edit with an adversarial review. Every amendment is logged —");
         println!("what changed, what arguments the system raised, and your");
@@ -4551,7 +4551,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
         println!("  amend design    — edit DESIGN.md; appends `## Amendment log` entry");
         println!();
         println!("`amend charter` requires the project to be founded");
-        println!("(`sovereign project found`); `amend design` works on any repo");
+        println!("(`svrn project found`); `amend design` works on any repo");
         println!("with a DESIGN.md at repo root.");
         return 0;
     }
@@ -4574,7 +4574,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
         eprintln!();
         eprintln!(
             "  sovereign project amend: no .sovereign/project.toml found.\n\
-             Run `sovereign project init` first, then `sovereign project found`."
+             Run `svrn project init` first, then `svrn project found`."
         );
         return 1;
     }
@@ -4589,7 +4589,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
         eprintln!();
         eprintln!(
             "  sovereign project amend: this project hasn't been founded yet.\n\
-             Run `sovereign project found` first — the charter it produces is \
+             Run `svrn project found` first — the charter it produces is \
              what `amend` edits."
         );
         return 1;
@@ -4612,7 +4612,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
         if !crate::amend::AmendmentInterlocutor::confirm_drift(&mut interlocutor, &hint) {
             eprintln!();
             eprintln!(
-                "  Amendment cancelled. To discard the drift first:\n    git checkout -- {}\n  Then re-run `sovereign project amend`.",
+                "  Amendment cancelled. To discard the drift first:\n    git checkout -- {}\n  Then re-run `svrn project amend`.",
                 charter_path.display()
             );
             return 0;
@@ -4804,7 +4804,7 @@ fn resolve_git(
     }
 
     // Non-TTY stdin (piped / CI) without explicit flag: auto-init.
-    // The rationale: scripts running `sovereign project init` in
+    // The rationale: scripts running `svrn project init` in
     // fresh repos are almost always setting up a dev environment,
     // and git is what every downstream ATOS command assumes. If the
     // user truly wants no git, they pass --no-git.
@@ -4975,7 +4975,7 @@ fn print_observation_report(
     } else {
         actionable.push((
             "Embed model not found (documentation search will be degraded).".into(),
-            "sovereign setup",
+            "svrn setup",
         ));
     }
 
@@ -4989,7 +4989,7 @@ fn print_observation_report(
     if !direct_deps.is_empty() {
         let n = direct_deps.len();
         deferred.push(format!(
-            "{n} direct external dependenc{y} detected — surfaced to `sovereign project found`.",
+            "{n} direct external dependenc{y} detected — surfaced to `svrn project found`.",
             y = if n == 1 { "y" } else { "ies" }
         ));
     }
@@ -5124,12 +5124,12 @@ fn generate_sovereign_md(corpus_id: &str, port: u16, langs: &[&str], has_scip: b
 `find_callers` and `find_callees` use the SCIP graph.
 New symbols have no graph entries until the next git commit
 (the post-commit hook keeps this current automatically).
-To refresh manually: `sovereign project refresh`"
+To refresh manually: `svrn project refresh`"
     } else {
         "## Call graph
 
 Call graph tools are not available (no SCIP exporter found).
-Install a SCIP exporter and run `sovereign project refresh` to enable."
+Install a SCIP exporter and run `svrn project refresh` to enable."
     };
 
     format!(
@@ -5154,7 +5154,7 @@ sovereign tools describe <id>                  # full descriptor + parameters + 
 sovereign tools call <id> [--key=value ...]    # invoke, plain text or --format json output
 ```
 
-`sovereign tools call symbol_lookup --name=Foo` runs the same
+`svrn tools call symbol_lookup --name=Foo` runs the same
 `Tool::execute()` as the MCP path — pick whichever is in front of you. Use
 the CLI when the daemon isn't up, when scripting, or to see `--help`.
 
@@ -5172,7 +5172,7 @@ the CLI when the daemon isn't up, when scripting, or to see `--help`.
 | `write_note` | Record decisions, invariants, todos | Persists across sessions |
 | `read_notes` | Recall prior decisions | FTS or filter by symbol/file/kind |
 | `delete_note` | Remove stale notes | By ID |
-| `session_reflection` | End of significant task — record tool feedback | Feeds `sovereign reflect` |
+| `session_reflection` | End of significant task — record tool feedback | Feeds `svrn reflect` |
 | `test_status` | Last test run result | |
 | `run_tests` | Trigger a test run | |
 | `get_run_output` | Test run stdout/stderr | |
@@ -5259,14 +5259,14 @@ session_reflection(
 
 **Before using `blast_radius` or `project_context` on a large task**, check for known limitations first:
 `read_notes(kinds=["reflection"], query="<tool_name>")` — limitations disappear from results
-once the developer retires them via `sovereign reflect --retire`.
+once the developer retires them via `svrn reflect --retire`.
 
 When you see `[sovereign] N tool calls this session. Consider calling session_reflection…`
 appended to a tool response, it is a nudge — write one when the work feels significant.
 
 ## Developer: reviewing reflections
 
-`sovereign reflect` reads the accumulated backlog from any directory — it finds the active
+`svrn reflect` reads the accumulated backlog from any directory — it finds the active
 database automatically via `~/.sovereign/active_notes_db`.
 
 ```bash
@@ -5321,10 +5321,10 @@ Never poll in a tight loop — use a 15-30s gap between checks.
 
 ## Server lifecycle
 
-`sovereign project serve` hot-reloads SCIP every 30 seconds. Post-commit
+`svrn project serve` hot-reloads SCIP every 30 seconds. Post-commit
 hooks keep both the symbol index and call graph current automatically.
 If something seems stale, check `~/.sovereign/hooks.log` and run
-`sovereign project install-hooks` if the hook predates recent changes.
+`svrn project install-hooks` if the hook predates recent changes.
 
 {call_graph_section}
 
@@ -5478,8 +5478,8 @@ fn generate_agents_md(
          tools for this codebase. **Use MCP tools before reading files.**\n\
          \n\
          When MCP isn't available (daemon stopped, scripting, ad-hoc shell use), the\n\
-         same tools are reachable as `sovereign tools {{list|describe|call}} ...` —\n\
-         plain-text output, `--help` on every subcommand. `sovereign tools list`\n\
+         same tools are reachable as `svrn tools {{list|describe|call}} ...` —\n\
+         plain-text output, `--help` on every subcommand. `svrn tools list`\n\
          prints the live catalog grouped by Effect × Scope. Same `Tool::execute()`\n\
          underneath either path.\n\
          \n\
@@ -5526,7 +5526,7 @@ fn generate_agents_md(
 /// Generate the inject-notes.sh hook script content for the given port.
 ///
 /// The hook is ATOS-aware: when `$SOVEREIGN_FEATURE_ID` is set in the driver
-/// environment (see `sovereign atos start-milestone`), the MCP call includes
+/// environment (see `svrn atos start-milestone`), the MCP call includes
 /// `scope=["global","feature"]` plus that feature_id so the agent sees both
 /// global invariants and the in-flight feature's decisions. Outside an ATOS
 /// session the hook scopes to globals only — feature-specific chatter from
@@ -5542,7 +5542,7 @@ fn generate_inject_notes_script(port: u16) -> String {
 PORT="${{SOVEREIGN_PORT:-{port}}}"
 
 # ATOS scope-aware payload. When $SOVEREIGN_FEATURE_ID is set (by
-# `sovereign atos start-milestone`), the query pulls global notes plus
+# `svrn atos start-milestone`), the query pulls global notes plus
 # the active feature's notes. Otherwise only globals are injected.
 if [ -n "${{SOVEREIGN_FEATURE_ID:-}}" ]; then
   PAYLOAD=$(printf '{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"read_notes","arguments":{{"kinds":["invariant","decision"],"scope":["global","feature"],"feature_id":"%s","limit":20}}}}}}' "$SOVEREIGN_FEATURE_ID")
@@ -5615,7 +5615,7 @@ fn generate_claude_settings(port: u16, corpus_id: &str, has_git: bool, has_scip:
          Read .sovereign/SOVEREIGN.md for the full tool reference \
          and project-specific invariants. When MCP isn't available \
          (daemon stopped, scripting, non-MCP client), the same tools \
-         are reachable as `sovereign tools {{list|describe|call}}` — \
+         are reachable as `svrn tools {{list|describe|call}}` — \
          see `.sovereign/SOVEREIGN.md` for the CLI section.\n\n\
          SESSION START — run these three calls before anything else:\n\
          1. recent_changes(hours: 24) — see which subsystems are active\n\
@@ -5879,12 +5879,12 @@ const DAEMON_BASE: &str = "http://127.0.0.1:9741";
 pub(crate) async fn cmd_register(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
-            "sovereign project register",
+            "svrn project register",
             "Register the current directory with the daemon's freshness pipeline.",
             &[
-                "sovereign project register",
-                "sovereign project register --root /path/to/repo",
-                "sovereign project register --name my-monorepo",
+                "svrn project register",
+                "svrn project register --root /path/to/repo",
+                "svrn project register --name my-monorepo",
             ],
         );
         return 0;
@@ -5928,12 +5928,12 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
                 corpus_id,
                 root.display()
             );
-            println!("    The daemon is now watching this project. Use `sovereign project watch status` to inspect.");
+            println!("    The daemon is now watching this project. Use `svrn project watch status` to inspect.");
             0
         }
         Err(e) => {
             eprintln!("error: daemon call failed: {e}");
-            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            eprintln!("hint: is the daemon running? try `svrn daemon status`.");
             1
         }
     }
@@ -5942,9 +5942,9 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
 pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
-            "sovereign project unregister",
+            "svrn project unregister",
             "Stop the daemon from watching a project.",
-            &["sovereign project unregister <corpus_id>"],
+            &["svrn project unregister <corpus_id>"],
         );
         return 0;
     }
@@ -5977,9 +5977,9 @@ pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
 pub(crate) async fn cmd_list(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
-            "sovereign project list",
+            "svrn project list",
             "List every project the daemon is watching.",
-            &["sovereign project list"],
+            &["svrn project list"],
         );
         return 0;
     }
@@ -5990,7 +5990,7 @@ pub(crate) async fn cmd_list(args: &[String]) -> i32 {
                 return 0;
             };
             if projects.is_empty() {
-                println!("  No projects registered yet. Run `sovereign project register` in a repo to add one.");
+                println!("  No projects registered yet. Run `svrn project register` in a repo to add one.");
                 return 0;
             }
             println!("  Registered projects:");
@@ -6013,7 +6013,7 @@ pub(crate) async fn cmd_list(args: &[String]) -> i32 {
         }
         Err(e) => {
             eprintln!("error: daemon call failed: {e}");
-            eprintln!("hint: is the daemon running? try `sovereign daemon status`.");
+            eprintln!("hint: is the daemon running? try `svrn daemon status`.");
             1
         }
     }
@@ -6022,12 +6022,12 @@ pub(crate) async fn cmd_list(args: &[String]) -> i32 {
 pub(crate) async fn cmd_watch(args: &[String]) -> i32 {
     if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
-            "sovereign project watch",
+            "svrn project watch",
             "Inspect or control per-project watchers.",
             &[
-                "sovereign project watch status [<id>]",
-                "sovereign project watch restart <id> [<watcher>]",
-                "sovereign project watch logs <id> <watcher>",
+                "svrn project watch status [<id>]",
+                "svrn project watch restart <id> [<watcher>]",
+                "svrn project watch logs <id> <watcher>",
             ],
         );
         return if args.is_empty() { 1 } else { 0 };
@@ -6064,7 +6064,7 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
         .collect();
     if filtered.is_empty() {
         if let Some(id) = target {
-            eprintln!("\"{id}\" is not registered. run `sovereign project list` to see registered projects.");
+            eprintln!("\"{id}\" is not registered. run `svrn project list` to see registered projects.");
         } else {
             println!("  no projects registered yet.");
         }
@@ -6116,7 +6116,7 @@ async fn cmd_watch_restart(args: &[String]) -> i32 {
     {
         Ok(_) => {
             println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
-            println!("    Check progress with `sovereign project watch status {corpus_id}`.");
+            println!("    Check progress with `svrn project watch status {corpus_id}`.");
             0
         }
         Err(e) => {
@@ -6299,7 +6299,7 @@ fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
 // The post-commit hook installer used to be wired into `cmd_init`, but
 // freshness is now handled by the daemon's watcher (see `corpus-engine`
 // `update::watcher` and the daemon's reindex loop). The CLI still
-// recognizes `sovereign project install-hooks` as a deprecated
+// recognizes `svrn project install-hooks` as a deprecated
 // subcommand that prints a migration hint, but no production code path
 // installs a hook anymore.
 //
@@ -6736,7 +6736,7 @@ fi
     /// `collect_feature_rows` returns one row for a feature with a
     /// `.sovereign/features/<id>/spec.md` on disk and no
     /// `features.db`. Phase 6: this is the new default — users do
-    /// NOT need to run `sovereign atos provision` to have a feature
+    /// NOT need to run `svrn atos provision` to have a feature
     /// surface in the audit; writing the spec is sufficient.
     #[tokio::test]
     async fn audit_lists_directory_only_feature_without_features_db() {

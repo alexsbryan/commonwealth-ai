@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich diagnose <corpus-id>` — read-only atlas
+//! `svrn enrich diagnose <corpus-id>` — read-only atlas
 //! inspection.
 //!
 //! Where `enrich show` reads the legacy phase-cache outputs, this
@@ -30,11 +30,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich diagnose",
+    command: "svrn enrich diagnose",
     summary: "Read-only inspection of the resolved philosophy atlas. Reports per-phase atom/edge counts, position lists, fault lines, gaps, and configurations.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich diagnose <corpus-id> [--phase positions|atoms|fault-lines|gaps|configurations|all] [--limit <n>]",
+            "svrn enrich diagnose <corpus-id> [--phase positions|atoms|fault-lines|gaps|configurations|all] [--limit <n>]",
         ),
         HelpSection::Flags(&[
             (
@@ -48,11 +48,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich diagnose fwd",
+                "svrn enrich diagnose fwd",
                 "Full atlas summary for the corpus.",
             ),
             (
-                "sovereign enrich diagnose fwd --phase fault-lines --limit 50",
+                "svrn enrich diagnose fwd --phase fault-lines --limit 50",
                 "List up to 50 detected Tension edges with their crux text.",
             ),
         ]),

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign setup` — first-run onboarding.
+//! `svrn setup` — first-run onboarding.
 //!
 //! Flow: detect hardware → pick primary model → download three slots
 //! in parallel → write `~/.sovereign/config.toml` → register
@@ -54,28 +54,28 @@ use finish::finish_with_paths;
 pub(crate) use download::download_with_progress;
 
 pub async fn run_setup(args: &[String]) -> i32 {
-    // Phase 4: `sovereign setup` is now a wizard-only shim. The
+    // Phase 4: `svrn setup` is now a wizard-only shim. The
     // service-install + opencode + doctor steps that used to run
     // here moved out — service registration is now `sovereign
     // install-service`, and the daemon-first-boot path
-    // (`sovereign daemon`) inlines the wizard automatically.
+    // (`svrn daemon`) inlines the wizard automatically.
     //
     // We detect whether this invocation came in via the new
     // `daemon --setup-only` path (which prepends `--wizard-only`)
-    // or from a direct `sovereign setup` user invocation. Direct
+    // or from a direct `svrn setup` user invocation. Direct
     // invocations get a one-time banner so the user knows where
     // service registration moved.
     let invoked_via_daemon_path = args.iter().any(|a| a == "--wizard-only");
     let mut effective_args: Vec<String> = args.to_vec();
     if !invoked_via_daemon_path {
-        sovereign_cli_shared::deprecation::announce("sovereign setup", "sovereign daemon --setup-only");
-        // The legacy `sovereign setup` is now wizard-only. Force the
+        sovereign_cli_shared::deprecation::announce("svrn setup", "svrn daemon --setup-only");
+        // The legacy `svrn setup` is now wizard-only. Force the
         // flag on so `finish_with_paths` short-circuits before the
         // service-install branch — that branch belongs to
-        // `sovereign install-service` now. Keeping the alias semantics
-        // means scripts that called `sovereign setup` still get a
+        // `svrn install-service` now. Keeping the alias semantics
+        // means scripts that called `svrn setup` still get a
         // working config; they just have to follow up with
-        // `sovereign install-service` if they want the service
+        // `svrn install-service` if they want the service
         // manager to keep the daemon alive across reboots.
         effective_args.push("--wizard-only".to_string());
     }
@@ -126,7 +126,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
         let path = SetupConfig::default_path();
         println!();
         println!("  Already set up. Config at {}", path.display());
-        println!("  Run `sovereign status` to check or `sovereign setup --reset` to reconfigure.");
+        println!("  Run `svrn status` to check or `svrn setup --reset` to reconfigure.");
         return 0;
     }
 
@@ -280,8 +280,8 @@ struct Opts {
     /// opencode config, doctor, and the daemon health probe. The
     /// daemon's first-boot path sets this so the wizard can run
     /// inline before `run_daemon` continues to load models and bind
-    /// `:9741`. The legacy `sovereign setup` command also runs in
-    /// this mode and points the user at `sovereign install-service`
+    /// `:9741`. The legacy `svrn setup` command also runs in
+    /// this mode and points the user at `svrn install-service`
     /// for service registration.
     wizard_only: bool,
 }
@@ -324,7 +324,7 @@ struct ModelPaths {
 /// reject at load. Leaving a stub behind has exactly one failure
 /// mode — silent inference 503s hours later when the user first
 /// issues a chat — while deleting it lets the operator just
-/// re-run `sovereign setup` (which is now idempotent: it'll skip
+/// re-run `svrn setup` (which is now idempotent: it'll skip
 /// good files and re-download missing ones).
 async fn run_repair() -> i32 {
     let cfg = match SetupConfig::load() {
@@ -334,7 +334,7 @@ async fn run_repair() -> i32 {
                 "error: could not read {}: {e}",
                 SetupConfig::default_path().display()
             );
-            eprintln!("hint: run `sovereign setup` to set up from scratch.");
+            eprintln!("hint: run `svrn setup` to set up from scratch.");
             return 1;
         }
     };
@@ -379,7 +379,7 @@ async fn run_repair() -> i32 {
                 if let Err(rm_err) = std::fs::remove_file(path) {
                     eprintln!("      could not remove: {rm_err}");
                 } else {
-                    eprintln!("      removed; re-run `sovereign setup` to re-download.");
+                    eprintln!("      removed; re-run `svrn setup` to re-download.");
                     removed += 1;
                 }
             }
@@ -389,7 +389,7 @@ async fn run_repair() -> i32 {
     println!();
     println!(
         "  Summary: {kept} valid, {removed} removed. \
-         Run `sovereign setup` to re-download the removed slots."
+         Run `svrn setup` to re-download the removed slots."
     );
     if removed > 0 {
         1
@@ -609,7 +609,7 @@ mod tests {
     /// Phase 4: `--wizard-only` is the internal flag that
     /// `daemon_cmd::run_setup_only` uses to suppress the
     /// service-install / opencode / doctor steps. It also gets
-    /// auto-injected by the legacy `sovereign setup` shim so
+    /// auto-injected by the legacy `svrn setup` shim so
     /// direct invocations of the old name still hit the wizard
     /// path.
     #[test]
@@ -621,7 +621,7 @@ mod tests {
     }
 
     /// Default Opts still has `wizard_only=false` so we don't
-    /// accidentally short-circuit the legacy `sovereign setup` flow
+    /// accidentally short-circuit the legacy `svrn setup` flow
     /// in scripts that rebuilt against this binary without changing
     /// their invocation.
     #[test]

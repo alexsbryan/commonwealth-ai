@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness` — development glassbox CLI for the
+//! `svrn awareness` — development glassbox CLI for the
 //! relational + strategic awareness pipeline.
 //!
 //! Every subcommand answers one developer question: what's in the
@@ -83,7 +83,7 @@ pub async fn run_awareness(args: &[String]) -> i32 {
 
 fn print_help() {
     eprintln!(
-        "sovereign awareness — development glassbox CLI for the\n\
+        "svrn awareness — development glassbox CLI for the\n\
          relational + strategic awareness pipeline.\n\
          \n\
          USAGE\n    sovereign awareness <subcommand> [flags]\n\

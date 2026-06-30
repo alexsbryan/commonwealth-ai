@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign plan` — top-level plan-related commands.
+//! `svrn plan` — top-level plan-related commands.
 //!
 //! Two surfaces:
 //!
-//! - `sovereign plan [--allow-open]` — legacy: derive
+//! - `svrn plan [--allow-open]` — legacy: derive
 //!   IMPLEMENTATION_PLAN.md (delegates to project_cmd::cmd_plan).
-//! - `sovereign plan validate <path>` — new: lint a plan markdown
+//! - `svrn plan validate <path>` — new: lint a plan markdown
 //!   file for the four alignment sections (Context, What this
 //!   extends, What this removes, Restraint patterns, Could this
 //!   be done with less?). Used by the PreToolUse hook on
@@ -36,7 +36,7 @@ async fn cmd_validate(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        eprintln!("Usage: sovereign plan validate <path>");
+        eprintln!("Usage: svrn plan validate <path>");
         eprintln!();
         eprintln!("Lint a plan markdown file for the four alignment sections.");
         eprintln!("Exit codes:");

@@ -213,7 +213,7 @@ async fn render_diff(
         println!();
         println!(
             "  ⚠ {total_parse_errors} tool_call parse error(s) across all runs — \
-             run `sovereign atos diff {} --ordinal {} --verbose` (TODO) to inspect payloads.",
+             run `svrn atos diff {} --ordinal {} --verbose` (TODO) to inspect payloads.",
             feature.id, milestone.ordinal
         );
     }

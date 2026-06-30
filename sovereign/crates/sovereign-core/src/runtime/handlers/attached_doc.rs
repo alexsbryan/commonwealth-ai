@@ -659,6 +659,9 @@ impl Runtime {
             };
         let evidence = crate::runtime::grounding::EvidenceContext {
             chunks: retrieved_tool_results.to_vec(),
+            // Tool-result transcripts, not retrieved chunks — no source labels; the
+            // citation check runs body-only here.
+            source_labels: Vec::new(),
             searcher,
             entity_anchored,
             top_similarity: None,

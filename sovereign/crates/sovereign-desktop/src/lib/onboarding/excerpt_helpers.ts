@@ -150,7 +150,7 @@ export function deriveExcerptStarters(
 
   const out: StarterQuestion[] = [];
 
-  // Cross-document question first — it's the "unique to Sovereign"
+  // Cross-document question first — it's the "unique to svrnmesh"
   // capability and the highest-value question a first-time user
   // could ask. Only offered when we have at least two docs.
   if (cleanTitles.length >= 2) {

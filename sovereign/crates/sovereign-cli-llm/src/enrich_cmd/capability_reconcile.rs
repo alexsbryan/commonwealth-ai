@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich capability-reconcile <corpus>` — reconcile the DERIVED
+//! `svrn enrich capability-reconcile <corpus>` — reconcile the DERIVED
 //! capabilities against the project's architecture docs. "Drift reports taken to
 //! the next level": where the existing drift system reconciles *names* (does this
 //! symbol exist?), this reconciles *capabilities* (does the code do what the docs
@@ -51,19 +51,19 @@ const VERIFY_SYSTEM: &str = "You decide whether a CAPABILITY is documented. Arch
 const DRIFT_SYSTEM: &str = "You check whether documentation has DRIFTED from the code. You are given (A) what a capability ACTUALLY does, derived from its code, and (B) excerpts from the architecture docs that describe it. Decide whether any excerpt CONTRADICTS the code behaviour — claims something the code does not do, or describes it working differently (e.g. 'synchronous' when the code is async, 'loops over tools' when the code is single-shot). Report drift ONLY for a real, specific contradiction — NOT mere incompleteness, different wording, or the code computing more detail than the doc summarizes. 'Read-only', 'safe', and 'pure' describe SIDE EFFECTS (no writes or mutation): a tool that reads data and computes, analyzes, or calculates a result is still read-only — that is NOT drift. Answer on one line: 'DRIFT: <the specific contradiction, <=20 words>' or 'OK'.";
 
 const HELP: Help = Help {
-    command: "sovereign enrich capability-reconcile",
+    command: "svrn enrich capability-reconcile",
     summary: "Reconcile derived capabilities against the architecture docs: corroborated / undocumented / drifted.",
     sections: &[
-        HelpSection::Usage("sovereign enrich capability-reconcile <corpus-id> [--filter=<label-substring>] [--no-drift] [--render-only]"),
+        HelpSection::Usage("svrn enrich capability-reconcile <corpus-id> [--filter=<label-substring>] [--no-drift] [--render-only]"),
         HelpSection::Flags(&[
-            ("<corpus-id>", "An installed code corpus with a capability map (run `sovereign code capability-map` first)."),
+            ("<corpus-id>", "An installed code corpus with a capability map (run `svrn code capability-map` first)."),
             ("--filter=<s>", "Optional: only reconcile capabilities whose label contains this substring."),
             ("--no-drift", "Skip the 5b behavioural-drift pass (faster; corroborated/undocumented only)."),
             ("--render-only", "Re-render capability_findings.md from the existing JSON — no LLM, no daemon."),
         ]),
         HelpSection::Notes(
             "Requires the daemon at localhost:9741. Behavioural drift needs narrations — run \
-             `sovereign enrich capability-doc <corpus>` first so corroborated capabilities can be \
+             `svrn enrich capability-doc <corpus>` first so corroborated capabilities can be \
              checked claim-vs-code.",
         ),
     ],
@@ -275,7 +275,7 @@ fn render_markdown(set: &FindingSet) -> String {
     s.push_str(&format!("# {} — Capability Reconciliation (derived vs docs)\n\n", set.corpus_id));
     s.push_str(&format!(
         "_Derived capabilities reconciled against the architecture docs — {} corroborated · {} undocumented · {} drifted. \
-         Regenerate with `sovereign enrich capability-reconcile {}`._\n\n",
+         Regenerate with `svrn enrich capability-reconcile {}`._\n\n",
         set.corroborated, set.undocumented, set.drifted, set.corpus_id,
     ));
 

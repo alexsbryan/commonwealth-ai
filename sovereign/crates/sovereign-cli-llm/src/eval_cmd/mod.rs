@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign eval ...` — measure retrieval quality against a question
+//! `svrn eval ...` — measure retrieval quality against a question
 //! bank.
 //!
 //! The eval command is the measurement substrate for everything we
@@ -45,10 +45,10 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign eval",
+    command: "svrn eval",
     summary: "Run a question bank against a corpus; measure retrieval quality.",
     sections: &[
-        HelpSection::Usage("sovereign eval <subcommand> [args]"),
+        HelpSection::Usage("svrn eval <subcommand> [args]"),
         HelpSection::Subcommands(&[(
             "run",
             "Execute a bank and print per-question + rollup scores.",
@@ -62,11 +62,11 @@ const HELP: Help = Help {
 };
 
 const RUN_HELP: Help = Help {
-    command: "sovereign eval run",
+    command: "svrn eval run",
     summary: "Run a question bank, print per-question results + category rollup.",
     sections: &[
         HelpSection::Usage(
-            "sovereign eval run --bank <path> [--synth] [--limit N] [--inspect] [--format text|json] [--output <path>]",
+            "svrn eval run --bank <path> [--synth] [--limit N] [--inspect] [--format text|json] [--output <path>]",
         ),
         HelpSection::Flags(&[
             ("--bank <path>",  "Path to the bank TOML (e.g. sovereign/bench/wikipedia/questions.toml)."),
@@ -95,7 +95,7 @@ const RUN_HELP: Help = Help {
             "All `chat` global flags also apply: --daemon, --data-dir, --chat-model, \
              --embed-model, --temperature, --max-tokens. The bank's `corpus` field \
              MUST match an installed corpus_id; install it first via \
-             `sovereign corpus install <id>`. Under --synth, --chat-model selects the \
+             `svrn corpus install <id>`. Under --synth, --chat-model selects the \
              model that will do synthesis; --max-tokens lets you sweep the \
              latency/coverage tradeoff (lower = faster wall, terser answer) without \
              touching the operator's product config.",

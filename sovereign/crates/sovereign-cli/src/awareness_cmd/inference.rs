@@ -6,7 +6,7 @@
 //!
 //! - **default** — POST prompts to the running daemon's
 //!   `/v1/chat/completions` endpoint via `DaemonInferenceClient`. The
-//!   daemon must be running (`sovereign daemon run`); the CLI does
+//!   daemon must be running (`svrn daemon run`); the CLI does
 //!   not load a parallel embedded model. Chat-model id is taken from
 //!   `--model <id>` or auto-selected from the daemon's `/v1/models`
 //!   listing (first non-embedding entry).
@@ -57,7 +57,7 @@ pub(super) fn pick_mode(flags: &[(String, String)]) -> InferenceMode {
 }
 
 /// Build the InferenceFn for the chosen mode. Real mode loads the
-/// embedded model the same way `sovereign chat` does — heavy, but
+/// embedded model the same way `svrn chat` does — heavy, but
 /// the awareness CLI defers that cost until the user explicitly
 /// asks for real extraction quality.
 pub(super) async fn resolve_inference(
@@ -400,7 +400,7 @@ async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, Strin
     if !probe_daemon(&base_url).await {
         return Err(format!(
             "daemon not reachable at {base_url}/v1/models — start it with \
-             `sovereign daemon run` (or pass --daemon-url <url>); use --mock \
+             `svrn daemon run` (or pass --daemon-url <url>); use --mock \
              only for offline wiring checks, not for tuning"
         ));
     }

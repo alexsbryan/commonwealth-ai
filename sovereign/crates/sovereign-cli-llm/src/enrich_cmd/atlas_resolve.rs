@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-resolve` — Phase A Step 3a + Step 3b
+//! `svrn enrich atlas-resolve` — Phase A Step 3a + Step 3b
 //! driver.
 //!
 //! Reads the cached `Phase1Output` (section-level sketches),
@@ -38,10 +38,10 @@ use sovereign_core::types::{
 };
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-resolve",
+    command: "svrn enrich atlas-resolve",
     summary: "Resolve atlas atoms + edges from Phase 1 sketches.",
     sections: &[
-        HelpSection::Usage("sovereign enrich atlas-resolve <corpus-id> [--phase 3a|3b|all]"),
+        HelpSection::Usage("svrn enrich atlas-resolve <corpus-id> [--phase 3a|3b|all]"),
         HelpSection::Flags(&[
             (
                 "--phase 3a",
@@ -63,16 +63,16 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-resolve brothers_karamazov",
+                "svrn enrich atlas-resolve brothers_karamazov",
                 "Default (Phase 3a) — resolve entities + events from the cached sketches.",
             ),
             (
-                "sovereign enrich atlas-resolve bk --phase all",
+                "svrn enrich atlas-resolve bk --phase all",
                 "Full structural pass — every atom type + trajectories.json populated.",
             ),
         ]),
         HelpSection::Notes(
-            "Requires a prior `sovereign enrich extract <corpus> --full` so the Phase 1 \
+            "Requires a prior `svrn enrich extract <corpus> --full` so the Phase 1 \
              cache exists. Produces `~/.sovereign/indexes/<corpus>/atlas/atoms.json`, \
              `edges.json`, and `trajectories.json`.",
         ),
@@ -130,7 +130,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         Ok(Some(p)) => p,
         Ok(None) => {
             eprintln!(
-                "error: no Phase 1 cache at {}. Run `sovereign enrich extract {} \
+                "error: no Phase 1 cache at {}. Run `svrn enrich extract {} \
                  --full` first.",
                 paths::cache_dir(&cfg.corpus_id).display(),
                 cfg.corpus_id
@@ -226,7 +226,7 @@ pub(crate) async fn resolve_into_dir(
     let want_3b = matches!(phase, ResolvePhase::P3b | ResolvePhase::All);
 
     // Collect structured drops across both resolution phases so the
-    // aggregator (`sovereign enrich errors`) can surface them grouped
+    // aggregator (`svrn enrich errors`) can surface them grouped
     // by kind. Empty in the clean-run case.
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
@@ -358,7 +358,7 @@ pub(crate) async fn resolve_into_dir(
                 println!("  ✓ {} (no resolution drops)", path.display());
             } else {
                 println!(
-                    "  ! {} drop(s) — see {} (run `sovereign enrich errors {}` for remediation)",
+                    "  ! {} drop(s) — see {} (run `svrn enrich errors {}` for remediation)",
                     resolution_failures.len(),
                     path.display(),
                     cfg.corpus_id
@@ -403,7 +403,7 @@ pub(crate) enum ResolvePhase {
 ///
 /// One atomic op wrapping the *exact* bespoke `resolve_into_dir` (entity merge by
 /// description cosine, event dedupe, typed-atom resolution, type extensions) — so
-/// a workflow-built atlas is byte-faithful to `sovereign enrich atlas-resolve`.
+/// a workflow-built atlas is byte-faithful to `svrn enrich atlas-resolve`.
 /// It reuses the same machinery (`EnrichConfig`, `DaemonInferenceClient`,
 /// `resolve_into_dir`), which is why this leaf lives here in `enrich_cmd` rather
 /// than in `sovereign-tools`: the resolver needs a daemon embed closure (the

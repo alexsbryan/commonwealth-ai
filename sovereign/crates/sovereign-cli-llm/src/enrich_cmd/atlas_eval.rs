@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-eval <atlas-corpus> --bank <path>` —
+//! `svrn enrich atlas-eval <atlas-corpus> --bank <path>` —
 //! score the structural atlas against a question bank by tokenized
 //! title-overlap retrieval.
 //!
@@ -33,11 +33,11 @@ use crate::eval_cmd::bank::load_bank;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-eval",
+    command: "svrn enrich atlas-eval",
     summary: "Score the structural atlas against a question bank by tokenized title-overlap retrieval.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-eval <atlas-corpus> --bank <path> [--top-k N] [--include-placeholders] [--json]",
+            "svrn enrich atlas-eval <atlas-corpus> --bank <path> [--top-k N] [--include-placeholders] [--json]",
         ),
         HelpSection::Flags(&[
             (
@@ -59,7 +59,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-eval wiki-l5-struct --bank sovereign/bench/wikipedia/questions.toml --top-k 10",
+                "svrn enrich atlas-eval wiki-l5-struct --bank sovereign/bench/wikipedia/questions.toml --top-k 10",
                 "Score the structural-only retrieval against the wiki-core-v2 bank.",
             ),
         ]),
@@ -106,7 +106,7 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
     let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         eprintln!(
-            "error: no atlas at {} — run `sovereign enrich ingest {corpus_id} --strategy structure_first --source-corpus <id>` first",
+            "error: no atlas at {} — run `svrn enrich ingest {corpus_id} --strategy structure_first --source-corpus <id>` first",
             atlas_dir.display()
         );
         return 1;

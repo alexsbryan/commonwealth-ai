@@ -39,6 +39,7 @@
 //! questions, where a GK caveat cannot exempt an in-world claim.
 
 mod citation;
+mod citation_attribution;
 mod config;
 mod judge;
 mod search;
@@ -49,6 +50,14 @@ mod value_presence;
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
 pub use value_presence::{assess_asserted_value, AssertedValue};
+
+// The supporting-specifics half of groundedness: `value_presence` checks the
+// answer's top-line VALUE, this strips `[Source: …]` citations whose title is
+// absent from the evidence. The gate consumes it in `gate_held_answer`.
+// `CitationAttribution` (the return type) is exported alongside but not yet named
+// by a consumer — same `#[allow]` idiom as `grounding_gate_flags`.
+#[allow(unused_imports)]
+pub use citation_attribution::{attribute_citations, CitationAttribution};
 
 pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfile};
 // Registry export: consumed by the config-module coverage test today;
@@ -77,6 +86,13 @@ use judge::{claim_violation_joint, extract_claim_list};
 pub(crate) struct EvidenceContext {
     /// Prompt-snapshot evidence the draft was synthesized from.
     pub chunks: Vec<String>,
+    /// Legitimate citation labels for the citation-attribution check — each
+    /// retrieved chunk's title and corpus id (what the synthesis presents as
+    /// `[Source: …]` headers and the model cites). A `[Source: X]` whose words are
+    /// absent from the chunk BODY but present in a label is grounded, not a
+    /// fabrication. Empty when labels are unavailable (tool-transcript / step-
+    /// summary evidence) — the check is then body-only.
+    pub source_labels: Vec<String>,
     /// Claim-conditioned widening WITHIN the sealed universe.
     /// `None` = the snapshot IS the universe (e.g. tool transcripts).
     pub searcher: Option<Arc<dyn SealedEvidenceSearch>>,
@@ -121,6 +137,30 @@ pub(crate) fn gate_evidence_chunks(chunks: &[corpus_engine::ScoredChunk]) -> Vec
         .collect()
 }
 
+/// The legitimate citation LABELS for `attribute_citations`: each chunk's title
+/// and corpus id — the source identifiers the synthesis presents as `[Source: …]`
+/// headers and the model cites. Unlike `gate_evidence_chunks` these are NOT body
+/// text; they only WIDEN what the citation check counts as grounded, so a citation
+/// naming a source by its corpus or section title is not mistaken for a fabrication.
+/// RAPTOR summaries are NOT excluded here: a summary's title/corpus is still a real
+/// label, and since labels never narrow groundedness, including them is always safe.
+pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+    let mut out = Vec::with_capacity(chunks.len() * 2);
+    for c in chunks {
+        if let Some(t) = c.title.as_deref() {
+            let t = t.trim();
+            if !t.is_empty() {
+                out.push(t.to_string());
+            }
+        }
+        let cid = c.corpus_id.trim();
+        if !cid.is_empty() {
+            out.push(cid.to_string());
+        }
+    }
+    out
+}
+
 /// One audit-failed claim plus the claim-conditioned passages its
 /// targeted search returned — the rewrite's correction material.
 struct FailedClaim {
@@ -140,10 +180,11 @@ struct FailedClaim {
 /// leakage.
 pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {
     format!(
-        "I can't answer this from your sources — none of the {chunks_checked} \
-         retrieved passages support an answer, so I'm not going to state one. If \
-         it's in your sources, try rephrasing with the specific names or terms \
-         involved; otherwise it may simply not be recorded there."
+        "I looked through the {chunks_checked} passages your sources turned up for \
+         this, but none of them actually cover it — so I'd rather not guess at an \
+         answer that isn't there. If you think it's in your sources, try rephrasing \
+         with the specific names or terms involved and I'll take another look; \
+         otherwise it may just not be recorded there."
     )
 }
 
@@ -414,6 +455,18 @@ pub(crate) async fn gate_answer(
                     retry_req.assistant_prefix = None;
                     match inference.complete(&retry_req).await {
                         Ok(resp) => {
+                            // Truncation trace (2026-06-30): the gate's non-streaming
+                            // retry bypasses the synth.truncation glassbox — log its
+                            // finish vs cap so a silent Length cut here is visible.
+                            tracing::info!(
+                                target: "gate.call",
+                                kind = "retry",
+                                finish = ?resp.finish_reason,
+                                completion_tokens = ?resp.completion_tokens,
+                                max_tokens = ?retry_req.max_tokens,
+                                resp_chars = resp.text.chars().count(),
+                                "gate internal completion"
+                            );
                             let second = resp.text;
                             // Same structural strip on the retry: the documented
                             // leak is a retry that re-asserts the fabrication
@@ -685,6 +738,18 @@ async fn gate_longform(
     rewrite_req.assistant_prefix = Some(LONGFORM_REWRITE_PREFIX.to_string());
     match inference.complete(&rewrite_req).await {
         Ok(resp) => {
+            // Truncation trace (2026-06-30): the longform rewrite is non-streaming
+            // and bypasses synth.truncation — log its finish vs cap so a silent
+            // Length cut on the rewrite (the prime suspect) is visible.
+            tracing::info!(
+                target: "gate.call",
+                kind = "rewrite",
+                finish = ?resp.finish_reason,
+                completion_tokens = ?resp.completion_tokens,
+                max_tokens = ?rewrite_req.max_tokens,
+                resp_chars = resp.text.chars().count(),
+                "gate internal completion"
+            );
             let second = format!("{LONGFORM_REWRITE_PREFIX}{}", resp.text);
             let second_backup = second.clone();
             match audit(second).await {
@@ -831,6 +896,7 @@ mod tests {
     fn refinement_evidence() -> EvidenceContext {
         EvidenceContext {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
+            source_labels: Vec::new(),
             searcher: None,
             entity_anchored: false,
             top_similarity: None,
@@ -861,8 +927,11 @@ mod tests {
         );
         // grounded_abstention was rewritten (2026-06-17) to stop restating the
         // rejected claim verbatim (it leaked the fabrication + read as "answered"
-        // to the primary judge). The action is the invariant; the wording moved.
-        assert!(outcome.text.starts_with("I can't answer this from your sources"));
+        // to the primary judge), then re-toned (2026-06-30) to drop the abrupt
+        // "so I'm not going to state one" lecture for a warm, helpful refusal.
+        // The action is the invariant; the wording is graceful, not brusque.
+        assert!(outcome.text.starts_with("I looked through the"));
+        assert!(!outcome.text.contains("not going to state"));
     }
 
     /// Supported claims release unchanged under verify-only.

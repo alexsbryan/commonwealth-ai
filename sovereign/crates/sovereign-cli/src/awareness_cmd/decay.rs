@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness decay` — simulate memory decay with vs.
+//! `svrn awareness decay` — simulate memory decay with vs.
 //! without entity-aware weighting.
 //!
 //! Reads every memory from the StateStore, projects each forward by

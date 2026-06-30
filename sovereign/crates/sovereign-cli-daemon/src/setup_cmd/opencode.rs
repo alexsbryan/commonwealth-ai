@@ -54,7 +54,7 @@ pub(super) fn opencode_config_snippet(client_port: u16) -> String {
 
 /// Install or merge our opencode entries into `~/.config/opencode/opencode.json`.
 ///
-/// Behaviour matrix (decided so a re-run of `sovereign setup` is
+/// Behaviour matrix (decided so a re-run of `svrn setup` is
 /// always safe and never clobbers third-party config):
 ///   - file missing               → create with our entries only.
 ///   - file present, no overlap   → merge: add `mcp.servers.sovereign`

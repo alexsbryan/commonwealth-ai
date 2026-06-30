@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Phase 3 — `sovereign init` auto-spawns `serve --background`.
+//! Phase 3 — `svrn init` auto-spawns `serve --background`.
 //!
 //! End-to-end checks that don't require a real index. The full
 //! init→serve→stop dance is hard to exercise in a unit test (it
@@ -41,7 +41,7 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).to_string()
 }
 
-/// `sovereign serve --help` documents the new `--background` flag
+/// `svrn serve --help` documents the new `--background` flag
 /// and the stop instructions. This is the user-facing contract that
 /// the Phase 3 plan promised — if either string disappears, users
 /// won't discover the new mode.
@@ -65,12 +65,12 @@ fn serve_help_documents_background_flag() {
         "serve --help missing --background flag:\n{combined}"
     );
     assert!(
-        combined.contains("sovereign stop"),
+        combined.contains("svrn stop"),
         "serve --help missing stop instructions:\n{combined}"
     );
 }
 
-/// `sovereign stop --help` documents that it reads the pid file. If
+/// `svrn stop --help` documents that it reads the pid file. If
 /// users can't find this in --help they'll never realize a
 /// background server is running.
 #[test]
@@ -88,7 +88,7 @@ fn stop_help_documents_pid_file() {
     );
 }
 
-/// `sovereign init --help` runs without spawning anything. Our wrapper
+/// `svrn init --help` runs without spawning anything. Our wrapper
 /// in `init.rs` should forward --help directly to cmd_init, which
 /// short-circuits via util::help::wants_help. If we accidentally
 /// trigger the spawn path on --help, this test will hang or fail.

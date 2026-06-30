@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign portfolio ask` — one question, per-company answers (AC-6).
+//! `svrn portfolio ask` — one question, per-company answers (AC-6).
 //!
 //! A portfolio query is a *logical* roll-up, not a physical merge. We run
 //! the question once PER corpus in the set, each turn sealed to that single
@@ -56,7 +56,7 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         match super::get_portfolio(&store, name) {
             Some(c) if !c.is_empty() => c,
             Some(_) => {
-                eprintln!("error: portfolio `{name}` is empty — add corpora with `sovereign portfolio add {name} <corpus-id ...>`");
+                eprintln!("error: portfolio `{name}` is empty — add corpora with `svrn portfolio add {name} <corpus-id ...>`");
                 return 1;
             }
             None => {

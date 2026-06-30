@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench governance` — FR-9 Lane A: governance tension
+//! `svrn bench governance` — FR-9 Lane A: governance tension
 //! detector precision/recall against an exhaustive truth manifest.
 //!
 //! Reads the corpus's enriched atlas (`atoms.json` + `edges.json`) + the
@@ -37,11 +37,11 @@ use sovereign_eval::governance_bench::{
 };
 
 const HELP: Help = Help {
-    command: "sovereign bench governance",
+    command: "svrn bench governance",
     summary: "Governance tension-detector precision/recall vs an exhaustive truth manifest (FR-9 Lane A).",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench governance <run|diagnose> <corpus-id> [--truth <path>] [--split <test|all>] [--out <report.json>]",
+            "svrn bench governance <run|diagnose> <corpus-id> [--truth <path>] [--split <test|all>] [--out <report.json>]",
         ),
         HelpSection::Flags(&[
             (
@@ -59,15 +59,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign bench governance run maple-house --split test --out target/gov.json",
+                "svrn bench governance run maple-house --split test --out target/gov.json",
                 "Score the detector on the test split; emit the gate artifact.",
             ),
             (
-                "sovereign bench governance diagnose maple-house --split all",
+                "svrn bench governance diagnose maple-house --split all",
                 "Per-tension hit/miss + per-decoy false-positive listing.",
             ),
             (
-                "sovereign bench governance qa maple-house --out target/gov-qa.jsonl",
+                "svrn bench governance qa maple-house --out target/gov-qa.jsonl",
                 "Lane B: run the QA chaos bank over the governance corpus (active-set + governance gate apply); emit ResultRow JSONL for `bench gate governance-qa`.",
             ),
         ]),
@@ -214,7 +214,7 @@ fn run(args: &[String], diagnose: bool) -> i32 {
         Ok(d) => d,
         Err(e) => {
             eprintln!("error: reading enriched atlas for `{}`: {e}", parsed.corpus_id);
-            eprintln!("  run `sovereign enrich build {} --full` first.", parsed.corpus_id);
+            eprintln!("  run `svrn enrich build {} --full` first.", parsed.corpus_id);
             return 1;
         }
     };

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign tools` — invoke code-intelligence tools directly from
+//! `svrn tools` — invoke code-intelligence tools directly from
 //! the CLI.
 //!
-//! The MCP surface (`sovereign project serve` / `sovereign daemon`)
+//! The MCP surface (`svrn project serve` / `svrn daemon`)
 //! exposes the same 24 tools over JSON-RPC; terminal agents see them
 //! as *an API* and often write Python wrappers to probe unfamiliar
 //! schemas. This surface exposes the same tools as *primitives* the
@@ -62,7 +62,7 @@ pub async fn run_tools(raw_args: &[String]) -> i32 {
 
 fn print_help() {
     eprintln!(
-        "sovereign tools — invoke code-intelligence tools as CLI primitives\n\
+        "svrn tools — invoke code-intelligence tools as CLI primitives\n\
          \n\
          USAGE\n    sovereign tools <subcommand> [flags]\n\
          \n\
@@ -119,7 +119,7 @@ async fn cmd_list(_args: &[String]) -> i32 {
     ];
 
     println!(
-        "sovereign tools — {} tool(s) available\n",
+        "svrn tools — {} tool(s) available\n",
         env.registry.count()
     );
     for (effect, scope) in order {
@@ -146,7 +146,7 @@ async fn cmd_list(_args: &[String]) -> i32 {
         println!();
     }
 
-    println!("Run `sovereign tools describe <id>` for details.");
+    println!("Run `svrn tools describe <id>` for details.");
     0
 }
 
@@ -187,7 +187,7 @@ async fn cmd_describe(args: &[String]) -> i32 {
         Ok(t) => t,
         Err(_) => {
             eprintln!("tools describe: unknown tool '{id}'");
-            eprintln!("  Run `sovereign tools list` for the full set.");
+            eprintln!("  Run `svrn tools list` for the full set.");
             return 1;
         }
     };
@@ -315,7 +315,7 @@ async fn cmd_call(args: &[String]) -> i32 {
         Ok(t) => t,
         Err(_) => {
             eprintln!("tools call: unknown tool '{id}'");
-            eprintln!("  Run `sovereign tools list` for the full set.");
+            eprintln!("  Run `svrn tools list` for the full set.");
             return 1;
         }
     };

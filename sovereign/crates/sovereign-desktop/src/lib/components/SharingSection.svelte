@@ -27,7 +27,7 @@
   // The glassbox "Activity & Sharing" surface. Three reads on a 5s
   // poll, plus the event-driven corpus-progress store, answer "what
   // has my daemon been doing — for me, and for the mesh?" in
-  // Sovereign's own vocabulary (tokens, embeddings, chunks, queries),
+  // svrnmesh's own vocabulary (tokens, embeddings, chunks, queries),
   // even as a mesh of one. Below the visibility sit the controls —
   // "the reins" — that decide how hard the daemon works.
 
@@ -318,7 +318,7 @@
   <!-- ── Totals ──────────────────────────────────────────── -->
   <h3 class="h3">All on this machine</h3>
   <p class="hint">
-    What Sovereign has done locally over the last {WINDOW_DAYS} days — your
+    What svrnmesh has done locally over the last {WINDOW_DAYS} days — your
     chats, the knowledge it served, and the corpora it built. None of it left
     your computer.
   </p>

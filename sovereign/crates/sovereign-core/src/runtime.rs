@@ -44,6 +44,26 @@ pub const OVERSIZE_MESSAGE_HINT: &str =
      routes attachments through a map-reduce pipeline designed for long \
      inputs. Or summarise your question into a paragraph or two.";
 
+/// Graceful clarification shown when a turn carries no actual question — empty,
+/// whitespace, or punctuation/symbols only (e.g. "?"). Without this the turn
+/// routed into the generative path and produced a generic essay over nothing,
+/// which the UX judge (rightly) scored as broken. Mirrors `OVERSIZE_MESSAGE_HINT`:
+/// `pub` so the desktop recognises it and renders a calm assistant turn instead
+/// of a raw error bubble. Brief, warm, points to a path forward.
+pub const DEGENERATE_MESSAGE_HINT: &str =
+    "I didn't catch a question there — what would you like to know? Ask about \
+     anything in your knowledge bases (a fact, a summary, or how two ideas \
+     connect) and I'll dig in.";
+
+/// A turn message carries no question to answer: it has no alphanumeric
+/// character at all (empty, whitespace, or punctuation/symbols only, like "?").
+/// Unicode-aware, so a question in any script (CJK, etc.) is NOT degenerate —
+/// only genuinely contentless input is. Guards the chat entry points alongside
+/// the oversize check.
+pub fn is_degenerate_message(message: &str) -> bool {
+    !message.chars().any(|c| c.is_alphanumeric())
+}
+
 pub use self::voice_prompts::{
     __voice_test_epistemic_contract_for, __voice_test_factual_base_prompt,
     __voice_test_relational_base_prompt, __voice_test_relational_expressive_prompt,
@@ -74,8 +94,8 @@ pub(crate) use self::collaboration::{
 pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::evidence::{
     compute_evidence_shape, decide_expansion_strategy, is_grounding_candidate, operation_of,
-    resolve_synthesis_route, EvidenceShape, ExpansionStrategy, SynthesisRoute,
-    EVIDENCE_MIN_TOKEN_COVERAGE,
+    resolve_output_budget, resolve_synthesis_route, EvidenceShape, ExpansionStrategy,
+    SynthesisRoute, EVIDENCE_MIN_TOKEN_COVERAGE,
 };
 pub(crate) use self::intent_helpers::{
     build_clarification_question, default_oicp_for_intent, format_interpretation, intent_hint,
@@ -266,7 +286,16 @@ pub struct Runtime {
     /// knowledge-query turn to surface stream-tagged anchors per
     /// question entity. `None` (or empty index) = no boost; retrieval
     /// falls back to cosine + entity-boost search exactly as before.
-    pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
+    /// `RwLock` (not a plain `Option`) so the desktop can DEFER this
+    /// load off the boot critical path: `canonical_atoms.json` is ~900MB
+    /// and parsing+indexing it was the bulk of the splash's
+    /// `BuildingRuntime` phase (2026-06-29 boot trace). The Runtime is
+    /// constructed with `None` (boost short-circuits, retrieval unchanged)
+    /// and a background warm attaches the index into the live
+    /// `Arc<Runtime>` via [`Self::install_meta_atlas`] once the app is
+    /// already interactive. CLI/server still attach eagerly via
+    /// [`Self::with_meta_atlas`].
+    pub meta_atlas: std::sync::RwLock<Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>>,
     /// Cross-corpus bridge edges (typed topic-to-topic alignment from
     /// `sovereign meta-atlas align`), consumed by [`Self::bridge_boost`].
     /// `None`/empty → no-op (retrieval behaves as before).
@@ -400,7 +429,7 @@ impl Runtime {
             folder_metadata: None,
             rerank_fn: None,
             rerank_config: corpus_engine::RerankConfig::default(),
-            meta_atlas: None,
+            meta_atlas: std::sync::RwLock::new(None),
             bridge: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
             gliner: None,
@@ -492,8 +521,24 @@ impl Runtime {
         mut self,
         index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
     ) -> Self {
-        self.meta_atlas = Some(index);
+        self.meta_atlas = std::sync::RwLock::new(Some(index));
         self
+    }
+
+    /// Attach the cross-corpus meta-atlas AFTER construction. Lets the
+    /// desktop fire `backend-ready` fast and warm the ~900MB index in the
+    /// background, then install it into the already-shared `Arc<Runtime>`
+    /// (the field is interior-mutable for exactly this). Idempotent;
+    /// overwrites any prior index. A poisoned lock is recovered rather
+    /// than panicking — a failed warm must never wedge retrieval.
+    pub fn install_meta_atlas(
+        &self,
+        index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
+    ) {
+        match self.meta_atlas.write() {
+            Ok(mut g) => *g = Some(index),
+            Err(poisoned) => *poisoned.into_inner() = Some(index),
+        }
     }
 
     /// Install the cross-corpus bridge index (typed topic-to-topic edges
@@ -849,7 +894,7 @@ mod enrichment_seam_invariant {
     fn read_enrichment_seams(rt: &Runtime) -> Vec<(&'static str, bool)> {
         vec![
             ("gliner", rt.gliner.is_some()),
-            ("meta_atlas", rt.meta_atlas.is_some()),
+            ("meta_atlas", rt.meta_atlas.read().map(|g| g.is_some()).unwrap_or(false)),
             ("atlas_context_provider", rt.atlas_context_provider.is_some()),
             ("wikipedia_graph", rt.wikipedia_graph.is_some()),
             ("conv_tiered_reader", rt.conv_tiered_reader.is_some()),

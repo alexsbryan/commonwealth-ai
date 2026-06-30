@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench parity-compare` — the desktop-vs-bench **enrichment-parity gate**.
+//! `svrn bench parity-compare` — the desktop-vs-bench **enrichment-parity gate**.
 //!
 //! The benches validate chat over the full enrichment variety because they build
 //! their Runtime from the same `chat_cmd::bootstrap` the CLI uses, which wires
@@ -56,11 +56,11 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench parity-compare",
+    command: "svrn bench parity-compare",
     summary: "Diff the enrichment legs the desktop surfaces vs the bench, per question; fail when desktop ⊊ bench.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench parity-compare --bank <bank.toml> [--corpus <id>] [--bridge-url <url>] [--spec <s>] [--limit N] [--no-warm-atlas] [--out <json>]",
+            "svrn bench parity-compare --bank <bank.toml> [--corpus <id>] [--bridge-url <url>] [--spec <s>] [--limit N] [--no-warm-atlas] [--out <json>]",
         ),
         HelpSection::Notes(
             "Requires the daemon up (--base-url, default :9741) AND the desktop up with \

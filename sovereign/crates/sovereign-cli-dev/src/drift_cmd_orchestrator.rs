@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign drift detect` — narrative-vs-code drift in one command.
+//! `svrn drift detect` — narrative-vs-code drift in one command.
 //!
 //! Wraps the eight primitives (code index → structural atlas → for
 //! each narrative: recipe stamp + corpus install + enrich init +
@@ -144,7 +144,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             warn!(error = %msg, "drift_orchestrator:step_chat_model_probe_failed");
             eprintln!("✗ chat-model probe failed: {msg}");
             eprintln!();
-            eprintln!("  Remediation: confirm `sovereign daemon status` is running and");
+            eprintln!("  Remediation: confirm `svrn daemon status` is running and");
             eprintln!(
                 "  at least one chat slot is loaded. Try: curl http://localhost:9741/v1/models"
             );
@@ -162,7 +162,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         println!("  → indexing code corpus '{project_id}'…");
         if !run_code_index_with_retry(&sovereign_bin_str, code_path, &project_id) {
             warn!(project_id = %project_id, "drift_orchestrator:step_code_index_failed");
-            eprintln!("✗ `sovereign code index` failed after retry.");
+            eprintln!("✗ `svrn code index` failed after retry.");
             eprintln!("  Remediation: re-run manually:");
             eprintln!(
                 "    sovereign code index {} --corpus-id {}",
@@ -210,7 +210,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         ) {
             warn!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_failed");
             eprintln!("✗ structural atlas ingest failed.");
-            eprintln!("  Remediation: try `sovereign enrich ingest {} --source-corpus {} --include-functions` and inspect the error.",
+            eprintln!("  Remediation: try `svrn enrich ingest {} --source-corpus {} --include-functions` and inspect the error.",
                 structural_atlas_id, source_corpus);
             return 1;
         }
@@ -277,7 +277,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             if !run_step(&sovereign_bin_str, &["corpus", "install", &nid]) {
                 warn!(narrative_id = %nid, "drift_orchestrator:narrative_corpus_install_failed");
                 eprintln!("✗ corpus install failed.");
-                eprintln!("  Remediation: `sovereign corpus install {nid}` and inspect.");
+                eprintln!("  Remediation: `svrn corpus install {nid}` and inspect.");
                 return 1;
             }
             // The install is async; wait until the meta lands.
@@ -384,7 +384,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                         warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_failed");
                         eprintln!("✗ recovery from partial extract failed.");
                         eprintln!(
-                            "  Remediation: `sovereign enrich errors {nid}` for diagnostics."
+                            "  Remediation: `svrn enrich errors {nid}` for diagnostics."
                         );
                         return 1;
                     }
@@ -392,7 +392,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                 } else {
                     warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_failed");
                     eprintln!("✗ enrich build failed for {nid}.");
-                    eprintln!("  Remediation: `sovereign enrich errors {nid}` for diagnostics.");
+                    eprintln!("  Remediation: `svrn enrich errors {nid}` for diagnostics.");
                     return 1;
                 }
             } else {
@@ -712,7 +712,7 @@ fn ensure_recipe(corpus_id: &str, doc_path: &Path) -> bool {
         r#"[corpus]
 id = "{corpus_id}"
 name = "{display}"
-description = "Narrative atlas stamped by `sovereign drift detect`."
+description = "Narrative atlas stamped by `svrn drift detect`."
 license = "private"
 # mesh_sharing = true: the auth boundary is Tailscale-IP, so this only
 # exposes the corpus to mesh peers the user themselves trust. Replication
@@ -1143,11 +1143,11 @@ fn parse_args(args: &[String]) -> Result<DetectArgs, String> {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign drift detect",
+    command: "svrn drift detect",
     summary: "Generate a narrative-vs-code drift report end-to-end. Resilient: idempotent, auto-recovers from common failures, surfaces concrete remediation.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign drift detect --code <path> --narrative <doc>... [--output <md>] [--project-id <id>] [--chat-model <slot>]",
+            "svrn drift detect --code <path> --narrative <doc>... [--output <md>] [--project-id <id>] [--chat-model <slot>]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--code <path>", "Path to the codebase to compare against. Indexed if not already cached."),
@@ -1159,7 +1159,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         ]),
         sovereign_cli_shared::help::HelpSection::Examples(&[
             (
-                "sovereign drift detect --code /path/to/repo --narrative /path/to/ARCH.md --narrative /path/to/OVERVIEW.md",
+                "svrn drift detect --code /path/to/repo --narrative /path/to/ARCH.md --narrative /path/to/OVERVIEW.md",
                 "Compare two narrative docs against the repo. Re-runs short-circuit on cached steps.",
             ),
         ]),

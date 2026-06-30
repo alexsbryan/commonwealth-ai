@@ -178,7 +178,7 @@ pub struct StorageBudgetState {
 ///     daemon).
 ///  2. If neither the config nor the daemon has a budget, apply the
 ///     daemon's recommended baseline AND persist it. The user can
-///     still override after — this just ensures Sovereign starts
+///     still override after — this just ensures svrnmesh starts
 ///     out as a respectful tenant of the disk on first launch
 ///     instead of silently having no ceiling.
 ///

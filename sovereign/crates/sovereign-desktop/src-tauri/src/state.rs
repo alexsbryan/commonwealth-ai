@@ -281,6 +281,21 @@ pub async fn bootstrap_with_progress(
         }
     };
 
+    // Glassbox sub-phase timing. The `WiringKnowledge` and `BuildingRuntime`
+    // phases each bundle several loads; without per-step timing those two
+    // splash phases are opaque (a 2026-06-29 trace found ~17s + ~19s hiding
+    // inside them). `substep` logs each remaining critical-path step's
+    // duration at info on the `bootstrap` target so a slow boot keeps
+    // self-attributing even after the heavy loads moved to background warms.
+    let substep = |name: &str, started: std::time::Instant| {
+        tracing::info!(
+            target: "bootstrap",
+            substep = name,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "boot substep"
+        );
+    };
+
     let config = state.config.read().await.clone();
 
     if !config.model_path.exists() {
@@ -629,9 +644,10 @@ pub async fn bootstrap_with_progress(
     // `load_or_generate` has written one), then mesh.json's
     // `self_node_id` (the common path when a mesh already exists),
     // falling back to generate-and-persist for fresh installs.
-    let mesh_data_dir_resolved = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("sovereign");
+    // Prefer the rebranded platform data dir, falling back to the legacy
+    // location (see sovereign_core::rebrand) so the desktop's node_id storage
+    // doesn't depend on the transitional ~/.sovereign symlink.
+    let mesh_data_dir_resolved = sovereign_core::rebrand::mesh_data_dir();
     let self_node_id = match sovereign_mesh::persist::load_node_id(&mesh_data_dir_resolved) {
         Ok(Some(id)) => id,
         _ => match sovereign_mesh::persist::load(&mesh_data_dir_resolved) {
@@ -1051,8 +1067,11 @@ pub async fn bootstrap_with_progress(
     // are embedding with the same model before assigning them a partition.
     if config.embed_model_path.is_some() {
         // Err => embed not configured or failed — skip validation.
+        let t_embed_probe = std::time::Instant::now();
         if let Ok(probe_vec) = inference.embed("probe").await {
+            substep("embed_probe", t_embed_probe);
             let dims = probe_vec.len();
+            let t_validate = std::time::Instant::now();
             if let Err(e) = corpus_engine.validate_corpus_readiness(dims).await {
                 tracing::warn!(
                     "Corpus readiness issue detected at startup: {} \
@@ -1061,6 +1080,7 @@ pub async fn bootstrap_with_progress(
                     e
                 );
             }
+            substep("validate_corpus_readiness", t_validate);
 
             // Derive pooling and normalization from the embed family quirks
             // (set at model-load time). Unknown/mean-pool models have no
@@ -1115,25 +1135,54 @@ pub async fn bootstrap_with_progress(
     // SCIP directly (Lance kept only embeddings/content/mtime).
     // `indexes_dir` was moved into `CorpusEngine::new` above; we have
     // to re-derive the path from `home` rather than reuse the binding.
+    // Code-intel SCIP graph. The merge imports every corpus's
+    // `scip_graph.db` into one in-memory graph; for a repo-scale code
+    // corpus that's hundreds of MB and ~17s (2026-06-29 boot trace). It
+    // is NOT needed to make chat usable, so register the tools against an
+    // EMPTY graph NOW and merge in the BACKGROUND, swapping the populated
+    // graph into the same `ArcSwap` handle the tools already hold. Until
+    // the swap lands the code-intel tools return empty (IndexHealthChecker
+    // reports "not ready") — graceful, and off the path to `backend-ready`.
     let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
-    let symbols_graph = {
-        let merged = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-            .map_err(|e| format!("in-memory ScipGraph for symbols lookup: {e}"))?;
-        if let Ok(rd) = std::fs::read_dir(&indexes_dir_for_scip) {
-            for de in rd.flatten() {
-                if !de.path().is_dir() {
-                    continue;
+    let symbols_graph: sovereign_mesh::reindexer::ScipGraphHandle = Arc::new(
+        arc_swap::ArcSwap::from_pointee(
+            corpus_engine_scip::ScipGraph::open_in_memory("merged")
+                .map_err(|e| format!("in-memory ScipGraph for symbols lookup: {e}"))?,
+        ),
+    );
+    {
+        let warm_dir = indexes_dir_for_scip.clone();
+        let warm_handle = Arc::clone(&symbols_graph);
+        tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let merged = match corpus_engine_scip::ScipGraph::open_in_memory("merged") {
+                Ok(g) => g,
+                Err(e) => {
+                    tracing::warn!(target: "bootstrap", error = %e, "scip-merge(bg): open failed; code-intel stays empty");
+                    return;
                 }
-                let scip_path = de.path().join("scip_graph.db");
-                if scip_path.exists() {
-                    let _ = merged.import_from_path(&scip_path).await;
+            };
+            let mut imported = 0usize;
+            if let Ok(rd) = std::fs::read_dir(&warm_dir) {
+                for de in rd.flatten() {
+                    if !de.path().is_dir() {
+                        continue;
+                    }
+                    let scip_path = de.path().join("scip_graph.db");
+                    if scip_path.exists() && merged.import_from_path(&scip_path).await.is_ok() {
+                        imported += 1;
+                    }
                 }
             }
-        }
-        let handle: sovereign_mesh::reindexer::ScipGraphHandle =
-            Arc::new(arc_swap::ArcSwap::from_pointee(merged));
-        handle
-    };
+            warm_handle.store(Arc::new(merged));
+            tracing::info!(
+                target: "bootstrap",
+                imported,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "scip-merge(bg): code-intel graph ready"
+            );
+        });
+    }
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
         Arc::clone(&symbols_graph),
@@ -1321,7 +1370,9 @@ pub async fn bootstrap_with_progress(
     // atoms on first use — `graph()` only parses dirs this scan registered.
     // Cache-only: cold embed work is deferred to the post-install hook, so this
     // is a bounded, predictable boot cost (parity with the CLI/server).
+    let t_atlas_init = std::time::Instant::now();
     atlas_ctx_mgr.init_from_cache().await;
+    substep("atlas_init_from_cache", t_atlas_init);
     // NOTE (2026-06-26): a background atlas-graph pre-warm was tried here to hide
     // the ~38s first-query cold parse of a wiki-scale (1.6M-atom) atlas, but it
     // REGRESSED the racing first query: `graph()` parses synchronously on the
@@ -1339,6 +1390,7 @@ pub async fn bootstrap_with_progress(
     // wiki graph-expansion and the cross-corpus articulation boost the benches
     // exercise. (Probe logic mirrors bootstrap.rs `load_wikipedia_graph`;
     // dedup to a shared crate is a follow-up.)
+    let t_wiki = std::time::Instant::now();
     if std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
@@ -1348,25 +1400,26 @@ pub async fn bootstrap_with_progress(
         let idx_dir = corpus_engine.index_dir().to_path_buf();
         for info in infos {
             // WIKIPEDIA_ATLAS_V2 W3: the shared columnar-or-sqlite gate (the
-            // "dedup to a shared crate" the comment above anticipated).
+            // "dedup to a shared crate" the comment above anticipated). The
+            // columnar (v2) open is two lazy Lance `open_table`s (cheap); the
+            // legacy SQLite path opens a multi-GB db — if this substep ever
+            // shows seconds, that corpus is on the SQLite fallback and should
+            // be migrated (or this open deferred like meta-atlas).
             if let Some(g) = corpus_engine::open_wikipedia_graph(&idx_dir, &info.corpus_id).await {
                 runtime = runtime.with_wikipedia_graph(g);
                 break;
             }
         }
     }
-    {
-        let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
-        let meta_atlas =
-            match corpus_engine::meta_atlas::MetaAtlasIndex::load(meta_atlas_path.as_deref()) {
-                Ok(idx) => Arc::new(idx),
-                Err(e) => {
-                    tracing::warn!(error = %e, "meta-atlas: load failed; cross-corpus boost disabled");
-                    Arc::new(corpus_engine::meta_atlas::MetaAtlasIndex::empty())
-                }
-            };
-        runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
-    }
+    substep("wikipedia_graph_open", t_wiki);
+    // Cross-corpus meta-atlas is DEFERRED off the boot critical path:
+    // `canonical_atoms.json` is ~900MB and its parse+index was the bulk of
+    // the BuildingRuntime phase (2026-06-29 trace). The Runtime starts with
+    // `meta_atlas = None` (boost short-circuits, retrieval byte-identical)
+    // and a background warm attaches it via `install_meta_atlas` once the
+    // app is already interactive — spawned just after the Runtime is shared
+    // below. The first turns simply run without the cross-corpus boost
+    // until the warm lands (seconds).
     // Tool-Mastery Layer 3 — NoteStore drives the per-conversation
     // tool_decision write hook (runtime.rs handle_message_stream's
     // post-gap-check spawn) and the Layer-2 dossier read at the
@@ -1384,6 +1437,7 @@ pub async fn bootstrap_with_progress(
     // desktop chat path keeps working without GLiNER. See
     // `Runtime::maybe_retrieve_relevant_history`.
     {
+        let t_gliner = std::time::Instant::now();
         let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
         if sovereign_tools::gliner_ner::probe_model_available(model_id) {
             match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
@@ -1402,6 +1456,7 @@ pub async fn bootstrap_with_progress(
                 "desktop: GLiNER model not installed; entity-aware retrieval disabled (falls back to cosine+MMR)"
             );
         }
+        substep("gliner_load", t_gliner);
     }
     // Rolling-summary compaction worker. Spawn one per Runtime so
     // the save-time hook in `end_conversation` can fire-and-forget
@@ -1491,7 +1546,45 @@ pub async fn bootstrap_with_progress(
             .with_routing_events(Arc::clone(&state.routing_events)
                 as Arc<dyn sovereign_core::traits::RoutingEventSink>);
 
-    *state.runtime.write().await = Some(Arc::new(runtime));
+    let runtime_arc = Arc::new(runtime);
+    *state.runtime.write().await = Some(Arc::clone(&runtime_arc));
+
+    // Background warm for the deferred meta-atlas (see the BuildingRuntime
+    // comment above): load the ~900MB index off the boot path and attach it
+    // to the now-shared Runtime. The parse is blocking + CPU-heavy, so it
+    // runs on a blocking thread; `install_meta_atlas` then flips the
+    // cross-corpus boost on for subsequent turns.
+    {
+        let warm_runtime = Arc::clone(&runtime_arc);
+        tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let loaded = tokio::task::spawn_blocking(|| {
+                let path = corpus_engine::meta_atlas::default_meta_atlas_path();
+                corpus_engine::meta_atlas::MetaAtlasIndex::load(path.as_deref())
+            })
+            .await;
+            match loaded {
+                Ok(Ok(idx)) => {
+                    let atoms = idx.len();
+                    warm_runtime.install_meta_atlas(Arc::new(idx));
+                    tracing::info!(
+                        target: "bootstrap",
+                        atoms,
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "meta-atlas(bg): cross-corpus boost ready"
+                    );
+                }
+                Ok(Err(e)) => tracing::warn!(
+                    target: "bootstrap", error = %e,
+                    "meta-atlas(bg): load failed; cross-corpus boost disabled"
+                ),
+                Err(e) => tracing::warn!(
+                    target: "bootstrap", error = %e,
+                    "meta-atlas(bg): warm task panicked; cross-corpus boost disabled"
+                ),
+            }
+        });
+    }
 
     // Auto-resume a previously-persisted mesh so the founder sees
     // their mesh on restart and existing joiners pick up where they

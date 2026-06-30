@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench proxy` — Proxy Voting Corpus Q&A bench (AC-4/AC-5).
+//! `svrn bench proxy` — Proxy Voting Corpus Q&A bench (AC-4/AC-5).
 //!
 //! The chaos two-red-line path over an installed `proxy-cik…` corpus.
 //! Because the sealed corpus is in the `proxy-cik` family, the live turns
@@ -26,11 +26,11 @@
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench proxy",
+    command: "svrn bench proxy",
     summary: "Proxy Voting Corpus cite-or-abstain Q&A bench (AC-4 RL-1/RL-2, AC-5).",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench proxy qa <corpus-id> [--bank <t>] [--manifest <t>] [--out <jsonl>] [chaos flags]",
+            "svrn bench proxy qa <corpus-id> [--bank <t>] [--manifest <t>] [--out <jsonl>] [chaos flags]",
         ),
         HelpSection::Flags(&[
             (
@@ -47,7 +47,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Examples(&[(
-            "sovereign bench proxy qa proxy-cik0000034088 --out target/proxy-qa/results.jsonl",
+            "svrn bench proxy qa proxy-cik0000034088 --out target/proxy-qa/results.jsonl",
             "Run the chaos two-red-line bank over Exxon's ballot (GateSurface::ProxyArgument applies).",
         )]),
     ],

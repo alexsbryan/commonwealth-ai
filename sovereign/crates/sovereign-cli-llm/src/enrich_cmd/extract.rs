@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich extract <corpus> [--chapters ...|--full]` — phase 1.
+//! `svrn enrich extract <corpus> [--chapters ...|--full]` — phase 1.
 //!
 //! Rebuilds chapter inputs from the pinned source file, constructs a
 //! `PhaseRunner` with the daemon-backed embed + chat closures, runs
@@ -23,11 +23,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich extract",
+    command: "svrn enrich extract",
     summary: "Run phase 1 (per-chapter question extraction) on a subset or the full corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse]",
+            "svrn enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse]",
         ),
         HelpSection::Flags(&[
             ("--chapters <ids>", "Comma-separated chapter ids (e.g. sec_0001,sec_0003). Subset runs do NOT update the cache."),
@@ -66,24 +66,24 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich extract ak --chapters sec_0001,sec_0011,sec_0023",
+                "svrn enrich extract ak --chapters sec_0001,sec_0011,sec_0023",
                 "Fast-loop subset run (2-3 min). Output written to runs/.",
             ),
             (
-                "sovereign enrich extract ak --full",
+                "svrn enrich extract ak --full",
                 "Full-corpus run. Updates cache/questions.json — consumed by phases 2+.",
             ),
             (
-                "sovereign enrich extract ak --retry-failed",
+                "svrn enrich extract ak --retry-failed",
                 "Reprocess the chapters that failed in the last run (parse errors, transient chat failures).",
             ),
             (
-                "sovereign enrich extract bk --retry-failed --terse",
+                "svrn enrich extract bk --retry-failed --terse",
                 "Recover chapters whose default pass failed with <think> truncation, using the terse prompt variant.",
             ),
         ]),
         HelpSection::Notes(
-            "Requires `sovereign enrich init` first. Daemon must be running at localhost:9741.",
+            "Requires `svrn enrich init` first. Daemon must be running at localhost:9741.",
         ),
     ],
 };
@@ -105,7 +105,7 @@ async fn cmd_finalize(cfg: &EnrichConfig, checkpoint_path: &std::path::Path) -> 
     };
     if entries.is_empty() {
         eprintln!(
-            "error: checkpoint {} is empty (or missing). Run `sovereign enrich extract {} --full --resume` first to populate it.",
+            "error: checkpoint {} is empty (or missing). Run `svrn enrich extract {} --full --resume` first to populate it.",
             checkpoint_path.display(),
             cfg.corpus_id
         );
@@ -344,7 +344,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                 }
                 Ok(None) => {
                     eprintln!(
-                        "error: no prior run files under {} — run `sovereign enrich extract {} --full` first",
+                        "error: no prior run files under {} — run `svrn enrich extract {} --full` first",
                         runs_dir.display(),
                         cfg.corpus_id
                     );
@@ -407,7 +407,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             if remaining.is_empty() {
                 println!(
                     "  · --resume: every selected chapter is already in the checkpoint ({} done). \
-                     Run `sovereign enrich extract {} --finalize` to write the canonical run-file.",
+                     Run `svrn enrich extract {} --finalize` to write the canonical run-file.",
                     done.len(),
                     cfg.corpus_id
                 );

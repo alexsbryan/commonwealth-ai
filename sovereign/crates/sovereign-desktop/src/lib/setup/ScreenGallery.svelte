@@ -148,7 +148,7 @@
       label: "Failed (fatal)",
       progress: base({ kind: "failed", recoverable: false }, ""),
       failed: {
-        message: "Could not create ~/.sovereign/models: permission denied.",
+        message: "Could not create ~/.svrnmesh/models: permission denied.",
         recoverable: false,
       },
     },
@@ -195,8 +195,8 @@
           catalog={PLAN_CATALOG}
           fast={PLAN_FAST}
           embed={PLAN_EMBED}
-          modelsDir="~/.sovereign/models"
-          dataDir="~/.sovereign"
+          modelsDir="~/.svrnmesh/models"
+          dataDir="~/.svrnmesh"
           onConfirm={() => (screen = "setup")}
           onBack={() => (screen = "welcome")}
         />

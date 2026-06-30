@@ -380,11 +380,11 @@ pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
         let mut seen = HashSet::new();
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
-        // Priority 1: Sovereign models directory
+        // Priority 1: svrnmesh models directory
         let sovereign_models = home.join(".sovereign").join("models");
         scan_directory_flat(
             &sovereign_models,
-            "Sovereign Models",
+            "svrnmesh Models",
             &mut results,
             &mut seen,
         );

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich status <corpus>` — quick per-phase staleness table.
+//! `svrn enrich status <corpus>` — quick per-phase staleness table.
 
 use corpus_engine::enrichment::pipeline::{PhaseCache, PhaseCacheStatus, PipelinePhase};
 
@@ -8,9 +8,9 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich status",
+    command: "svrn enrich status",
     summary: "Print the cache-freshness status of every phase for a corpus.",
-    sections: &[HelpSection::Usage("sovereign enrich status <corpus-id>")],
+    sections: &[HelpSection::Usage("svrn enrich status <corpus-id>")],
 };
 
 pub async fn cmd_status(args: &[String]) -> i32 {

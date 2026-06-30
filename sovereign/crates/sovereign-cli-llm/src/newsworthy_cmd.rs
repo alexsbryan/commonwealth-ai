@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign newsworthy <subcommand>` — operator inspection for the
+//! `svrn newsworthy <subcommand>` — operator inspection for the
 //! `wikipedia-newsworthy` freshness daemon.
 //!
 //! v0 ships one subcommand:
@@ -49,7 +49,7 @@ pub async fn run(args: &[String]) -> i32 {
 
 fn print_help() {
     println!(
-        "Usage: sovereign newsworthy <subcommand>\n\n\
+        "Usage: svrn newsworthy <subcommand>\n\n\
          Subcommands:\n  \
            status [--store-path PATH]    Print tracked-set summary by lifecycle\n  \
            help                          This message\n\n\

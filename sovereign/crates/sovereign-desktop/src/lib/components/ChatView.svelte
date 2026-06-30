@@ -1329,7 +1329,7 @@
         <div class="empty-mark">
           <BrandMark size={88} />
         </div>
-        <h2>SOVEREIGN</h2>
+        <h2>SVRNMESH</h2>
         <p class="empty-sub">ai for the rest of us</p>
 
         {#if starters.length > 0}
@@ -1441,7 +1441,7 @@
 
       {#if isLoading}
         {#if docProgressText}
-          <div class="doc-progress-indicator" aria-label="Sovereign is processing document">
+          <div class="doc-progress-indicator" aria-label="svrnmesh is processing document">
             <span class="progress-mark pulse">{"\u25C8"}</span>
             <span class="progress-text">{docProgressText}{staleSuffix}</span>
           </div>
@@ -1449,7 +1449,7 @@
           <div
             class="doc-progress-indicator"
             data-source="narration"
-            aria-label="Sovereign is working"
+            aria-label="svrnmesh is working"
           >
             <span class="progress-mark pulse">{"\u25C8"}</span>
             <span class="progress-text">{latestNarrationText}{staleSuffix}</span>
@@ -1458,13 +1458,13 @@
           <div
             class="doc-progress-indicator"
             data-source="placeholder"
-            aria-label="Sovereign is working"
+            aria-label="svrnmesh is working"
           >
             <span class="progress-mark pulse">{"\u25C8"}</span>
             <span class="progress-text">Working on it&hellip;{staleSuffix}</span>
           </div>
         {:else}
-          <div class="typing-indicator" aria-label="Sovereign is responding">
+          <div class="typing-indicator" aria-label="svrnmesh is responding">
             <span></span><span></span><span></span>
           </div>
         {/if}

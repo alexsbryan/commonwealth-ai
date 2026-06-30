@@ -501,6 +501,77 @@ pub(crate) fn resolve_synthesis_route(
     }
 }
 
+/// The output-length budget for one synthesis turn.
+///
+/// `soft_target` is what we ASK the model to aim for (rendered into the
+/// system prompt by `build_response_length_directive`); it scales with how
+/// much there is to say. `hard_ceiling` is the `max_tokens` safety net — a
+/// single generous value that should almost never bind, because
+/// `run_synthesis_stream`'s content-detected auto-continue lands any answer
+/// that overruns it. Decoupling the two is the point: length is steered
+/// dynamically by the prompt, not chopped by a blunt per-route cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OutputBudget {
+    pub(crate) soft_target: usize,
+    pub(crate) hard_ceiling: usize,
+}
+
+/// Default generous output ceiling. Env-tunable via the same knob the deep
+/// path already honoured; the Primary path ran this value with zero length
+/// truncations across a 31-answer sample reaching 9k+ chars.
+fn output_hard_ceiling() -> usize {
+    std::env::var("SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(4096)
+}
+
+/// Size the synthesis output budget to the task instead of a blunt per-route
+/// cap. The soft target scales with answer depth (intent) and evidence
+/// breadth (distinct sources); the hard ceiling is uniform and generous.
+///
+/// Replaces the static `FAST_KNOWLEDGE_MAX_TOKENS = 600`, which truncated
+/// 3/10 fast-path answers in the 2026-06-30 chaos run — invisibly, because
+/// the MTP model reports `finish=Stop` even when it stops at the cap, so the
+/// Length-keyed telemetry/retry never saw it.
+pub(crate) fn resolve_output_budget(intent: &Intent, shape: &EvidenceShape) -> OutputBudget {
+    // Depth floor by intent — how thorough an answer the ask implies.
+    let base = match intent {
+        Intent::SimpleQuery => 400,
+        Intent::ComparisonQuery => 700,
+        Intent::DeepQuery => 1200,
+        Intent::CodeQuery => 900,
+        // KnowledgeQuery and anything else routed through synthesis.
+        _ => 700,
+    };
+    // Breadth — each additional distinct source is more ground to cover.
+    // Capped so a noisy retrieval can't inflate the target without bound.
+    let breadth = shape.distinct_sources.saturating_sub(1).min(6) * 130;
+    let soft_target = (base + breadth).clamp(350, 2000);
+    OutputBudget {
+        soft_target,
+        hard_ceiling: output_hard_ceiling(),
+    }
+}
+
+/// True when `text` ends mid-thought — i.e. the model was cut off rather than
+/// finishing. Detection is by CONTENT (no terminal punctuation), because this
+/// model family reports `finish=Stop` even when it stops at the token cap, so
+/// `finish_reason` cannot be trusted to flag a truncation. Citation-aware
+/// (`]` closes a claim) and treats an explicit ellipsis as a deliberate
+/// trail-off, not a cut.
+pub(crate) fn ends_mid_thought(text: &str) -> bool {
+    let t = text.trim_end();
+    if t.is_empty() || t.ends_with("...") || t.ends_with('…') {
+        return false;
+    }
+    // Sentence/clause terminals + closers for quotes, citations, lists, code.
+    const TERMINAL: &[char] = &[
+        '.', '!', '?', '"', '\'', ')', ']', '}', '»', '”', '’', '*', '`',
+    ];
+    !t.chars().last().is_some_and(|c| TERMINAL.contains(&c))
+}
+
 #[cfg(test)]
 mod route_resolver_tests {
     use super::*;
@@ -1297,5 +1368,53 @@ mod expansion_strategy_tests {
         let (strategy, _) =
             decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
+    }
+}
+
+#[cfg(test)]
+mod output_budget_tests {
+    use super::*;
+
+    #[test]
+    fn budget_scales_with_intent_depth() {
+        let shape = build_test_evidence_shape(5, 1, false, 1);
+        let simple = resolve_output_budget(&Intent::SimpleQuery, &shape).soft_target;
+        let deep = resolve_output_budget(&Intent::DeepQuery, &shape).soft_target;
+        assert!(deep > simple, "deep ({deep}) should target more than simple ({simple})");
+    }
+
+    #[test]
+    fn budget_scales_with_evidence_breadth() {
+        let narrow = build_test_evidence_shape(5, 1, false, 3); // one dominant source
+        let broad = build_test_evidence_shape(5, 5, false, 1); // five distinct sources
+        let a = resolve_output_budget(&Intent::KnowledgeQuery, &narrow).soft_target;
+        let b = resolve_output_budget(&Intent::KnowledgeQuery, &broad).soft_target;
+        assert!(b > a, "broader evidence ({b}) should target more than narrow ({a})");
+    }
+
+    #[test]
+    fn budget_has_floor_and_generous_ceiling() {
+        let shape = build_test_evidence_shape(1, 1, false, 1);
+        let b = resolve_output_budget(&Intent::SimpleQuery, &shape);
+        assert!(b.soft_target >= 350, "soft target respects the floor");
+        assert!(b.soft_target <= 2000, "soft target respects the upper clamp");
+        assert!(b.hard_ceiling >= 4096, "hard ceiling is generous; auto-continue backstops it");
+        assert!(b.hard_ceiling > b.soft_target, "ceiling sits above the target as a net");
+    }
+
+    #[test]
+    fn ends_mid_thought_detects_cuts_not_completions() {
+        // Cut off mid-word / mid-clause -> true.
+        assert!(ends_mid_thought("The sheer number of"));
+        assert!(ends_mid_thought("It depends on the"));
+        assert!(ends_mid_thought("Reasons include:")); // promised a list, never delivered
+        // Properly landed -> false.
+        assert!(!ends_mid_thought("That is the whole story."));
+        assert!(!ends_mid_thought("Is it really?"));
+        assert!(!ends_mid_thought("...the Union [Source: Federalist No. 10]")); // citation closes
+        assert!(!ends_mid_thought("She taught at Girton.\n")); // trailing whitespace ok
+        assert!(!ends_mid_thought("a focused **summary**")); // markdown closer
+        assert!(!ends_mid_thought("a deliberate trail-off...")); // ellipsis is intentional
+        assert!(!ends_mid_thought("")); // nothing to continue
     }
 }

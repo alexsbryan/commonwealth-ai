@@ -149,7 +149,7 @@ async fn mcp_initialize(
             "tools": {}
         },
         "serverInfo": {
-            "name": "sovereign",
+            "name": "svrnmesh",
             "version": env!("CARGO_PKG_VERSION")
         },
         "sessionId": session_id
@@ -244,7 +244,7 @@ async fn mcp_message(
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
                 "serverInfo": {
-                    "name": "sovereign",
+                    "name": "svrnmesh",
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "sessionId": session_id

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign recipe` subcommand handlers.
+//! `svrn recipe` subcommand handlers.
 //!
 //! Provides two commands that don't require a loaded inference model:
 //!
@@ -10,7 +10,7 @@
 //! Both commands use a stub `EmbedFn` that returns zero-vectors. Embedding
 //! is always disabled (`--no-embed`) in this code path because loading an
 //! inference model requires `--model`, which is handled by the main REPL
-//! entry point. Run `sovereign recipe test --embed` with a model to enable
+//! entry point. Run `svrn recipe test --embed` with a model to enable
 //! the embed + search phase — that workflow is not yet supported here.
 
 use std::path::{Path, PathBuf};
@@ -47,10 +47,10 @@ pub async fn run_recipe(args: &[String]) -> i32 {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign recipe",
+    command: "svrn recipe",
     summary: "Run corpus ingestion recipes: test, validate, list.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign recipe <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn recipe <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list", "List all corpora available in the registry"),
             (
@@ -165,7 +165,7 @@ async fn cmd_test(args: &[String]) -> i32 {
         None => {
             eprintln!("error: missing recipe path");
             eprintln!(
-                "Usage: sovereign recipe test <path> [--sample-size N] [--recapture] [--json] \
+                "Usage: svrn recipe test <path> [--sample-size N] [--recapture] [--json] \
                  [--enrich] [--params k=v[,...]]... [--params-file <json>] [--output path]"
             );
             return 1;
@@ -433,7 +433,7 @@ async fn cmd_validate(args: &[String]) -> i32 {
         Some(p) => p,
         None => {
             eprintln!("error: missing recipe path");
-            eprintln!("Usage: sovereign recipe validate <path> [--offline]");
+            eprintln!("Usage: svrn recipe validate <path> [--offline]");
             return 1;
         }
     };
@@ -565,12 +565,12 @@ fn build_stub_engine() -> CorpusEngine {
 
 // ── `recipe publish` ─────────────────────────────────────────────────────────
 
-/// `sovereign recipe publish <path> [--submit-pr]`
+/// `svrn recipe publish <path> [--submit-pr]`
 ///
 /// Adds a recipe to the user's local registry at
 /// `~/.sovereign/recipes/registry.toml` and copies the recipe
 /// TOML to `~/.sovereign/recipes/<id>/recipe.toml`. The next
-/// `sovereign corpus install <id>` (or desktop "Add Knowledge
+/// `svrn corpus install <id>` (or desktop "Add Knowledge
 /// Source → Browse") will pick it up via the
 /// [`RecipeRegistry::with_local_registry`] merge.
 ///
@@ -593,7 +593,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
             "--force" | "-f" => force = true,
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign recipe publish <path> [--submit-pr] [--force]\n\n\
+                    "Usage: svrn recipe publish <path> [--submit-pr] [--force]\n\n\
                      Adds a recipe to ~/.sovereign/recipes/registry.toml and copies \
                      the TOML to ~/.sovereign/recipes/<id>/recipe.toml. The recipe \
                      is validated first; pass --force to skip validation."
@@ -611,7 +611,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
 
     let Some(recipe_path) = recipe_path else {
         eprintln!("error: missing recipe path");
-        eprintln!("Usage: sovereign recipe publish <path> [--submit-pr] [--force]");
+        eprintln!("Usage: svrn recipe publish <path> [--submit-pr] [--force]");
         return 1;
     };
 
@@ -793,7 +793,7 @@ fn upsert_local_registry_entry(
     Ok(())
 }
 
-/// Record a publish marker so `sovereign project audit` doesn't
+/// Record a publish marker so `svrn project audit` doesn't
 /// fire the "publish your recipe" nudge again. Stored as a JSON
 /// map keyed by recipe id.
 fn record_publish_marker(path: &Path, recipe_id: &str, sha256: &str) -> std::io::Result<()> {

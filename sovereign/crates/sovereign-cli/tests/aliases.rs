@@ -10,9 +10,9 @@
 //! `default_build_gate.rs` (the `cfg(not(...))` twin of this gate).
 #![cfg(feature = "dev-tools")]
 //!
-//! Every command moved into the flat `sovereign <leaf>` namespace
-//! must ALSO keep working under its old `sovereign project <leaf>`
-//! / `sovereign atos <leaf>` / `sovereign reflect` form for the
+//! Every command moved into the flat `svrn <leaf>` namespace
+//! must ALSO keep working under its old `svrn project <leaf>`
+//! / `svrn atos <leaf>` / `svrn reflect` form for the
 //! indefinite alias period.
 //!
 //! These tests spawn the actual `sovereign-cli` binary so the
@@ -24,7 +24,7 @@
 //!
 //! 1. **New name `--help`**: the new top-level modules all check
 //!    `util::help::wants_help` at the very top of `run`, so
-//!    `sovereign <leaf> --help` exits 0 without touching the
+//!    `svrn <leaf> --help` exits 0 without touching the
 //!    filesystem. This verifies the dispatch arm exists.
 //!
 //! 2. **Old name no-args**: most underlying handlers (especially
@@ -105,7 +105,7 @@ macro_rules! require_siblings {
     };
 }
 
-/// New-name probe: `sovereign <args> --help` exits 0. Verifies that
+/// New-name probe: `svrn <args> --help` exits 0. Verifies that
 /// the new top-level module exists, is wired into main.rs's match,
 /// and routes through `util::help::wants_help` at the top of `run`.
 fn help_runs(args: &[&str]) {
@@ -139,13 +139,13 @@ fn banner_fires(legacy_args: &[&str], expected_old: &str, expected_new: &str) {
 fn alias_init() {
     require_siblings!();
     help_runs(&["init"]);
-    // `sovereign project init --help` short-circuits cleanly; using
+    // `svrn project init --help` short-circuits cleanly; using
     // --help here exercises the alias path's banner with no side
     // effects on the filesystem.
     banner_fires(
         &["project", "init", "--help"],
-        "sovereign project init",
-        "sovereign init",
+        "svrn project init",
+        "svrn init",
     );
 }
 
@@ -155,8 +155,8 @@ fn alias_status() {
     help_runs(&["status"]);
     banner_fires(
         &["project", "status", "--help"],
-        "sovereign project status",
-        "sovereign status",
+        "svrn project status",
+        "svrn status",
     );
 }
 
@@ -166,8 +166,8 @@ fn alias_audit() {
     help_runs(&["audit"]);
     banner_fires(
         &["project", "audit", "--help"],
-        "sovereign project audit",
-        "sovereign audit",
+        "svrn project audit",
+        "svrn audit",
     );
 }
 
@@ -179,8 +179,8 @@ fn alias_charter() {
     help_runs(&["charter"]);
     banner_fires(
         &["project", "charter", "--help"],
-        "sovereign project charter",
-        "sovereign charter",
+        "svrn project charter",
+        "svrn charter",
     );
 }
 
@@ -190,8 +190,8 @@ fn alias_amend() {
     help_runs(&["amend"]);
     banner_fires(
         &["project", "amend", "--help"],
-        "sovereign project amend",
-        "sovereign amend",
+        "svrn project amend",
+        "svrn amend",
     );
 }
 
@@ -201,8 +201,8 @@ fn alias_design() {
     help_runs(&["design"]);
     banner_fires(
         &["project", "design", "--help"],
-        "sovereign project design",
-        "sovereign design",
+        "svrn project design",
+        "svrn design",
     );
 }
 
@@ -212,8 +212,8 @@ fn alias_plan() {
     help_runs(&["plan"]);
     banner_fires(
         &["project", "plan", "--help"],
-        "sovereign project plan",
-        "sovereign plan",
+        "svrn project plan",
+        "svrn plan",
     );
 }
 
@@ -223,8 +223,8 @@ fn alias_serve() {
     help_runs(&["serve"]);
     banner_fires(
         &["project", "serve", "--help"],
-        "sovereign project serve",
-        "sovereign serve",
+        "svrn project serve",
+        "svrn serve",
     );
 }
 
@@ -234,14 +234,14 @@ fn alias_refresh() {
     help_runs(&["refresh"]);
     banner_fires(
         &["project", "refresh", "--help"],
-        "sovereign project refresh",
-        "sovereign refresh",
+        "svrn project refresh",
+        "svrn refresh",
     );
 }
 
 // ─── Tier-2: spec commands ──────────────────────────────────────
 //
-// `sovereign atos end-milestone` and `sovereign atos spec` don't
+// `svrn atos end-milestone` and `svrn atos spec` don't
 // recognise `--help` — they exit 2 with "missing <id>" /
 // "unknown subcommand". The banner still fires inside the alias
 // shim before the handler runs, so we probe with no args (and
@@ -255,8 +255,8 @@ fn alias_milestone() {
     // copy-paste lands the user in a working invocation.
     banner_fires(
         &["atos", "end-milestone"],
-        "sovereign atos end-milestone",
-        "sovereign milestone <feature-id> <N>",
+        "svrn atos end-milestone",
+        "svrn milestone <feature-id> <N>",
     );
 }
 
@@ -264,20 +264,20 @@ fn alias_milestone() {
 fn alias_drift() {
     require_siblings!();
     help_runs(&["drift"]);
-    banner_fires(&["atos", "spec"], "sovereign atos spec", "sovereign drift");
+    banner_fires(&["atos", "spec"], "svrn atos spec", "svrn drift");
 }
 
 #[test]
 fn alias_notes() {
     help_runs(&["notes"]);
-    // `sovereign reflect` is the legacy entry point for the
-    // reflection view that `sovereign notes` now owns. The banner
+    // `svrn reflect` is the legacy entry point for the
+    // reflection view that `svrn notes` now owns. The banner
     // fires inside `run_reflect` regardless of the args passed —
     // `--help` is the cheapest probe (no DB / fs touch).
     banner_fires(
         &["reflect", "--help"],
-        "sovereign reflect",
-        "sovereign notes",
+        "svrn reflect",
+        "svrn notes",
     );
 }
 

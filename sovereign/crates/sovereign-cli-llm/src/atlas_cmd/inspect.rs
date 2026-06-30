@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas list-corpora | list-atoms | show-atom` — read-only
+//! `svrn atlas list-corpora | list-atoms | show-atom` — read-only
 //! atlas inspection from the CLI. Same code path as the desktop's
 //! atlas inspector (sovereign-tools::atlas_view::FileAtlasReader);
 //! different transport.
@@ -23,10 +23,10 @@ use sovereign_tools::atlas_view::{AtomFilter, FileAtlasReader, PageCursor};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const LIST_CORPORA_HELP: Help = Help {
-    command: "sovereign atlas list-corpora",
+    command: "svrn atlas list-corpora",
     summary: "List every installed corpus that has an atlas on disk.",
     sections: &[
-        HelpSection::Usage("sovereign atlas list-corpora [--format=text|json]"),
+        HelpSection::Usage("svrn atlas list-corpora [--format=text|json]"),
         HelpSection::Notes(
             "Reads from `<data-dir>/indexes/<corpus>/atlas/`. Uses the cached \
              `_summary.json` sidecar so this is fast even at wiki scale.",
@@ -35,11 +35,11 @@ const LIST_CORPORA_HELP: Help = Help {
 };
 
 const LIST_ATOMS_HELP: Help = Help {
-    command: "sovereign atlas list-atoms",
+    command: "svrn atlas list-atoms",
     summary: "Browse atoms within a corpus — filterable by type and substring.",
     sections: &[
         HelpSection::Usage(
-            "sovereign atlas list-atoms <corpus_id> [--type=TYPE] [--query=Q] \
+            "svrn atlas list-atoms <corpus_id> [--type=TYPE] [--query=Q] \
              [--limit=N] [--offset=N] [--format=text|json]",
         ),
         HelpSection::Notes(
@@ -51,11 +51,11 @@ const LIST_ATOMS_HELP: Help = Help {
 };
 
 const SHOW_ATOM_HELP: Help = Help {
-    command: "sovereign atlas show-atom",
+    command: "svrn atlas show-atom",
     summary: "Show full inspector record for one atom — type-specific body, \
               evidence excerpts, related atoms, cross-corpus links.",
     sections: &[HelpSection::Usage(
-        "sovereign atlas show-atom <corpus_id> <atom_id> [--format=text|json]",
+        "svrn atlas show-atom <corpus_id> <atom_id> [--format=text|json]",
     )],
 };
 

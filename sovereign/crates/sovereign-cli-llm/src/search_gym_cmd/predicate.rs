@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Pass-predicate vocabulary for `sovereign search-gym`.
+//! Pass-predicate vocabulary for `svrn search-gym`.
 //!
 //! Each fixture's `pass.toml` parses into a `Predicate`. The struct is
 //! intentionally flat: every key is optional, present-keys form an

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench mechanism-fidelity run …` — the elicitation +
+//! `svrn bench mechanism-fidelity run …` — the elicitation +
 //! scoring orchestrator for the Reasoning-Fidelity Validation Harness.
 //!
 //! The pure logic (case schemas, structural priors, perturbation engine,
@@ -53,11 +53,11 @@ use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench mechanism-fidelity",
+    command: "svrn bench mechanism-fidelity",
     summary: "Metamorphic reasoning-fidelity audit: does a frozen LLM reason from the causal mechanism or from memorized label-association?",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench mechanism-fidelity run --models <a,b> [--class <id>] [--corpus <dir>] [--pool {train|dev|test}] [--n-cases N] [--seed N] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
+            "svrn bench mechanism-fidelity run --models <a,b> [--class <id>] [--corpus <dir>] [--pool {train|dev|test}] [--n-cases N] [--seed N] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
         ),
         HelpSection::Subcommands(&[(
             "run",

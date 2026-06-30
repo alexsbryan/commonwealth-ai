@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich spec-intel <spec.md>` — turn a software-spec markdown file
+//! `svrn enrich spec-intel <spec.md>` — turn a software-spec markdown file
 //! into a resumable cache of *conditioned claims*.
 //!
 //! This mirrors `enrich code-intel`, but the unit of work is a spec SECTION
@@ -55,10 +55,10 @@ const PHASE_ID: &str = "spec_intel";
 const EXTRACTION_SYSTEM: &str = r#"You extract behavioral claims about a software system from text that is OFTEN informal — a terse README, a description, or usage examples, not a structured spec. List EVERY distinct thing the system does or should do, one claim per behavior, from THREE sources: (1) explicit prose ("it validates input, computes a total, and saves it" is THREE claims); (2) DESCRIPTIONS that imply behavior ("a parser and evaluator for X" means the code PARSES X and EVALUATES X — extract both); (3) CODE EXAMPLES that demonstrate behavior (a call `Foo::parse(s)` shows "parses a Foo from a string"; `a.matches(b)` shows "checks whether a matches b"). Be inclusive. Output ONLY a JSON array. Each item: {"statement": "<one behavior the code should exhibit>", "conditions": ["<a specific ACTION the code performs — what you would look for in the code, never a precondition, input, or restated context>", ...], "referenced_entities": ["<code symbol/type/file the claim names>", ...], "normativity": "contract|proposal"}. Use normativity=contract for stated/validated behavior, proposal for planned or intended behavior. Output [] only if there is genuinely no behavior described or shown."#;
 
 const HELP: Help = Help {
-    command: "sovereign enrich spec-intel",
+    command: "svrn enrich spec-intel",
     summary: "Extract conditioned claims (validated findings + planned behavior) from a spec .md, section by section.",
     sections: &[
-        HelpSection::Usage("sovereign enrich spec-intel <spec.md> [--corpus=<id>]"),
+        HelpSection::Usage("svrn enrich spec-intel <spec.md> [--corpus=<id>]"),
         HelpSection::Flags(&[
             (
                 "<spec.md>",

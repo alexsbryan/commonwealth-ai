@@ -1,24 +1,25 @@
 #!/bin/sh
-# Sovereign CLI installer.
+# svrnmesh CLI installer.
 #
 #   curl -fsSL https://svrnme.sh/install.sh | sh
 #
 # Detects your platform, downloads the matching prebuilt CLI from GitHub
 # Releases, verifies its checksum, and installs the binaries to ~/.local/bin.
 #
-# Env overrides:
-#   SOVEREIGN_INSTALL_DIR   where to put the binaries (default: ~/.local/bin)
-#   SOVEREIGN_VERSION       a release tag, e.g. cli-v0.1.0 (default: latest)
+# Env overrides (legacy SOVEREIGN_* names still honored during the rebrand):
+#   SVRNMESH_INSTALL_DIR   where to put the binaries (default: ~/.local/bin)
+#   SVRNMESH_VERSION       a release tag, e.g. cli-v0.1.0 (default: latest)
 #
 # The CLI is three binaries: `sovereign-cli` (the dispatcher you run as
-# `sovereign`) plus the `sovereign-cli-daemon` and `sovereign-cli-llm` siblings
-# it exec()s. They install together; `sovereign` is symlinked to the dispatcher.
+# `svrn`) plus the `sovereign-cli-daemon` and `sovereign-cli-llm` siblings
+# it exec()s. They install together; `svrn` is symlinked to the dispatcher
+# (a transitional `sovereign` alias is also installed for one release).
 
 set -eu
 
 REPO="alexsbryan/commonwealth-ai"
 BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm"
-INSTALL_DIR="${SOVEREIGN_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${SVRNMESH_INSTALL_DIR:-${SOVEREIGN_INSTALL_DIR:-$HOME/.local/bin}}"
 
 say() { printf '  %s\n' "$1"; }
 err() { printf 'install: %s\n' "$1" >&2; exit 1; }
@@ -49,7 +50,7 @@ command -v curl >/dev/null 2>&1 || err "curl is required"
 command -v tar  >/dev/null 2>&1 || err "tar is required"
 
 # ── Resolve the download base ────────────────────────────────────────────
-ver="${SOVEREIGN_VERSION:-latest}"
+ver="${SVRNMESH_VERSION:-${SOVEREIGN_VERSION:-latest}}"
 if [ "$ver" = "latest" ]; then
   # Resolve the newest cli-v* release explicitly. GitHub's
   # /releases/latest is a single repo-global pointer shared with the
@@ -103,9 +104,12 @@ for b in $BINS; do
     cp "$src/$b" "$INSTALL_DIR/$b" && chmod 0755 "$INSTALL_DIR/$b"
   fi
 done
+ln -sf sovereign-cli "$INSTALL_DIR/svrn"
+# Transitional alias so existing scripts/muscle-memory keep working; dropped a
+# release after the svrnmesh rebrand settles.
 ln -sf sovereign-cli "$INSTALL_DIR/sovereign"
 
-say "installed sovereign → $INSTALL_DIR/sovereign"
+say "installed svrn → $INSTALL_DIR/svrn"
 
 # ── PATH hint + next step ────────────────────────────────────────────────
 case ":$PATH:" in
@@ -116,4 +120,4 @@ case ":$PATH:" in
     ;;
 esac
 
-printf '\n  next:  sovereign setup\n\n'
+printf '\n  next:  svrn setup\n\n'

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich reset <corpus>` — clear phase caches/runs so
+//! `svrn enrich reset <corpus>` — clear phase caches/runs so
 //! the developer can re-iterate without hand-deleting files.
 //!
 //! Three modes, ordered by destructiveness:
@@ -32,11 +32,11 @@ use sovereign_cli_shared::help::{self, Help, HelpSection};
 use sovereign_cli_shared::prompts::confirm;
 
 const HELP: Help = Help {
-    command: "sovereign enrich reset",
+    command: "svrn enrich reset",
     summary: "Clear phase caches and run outputs so a corpus can be re-iterated.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich reset <corpus-id> [--from <phase>] [--full] [--include-exemplars] [--dry-run] [--yes]",
+            "svrn enrich reset <corpus-id> [--from <phase>] [--full] [--include-exemplars] [--dry-run] [--yes]",
         ),
         HelpSection::Flags(&[
             ("--from <phase>", "Clear this phase + every downstream. Default: question-clusters (keeps phase 1)."),
@@ -46,10 +46,10 @@ const HELP: Help = Help {
             ("--yes", "Skip the interactive confirmation."),
         ]),
         HelpSection::Examples(&[
-            ("sovereign enrich reset ak", "Default: clear phases 2-7 caches + runs; keep phase 1, exemplars, config, manifest."),
-            ("sovereign enrich reset ak --from positions", "Clear phases 5, 6, 7 caches + runs."),
-            ("sovereign enrich reset ak --full --yes", "Tear down everything for 'ak' without prompting."),
-            ("sovereign enrich reset ak --dry-run", "Preview what would be deleted."),
+            ("svrn enrich reset ak", "Default: clear phases 2-7 caches + runs; keep phase 1, exemplars, config, manifest."),
+            ("svrn enrich reset ak --from positions", "Clear phases 5, 6, 7 caches + runs."),
+            ("svrn enrich reset ak --full --yes", "Tear down everything for 'ak' without prompting."),
+            ("svrn enrich reset ak --dry-run", "Preview what would be deleted."),
         ]),
     ],
 };

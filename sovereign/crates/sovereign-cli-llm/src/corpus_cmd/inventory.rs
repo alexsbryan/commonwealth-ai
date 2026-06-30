@@ -24,13 +24,13 @@ pub(super) async fn cmd_corpus_list() -> i32 {
     0
 }
 
-/// `sovereign corpus install <id> [--params name=value,...] [--param key=value]...`
+/// `svrn corpus install <id> [--params name=value,...] [--param key=value]...`
 ///
 /// Submits an install request to the running daemon's
 /// `/internal/corpus/install` endpoint. The daemon owns the actual
 /// ingest task — this CLI command is a thin client so the install
 /// runs in the background and the user can disconnect / re-attach
-/// via `sovereign corpus status`.
+/// via `svrn corpus status`.
 ///
 /// Recipe parameters: when the recipe declares a
 /// `[recipe.parameters]` block (e.g. `sec-filings` asking for an
@@ -71,7 +71,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus install <id> [--params k=v[,k=v...]] \
+                    "Usage: svrn corpus install <id> [--params k=v[,k=v...]] \
                      [--params-file <path>]\n\n\
                      Submits an install request to the running daemon. Recipe \
                      parameters declared in the recipe's `[recipe.parameters]` block \
@@ -89,7 +89,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
     }
 
     let Some(id) = positional.first() else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus install <id> [--params …]");
+        eprintln!("Missing corpus ID. Usage: svrn corpus install <id> [--params …]");
         return 1;
     };
 
@@ -165,7 +165,7 @@ pub(crate) async fn submit_install_request(
         Err(e) => {
             eprintln!(
                 "Failed to contact daemon at {url}: {e}\n\n\
-                 Is `sovereign daemon` running? Try: sovereign daemon status"
+                 Is `svrn daemon` running? Try: sovereign daemon status"
             );
             1
         }
@@ -289,7 +289,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
             "--partitions-only" => partitions_only = true,
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]\n\n\
+                    "Usage: svrn corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]\n\n\
                      Delete on-disk index directories for a corpus.\n\n\
                      Default: removes BOTH the canonical (<index_dir>/<corpus>/) and \
                      every partition (<index_dir>/<corpus>-partition-*/).\n\n\
@@ -300,7 +300,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
                      successful merge has produced canonical and you no longer need the \
                      per-peer partial indexes for forensics.\n\
                      --yes / -y         Skip confirmation prompt.\n\n\
-                     Stop the daemon first (`sovereign daemon stop`) if it's actively writing \
+                     Stop the daemon first (`svrn daemon stop`) if it's actively writing \
                      to the corpus — POSIX will let rm-rf succeed with open handles, but the \
                      daemon will surface ENOENT errors until it rescans."
                 );
@@ -319,7 +319,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]");
+        eprintln!("Missing corpus ID. Usage: svrn corpus remove <corpus_id> [--canonical-only|--partitions-only] [--yes]");
         return 1;
     };
 
@@ -443,7 +443,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
                 );
                 println!("   That work is local-only unless a mesh peer has pulled this atlas.");
                 println!(
-                    "   Consider running `sovereign mesh push {corpus_id}` first if you have peers."
+                    "   Consider running `svrn mesh push {corpus_id}` first if you have peers."
                 );
             }
         }
@@ -492,7 +492,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
         eprintln!();
         eprintln!(
             "Most often this means the daemon is holding LanceDB file locks. \
-             Stop it (`sovereign daemon stop`) and re-run."
+             Stop it (`svrn daemon stop`) and re-run."
         );
         return 1;
     }

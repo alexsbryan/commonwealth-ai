@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign recipe-agent live-trial` — scripted, daemon-driven trial.
+//! `svrn recipe-agent live-trial` — scripted, daemon-driven trial.
 //!
 //! Drives the recipe-author agent loop end-to-end against the running
 //! sovereign daemon's `/v1/chat/completions`. Reads partner messages
@@ -377,7 +377,7 @@ async fn probe_daemon(base: &str) -> std::result::Result<(), String> {
         )),
         Err(_) => Err(format!(
             "daemon unreachable at {base}. \
-             Start it with `sovereign daemon run`, or pass --daemon <URL>."
+             Start it with `svrn daemon run`, or pass --daemon <URL>."
         )),
     }
 }

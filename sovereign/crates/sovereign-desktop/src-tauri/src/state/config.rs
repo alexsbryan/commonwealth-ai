@@ -72,7 +72,7 @@ pub struct DesktopConfig {
     #[serde(default)]
     pub enable_recipe_authoring: bool,
     /// Opt-in for **Mobile access** — serving the phone-facing
-    /// `sovereign-server` API so the Sovereign mobile app can pair with this
+    /// `sovereign-server` API so the svrnmesh mobile app can pair with this
     /// node over the tailnet. When `true`, the desktop supervises a
     /// `sovereign-server` child (via [`crate::supervisor::Supervisor`]) that
     /// delegates all inference to the local daemon — it loads no models of
@@ -119,7 +119,7 @@ pub struct DesktopConfig {
     pub auto_collaborate: bool,
 
     /// "Naked mode" — run the loaded model raw, with NONE of the
-    /// Sovereign affordances (no retrieval, router, grounding gate,
+    /// svrnmesh affordances (no retrieval, router, grounding gate,
     /// tools, atlas, or gap-check). Chat history → model → reply, with
     /// only a minimal assistant preamble + `custom_instructions`. For
     /// A/B-ing a model's raw behaviour against the situated agent, or
@@ -184,11 +184,11 @@ pub struct DesktopConfig {
     pub node_name: String,
 
     /// Whether the `KnowledgeView` landscape-digest layer is active.
-    /// When `true` (default), Sovereign builds + maintains three
+    /// When `true` (default), svrnmesh builds + maintains three
     /// enriched views over memories / conversations / notes and
     /// splices their digest into every conversation's system prompt.
     /// When `false`, the feature is skipped at Runtime construction —
-    /// Sovereign behaves exactly as it did before KnowledgeView existed.
+    /// svrnmesh behaves exactly as it did before KnowledgeView existed.
     ///
     /// Toggling this requires a desktop restart: the Runtime is built
     /// once at app startup, with or without the landscape-digest
@@ -198,7 +198,7 @@ pub struct DesktopConfig {
     #[serde(default = "default_knowledge_view_enabled")]
     pub knowledge_view_enabled: bool,
 
-    /// Persisted ceiling on how much disk Sovereign is allowed to use
+    /// Persisted ceiling on how much disk svrnmesh is allowed to use
     /// for corpus storage (sum of `~/.sovereign/indexes/*`). `None`
     /// means "compute a sensible default at boot from free disk" —
     /// the desktop's startup hook turns that into a concrete value

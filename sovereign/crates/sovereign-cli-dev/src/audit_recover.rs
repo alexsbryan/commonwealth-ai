@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign audit --recover` (Phase 7.3).
+//! `svrn audit --recover` (Phase 7.3).
 //!
 //! When a session SIGKILL's mid-flight, the in-process pattern
 //! matcher's `tokio::spawn` may not have finished writing its
@@ -100,7 +100,7 @@ pub async fn cmd_audit_recover() -> i32 {
         eprintln!(
             "  sovereign audit --recover: could not locate notes.db. \
              Run from inside an initialised sovereign repo, or run \
-             `sovereign init` first."
+             `svrn init` first."
         );
         return 1;
     };

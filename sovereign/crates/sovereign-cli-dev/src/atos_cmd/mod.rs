@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos` — the Agent Task Orchestration System CLI.
+//! `svrn atos` — the Agent Task Orchestration System CLI.
 //!
 //! The CLI is deliberately thin. It:
 //!   1. Owns the [`corpus_engine_atos::FeatureStore`] and
 //!      [`corpus_engine_notes::NoteStore`] paths (the same files
-//!      `sovereign project serve` uses, so artifacts are shared).
+//!      `svrn project serve` uses, so artifacts are shared).
 //!   2. Spawns a driver subprocess (Claude Code by default, opencode
 //!      behind `--driver opencode`) with `SOVEREIGN_FEATURE_ID`
 //!      exported.
@@ -32,8 +32,8 @@
 //! External callers consume a single entry point:
 //! [`run_atos`]. Everything else is crate-private.
 
-// The flat namespace (`sovereign milestone`, `sovereign drift`,
-// `sovereign audit`, etc.) reaches into these submodules directly,
+// The flat namespace (`svrn milestone`, `svrn drift`,
+// `svrn audit`, etc.) reaches into these submodules directly,
 // so they're `pub(crate)` rather than the original module-private
 // `mod`. The new top-level subcommand modules call the same
 // handlers without forcing every alias path through `run_atos`'s
@@ -60,7 +60,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
         return 1;
     };
 
-    // `sovereign atos --version` — tiny dogfood target exercised by M1.5.
+    // `svrn atos --version` — tiny dogfood target exercised by M1.5.
     if matches!(first.as_str(), "--version" | "-V") {
         println!("atos {}", env!("CARGO_PKG_VERSION"));
         return 0;
@@ -70,7 +70,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
         return 0;
     }
 
-    // Most leaves below moved to the flat `sovereign <leaf>`
+    // Most leaves below moved to the flat `svrn <leaf>`
     // namespace. Each shim prints a one-time banner and forwards to
     // the same underlying handler the new top-level arm calls, so
     // behaviour is identical. SOVEREIGN_QUIET_DEPRECATIONS=1
@@ -83,8 +83,8 @@ pub async fn run_atos(args: &[String]) -> i32 {
             // until then it still does the original work but
             // signals the upcoming change.
             announce(
-                "sovereign atos provision",
-                "sovereign init + commit .sovereign/features/<id>/spec.md",
+                "svrn atos provision",
+                "svrn init + commit .sovereign/features/<id>/spec.md",
             );
             provision::cmd_provision(rest).await
         }
@@ -93,63 +93,63 @@ pub async fn run_atos(args: &[String]) -> i32 {
         "replay" => replay::cmd_replay(rest).await,
         "start-milestone" => {
             announce(
-                "sovereign atos start-milestone",
-                "sovereign milestone <feature-id> <N>",
+                "svrn atos start-milestone",
+                "svrn milestone <feature-id> <N>",
             );
             milestone::cmd_start_milestone(rest).await
         }
         "end-milestone" => {
             announce(
-                "sovereign atos end-milestone",
-                "sovereign milestone <feature-id> <N>",
+                "svrn atos end-milestone",
+                "svrn milestone <feature-id> <N>",
             );
             milestone::cmd_end_milestone(rest).await
         }
         "archive" => {
             announce(
-                "sovereign atos archive",
-                "sovereign audit <feature-id> --archive",
+                "svrn atos archive",
+                "svrn audit <feature-id> --archive",
             );
             provision::cmd_archive(rest).await
         }
         "status" => {
-            announce("sovereign atos status", "sovereign status");
+            announce("svrn atos status", "svrn status");
             status::cmd_status(rest).await
         }
         "promote" => {
-            announce("sovereign atos promote", "sovereign notes promote");
+            announce("svrn atos promote", "svrn notes promote");
             status::cmd_promote(rest).await
         }
         "diff" => ab::cmd_diff(rest).await,
         "run-ab" => ab::cmd_run_ab(rest).await,
         "probe-driver" => {
-            announce("sovereign atos probe-driver", "sovereign doctor");
+            announce("svrn atos probe-driver", "svrn doctor");
             ab::cmd_probe_driver(rest).await
         }
         "report" => {
-            announce("sovereign atos report", "sovereign audit <feature-id>");
+            announce("svrn atos report", "svrn audit <feature-id>");
             status::cmd_report(rest).await
         }
         "teardown" => {
             announce(
-                "sovereign atos teardown",
-                "sovereign audit <feature-id> --archive",
+                "svrn atos teardown",
+                "svrn audit <feature-id> --archive",
             );
             teardown::cmd_teardown(rest).await
         }
         "feature" => feature::cmd_feature(rest).await,
         "spec" => {
-            announce("sovereign atos spec", "sovereign drift");
+            announce("svrn atos spec", "svrn drift");
             spec::cmd_spec(rest).await
         }
         "doctor" => {
-            announce("sovereign atos doctor", "sovereign doctor");
+            announce("svrn atos doctor", "svrn doctor");
             doctor::cmd_doctor(rest).await
         }
         "install-plugin" => {
             announce(
-                "sovereign atos install-plugin",
-                "sovereign doctor --fix (lands in Phase 5)",
+                "svrn atos install-plugin",
+                "svrn doctor --fix (lands in Phase 5)",
             );
             plugin::cmd_install_plugin(rest).await
         }
@@ -163,7 +163,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
 
 fn print_help() {
     eprintln!(
-        "sovereign atos — Agent Task Orchestration System\n\
+        "svrn atos — Agent Task Orchestration System\n\
          \n\
          USAGE\n    sovereign atos <subcommand> [flags]\n\
          \n\

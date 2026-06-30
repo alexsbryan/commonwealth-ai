@@ -34,6 +34,7 @@ pub mod router_embed;
 pub mod router_embed_cache;
 pub mod runtime;
 pub mod scope_classifier;
+pub mod rebrand;
 pub mod setup_config;
 pub mod skills;
 pub mod stubs;

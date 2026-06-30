@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas ...` — Atlas-style structural enrichment that
+//! `svrn atlas ...` — Atlas-style structural enrichment that
 //! lives outside the existing 8-phase LLM-extraction pipeline.
 //!
 //! The `enrich` command runs the literary/philosophy atlas pipeline:
@@ -36,10 +36,10 @@ pub mod wikipedia;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign atlas",
+    command: "svrn atlas",
     summary: "Atlas-style structural enrichment of a corpus (Wikipedia today).",
     sections: &[
-        HelpSection::Usage("sovereign atlas <subcommand> [args]"),
+        HelpSection::Usage("svrn atlas <subcommand> [args]"),
         HelpSection::Subcommands(&[
             (
                 "wikipedia",
@@ -92,7 +92,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "Atlas commands operate against an already-installed corpus index. Install \
-             the corpus first via `sovereign corpus install <id>` (or `sovereign \
+             the corpus first via `svrn corpus install <id>` (or `svrn \
              recipe run`). The graph DB lives alongside the LanceDB table at \
              `<data-dir>/indexes/<corpus-id>/wikipedia_graph.db` by default.",
         ),

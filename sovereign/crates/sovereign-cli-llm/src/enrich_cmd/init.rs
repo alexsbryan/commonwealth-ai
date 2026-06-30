@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich init <corpus> --source <path>` — first-run setup.
+//! `svrn enrich init <corpus> --source <path>` — first-run setup.
 //!
 //! Responsibilities:
 //!   1. Probe the daemon + resolve default chat/embed models.
@@ -33,11 +33,11 @@ use sovereign_cli_shared::prompts::{confirm, stdin_is_tty};
 use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 
 const HELP: Help = Help {
-    command: "sovereign enrich init",
+    command: "svrn enrich init",
     summary: "Scaffold an enrichment-admin tree for a corpus: chapters.json + config.json + dirs.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich init <corpus-id> --source <path> \\\n  [--chapter-regex <pat> | --toc [--toc-start <m>] [--toc-end <m>]] \\\n  [--min-section-body-words <n>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] \\\n  [--dry-run] [--force]",
+            "svrn enrich init <corpus-id> --source <path> \\\n  [--chapter-regex <pat> | --toc [--toc-start <m>] [--toc-end <m>]] \\\n  [--min-section-body-words <n>] [--pipeline <id>] [--chat-model <id>] [--embed-model <id>] \\\n  [--dry-run] [--force]",
         ),
         HelpSection::Flags(&[
             ("--source <path>", "Absolute path to the plaintext source file. Required unless --from-template / --template-path / --from-corpus is used."),
@@ -59,7 +59,7 @@ const HELP: Help = Help {
                 "--include-articles <path>",
                 "Restrict --from-corpus to article titles listed in <path>. Accepts \
                  plain titles (one per line; lines beginning with # and blank lines \
-                 are ignored) OR the JSON produced by `sovereign enrich \
+                 are ignored) OR the JSON produced by `svrn enrich \
                  triage-candidates --json` (reads top_in_corpus_by_centrality[*].name). \
                  Title match is case + underscore folded. Mutually exclusive with \
                  --limit-articles.",
@@ -101,23 +101,23 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich init anna-karenina --source ~/books/ak.txt",
+                "svrn enrich init anna-karenina --source ~/books/ak.txt",
                 "First-run setup with auto-resolved models and default chapter regex.",
             ),
             (
-                "sovereign enrich init ak --source ak.txt --chapter-regex '^BOOK [A-Z]+' --dry-run",
+                "svrn enrich init ak --source ak.txt --chapter-regex '^BOOK [A-Z]+' --dry-run",
                 "Preview section detection with a custom regex; do not write state.",
             ),
             (
-                "sovereign enrich init bk --source bk.txt --pipeline literary_atlas",
+                "svrn enrich init bk --source bk.txt --pipeline literary_atlas",
                 "Use the atlas-schema Phase 1 extractor (full atom graph) instead of the legacy questions-only pipeline.",
             ),
             (
-                "sovereign enrich init compatibilism --source compatibilism.md --pipeline philosophy_atlas",
+                "svrn enrich init compatibilism --source compatibilism.md --pipeline philosophy_atlas",
                 "Philosophy-tuned atlas pipeline (same schema, argumentative-prose prompts).",
             ),
             (
-                "sovereign enrich init fwd --from-template free-will-debate",
+                "svrn enrich init fwd --from-template free-will-debate",
                 "Scaffold a corpus from the bundled `free-will-debate` philosophy fixture. The eval harness scores Gemma-4B output against bench/philosophy/free-will-debate.toml.",
             ),
         ]),
@@ -334,7 +334,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         eprintln!(
             "      You can still finish init if --chat-model / --embed-model are both pinned,"
         );
-        eprintln!("      but `sovereign enrich extract` will fail until the daemon is up.");
+        eprintln!("      but `svrn enrich extract` will fail until the daemon is up.");
         if parsed.chat_model.is_none() || parsed.embed_model.is_none() {
             // Non-interactive context (pipeline driver, CI, redirected
             // stdin): never prompt — there's no human to answer, and
@@ -484,7 +484,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: could not open index for source corpus `{source_corpus}`: {e}\n\
-                 hint: install it first via `sovereign corpus install {source_corpus}`."
+                 hint: install it first via `svrn corpus install {source_corpus}`."
             );
             return 1;
         }
@@ -920,7 +920,7 @@ struct ParsedInit {
     /// Match is case + underscore folded by
     /// `corpus_engine::filters::normalize_title`. Designed to consume
     /// the top-K title list from
-    /// `sovereign enrich triage-candidates --json`.
+    /// `svrn enrich triage-candidates --json`.
     include_articles: Option<Vec<String>>,
 }
 

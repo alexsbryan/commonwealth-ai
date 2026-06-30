@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus` subcommand handlers — extracted from `mesh_cmd`
+//! `svrn corpus` subcommand handlers — extracted from `mesh_cmd`
 //! (§3.2). Corpus index management: list / install / remove / status /
 //! stream-axes / diagnostics / dedupe / repair / pull / partition tooling
 //! + parcel export. Dispatched as the `corpus` verb — which previously
@@ -86,10 +86,10 @@ pub async fn run_corpus(args: &[String]) -> i32 {
 
 
 const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign corpus",
+    command: "svrn corpus",
     summary: "Manage knowledge corpora shared across the mesh (install / remove / inspect).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign corpus <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn corpus <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list",                      "List installed and available corpora"),
             ("ingest <folder>",           "Build a corpus from a folder via the workflow runner (chunk→embed→store; --corpus <id>, --glob)"),

@@ -206,7 +206,7 @@
   <p class="slot-desc" style="margin-bottom: 10px;">
     Build a per-article library from the Stanford Encyclopedia of
     Philosophy parquet. Cache the parquet first with
-    <code>sovereign corpus acquire sep</code>.
+    <code>svrn corpus acquire sep</code>.
   </p>
 
   <form class="sep-form" onsubmit={(e) => { e.preventDefault(); submitSepIngest(); }}>
@@ -247,7 +247,7 @@
   {:else if corpora.length === 0}
     <p class="muted">
       Nothing enriched yet. Scaffold an SEP article above or use the CLI:
-      <code>sovereign enrich init &lt;corpus&gt; --source &lt;file&gt; --pipeline philosophy_atlas</code>.
+      <code>svrn enrich init &lt;corpus&gt; --source &lt;file&gt; --pipeline philosophy_atlas</code>.
     </p>
   {:else}
     <div class="corpora">

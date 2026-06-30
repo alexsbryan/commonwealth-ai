@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus catalog <subcommand>`
+//! `svrn corpus catalog <subcommand>`
 //!
 //! Catalog-corpus probes and the on-demand single-work simulator.
 //! Pairs with the `gutenberg` catalog recipe and the `gutenberg-work`
@@ -78,7 +78,7 @@ async fn cmd_query(args: &[String]) -> i32 {
     let query = match args.first() {
         Some(q) => q.clone(),
         None => {
-            eprintln!("Usage: sovereign corpus catalog query <text>");
+            eprintln!("Usage: svrn corpus catalog query <text>");
             return 1;
         }
     };
@@ -118,7 +118,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         }
     }
     let Some(query) = query else {
-        eprintln!("Usage: sovereign corpus catalog simulate <text> [--enrich] [--yes]");
+        eprintln!("Usage: svrn corpus catalog simulate <text> [--enrich] [--yes]");
         return 1;
     };
     let engine = match build_engine() {

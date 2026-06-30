@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich sheets-ingest <folder> --corpus <id>` — the
+//! `svrn enrich sheets-ingest <folder> --corpus <id>` — the
 //! described-asset substrate driver for spreadsheet corpora.
 //!
 //! Walks a folder of spreadsheets; for each, runs the XLSX sub-extractor
@@ -9,7 +9,7 @@
 //! writes `<corpus>/atlas/atoms.json`. No LLM — column-aware is
 //! structural — so this is the fast iteration loop for the attachment
 //! substrate. Measure the output against a planted gold set with
-//! `sovereign bench enron diagnose --corpus <id> --bench-dir <dir>`.
+//! `svrn bench enron diagnose --corpus <id> --bench-dir <dir>`.
 //!
 //! This is the live wiring of `column_aware::extract_entities_from_parquet`
 //! (previously built + unit-tested but with no pipeline caller).

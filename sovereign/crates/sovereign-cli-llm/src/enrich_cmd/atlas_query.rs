@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-query` — classify a natural-language question against
+//! `svrn enrich atlas-query` — classify a natural-language question against
 //! a resolved atlas, walk it, and print a cited brief. Two families:
 //!
 //! 1. **CallChain (Inc 5 — "talk to your architecture").** For a code atlas,
@@ -41,11 +41,11 @@ const CALL_FANOUT: usize = 12;
 const DEFAULT_DEPTH: usize = 3;
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-query",
+    command: "svrn enrich atlas-query",
     summary: "Classify + traverse a question against a resolved atlas (CallChain for code).",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-query <corpus-id> \"<question>\" [--depth N] [--callers] [--json]",
+            "svrn enrich atlas-query <corpus-id> \"<question>\" [--depth N] [--callers] [--json]",
         ),
         HelpSection::Flags(&[
             (
@@ -63,15 +63,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-query semver-self-atlas \"what does the matches function call\" --depth 3",
+                "svrn enrich atlas-query semver-self-atlas \"what does the matches function call\" --depth 3",
                 "Named CallChain — BFS the scip call edges from `matches`, callees.",
             ),
             (
-                "sovereign enrich atlas-query semver-self-atlas \"how does it check whether a version satisfies a requirement\"",
+                "svrn enrich atlas-query semver-self-atlas \"how does it check whether a version satisfies a requirement\"",
                 "Conceptual CallChain — embed the question, ANN-seed an atom, then trace.",
             ),
             (
-                "sovereign enrich atlas-query bk \"Who is Alyosha?\"",
+                "svrn enrich atlas-query bk \"Who is Alyosha?\"",
                 "Classifier variant — entity lookup over a prose atlas.",
             ),
         ]),
@@ -79,7 +79,7 @@ const HELP: Help = Help {
             "CallChain needs the v2 store (atoms.lance + edges.csr) — the only backend \
              that carries edge provenance, so scip call edges can be told from \
              containment. Conceptual seeding needs an embedding model and, for best \
-             results, a backfilled ANN table (`sovereign atlas backfill-ann <corpus> \
+             results, a backfilled ANN table (`svrn atlas backfill-ann <corpus> \
              --atlas-depth structural --atlas-min-description-chars 1`).",
         ),
     ],

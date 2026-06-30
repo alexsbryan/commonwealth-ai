@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Daemon-backed Runtime bootstrap for `sovereign chat`.
+//! Daemon-backed Runtime bootstrap for `svrn chat`.
 //!
 //! Mirrors `sovereign-desktop::state::bootstrap` — same StateStore,
 //! CorpusEngine, tools, mesh-knowledge wiring — but the
@@ -79,7 +79,7 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
 /// Build a daemon-backed `ChatSession` with a caller-supplied
 /// `SkillRegistry`. The default `build_session` passes an empty
 /// registry — chat-as-chat doesn't need skills loaded. The Tier-B
-/// voice eval harness (`sovereign voice eval`) supplies a registry
+/// voice eval harness (`svrn voice eval`) supplies a registry
 /// pre-populated with the relational skills (inner-work,
 /// personal-assistant) and pre-activates the per-scenario one so
 /// the runtime's `primary_skill_register()` resolves to
@@ -126,7 +126,7 @@ pub async fn build_session_with_skills(
 
     // 3. Open the state store. Creating the data dir on the fly is
     //    safe — mirrors the desktop's behaviour and means a first
-    //    `sovereign chat` against a fresh home directory doesn't
+    //    `svrn chat` against a fresh home directory doesn't
     //    stumble on a missing folder.
     std::fs::create_dir_all(&globals.data_dir)
         .map_err(|e| Error::Serialization(format!("create {:?}: {e}", globals.data_dir)))?;
@@ -212,7 +212,7 @@ pub async fn build_session_with_skills(
     // Code-intelligence tools previously registered here against an
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through
-    // `sovereign daemon` (sovereign-cli-atos), which builds the
+    // `svrn daemon` (sovereign-cli-atos), which builds the
     // merged graph from ~/.sovereign/indexes/*/scip_graph.db.
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
@@ -255,7 +255,7 @@ pub async fn build_session_with_skills(
 
     // External MCP servers (the `[[mcp_servers]]` array of the canonical
     // config): connect over HTTP and register their tools into the SAME
-    // registry the agent plans against, so a server added via `sovereign mcp
+    // registry the agent plans against, so a server added via `svrn mcp
     // add` or the desktop settings pane is callable here too. One shared
     // loader, every surface — parity with the router stack below. The manager
     // is held only for connection statuses (logged); the live transports are
@@ -459,7 +459,7 @@ pub async fn build_session_with_skills(
 
     // Cross-corpus meta-atlas (Move 5). Loads
     // `~/.sovereign/meta-atlas/canonical_atoms.json` produced by
-    // `sovereign meta-atlas build`. Empty / absent file → boost is a
+    // `svrn meta-atlas build`. Empty / absent file → boost is a
     // no-op and retrieval falls back to cosine + existing
     // entity-boost. Operator can rebuild with the CLI; we don't auto-
     // build at chat boot (cost is non-trivial on a 1.6M-atom
@@ -652,12 +652,12 @@ async fn probe_or_bail(base: &str) -> Result<()> {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) => Err(Error::Serialization(format!(
             "daemon at {base} returned {} from /v1/models. \
-             Is it really a sovereign daemon? Try `sovereign doctor`.",
+             Is it really a sovereign daemon? Try `svrn doctor`.",
             r.status()
         ))),
         Err(_) => Err(Error::Serialization(format!(
             "daemon unreachable at {base}. \
-             Start it with `sovereign daemon run`, or pass --daemon <url>."
+             Start it with `svrn daemon run`, or pass --daemon <url>."
         ))),
     }
 }
@@ -736,7 +736,7 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
     match (chat_found, embed_found) {
         (Some(c), Some(e)) => Ok((c, e)),
         (None, _) => Err(Error::Serialization(
-            "daemon lists no chat models — check `sovereign setup` and the primary/fast slots"
+            "daemon lists no chat models — check `svrn setup` and the primary/fast slots"
                 .into(),
         )),
         (_, None) => Err(Error::Serialization(
@@ -801,7 +801,7 @@ async fn log_installed_corpora(engine: &corpus_engine::CorpusEngine) {
 /// cleanly. `None` when no graph file is present — retrieval then
 /// behaves exactly as before (no graph expansion, no contested
 /// markers). Builds graphs out-of-band via
-/// `sovereign atlas wikipedia build-graph <corpus-id>`.
+/// `svrn atlas wikipedia build-graph <corpus-id>`.
 async fn load_wikipedia_graph(
     engine: &corpus_engine::CorpusEngine,
     indexes_dir: &std::path::Path,

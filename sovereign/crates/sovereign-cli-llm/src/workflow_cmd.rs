@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign workflow` — run a user-authored `Step · Artifact · Runner`
+//! `svrn workflow` — run a user-authored `Step · Artifact · Runner`
 //! workflow (model + MCP + tool + transform steps, authored as TOML).
 //!
 //! Assembles a *light* stack — daemon-routed inference (no per-process model
@@ -58,7 +58,7 @@ fn classify_artifact(
     }
     Err(format!(
         "no workflow or recipe named `{name}` — not a workflow file/catalog entry, \
-         not a recipe in the registry.\n  See `sovereign workflow list`."
+         not a recipe in the registry.\n  See `svrn workflow list`."
     ))
 }
 
@@ -106,7 +106,7 @@ pub async fn run_workflow(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign workflow author "<describe what you want>"` — natural-language
+/// `svrn workflow author "<describe what you want>"` — natural-language
 /// authoring. Tags a daemon conversation with the `workflow-author` skill and
 /// sends the description; the daemon runs the compose→validate→test agent loop
 /// server-side and returns the partner-facing reply. One authoring turn — re-run
@@ -136,7 +136,7 @@ async fn cmd_author(args: &[String]) -> i32 {
         i += 1;
     }
     let Some(desc) = desc else {
-        eprintln!("Usage: sovereign workflow author \"<describe the workflow you want>\"");
+        eprintln!("Usage: svrn workflow author \"<describe the workflow you want>\"");
         eprintln!("Example: sovereign workflow author \"fetch a web page and write a 3-sentence summary\"");
         return 1;
     };
@@ -172,7 +172,7 @@ async fn cmd_author(args: &[String]) -> i32 {
             }
         },
         Err(e) => {
-            eprintln!("Daemon not reachable at {daemon} ({e}). Start it with `sovereign daemon`.");
+            eprintln!("Daemon not reachable at {daemon} ({e}). Start it with `svrn daemon`.");
             return 1;
         }
     };
@@ -234,11 +234,11 @@ async fn cmd_author(args: &[String]) -> i32 {
 // runtime resolves a watched folder's workflow the same way the CLI does.
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign workflow",
+    command: "svrn workflow",
     summary: "Run a Step·Artifact·Runner workflow — model, MCP, and tool steps authored as TOML.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign workflow run <name|file.toml> [--folder <dir>] [--corpus <id>] [--glob <patterns>] [--param k=v]... [--params-file <json>] [--concurrency N] [--daemon <url>] [--no-cache]",
+            "svrn workflow run <name|file.toml> [--folder <dir>] [--corpus <id>] [--glob <patterns>] [--param k=v]... [--params-file <json>] [--concurrency N] [--daemon <url>] [--no-cache]",
         ),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
@@ -355,7 +355,7 @@ async fn cmd_run(args: &[String]) -> i32 {
     }
 
     let Some(file) = file else {
-        eprintln!("Usage: sovereign workflow run <name|file.toml> [--folder <dir>] …");
+        eprintln!("Usage: svrn workflow run <name|file.toml> [--folder <dir>] …");
         eprintln!("       sovereign workflow list   # to see available workflows");
         return 1;
     };
@@ -408,7 +408,7 @@ async fn cmd_run(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign workflow list` — the gallery: shipped starters + the user's own
+/// `svrn workflow list` — the gallery: shipped starters + the user's own
 /// (`~/.sovereign/workflows/`), user shadowing a same-named starter.
 fn cmd_list() -> i32 {
     let mut rows: Vec<(String, &'static str, String)> = Vec::new();
@@ -460,11 +460,11 @@ fn cmd_list() -> i32 {
     0
 }
 
-/// `sovereign workflow copy <name> [new]` — copy any workflow into the user dir
+/// `svrn workflow copy <name> [new]` — copy any workflow into the user dir
 /// for editing.
 fn cmd_copy(args: &[String]) -> i32 {
     let Some(id) = args.first() else {
-        eprintln!("Usage: sovereign workflow copy <name> [new-name]");
+        eprintln!("Usage: svrn workflow copy <name> [new-name]");
         return 1;
     };
     let (toml, _) = match resolve_workflow_source(id) {
@@ -482,7 +482,7 @@ fn cmd_copy(args: &[String]) -> i32 {
     write_user_workflow(new, &toml)
 }
 
-/// `sovereign workflow new <name> [--from <starter>]` — scaffold a new editable
+/// `svrn workflow new <name> [--from <starter>]` — scaffold a new editable
 /// workflow from a starter (default `notebook`).
 fn cmd_new(args: &[String]) -> i32 {
     let mut name: Option<&str> = None;
@@ -509,7 +509,7 @@ fn cmd_new(args: &[String]) -> i32 {
         i += 1;
     }
     let Some(name) = name else {
-        eprintln!("Usage: sovereign workflow new <name> [--from <starter>]");
+        eprintln!("Usage: svrn workflow new <name> [--from <starter>]");
         return 1;
     };
     let (toml, _) = match resolve_workflow_source(from) {

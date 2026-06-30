@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench promote …` — the Fidelity-Flywheel WRITE side: the
+//! `svrn bench promote …` — the Fidelity-Flywheel WRITE side: the
 //! promotion controller that actually closes the loop.
 //!
 //! Propose a typed [`ScaffoldingParam`] change, evaluate it as two PAIRED arms
@@ -42,11 +42,11 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench promote",
+    command: "svrn bench promote",
     summary: "Fidelity-Flywheel write side: propose a retrieval scaffolding change, gate it on a held-out pool, apply it on a pass.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench promote --param <key=value> --corpus <id> [--mine-path <dir>] [--absent-bank <bank.toml>] [--withheld-path <dir>] [--n N] [--seed N] [--bench-root <dir>] [--candidate-config <toml>] [--apply] [--unseal-test --reason \"…\"] [--update-baseline]",
+            "svrn bench promote --param <key=value> --corpus <id> [--mine-path <dir>] [--absent-bank <bank.toml>] [--withheld-path <dir>] [--n N] [--seed N] [--bench-root <dir>] [--candidate-config <toml>] [--apply] [--unseal-test --reason \"…\"] [--update-baseline]",
         ),
         HelpSection::Subcommands(&[]),
         HelpSection::Notes(

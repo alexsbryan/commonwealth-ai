@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos doctor` — one-pass health check.
+//! `svrn atos doctor` — one-pass health check.
 //!
 //! Prints a per-check ✓ / ✗ / ⚠ line and exits 0 iff every check is ✓
 //! or ⚠. The job is to tell the operator — or someone landing on a
@@ -38,7 +38,7 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
         report.fail(
             ".sovereign directory",
             format!(
-                "missing at {} — run `sovereign atos provision <id>` first",
+                "missing at {} — run `svrn atos provision <id>` first",
                 sov.display()
             ),
         );
@@ -92,7 +92,7 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
         report.warn(
             "opencode plugin",
             format!(
-                "{} not found — run `sovereign atos install-plugin`",
+                "{} not found — run `svrn atos install-plugin`",
                 plugin.display()
             ),
         );
@@ -109,14 +109,14 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
                         report.warn(
                             "opencode plugin",
                             format!(
-                                "v{v} on disk, v{expected} in this CLI — run `sovereign atos install-plugin`"
+                                "v{v} on disk, v{expected} in this CLI — run `svrn atos install-plugin`"
                             ),
                         );
                     }
                     None => {
                         report.warn(
                             "opencode plugin",
-                            "present but unversioned (hand-authored or pre-embedded) — run `sovereign atos install-plugin`".into(),
+                            "present but unversioned (hand-authored or pre-embedded) — run `svrn atos install-plugin`".into(),
                         );
                     }
                 }

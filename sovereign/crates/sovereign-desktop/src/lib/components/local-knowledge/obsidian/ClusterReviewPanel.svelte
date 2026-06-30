@@ -130,7 +130,7 @@
 
   {#if preview.open_questions.length > 0}
     <section class="gaps">
-      <p class="lk-label gaps-label">Gaps Sovereign noticed</p>
+      <p class="lk-label gaps-label">Gaps svrnmesh noticed</p>
       <ul class="gap-list">
         {#each preview.open_questions as q}
           <li>{q.gap_description}</li>

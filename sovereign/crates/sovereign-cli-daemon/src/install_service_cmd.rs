@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign install-service` — register the daemon with launchd /
+//! `svrn install-service` — register the daemon with launchd /
 //! systemd as a user-level service.
 //!
 //! Phase 4 split: prior to this, service registration was an implicit
-//! step inside `sovereign setup`. The user could never run setup
+//! step inside `svrn setup`. The user could never run setup
 //! without also installing the service, even on dev boxes where they
 //! wanted to test the daemon in the foreground first. Splitting this
 //! out makes service registration explicit + scriptable, and lets
-//! `sovereign daemon` work as a foreground process for casual use.
+//! `svrn daemon` work as a foreground process for casual use.
 //!
 //! The actual platform-specific registration (writing the plist on
 //! macOS, the unit file on Linux, then loading it) lives in
@@ -23,7 +23,7 @@ pub async fn run(args: &[String]) -> i32 {
         return 0;
     }
     if let Some(unknown) = args.iter().find(|a| a.starts_with('-')) {
-        eprintln!("error: unknown flag '{unknown}' for `sovereign install-service`");
+        eprintln!("error: unknown flag '{unknown}' for `svrn install-service`");
         sovereign_cli_shared::help::print(&HELP);
         return 2;
     }
@@ -59,10 +59,10 @@ pub async fn run(args: &[String]) -> i32 {
     match service_install::install_service(&bin_path) {
         Ok(()) => {
             eprintln!("\u{2713} service registered.");
-            // The service manager spawns `sovereign daemon run` in
+            // The service manager spawns `svrn daemon run` in
             // the background. Print one line so the user knows the
             // daemon should already be coming up; they can verify
-            // with `sovereign daemon status` (or `sovereign status`).
+            // with `svrn daemon status` (or `svrn status`).
             eprintln!("  Verify with: sovereign daemon status");
             0
         }
@@ -72,22 +72,22 @@ pub async fn run(args: &[String]) -> i32 {
             // ~/Library/LaunchAgents permission, etc. Tell the user
             // they can still run the daemon manually so they aren't
             // stuck.
-            eprintln!("hint: you can still run the daemon foreground via `sovereign daemon`.");
+            eprintln!("hint: you can still run the daemon foreground via `svrn daemon`.");
             1
         }
     }
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign install-service",
+    command: "svrn install-service",
     summary: "Register the sovereign daemon with launchd (macOS) or systemd (Linux).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign install-service"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn install-service"),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Writes a launchd plist (macOS) or systemd user unit (Linux) that runs \
-             `sovereign daemon run` on login + restarts on crash. The daemon's setup \
+             `svrn daemon run` on login + restarts on crash. The daemon's setup \
              wizard must have been completed first (config at ~/.sovereign/config.toml). \
-             Run `sovereign daemon --setup-only` if not.",
+             Run `svrn daemon --setup-only` if not.",
         ),
     ],
 };

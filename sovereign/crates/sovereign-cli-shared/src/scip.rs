@@ -2,7 +2,7 @@
 //! Merged SCIP graph loader for code-intelligence tools.
 //!
 //! Lives here so both `sovereign-cli` (whose `tools_cmd` registry
-//! opens the graph on every `sovereign tools` invocation) and
+//! opens the graph on every `svrn tools` invocation) and
 //! `sovereign-cli-atos` (whose `project_cmd::cmd_serve` opens the
 //! graph at daemon startup) can share one implementation.
 //!
@@ -75,7 +75,7 @@ pub async fn load_merged_graph(data_dir: &Path, verbose: bool) -> (ScipGraph, Me
 
     if verbose {
         if summary.graphs_found == 0 {
-            eprintln!("    (none — run `sovereign project init` with SCIP exporters)");
+            eprintln!("    (none — run `svrn project init` with SCIP exporters)");
         } else {
             eprintln!(
                 "    Total: {} symbols, {} edges across {} projects",

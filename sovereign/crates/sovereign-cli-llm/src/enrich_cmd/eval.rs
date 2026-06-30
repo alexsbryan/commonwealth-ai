@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich eval <corpus-id> <golden-set>` — score the
+//! `svrn enrich eval <corpus-id> <golden-set>` — score the
 //! resolved atlas against a hand-authored golden set.
 //!
 //! The eval surface is the measurement half of the philosophy tuning
@@ -54,11 +54,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich eval",
+    command: "svrn enrich eval",
     summary: "Score the resolved atlas against a golden-set TOML; report per-phase precision/recall/F1.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich eval <corpus-id> <golden-set-path> \\\n  [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>]",
+            "svrn enrich eval <corpus-id> <golden-set-path> \\\n  [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>]",
         ),
         HelpSection::Flags(&[
             (
@@ -72,11 +72,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich eval fwd bench/philosophy/free-will-debate.toml",
+                "svrn enrich eval fwd bench/philosophy/free-will-debate.toml",
                 "Full per-phase scoreboard against a corpus initialised from --from-template free-will-debate.",
             ),
             (
-                "sovereign enrich eval fwd bench/philosophy/free-will-debate.toml --phase fault-lines --report /tmp/fault-lines.json",
+                "svrn enrich eval fwd bench/philosophy/free-will-debate.toml --phase fault-lines --report /tmp/fault-lines.json",
                 "Score only the Phase 6 fault-line detector and persist the result for later diff.",
             ),
         ]),

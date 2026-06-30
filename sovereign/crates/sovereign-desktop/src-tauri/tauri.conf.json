@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/src/tauri-conf.schema.json",
-  "productName": "Sovereign",
+  "productName": "svrnmesh",
   "version": "0.1.18",
-  "identifier": "com.sovereign.desktop",
+  "identifier": "com.svrnmesh.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -18,7 +18,7 @@
   "app": {
     "windows": [
       {
-        "title": "Sovereign",
+        "title": "svrnmesh",
         "width": 1024,
         "height": 720,
         "minWidth": 640,
@@ -30,7 +30,7 @@
     ],
     "trayIcon": {
       "iconPath": "icons/32x32.png",
-      "tooltip": "Sovereign"
+      "tooltip": "svrnmesh"
     },
     "security": {
       "csp": null
@@ -50,7 +50,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["sovereign"]
+        "schemes": ["svrnmesh", "sovereign"]
       }
     },
     "updater": {

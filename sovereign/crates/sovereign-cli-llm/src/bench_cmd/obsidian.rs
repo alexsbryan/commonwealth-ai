@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench obsidian` — atlas correctness bench for the
+//! `svrn bench obsidian` — atlas correctness bench for the
 //! author's real obsidian vault.
 //!
 //! Wraps `enrich eval` against
@@ -32,7 +32,7 @@
 //!     #             --report /tmp/obsidian-bench.json
 //!     #
 //!     #     (re-run extraction after a prompt iteration without a
-//!     #      rebuild: `sovereign atlas typed-extension obsidian-<hash>`)
+//!     #      rebuild: `svrn atlas typed-extension obsidian-<hash>`)
 //!     #
 //!     # (b) literary_atlas pin (legacy comparison surface) — one-time,
 //!     #     per major content shift in the vault:
@@ -69,11 +69,11 @@ const DEFAULT_GOLDEN_PATH: &str = "sovereign/bench/obsidian/golden.toml";
 const VAULT_ENV_VAR: &str = "SOVEREIGN_OBSIDIAN_VAULT";
 
 const HELP: Help = Help {
-    command: "sovereign bench obsidian",
+    command: "svrn bench obsidian",
     summary: "Score the resolved atlas of an obsidian-vault corpus against the in-repo golden.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench obsidian [--vault <path>] [--corpus <id>] [--golden <path>] [--report <json-path>]",
+            "svrn bench obsidian [--vault <path>] [--corpus <id>] [--golden <path>] [--report <json-path>]",
         ),
         HelpSection::Flags(&[
             (
@@ -85,7 +85,7 @@ const HELP: Help = Help {
             (
                 "--corpus <id>",
                 "Corpus to score. Default: obsidian-vault. The corpus must already be \
-                 `sovereign enrich init`'d and `sovereign enrich build`'d with --pipeline obsidian_atlas.",
+                 `svrn enrich init`'d and `svrn enrich build`'d with --pipeline obsidian_atlas.",
             ),
             (
                 "--golden <path>",
@@ -100,7 +100,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign bench obsidian --report /tmp/obsidian-bench.json",
+                "svrn bench obsidian --report /tmp/obsidian-bench.json",
                 "Score the default corpus (obsidian-vault) against the in-repo golden.",
             ),
             (
@@ -109,7 +109,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "v1 wraps `sovereign enrich eval` with sensible obsidian defaults. You must run \
+            "v1 wraps `svrn enrich eval` with sensible obsidian defaults. You must run \
              `enrich init` + `enrich build` against the corpus once before scoring; this \
              subcommand does NOT build the atlas itself. The golden at \
              sovereign/bench/obsidian/golden.toml is grounded in real vault content as of \

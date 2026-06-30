@@ -33,7 +33,7 @@
       <span class="count lk-folio">{outliers.length}</span>
     </header>
     <p class="hint">
-      These notes don't fit a cluster. Sovereign won't tag them.
+      These notes don't fit a cluster. svrnmesh won't tag them.
       Drop the threshold above to include more.
     </p>
 
