@@ -208,8 +208,10 @@ pub async fn primary_catalog(profile: Option<String>) -> Result<Vec<PrimaryOptio
 /// currently registered without the renderer making raw HTTP calls
 /// across Tauri's sandbox (which fails with Safari's "Load failed").
 #[tauri::command]
-pub async fn list_daemon_models() -> Result<Vec<String>, String> {
-    let url = "http://127.0.0.1:9741/v1/models";
+pub async fn list_daemon_models(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    let url = format!("{}/v1/models", state.client_base_url());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
@@ -259,8 +261,10 @@ pub struct RuntimeStatus {
 }
 
 #[tauri::command]
-pub async fn get_runtime_status() -> Result<RuntimeStatus, String> {
-    let url = "http://127.0.0.1:9741/status";
+pub async fn get_runtime_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<RuntimeStatus, String> {
+    let url = format!("{}/status", state.client_base_url());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()

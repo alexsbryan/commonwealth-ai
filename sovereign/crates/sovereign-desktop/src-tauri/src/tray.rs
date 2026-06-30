@@ -33,8 +33,10 @@ use tauri::{
 };
 
 use crate::commands::{
-    self, get_contribution_status, pause_contributions, resume_contributions, ContributionStatus,
+    self, get_contribution_status_at, pause_contributions_at, resume_contributions_at,
+    ContributionStatus,
 };
+use crate::state::AppState;
 
 /// Items the 5s poller mutates. Held in an `Arc` so the poller task
 /// can read them without contending with the menu builder.
@@ -112,8 +114,9 @@ fn handle_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             // arithmetic at the daemon).
             let duration = if secs == 0 { 365 * 24 * 3600 } else { secs };
             let app_handle = app.clone();
+            let base_url = app.state::<Arc<AppState>>().internal_base_url();
             tauri::async_runtime::spawn(async move {
-                match pause_contributions(duration).await {
+                match pause_contributions_at(&base_url, duration).await {
                     Ok(_) => {
                         let _ = app_handle.emit("tray-status-refresh", ());
                     }
@@ -129,8 +132,9 @@ fn handle_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "resume" => {
             let app_handle = app.clone();
+            let base_url = app.state::<Arc<AppState>>().internal_base_url();
             tauri::async_runtime::spawn(async move {
-                match resume_contributions().await {
+                match resume_contributions_at(&base_url).await {
                     Ok(_) => {
                         let _ = app_handle.emit("tray-status-refresh", ());
                     }
@@ -144,15 +148,19 @@ fn handle_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-fn spawn_poller(_app: AppHandle, items: Arc<TrayItems>) {
+fn spawn_poller(app: AppHandle, items: Arc<TrayItems>) {
     tauri::async_runtime::spawn(async move {
+        // Resolve the daemon's internal base URL once from the managed
+        // AppState (the bootstrap mode is fixed for the process
+        // lifetime, so a one-shot resolution is correct here).
+        let base_url = app.state::<Arc<AppState>>().internal_base_url();
         // Tight initial cadence so the menu reflects reality within
         // the first ~5s after launch; settles to a relaxed loop.
         let mut ticker = tokio::time::interval(Duration::from_secs(5));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             ticker.tick().await;
-            match get_contribution_status().await {
+            match get_contribution_status_at(&base_url).await {
                 Ok(status) => {
                     let text = render_status_text(&status);
                     if let Err(e) = items.status.set_text(&text) {
@@ -196,8 +204,9 @@ fn render_status_text(s: &ContributionStatus) -> String {
 }
 
 // `commands` re-export to silence the `unused import` lint if no
-// other path hits these names directly. The poller uses them via the
-// crate-qualified calls above.
+// other path hits these names directly. The poller + menu use the
+// `*_at` helpers above; keep the public command fns referenced too so
+// a future refactor doesn't silently drop them from the tray surface.
 #[allow(dead_code)]
 fn _keep_commands_used() {
     let _ = commands::get_contribution_status;
