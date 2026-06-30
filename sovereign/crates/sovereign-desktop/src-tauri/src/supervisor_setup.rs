@@ -176,7 +176,13 @@ pub async fn maybe_start(
                 client_port,
                 "supervisor: child daemon healthy; switching to Attach mode"
             );
-            (BootstrapMode::Attach { client_port }, Some(supervisor))
+            (
+                BootstrapMode::Attach {
+                    client_port,
+                    internal_port: cli_setup.daemon.internal_port,
+                },
+                Some(supervisor),
+            )
         }
         Ok(StartupOutcome::Failed(reason)) => {
             warn!(

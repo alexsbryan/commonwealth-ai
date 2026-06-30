@@ -30,7 +30,7 @@ fn daemon_port(state: &AppState) -> u16 {
     // the same router.
     use crate::bootstrap::BootstrapMode;
     match &state.bootstrap_mode {
-        BootstrapMode::Attach { client_port } => *client_port,
+        BootstrapMode::Attach { client_port, .. } => *client_port,
         BootstrapMode::Local { .. } => DEFAULT_CLIENT_PORT,
     }
 }

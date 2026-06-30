@@ -28,8 +28,6 @@ use std::path::PathBuf;
 use corpus_engine::{ParameterKind, Recipe, RegistryEntry, RegistrySnapshot};
 use serde::{Deserialize, Serialize};
 
-const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
-
 /// Result of `corpus_import_recipe`. `success = false` carries
 /// `errors` so the import dialog can show validation problems
 /// inline; the recipe is NOT written to disk in that case.
@@ -193,7 +191,8 @@ pub async fn corpus_install_with_parameters(
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("build daemon client: {e}"))?;
-    let url = format!("{DAEMON_INTERNAL_URL}/internal/corpus/install");
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/install");
     let resp = client
         .post(&url)
         .json(&serde_json::json!({
