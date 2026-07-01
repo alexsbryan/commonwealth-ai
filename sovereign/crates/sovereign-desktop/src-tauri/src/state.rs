@@ -1279,7 +1279,14 @@ pub async fn bootstrap_with_progress(
     let inference_config = {
         let cfg = state.config.read().await;
         InferenceConfig {
-            temperature: cfg.temperature,
+            // Measurement lever: SOVEREIGN_SYNTH_TEMP forces the synthesis
+            // temperature (default 0.7 → high output variance) so a replay A/B
+            // isolates a code change instead of drowning it in sampling noise.
+            // Unset in production; set to 0 for deterministic measurement runs.
+            temperature: std::env::var("SOVEREIGN_SYNTH_TEMP")
+                .ok()
+                .and_then(|v| v.parse::<f32>().ok())
+                .unwrap_or(cfg.temperature),
             max_tokens: cfg.max_tokens as usize,
             think_budget: cfg.think_budget as usize,
             top_k: cfg.top_k,

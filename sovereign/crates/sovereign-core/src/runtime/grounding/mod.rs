@@ -78,7 +78,7 @@ use std::sync::Arc;
 use crate::traits::InferenceProvider;
 use crate::types::CompletionRequest;
 
-use judge::{claim_violation_joint, extract_claim_list};
+use judge::{claim_violation_joint, extract_claim_list, scan_unsupported_specifics};
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
@@ -629,6 +629,19 @@ pub(super) fn claim_budget(chars: usize, min_claims: usize) -> usize {
     (chars / CHARS_PER_CLAIM).clamp(min_claims, MAX_AUDITED_CLAIMS)
 }
 
+/// Whether the holistic supporting-specifics scan runs alongside the per-claim
+/// audit in `gate_longform`. ON by default; `SOVEREIGN_SPECIFICS_SCAN=0`
+/// disables it (the clean A/B lever — the per-claim audit alone is the prior
+/// behaviour). The scan is one extra judge call per audited text; it catches
+/// the fabricated specifics / misattributions the load-bearing claim extraction
+/// structurally misses.
+fn specifics_scan_enabled() -> bool {
+    !matches!(
+        std::env::var("SOVEREIGN_SPECIFICS_SCAN").ok().as_deref(),
+        Some("0") | Some("false") | Some("off")
+    )
+}
+
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
 /// An essay with one bad claim is REWRITTEN, not abstained; if the
 /// rewrite still carries unsupported claims, they are listed in a
@@ -699,6 +712,42 @@ async fn gate_longform(
                         }
                     }
                     None => {} // unverifiable claim — fail open per claim
+                }
+            }
+            // Holistic supporting-specifics scan: catches the fabricated
+            // details the load-bearing claim extraction misses (misattribution,
+            // fake values, phantom section refs). One extra judge pass over the
+            // WHOLE text vs the FULL evidence; its findings join `failed` and
+            // ride the same rewrite/annotate path. Each flagged specific gets a
+            // claim-conditioned search so the rewrite has corrective material —
+            // which ALSO self-corrects a false positive: a truly-grounded
+            // specific gets its grounding passage back, so the rewrite keeps it.
+            if specifics_scan_enabled() {
+                if let Some(specifics) =
+                    scan_unsupported_specifics(&inference, question, &text, chunks, budget).await
+                {
+                    for spec in specifics {
+                        // Skip specifics already surfaced by the per-claim audit.
+                        if failed
+                            .iter()
+                            .any(|f| f.claim.contains(&spec) || spec.contains(&f.claim))
+                        {
+                            continue;
+                        }
+                        let corrective = match &searcher {
+                            Some(s) => s.search(&spec).await,
+                            None => Vec::new(),
+                        };
+                        dbg(&format!(
+                            "specifics_scan flagged {:?} (corrective_hits={})",
+                            spec.chars().take(60).collect::<String>(),
+                            corrective.len()
+                        ));
+                        failed.push(FailedClaim {
+                            claim: spec,
+                            evidence: corrective,
+                        });
+                    }
                 }
             }
             Some((text, claims.len(), failed))
