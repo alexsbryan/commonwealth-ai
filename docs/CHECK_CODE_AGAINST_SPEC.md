@@ -91,33 +91,57 @@ with fresh eyes. The spec check is just that same map, held up against your inte
 
 ## What it costs
 
-The first pass over a large codebase is the slow part — it has to read everything
-once. After that it's nearly free. Change a few functions and commit, and it
-re-reads only what you touched, re-checks only the parts of the spec that could be
-affected, and updates in seconds. The version that never goes stale — that
-re-checks on every commit — is actually *cheaper* to keep running than that
-one-time first scan. The hard part is over once you've done it.
+Two passes. Building the fact base is a single tree-sitter read of your code — fast,
+and cheap to redo when the code changes. Checking a spec is then a lookup per claim:
+the deterministic checks are instant, and the ones that need a call-graph trace are
+near-instant against a graph loaded once into memory. The heaviest part is a small
+model tagging each claim, and it runs on your own machine. There's no giant index to
+keep warm.
 
 ## How to run it
 
-One command:
+Three steps, all local:
 
 ```bash
-sovereign code map /path/to/your/repo --spec design.md
+sovereign code facts /path/to/your/repo --corpus-id myrepo
+sovereign enrich spec-intel design.md --corpus myrepo
+sovereign code check-spec --corpus myrepo --claims ~/.sovereign/specs/myrepo/design/claims.json
 ```
 
-It handles the rest — reading the code, mapping it, comparing it to the spec — and
-prints the report with its receipts. Drop the `--spec` and you get the plain-English
-map of what the code does, on its own. It runs entirely on your own machine; your
-code and your spec never leave it.
+The first builds the fact base from your code; the second turns your spec into a list
+of claims; the third checks each claim and prints a verdict with its receipt. Your
+code and your spec never leave your machine.
+
+## Two kinds of answer, honestly labeled
+
+Under the hood there are two layers, and the report tells you which one spoke. The
+**deterministic** layer answers the claims it can pin to a fact — a config flag set a
+certain way, a specific string present, a function that exists — and those verdicts
+come with an exact file and line you can open in seconds. It is built to be *safe*:
+when it isn't sure, it says nothing rather than guess. The **fuzzy** layer handles the
+behavioral and conceptual claims the first layer can't pin down; add
+`--fuzzy <spec_findings.json>` (from `enrich spec-reconcile`) and its verdicts fill the
+gaps, clearly marked as the softer, review-me answers. Trust the deterministic ones;
+scrutinize the fuzzy ones.
+
+## What it doesn't do yet
+
+The deterministic layer reads Rust today — other languages are a matter of adding a
+per-language pack, not new machinery, but they aren't there yet. Which claims get a
+hard, cited answer depends on how cleanly each one names a checkable fact; the rest
+fall to the fuzzy layer or to you. And it will never tell you whether a divergence is
+a bug or an improvement — that call is yours, and the whole point is to make it cheap
+to make.
 
 ---
 
 A reasonable spec and an honest look at the code, and you can finally see the
-distance between them — every divergence located, every claim something you can
-check yourself.
+distance between them — every hard divergence located and cited, every soft one
+flagged for you to weigh.
 
-*The capability map and per-function summaries underneath this are the mature core;
-the spec comparison is the newest layer built on them. The mechanics, the other
-verbs (`enrich code-intel`, `code capability-map`, `enrich capability-doc`), and the
-tuning live in [CODE_INTELLIGENCE.md](../sovereign/docs/CODE_INTELLIGENCE.md).*
+*Underneath: the deterministic fact base (`sovereign code facts` →
+`corpus_engine::facts` / `facts_check`) plus the fuzzy capability-map and per-function
+summaries. Mechanics and the other verbs (`enrich code-intel`, `code capability-map`,
+`enrich spec-reconcile`) live in
+[CODE_INTELLIGENCE.md](../sovereign/docs/CODE_INTELLIGENCE.md); the build plan is in
+[internal/FACT_BASE_SCALE_OUT.md](internal/FACT_BASE_SCALE_OUT.md).*
