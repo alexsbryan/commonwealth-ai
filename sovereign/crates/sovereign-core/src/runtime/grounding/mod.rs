@@ -609,6 +609,26 @@ fn rewrite_system_note(failed: &[FailedClaim]) -> String {
 /// documented blind spot; measured v13: a correct maximal essay was
 /// rewritten into hedging because its synthesis claims had no single
 
+/// Claim-audit budget for an answer of `chars` characters. Scales with
+/// length so a long "exhaustive" answer — which buries fabricated specifics
+/// in its later sections, past the first few load-bearing claims — gets
+/// proportionate checking, instead of the fixed 4-claim audit that was
+/// structurally blind to body fabrication (observed 2026-06-30: 3/5 shipped
+/// fabrications were direct releases whose fabricated specifics were never
+/// extracted). Floored at the surface's `min_claims` and capped so per-claim
+/// judge latency stays bounded on very long answers.
+pub(super) fn claim_budget(chars: usize, min_claims: usize) -> usize {
+    // 600 chars/claim (not 900) so the empirical fabrication distribution
+    // actually scales: the fixed-1h shipped fabrications sat at 3630-8571
+    // chars, which at 900/claim only reached budget 4-9 (the 3630 case got
+    // NO lift) — measured under-powered on the fab-fix run-1 trace. At 600 the
+    // same cases get 6-10 claims audited. Cap 10 bounds the per-claim judge
+    // latency on the longest answers (each audited claim is a 35B judge call).
+    const MAX_AUDITED_CLAIMS: usize = 10;
+    const CHARS_PER_CLAIM: usize = 600;
+    (chars / CHARS_PER_CLAIM).clamp(min_claims, MAX_AUDITED_CLAIMS)
+}
+
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
 /// An essay with one bad claim is REWRITTEN, not abstained; if the
 /// rewrite still carries unsupported claims, they are listed in a
@@ -626,14 +646,17 @@ async fn gate_longform(
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let per_claim_chunks = profile.max_chunks;
-    let max_claims = profile.max_claims;
+    let min_claims = profile.max_claims;
     let audit = |text: String| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
         async move {
-            let claims = extract_claim_list(&inference, question, &text).await?;
+            // Budget scales with THIS text's length — audited afresh for the
+            // draft and again for the (possibly different-length) rewrite.
+            let budget = claim_budget(text.chars().count(), min_claims);
+            let claims = extract_claim_list(&inference, question, &text, budget).await?;
             let mut failed: Vec<FailedClaim> = Vec::new();
-            for claim in claims.iter().take(max_claims) {
+            for claim in claims.iter().take(budget) {
                 // Claim-conditioned retrieval: verify against the
                 // sealed CORPUS, not just the prompt snapshot. Hits
                 // go first (most relevant to THIS claim) and the cap
@@ -736,6 +759,19 @@ async fn gate_longform(
     let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
     rewrite_req.assistant_prefix = Some(LONGFORM_REWRITE_PREFIX.to_string());
+    // A corrective rewrite prunes/replaces the failed claims — it must only be
+    // able to TIGHTEN the draft, never regrow it. Cap its token budget to the
+    // draft's size (observed 2026-06-30: the rewrite inherited the base
+    // "exhaustive/1500-word" budget and inflated the answer x2-x7.5 — once to
+    // 23.8k chars of gibberish — after which the re-audit released the enlarged
+    // fabrication). ~4 chars/token is the usual English ratio; floor keeps a
+    // short draft's rewrite from being starved.
+    let draft_token_budget = (draft_backup.chars().count() / 4).max(256);
+    rewrite_req.max_tokens = Some(
+        rewrite_req
+            .max_tokens
+            .map_or(draft_token_budget, |m| m.min(draft_token_budget)),
+    );
     match inference.complete(&rewrite_req).await {
         Ok(resp) => {
             // Truncation trace (2026-06-30): the longform rewrite is non-streaming
@@ -901,6 +937,23 @@ mod tests {
             entity_anchored: false,
             top_similarity: None,
         }
+    }
+
+    #[test]
+    fn claim_budget_scales_with_length_within_bounds() {
+        // Short answers keep the floor (the surface's min_claims).
+        assert_eq!(claim_budget(0, 4), 4);
+        assert_eq!(claim_budget(500, 4), 4);
+        assert_eq!(claim_budget(2_399, 4), 4, "under 4*600 stays at floor");
+        // The empirical fabrication distribution now scales meaningfully — at
+        // the old 900/claim these got budget 4-9 (3630 got NO lift).
+        assert_eq!(claim_budget(3_630, 4), 6, "3630-char fabrication -> 6, not 4");
+        assert_eq!(claim_budget(4_550, 4), 7, "4550-char fabrication -> 7");
+        // Very long answers are capped so per-claim judge latency stays bounded.
+        assert_eq!(claim_budget(8_571, 4), 10, "8571-char essay -> capped at 10");
+        assert_eq!(claim_budget(usize::MAX, 4), 10);
+        // The floor is the surface's min, not a hardcoded 4.
+        assert_eq!(claim_budget(500, 1), 1);
     }
 
     /// The Phase-6 invariant's gate half: verify-only (retry: false)

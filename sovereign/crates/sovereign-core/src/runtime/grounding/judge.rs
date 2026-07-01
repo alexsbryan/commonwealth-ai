@@ -303,27 +303,31 @@ pub(super) async fn extract_claim_list(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     answer: &str,
+    max_claims: usize,
 ) -> Option<Vec<String>> {
     let prompt = format!(
         "A user asked: {}\n\nAn assistant wrote this long answer:\n\"\"\"\n{}\n\"\"\"\n\n\
          List the SPECIFIC factual claims the answer asserts — concrete who/what/when \
          relations a passage could confirm or refute (names, identifications, events, \
          attributions). One claim per line, each a short standalone sentence naming \
-         both sides of the relation. At most 4 lines; pick the most load-bearing \
-         claims. Skip opinions, summaries of the question, and anything the answer \
-         itself flags as not from the sources.\n\
+         both sides of the relation. At most {n} lines; pick the most load-bearing \
+         claims, and when the answer is long, sample across ALL of it — include \
+         specific claims from the later sections, not only the opening. Skip \
+         opinions, summaries of the question, and anything the answer itself flags \
+         as not from the sources.\n\
          Reply with exactly NO_CLAIM if there are no such checkable claims.",
         question.chars().take(400).collect::<String>(),
-        answer.chars().take(6000).collect::<String>(),
+        answer.chars().take(14_000).collect::<String>(),
+        n = max_claims,
     );
     let req = CompletionRequest {
         prompt,
-        system_message: Some(
-            "You extract claims precisely. Reply with up to 4 lines, or NO_CLAIM.".into(),
-        ),
+        system_message: Some(format!(
+            "You extract claims precisely. Reply with up to {max_claims} lines, or NO_CLAIM."
+        )),
         preferred_speed: Speed::Medium,
         model_id: Some("primary".into()),
-        max_tokens: Some(160),
+        max_tokens: Some((max_claims * 48).max(160)),
         temperature: Some(0.0),
         think_budget: Some(0),
         enable_thinking: Some(false),
