@@ -1131,22 +1131,25 @@ yield_to_foreground_secs = 0
     }
 
     #[test]
-    fn default_path_includes_sovereign_and_config_toml() {
-        // Post-consolidation (2026-05-10): config lives at
-        // `~/.sovereign/config.toml`, not `~/sovereign/config.toml`.
-        // Path::ends_with matches whole components, so the dotted
-        // directory needs the dot literal in the predicate.
-        // `default_path()` resolves to `~/.sovereign/config.toml` —
-        // hidden directory, per the canonical layout consolidated by
-        // the `default_data_dir()` migration (the doc comment on
-        // `default_path` is normative). The earlier assertion used
-        // the bare `sovereign/config.toml` form which only matched
-        // the legacy `~/.config/sovereign/config.toml` layout, so it
-        // failed on any environment that had migrated. Match the
-        // canonical hidden-dir layout instead.
+    fn default_path_is_hidden_brand_dir_with_config_toml() {
+        // Config lives directly under home in a hidden, brand-named dir:
+        // `~/.svrnmesh/config.toml` (preferred) or the legacy
+        // `~/.sovereign/config.toml`. Post-rename, `default_path()` ->
+        // `svrnmesh_root()` -> `rebrand::resolve_branded_dir` resolves to
+        // whichever the machine actually has: a populated `~/.svrnmesh` wins,
+        // else a populated legacy `~/.sovereign`, else `~/.svrnmesh` on a
+        // fresh install. The brand component is therefore environment-
+        // dependent, so the assertion must accept either spelling.
+        //
+        // The leading dot is load-bearing: `Path::ends_with` matches whole
+        // components, so the dotted `.svrnmesh`/`.sovereign` distinguishes the
+        // canonical hidden-dir layout from the legacy
+        // `~/.config/sovereign/config.toml` (which ends with the *undotted*
+        // `sovereign/config.toml`). Keep the dot literal so a regression back
+        // to that legacy layout still fails this test.
         let p = SetupConfig::default_path();
         assert!(
-            p.ends_with(".sovereign/config.toml"),
+            p.ends_with(".svrnmesh/config.toml") || p.ends_with(".sovereign/config.toml"),
             "unexpected path: {}",
             p.display()
         );
