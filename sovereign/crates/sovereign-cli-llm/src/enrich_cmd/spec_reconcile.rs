@@ -63,7 +63,7 @@ const BUNDLE: usize = 10;
 const FLOOR: f32 = 0.45;
 /// First N chars of each function summary shown in the evidence bundle
 /// (prototype `summary[:140]`).
-const SUMMARY_CLIP: usize = 140;
+const SUMMARY_CLIP: usize = 400; // eval loop iter2: give the judge the full summary (was 140)
 /// Concurrency for the one-time function-embedding pass.
 const EMBED_CONCURRENCY: usize = 16;
 /// Concurrency for the per-claim adjudication chat calls (mirror
