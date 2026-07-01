@@ -78,7 +78,8 @@ def seeds_for(names):
     out = []
     for n in names:
         pat = f"%{n}%()." if len(n) >= 6 else f"%]{n}()."
-        rows = cur.execute("SELECT DISTINCT caller_qualified FROM refs WHERE caller_qualified LIKE ? LIMIT 30", (pat,)).fetchall()
+        # cap PER NAME low so a generic early name can't crowd out a later, better one
+        rows = cur.execute("SELECT DISTINCT caller_qualified FROM refs WHERE caller_qualified LIKE ? LIMIT 8", (pat,)).fetchall()
         out += [q for (q,) in rows]
     return out
 
@@ -100,21 +101,33 @@ def neighborhood(seeds, depth=2):
     return sorted({short(s) for s in seen if s.rstrip().endswith("().")})
 
 
+_FILE_LINES = {}
+def _file_lines(path):
+    if path not in _FILE_LINES:
+        try:
+            _FILE_LINES[path] = open(path).read().splitlines()
+        except OSError:
+            _FILE_LINES[path] = None
+    return _FILE_LINES[path]
+
+
 def fetch_slice(name, keys, max_lines=20):
+    """Return (kw_hit, sliced_body) or None. kw_hit=True when the body mentions a
+    question keyword — lets the caller prioritize relevant bodies over alphabetical order."""
     row = cur.execute("SELECT file_path,line_start,line_end FROM symbols WHERE name=? ORDER BY (line_end-line_start) DESC LIMIT 1", (name,)).fetchone()
     if not row:
         return None
     f, a, b = row
     path = f if os.path.isabs(f) else os.path.join(REPO, f)
-    try:
-        lines = open(path).read().splitlines()[a-1:b]
-    except OSError:
+    full = _file_lines(path)
+    if full is None:
         return None
+    lines = full[a-1:b]
     hit = [j for j, ln in enumerate(lines) if any(k in ln.lower() for k in keys)]
     if hit:
         lo, hi = max(0, hit[0]-2), min(len(lines), hit[-1]+3)
-        return "\n".join(lines[:1] + ["    // …"] + lines[lo:hi][:max_lines])
-    return "\n".join(lines[:max_lines])
+        return True, "\n".join(lines[:1] + ["    // …"] + lines[lo:hi][:max_lines])
+    return False, "\n".join(lines[:max_lines])
 
 
 # ── the four steps per claim ──
@@ -122,11 +135,12 @@ EXTRACT_SYS = ('Turn a spec claim into a code-checkable question. A claim is "wi
                'that a specific code PATH performs a specific behavior (exposes / uses / calls / routes / '
                'enables / invokes a capability) — the kind you verify by inspecting what that path DOES, '
                'not by finding a function whose name matches. Output JSON only: '
-               '{"wiring": true|false, "subject": "<describe the code path by the REQUEST or SITUATION it '
-               'handles (the claim\'s when/for/scope trigger), like a handler\'s one-line summary — i.e. the '
-               'ENTRY POINT that would perform the behavior, NOT the behavior the claim asserts. Example: for '
-               '\'the checkout flow emails a receipt\', subject=\'handles a checkout request\' (the entry), never '
-               '\'emails a receipt\' (the asserted behavior)>", '
+               '{"wiring": true|false, "subjects": ['
+               '"<SCOPE-form: the request/situation the path handles, from the claim\'s when/for/scope trigger '
+               '— e.g. \'handles a checkout request\'>", '
+               '"<OPERATION-form: the USER-FACING interaction this path serves — what a user did to trigger '
+               'it — e.g. \'answering a user question\', \'running a CLI command\', \'ingesting a document\'>", '
+               '"<PREDICATE-form: what the claim asserts the path does — e.g. \'sends a receipt email\'>"], '
                '"question": "<a yes/no question about what that path does>", "expected": "YES"|"NO"}. '
                'expected = what the claim asserts the answer is. wiring=false for claims not about one path\'s behavior.')
 
@@ -158,19 +172,26 @@ def run_claim(claim):
     ex = extract(claim)
     if not ex or not ex.get("wiring"):
         return {"verdict": "ABSTAIN", "why": "not a wiring claim" if ex else "extract-fail"}
-    cands = resolve_subject(ex["subject"], k=6)
-    seeds = seeds_for([fn_name(f) for f in cands])
+    subjects = ex.get("subjects") or ([ex["subject"]] if ex.get("subject") else [])
+    names, seen_n = [], set()
+    for subj in subjects[:3]:                       # union the phrasings' candidates
+        for f in resolve_subject(subj, k=5):
+            n = fn_name(f)
+            if n and n not in seen_n:
+                seen_n.add(n); names.append(n)
+    seeds = list(dict.fromkeys(seeds_for(names)))[:120]
     if not seeds:
-        return {"verdict": "ABSTAIN", "why": f"subject '{ex['subject']}' unresolved", "ex": ex}
+        return {"verdict": "ABSTAIN", "why": f"subjects {subjects} unresolved", "ex": ex}
     hood = neighborhood(seeds)
     keys = [w for w in re.findall(r"[a-z_]{4,}", ex["question"].lower()) if w not in STOP][:6] or ["request"]
-    blocks, picked = [], []
+    scored = []
     for n in hood:
-        if len(picked) >= 10:
-            break
-        s = fetch_slice(n, keys)
-        if s and s.count("\n") >= 4:
-            picked.append(n); blocks.append(f"### fn {n}\n{s}")
+        r0 = fetch_slice(n, keys)
+        if r0 and r0[1].count("\n") >= 4:
+            kw, body = r0
+            scored.append((0 if kw else 1, n, body))
+    scored.sort(key=lambda x: x[0])          # keyword-relevant bodies first — the gun mentions the terms
+    blocks = [f"### fn {n}\n{body}" for _, n, body in scored[:10]]
     if not blocks:
         return {"verdict": "ABSTAIN", "why": "no bodies", "ex": ex}
     actual, raw = judge(ex["question"], blocks)
@@ -206,7 +227,7 @@ for c in claims:
         flag = "  ✓ caught"
     print(f"[{tag:12}] key={gt:12} {c['statement'][:60]}{flag}")
     if "ex" in r and tag != "ABSTAIN":
-        print(f"      subj={r['ex'].get('subject','')[:50]!r} Q={r['ex'].get('question','')[:60]!r} exp={r['ex'].get('expected')}")
+        print(f"      subjs={str(r['ex'].get('subjects','') or r['ex'].get('subject',''))[:82]} exp={r['ex'].get('expected')}")
     if r.get("cite"):
         print(f"      actual={r.get('actual','?')} cite={r['cite'][:100]}")
 
