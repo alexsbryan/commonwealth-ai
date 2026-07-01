@@ -35,18 +35,19 @@ async function discoverModel() {
   return MODEL;
 }
 
-const SYSTEM = `Judge a knowledge-app answer from a demanding user's seat. You get the QUESTION, the full EVIDENCE the app retrieved, and the ANSWER. Ignore any length the user demanded — short is fine.
+const SYSTEM = `You are a real end user deciding whether to TRUST this knowledge app. Judge ONE answer to YOUR question: did you get a high-quality, trustworthy, ideally well-cited response? Ignore any length you demanded — short is fine.
 
-Decide in order, stop at the first that matches:
-1. HONEST DECLINE → good (honest_limitation). The answer says the sources don't cover it, or the knowledge base is unavailable / still building / needs rebuild (real UI steps like "Settings → Rebuild" are honest guidance, not invented), or the input is too long, or it clearly labels content "from general knowledge, not your sources".
-2. BROKEN → a specific it presents AS FROM THE SOURCES (name, number, date, quote, code) is NOT anywhere in the EVIDENCE; or it shows the model's own reasoning; or it repeats/pads with filler; or it answers a different question.
-3. Otherwise → good.
+Pick the category — first that matches, stop there:
+1. honest_limitation — it honestly declines: the sources don't cover it, the knowledge base is unavailable / still building / needs rebuild (real UI steps like "Settings → Rebuild" are honest), or the input is empty or too long.
+2. confabulation — it BREAKS TRUST by making something up: it states a FALSE specific as fact (contradicts the evidence or what you know), OR it invents a quote / source / citation that does not exist (a quote not in the EVIDENCE, a fabricated "[Source: …]", or claims the sources "explicitly" state something they plainly do not). Correct information carrying only a loose or missing citation is NOT confabulation — that is good with well_cited:false.
+3. incoherent — cut off mid-answer, leaks the model's own reasoning, pads with filler, or answers a different question.
+4. good — a helpful, trustworthy answer. Correct general knowledge the model adds to help is GOOD (ideally caveated). An honest "[unverified excerpt: X]" label is honest — judge X's content, never the wrapper.
 
-The app marks any span it could not verbatim-confirm as "[unverified excerpt: X]". That wrapper is honest labeling — judge X's content against the evidence like any other text, and never count the words "unverified excerpt" (or the brackets) as an absent or fabricated specific.
+Then rate two quality signals — they do NOT change the category:
+- well_cited: true if the answer's claims are backed by the sources or real citations; false if uncited or loosely cited.
+- caveated: true if it flags its non-source additions as general knowledge (e.g. "not in your sources", "from general knowledge"), else false.
 
-Read ALL the evidence before calling a specific absent.
-
-Reply ONLY as JSON: {"category":"good|honest_limitation|fabrication|incoherent_or_leak|padding|wrong|off_topic","why":"one line"}`;
+Reply ONLY as JSON: {"category":"good|honest_limitation|confabulation|incoherent","well_cited":true|false,"caveated":true|false,"why":"one line"}`;
 
 function firstJson(text) {
   const m = String(text).match(/\{[\s\S]*\}/);
@@ -94,6 +95,12 @@ async function judge(question, evidence, answer) {
     broken,
     score: broken ? 8 : 0,
     category,
+    // Non-scoring end-user quality signals (tracked separately, never gate the
+    // category): is the answer well-cited, and did it caveat non-source
+    // additions? Correct GK is `good` whether cited/caveated or not — these
+    // measure "high quality, ideally well cited", the trust nudges, not pass/fail.
+    well_cited: Boolean(j.well_cited),
+    caveated: Boolean(j.caveated),
     why: String(j.why ?? "").slice(0, 200),
   };
 }
