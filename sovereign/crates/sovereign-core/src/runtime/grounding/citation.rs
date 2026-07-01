@@ -44,6 +44,12 @@ const PASSAGE_CHAR_BUDGET: usize = 28_000;
 /// corpus words is a span a confabulation does not produce by accident).
 const MIN_VERBATIM_RUN: usize = 6;
 
+/// Longest alphanumeric run `extend_mid_token_copy` will append. A mid-token
+/// stop leaves at most a partial word/number to restore; a run longer than this
+/// means the "continuation" is some other structure (a hash blob, minified
+/// text) — don't guess.
+const MAX_TAIL_RUN: usize = 24;
+
 /// Outcome of the citation-grounded answer path.
 pub enum CitationOutcome {
     /// A verifiable supporting quote was found — release this answer.
@@ -113,6 +119,45 @@ pub async fn citation_grounded_answer(
             ));
             return CitationOutcome::Inconclusive;
         }
+    };
+    // Mid-token stop compensation (probed deterministically 2026-07-01): the MTP
+    // primary sometimes emits a spontaneous EOS mid-token while copying under a
+    // long context — finish=Stop with the token budget unused, leaving
+    // "RELATIONAL_EXPRESSIVE_SYSTEM_PROM" or a formula cut at a trailing "∧ ¬".
+    // The quote is verified verbatim against the chunks below, so completion is
+    // grounded by construction: when the text's occurrence in its source is
+    // followed by more alphanumeric characters EVERYWHERE it appears, it stopped
+    // mid-token — append that run, copying only from the source (quote-first for
+    // the answer, chunks for the quote). Skips the NONE sentinels — an
+    // abstention has nothing to complete.
+    let sentinel = is_none(&quote) || is_none(&answer);
+    let quote = match (!sentinel)
+        .then(|| extend_mid_token_copy(&quote, chunks.iter().map(String::as_str)))
+        .flatten()
+    {
+        Some(fixed) => {
+            dbg(&format!(
+                "citation: quote stopped mid-token — completed from chunk (…{:?})",
+                fixed.chars().rev().take(24).collect::<String>().chars().rev().collect::<String>()
+            ));
+            fixed
+        }
+        None => quote,
+    };
+    let answer = match (!sentinel)
+        .then(|| {
+            extend_mid_token_copy(
+                &answer,
+                std::iter::once(quote.as_str()).chain(chunks.iter().map(String::as_str)),
+            )
+        })
+        .flatten()
+    {
+        Some(fixed) => {
+            dbg(&format!("citation: answer stopped mid-token — completed to {fixed:?}"));
+            fixed
+        }
+        None => answer,
     };
     // Anti-confabulation: the quote must (a) be verbatim in the passages and
     // (b) actually SUPPORT the answer — the model can copy a real-but-
@@ -228,6 +273,93 @@ fn parse_quote_answer(resp: &str) -> Option<(String, String)> {
 fn is_none(s: &str) -> bool {
     let l = s.trim().to_lowercase();
     l.is_empty() || l == "none" || l.starts_with("none ") || l.starts_with("none.")
+}
+
+/// The grounded completion of a mid-token generation stop, if one is warranted.
+/// Tries `sources` in order (first source containing the text decides — pass the
+/// verified quote before the chunks so declared provenance wins). Within that
+/// source, every occurrence must agree:
+/// - any occurrence followed by a token boundary → the text IS a complete token
+///   there → `None` (nothing to fix);
+/// - all occurrences followed by the SAME alphanumeric run (≤ `MAX_TAIL_RUN`) →
+///   `Some(text + run)`;
+/// - disagreeing or oversized continuations → `None` (ambiguous — don't guess).
+/// Whitespace-run tolerant (a quote's single spaces match a chunk's newlines),
+/// case-exact (the text is a copy; a case drift means it is not this span).
+fn extend_mid_token_copy<'a>(
+    text: &str,
+    sources: impl IntoIterator<Item = &'a str>,
+) -> Option<String> {
+    let needle = text.trim_end();
+    if needle.is_empty() {
+        return None;
+    }
+    for src in sources {
+        let conts = continuations_after(src, needle);
+        if conts.is_empty() {
+            continue; // not in this source — try the next
+        }
+        if conts.iter().any(|c| c.is_empty()) {
+            return None; // complete token somewhere — no truncation to repair
+        }
+        let first = &conts[0];
+        if conts.iter().all(|c| c == first) && first.chars().count() <= MAX_TAIL_RUN {
+            return Some(format!("{needle}{first}"));
+        }
+        return None; // ambiguous continuations in the provenance source
+    }
+    None
+}
+
+/// The alphanumeric run immediately following each whitespace-tolerant
+/// occurrence of `needle` in `hay` (empty string = the occurrence ends at a
+/// token boundary). Runs are truncated at `MAX_TAIL_RUN + 1` chars so an
+/// oversized continuation is detectable without unbounded collection.
+fn continuations_after(hay: &str, needle: &str) -> Vec<String> {
+    let h: Vec<char> = hay.chars().collect();
+    let n: Vec<char> = needle.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < h.len() {
+        if let Some(end) = whitespace_tolerant_match_at(&h, i, &n) {
+            let mut run = String::new();
+            let mut k = end;
+            while k < h.len() && h[k].is_alphanumeric() && run.chars().count() <= MAX_TAIL_RUN {
+                run.push(h[k]);
+                k += 1;
+            }
+            out.push(run);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Match `needle` at `h[start..]` treating any whitespace run as equivalent to
+/// any other. Returns the hay index one past the match.
+fn whitespace_tolerant_match_at(h: &[char], start: usize, n: &[char]) -> Option<usize> {
+    let mut i = start;
+    let mut j = 0usize;
+    while j < n.len() {
+        if n[j].is_whitespace() {
+            if i >= h.len() || !h[i].is_whitespace() {
+                return None;
+            }
+            while i < h.len() && h[i].is_whitespace() {
+                i += 1;
+            }
+            while j < n.len() && n[j].is_whitespace() {
+                j += 1;
+            }
+        } else {
+            if i >= h.len() || h[i] != n[j] {
+                return None;
+            }
+            i += 1;
+            j += 1;
+        }
+    }
+    Some(i)
 }
 
 fn normalize(s: &str) -> String {
@@ -366,5 +498,74 @@ mod tests {
             "Deloitte 2025",
             "review of Deloitte's performance during the engagement for the 2025 audit"
         ));
+    }
+
+    // ── mid-token stop compensation (probed deterministically 2026-07-01:
+    //    finish=Stop at 99/256 tokens, answer cut mid-symbol) ──
+
+    #[test]
+    fn completes_the_mid_symbol_answer_from_the_chunk() {
+        // The observed failure: chaos rebaseline step 127 / replay step 21.
+        let chunk = "two prompt forms: `RELATIONAL_BASE_SYSTEM_PROMPT` (full) and\n\
+                     `RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT` (compact — situated-handler default).";
+        let fixed =
+            extend_mid_token_copy("RELATIONAL_EXPRESSIVE_SYSTEM_PROM", std::iter::once(chunk));
+        assert_eq!(fixed.as_deref(), Some("RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT"));
+    }
+
+    #[test]
+    fn completes_the_dangling_formula_operator() {
+        // Chaos rebaseline step 173: the answer stopped at a trailing "¬".
+        let quote = "Then simply define Hn+1 := ¬H1 ∧ … ∧ ¬Hn and add this new hypothesis.";
+        let fixed = extend_mid_token_copy("Hn+1 := ¬H1 ∧ … ∧ ¬", std::iter::once(quote));
+        assert_eq!(fixed.as_deref(), Some("Hn+1 := ¬H1 ∧ … ∧ ¬Hn"));
+    }
+
+    #[test]
+    fn complete_token_anywhere_means_no_extension() {
+        // "1968" ends at a boundary in one occurrence — it is a real token; the
+        // longer "19685" elsewhere must not trigger an extension.
+        let chunk = "launched in 1968. Production reached 19685 units.";
+        assert_eq!(extend_mid_token_copy("1968", std::iter::once(chunk)), None);
+    }
+
+    #[test]
+    fn disagreeing_continuations_do_not_extend() {
+        let chunk = "PREFIXalpha here, PREFIXbeta there.";
+        assert_eq!(extend_mid_token_copy("PREFIX", std::iter::once(chunk)), None);
+    }
+
+    #[test]
+    fn truncated_number_completes_to_the_source_value() {
+        // The NARA class: "289494" cut from "28949423" — unanimous continuation
+        // restores the real value (verification then passes on the full number).
+        let quote = "NARA fileUnit 28949423.";
+        assert_eq!(
+            extend_mid_token_copy("289494", std::iter::once(quote)).as_deref(),
+            Some("28949423")
+        );
+    }
+
+    #[test]
+    fn whitespace_runs_are_equivalent() {
+        // The answer copies a quote whose source chunk breaks the line mid-span.
+        let chunk = "the relational voice\ncontract has two prompt\n  forms in FOOBA";
+        let fixed = extend_mid_token_copy(
+            "voice contract has two prompt forms in FOO",
+            std::iter::once(chunk),
+        );
+        assert_eq!(fixed.as_deref(), Some("voice contract has two prompt forms in FOOBA"));
+    }
+
+    #[test]
+    fn oversized_continuation_is_not_guessed() {
+        let chunk = "hash watched959ee8a8f330aabbccddeeff00112233445566778899 end";
+        assert_eq!(extend_mid_token_copy("watched", std::iter::once(chunk)), None);
+    }
+
+    #[test]
+    fn absent_text_and_sentinels_are_untouched() {
+        assert_eq!(extend_mid_token_copy("missing", std::iter::once("no match here")), None);
+        assert_eq!(extend_mid_token_copy("", std::iter::once("anything")), None);
     }
 }
