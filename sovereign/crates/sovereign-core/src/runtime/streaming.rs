@@ -424,9 +424,11 @@ async fn gate_held_answer(
                 target: "synth.citation",
                 citations_total = cites.citations_total,
                 citations_stripped = cites.citations_stripped(),
+                citations_snapped = cites.citations_snapped(),
                 fabrication_rate = cites.fabrication_rate(),
                 stripped = ?cites.stripped_titles,
-                "stripped unverifiable [Source:] citations absent from the evidence"
+                snapped = ?cites.snapped_titles,
+                "corrected [Source:] citations: snapped garbled labels, stripped unverifiable ones"
             );
             *full_text = cites.cleaned;
         }

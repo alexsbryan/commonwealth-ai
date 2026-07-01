@@ -19,16 +19,37 @@
 //! from the passages. So a title whose distinctive words appear nowhere in the
 //! evidence is a fabricated attribution by the prompt's own contract.
 //!
-//! Deterministic, no LLM: tokenize the cited title, measure the fraction of its
-//! significant words present in the evidence, and strip the marker when the
-//! majority are absent. A reformatted-but-real title ("Federalist 51 (Madison)"
-//! for the header "Federalist No. 51") keeps most of its words and is released; an
-//! invented one ("Advertising Campaign - NASCAR") keeps about none and is stripped.
+//! Deterministic, no LLM. Each cited title runs an ORDERED decision (stop at the
+//! first match):
 //!
-//! Strip, don't gate — a false strip removes one marker, it does not refuse a good
-//! answer; that asymmetry is why the floor is forgiving (0.5). The per-answer
-//! fabrication rate is reported for the glassbox so a confabulation-heavy answer is
-//! visible to telemetry and the desktop panel even though we don't gate on it yet.
+//! 1. Exact match against a real source label → keep.
+//! 2. Verbatim multi-word phrase from the evidence body (a real in-body header,
+//!    e.g. "4.16 Architectural correctness tooling") → keep.
+//! 3. SNAP: char-similar to exactly one real label → rewrite the citation to that
+//!    label. The chaos rebaseline (2026-07-01, steps 21/105) showed the model
+//!    cannot reliably copy opaque hash ids: it cited seven corruptions of the one
+//!    real corpus id `watched-959ee8a8f330` (`watched-959ee8a67210`, …). Every
+//!    observed garble sits at 0.80–0.95 Levenshtein similarity to the true label
+//!    while fabricated titles measure ≤ 0.53 against any label — so a unique
+//!    near-miss is a garbled COPY of a real source, and correcting it preserves
+//!    the citation instead of destroying a genuine attribution.
+//! 4. ID-token VETO: a title carrying an ID-shaped token (≥6 chars with a digit)
+//!    that matches no COMPLETE token in the evidence is stripped. Same principle
+//!    as the gate's exact-value fix (`quote_has_number_token`): identifiers match
+//!    completely or not at all. Without this, a garbled hash passes the word
+//!    floor below at exactly 0.5 — the shared prefix ("watched") carries half the
+//!    weight and the corruption ships.
+//! 5. Word floor: measure the fraction of the title's significant words present
+//!    in the evidence; strip when the majority are absent. A reformatted-but-real
+//!    title ("Federalist 51 (Madison)" for the header "Federalist No. 51") keeps
+//!    most of its words and is released; an invented one ("Advertising Campaign -
+//!    NASCAR") keeps about none and is stripped.
+//!
+//! Snap or strip, don't gate — a false strip removes one marker, it does not
+//! refuse a good answer; that asymmetry is why the floor is forgiving (0.5). The
+//! per-answer fabrication rate is reported for the glassbox so a
+//! confabulation-heavy answer is visible to telemetry and the desktop panel even
+//! though we don't gate on it yet.
 
 /// Below this fraction of a title's significant words present in the evidence, the
 /// citation is treated as a fabricated attribution. 0.5 = "more invented than
@@ -44,15 +65,39 @@ const SUPPORT_FLOOR: f32 = 0.5;
 /// than risk a false strip.
 const MIN_TITLE_WORDS: usize = 2;
 
+/// A cited title at least this char-similar to a real source label is a garbled
+/// copy of that label — snap it. Calibrated on the chaos rebaseline: all seven
+/// observed hash-id garbles measure 0.80–0.95 against the label they corrupted;
+/// fabricated / unrelated titles measure ≤ 0.53 against every label. 0.75 leaves
+/// a wide margin on both sides.
+const SNAP_FLOOR: f32 = 0.75;
+
+/// A snap must be UNAMBIGUOUS: the best label must beat the runner-up by this
+/// margin (or the runner-up must be below `SNAP_FLOOR`). Near-twin labels
+/// ("Decision — 2026-03-28 — Guest Parking" vs "… — 2026-04-02 — Porch Smoking")
+/// separate by ≈0.3, so 0.10 is conservative. An ambiguous near-miss falls
+/// through — the ID-token veto strips it rather than risk snapping to the wrong
+/// source.
+const SNAP_MARGIN: f32 = 0.10;
+
+/// A significant word this long that carries a digit is ID-shaped (hash ids,
+/// record numbers) and must match a COMPLETE token in the evidence — partial
+/// matches are how truncated/garbled identifiers masquerade as grounded. Short
+/// digit words ("51", "2001") stay under the plain word rule.
+const ID_TOKEN_MIN_LEN: usize = 6;
+
 /// The result of auditing an answer's citations against its evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationAttribution {
-    /// The answer with unverifiable `[Source: …]` markers removed.
+    /// The answer with unverifiable `[Source: …]` markers removed and garbled
+    /// ones snapped to the real label.
     pub cleaned: String,
     /// Total individual `Source:` citations seen across the answer.
     pub citations_total: usize,
     /// The titles that were stripped (absent from the evidence).
     pub stripped_titles: Vec<String>,
+    /// Citations rewritten to the real label they garbled: `(cited, snapped-to)`.
+    pub snapped_titles: Vec<(String, String)>,
 }
 
 impl CitationAttribution {
@@ -60,9 +105,13 @@ impl CitationAttribution {
     pub fn citations_stripped(&self) -> usize {
         self.stripped_titles.len()
     }
+    /// How many citations were snapped to the real label they garbled.
+    pub fn citations_snapped(&self) -> usize {
+        self.snapped_titles.len()
+    }
     /// Did the audit change the answer?
     pub fn changed(&self) -> bool {
-        !self.stripped_titles.is_empty()
+        !self.stripped_titles.is_empty() || !self.snapped_titles.is_empty()
     }
     /// Fraction of the answer's citations that were fabricated. 0.0 when the answer
     /// carried no citations. A high rate is the signal that the whole answer is
@@ -98,10 +147,22 @@ pub fn attribute_citations(
         raw.push_str(&labels.join(" "));
     }
     let hay = normalize(&raw);
+    // Distinct labels as (original, normalized) — the snap targets. Dedup so the
+    // corpus id repeated once per chunk doesn't compete with itself in the
+    // uniqueness check.
+    let mut seen = std::collections::HashSet::new();
+    let label_set: Vec<(String, String)> = labels
+        .iter()
+        .filter_map(|l| {
+            let n = normalize(l);
+            (!n.is_empty() && seen.insert(n.clone())).then(|| (l.trim().to_string(), n))
+        })
+        .collect();
     let chars: Vec<char> = answer.chars().collect();
     let mut out = String::with_capacity(answer.len());
     let mut citations_total = 0usize;
     let mut stripped_titles: Vec<String> = Vec::new();
+    let mut snapped_titles: Vec<(String, String)> = Vec::new();
     let mut i = 0usize;
     while i < chars.len() {
         if chars[i] == '[' {
@@ -109,9 +170,11 @@ pub fn attribute_citations(
                 let end = i + 1 + rel; // absolute index of ']'
                 let inner: String = chars[i + 1..end].iter().collect();
                 if inner.trim_start().to_lowercase().starts_with("source:") {
-                    let (rebuilt, total, stripped) = process_bracket(&inner, &hay);
+                    let (rebuilt, total, stripped, snapped) =
+                        process_bracket(&inner, &hay, &label_set);
                     citations_total += total;
                     stripped_titles.extend(stripped);
+                    snapped_titles.extend(snapped);
                     if rebuilt.is_empty() {
                         // Whole bracket removed — consume one preceding space so
                         // "claim [Source: X]." collapses to "claim." not "claim .".
@@ -131,17 +194,23 @@ pub fn attribute_citations(
         out.push(chars[i]);
         i += 1;
     }
-    CitationAttribution { cleaned: out, citations_total, stripped_titles }
+    CitationAttribution { cleaned: out, citations_total, stripped_titles, snapped_titles }
 }
 
 /// Process one `[…]` whose inner text begins with `Source:`. Splits on `;` into
-/// individual citations, keeps the verifiable ones, and returns the rebuilt inner
-/// text (empty = drop the whole bracket), the count of citations seen, and the
-/// titles stripped.
-fn process_bracket(inner: &str, hay: &str) -> (String, usize, Vec<String>) {
+/// individual citations, keeps the verifiable ones (snapping garbled label copies
+/// to the real label), and returns the rebuilt inner text (empty = drop the whole
+/// bracket), the count of citations seen, the titles stripped, and the
+/// `(cited, snapped-to)` rewrites.
+fn process_bracket(
+    inner: &str,
+    hay: &str,
+    labels: &[(String, String)],
+) -> (String, usize, Vec<String>, Vec<(String, String)>) {
     let mut kept: Vec<String> = Vec::new();
     let mut total = 0usize;
     let mut stripped: Vec<String> = Vec::new();
+    let mut snapped: Vec<(String, String)> = Vec::new();
     for seg in inner.split(';') {
         let seg = seg.trim();
         if seg.is_empty() {
@@ -149,13 +218,16 @@ fn process_bracket(inner: &str, hay: &str) -> (String, usize, Vec<String>) {
         }
         total += 1;
         let title = strip_source_prefix(seg);
-        if title_is_supported(title, hay) {
-            kept.push(format!("Source: {title}"));
-        } else {
-            stripped.push(title.to_string());
+        match judge_title(title, hay, labels) {
+            TitleVerdict::Keep => kept.push(format!("Source: {title}")),
+            TitleVerdict::Snap(label) => {
+                kept.push(format!("Source: {label}"));
+                snapped.push((title.to_string(), label));
+            }
+            TitleVerdict::Strip => stripped.push(title.to_string()),
         }
     }
-    (kept.join("; "), total, stripped)
+    (kept.join("; "), total, stripped, snapped)
 }
 
 /// Drop a leading case-insensitive `Source:` from a citation segment, returning the
@@ -170,21 +242,115 @@ fn strip_source_prefix(seg: &str) -> &str {
     }
 }
 
-/// A title is supported when too short to judge (kept, conservative) or when at
-/// least `SUPPORT_FLOOR` of its significant words are present in the evidence.
-fn title_is_supported(title: &str, hay: &str) -> bool {
-    // A multi-word title present VERBATIM as a contiguous phrase is grounded by
-    // definition — it is literally a header in the evidence.
-    let nt: String = title.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ");
-    if nt.split(' ').filter(|w| !w.is_empty()).count() >= 2 && hay.contains(&nt) {
-        return true;
+/// The per-title verdict: keep as cited, rewrite to a real label, or strip.
+enum TitleVerdict {
+    Keep,
+    Snap(String),
+    Strip,
+}
+
+/// The ordered decision procedure documented at the top of the module: exact
+/// label → verbatim body phrase → snap-to-label → ID-token veto → word floor.
+fn judge_title(title: &str, hay: &str, labels: &[(String, String)]) -> TitleVerdict {
+    let nt = normalize(title);
+    // 1. The citation names a real source label verbatim.
+    if labels.iter().any(|(_, ln)| *ln == nt) {
+        return TitleVerdict::Keep;
     }
+    // 2. A multi-word title present VERBATIM as a contiguous phrase is grounded
+    //    by definition — it is literally a header in the evidence. Bounded, not
+    //    substring: "Record 2894942" must not match inside "Record 28949423".
+    if nt.split(' ').filter(|w| !w.is_empty()).count() >= 2 && hay_contains_bounded(hay, &nt) {
+        return TitleVerdict::Keep;
+    }
+    // 3. A unique near-miss of one real label is a garbled copy — correct it.
+    if let Some(label) = snap_to_label(&nt, labels) {
+        return TitleVerdict::Snap(label);
+    }
+    // 4. An ID-shaped token that matches no complete evidence token is a
+    //    corrupted or invented identifier — the word floor must not see it.
     let sig = significant_words(title);
+    if sig.iter().any(|w| id_shaped(w) && !hay_contains_bounded(hay, w)) {
+        return TitleVerdict::Strip;
+    }
+    // 5. Word floor.
     if sig.len() < MIN_TITLE_WORDS {
-        return true; // too coarse to judge — keep
+        return TitleVerdict::Keep; // too coarse to judge — keep
     }
     let present = sig.iter().filter(|w| hay.contains(w.as_str())).count();
-    (present as f32 / sig.len() as f32) >= SUPPORT_FLOOR
+    if (present as f32 / sig.len() as f32) >= SUPPORT_FLOOR {
+        TitleVerdict::Keep
+    } else {
+        TitleVerdict::Strip
+    }
+}
+
+/// The unique label the cited title is a garbled copy of, if any: best similarity
+/// ≥ `SNAP_FLOOR` and unambiguous (runner-up below the floor or beaten by
+/// `SNAP_MARGIN`). Returns the label's ORIGINAL text — the snap restores the real
+/// header, not a normalization of it.
+fn snap_to_label(nt: &str, labels: &[(String, String)]) -> Option<String> {
+    let mut best: Option<(f32, &str)> = None;
+    let mut second = 0.0f32;
+    for (orig, norm) in labels {
+        let s = char_similarity(nt, norm);
+        match best {
+            Some((bs, _)) if s <= bs => second = second.max(s),
+            _ => {
+                if let Some((bs, _)) = best {
+                    second = second.max(bs);
+                }
+                best = Some((s, orig.as_str()));
+            }
+        }
+    }
+    let (bs, orig) = best?;
+    (bs >= SNAP_FLOOR && (second < SNAP_FLOOR || bs - second >= SNAP_MARGIN))
+        .then(|| orig.to_string())
+}
+
+/// Normalized Levenshtein similarity over chars: 1.0 = identical, 0.0 = disjoint.
+fn char_similarity(a: &str, b: &str) -> f32 {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let max = a.len().max(b.len());
+    if max == 0 {
+        return 0.0;
+    }
+    let mut dp: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut prev = dp[0];
+        dp[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let cur = dp[j + 1];
+            dp[j + 1] = (dp[j + 1] + 1).min(dp[j] + 1).min(prev + usize::from(ca != cb));
+            prev = cur;
+        }
+    }
+    1.0 - dp[b.len()] as f32 / max as f32
+}
+
+/// ID-shaped: long enough to be an identifier and carrying at least one digit.
+fn id_shaped(w: &str) -> bool {
+    w.chars().count() >= ID_TOKEN_MIN_LEN && w.chars().any(|c| c.is_ascii_digit())
+}
+
+/// Whether `needle` occurs in `hay` bounded by non-alphanumerics — the complete-run
+/// rule from the gate's exact-value fix: `2894942` inside `28949423` is NOT a
+/// match. Used for both single ID tokens and whole title phrases. Both sides are
+/// already lowercase.
+fn hay_contains_bounded(hay: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    for (i, m) in hay.match_indices(needle) {
+        let left_ok = hay[..i].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+        let right_ok = hay[i + m.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+        if left_ok && right_ok {
+            return true;
+        }
+    }
+    false
 }
 
 /// The distinctive content words of a title: ≥2 chars, not a function/honorific
@@ -374,5 +540,115 @@ mod tests {
         assert_eq!(r.citations_stripped(), 1);
         assert_eq!(r.stripped_titles, vec!["Re: Advertising Campaign - NASCAR"]);
         assert!(r.cleaned.contains("[Source: Re: Cornell]"));
+    }
+
+    // ── snap + ID-token veto: the garbled-hash-id class (chaos rebaseline
+    //    2026-07-01, steps 21/105 — 7 corruptions of one real corpus id) ──
+
+    /// The watched-corpus turn: the corpus id is a LABEL (it never appears in the
+    /// chunk bodies), and the body legitimately contains the word "watched".
+    fn watched_labels() -> Vec<String> {
+        vec!["watched-959ee8a8f330".to_string()]
+    }
+    fn watched_body() -> Vec<String> {
+        vec![
+            "Because if you never land, you never see what's underneath you. The \
+             watched folder mirrors notes as they change."
+                .to_string(),
+        ]
+    }
+
+    #[test]
+    fn garbled_hash_id_citation_snaps_to_the_true_label() {
+        let answer = "the fox speaks [Source: watched-959ee8a67210].";
+        let r = attribute_citations(answer, &watched_body(), &watched_labels());
+        assert_eq!(r.citations_snapped(), 1);
+        assert_eq!(r.citations_stripped(), 0);
+        assert_eq!(
+            r.snapped_titles,
+            vec![("watched-959ee8a67210".to_string(), "watched-959ee8a8f330".to_string())]
+        );
+        assert!(r.cleaned.contains("[Source: watched-959ee8a8f330]"));
+        assert!(!r.cleaned.contains("959ee8a67210"));
+    }
+
+    #[test]
+    fn every_observed_garble_snaps_to_the_true_label() {
+        // All seven corruptions the rebaseline shipped (steps 21 + 105).
+        for garble in [
+            "watched-959ee8a67210",
+            "watched-959e8a8f33",
+            "watched-9598a8f321",
+            "watched-9e9ee8aaf320",
+            "watched-959ee8a330",
+            "watched-959eae8f330",
+            "watched-959ee6a8f331",
+        ] {
+            let answer = format!("claim [Source: {garble}].");
+            let r = attribute_citations(&answer, &watched_body(), &watched_labels());
+            assert_eq!(r.citations_snapped(), 1, "{garble} must snap");
+            assert!(r.cleaned.contains("[Source: watched-959ee8a8f330]"), "{garble}");
+        }
+    }
+
+    #[test]
+    fn exact_id_citation_is_untouched() {
+        let answer = "the fox speaks [Source: watched-959ee8a8f330].";
+        let r = attribute_citations(answer, &watched_body(), &watched_labels());
+        assert!(!r.changed());
+        assert_eq!(r.cleaned, answer);
+    }
+
+    #[test]
+    fn id_shaped_garble_cannot_pass_the_word_floor() {
+        // No labels captured (tool-transcript evidence): the pre-fix floor kept
+        // this at exactly 0.5 ("watched" present, garbled hash absent). The
+        // ID-token veto must strip it.
+        let answer = "the fox speaks [Source: watched-959ee8a67210].";
+        let r = attribute_citations(answer, &watched_body(), &[]);
+        assert_eq!(r.citations_stripped(), 1);
+        assert!(!r.cleaned.contains("Source:"));
+    }
+
+    #[test]
+    fn ambiguous_near_twin_labels_strip_rather_than_missnap() {
+        // Two real labels one edit apart from the cited garble: snapping would
+        // be a coin flip, so the veto strips instead.
+        let labels = vec!["watched-959ee8a8f330".to_string(), "watched-959ee8a8f332".to_string()];
+        let answer = "claim [Source: watched-959ee8a8f331].";
+        let r = attribute_citations(answer, &watched_body(), &labels);
+        assert_eq!(r.citations_snapped(), 0);
+        assert_eq!(r.citations_stripped(), 1);
+        assert!(!r.cleaned.contains("959ee8a8f331"));
+    }
+
+    #[test]
+    fn correct_bare_hash_survives_the_veto() {
+        // Citing the id without its prefix: too far to snap (0.6), but the hash
+        // IS a complete token inside the label — keep, don't strip.
+        let answer = "claim [Source: 959ee8a8f330].";
+        let r = attribute_citations(answer, &watched_body(), &watched_labels());
+        assert_eq!(r.citations_stripped(), 0);
+        assert!(r.cleaned.contains("[Source: 959ee8a8f330]"));
+    }
+
+    #[test]
+    fn truncated_record_number_is_stripped_complete_one_kept() {
+        // The NARA class: a record number must match a COMPLETE digit run.
+        let body = vec!["Record 28949423 in the NARA index covers the sighting.".to_string()];
+        let r = attribute_citations("see [Source: Record 2894942].", &body, &[]);
+        assert_eq!(r.citations_stripped(), 1, "truncated number must strip");
+        let r = attribute_citations("see [Source: Record 28949423].", &body, &[]);
+        assert_eq!(r.citations_stripped(), 0, "complete number must survive");
+    }
+
+    #[test]
+    fn short_year_token_is_not_id_shaped() {
+        // "2001" (len 4) stays under the plain word rule — a real reworded title
+        // carrying a year must not trip the veto.
+        let body = vec!["Re: EnronOnline Executive Summary for April 23, 2001.".to_string()];
+        let answer = "summary [Source: EnronOnline Summary 2001].";
+        let r = attribute_citations(answer, &body, &[]);
+        assert_eq!(r.citations_stripped(), 0);
     }
 }
