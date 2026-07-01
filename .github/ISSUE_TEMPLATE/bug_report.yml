@@ -1,0 +1,87 @@
+name: Bug report
+description: Something isn't working the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this. The more of the below you can
+        fill in, the faster it gets fixed.
+
+        If this is a security or privacy issue — including any way data could
+        leave a machine unexpectedly — please **don't** file it here. See
+        [SECURITY.md](https://github.com/alexsbryan/commonwealth-ai/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        I ran `sovereign chat session` and asked ... . I expected ... but got ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands or clicks, in order.
+      placeholder: |
+        1. sovereign setup
+        2. sovereign chat session
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which part
+      options:
+        - CLI (sovereign)
+        - Desktop app
+        - Mesh (Commonwealth)
+        - Daemon / server API
+        - Knowledge base / corpus
+        - Code intelligence
+        - Building from source
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        `sovereign --version`, the release tag (e.g. cli-v0.1.18), or `git
+        rev-parse --short HEAD` if you built from source.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Hardware and OS
+      description: 'e.g. "Strix Halo, Fedora 43, Vulkan" or "M2 Mac, macOS 14"'
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model(s) in use
+      description: Which model was loaded, if it's relevant.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `sovereign doctor` (optional)
+      description: >
+        Only useful if the bug involves the running daemon, mesh, models, or
+        code intelligence — it reports on a live stack, so skip it for build
+        errors or a fresh checkout. If it applies, `sovereign doctor` (or
+        `sovereign doctor --json`) captures what the daemon sees.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        Error output or a stack trace. Daemon logs live at
+        ~/.sovereign/logs/daemon.log (stderr in daemon.err).
+      render: text

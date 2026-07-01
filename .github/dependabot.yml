@@ -1,0 +1,29 @@
+# Automated dependency updates so keeping current isn't manual work.
+#
+# Minor + patch bumps are grouped into a single weekly PR per ecosystem to
+# avoid a flood of one-crate PRs across a 40-crate workspace. Major bumps come
+# as their own PRs (they can break, so they deserve individual review).
+version: 2
+updates:
+  # Rust crates — reads the root workspace Cargo.toml / Cargo.lock.
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions used by the workflows in .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"

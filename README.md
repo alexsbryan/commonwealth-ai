@@ -46,6 +46,10 @@ svrn workflow run my-pipeline.toml
 
 The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it.
 
+## Contributing
+
+Commonwealth AI is opening up to contributions. If you'd like to help — a bug report, a fix, a doc correction — start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public issue tracker.
+
 ---
 
 *Free software under [AGPL-3.0-or-later](./LICENSE).*

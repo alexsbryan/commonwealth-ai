@@ -23,6 +23,16 @@ on:
       tag:
         description: "Tag to attach the release to (e.g. desktop-v0.1.0). Leave blank to use the workflow ref."
         required: false
+  # Callable by the manual "Release (manual)" orchestrator (release.yml). Same
+  # contract as cli-release.yml: `inputs.tag` covers dispatch + call; a tag push
+  # leaves it empty and the version-check / resolve steps fall back to GITHUB_REF.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to attach the release to (e.g. desktop-v0.1.0)."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write  # needed to create / upload to a GitHub Release
@@ -142,7 +152,8 @@ jobs:
         # matches desktop-vX.Y.Z; otherwise just checks the three agree.
         shell: bash
         run: |
-          ref="${GITHUB_REF#refs/tags/}"
+          ref="${{ inputs.tag }}"
+          [ -n "$ref" ] || ref="${GITHUB_REF#refs/tags/}"
           if [[ "$ref" == desktop-v* ]]; then
             expected="${ref#desktop-v}"
             scripts/check-desktop-version.sh "$expected"
