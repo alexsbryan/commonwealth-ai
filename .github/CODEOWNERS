@@ -1,0 +1,42 @@
+# Code owners for commonwealth-ai.
+#
+# Every pull request automatically requests review from the owner matched
+# here. The LAST matching pattern wins, so the catch-all sits at the top and
+# more specific areas override it below.
+#
+# Enforcement: CODEOWNERS only *requests* review by default. To make owner
+# review a merge requirement, enable "Require review from Code Owners" in the
+# branch protection rule for `main` (Settings -> Branches).
+
+# Default owner for everything in the repo.
+*                               @alexsbryan
+
+# --- Subsystems ------------------------------------------------------------
+# These resolve to the same owner today. As co-maintainers come on, split an
+# area off by changing the one line for it — nothing else needs to move.
+
+# Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
+/corpus-engine/                 @alexsbryan
+/corpus-engine-scip/            @alexsbryan
+/corpus-engine-atos/            @alexsbryan
+/corpus-engine-notes/           @alexsbryan
+/corpus-engine-archaeology/     @alexsbryan
+
+# Sovereign — local runtime, CLI, desktop, and server.
+/sovereign/                     @alexsbryan
+
+# Commonwealth — the symmetric mesh daemon.
+/commonwealth/                  @alexsbryan
+
+# Wire-protocol types shared across the tree.
+/oicp-types/                    @alexsbryan
+
+# Release + CI machinery. Changes here affect every downstream user.
+/.github/                       @alexsbryan
+/scripts/                       @alexsbryan
+/RELEASING.md                   @alexsbryan
+/Cargo.toml                     @alexsbryan
+
+# Architecture contracts — the compass documents. Review with extra care.
+/sovereign/SYSTEM_OVERVIEW.md   @alexsbryan
+/sovereign/ARCH_PRINCIPLES.md   @alexsbryan

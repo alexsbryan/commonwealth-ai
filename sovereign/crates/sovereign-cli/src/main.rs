@@ -253,6 +253,7 @@ const HELP: Help = Help {
             ("--brave-api-key <key>", "Brave Search key (optional)"),
             ("--tavily-api-key <key>", "Tavily Search key (optional)"),
             ("--help, -h", "Show this message"),
+            ("--version, -V", "Print the version and exit"),
         ]),
         HelpSection::Notes(
             "Run `svrn <subcommand> --help` for detail on any specific subcommand.",
@@ -596,6 +597,14 @@ fn main() {
     runtime.block_on(async_main());
 }
 
+/// The `--version` line: program name + the workspace version the three
+/// product binaries share (each inherits it via `version.workspace = true`).
+/// It matches the `cli-vX.Y.Z` release tag, so it's the string a bug report
+/// should carry. Pure + testable; the dispatch below prints it and exits.
+fn version_line() -> String {
+    format!("sovereign {}", env!("CARGO_PKG_VERSION"))
+}
+
 async fn async_main() {
     // Check for subcommands before standard arg parsing.
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
@@ -606,6 +615,18 @@ async fn async_main() {
     if let Some(first) = raw_args.first() {
         if matches!(first.as_str(), "--help" | "-h" | "help") && raw_args.len() == 1 {
             print_usage();
+            std::process::exit(0);
+        }
+    }
+
+    // Top-level --version / -V (or a lone `version`). A bug report needs a
+    // version string, and before this there was none — `svrn --version` fell
+    // through to the banner. `svrn <subcommand> --version` still routes to the
+    // subcommand dispatcher below, unshadowed.
+    if let Some(first) = raw_args.first() {
+        let f = first.as_str();
+        if f == "--version" || f == "-V" || (f == "version" && raw_args.len() == 1) {
+            println!("{}", version_line());
             std::process::exit(0);
         }
     }
@@ -872,6 +893,22 @@ async fn async_main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `--version` must carry the real workspace version — the string a bug
+    /// report should include. Guards against the earlier regression where
+    /// `svrn --version` printed the banner with no version at all.
+    #[test]
+    fn version_line_carries_the_workspace_version() {
+        let v = version_line();
+        assert_eq!(v, format!("sovereign {}", env!("CARGO_PKG_VERSION")));
+        let num = v
+            .strip_prefix("sovereign ")
+            .expect("version line is prefixed with `sovereign `");
+        assert!(
+            num.split('.').count() >= 3 && num.starts_with(|c: char| c.is_ascii_digit()),
+            "version_line() should be `sovereign <semver>`, got `{v}`"
+        );
+    }
 
     /// The public `--help` must never advertise a verb the default build
     /// rejects. Pins the gating invariant: every `Subcommands` entry in
