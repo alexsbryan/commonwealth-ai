@@ -1072,12 +1072,19 @@ async function chaosStep(memorySummary) {
         retrieved: got.chunks.length,
         resolved: chunkTexts.length,
         chars: chunkTexts.reduce((n, t) => n + t.length, 0),
-        // Per-chunk provenance + capped evidence text so a post-run grounding-
+        // Per-chunk provenance + evidence text so a post-run grounding-
         // faithfulness audit can check the answer's claims against the SAME
-        // evidence the oracle saw, without re-running. Bounded to keep the
-        // journal manageable over a long run.
+        // evidence the oracle saw, without re-running. MUST match the FULL
+        // chunkTexts the live oracle (scoreAnswerAligned, below) grounds against
+        // — the gate itself grounds on full chunk `content` (gate_evidence_chunks),
+        // so a correctly-grounded specific can live PAST an aggressive per-chunk
+        // cut. The old 1500/chunk cap dropped exactly those (measured 2026-07-01:
+        // "David Hart, COO of Knowledge Process Software" sat at offset 1645 in
+        // its chunk → truncated out of evidence.text → the offline re-judge mis-
+        // scored a grounded answer as fabrication). Per-chunk 12000 + total 120000
+        // keeps the journal bounded while faithfully reflecting the gate's view.
         ids: got.chunks.map((c) => c.chunk_id ?? c.id ?? null),
-        text: chunkTexts.map((t) => t.slice(0, 1500)).join("\n---\n").slice(0, 24000),
+        text: chunkTexts.map((t) => t.slice(0, 12000)).join("\n---\n").slice(0, 120000),
       };
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
       userJudge = await judgeAsUser(question, answer);

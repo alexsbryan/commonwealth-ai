@@ -35,19 +35,16 @@ async function discoverModel() {
   return MODEL;
 }
 
-const SYSTEM = `You are auditing a knowledge-app's answer for REAL quality, from a demanding user's seat. You are given the user's QUESTION, the EVIDENCE the app retrieved (its only legitimate source), and the app's ANSWER.
+const SYSTEM = `Judge a knowledge-app answer from a demanding user's seat. You get the QUESTION, the full EVIDENCE the app retrieved, and the ANSWER. Ignore any length the user demanded — short is fine.
 
-Judge ONLY whether the answer is good to hand a user. IGNORE any length or word-count the user demanded — a short answer is NOT a defect. What matters:
-- GROUNDED & CORRECT: every specific claim (names, numbers, dates, quotes, code, section numbers, commands) is supported by the EVIDENCE. A claim not in the evidence is a fabrication, even if plausible. If the evidence genuinely lacks the answer, an honest "the sources don't state this" is CORRECT.
-- COHERENT: it is a finished answer to the user, not the model's internal reasoning ("I need to check...", "Wait, let me look..."), not a bare sentence fragment, not the same sentence/paragraph repeated to fill space.
-- RESPONSIVE: it actually answers THIS question.
-- APPROPRIATELY CONCISE IS GOOD: if the evidence supports only a short answer, a short correct answer is the BEST possible answer. Do NOT penalize brevity. DO penalize padding: filler, repetition, or invented detail added to look thorough.
+Decide in order, stop at the first that matches:
+1. HONEST DECLINE → good (honest_limitation). The answer says the sources don't cover it, or the knowledge base is unavailable / still building / needs rebuild (real UI steps like "Settings → Rebuild" are honest guidance, not invented), or the input is too long, or it clearly labels content "from general knowledge, not your sources".
+2. BROKEN → a specific it presents AS FROM THE SOURCES (name, number, date, quote, code) is NOT anywhere in the EVIDENCE; or it shows the model's own reasoning; or it repeats/pads with filler; or it answers a different question.
+3. Otherwise → good.
 
-A concise correct grounded answer scores LOW (good). Fabricated, incoherent, padded-with-filler, reasoning-leak, wrong, or off-topic scores HIGH (broken).
+Read ALL the evidence before calling a specific absent.
 
-Respond ONLY as JSON:
-{"broken":true|false,"score":0-10,"category":"good|fabrication|incoherent_or_leak|padding|wrong|off_topic","why":"<one line>"}
-0=perfect, 10=totally broken. Set broken=true iff score>=6. category="good" iff broken=false.`;
+Reply ONLY as JSON: {"category":"good|honest_limitation|fabrication|incoherent_or_leak|padding|wrong|off_topic","why":"one line"}`;
 
 function firstJson(text) {
   const m = String(text).match(/\{[\s\S]*\}/);
@@ -78,11 +75,17 @@ async function judge(question, evidence, answer) {
   const body = await res.json();
   const text = body.choices?.[0]?.message?.content ?? "";
   const j = firstJson(text);
-  if (!j || typeof j.score !== "number") return null;
+  if (!j || !j.category) return null;
+  // CATEGORY is the single decision — broken derives from it. Avoids asking the
+  // (smaller open-weight) judge to keep a separate broken/score field consistent
+  // with the category, which it did not reliably do (observed: score 10 with
+  // broken=false). good|honest_limitation ⇒ not broken.
+  const category = String(j.category);
+  const broken = !["good", "honest_limitation"].includes(category);
   return {
-    broken: !!j.broken,
-    score: Math.max(0, Math.min(10, j.score)),
-    category: String(j.category ?? (j.broken ? "wrong" : "good")),
+    broken,
+    score: broken ? 8 : 0,
+    category,
     why: String(j.why ?? "").slice(0, 200),
   };
 }
