@@ -42,6 +42,8 @@ Decide in order, stop at the first that matches:
 2. BROKEN → a specific it presents AS FROM THE SOURCES (name, number, date, quote, code) is NOT anywhere in the EVIDENCE; or it shows the model's own reasoning; or it repeats/pads with filler; or it answers a different question.
 3. Otherwise → good.
 
+The app marks any span it could not verbatim-confirm as "[unverified excerpt: X]". That wrapper is honest labeling — judge X's content against the evidence like any other text, and never count the words "unverified excerpt" (or the brackets) as an absent or fabricated specific.
+
 Read ALL the evidence before calling a specific absent.
 
 Reply ONLY as JSON: {"category":"good|honest_limitation|fabrication|incoherent_or_leak|padding|wrong|off_topic","why":"one line"}`;
