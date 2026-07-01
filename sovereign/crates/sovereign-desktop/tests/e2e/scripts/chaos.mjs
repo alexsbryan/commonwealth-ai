@@ -377,9 +377,19 @@ async function answerInEvidence(question, chunkTexts) {
 // The message-complete payload carries only 200-char snippets; resolve each
 // retrieved chunk to its FULL text via read_get_chunk so the grounding check
 // sees the real evidence. Best-effort: falls back to the snippet on any miss.
+//
+// Resolve ALL retrieved chunks, not a top-N slice. The production gate grounds
+// against `gate_evidence_chunks(&chunks)` — the ENTIRE retrieved set (uncapped,
+// minus raptor) — so an answer's supporting quote can legitimately live in a
+// chunk ranked 13th+. Capturing only the top 12 made the oracle judge a
+// correctly-grounded answer against evidence that omitted its grounding chunk,
+// scoring it "fabrication" (proven: the tokei "Foo(42, start)" quote the gate
+// verified verbatim in-corpus sat past rank 12; 13/15 gen75 "fabrications" had
+// retrieved>12). Match the gate's evidence universe so the oracle sees what it
+// saw. The 48 cap is a runaway bound above the largest observed retrieval (39).
 async function resolveChunkTexts(chunks) {
   const texts = [];
-  for (const c of (chunks ?? []).slice(0, 12)) {
+  for (const c of (chunks ?? []).slice(0, 48)) {
     const corpusId = c?.corpus_id ?? c?.corpusId;
     const chunkId = c?.chunk_id ?? c?.chunkId;
     if (corpusId != null && chunkId != null) {
@@ -1081,10 +1091,12 @@ async function chaosStep(memorySummary) {
         // cut. The old 1500/chunk cap dropped exactly those (measured 2026-07-01:
         // "David Hart, COO of Knowledge Process Software" sat at offset 1645 in
         // its chunk → truncated out of evidence.text → the offline re-judge mis-
-        // scored a grounded answer as fabrication). Per-chunk 12000 + total 120000
-        // keeps the journal bounded while faithfully reflecting the gate's view.
+        // scored a grounded answer as fabrication). Per-chunk 12000 + total 300000
+        // keeps the journal bounded while fitting ALL resolved chunks (now up to
+        // 48, not the old top-12) — the grounding chunk can rank 13th+, so the
+        // total cap must not silently drop the tail the way the 12-chunk slice did.
         ids: got.chunks.map((c) => c.chunk_id ?? c.id ?? null),
-        text: chunkTexts.map((t) => t.slice(0, 12000)).join("\n---\n").slice(0, 120000),
+        text: chunkTexts.map((t) => t.slice(0, 12000)).join("\n---\n").slice(0, 300000),
       };
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
       userJudge = await judgeAsUser(question, answer);

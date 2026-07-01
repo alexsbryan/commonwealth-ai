@@ -59,7 +59,13 @@ function firstJson(text) {
 }
 
 async function judge(question, evidence, answer) {
-  const user = `QUESTION:\n${String(question).slice(0, 1000)}\n\nEVIDENCE the app retrieved (${evidence.length} chars):\n"""\n${String(evidence).slice(0, 12000)}\n"""\n\nThe app's ANSWER:\n"""\n${String(answer).slice(0, 12000)}\n"""\n\nJudge it (length-blind).`;
+  // Evidence window must fit ALL retrieved chunks: the app's gate grounds on the
+  // whole retrieved set, so a supporting quote can sit past rank 12 (~20k chars
+  // in). A 12k window truncated exactly those chunks and made the judge call a
+  // correctly-grounded answer a fabrication. 60k covers the largest observed
+  // retrieval; it is EVIDENCE payload (not the decision rubric), so it does not
+  // violate the succinct-instruction rule.
+  const user = `QUESTION:\n${String(question).slice(0, 1000)}\n\nEVIDENCE the app retrieved (${evidence.length} chars):\n"""\n${String(evidence).slice(0, 60000)}\n"""\n\nThe app's ANSWER:\n"""\n${String(answer).slice(0, 12000)}\n"""\n\nJudge it (length-blind).`;
   const res = await fetch(`${DAEMON}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
