@@ -154,7 +154,30 @@ fn answer_supported_by_quote(answer: &str, quote: &str) -> bool {
         .filter(|w| w.chars().count() >= 2 && !TINY_STOP.contains(w))
         .map(String::from)
         .collect();
-    !words.is_empty() && words.iter().all(|w| q.contains(w.as_str()))
+    !words.is_empty()
+        && words.iter().all(|w| {
+            if w.chars().all(|c| c.is_ascii_digit()) && super::config::exactval_fix_enabled() {
+                // Numeric value: it must be a COMPLETE number token in the quote,
+                // not a partial digit-run of a longer number. Plain substring
+                // containment accepts a TRUNCATED value — the model answered
+                // "289494" citing a quote that reads "…NARA fileUnit 28949423",
+                // and "289494" is a prefix substring of "28949423", so it slipped
+                // through as grounded. A prefix of a number is a different number.
+                quote_has_number_token(&q, w)
+            } else {
+                q.contains(w.as_str())
+            }
+        })
+}
+
+/// True iff `num` appears in `normalized_quote` as a whole digit-run (bounded by
+/// non-digits), not merely as a substring of a longer number. Keeps the citation
+/// path from grounding a truncated/altered numeric value against a quote that
+/// contains a *different* (longer) number sharing its leading digits.
+fn quote_has_number_token(normalized_quote: &str, num: &str) -> bool {
+    normalized_quote
+        .split(|c: char| !c.is_ascii_digit())
+        .any(|tok| tok == num)
 }
 
 /// Number the chunks and join them, full text, up to the budget.
@@ -324,6 +347,24 @@ mod tests {
         assert!(!answer_supported_by_quote(
             "dancinggirls",
             "photographs of more or less undressed dancing girls in the window"
+        ));
+        // Numeric truncation (measured 2026-07-01): a TRUNCATED number must not
+        // ground against a quote that contains a *longer* number sharing its
+        // leading digits. "289494" is a prefix substring of "28949423" but a
+        // different value.
+        assert!(!answer_supported_by_quote(
+            "289494",
+            "U.S. Air Force Project Blue Book UFO case file (15 scanned pages; NARA fileUnit 28949423)."
+        ));
+        // The complete, correct number still grounds.
+        assert!(answer_supported_by_quote(
+            "28949423",
+            "U.S. Air Force Project Blue Book UFO case file (15 scanned pages; NARA fileUnit 28949423)."
+        ));
+        // A whole-token year grounds normally.
+        assert!(answer_supported_by_quote(
+            "Deloitte 2025",
+            "review of Deloitte's performance during the engagement for the 2025 audit"
         ));
     }
 }

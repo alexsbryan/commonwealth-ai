@@ -334,6 +334,25 @@ pub(crate) async fn gate_answer(
                 "{answer}\n\nGrounded in the source: \"{}\"",
                 quote.chars().take(220).collect::<String>()
             );
+            // Second-opinion fabrication guard: the citation path grounds the
+            // asserted VALUE against a quote, but a confabulated quote wearing a
+            // real-passage shape can still slip a fabricated named entity
+            // through (measured: "David Hart, COO of Knowledge Process Software"
+            // over Enron evidence). Scan the asserted answer holistically; on a
+            // flag, correct-or-abstain instead of releasing the fabrication.
+            if let Some(guarded) = short_specifics_guard(
+                inference,
+                question,
+                &answer,
+                chunks,
+                evidence.searcher.as_ref(),
+                base_request,
+                profile,
+            )
+            .await
+            {
+                return guarded;
+            }
             return GateOutcome {
                 text: cited,
                 meta: serde_json::json!({
@@ -363,11 +382,26 @@ pub(crate) async fn gate_answer(
         chunks.len(),
         text.chars().take(240).collect::<String>()
     ));
-    // Structural exemption-closing: on an entity-anchored question, strip any GK
-    // caveat before extraction so the asserted claim is actually verified rather
-    // than exempted as NO_CLAIM. The released `text` is unchanged; only what the
-    // verifier reads is de-caveated.
-    let verify_text = if entity_anchored { strip_gk_caveat(&text) } else { text.clone() };
+    // Structural exemption-closing: strip any GK caveat before extraction so the
+    // asserted claim is actually verified rather than exempted as NO_CLAIM. This
+    // runs UNCONDITIONALLY now (not just entity_anchored): gate_answer only fires
+    // on the gated path, where documents WERE retrieved (gate_on requires
+    // documents_found > 0), so the grounding contract applies — a "from general
+    // knowledge" escape hatch must not ship confident specifics the retrieved
+    // evidence can't support (observed 2026-07-01: "Winnie's former lover was
+    // Eddie Henderson", a name absent from the Secret-Agent corpus, shipped under
+    // a GK caveat on a non-entity-anchored question). If the GK content is
+    // genuinely unsupported the gate now abstains — an honest "the sources don't
+    // cover it" beats a labelled-but-confident fabrication. strip_gk_caveat is a
+    // no-op when there is no caveat, so grounded answers are unaffected. The
+    // released `text` is unchanged; only what the verifier reads is de-caveated.
+    // Env-gated (SOVEREIGN_EXACTVAL_FIX=0 restores the prior entity_anchored-only
+    // strip) for a clean replay A/B.
+    let verify_text = if entity_anchored || config::exactval_fix_enabled() {
+        strip_gk_caveat(&text)
+    } else {
+        text.clone()
+    };
     match verify_grounding(
         inference,
         question,
@@ -468,10 +502,12 @@ pub(crate) async fn gate_answer(
                                 "gate internal completion"
                             );
                             let second = resp.text;
-                            // Same structural strip on the retry: the documented
+                            // Same structural strip on the retry, matching the
+                            // first-pass strip above (env-gated): the documented
                             // leak is a retry that re-asserts the fabrication
                             // wearing the GK caveat and slips the exemption.
-                            let verify_second = if entity_anchored {
+                            let verify_second = if entity_anchored || config::exactval_fix_enabled()
+                            {
                                 strip_gk_caveat(&second)
                             } else {
                                 second.clone()
@@ -533,6 +569,26 @@ pub(crate) async fn gate_answer(
         top_similarity = ?evidence.top_similarity,
         "grounding gate verdict"
     );
+    // Second-opinion fabrication guard on a RELEASED single-claim answer — the
+    // per-claim verify grounds the load-bearing value but is blind to fabricated
+    // SUPPORTING specifics (a cited flag/number/entity absent from the
+    // evidence). Skip when the path already abstained (nothing asserted). On a
+    // flag: correct-or-abstain via one grounded rewrite.
+    if !action.starts_with("abstained") && !action.starts_with("judge_failed") {
+        if let Some(guarded) = short_specifics_guard(
+            inference,
+            question,
+            &text,
+            chunks,
+            evidence.searcher.as_ref(),
+            base_request,
+            profile,
+        )
+        .await
+        {
+            return guarded;
+        }
+    }
     GateOutcome {
         text,
         meta: serde_json::json!({
@@ -640,6 +696,171 @@ fn specifics_scan_enabled() -> bool {
         std::env::var("SOVEREIGN_SPECIFICS_SCAN").ok().as_deref(),
         Some("0") | Some("false") | Some("off")
     )
+}
+
+/// Whether the SHORT-path second-opinion specifics scan runs. SHELVED — OFF by
+/// default; opt in with `SOVEREIGN_SHORT_SPECIFICS_SCAN=1`. The short-path
+/// "fabrication" category it targets proved to be ~90% measurement artifact
+/// (correctly-grounded answers mis-scored because the offline evidence was
+/// truncated); once that capture bug was fixed the guard's live A/B was no
+/// longer a meaningful composite lever, so it ships dormant as defense-in-depth
+/// pending a fresh clean-evidence validation. Kept separate from
+/// `SOVEREIGN_SPECIFICS_SCAN` (the long-form scan, ON) so each band is
+/// independently switchable.
+fn short_specifics_scan_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_SHORT_SPECIFICS_SCAN").ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
+/// True when a released short answer is itself an honest abstention / decline
+/// ("the sources don't cover it", "I'm not certain", the `grounded_abstention`
+/// prose). Such an answer asserts no verifiable value, so the specifics scan has
+/// nothing to fabricate-check — running it only surfaces kind-(3) noise (the
+/// scan second-guessing a correct "not in sources" as a false claim ABOUT the
+/// evidence). Skipping is a latency optimisation and errs fail-open: a false
+/// skip just preserves prior behaviour. Measured 2026-07-01: 6/7 short-band scan
+/// flags on GOOD answers were exactly these honest abstentions.
+fn answer_declines(text: &str) -> bool {
+    let h = text.trim_start().to_lowercase();
+    const DECLINES: &[&str] = &[
+        "i don't have reliable information",
+        "i do not have reliable information",
+        "i am not certain",
+        "i'm not certain",
+        "i do not have information",
+        "i don't have information",
+        "none of them actually cover it", // grounded_abstention prose
+        "i'd rather not guess",           // grounded_abstention prose
+        "do not contain",
+        "does not contain",
+        "not recorded there",
+        "the sources do not",
+        "the sources don't",
+        "sources do not contain",
+        "no passage",
+        "not in your sources",
+    ];
+    DECLINES.iter().any(|d| h.contains(d))
+}
+
+/// Second-opinion fabrication guard for the SHORT gate path (single-claim +
+/// citation). Those paths verify the LOAD-BEARING value but are structurally
+/// blind to fabricated SUPPORTING specifics — a named person/flag/number/quote
+/// the answer cites to `[Source: …]` that is absent from the evidence (observed
+/// 2026-07-01 on thin evidence: "David Hart, COO of Knowledge Process Software"
+/// shipped by the citation path, and tokei "--files"/"--sort"/".tokeignore"
+/// specifics padded onto a grounded top-line). Runs the holistic specifics scan
+/// on an already-RELEASED short answer; on a flag it routes into ONE corrective
+/// retry (each flagged specific re-searched so the rewrite has the truth) and
+/// re-scans the result, abstaining only if the rewrite still fabricates.
+///
+/// Never a blunt abstention: a truly-grounded specific gets its passage back and
+/// the rewrite keeps it (self-correcting away a false positive), and a
+/// mostly-grounded answer with one bad specific is rewritten, not discarded.
+/// Returns `None` to leave the release unchanged — disabled, no-retry surface,
+/// abstention-shaped answer, judge failure, or a clean scan.
+#[allow(clippy::too_many_arguments)]
+async fn short_specifics_guard(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    released: &str,
+    chunks: &[String],
+    searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+) -> Option<GateOutcome> {
+    // Only on retry-capable surfaces: the guard's whole remedy is a corrective
+    // re-synthesis. Verify-only surfaces have no second synthesis to give.
+    if !short_specifics_scan_enabled() || !profile.retry {
+        return None;
+    }
+    // Nothing asserted → nothing to fabricate-check (fail-open latency skip).
+    if answer_declines(released) {
+        return None;
+    }
+    // Small budget floored at 3 so even a terse citation answer ("David Hart")
+    // gets a real check; scales modestly on longer short answers.
+    let budget = claim_budget(released.chars().count(), 3);
+    let specifics =
+        scan_unsupported_specifics(inference, question, released, chunks, budget).await?;
+    if specifics.is_empty() {
+        return None; // clean — release unchanged
+    }
+    // Corrective evidence per flagged specific — the same material the long-form
+    // rewrite gets, and the self-correction for a false positive (a real
+    // specific's grounding passage comes back, so the rewrite keeps it).
+    let mut corrective: Vec<String> = Vec::new();
+    if let Some(s) = searcher {
+        for spec in specifics.iter().take(4) {
+            if let Some(hit) = s.search(spec).await.into_iter().next() {
+                corrective.push(hit);
+            }
+        }
+    }
+    let joined = specifics.join("\"; \"");
+    dbg(&format!(
+        "short_specifics_guard: {} flagged specific(s) [{:?}] → corrective retry",
+        specifics.len(),
+        joined.chars().take(90).collect::<String>()
+    ));
+    let mut retry_req = base_request.clone();
+    let base_sys = retry_req.system_message.clone().unwrap_or_default();
+    retry_req.system_message = Some(format!("{base_sys}{}", retry_system_note(&joined, &corrective)));
+    retry_req.assistant_prefix = None;
+    let second = match inference.complete(&retry_req).await {
+        Ok(r) => r.text,
+        Err(e) => {
+            tracing::warn!(
+                target: "grounding_gate",
+                error = %e,
+                "short specifics guard retry failed — keeping prior release"
+            );
+            return None; // fail-open: keep the original release
+        }
+    };
+    // Re-scan the rewrite. Still fabricating → abstain; clean → release the
+    // corrected answer. A re-scan judge failure falls open to keep the rewrite
+    // (written under the corrective note, no worse than the flagged draft).
+    match scan_unsupported_specifics(inference, question, &second, chunks, budget).await {
+        Some(v) if !v.is_empty() => {
+            tracing::info!(
+                target: "grounding_gate",
+                action = "abstained_specifics",
+                flagged = specifics.len(),
+                "short specifics guard: rewrite still fabricates — abstaining"
+            );
+            Some(GateOutcome {
+                text: grounded_abstention("", chunks.len().min(12)),
+                meta: serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "abstained_specifics",
+                    "retried": true,
+                    "flagged_specifics": specifics,
+                    "mode": "short_specifics",
+                }),
+            })
+        }
+        _ => {
+            tracing::info!(
+                target: "grounding_gate",
+                action = "retry_released_specifics",
+                flagged = specifics.len(),
+                "short specifics guard: corrective rewrite released"
+            );
+            Some(GateOutcome {
+                text: second,
+                meta: serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "retry_released_specifics",
+                    "retried": true,
+                    "flagged_specifics": specifics,
+                    "mode": "short_specifics",
+                }),
+            })
+        }
+    }
 }
 
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
@@ -1003,6 +1224,33 @@ mod tests {
         assert_eq!(claim_budget(usize::MAX, 4), 10);
         // The floor is the surface's min, not a hardcoded 4.
         assert_eq!(claim_budget(500, 1), 1);
+    }
+
+    #[test]
+    fn answer_declines_skips_honest_abstentions_only() {
+        // The exact short-band answers the specifics scan flagged as GOOD-but-
+        // FLAGGED on 2026-07-01 — all honest abstentions the guard must SKIP so
+        // it never wastes a corrective retry re-abstaining them.
+        for decline in [
+            "I don't have reliable information on the specific four authors listed for Chapter E.",
+            "I am not certain of the value of `SWAP_THRESHOLD`. The provided sources do not contain this.",
+            "The provided knowledge base sources do not contain this specific constant or file.",
+            "I looked through the 12 passages your sources turned up for this, but none of them actually cover it — so I'd rather not guess.",
+            "Based on the provided knowledge base, I do not have information regarding a character named \"Winnie\".",
+            "The provided Rust snippets do not contain any assignment to a variable named `b`.",
+            grounded_abstention("x", 12).as_str(),
+        ] {
+            assert!(answer_declines(decline), "should skip decline: {decline:?}");
+        }
+        // Real ASSERTING short answers the guard MUST scan — including the two
+        // confirmed fabrications the guard exists to catch.
+        for assert_ans in [
+            "David Hart\n\nGrounded in the source: \"David Hart, Chief Operations Officer, Knowledge Process Software\"",
+            "The most important thing is what Tokei does: it shows file-level stats (`--files`) and sorting (`--sort`).",
+            "The three operations are index_stats, extract_shard, and merge_shards.",
+        ] {
+            assert!(!answer_declines(assert_ans), "should scan assertion: {assert_ans:?}");
+        }
     }
 
     /// The Phase-6 invariant's gate half: verify-only (retry: false)
