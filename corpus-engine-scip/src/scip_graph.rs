@@ -1175,6 +1175,25 @@ impl ScipGraph {
     /// [`find_callees`](Self::find_callees), but without the
     /// staleness wrapper — the atlas walker doesn't surface that
     /// caution to humans (it's a one-shot batch run).
+    /// All qualified call edges `(caller_qualified, callee_qualified)` in a single query —
+    /// for building an in-memory adjacency map so a BFS is HashMap lookups rather than one
+    /// async SQL round-trip per node (orders of magnitude faster for repeated traversals).
+    pub async fn all_qualified_edges(&self) -> Result<Vec<(String, String)>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT caller_qualified, callee_qualified FROM refs
+                 WHERE corpus_id = ? AND callee_qualified != '' AND caller_qualified != ''",
+            )
+            .map_err(|e| Error::Database(format!("all_qualified_edges prepare: {e}")))?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map(params![self.corpus_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| Error::Database(format!("all_qualified_edges query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
     pub async fn find_callees_qualified(
         &self,
         caller_qualified: &str,

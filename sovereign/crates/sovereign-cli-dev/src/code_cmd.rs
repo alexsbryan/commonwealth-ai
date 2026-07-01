@@ -53,6 +53,8 @@ pub async fn run_code(args: &[String]) -> i32 {
             crate::code_capability_graph::cmd_capability_graph(&args[1..]).await
         }
         "map" => crate::code_map::cmd_map(&args[1..]).await,
+        "facts" => cmd_facts(&args[1..]).await,
+        "check-spec" => cmd_check_spec(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -112,6 +114,390 @@ async fn cmd_finalize(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+// ─── facts ────────────────────────────────────────────────────
+// `sovereign code facts <path>` — extract the deterministic code-fact
+// base (construction-field / string-literal / function-definition) and
+// write it to ~/.sovereign/indexes/<corpus>/facts.json. The queryable
+// substrate for spec↔code drift detection. Rust-only for now.
+async fn cmd_facts(args: &[String]) -> i32 {
+    if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        eprintln!(
+            "Usage: sovereign code facts <path> [--corpus-id <id>] [--roots <dir,dir>]\n\n\
+             Extract the deterministic code-fact base from a repository and write it to\n\
+             ~/.sovereign/indexes/<corpus>/facts.json. Facts: construction-field values\n\
+             (data-flow, e.g. `tools: None`), string literals, and function definitions.\n\
+             --roots defaults to the whole repo; pass crate src dirs for a monorepo. Rust-only."
+        );
+        return if args.is_empty() { 1 } else { 0 };
+    }
+
+    let mut path: Option<String> = None;
+    let mut corpus_id: Option<String> = None;
+    let mut roots: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--corpus-id" => {
+                i += 1;
+                if i < args.len() {
+                    corpus_id = Some(args[i].clone());
+                }
+            }
+            "--roots" => {
+                i += 1;
+                if i < args.len() {
+                    roots = args[i].split(',').map(|s| s.trim().to_string()).collect();
+                }
+            }
+            other if !other.starts_with("--") => path = Some(other.to_string()),
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let repo = match path {
+        Some(p) => PathBuf::from(p),
+        None => {
+            eprintln!("code facts: missing <path>");
+            return 1;
+        }
+    };
+    let repo = match repo.canonicalize() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("code facts: cannot resolve {}: {e}", repo.display());
+            return 1;
+        }
+    };
+    let corpus_id = corpus_id.unwrap_or_else(|| {
+        repo.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "corpus".to_string())
+    });
+    if roots.is_empty() {
+        roots = vec![".".to_string()];
+    }
+
+    let facts = corpus_engine::facts::extract_facts(&repo, &roots);
+
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => {
+            eprintln!("cannot resolve home directory");
+            return 1;
+        }
+    };
+    let out_dir = home.join(".sovereign").join("indexes").join(&corpus_id);
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        eprintln!("cannot create {}: {e}", out_dir.display());
+        return 1;
+    }
+    let out = out_dir.join("facts.json");
+    if let Err(e) = facts.write(&out) {
+        eprintln!("cannot write facts: {e}");
+        return 1;
+    }
+    println!(
+        "code facts [{corpus_id}]: {} construction-fields · {} string-literals · {} function-defs → {}",
+        facts.ctor_fields.len(),
+        facts.str_lits.len(),
+        facts.fn_defs.len(),
+        out.display()
+    );
+    0
+}
+
+// ─── check-spec ───────────────────────────────────────────────
+// `sovereign code check-spec --corpus <id> --claims <claims.json>` —
+// tag each spec claim and check it against the deterministic fact base
+// (built by `code facts`), producing cited drift / corroborated /
+// unverifiable verdicts. The user-facing surface of the fact-base check.
+// Needs the daemon (tagger + embeddings) + facts.json + scip_graph.db
+// (+ capability_map.json + fn_vecs for CONFIG/CALLS scoping).
+
+const TAG_SYS: &str = "Classify a spec claim's PRIMARY checkable relation about the code, preferring CONCRETE relations. Check in this order and pick the FIRST that fits:\nCONFIG - asserts a request/struct field or flag is set/unset (e.g. 'exposes tools to the model' => field=tools). ALWAYS give `field` (the bare field name) when you choose CONFIG; if you cannot name a field, do NOT choose CONFIG.\nLITERAL - asserts a VERBATIM string appears: an endpoint, a marker like 'SUMMARY:', a model name. Give `literal` = the exact substring only.\nEXISTS - asserts a named function/type exists / is the named entry. Give `target` (the bare name).\nCALLS - asserts X calls/invokes/reaches Y. Give `target`.\nCAPABILITY / CONTROL / OUT_OF_SCHEMA - only if none of the concrete relations fit.\n`subject` = short description of the code path/situation the claim is about. `expected` = YES if the claim asserts it is present/true, NO if absent/false.\nOutput JSON: {\"relation\":\"...\",\"subject\":\"...\",\"field\":\"\",\"literal\":\"\",\"target\":\"\",\"expected\":\"YES\"}.";
+
+fn clip(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
+
+/// Load capability-ENTRY vectors (name, embedding) for entry-restricted resolution.
+fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
+    let mut entry_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Ok(txt) = std::fs::read_to_string(home.join(".sovereign/capabilities").join(corpus).join("capability_map.json")) {
+        if let Ok(cap) = serde_json::from_str::<serde_json::Value>(&txt) {
+            if let Some(caps) = cap.get("capabilities").and_then(|c| c.as_array()) {
+                for c in caps {
+                    if let Some(reps) = c.get("reps").and_then(|r| r.as_array()) {
+                        for r in reps {
+                            if let Some(s) = r.as_str() {
+                                entry_names.insert(s.to_string());
+                            }
+                        }
+                    }
+                    if let Some(es) = c.get("entries").and_then(|r| r.as_array()) {
+                        for e in es {
+                            if let Some(s) = e.as_str() {
+                                let short = s.rsplit('#').next().unwrap_or(s).rsplit(']').next().unwrap_or(s).trim_end_matches("().").trim();
+                                if !short.is_empty() && !short.contains('(') {
+                                    entry_names.insert(short.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let side = match std::fs::read_to_string(home.join(".sovereign/specs/_fn_vecs").join(format!("{corpus}.json"))) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let side: serde_json::Value = match serde_json::from_str(&side) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let dim = side.get("dim").and_then(|d| d.as_u64()).unwrap_or(0) as usize;
+    let fns = match side.get("fns").and_then(|f| f.as_array()) {
+        Some(f) => f,
+        None => return Vec::new(),
+    };
+    let bin = match std::fs::read(home.join(".sovereign/specs/_fn_vecs").join(format!("{corpus}.bin"))) {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for (i, fm) in fns.iter().enumerate() {
+        let name = fm.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        if !entry_names.contains(name) {
+            continue;
+        }
+        let off = i * dim * 4;
+        if off + dim * 4 > bin.len() {
+            continue;
+        }
+        let vec: Vec<f32> = (0..dim)
+            .map(|j| {
+                let b = off + j * 4;
+                f32::from_le_bytes([bin[b], bin[b + 1], bin[b + 2], bin[b + 3]])
+            })
+            .collect();
+        out.push((name.to_string(), vec));
+    }
+    out
+}
+
+/// Parse a spec-intel `claims.json` → (statement, conditions) list.
+fn load_claims(path: &str) -> Result<Vec<(String, Vec<String>)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let claim_vals: Vec<serde_json::Value> = if let Some(secs) = v.get("sections").and_then(|s| s.as_array()) {
+        secs.iter().flat_map(|s| s.get("claims").and_then(|c| c.as_array()).cloned().unwrap_or_default()).collect()
+    } else {
+        v.get("claims").and_then(|c| c.as_array()).cloned().unwrap_or_default()
+    };
+    let mut out = Vec::new();
+    for c in claim_vals {
+        let stmt = c.get("statement").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        if stmt.is_empty() {
+            continue;
+        }
+        let conds: Vec<String> = c
+            .get("conditions")
+            .and_then(|x| x.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        out.push((stmt, conds));
+    }
+    Ok(out)
+}
+
+/// Load fuzzy spec-reconcile findings (statement → verdict kind) for the deterministic-first
+/// composition — the deterministic fact base answers what it can; the fuzzy path fills the gaps.
+fn load_fuzzy(path: &str) -> std::collections::HashMap<String, String> {
+    let mut m = std::collections::HashMap::new();
+    if let Ok(txt) = std::fs::read_to_string(path) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) {
+            if let Some(fs) = v.get("findings").and_then(|f| f.as_array()) {
+                for f in fs {
+                    if let (Some(s), Some(k)) = (f.get("statement").and_then(|x| x.as_str()), f.get("kind").and_then(|x| x.as_str())) {
+                        m.insert(s.to_string(), k.to_string());
+                    }
+                }
+            }
+        }
+    }
+    m
+}
+
+/// Tag one claim via a daemon chat call → structured [`Tag`].
+async fn tag_claim(http: &reqwest::Client, port: u16, model: &str, stmt: &str, conds: &[String]) -> corpus_engine::facts_check::Tag {
+    let user = format!("CLAIM: {stmt}\nCONDITIONS: {conds:?}");
+    let body = serde_json::json!({
+        "model": model, "temperature": 0.1, "max_tokens": 300,
+        "messages": [{"role": "system", "content": TAG_SYS}, {"role": "user", "content": user}]
+    });
+    let attempt = async {
+        let resp = http.post(format!("http://localhost:{port}/v1/chat/completions")).json(&body).send().await.ok()?;
+        let v: serde_json::Value = resp.json().await.ok()?;
+        let content = v.get("choices")?.as_array()?.first()?.get("message")?.get("content")?.as_str()?;
+        let start = content.find('{')?;
+        let end = content.rfind('}')? + 1;
+        serde_json::from_str::<corpus_engine::facts_check::Tag>(&content[start..end]).ok()
+    };
+    attempt.await.unwrap_or_default()
+}
+
+async fn cmd_check_spec(args: &[String]) -> i32 {
+    let mut corpus: Option<String> = None;
+    let mut claims_path: Option<String> = None;
+    let mut fuzzy_path: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--corpus" | "--corpus-id" => {
+                i += 1;
+                if i < args.len() {
+                    corpus = Some(args[i].clone());
+                }
+            }
+            "--claims" => {
+                i += 1;
+                if i < args.len() {
+                    claims_path = Some(args[i].clone());
+                }
+            }
+            "--fuzzy" => {
+                i += 1;
+                if i < args.len() {
+                    fuzzy_path = Some(args[i].clone());
+                }
+            }
+            "--help" | "-h" | "help" => {
+                eprintln!(
+                    "Usage: sovereign code check-spec --corpus <id> --claims <claims.json> [--fuzzy <spec_findings.json>]\n\n\
+                     Tag each spec claim and check it against the deterministic fact base (built by\n\
+                     `sovereign code facts`) → cited drift / corroborated / unverifiable verdicts.\n\
+                     With --fuzzy (from `enrich spec-reconcile`): deterministic verdicts win; the fuzzy\n\
+                     verdict fills abstentions, labeled `fuzzy`. Needs the daemon (tagger + embeddings)\n\
+                     + facts.json + scip_graph.db (+ capability_map.json + fn_vecs for CONFIG/CALLS)."
+                );
+                return 0;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let corpus = match corpus {
+        Some(c) => c,
+        None => {
+            eprintln!("check-spec: --corpus <id> required");
+            return 1;
+        }
+    };
+    let claims_path = match claims_path {
+        Some(c) => c,
+        None => {
+            eprintln!("check-spec: --claims <claims.json> required");
+            return 1;
+        }
+    };
+
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => {
+            eprintln!("cannot resolve home directory");
+            return 1;
+        }
+    };
+    let idx = home.join(".sovereign").join("indexes").join(&corpus);
+
+    let facts = match corpus_engine::facts::Facts::load(&idx.join("facts.json")) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("check-spec: load {}: {e}\n  run `sovereign code facts <repo> --corpus-id {corpus}` first", idx.join("facts.json").display());
+            return 1;
+        }
+    };
+    let graph = corpus_engine_scip::scip_graph::ScipGraph::open(&idx.join("scip_graph.db"), &corpus).ok();
+    let adj = match &graph {
+        Some(g) => Some(corpus_engine::facts_check::build_adjacency(g).await), // load edges once → fast in-memory BFS
+        None => None,
+    };
+    let entries = load_entries(&home, &corpus);
+    let claims = match load_claims(&claims_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("check-spec: load claims: {e}");
+            return 1;
+        }
+    };
+
+    let fuzzy = fuzzy_path.as_deref().map(load_fuzzy).unwrap_or_default();
+
+    let cfg = match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("check-spec: read config: {e}");
+            return 1;
+        }
+    };
+    let port = cfg.daemon.client_port;
+    let chat_model = cfg.models.primary.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+    let (embed, _) = match build_daemon_embed_fn().await {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("check-spec: {e}");
+            return 1;
+        }
+    };
+    let http = reqwest::Client::new();
+
+    println!(
+        "check-spec [{corpus}]: {} claims · {} fn-defs · scip={} · entries={}\n{}",
+        claims.len(),
+        facts.fn_defs.len(),
+        graph.is_some(),
+        entries.len(),
+        "=".repeat(72)
+    );
+    let (mut drift, mut corrob, mut unver, mut fuzzy_used) = (0u32, 0u32, 0u32, 0u32);
+    for (stmt, conds) in &claims {
+        let tag = tag_claim(&http, port, &chat_model, stmt, conds).await;
+        let v = corpus_engine::facts_check::check_claim(&facts, adj.as_ref(), &entries, Some(&embed), stmt, &tag).await;
+        // deterministic-first: a cited drift/corroborated wins; on abstention, fall back to the
+        // fuzzy spec-reconcile verdict (labeled, lower-confidence) if one exists.
+        let (verdict, source, receipt) = match v.kind {
+            corpus_engine::facts_check::VerdictKind::Drift => {
+                drift += 1;
+                ("DRIFT".to_string(), "det", v.receipt)
+            }
+            corpus_engine::facts_check::VerdictKind::Corroborated => {
+                corrob += 1;
+                ("corrob".to_string(), "det", v.receipt)
+            }
+            corpus_engine::facts_check::VerdictKind::Unverifiable => match fuzzy.get(stmt.as_str()) {
+                Some(fk) => {
+                    fuzzy_used += 1;
+                    (fk.clone(), "fuzzy", format!("deterministic abstained; fuzzy spec-reconcile: {fk}"))
+                }
+                None => {
+                    unver += 1;
+                    ("unverif".to_string(), "—", v.receipt)
+                }
+            },
+        };
+        println!("[{:11}|{source:5}|{:9}] {}", clip(&verdict, 11), clip(&tag.relation, 9), clip(stmt, 48));
+        println!("     {}", clip(&receipt, 100));
+    }
+    println!(
+        "{}\n{corrob} corroborated · {drift} drift (deterministic, cited) · {fuzzy_used} fuzzy-fallback · {unver} unverifiable  ({} claims)",
+        "=".repeat(72),
+        claims.len()
+    );
+    0
 }
 
 // ─── reflect ──────────────────────────────────────────────────
