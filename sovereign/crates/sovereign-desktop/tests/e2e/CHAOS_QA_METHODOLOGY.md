@@ -117,6 +117,12 @@ Double-fork + `os.setsid` so the harness reaper can't SIGKILL it mid-flight
 stamped journal + a `.DONE` sentinel. Edit the STAMP and minutes per run.
 **Monitor** completion by polling the `.DONE` file on a ScheduleWakeup, not a tight loop.
 
+`launch-citefix-replay.py` / `launch-truncfix-replay.py` are the REPLAY variants
+of the same pattern: temp-0, `SOVEREIGN_CHAOS_REPLAY=<bank>`, gate-trace +
+`synth.citation` RUST_LOG on, and they also copy the app log to
+`<stamp>.app.log` (essential — the per-turn mechanism traces live there). Build
+a bank with `build-replay-bank.mjs <journal> <bank>`; edit BANK/STAMP per run.
+
 ### 3.5 Instrumentation — the gate trace (**critical, easy to miss**)
 The grounding gate logs under tracing target **`grounding_gate`** (a custom
 string). `RUST_LOG=sovereign_core=debug` does **NOT** match it. To SEE the gate:
@@ -184,45 +190,94 @@ NARA ×3 broke → ×3 good. The shelved iter3 short-specifics guard is
 **Do NOT tighten the gate to satisfy the oracle** — the gate grounds correctly;
 these were measurement bugs.
 
+## 5b. App-side fixes (2026-07-01 session two — both validated by paired replay)
+
+1. **Citation fidelity — snap + ID-token veto** (`bc0dd31f`,
+   `citation_attribution.rs`): `title_is_supported` → ordered `judge_title`
+   (exact label → bounded verbatim phrase → **snap** a unique near-miss of one
+   real label back to that label → **ID-token veto** for ID-shaped tokens with
+   no complete-token match → word floor). Root cause: an opaque id splits into
+   prefix+hash; the intact prefix alone scores exactly 0.5 = the keep floor.
+   Snap calibration has margin on both sides (garbles 0.80–0.95 vs fabrications
+   ≤0.53; floor 0.75, uniqueness margin 0.10). Watch `synth.citation` telemetry
+   (`snapped=[…]`) to see it fire.
+2. **Mid-token completion** (`b1f09a19`, `citation.rs`): the MTP primary emits a
+   spontaneous EOS mid-token under long-context copy load (probed: finish=stop
+   at 99/256 tokens) — the short path released `…SYSTEM_PROM` / `∧ ¬`-dangling
+   formulas. `extend_mid_token_copy` completes the tail deterministically from
+   the verified quote/chunks (unanimous continuation required; ≤24-char runs;
+   non-prefix garbles still fall to reject→retry). Detect truncation by
+   CONTENT, never finish_reason — that trap is now closed on the extraction
+   path too.
+
 ---
 
-## 6. Current state (2026-07-01)
+## 6. Current state (2026-07-01, post citation-fidelity + mid-token fixes)
 
 - **Trustworthy re-baseline** (`rebaseline-2026-07-01`, fixed harness,
   representative, 41 answered): **~65% trust-centric composite** (12 confabulation
-  + 2 incoherent of 41). Tracked signals among good answers: **well_cited 70%,
-  caveated 18%**.
+  + 2 incoherent of 41; **75% on the unique-question view** — the comparable
+  number for deduped replays). Tracked signals among good answers: **well_cited
+  70%, caveated 18%**.
 - Old-rubric split on the same run: **focused fact-lookup 77% / open-ended
   "most important thing in X" 50%** — the open-ended synthesis path is the weak spot.
-- The 65% failures are **genuine trust-breakers**, verified against full evidence:
-  1. **Fake / corrupted source citations** (clearest): step 21 cited *four*
-     `[Source: watched-…]` IDs, all nonexistent corruptions of the one real corpus
-     ID `watched-959ee8a8f330`. LLMs can't reliably copy opaque hash IDs.
-  2. **Synthesis padding** (~7): invented dates (`2025-06-10`), a phantom
-     "Three Expedients" list, etc. on open-ended prompts.
+- The failures were **genuine trust-breakers**, verified against full evidence:
+  1. **Fake / corrupted source citations**: step 21 cited *four* `[Source:
+     watched-…]` IDs, all nonexistent corruptions of the one real corpus ID
+     `watched-959ee8a8f330`. LLMs can't reliably copy opaque hash IDs. Also hit
+     labels with dates ("2025-06-10" for the real "2026-06-10" — step 171's
+     "invented date" was a garbled LABEL) and section titles (Federalist
+     stutter-titles, step 175).
+  2. **Synthesis padding** (~7): invented in-prose specifics on open-ended prompts.
   3. **Truncation** (2): answers cut off mid-value.
-  - Judge noise: ~1 false positive observed (step 166 cited a real source but was
-    flagged) → treat 65% as ±a couple points.
+
+**Both №1 and №3 are FIXED and validated** (see §5b). Paired temp-0 full-bank
+replay (`citefix-replay-2026-07-01`, pre-truncation-fix binary): 5 unique
+confabulations flip to good/honest; 13/13 correct snaps, 0 false snaps, 0
+over-strips on 20 still-good questions; unique composite 75% with the remaining
+broke = the truncation pair (since fixed — `truncfix-replay-2026-07-01` shows
+both release complete answers) + in-prose padding + two known intermittent
+classes (leak-loop repetition; SEP-lighthouse rewrite misattribution).
 
 ---
 
 ## 7. Open threads / next steps (ranked by trust impact × fixability)
 
-1. **Citation fidelity — fake/corrupted source IDs (recommended next).** The app
-   asks the model to reproduce opaque hash IDs and it garbles them into nonexistent
-   `[Source: …]`. Generalizable fix: post-process citations — validate each cited
-   source against the real retrieved source labels; snap fuzzy matches to the true
-   ID, strip citations that match nothing. A citation to a nonexistent source is
-   the cardinal trust-breaker. **Instrument first** (gate trace + which path emits
-   the citation) before coding.
-2. **Synthesis padding** on open-ended prompts. Larger count, subtler. The 18%
-   caveat rate is the lever: nudge the model to **label** GK ("from general
-   knowledge, not your sources") rather than pass it off as sourced. `gate_longform`
-   already has `scan_unsupported_specifics` — instrument *why it misses* these
-   (short vs long path? budget? the "most important thing in <corpus-id>" prompts
-   are partly degenerate chaos questions — real users ask more focused things).
-3. **Truncation**: answers cut off mid-value (see prior truncation work in memory —
-   FastFocused 600-cap, MTP-always-Stop; detect by CONTENT not finish_reason).
+1. **Longform rewrite/annotate output quality (recommended next).** Instrumented
+   2026-07-01 (citefix-replay app log): audit RECALL is decent (the false "James
+   Joyce wrote *To the Lighthouse*" failed per-claim at vp=0.981 AND was
+   scan-flagged) — the trust-breakers ship at the OUTPUT stage. Four concrete,
+   general defects, each observed live:
+   a. `scan_unsupported_specifics` returns judge CHATTER, not verbatim answer
+      spans ("The answer cites …", "— The evid…"), and that chatter flows
+      unsanitized into the user-visible verification note (step 20's "is a
+      fabricated specific" self-indictment). Fix: verbatim-only output contract
+      + sanitize before the note.
+   b. The REWRITE can introduce new claims-about-the-text (step 29: replaced the
+      Joyce misattribution with "the text cites Woolf's work" — correct GK, but
+      the text names no author). Constrain the rewrite: prune/hedge only, never
+      new attributions to the sources.
+   c. `rewrite_annotated` keeps confidently-asserted failed claims in the BODY
+      with only a footnote — the assertion still reads as fact.
+   d. Ordering: the scan sees the PRE-snap draft, so garbled `[Source:]` labels
+      get flagged and burn rewrite cycles before the post-gate snap cleans them.
+      Consider snapping citations before the audit.
+2. **In-gate evidence caps (same artifact class as §5, inside the app).**
+   `scan_unsupported_specifics` truncates each evidence chunk to 1500 chars
+   (judge.rs:397); the per-claim check caps at top-12 chunks × 2400 chars
+   (judge.rs:251/255). Mirror-images of the two PROVEN capture artifacts — a
+   grounded specific past the cap / rank 13+ cannot be rescued and reads as
+   fabricated, feeding rewrite churn. On the replay's observed failures these
+   bit less than 1a–1c, so quantify first (deterministically grep each failed
+   claim against the FULL journal evidence) before changing the caps.
+3. **Invented PROSE source labels.** Fixing hash garbles exposed a second-order
+   mode (replay step 20): `[Source: Boy who never landed]` — a descriptive
+   invented label whose common words pass the word floor. One occurrence so far;
+   candidate fix is a stricter floor when real labels exist and neither
+   exact/snap/phrase matched, but get more observations first.
+4. **Leak-loop repetition** (replay step 28, known intermittent class): quote
+   text duplicated/concatenated inside `[unverified excerpt: …]`. Root-cause via
+   quote_verification path when it recurs.
 
 ---
 
@@ -260,13 +315,16 @@ never a narrowed `cargo -p`).
 
 ## 9. Commit lineage (this initiative)
 
+- `b1f09a19` fix(grounding): complete mid-token generation stops from the verified source
+- `bc0dd31f` fix(grounding): snap garbled [Source:] labels to the real source + ID-token veto
+- `8ac9773d` docs(chaos-qa): methodology + handoff, persist tooling, **trust-centric rubric**
+  (the rubric IS committed here — an earlier revision of this doc said otherwise)
 - `4100ca31` fix(chaos-measurement): judge against the gate's FULL evidence set (all chunks) — the top-12 cap fix
 - `bf56bac9` fix(chaos-measurement): recognize the honest [unverified excerpt] label
 - `b83ec57e` fix(grounding): exact-value + GK-fabrication fidelity in the short gate path
 - `8edd6f55` fix(chaos-measurement): judge against the gate's FULL evidence + calibrated succinct rubric
 - `b7e51bf6` feat(grounding): holistic specifics-scan closes the gate's fabrication blind spot
-- **UNCOMMITTED:** `rejudge-length-blind.mjs` — the pragmatic **trust-centric** rubric
-  (this session's current metric). `test-scan-short.mjs` — untracked shelved iter3 tool.
+- **Untracked (deliberate):** `test-scan-short.mjs` — shelved iter3 tool.
 
 Persistent memory index: `~/.claude/.../memory/MEMORY.md`; deep notes in
 `project_chaos_evidence_capture_artifact_2026_07_01.md` and its `[[links]]`.
