@@ -354,11 +354,10 @@ calls (so a relevant tool is reliably planned as a `tool` step, not a
 
 The `email` + `described_asset` extractors and the `column_aware`
 extractor land together as the substrate of the architecture-over-Enron
-push (5-phase plan in `~/.claude/plans/this-is-a-whole-serialized-cake.md`).
-Each future binary-bearing vertical (Firm Inbox, sales intelligence,
-project memory, calendar / transactions / sensor ingest) inherits the
-same dispatcher + asset-store pair unchanged. See HISTORY.md's
-`enron-entity-resolution` section.
+push. Each future binary-bearing vertical (Firm Inbox, sales
+intelligence, project memory, calendar / transactions / sensor ingest)
+inherits the same dispatcher + asset-store pair unchanged. See
+`bench/HISTORY.md`'s `enron-entity-resolution` section.
 
 ### Storage
 
@@ -379,7 +378,7 @@ identical schema for a full index or a shard.
     │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
     │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
     └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.2 (canonical export)
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.3 (canonical export)
         ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
         │                                # query-path reader (hot scalar columns + a
         │                                # lossless payload). Replaced atoms.rkyv; the
@@ -658,6 +657,21 @@ User message
 `Delegate`. Planner emits `[sample:N:method]` / `[eval:name]`
 annotations; the executor parses them into config.
 
+**Idempotency ledger (executor replay-safety).** Before a
+`NonIdempotent` tool step runs, the executor writes a durable `Started`
+`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
+idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
+after the side-effect returns. On resume the guard reads that key: a
+`Completed` row means the action already ran — a replan re-runs from an
+empty completed-set, so this is the path that would otherwise re-send —
+and is skipped with its recorded result; a `Started`-but-not-`Completed`
+row means a crash interrupted it mid-flight, so the executor halts and
+surfaces for review rather than blind-replaying a non-idempotent
+side-effect (an email sent twice). The key is content-derived, not
+`(task, step_id)`, so it matches across a replan that re-issues the same
+action under a new step id. Proven exactly-once both ways by
+`sovereign-store/tests/step_execution_replay.rs`.
+
 **Delegate — the context-firewall worker (§5.2).** `StepKind::Delegate {
 goal, tools, return_schema, max_iterations }`
 (`executor::Executor::execute_delegate`) runs a scoped rich-param tool loop
@@ -674,36 +688,6 @@ from the search-shaped `{tool, query}` loop in `executor.rs` that
 `sovereign-store/tests/delegate_firewall.rs`. (v1: the worker's internal
 tool calls go straight to `tool.execute`, bypassing the idempotency ledger
 above — threading #4 into the worker loop is a follow-on.)
-
-**Idempotency ledger (executor replay-safety).** Before a
-`NonIdempotent` tool step runs, the executor writes a durable `Started`
-`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
-idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
-after the side-effect returns. On resume the guard reads that key: a
-`Completed` row means the action already ran — a replan re-runs from an
-empty completed-set, so this is the path that would otherwise re-send —
-and is skipped with its recorded result; a `Started`-but-not-`Completed`
-row means a crash interrupted it mid-flight, so the executor halts and
-surfaces for review rather than blind-replaying a non-idempotent
-side-effect (an email sent twice). The key is content-derived, not
-`(task, step_id)`, so it matches across a replan that re-issues the same
-action under a new step id. Proven exactly-once both ways by
-`sovereign-store/tests/step_execution_replay.rs`.
-
-**Idempotency ledger (executor replay-safety).** Before a
-`NonIdempotent` tool step runs, the executor writes a durable `Started`
-`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
-idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
-after the side-effect returns. On resume the guard reads that key: a
-`Completed` row means the action already ran — a replan re-runs from an
-empty completed-set, so this is the path that would otherwise re-send —
-and is skipped with its recorded result; a `Started`-but-not-`Completed`
-row means a crash interrupted it mid-flight, so the executor halts and
-surfaces for review rather than blind-replaying a non-idempotent
-side-effect (an email sent twice). The key is content-derived, not
-`(task, step_id)`, so it matches across a replan that re-issues the same
-action under a new step id. Proven exactly-once both ways by
-`sovereign-store/tests/step_execution_replay.rs`.
 
 The router emits **facts**; the runtime applies **policy**.
 Splitting them keeps classification testable without a model and
