@@ -186,6 +186,21 @@ pub async fn citation_grounded_answer(
         }
         None => answer,
     };
+    // Space fidelity (probe4 2026-07-02: "18seconds"/"21nauticalmiles" for the
+    // quote's "18 seconds"/"21 nautical miles" — the copy channel drops spaces
+    // the way it drops letters and case; the old space-strict check turned a
+    // CORRECT lighthouse answer into a decline). Repair the surface from the
+    // quote's exact spacing before verification.
+    let answer = match (!sentinel)
+        .then(|| respace_answer_from_quote(&answer, &quote))
+        .flatten()
+    {
+        Some(fixed) => {
+            dbg(&format!("citation: answer respaced from the quote → {fixed:?}"));
+            fixed
+        }
+        None => answer,
+    };
     // Anti-confabulation: the quote must (a) be verbatim in the passages and
     // (b) actually SUPPORT the answer — the model can copy a real-but-
     // insufficient sentence and still confabulate the value (measured: quoted an
@@ -241,9 +256,85 @@ fn answer_supported_by_quote(answer: &str, quote: &str) -> bool {
                 // through as grounded. A prefix of a number is a different number.
                 quote_has_number_token(&q, w)
             } else {
-                q.contains(w.as_str())
+                // Space-tolerant containment: the MTP copy channel drops spaces
+                // ("18seconds" for the quote's "18 seconds"; the measured
+                // "dancinggirls") — a mis-spaced COPY of quote text is grounded
+                // content wearing a typo, and `respace_answer_from_quote`
+                // repairs the surface after verification. A compound absent
+                // from the quote even space-blind ("50minutes" with no
+                // "50 minutes" anywhere) still fails.
+                q.contains(w.as_str()) || q.split_whitespace().collect::<String>().contains(w.as_str())
             }
         })
+}
+
+/// Repair space-dropped copies: any answer word (≥6 chars) that is absent from
+/// the quote as written but present when the quote's spaces are ignored gets
+/// replaced by the quote's exactly-spaced span ("18seconds" → "18 seconds").
+/// The quote is verified verbatim corpus text, so the respaced form is ground
+/// truth. Words the quote doesn't contain either way are left untouched.
+fn respace_answer_from_quote(answer: &str, quote: &str) -> Option<String> {
+    let qn = normalize(quote);
+    let mut out: Vec<String> = Vec::new();
+    let mut changed = false;
+    for word in answer.split_whitespace() {
+        let core: String = word
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase();
+        if core.chars().count() >= 6 && !qn.contains(&core) {
+            if let Some(spaced) = find_spaced_span(&qn, &core) {
+                // Preserve the word's punctuation shell around the respaced core.
+                let start = word.to_lowercase().find(core.as_str());
+                if let Some(i) = start {
+                    let prefix = &word[..i];
+                    let suffix = &word[i + core.len()..];
+                    out.push(format!("{prefix}{spaced}{suffix}"));
+                    changed = true;
+                    continue;
+                }
+            }
+        }
+        out.push(word.to_string());
+    }
+    changed.then(|| out.join(" "))
+}
+
+/// The quote's exactly-spaced span whose non-space chars equal `token`
+/// (both lowercase). None when absent or when the match is embedded in a
+/// longer alphanumeric run (complete-run discipline).
+fn find_spaced_span(quote_norm: &str, token: &str) -> Option<String> {
+    let q: Vec<char> = quote_norm.chars().collect();
+    let t: Vec<char> = token.chars().collect();
+    for start in 0..q.len() {
+        if q[start].is_whitespace() || (start > 0 && q[start - 1].is_alphanumeric() && q[start].is_alphanumeric() && start_is_mid_run(&q, start)) {
+            continue;
+        }
+        let mut i = start;
+        let mut j = 0;
+        while j < t.len() && i < q.len() {
+            if q[i].is_whitespace() {
+                i += 1;
+                continue;
+            }
+            if q[i] != t[j] {
+                break;
+            }
+            i += 1;
+            j += 1;
+        }
+        if j == t.len() {
+            let boundary = i >= q.len() || !q[i].is_alphanumeric();
+            let left_ok = start == 0 || !q[start - 1].is_alphanumeric();
+            if boundary && left_ok {
+                return Some(q[start..i].iter().collect::<String>().trim_end().to_string());
+            }
+        }
+    }
+    None
+}
+
+fn start_is_mid_run(q: &[char], start: usize) -> bool {
+    start > 0 && q[start - 1].is_alphanumeric()
 }
 
 /// True iff `num` appears in `normalized_quote` as a whole digit-run (bounded by
@@ -555,12 +646,22 @@ mod tests {
             "Russian embassy",
             "Ever since the time of the late Baron Stott-Wartenheim, employed by the Embassy."
         ));
-        // The measured competence regression: a mis-spaced value not verbatim in
-        // its own quote → not grounded → falls through to the correct draft.
-        assert!(!answer_supported_by_quote(
+        // Space-dropped copies are grounded content wearing a typo: verification
+        // is space-tolerant (the old space-strict rule turned a CORRECT
+        // lighthouse answer into a decline), and respace_answer_from_quote
+        // repairs the surface from the quote before release.
+        assert!(answer_supported_by_quote(
             "dancinggirls",
             "photographs of more or less undressed dancing girls in the window"
         ));
+        assert_eq!(
+            respace_answer_from_quote(
+                "dancinggirls",
+                "photographs of more or less undressed dancing girls in the window"
+            )
+            .as_deref(),
+            Some("dancing girls")
+        );
         // Numeric truncation (measured 2026-07-01): a TRUNCATED number must not
         // ground against a quote that contains a *longer* number sharing its
         // leading digits. "289494" is a prefix substring of "28949423" but a
@@ -688,6 +789,26 @@ mod tests {
         let quote = "Then simply define Hn+1 := ¬H1 ∧ … ∧ ¬Hn here.";
         assert_eq!(snap_answer_case_to_quote("Hn+1 := ¬H1 ∧ … ∧ ¬Hn", quote), None);
         assert_eq!(snap_answer_case_to_quote("something else entirely", quote), None);
+    }
+
+    #[test]
+    fn space_dropped_lighthouse_answer_respaces_from_quote() {
+        // probe4 verbatim: correct values, spaces eaten by the copy channel.
+        let quote = "The light's characteristic signal is one white flash every 18                      seconds, visible for 21 nautical miles in clear weather.";
+        let ans = "one white flash every 18seconds; 21nauticalmiles";
+        assert!(answer_supported_by_quote(ans, quote));
+        assert_eq!(
+            respace_answer_from_quote(ans, quote).as_deref(),
+            Some("one white flash every 18 seconds; 21 nautical miles")
+        );
+    }
+
+    #[test]
+    fn fabricated_compound_still_fails_space_blind() {
+        // "50minutes" has no "50 minutes" in the quote either way.
+        let quote = "The sighting was reported at dawn and lasted briefly.";
+        assert!(!answer_supported_by_quote("50minutes", quote));
+        assert_eq!(respace_answer_from_quote("50minutes", quote), None);
     }
 
     #[test]
