@@ -895,21 +895,56 @@ async fn short_specifics_guard(
 ) -> Option<GateOutcome> {
     // Only on retry-capable surfaces: the guard's whole remedy is a corrective
     // re-synthesis. Verify-only surfaces have no second synthesis to give.
-    if !short_specifics_scan_enabled() || !profile.retry {
+    if !profile.retry {
         return None;
     }
-    // Nothing asserted → nothing to fabricate-check (fail-open latency skip).
-    if answer_declines(released) {
-        return None;
-    }
-    // Small budget floored at 3 so even a terse citation answer ("David Hart")
-    // gets a real check; scales modestly on longer short answers.
+    // Deterministic sentence sweep FIRST — receipt-grade hits (a code
+    // identifier or in-world name attribution absent from the entire
+    // evidence) trigger the corrective retry regardless of the LLM-scan flag.
+    // gen75e s34: the `cmd_init`/`found.rs` ghosts shipped in a 1,504-char
+    // answer — UNDER the 1,800 longform pivot, where none of the longform
+    // vetoes run. The short path needs the same receipts-grade guard.
+    let hay_lower = chunks.join(" ").to_lowercase();
+    // Budget for the LLM scan paths (initial when the flag is on; the
+    // post-retry re-scan always).
     let budget = claim_budget(released.chars().count(), 3);
-    let specifics =
-        scan_unsupported_specifics(inference, question, released, chunks, budget).await?;
-    if specifics.is_empty() {
-        return None; // clean — release unchanged
+    let mut swept: Vec<String> = Vec::new();
+    for sentence in released.split(['.', '\n']) {
+        let sentence = sentence.trim();
+        if sentence.chars().count() < 20 {
+            continue;
+        }
+        if let Some(x) = judge::absent_identifier_attribution(sentence, &hay_lower)
+            .or_else(|| judge::absent_name_attribution(sentence, &hay_lower))
+        {
+            if !swept.contains(&x) {
+                swept.push(x);
+            }
+        }
     }
+    let specifics = if !swept.is_empty() {
+        dbg(&format!("short sweep VETOED {swept:?} (absent from evidence)"));
+        swept
+            .iter()
+            .map(|x| format!("The answer references \"{x}\", which does not appear in the sources."))
+            .collect()
+    } else {
+        if !short_specifics_scan_enabled() {
+            return None;
+        }
+        // Nothing asserted → nothing to fabricate-check (fail-open latency skip).
+        if answer_declines(released) {
+            return None;
+        }
+        // Small budget floored at 3 so even a terse citation answer ("David Hart")
+        // gets a real check; scales modestly on longer short answers.
+        let specifics =
+            scan_unsupported_specifics(inference, question, released, chunks, budget).await?;
+        if specifics.is_empty() {
+            return None; // clean — release unchanged
+        }
+        specifics
+    };
     // Corrective evidence per flagged specific — the same material the long-form
     // rewrite gets, and the self-correction for a false positive (a real
     // specific's grounding passage comes back, so the rewrite keeps it).
