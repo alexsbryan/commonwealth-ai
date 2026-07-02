@@ -145,8 +145,11 @@ Mesh created: Sunset District Co-op
 Join key: cwth-7f3a-9b2e-4d1c
 
 Share this key with people you want in the mesh.
-They run: commonwealth join cwth-7f3a-9b2e-4d1c
+They run: sovereign mesh join cwth-7f3a-9b2e-4d1c
 ```
+
+(Mesh lifecycle UX — create, join, status across nodes — lives in the
+`sovereign` CLI; the `commonwealth` binary manages the standalone daemon.)
 
 The join key is shared out-of-band — spoken aloud, sent via Signal, printed on a card. The join process requires a human social interaction. You cannot join a Commonwealth mesh by scanning the network.
 
@@ -583,14 +586,12 @@ If a process dies or becomes unresponsive:
 
 ### Graceful Departure
 
-```
-$ commonwealth pause
-Announcing departure to mesh... done
-Waiting for mesh to rebalance (30s)... done
-3 nodes have taken over your model layers.
-2 nodes have taken over your knowledge shards.
-Your node is paused. Run 'commonwealth resume' to rejoin.
-```
+**Design intent, not yet implemented** — there is no `pause` command
+today. The intended behavior: announce impending departure, give the
+Scheduler a 30-second window to preemptively rebalance model layers and
+knowledge shards onto surviving nodes, then go quiet with no 503s. Until
+that ships, stopping the daemon is an abrupt departure and recovery
+follows the node-failure path above (5-15 seconds).
 
 ---
 
@@ -851,13 +852,19 @@ Returned nodes are noted but don't trigger immediate rebalancing. The next sched
 
 ### Threat Model
 
+The authoritative, surface-by-surface threat model lives in
+[`docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md) at the repository root;
+this table is a summary and defers to it wherever they disagree.
+
 |Threat|Mitigation|
 |---|---|
-|Unauthorized join|Join key required, shared out-of-band|
-|Eavesdropping|Mutual TLS on all inter-node communication|
-|Node impersonation|Certificate pinning from join handshake|
+|Unauthorized join|Join key required (BLAKE3 hash, constant-time compare), shared out-of-band, plus an Ed25519 proof-of-possession — a bad proof is rejected with 401.|
+|Unintended client access|The client API (`:9741`) requires a bearer token from any non-loopback caller (loopback is exempt) and fails closed when no token is configured.|
+|Eavesdropping|**Plaintext mesh is the default.** An encrypted mesh (founder-set policy) moves inter-node traffic onto iroh QUIC/TLS and forces the client API to loopback. The worker-pod path is TLS with an owner-pinned certificate. Unused per-session-TLS scaffolding was deliberately removed (2026-06-15) rather than left as a security façade — never claim blanket inter-node encryption.|
+|Node impersonation|Ed25519 identity proof at join; on an encrypted mesh, iroh dial-by-key authenticates the peer's key on every connection.|
+|Tensor-split RPC|**Not encrypted.** Multi-host tensor sharding (`SOVEREIGN_RPC_SERVE`) is raw TCP — the sole residual plaintext even on an encrypted mesh. Never claim end-to-end encryption while it is in use.|
 |Compromised node serving bad inference|**Not defended.** Social trust model.|
-|External attacks|Internal API bound to VPN/LAN, not public internet|
+|External attacks|The internal API (`:9742`) is expected to sit behind a VPN/LAN/tailnet perimeter, never the public internet.|
 |Prompt privacy|Entry node sees full prompt. Scheduler prefers requester as entry node. Other nodes see only opaque activations.|
 |Query privacy|Knowledge queries reveal research topics, not personal content. Clients control what they query.|
 
@@ -926,21 +933,30 @@ preferred = ["wikipedia", "openalex", "sep", "stackexchange"]
 
 ## 11. CLI
 
+Every command below does real work — the aspirational placeholder
+commands that printed `(In production, this would …)` were removed
+2026-07-01 rather than left as a façade. Mesh lifecycle across nodes
+(create / join / status / rotate) lives in the `sovereign` CLI; the
+HTTP API on `:9741`/`:9742` is the daemon's actual control plane.
+
 ```
 commonwealth init --name "Mesh Name"     Create a mesh, output join key
-commonwealth join <key> [--address ...]  Join a mesh
-commonwealth status                      Mesh state: members, models, knowledge, capacity
-commonwealth balance                     Contribution ledger
-commonwealth pause / resume              Graceful departure and return
-commonwealth leave                       Permanent departure
-commonwealth models                      List available and loaded models
-commonwealth corpora                     List available and hosted knowledge bases
-commonwealth logs [--follow]             Daemon logs
-commonwealth mesh set <key> <value>      Propose mesh-wide config change
-commonwealth mesh members                List members with status and balance
-commonwealth mesh revoke <node>          Propose revoking a member
-commonwealth mesh peer <key>             Establish peering with another mesh
+commonwealth status                      Node + mesh state from the running daemon (GET /status)
+commonwealth balance                     Contribution ledger (local store)
+commonwealth models                      Models advertised by the daemon (GET /v1/models)
+commonwealth corpus status               Ingestion/shard status for tracked corpora
+commonwealth corpus collaborate <id>     Recruit peers to share a mid-flight ingestion
+commonwealth daemon start                Run the daemon
+commonwealth recipe test <path>          Run the community-recipe test harness
+commonwealth recipe validate <path>      Validate recipe fields without downloading
+commonwealth peer-preference set|list|clear   Per-peer affinity (Ostrom sanctions, local-only)
 ```
+
+Deliberately absent: member revocation (`Mesh::merge_from` is grow-only
+with no tombstone, so a revoke cannot propagate — shipping the command
+before the tombstone would report false success on a security action),
+graceful pause/resume/leave (see §8 Graceful Departure), and daemon log
+files (the daemon logs to stderr; use your service manager's journal).
 
 The daemon runs as a system service (`commonwealth daemon start/stop/status`).
 

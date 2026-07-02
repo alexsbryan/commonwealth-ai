@@ -49,6 +49,11 @@ get extra attention:
   local surface — anything that lets an unintended caller drive inference or
   read state.
 
+The full surface-by-surface posture — what listens where, what is
+authenticated, what is encrypted, and the honest list of known gaps — lives in
+[docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md). Reading it first will tell you
+whether something is a vulnerability or a documented boundary.
+
 ## Supported versions
 
 Fixes land on `main` and go out in the next release. Please test against the

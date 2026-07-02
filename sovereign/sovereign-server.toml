@@ -2,7 +2,14 @@
 # Copy this file and adjust for your deployment.
 
 [server]
-bind = "0.0.0.0:8080"
+# Loopback by default — only this machine can reach the API. To serve other
+# devices (a phone on your tailnet, LAN clients), widen the bind AND configure
+# [auth] below: the server refuses a non-loopback bind with auth disabled
+# unless you explicitly opt in.
+bind = "127.0.0.1:8080"
+# bind = "0.0.0.0:8080"               # remote access — requires [auth] keys
+# allow_unauthenticated_remote = true  # last resort: open bind, no auth (deliberate trust boundary only)
+# cors = "auto"                        # "auto" (permissive iff auth on) | "permissive" | "off"
 
 [auth]
 # "api_key" or "none"

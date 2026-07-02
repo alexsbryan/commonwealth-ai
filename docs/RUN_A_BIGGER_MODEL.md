@@ -39,6 +39,9 @@ On the host, create an invite:
 
 ```bash
 sovereign mesh create        # prints a key like cwth-a1b2-c3d4-e5f6
+                             # (says "a mesh already exists"? setup founded a
+                             #  solo mesh — read its key with `sovereign mesh
+                             #  status`, or `sovereign mesh rotate` for a new one)
 ```
 
 On each other machine, join with it:

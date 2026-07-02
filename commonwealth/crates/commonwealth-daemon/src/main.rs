@@ -30,6 +30,12 @@ struct Cli {
     command: Commands,
 }
 
+// Every subcommand here does real work against the daemon's HTTP surface
+// or local state — no aspirational placeholders. Mesh lifecycle UX
+// (create/join/status across nodes) lives in the `sovereign mesh` CLI;
+// this binary manages the standalone commonwealth daemon. Commands that
+// once printed "(In production, this would …)" were removed 2026-07-01
+// rather than left as a façade (see SYSTEM_OVERVIEW §10.2).
 #[derive(Subcommand)]
 enum Commands {
     /// Create a new mesh
@@ -38,41 +44,16 @@ enum Commands {
         #[arg(long)]
         name: String,
     },
-    /// Join an existing mesh
-    Join {
-        /// Join key shared by a mesh member
-        key: String,
-        /// Addresses to advertise to the mesh
-        #[arg(long)]
-        address: Vec<String>,
-    },
-    /// Show mesh status
+    /// Show node + mesh status from the running daemon
     Status,
     /// Show contribution balance
     Balance,
-    /// Pause this node (graceful departure)
-    Pause,
-    /// Resume this node after pause
-    Resume,
-    /// Permanently leave the mesh
-    Leave,
-    /// List available and loaded models
+    /// List models advertised by the running daemon
     Models,
     /// Manage knowledge corpora
     Corpus {
         #[command(subcommand)]
         command: CorpusCommands,
-    },
-    /// Show daemon logs
-    Logs {
-        /// Follow log output
-        #[arg(long, short)]
-        follow: bool,
-    },
-    /// Mesh management commands
-    Mesh {
-        #[command(subcommand)]
-        command: MeshCommands,
     },
     /// Daemon lifecycle management
     Daemon {
@@ -120,24 +101,8 @@ enum PeerPreferenceCommands {
 
 #[derive(Subcommand)]
 enum CorpusCommands {
-    /// List installed and available corpora
-    List,
-    /// Install a corpus
-    Install {
-        /// Corpus ID (e.g., "wikipedia")
-        id: String,
-        /// Install from a recipe file
-        #[arg(long)]
-        recipe: Option<PathBuf>,
-    },
-    /// Remove an installed corpus
-    Remove { id: String },
-    /// Check for corpus updates
-    Update { id: String },
-    /// Show shard status for all corpora
+    /// Show ingestion/shard status for corpora tracked by the daemon
     Status,
-    /// Merge shard files into a complete index
-    Consolidate { id: String },
     /// Recruit mesh peers to share a mid-flight ingestion.
     ///
     /// Requires a source-file manifest (`sovereign corpus
@@ -149,29 +114,6 @@ enum CorpusCommands {
         /// Recipe ID if different from corpus ID
         #[arg(long)]
         recipe: Option<String>,
-    },
-    /// Monitor collaborative ingestion progress
-    CollaborateStatus {
-        /// Corpus ID to monitor
-        id: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum MeshCommands {
-    /// Propose a mesh-wide config change
-    Set { key: String, value: String },
-    /// List members with status
-    Members,
-    /// Propose revoking a member
-    Revoke {
-        /// Node ID or name to revoke
-        node: String,
-    },
-    /// Establish peering with another mesh
-    Peer {
-        /// Peering key shared by the other mesh
-        key: String,
     },
 }
 
@@ -228,33 +170,14 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { name } => cmd_init(&name, &config),
-        Commands::Join { key, address } => cmd_join(&key, &address, &config),
         Commands::Status => cmd_status(&config),
         Commands::Balance => cmd_balance(&config),
-        Commands::Pause => cmd_pause(&config),
-        Commands::Resume => cmd_resume(&config),
-        Commands::Leave => cmd_leave(&config),
         Commands::Models => cmd_models(&config),
         Commands::Corpus { command } => match command {
-            CorpusCommands::List => cmd_corpus_list(&config),
-            CorpusCommands::Install { id, recipe } => {
-                cmd_corpus_install(&id, recipe.as_deref(), &config)
-            }
-            CorpusCommands::Remove { id } => cmd_corpus_remove(&id, &config),
-            CorpusCommands::Update { id } => cmd_corpus_update(&id, &config),
             CorpusCommands::Status => cmd_corpus_status(&config),
-            CorpusCommands::Consolidate { id } => cmd_corpus_consolidate(&id, &config),
             CorpusCommands::Collaborate { id, recipe } => {
                 cmd_corpus_collaborate(&id, recipe.as_deref(), &config)
             }
-            CorpusCommands::CollaborateStatus { id } => cmd_corpus_collaborate_status(&id, &config),
-        },
-        Commands::Logs { follow } => cmd_logs(follow, &config),
-        Commands::Mesh { command } => match command {
-            MeshCommands::Set { key, value } => cmd_mesh_set(&key, &value, &config),
-            MeshCommands::Members => cmd_mesh_members(&config),
-            MeshCommands::Revoke { node } => cmd_mesh_revoke(&node, &config),
-            MeshCommands::Peer { key } => cmd_mesh_peer(&key, &config),
         },
         Commands::Daemon { command } => match command {
             DaemonCommands::Start => cmd_daemon_start(&config),
@@ -364,21 +287,91 @@ fn cmd_init(name: &str, config: &Option<DaemonConfig>) -> Result<()> {
     Ok(())
 }
 
-fn cmd_join(key: &str, _addresses: &[String], _config: &Option<DaemonConfig>) -> Result<()> {
-    membership::validate_join_key_format(key)
-        .map_err(|e| anyhow::anyhow!("Invalid join key: {e}"))?;
+/// One-shot GET against the local daemon, JSON-decoded. Shared by the
+/// read-only commands (`status`, `models`, `corpus status`) so they all
+/// carry the same is-the-daemon-running error affordance.
+fn daemon_get(url: &str) -> Result<serde_json::Value> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build async runtime")?;
 
-    println!("Joining mesh with key: {key}");
-    println!("(In production, this would contact a mesh member to complete the join handshake.)");
-
-    Ok(())
+    rt.block_on(async move {
+        let resp = reqwest::Client::new().get(url).send().await.with_context(|| {
+            format!("failed to reach daemon at {url}\nIs it running? Try: commonwealth daemon start")
+        })?;
+        let status = resp.status();
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        if !status.is_success() {
+            anyhow::bail!(
+                "daemon returned HTTP {status}: {}",
+                body["error"].as_str().unwrap_or("unknown error")
+            );
+        }
+        Ok(body)
+    })
 }
 
 fn cmd_status(config: &Option<DaemonConfig>) -> Result<()> {
     let api_port = config.as_ref().map(|c| c.node.api_port).unwrap_or(9741);
+    let body = daemon_get(&format!("http://127.0.0.1:{api_port}/status"))?;
 
-    println!("Checking daemon at localhost:{api_port}...");
-    println!("(In production, this would GET http://localhost:{api_port}/status and display the result.)");
+    println!("Node {}", body["node_id"].as_str().unwrap_or("?"));
+    println!("{}", "─".repeat(72));
+
+    let mesh = &body["mesh"];
+    println!(
+        "  Mesh:      {}  [{}/{} online]  pooled {:.0} GB VRAM / {:.0} GB storage",
+        mesh["name"].as_str().unwrap_or("?"),
+        mesh["members_online"].as_u64().unwrap_or(0),
+        mesh["members_total"].as_u64().unwrap_or(0),
+        mesh["pooled_vram_gb"].as_f64().unwrap_or(0.0),
+        mesh["pooled_storage_gb"].as_f64().unwrap_or(0.0),
+    );
+
+    let models = body["inference"]["loaded_models"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if models.is_empty() {
+        println!("  Models:    (none planned)");
+    } else {
+        for m in &models {
+            println!(
+                "  Model:     {}  [{} node(s), ~{:.0} tok/s, {}]",
+                m["model"].as_str().unwrap_or("?"),
+                m["nodes"].as_u64().unwrap_or(0),
+                m["tps"].as_f64().unwrap_or(0.0),
+                if m["loaded"].as_bool().unwrap_or(false) {
+                    "loaded"
+                } else {
+                    "not loaded"
+                },
+            );
+        }
+    }
+
+    let knowledge = &body["knowledge"];
+    let corpora = knowledge["hosted_corpora"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    println!(
+        "  Knowledge: {} corpora, {} chunks searchable",
+        corpora.len(),
+        knowledge["total_chunks_searchable"].as_u64().unwrap_or(0),
+    );
+    for c in &corpora {
+        println!("             - {}", c.as_str().unwrap_or("?"));
+    }
+
+    let process = &body["process"];
+    let uptime = process["uptime_seconds"].as_u64().unwrap_or(0);
+    print!("  Process:   up {}h {}m", uptime / 3600, (uptime % 3600) / 60);
+    if let Some(rss) = process["rss_mb"].as_u64() {
+        print!(", {rss} MB rss");
+    }
+    println!();
 
     Ok(())
 }
@@ -583,70 +576,60 @@ fn fallback_self_id() -> commonwealth_core::ids::NodeId {
     commonwealth_core::ids::NodeId::from_u128(0)
 }
 
-fn cmd_pause(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Announcing departure to mesh...");
-    println!("(In production, this would initiate a graceful departure with 30s countdown.)");
-    println!("Your node is paused. Run 'commonwealth resume' to rejoin.");
-    Ok(())
-}
-
-fn cmd_resume(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Resuming node...");
-    println!("(In production, this would announce the node's return to the mesh.)");
-    Ok(())
-}
-
-fn cmd_leave(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Leaving mesh permanently...");
-    println!("(In production, this would initiate graceful departure, then remove membership.)");
-    Ok(())
-}
-
 fn cmd_models(config: &Option<DaemonConfig>) -> Result<()> {
     let api_port = config.as_ref().map(|c| c.node.api_port).unwrap_or(9741);
-    println!("(In production, this would GET http://localhost:{api_port}/v1/models.)");
-    Ok(())
-}
+    let body = daemon_get(&format!("http://127.0.0.1:{api_port}/v1/models"))?;
 
-fn cmd_corpus_list(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would list installed and available knowledge corpora.)");
-    Ok(())
-}
-
-fn cmd_corpus_install(
-    id: &str,
-    recipe: Option<&std::path::Path>,
-    _config: &Option<DaemonConfig>,
-) -> Result<()> {
-    if let Some(path) = recipe {
-        println!("Installing corpus '{id}' from recipe: {}", path.display());
-    } else {
-        println!("Installing builtin corpus '{id}'...");
+    let models = body["data"].as_array().cloned().unwrap_or_default();
+    if models.is_empty() {
+        println!("(no models advertised by the daemon)");
+        return Ok(());
     }
-    println!("(In production, this would ingest the corpus via corpus-engine.)");
+    println!("Models");
+    println!("{}", "─".repeat(48));
+    for m in &models {
+        println!("  {}", m["id"].as_str().unwrap_or("?"));
+    }
     Ok(())
 }
 
-fn cmd_corpus_remove(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Removing corpus '{id}'...");
-    println!("(In production, this would remove the index file and update the mesh.)");
-    Ok(())
-}
+fn cmd_corpus_status(config: &Option<DaemonConfig>) -> Result<()> {
+    let internal_port = config
+        .as_ref()
+        .map(|c| c.node.internal_port)
+        .unwrap_or(9742);
+    let body = daemon_get(&format!(
+        "http://127.0.0.1:{internal_port}/internal/corpus/status"
+    ))?;
 
-fn cmd_corpus_update(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Checking for updates to corpus '{id}'...");
-    println!("(In production, this would check the source for newer data.)");
-    Ok(())
-}
-
-fn cmd_corpus_status(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would show shard status for all corpora on this node.)");
-    Ok(())
-}
-
-fn cmd_corpus_consolidate(id: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Consolidating shards for corpus '{id}'...");
-    println!("(In production, this would merge all local shard files into a complete index.)");
+    let entries = body["entries"].as_array().cloned().unwrap_or_default();
+    if entries.is_empty() {
+        println!("No corpora tracked by this daemon.");
+        return Ok(());
+    }
+    println!(
+        "  {:<36} {:>7} {:>14} {:>10}",
+        "Corpus", "Active", "Shards", "Complete"
+    );
+    println!("  {}", "─".repeat(72));
+    for e in &entries {
+        let complete = e["estimated_fraction"]
+            .as_f64()
+            .map(|f| format!("{:.0}%", f * 100.0))
+            .unwrap_or_else(|| "?".into());
+        println!(
+            "  {:<36} {:>7} {:>7}/{:<6} {:>10}",
+            e["corpus_id"].as_str().unwrap_or("?"),
+            if e["active"].as_bool().unwrap_or(false) {
+                "yes"
+            } else {
+                "no"
+            },
+            e["shards_completed"].as_u64().unwrap_or(0),
+            e["shards_total"].as_u64().unwrap_or(0),
+            complete,
+        );
+    }
     Ok(())
 }
 
@@ -717,60 +700,11 @@ fn cmd_corpus_collaborate(
     })
 }
 
-fn cmd_corpus_collaborate_status(id: &str, config: &Option<DaemonConfig>) -> Result<()> {
-    let internal_port = config
-        .as_ref()
-        .map(|c| c.node.internal_port)
-        .unwrap_or(9742);
-    println!("Checking collaborative ingestion status for corpus '{id}'...");
-    println!("(In production, this would read the gossip handoff state from the daemon at localhost:{internal_port}.)");
-    Ok(())
-}
-
-fn cmd_logs(follow: bool, config: &Option<DaemonConfig>) -> Result<()> {
-    let data_dir = config
-        .as_ref()
-        .map(|c| c.node.data_dir.clone())
-        .unwrap_or_else(|| "~/.commonwealth".into());
-
-    if follow {
-        println!("(In production, this would tail -f {data_dir}/daemon.log.)");
-    } else {
-        println!("(In production, this would cat {data_dir}/daemon.log.)");
-    }
-    Ok(())
-}
-
-fn cmd_mesh_set(key: &str, value: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    println!("Proposing mesh config change: {key} = {value}");
-    println!("(In production, this would broadcast the proposal via gossip for majority vote.)");
-    Ok(())
-}
-
-fn cmd_mesh_members(_config: &Option<DaemonConfig>) -> Result<()> {
-    println!("(In production, this would list all mesh members with status and balance.)");
-    Ok(())
-}
-
-fn cmd_mesh_revoke(node: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    // HONESTY: revocation is not wired. `Mesh::merge_from` is grow-only with no
-    // tombstone, so a "revoked" node is resurrected on the next gossip round —
-    // returning Ok here would report false success on a security action. Fail
-    // loudly until revocation actually propagates.
-    anyhow::bail!(
-        "mesh revoke is not implemented: revoking '{node}' would not propagate \
-         (membership merge is grow-only, no tombstone). Refusing to report false success."
-    )
-}
-
-fn cmd_mesh_peer(key: &str, _config: &Option<DaemonConfig>) -> Result<()> {
-    membership::validate_join_key_format(key)
-        .map_err(|e| anyhow::anyhow!("Invalid peering key: {e}"))?;
-
-    println!("Establishing peering with key: {key}");
-    println!("(In production, this would initiate the peering handshake.)");
-    Ok(())
-}
+// NOTE: `mesh revoke` was removed with the other unbacked commands
+// (2026-07-01), but its constraint is worth keeping visible: membership
+// merge (`Mesh::merge_from`) is grow-only with no tombstone, so revocation
+// cannot propagate today — any future `revoke` must ship the tombstone
+// first or it would report false success on a security action.
 
 fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
     let api_port = config.as_ref().map(|c| c.node.api_port).unwrap_or(9741);
