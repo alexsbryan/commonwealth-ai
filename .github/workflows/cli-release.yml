@@ -105,11 +105,22 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
+      # CACHE REF-SCOPING (why tag-only releasing is always cold): GitHub
+      # Actions caches are restorable only from the run's own ref or the
+      # DEFAULT branch. A `cli-v*` tag run saves its cache scoped to that
+      # tag, which the next tag's run cannot see — so back-to-back tag
+      # releases never warm each other. Releasing via the manual
+      # "Release (manual)" orchestrator (release.yml, dispatched on main)
+      # runs this workflow on the MAIN ref, so its cache save is
+      # main-scoped and every future release — tag or button — restores
+      # it. One button-release seeds the cache for good.
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "." # single workspace at the repo root
           key: cli-release-${{ matrix.platform.target }}
+          # Seed even when a release attempt fails mid-build.
+          cache-on-failure: true
 
       - name: Linux build deps
         if: runner.os == 'Linux'
