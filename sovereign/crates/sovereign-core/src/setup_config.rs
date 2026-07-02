@@ -57,6 +57,12 @@ pub struct SetupConfig {
     /// Off by default; see [`SharedModelSection`].
     #[serde(default)]
     pub shared_model: SharedModelSection,
+    /// How this node finds + joins mesh peers (mDNS vs. static seeds).
+    /// Defaults reproduce the zero-config LAN behaviour; enterprise/VPC
+    /// fleets that block multicast turn mDNS off and list seed addresses
+    /// here. See [`DiscoverySection`].
+    #[serde(default)]
+    pub discovery: DiscoverySection,
     /// External MCP servers whose tools are loaded into the agent's tool
     /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
     /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
@@ -91,40 +97,75 @@ pub struct SetupConfig {
 /// [iroh]
 /// enabled = true
 /// ```
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IrohSection {
-    #[serde(default)]
-    pub enabled: bool,
+    /// Tri-state on purpose. `None` (absent — the common case) means
+    /// AUTO: the daemon turns iroh on iff this node participates in a
+    /// mesh (the `client-exposed` marker written by every explicit
+    /// create/join surface) — consent-by-mesh-participation, so a
+    /// meshless daemon never contacts relay infrastructure.
+    /// `Some(true)` forces on (headless/explicit); `Some(false)` is
+    /// the kill-switch (still overridden by a mesh-wide
+    /// `require_encryption`, which cannot run without iroh).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
     /// Per-traffic-class transport routing (Track W3). Only consulted
-    /// when `enabled` — an iroh selection with iroh off is ignored
-    /// (and logged). Nested here (not a top-level `[transport]`)
-    /// because routing a class to iroh is meaningless without the
-    /// endpoint this section turns on, and nesting means existing
-    /// `SetupConfig` literals (which build `iroh` via `Default`) need
-    /// no change.
+    /// when `enabled`. Since the iroh-first flip (2026-07), iroh
+    /// enabled means EVERY class routes iroh-first with automatic
+    /// per-dial IP fallback, and this section is an opt-OUT: name a
+    /// class `"ip"` to pin it to the IP path. A legacy `"iroh"` entry
+    /// names the default (logged no-op). Nested here (not a top-level
+    /// `[transport]`) because routing a class to iroh is meaningless
+    /// without the endpoint this section turns on, and nesting means
+    /// existing `SetupConfig` literals (which build `iroh` via
+    /// `Default`) need no change.
     ///
     /// ```toml
     /// [iroh]
     /// enabled = true
     /// [iroh.transport]
-    /// gossip = "iroh"   # flip one class at a time; everything else stays "ip"
+    /// inference = "ip"   # opt one class out; everything else rides iroh-first
     /// ```
     #[serde(default)]
     pub transport: TransportSection,
-    // W4 (self-hosted relays) will add an optional `relay_url` here;
-    // omitted until it is actually consumed, so there is no inert knob.
+    /// Self-hosted iroh relays (W4). Empty (the default) = n0's public
+    /// relays, the bootstrap posture. Non-empty overrides the relay set
+    /// with these URLs (address-lookup discovery is unchanged), so an
+    /// enterprise fleet can point every node at its own `iroh-relay` on
+    /// an allowlisted domain:443 — the answer for a corporate firewall
+    /// that category-blocks n0's relay domains. Per-node, gossiped via
+    /// `MemberRecord.relay_url`, so a mixed fleet interops with no
+    /// flag-day. Consumed by `build_relayed_endpoint`.
+    ///
+    /// ```toml
+    /// [iroh]
+    /// enabled = true
+    /// relay_urls = ["https://relay.corp.example:443"]
+    /// ```
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relay_urls: Vec<String>,
+    /// Which discovery/relay infrastructure to use (H1 sovereignty
+    /// knob). `"n0"` or absent (the default) = n0's public relays AND
+    /// n0's DNS/pkarr address-lookup. `"none"` / `"self"` / `"local"`
+    /// = sever ALL n0 contact: reach peers only via gossiped direct
+    /// addresses (a flat LAN/VPC) and/or `relay_urls` above (a
+    /// self-hosted relay). Setting `relay_urls` ALONE does not stop the
+    /// n0 DNS lookup — set `discovery = "none"` for a true no-third-party
+    /// deployment. Consumed by `build_relayed_endpoint` via `RelayConfig`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discovery: Option<String>,
 }
 
 /// Per-traffic-class transport selection (Track W3 of
-/// TRANSPORT_MIGRATION.md). Each class is `"ip"` (default — the
-/// tailnet/LAN overlay) or `"iroh"` (dial-by-key QUIC). Unset = `"ip"`.
-/// The migration's recommended flip order, one class at a time with a
-/// soak between each: gossip → control_plane → knowledge_search →
-/// model_transfer → inference. (`status_probe` rides with inference in
-/// practice.) The interpretation (string → `TrafficClass`) lives in
-/// `sovereign-mesh`, which owns both this config and the transport
-/// types; this struct is intentionally just data.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// TRANSPORT_MIGRATION.md). Each class is `"iroh"` (default when
+/// `[iroh] enabled` — dial-by-key QUIC, iroh-first with per-dial IP
+/// fallback) or `"ip"` (pin to the tailnet/LAN overlay). Unset =
+/// the default. `inference = "ip"` is the escape hatch if streaming
+/// latency regresses on a flipped mesh. The interpretation (string →
+/// `TrafficClass`) lives in `sovereign-mesh`, which owns both this
+/// config and the transport types; this struct is intentionally just
+/// data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransportSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gossip: Option<String>,
@@ -589,6 +630,17 @@ pub struct DaemonSection {
     /// `SOVEREIGN_CLIENT_TOKEN`.
     #[serde(default)]
     pub client_token: Option<String>,
+
+    /// Interface the internal mesh API (`:9742`) binds to. Defaults to
+    /// `0.0.0.0` (every interface) — the historical behaviour, and the
+    /// right choice when a cloud firewall / security group already scopes
+    /// who can reach the port. Pin it to a specific private address (e.g.
+    /// the VPC NIC `10.0.1.4`) to keep the **unauthenticated** internal API
+    /// off any other interface — defense-in-depth on a multi-homed host.
+    /// Ignored under `require_encryption`, which forces the internal router
+    /// loopback-only (the iroh acceptor is then the sole network ingress).
+    #[serde(default = "default_internal_bind")]
+    pub internal_bind: String,
 }
 
 /// Filesystem paths for mutable state.
@@ -615,6 +667,7 @@ impl Default for DaemonSection {
             alternation_grammar: default_alternation_grammar(),
             client_bind: default_client_bind(),
             client_token: None,
+            internal_bind: default_internal_bind(),
         }
     }
 }
@@ -625,6 +678,54 @@ impl Default for DataSection {
             dir: default_data_dir(),
         }
     }
+}
+
+/// How this node discovers and joins mesh peers. Defaults reproduce the
+/// historical zero-config LAN behaviour (mDNS on, no static seeds). An
+/// enterprise/VPC fleet that blocks multicast sets `mdns = false` and
+/// lists the founder/seed `host:port` addresses in `seed_addrs`; the
+/// daemon then forms the mesh entirely from those static seeds and never
+/// touches the multicast socket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverySection {
+    /// Advertise + browse `_commonwealth._tcp` over mDNS for zero-config
+    /// LAN peer discovery. Default `true`. Set `false` on hosts where
+    /// multicast is unavailable or undesirable (cloud VPCs, hardened
+    /// network namespaces): the daemon skips the multicast socket entirely
+    /// (its bind is otherwise fatal at boot) and relies on `seed_addrs` /
+    /// `?relay=` hints. Force-off env override: `SOVEREIGN_DISABLE_MDNS=1`.
+    #[serde(default = "default_mdns_enabled")]
+    pub mdns: bool,
+    /// Static internal-API `host:port` addresses (e.g. `"10.0.1.4:9742"`)
+    /// to join at boot when mDNS is off or finds nothing. Each is tried
+    /// as a direct `/internal/join` target — the same path a `?relay=`
+    /// hint uses — until one accepts. Empty by default: the founder needs
+    /// none, a joiner lists at least one reachable seed.
+    #[serde(default)]
+    pub seed_addrs: Vec<String>,
+    /// Shared mesh join key (`cwth-XXXX-XXXX-XXXX`) presented to each
+    /// `seed_addrs` peer at boot. Set on a fleet JOINER; leave unset on the
+    /// founder / a standalone node (which then forms its own solo mesh).
+    /// Same trust model as a join link shared out-of-band — keep this file
+    /// readable only by the daemon user. A joiner with a `join_key` but no
+    /// reachable `seed_addrs` fails to boot rather than split-braining into
+    /// its own mesh.
+    #[serde(default)]
+    pub join_key: Option<String>,
+}
+
+impl Default for DiscoverySection {
+    fn default() -> Self {
+        Self {
+            mdns: default_mdns_enabled(),
+            seed_addrs: Vec::new(),
+            join_key: None,
+        }
+    }
+}
+
+fn default_mdns_enabled() -> bool {
+    true
 }
 
 /// Defaults for watched-folder corpora (`sovereign corpus watch`).
@@ -694,6 +795,11 @@ fn default_client_bind() -> String {
 }
 fn default_internal_port() -> u16 {
     9742
+}
+fn default_internal_bind() -> String {
+    // Historical behaviour: the internal mesh API binds every interface.
+    // Operators on multi-homed hosts can pin it to a private NIC.
+    "0.0.0.0".to_string()
 }
 fn default_autostart() -> bool {
     true
@@ -948,6 +1054,62 @@ embed = "/models/embed.gguf"
     }
 
     #[test]
+    fn iroh_enabled_tristate_parses_all_legacy_forms() {
+        // `enabled` went bool → Option<bool> (auto-enable on mesh
+        // participation, 2026-07). Pre-existing configs wrote
+        // `enabled = true` / `enabled = false`; most wrote nothing.
+        // All three must parse, and absent must be None (= auto).
+        let base = r#"
+[models]
+primary = "/m/p.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(base).unwrap();
+        assert_eq!(cfg.iroh.enabled, None);
+
+        let on: SetupConfig =
+            toml::from_str(&format!("{base}\n[iroh]\nenabled = true\n")).unwrap();
+        assert_eq!(on.iroh.enabled, Some(true));
+
+        let off: SetupConfig =
+            toml::from_str(&format!("{base}\n[iroh]\nenabled = false\n")).unwrap();
+        assert_eq!(off.iroh.enabled, Some(false));
+
+        // And None round-trips as None (absent, not `enabled = false`).
+        let out = toml::to_string_pretty(&cfg).unwrap();
+        let reparsed: SetupConfig = toml::from_str(&out).unwrap();
+        assert_eq!(reparsed.iroh.enabled, None);
+    }
+
+    #[test]
+    fn iroh_relay_urls_default_empty_and_parse() {
+        let base = r#"
+[models]
+primary = "/m/p.gguf"
+embed = "/m/e.gguf"
+"#;
+        // Absent = empty (n0 default), and omitted on re-serialize.
+        let cfg: SetupConfig = toml::from_str(base).unwrap();
+        assert!(cfg.iroh.relay_urls.is_empty());
+        let out = toml::to_string_pretty(&cfg).unwrap();
+        assert!(!out.contains("relay_urls"), "empty relay_urls must serialize as absent: {out}");
+
+        // A configured self-hosted relay fleet round-trips, and the
+        // sovereignty `discovery` knob parses.
+        let with_relays: SetupConfig = toml::from_str(&format!(
+            "{base}\n[iroh]\nenabled = true\nrelay_urls = [\"https://relay.corp.example:443\"]\ndiscovery = \"none\"\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            with_relays.iroh.relay_urls,
+            vec!["https://relay.corp.example:443".to_string()]
+        );
+        assert_eq!(with_relays.iroh.discovery.as_deref(), Some("none"));
+        // Absent discovery = None (n0 default).
+        assert_eq!(cfg.iroh.discovery, None);
+    }
+
+    #[test]
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
             models: ModelsSection {
@@ -966,6 +1128,7 @@ embed = "/models/embed.gguf"
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: Vec::new(),
         };
         let tmp = tempfile::tempdir().unwrap();
@@ -1002,6 +1165,7 @@ embed = "/models/embed.gguf"
             memory: Default::default(),
             iroh: Default::default(),
             shared_model: Default::default(),
+            discovery: Default::default(),
             mcp_servers: vec![McpServerConfig {
                 name: "vision".into(),
                 description: Some("Describe images".into()),

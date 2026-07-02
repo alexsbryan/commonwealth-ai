@@ -392,6 +392,7 @@ impl DocumentAssetManager {
             index_id,
             skeleton: None,
             state: AssetState::Pending,
+            owner: None,
         };
         self.store.save_document_asset(&asset).await?;
 
@@ -726,6 +727,7 @@ impl DocumentAssetManager {
             index_id,
             skeleton: Some(skeleton),
             state: AssetState::Ready,
+            owner: None,
         })
     }
 
@@ -3249,6 +3251,7 @@ mod tests {
             index_id: "t".to_string(),
             skeleton: None,
             state: AssetState::PartiallyReady,
+            owner: None,
         }
     }
 

@@ -18,6 +18,7 @@ pub async fn build_context(
     store: &dyn StateStore,
     conversation_id: &str,
     query: &str,
+    principal: Option<&str>,
 ) -> Result<ConversationContext> {
     let conversation = match store.get_conversation(conversation_id).await {
         Ok(c) => c,
@@ -58,14 +59,34 @@ pub async fn build_context(
     // `parent_corpus_id`); here we only do the parent-level
     // intersection that drives the model's "installed corpora" prompt
     // list. See `Conversation::enabled_corpora` docs.
+    // Scope the corpus set to what this principal may retrieve from. On a
+    // multi-user hub `principal` is the conversation's owner; a `Private`
+    // corpus owned by anyone else is excluded here, so it can never enter
+    // retrieval. `None` (single-user / desktop) hides nothing — every
+    // corpus, `Org` or `Private`, is visible. This is the in-process twin of
+    // the server's read-surface deny-set (`TenantRuntime::forbidden_corpora`).
     let all_installed: Vec<String> = store
         .list_corpus_states()
         .await
         .unwrap_or_default()
         .into_iter()
         .filter(|s| s.deleted_at.is_none())
+        .filter(|s| match (&s.visibility, principal) {
+            (CorpusVisibility::Private { owner }, Some(p)) => owner == p,
+            _ => true,
+        })
         .map(|s| s.corpus_id)
         .collect();
+    // The PURE principal ceiling — the corpora this principal may ever
+    // retrieve from, independent of the per-conversation `enabled_corpora`
+    // selection. `Some(..)` only when a principal is present (a multi-tenant
+    // hub injected a PrincipalResolver); `None` on the single-user / desktop
+    // path, where retrieval stays bit-identical to pre-feature behaviour
+    // (`None` enabled_corpora ⇒ every index searched). Applied as the
+    // independent `corpus_ceiling` Filter 5 at every corpus-chunk search —
+    // the airtight backstop that a forged or absent `enabled_corpora` cannot
+    // widen past. See `ConversationContext::corpus_ceiling`.
+    let corpus_ceiling: Option<Vec<String>> = principal.map(|_| all_installed.clone());
     let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
         Some(allow) => {
             let allow_set: std::collections::HashSet<&str> =
@@ -89,6 +110,7 @@ pub async fn build_context(
         memories,
         working_memory: None,
         installed_corpora,
+        corpus_ceiling,
         document_session,
         topic_context: None,
         // None here is intentional: landscape digests are spliced

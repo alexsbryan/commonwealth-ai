@@ -412,6 +412,7 @@ impl TestHarness {
                 version: 0,
                 deleted_at: None,
                 vector_index_ready: false,
+                visibility: CorpusVisibility::Org,
             })
             .await
             .unwrap();

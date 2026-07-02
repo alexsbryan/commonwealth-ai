@@ -114,6 +114,7 @@ async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
         mesh_name: Some("hypothetical-other-mesh".into()),
         relay_hint: None,
         iroh_dial: None,
+        encrypted: false,
         expires_at: None,
     };
 
@@ -226,6 +227,7 @@ async fn join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake() {
         mesh_name: Some("hypothetical-target".into()),
         relay_hint: None,
         iroh_dial: None,
+        encrypted: false,
         expires_at: None,
     };
 

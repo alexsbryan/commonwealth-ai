@@ -142,10 +142,18 @@
       {/if}
 
       {#if confirmation.iroh_dial}
-        <p class="encrypted-note small">
-          <strong>Encrypted mesh.</strong> Your join runs over an encrypted,
-          key-verified connection to the founder.
-        </p>
+        {#if confirmation.encrypted}
+          <p class="encrypted-note small">
+            <strong>Encrypted mesh.</strong> Your join runs over an encrypted,
+            key-verified connection to the founder.
+          </p>
+        {:else}
+          <p class="encrypted-note small">
+            <strong>Connects directly — no VPN needed.</strong> This invite
+            carries a connect code that reaches the founder even across
+            different networks.
+          </p>
+        {/if}
       {/if}
 
       {#if joinError}

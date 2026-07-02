@@ -27,6 +27,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "join" => cmd_join(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
+        "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,
         "leave" => cmd_leave().await,
         "logs" => cmd_logs().await,
@@ -388,6 +389,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "status",
                 "Show mesh members, hosted knowledge, loaded models",
             ),
+            (
+                "transport",
+                "Show each peer's live iroh path (direct / relayed / mixed)",
+            ),
             ("balance", "Show your contribution to the mesh"),
             ("leave", "Leave the current mesh"),
             ("logs", "Show mesh daemon logs"),
@@ -508,7 +513,12 @@ async fn cmd_create(args: &[String]) -> i32 {
     daemon.expose_client_api();
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
-            print_mesh_share(&result.mesh_name, &result.join_key, result.client_token.as_deref());
+            print_mesh_share(
+                &result.mesh_name,
+                &result.join_key,
+                result.client_token.as_deref(),
+                Some(&result.join_link),
+            );
             0
         }
         Err(e) => {
@@ -521,8 +531,35 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// Spec-format banner for a freshly-created or freshly-rotated mesh.
 /// Prints both the https share URL and the CLI form so the inviter
 /// can pick whichever suits the invitee's environment.
-fn print_mesh_share(mesh_name: &str, join_key: &str, client_token: Option<&str>) {
-    let app_link = build_https_join_link(join_key, None, Some(mesh_name), None, None);
+///
+/// `join_link` is the daemon-built deep link (it carries the founder's
+/// no-VPN dial string + TTL when the iroh endpoint is up); the https
+/// form is derived from it so both printed forms share params. `None`
+/// (the offline rotate path — no running daemon, no dial to read)
+/// prints the bare form.
+fn print_mesh_share(
+    mesh_name: &str,
+    join_key: &str,
+    client_token: Option<&str>,
+    join_link: Option<&str>,
+) {
+    let app_link = match join_link.and_then(parse_join_argument) {
+        Some(sovereign_mesh::deep_link::DeepLink::Join {
+            relay_hint,
+            iroh_dial,
+            encrypted,
+            expires_at,
+            ..
+        }) => build_https_join_link(
+            join_key,
+            relay_hint.as_deref(),
+            Some(mesh_name),
+            iroh_dial.as_deref(),
+            encrypted,
+            expires_at,
+        ),
+        None => build_https_join_link(join_key, None, Some(mesh_name), None, false, None),
+    };
     println!();
     println!("Mesh created.");
     println!();
@@ -712,7 +749,10 @@ async fn cmd_rotate(args: &[String]) -> i32 {
             // Rotation is an offline persist op — the API token is
             // unchanged, so it isn't reprinted here (shown on create /
             // `mesh status`).
-            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None);
+            // Offline persist op — no running daemon to read a dial
+            // string from; the daemon's status poll (`current_invite`)
+            // serves the dial-bearing link once it's back up.
+            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None, None);
             0
         }
         Ok(None) => {
@@ -920,6 +960,87 @@ async fn cmd_status(args: &[String]) -> i32 {
         if let Some(l) = status.join_link.as_deref() {
             println!("join link: {l}");
         }
+    }
+    0
+}
+
+/// `sovereign mesh transport` — the operator's "is anyone actually on
+/// iroh, and via a direct path or the relay?" surface (H2). Reads the
+/// `iroh_transport` block of `/v1/mesh/status`.
+async fn cmd_transport(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: sovereign mesh transport [--json]");
+        eprintln!();
+        eprintln!("Show each peer's live iroh connection path (direct / relayed / mixed / idle).");
+        eprintln!("Empty output means iroh isn't carrying mesh traffic (the mesh is on the IP path).");
+        return 0;
+    }
+    let json_out = args.iter().any(|a| a == "--json");
+
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("reqwest client builds");
+    let body = match client.get(&url).send().await {
+        Ok(r) if r.status().is_success() => match r.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("mesh transport: read body: {e}");
+                return 1;
+            }
+        },
+        Ok(r) => {
+            eprintln!("mesh transport: daemon returned HTTP {} from {url}", r.status());
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("mesh transport: daemon at {url} not reachable: {e}");
+            return 1;
+        }
+    };
+    let status: sovereign_mesh::mesh_http::StatusResponse = match serde_json::from_str(&body) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");
+            println!("{body}");
+            return 1;
+        }
+    };
+
+    if json_out {
+        match serde_json::to_string_pretty(&status.iroh_transport) {
+            Ok(s) => println!("{s}"),
+            Err(e) => {
+                eprintln!("mesh transport: serialize: {e}");
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    if status.iroh_transport.is_empty() {
+        println!("iroh transport: no peers on iroh (mesh is on the IP path, or iroh is disabled).");
+        return 0;
+    }
+    println!("  {:<12} {:<9} relay / direct", "peer", "path");
+    println!("  {:-<12} {:-<9} {:-<30}", "", "", "");
+    for p in &status.iroh_transport {
+        let name: String = p.name.chars().take(12).collect();
+        let (path, detail) = match &p.path {
+            Some(tp) => {
+                let detail = match &tp.relay {
+                    Some(r) => format!("relay={r}  direct={}", tp.active_direct_addrs),
+                    None => format!("direct={}", tp.active_direct_addrs),
+                };
+                (tp.path.as_str(), detail)
+            }
+            None => ("unknown", "no endpoint record yet".to_string()),
+        };
+        println!("  {name:<12} {path:<9} {detail}");
     }
     0
 }

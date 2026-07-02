@@ -272,13 +272,10 @@ pub async fn perform_encrypted_join(
     joining_node_name: &str,
     joining_node_addresses: Vec<SocketAddr>,
     joiner_seed: [u8; 32],
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
     proposed_node_id: Option<NodeId>,
     identity: Option<(commonwealth_core::ids::NodePubkey, String)>,
 ) -> Result<JoinHandshakeResult, JoinError> {
-    use commonwealth_transport::iroh::{
-        build_relayed_endpoint, parse_dial_string, HttpBridge, SecretKey, ALPN,
-    };
-
     let dummy_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
 
     let (node_pubkey, pubkey_proof) = match identity {
@@ -294,50 +291,20 @@ pub async fn perform_encrypted_join(
         pubkey_proof,
     };
 
-    // Parse the founder's dial-by-key target from the invite.
-    let target = parse_dial_string(founder_dial).map_err(|e| JoinError::BadResponse {
-        address: dummy_addr,
-        reason: format!("invite has a malformed iroh dial string: {e}"),
-    })?;
-
-    // One-shot dialing endpoint from this node's identity seed (the
-    // node_key seed IS a valid iroh SecretKey).
-    let secret = SecretKey::from_bytes(&joiner_seed);
-    let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()])
-        .await
-        .map_err(|e| JoinError::BadResponse {
-            address: dummy_addr,
-            reason: format!("failed to build iroh endpoint for encrypted join: {e}"),
-        })?;
-
-    // Localhost bridge: the QUIC handshake to the founder IS the key
-    // verification — it fails unless the responder holds the private key
-    // for the founder pubkey embedded in the dial string.
-    let bridge = HttpBridge::spawn(endpoint, target, ALPN)
-        .await
-        .map_err(|e| JoinError::BadResponse {
-            address: dummy_addr,
-            reason: format!("failed to open iroh tunnel to founder: {e}"),
-        })?;
-    let authority = bridge.local_addr().to_string();
-
-    let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .expect("reqwest client build");
-
     info!(
         founder = %founder_dial,
         "handshake_sent: encrypted join over iroh, POST /internal/join"
     );
-    // `_bridge`/endpoint stay alive until this fn returns (the POST
-    // rides the tunnel they own).
-    match try_single_peer(&http, &authority, &body).await {
-        Some(parsed) => Ok(JoinHandshakeResult {
+    match iroh_tunnel_handshake(founder_dial, joiner_seed, relay_cfg, &body).await {
+        Ok(parsed) => Ok(JoinHandshakeResult {
             mesh: parsed.mesh.into_mesh(),
             assigned_node_id: parsed.assigned_node_id,
         }),
-        None => Err(JoinError::NoPeerFound {
+        Err(TunnelFailure::Setup(reason)) => Err(JoinError::BadResponse {
+            address: dummy_addr,
+            reason,
+        }),
+        Err(TunnelFailure::NotAccepted) => Err(JoinError::NoPeerFound {
             mesh_name: "(encrypted mesh)".to_string(),
             direct_hint_msg:
                 " — the founder did not accept the encrypted join (expired invite, \
@@ -347,19 +314,86 @@ pub async fn perform_encrypted_join(
     }
 }
 
-/// Execute the join handshake. First tries `direct_peer_hint` if
-/// supplied (useful on overlay networks like Tailscale where mDNS
-/// doesn't propagate), then polls `mdns` for peers advertising
-/// `mesh_name`. First accepting peer wins. Times out after
-/// `timeout` with `Error::NoPeerFound` if nothing accepts.
+/// Why an iroh tunnel join attempt failed — the two callers differ
+/// only in what they do with each case (encrypted: fail closed;
+/// plaintext prefer-iroh: log and fall back to IP/mDNS).
+enum TunnelFailure {
+    /// Malformed dial string / endpoint bind / bridge setup — failed
+    /// before any founder contact.
+    Setup(String),
+    /// The tunnel came up but the founder didn't accept the join
+    /// (rejected key, expired invite, or unreachable over iroh).
+    NotAccepted,
+}
+
+/// Dial `founder_dial` by key over a one-shot iroh endpoint built from
+/// `joiner_seed` (this node's `node_key` seed IS a valid iroh
+/// `SecretKey`) and POST `/internal/join` through a localhost
+/// [`HttpBridge`]. The QUIC handshake to the founder IS the key
+/// verification — it fails unless the responder holds the private key
+/// for the pubkey embedded in the dial string. The endpoint and bridge
+/// live until this returns; the POST rides the tunnel they own.
+async fn iroh_tunnel_handshake(
+    founder_dial: &str,
+    joiner_seed: [u8; 32],
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
+    body: &JoinRequestWire,
+) -> Result<JoinResponseWire, TunnelFailure> {
+    use commonwealth_transport::iroh::{
+        build_relayed_endpoint, parse_dial_string, HttpBridge, SecretKey, ALPN,
+    };
+
+    let target = parse_dial_string(founder_dial).map_err(|e| {
+        TunnelFailure::Setup(format!("invite has a malformed iroh dial string: {e}"))
+    })?;
+
+    let secret = SecretKey::from_bytes(&joiner_seed);
+    let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()], relay_cfg)
+        .await
+        .map_err(|e| TunnelFailure::Setup(format!("failed to build iroh endpoint for join: {e}")))?;
+
+    let bridge = HttpBridge::spawn(endpoint, target, ALPN)
+        .await
+        .map_err(|e| TunnelFailure::Setup(format!("failed to open iroh tunnel to founder: {e}")))?;
+    let authority = bridge.local_addr().to_string();
+
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .expect("reqwest client build");
+
+    match try_single_peer(&http, &authority, body).await {
+        Some(parsed) => Ok(parsed),
+        None => Err(TunnelFailure::NotAccepted),
+    }
+}
+
+/// Execute the plaintext-mesh join handshake, trying each discovery
+/// path in order — every step is additive, any failure falls through
+/// to the next (unlike the encrypted join, which is fail-closed):
+///
+/// 1. **`iroh`** — `(founder_dial, joiner_seed)` from a `dial=` invite:
+///    dial the founder by key over a one-shot iroh tunnel (W2c, the
+///    no-VPN path; works across networks with no shared IP route).
+/// 2. **`direct_peer_hint`** — a `relay=` host:port POSTed directly
+///    (overlay networks / VPNs where mDNS doesn't propagate).
+/// 3. **mDNS** — poll for LAN peers advertising `mesh_name`.
+///
+/// First accepting peer wins. Times out after `timeout` (mDNS budget)
+/// with `Error::NoPeerFound` carrying the earlier paths' failure
+/// reasons if nothing accepts.
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_join(
     mesh_name: &str,
     join_key: &str,
     joining_node_name: &str,
     joining_node_addresses: Vec<SocketAddr>,
+    iroh: Option<(&str, [u8; 32])>,
+    // Relay/discovery posture for the iroh tunnel attempt (default =
+    // n0). Only consulted when `iroh` is `Some`.
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
     direct_peer_hint: Option<&str>,
-    mdns: &MdnsDiscovery,
+    mdns: Option<&MdnsDiscovery>,
     timeout: Duration,
     proposed_node_id: Option<NodeId>,
     // (pubkey, hex proof-of-possession) — see `JoinRequestWire`.
@@ -386,14 +420,58 @@ pub async fn perform_join(
         pubkey_proof,
     };
 
-    // Direct peer hint — tried first so overlay-network (Tailscale /
-    // Headscale / VPN) users don't wait for an mDNS loop that will
-    // never find anything. On success we're done; on failure we fall
-    // through to the mDNS loop so the hint remains purely additive.
-    // We also keep the failure reason to attach to the final error
-    // if everything fails — "No route to host" is the user-visible
-    // signal for WiFi AP isolation, which they'd otherwise have to
-    // dig out of the terminal logs.
+    // Prefer-iroh (W2c): a plaintext invite carrying a `dial=` connect
+    // code gets the founder dialed BY KEY first — the path that works
+    // with no shared IP route at all. Bounded so the IP/mDNS fallback
+    // stays responsive; any failure logs, is kept for the final error,
+    // and falls through — purely additive, mirroring the direct-hint
+    // block below.
+    let mut tunnel_failure: Option<String> = None;
+    if let Some((dial, seed)) = iroh {
+        info!(
+            founder = %dial,
+            "handshake_sent: prefer-iroh join, POST /internal/join over tunnel"
+        );
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            iroh_tunnel_handshake(dial, seed, relay_cfg, &body),
+        )
+        .await
+        {
+            Ok(Ok(parsed)) => {
+                info!(
+                    assigned_node_id = %parsed.assigned_node_id,
+                    "handshake_accepted: joined mesh over iroh tunnel"
+                );
+                return Ok(JoinHandshakeResult {
+                    mesh: parsed.mesh.into_mesh(),
+                    assigned_node_id: parsed.assigned_node_id,
+                });
+            }
+            Ok(Err(TunnelFailure::Setup(reason))) => {
+                warn!(%reason, "join: iroh tunnel setup failed — falling back to IP/mDNS");
+                tunnel_failure = Some(reason);
+            }
+            Ok(Err(TunnelFailure::NotAccepted)) => {
+                warn!("join: founder did not accept over the iroh tunnel — falling back to IP/mDNS");
+                tunnel_failure =
+                    Some("the founder did not accept the join over the iroh tunnel".into());
+            }
+            Err(_elapsed) => {
+                warn!("join: iroh tunnel attempt timed out — falling back to IP/mDNS");
+                tunnel_failure = Some("the iroh tunnel attempt timed out".into());
+            }
+        }
+    }
+
+    // Direct peer hint — tried before mDNS so overlay-network / VPN
+    // users don't wait for an mDNS loop that will never find
+    // anything. On success we're done; on failure we fall through to
+    // the mDNS loop so the hint remains purely additive. We also keep
+    // the failure reason to attach to the final error if everything
+    // fails — "No route to host" is the user-visible signal for WiFi
+    // AP isolation, which they'd otherwise have to dig out of the
+    // terminal logs.
     let mut direct_failure: Option<String> = None;
     if let Some(raw) = direct_peer_hint {
         if let Some(authority) = normalise_peer_hint(raw) {
@@ -456,8 +534,9 @@ pub async fn perform_join(
                         "couldn't reach {authority}: {deepest} \
                          (kind: {kind}). If you see \"No route to host\" \
                          on the same WiFi, your router likely has client \
-                         isolation enabled — try a Tailscale ?relay=… or \
-                         a different network."
+                         isolation enabled — ask the founder for a current \
+                         invite link (it carries a no-VPN connect code) or \
+                         use a different network."
                     ));
                 }
             }
@@ -467,6 +546,24 @@ pub async fn perform_join(
             );
         }
     }
+
+    // mDNS disabled (headless / VPC host): the paths above were our
+    // only discovery options. If they didn't already return, we have no
+    // way to locate a peer — surface the same not-found error the
+    // timeout would.
+    let Some(mdns) = mdns else {
+        let mut direct_hint_msg = match direct_failure {
+            Some(msg) => format!(". Direct seed also failed: {msg}"),
+            None => ". mDNS is disabled and no reachable seed address was provided".to_string(),
+        };
+        if let Some(t) = &tunnel_failure {
+            direct_hint_msg.push_str(&format!(". iroh tunnel also failed: {t}"));
+        }
+        return Err(JoinError::NoPeerFound {
+            mesh_name: mesh_name.to_string(),
+            direct_hint_msg,
+        });
+    };
 
     let start = Instant::now();
     // Track attempted peer addresses so we don't spam the same node
@@ -552,8 +649,9 @@ pub async fn perform_join(
 
     // Final log so the user sees *why* we timed out. If mDNS never
     // surfaced any peer, it's a network issue (firewall, different
-    // subnet, Tailscale without ?relay=). If peers were seen but
-    // none matched, it's a mesh_name mismatch — bad URL.
+    // subnet, or no shared network and an invite without a no-VPN
+    // connect code). If peers were seen but none matched, it's a
+    // mesh_name mismatch — bad URL.
     if seen_any_peer {
         warn!(
             mesh_name,
@@ -570,10 +668,13 @@ pub async fn perform_join(
         );
     }
 
-    let direct_hint_msg = match direct_failure {
+    let mut direct_hint_msg = match direct_failure {
         Some(msg) => format!(". Direct relay also failed: {msg}"),
         None => String::new(),
     };
+    if let Some(t) = &tunnel_failure {
+        direct_hint_msg.push_str(&format!(". iroh tunnel also failed: {t}"));
+    }
 
     Err(JoinError::NoPeerFound {
         mesh_name: mesh_name.to_string(),
@@ -635,6 +736,7 @@ mod tests {
             "joiner",
             vec![],
             [0u8; 32],
+            &commonwealth_transport::iroh::RelayConfig::default(),
             None,
             None,
         )

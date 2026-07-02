@@ -15,7 +15,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
+use sovereign_core::setup_config::{
+    DaemonSection, DataSection, IrohSection, ModelsSection, SetupConfig,
+};
 use sovereign_mesh::daemon::EmbeddedDaemon;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
@@ -38,8 +40,15 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
         data: DataSection::default(),
         watched_folders: Default::default(),
         memory: Default::default(),
-        iroh: Default::default(),
+        // Pinned off: the exposed-path test writes the client-exposed
+        // marker, which auto-enables iroh (2026-07) — a real endpoint
+        // bind + relay contact this hermetic test must not do.
+        iroh: IrohSection {
+            enabled: Some(false),
+            ..Default::default()
+        },
         shared_model: Default::default(),
+        discovery: Default::default(),
         mcp_servers: Vec::new(),
     }
 }

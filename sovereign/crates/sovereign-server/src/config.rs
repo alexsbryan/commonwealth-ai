@@ -45,6 +45,17 @@ pub struct IrohSection {
     /// identity instead.
     #[serde(default)]
     pub key_path: Option<PathBuf>,
+    /// Self-hosted iroh relays (W4 of TRANSPORT_MIGRATION.md). Empty =
+    /// n0's public relays. Non-empty points this host's endpoint at the
+    /// listed relays (e.g. a fleet's own `iroh-relay` on an allowlisted
+    /// domain). Consumed by `build_relayed_endpoint`.
+    #[serde(default)]
+    pub relay_urls: Vec<String>,
+    /// Sovereignty knob (H1). `"n0"`/absent = n0 relays + n0 DNS
+    /// lookup; `"none"`/`"self"`/`"local"` = sever all n0 contact
+    /// (self-hosted `relay_urls` and/or direct addrs only).
+    #[serde(default)]
+    pub discovery: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

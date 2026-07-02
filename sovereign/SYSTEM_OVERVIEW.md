@@ -167,7 +167,7 @@ crates/
 ├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints; IP today, iroh-ready
 ├── commonwealth-discovery    # mDNS, gossip, latency probe, hardware, TLS, peering
 ├── commonwealth-inference    # Scheduling + orchestration
-├── commonwealth-api          # HTTP servers (client 9741 + internal 9742 mTLS)
+├── commonwealth-api          # HTTP servers (client 9741 + internal 9742, plaintext)
 ├── commonwealth-knowledge    # corpus-engine integration over the mesh
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
 ├── commonwealth-state        # MeshStore — gossip-replicated SQLite KV w/ TTL GC
@@ -1213,12 +1213,28 @@ instance hangs off commonwealth-api's `AppState`
   reachability — normal LWW, unlike `node_pubkey`'s anti-downgrade);
   the daemon self-stamps its live dial info each gossip round via a
   pull-provider on `AppState`; `IrohTransport` dials peers purely from
-  the gossiped contact (**membership = dialability**). W3: `[iroh.transport]
-  <class> = "iroh"` installs a `RoutedTransport` for the flipped
-  classes (IP fallback retained); **no class is flipped by default**,
-  so the daemon still routes its own traffic over `IpTransport` until
-  an operator flips one (recommended order: gossip first, then soak).
-  Join-over-iroh is W2b.
+  the gossiped contact (**membership = dialability**).
+- **The no-VPN mesh (2026-07, uncommitted on `saas`; unit + e2e +
+  soak-axis verified).** When iroh is enabled, `RoutedTransport`
+  routes **every** `TrafficClass` iroh-first with automatic per-dial
+  IP fallback — `[iroh.transport] <class> = "ip"` is now an opt-OUT,
+  not an opt-in flip. Enablement is `[iroh] enabled: Option<bool>`:
+  absent = AUTO (on iff this node is in a mesh, keyed off the
+  `client-exposed` marker — a meshless daemon never contacts relays),
+  `Some(false)` = kill-switch (also `SOVEREIGN_IROH=off`). Plaintext
+  invites carry a `dial=` connect code (distinct from the encrypted
+  `iroh=`); `join::perform_join` dials the founder by key first and
+  falls back to `?relay=`/mDNS (W2c). A `RelayConfig` (`[iroh]
+  relay_urls` + `discovery`) drives `build_relayed_endpoint`:
+  self-hosted relays (W4), and `discovery = "none"` builds from
+  `presets::Minimal` to sever ALL n0 services (H1 — `relay_urls`
+  alone keeps n0's DNS lookup, so it is not a no-third-party
+  posture). `proxy_from_env` is always on, so the mesh survives
+  UDP-blocked corporate networks over relay-TCP:443 through a
+  (Basic-auth) HTTP proxy. Encrypted meshes
+  (`require_encryption`) stay the fail-closed variant (all classes
+  REQUIRE iroh, loopback-only listeners). `IpTransport` remains the
+  permanent fallback; every piece is config-reversible.
 - **Track M (mobile) is implemented**: `sovereign-server`'s
   `[iroh] enabled` block accepts dial-by-key clients on ALPN
   `cwth/client/0` (`src/iroh_access.rs`; pairing string at
@@ -1232,8 +1248,10 @@ instance hangs off commonwealth-api's `AppState`
 - **Out of seam, by design**: the join handshake (pre-membership
   bootstrap), worker-pod `PinnedTransport` (separate trust model),
   loopback self-probes, and the raw-TCP `llama-server`/`rpc-server`
-  tensor traffic (stays on the IP overlay until a tunnel proxy is
-  worth building).
+  tensor traffic. The last is the decided W6 posture: multi-host
+  inference needs its GPU anchors on a shared IP network (LAN/VPC) —
+  which every supported topology already has — rather than a VPN or a
+  per-worker iroh sidecar (specced as Option B, gated on a tok/s A/B).
 - **Migration order** (when a second transport goes live) is encoded
   by `TrafficClass`, not config: a small `RoutedTransport` mapping
   classes → transports slots into the same `Arc<dyn PeerTransport>`
@@ -1320,7 +1338,15 @@ needs peer reachability)
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + same no-auth posture as `/v1/*` (documented in-module); incremental streaming + per-request auth are tracked follow-ups. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
-**Internal API — :9742, mTLS**
+**Internal API — :9742, plaintext (perimeter-trust)**
+
+No per-request auth: the internal routes (gossip, scheduling, model/index
+transfer, knowledge fan-out) trust the network boundary. Binds `0.0.0.0`
+by default — set `[daemon] internal_bind` to pin it to a private interface,
+or create the mesh with `require_encryption` to force all traffic onto the
+iroh QUIC transport (which binds the internal router loopback-only). The
+historical per-session-cert/`TrustStore` mTLS scaffolding was removed
+2026-06-15 (see §5 "TLS / mesh encryption"); never describe `:9742` as mTLS.
 
 | Path                                | Purpose                          |
 |-------------------------------------|----------------------------------|
@@ -1774,7 +1800,7 @@ Default ports:
 | Port  | Service                                                       |
 |-------|---------------------------------------------------------------|
 | 9741  | Commonwealth/Sovereign client API (OpenAI-compatible)         |
-| 9742  | Commonwealth/Sovereign internal API (mTLS)                    |
+| 9742  | Commonwealth/Sovereign internal API (plaintext; network-isolation trust) |
 | 9743+ | `llama-server` instances                                      |
 | 50051+| `rpc-server` instances for layer shards                       |
 | 8080  | Sovereign HTTP server (configurable)                          |

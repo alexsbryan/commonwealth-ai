@@ -592,6 +592,33 @@ pub struct SearchBudget {
     pub version: i64,
 }
 
+/// Who may retrieve from a corpus on a shared (multi-user) hub. The server
+/// boundary turns this into a per-request allow-list ceiling; the Runtime
+/// never sees principals, only the resulting corpus-id set (see the
+/// `sovereign-server` crate). Stored as JSON in the `corpus_state.visibility`
+/// column; a `NULL` column (pre-migration rows) maps to `Org`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CorpusVisibility {
+    /// Visible to every authenticated principal — the operator's shared
+    /// corpus. The default, and what every legacy corpus maps to.
+    #[default]
+    Org,
+    /// Visible only to the principal whose id equals `owner` (a user's own
+    /// upload).
+    Private { owner: String },
+}
+
+impl CorpusVisibility {
+    /// The owner of a `Private` corpus, or `None` for `Org`.
+    pub fn owner(&self) -> Option<&str> {
+        match self {
+            CorpusVisibility::Org => None,
+            CorpusVisibility::Private { owner } => Some(owner),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorpusState {
     pub corpus_id: String,
@@ -608,6 +635,11 @@ pub struct CorpusState {
     /// When false, searches fall back to FTS only (no full-scan hang).
     #[serde(default)]
     pub vector_index_ready: bool,
+    /// Who may retrieve from this corpus on a shared multi-user hub.
+    /// Defaults to `Org` (shared), so single-user and operator-curated
+    /// deployments are unaffected; per-user uploads set `Private { owner }`.
+    #[serde(default)]
+    pub visibility: CorpusVisibility,
 }
 
 #[derive(Debug, Clone)]
@@ -969,6 +1001,7 @@ mod knowledge_view_digest_tests {
             memories: vec![],
             working_memory: None,
             installed_corpora: vec![],
+            corpus_ceiling: None,
             document_session: None,
             topic_context: None,
             knowledge_view_digests: None,
