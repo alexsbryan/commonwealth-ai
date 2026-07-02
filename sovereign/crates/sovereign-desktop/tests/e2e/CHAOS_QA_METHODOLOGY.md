@@ -209,6 +209,30 @@ these were measurement bugs.
    non-prefix garbles still fall to reject→retry). Detect truncation by
    CONTENT, never finish_reason — that trap is now closed on the extraction
    path too.
+3. **Longform output quality** (`124eaf13`, judge.rs/mod.rs/streaming.rs): the
+   gate's own honesty surfaces stopped indicting the answer. Scan findings
+   reduce to verbatim answer spans (`normalize_scan_item`); `[Source:]` markers
+   are outside the scan's jurisdiction (pre-validated by the pre-gate snap);
+   `[unverified excerpt:]` wrappers are stripped before any judge sees them
+   (they biased the audit against SUPPORTED content — Samuelson-1954, verbatim
+   at offset 2410, flagged only when wrapped); the rewrite may not mint new
+   claims-about-the-sources; and `verification_note` renders plain, deduped,
+   capped items — **unquoted by design**: the post-synthesis quote guardrail
+   demotes curly-quoted non-verbatim spans, and the note's cosmetic quotes made
+   the app's two honesty mechanisms fight each other (the probed
+   self-contradicting footer). Watch `verification note rendered` in the trace.
+4. **Snap hardening** (`13e72611`, citation_attribution.rs): unconditional
+   uniqueness margin (label FAMILIES defeat the old floor-escape — the
+   "Articles II–XI"→"Pets" false snap), composite hyphen-digit veto (date
+   garbles "2026-10-10"), parenthetical-qualifier snap ("Wikipedia
+   (contested)"→label), bounded bracket scan (an unclosed `[Source:` swallowed
+   ~570 chars into the note).
+5. **Measurement** (`50591afa`): journal `evidence.labels` (chunk titles +
+   corpus ids); label-aware re-judge rubric (+"Verification note is honest"
+   clause); replay mode isolates each bank question in a fresh conversation
+   (cross-question contamination proven). **Never co-schedule the cargo test
+   suite with a SHORT replay** — the compile burst starves the SUT (one round
+   voided by 60–130s hangs).
 
 ---
 
@@ -242,6 +266,17 @@ classes (leak-loop repetition; SEP-lighthouse rewrite misattribution).
 ---
 
 ## 7. Open threads / next steps (ranked by trust impact × fixability)
+
+0. **DONE (see §5b items 3–5):** the longform output-quality lever below was
+   instrumented and fixed across four replay rounds on 2026-07-01 (all of 1a–1d
+   plus three defects those rounds newly exposed: the wrapper-vs-audit bias,
+   the note-vs-quote-guardrail fight, and snap-family false snaps). What
+   remains of the padding class after those fixes: open-ended INTERPRETIVE
+   claims on degenerate "most important thing" prompts and hard literary
+   extraction (Verloc/Federalist) — 35B-model-capability territory, plus
+   chimera labels (real date + wrong name; one observation) and per-claim
+   judge precision on supported claims (Mill vp=0.634 within caps). Next
+   ranked levers below, pending the gen75 generalization run.
 
 1. **Longform rewrite/annotate output quality (recommended next).** Instrumented
    2026-07-01 (citefix-replay app log): audit RECALL is decent (the false "James
@@ -315,6 +350,9 @@ never a narrowed `cargo -p`).
 
 ## 9. Commit lineage (this initiative)
 
+- `50591afa` fix(chaos-measurement): journal source labels, label-aware rubric, replay conversation isolation
+- `13e72611` fix(grounding): citation snap hardening — margin always, composite date veto, qualifier snap, bounded brackets
+- `124eaf13` fix(grounding): longform output quality — the gate's own honesty surfaces stop indicting the answer
 - `b1f09a19` fix(grounding): complete mid-token generation stops from the verified source
 - `bc0dd31f` fix(grounding): snap garbled [Source:] labels to the real source + ID-token veto
 - `8ac9773d` docs(chaos-qa): methodology + handoff, persist tooling, **trust-centric rubric**
