@@ -114,6 +114,108 @@ fn strip_tool_code_blocks(s: &str) -> String {
     pass(&s, "<tool_call", "</tool_call>")
 }
 
+/// Strip BARE tool-invocation lines — the envelope-less reflex (observed
+/// gen75-2026-07-02 on an unindexed folder corpus): the model narrates "Let me
+/// search for information about this corpus:" and then emits
+/// `knowledge_lookup(query="…")` as a plain prose line. No envelope, no colon
+/// prefix, so neither `strip_tool_code_blocks` nor the marker list catches it,
+/// and the raw call syntax ships to the user.
+///
+/// Two STRUCTURAL signals, no tool-name list (the reflex renames itself
+/// per draw — `knowledge_lookup(query=…)` one run, `search(folder-corpus-…)`
+/// the next — so name matching only ever fits the last observation):
+///
+/// 1. ANYWHERE: a whole unfenced line of `identifier(kwarg=…)` with a
+///    search-ish keyword argument — that argument SHAPE is invocation syntax,
+///    whatever the callee is called.
+/// 2. TERMINAL: the answer's last unfenced content line is `identifier(…)`
+///    (any name, any args) AND the line announcing it is FIRST-PERSON intent
+///    ending in `:` ("Let me search …:", "I'll look up …:"). A model that
+///    narrates its own action and then emits a call has handed off to a tool
+///    that doesn't exist and stopped — nothing after the call can be the
+///    answer. An instructional ending addressed to the USER ("Call it like
+///    this:\n\nfoo(42)") is imperative, not first-person, and survives.
+///
+/// Fenced code blocks are skipped entirely; a dangling first-person intro is
+/// dropped alongside what it announced.
+fn strip_bare_tool_call_lines(s: &str) -> String {
+    fn is_call_line(line: &str) -> bool {
+        let t = line.trim();
+        let Some(open) = t.find('(') else { return false };
+        if !t.ends_with(')') || open == 0 {
+            return false;
+        }
+        let name = &t[..open];
+        name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+            && name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+    }
+    fn has_search_kwarg(line: &str) -> bool {
+        let t = line.trim();
+        let Some(open) = t.find('(') else { return false };
+        let args = t[open + 1..].trim_start();
+        const CALL_KWARGS: &[&str] = &["query=", "query =", "search=", "q=", "input=", "prompt="];
+        CALL_KWARGS.iter().any(|k| args.starts_with(k))
+    }
+    /// First-person self-narrated intent ("Let me …:", "I'll …:") — the model
+    /// announcing ITS OWN next action, as opposed to instructing the user.
+    fn is_self_narrated_intent(line: &str) -> bool {
+        let t = line.trim();
+        if !t.ends_with(':') {
+            return false;
+        }
+        let low = t.to_lowercase();
+        ["let me ", "i'll ", "i will ", "i need to ", "i'm going to ", "i am going to "]
+            .iter()
+            .any(|p| low.starts_with(p))
+    }
+
+    // Pass 1: kwarg-shaped invocation lines, anywhere outside fences.
+    let mut out: Vec<&str> = Vec::new();
+    let mut in_fence = false;
+    let mut stripped_any = false;
+    for line in s.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            out.push(line);
+            continue;
+        }
+        if !in_fence && is_call_line(line) && has_search_kwarg(line) {
+            stripped_any = true;
+            continue;
+        }
+        out.push(line);
+    }
+    // Pass 2: a TERMINAL self-narrated call, any name/args. `in_fence` now
+    // tells us whether the tail of the answer sits inside an unclosed fence —
+    // if so, leave it alone.
+    if !in_fence {
+        let last_content = out.iter().rposition(|l| !l.trim().is_empty());
+        if let Some(li) = last_content {
+            if is_call_line(out[li]) {
+                let intro = out[..li].iter().rposition(|l| !l.trim().is_empty());
+                if intro.is_some_and(|pi| is_self_narrated_intent(out[pi])) {
+                    out.truncate(li);
+                    stripped_any = true;
+                }
+            }
+        }
+    }
+    if !stripped_any {
+        return s.to_string();
+    }
+    // Drop a dangling trailing first-person intro ("Let me search …:") and
+    // trailing blanks left behind by either pass.
+    while let Some(last) = out.last() {
+        let t = last.trim();
+        if t.is_empty() || is_self_narrated_intent(last) {
+            out.pop();
+        } else {
+            break;
+        }
+    }
+    out.join("\n")
+}
+
 /// True when `text` is essentially a phantom tool call the chat CANNOT run — a
 /// bare colon-call (`:code_search("X")`, `:document_operation(...)` — the format
 /// Qwen3.6 reflexes for code/lookup questions even though chat wires no tools),
@@ -172,6 +274,7 @@ pub fn strip_presenter_artifacts(raw: &str) -> String {
     // end. This is presentation-only — it does not suppress a real tool
     // call, which travels as structured `tool_choice`/`tools`, not prose.
     text = strip_tool_code_blocks(&text);
+    text = strip_bare_tool_call_lines(&text);
 
     // Stage 2: leading `---` separator lines (Markdown HR / draft
     // separator). Repeat to catch `---\n---\n`.
@@ -759,5 +862,48 @@ mod tests {
         // still be respected.
         let req = present_request("user q", "d", SkillRegister::Factual, 200);
         assert_eq!(req.max_tokens, Some(200));
+    }
+
+    // ── bare tool-call lines (gen75-2026-07-02, unindexed folder corpus) ──
+
+    #[test]
+    fn bare_tool_call_line_and_its_intro_are_stripped() {
+        let raw = "I don't have direct access to the contents of \"folder-corpus-2918e9ebc0b5\" \
+                   in my current context.\n\nLet me search for information about this corpus:\n\n\
+                   knowledge_lookup(query=\"folder-corpus-2913e9ebc0bb\")";
+        let out = present_answer(raw);
+        assert!(!out.contains("knowledge_lookup"));
+        assert!(!out.contains("Let me search"));
+        assert!(out.starts_with("I don't have direct access"));
+    }
+
+    #[test]
+    fn fenced_code_and_prose_calls_survive() {
+        // A legitimate code answer: fenced call lines and in-prose mentions of
+        // call syntax must not be touched.
+        let raw = "The helper is invoked as `lookup(query=\"x\")` inside main:\n\
+                   ```rust\nknowledge_lookup(query=\"x\")\n```\nDone.";
+        assert_eq!(present_answer(raw), raw);
+    }
+
+    #[test]
+    fn plain_function_call_without_search_kwarg_is_kept() {
+        // Bare code lines that aren't search-tool-shaped stay (e.g. a snippet
+        // answer showing a call with positional args).
+        let raw = "Call it like this:\n\nfoo(42, start)";
+        assert_eq!(present_answer(raw), raw);
+    }
+
+    #[test]
+    fn positional_arg_search_verb_reflex_is_stripped() {
+        // The reflex's second observed shape (alignfix replay): a SEARCH-verb
+        // call with positional args instead of a kwarg.
+        let raw = "I don't have visibility into that corpus.\n\n\
+                   Let me try searching for references to this corpus:\n\n\
+                   search(folder-corpus-2918)";
+        let out = present_answer(raw);
+        assert!(!out.contains("search(folder-corpus"));
+        assert!(!out.contains("Let me try searching"));
+        assert!(out.starts_with("I don't have visibility"));
     }
 }

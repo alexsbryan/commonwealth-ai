@@ -14,7 +14,3 @@ config/
 # §10 ledger forward-reference: the Gemini import recipe does not exist
 # yet — the row names where the work will land when someone builds it.
 sovereign-recipes/conversations-gemini/
-
-# §10 ledger documents the 2026-06-01 DELETION of this never-compiled
-# stale duplicate — the citation is the historical record of the removal.
-sovereign-cli-dev/src/mesh_cmd.rs

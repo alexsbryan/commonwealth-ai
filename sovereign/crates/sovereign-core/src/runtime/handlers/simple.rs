@@ -191,6 +191,7 @@ impl Runtime {
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
                 chunks: crate::runtime::grounding::gate_evidence_chunks(&kc.chunks),
                 source_labels: crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks),
+                chunk_labels: crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks),
                 searcher: Some(std::sync::Arc::new(self.claim_searcher(
                     context.conversation.enabled_corpora.as_deref(),
                     &kc.chunks,

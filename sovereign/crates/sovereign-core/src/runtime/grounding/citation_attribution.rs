@@ -254,6 +254,184 @@ fn strip_source_prefix(seg: &str) -> &str {
     }
 }
 
+/// The outcome of the citation-value ALIGNMENT pass (see
+/// `align_citation_values`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationAlignment {
+    /// The answer with misaligned citations re-pointed or removed.
+    pub cleaned: String,
+    /// Citations re-pointed to the chunk that actually holds the value:
+    /// `(value, cited_label, holder_label)`.
+    pub realigned: Vec<(String, String, String)>,
+    /// Citations removed: the cited chunk lacks the segment's value and no
+    /// single chunk holds all of the segment's values.
+    pub stripped: Vec<String>,
+}
+
+impl CitationAlignment {
+    pub fn changed(&self) -> bool {
+        !self.realigned.is_empty() || !self.stripped.is_empty()
+    }
+}
+
+/// Citation-value ALIGNMENT: the pairing half of citation trust. The existence
+/// checks above guarantee a cited label is REAL; they cannot see that the
+/// VALUE next to it came from a different retrieved chunk. Observed
+/// (gen75-2026-07-02, an INDEX corpus of many case files): "The NARA file
+/// number … is 28940827. [Source: Project BLUE BOOK (USAF SAT, 3 Feb. 1966)]"
+/// — 28940827 belongs to the FALLS CHURCH row; the cited row's number is
+/// 461458900. Value present ✓, label real ✓, pairing WRONG — a reader
+/// verifying the citation finds a different number.
+///
+/// Deterministic, per citation whose label names SPECIFIC chunk(s) (a
+/// corpus-id label names every chunk — alignment is vacuous there): every
+/// ID-shaped value token in the citing segment must appear (complete-run) in
+/// the CITED chunk(s). When all of a segment's values are instead found
+/// together in exactly one other chunk, the citation is a copy error —
+/// re-point it to that chunk's label (provenance becomes honest and
+/// verifiable). Ambiguous cases (values split across chunks, or no single
+/// holder) drop the citation instead: an uncited claim is a lesser harm than a
+/// citation that disconfirms itself. Values absent from ALL evidence are the
+/// value-presence gate's business, not this pass's.
+pub(crate) fn align_citation_values(
+    answer: &str,
+    chunks: &[String],
+    chunk_labels: &[Vec<String>],
+) -> CitationAlignment {
+    const MAX_BRACKET_CHARS: usize = 300;
+    const SEGMENT_CHARS: usize = 400;
+    let n = chunks.len().min(chunk_labels.len());
+    let norm_chunks: Vec<String> = chunks[..n].iter().map(|c| normalize(c)).collect();
+    let norm_labels: Vec<Vec<String>> =
+        chunk_labels[..n].iter().map(|ls| ls.iter().map(|l| normalize(l)).collect()).collect();
+    let chars: Vec<char> = answer.chars().collect();
+    let mut out = String::with_capacity(answer.len());
+    let mut realigned = Vec::new();
+    let mut stripped = Vec::new();
+    let mut i = 0usize;
+    let mut seg_start = 0usize; // char index where the current citing segment begins
+    while i < chars.len() {
+        if chars[i] == '[' {
+            if let Some(rel) = chars[i + 1..].iter().position(|&c| c == ']') {
+                let end = i + 1 + rel;
+                let inner: String = chars[i + 1..end].iter().collect();
+                if inner.trim_start().to_lowercase().starts_with("source:")
+                    && rel <= MAX_BRACKET_CHARS
+                    && !inner.contains('\n')
+                {
+                    let title = inner.trim_start().trim_start_matches("Source:").trim_start_matches("source:").trim();
+                    let nt = normalize(title);
+                    // Chunks this label names. Skip when it names none (not
+                    // ours to judge) or all (corpus-id — vacuous).
+                    let cited: Vec<usize> = (0..n)
+                        .filter(|&k| norm_labels[k].iter().any(|l| *l == nt))
+                        .collect();
+                    let seg: String =
+                        chars[seg_start.max(i.saturating_sub(SEGMENT_CHARS))..i].iter().collect();
+                    let verdict = if cited.is_empty() || cited.len() == n {
+                        None
+                    } else {
+                        alignment_verdict(&seg, &cited, &norm_chunks, &norm_labels, chunk_labels)
+                    };
+                    match verdict {
+                        Some(AlignVerdict::Realign { value, holder_label }) => {
+                            out.push_str("[Source: ");
+                            out.push_str(&holder_label);
+                            out.push(']');
+                            realigned.push((value, title.to_string(), holder_label));
+                        }
+                        Some(AlignVerdict::Strip { value }) => {
+                            if out.ends_with(' ') {
+                                out.pop();
+                            }
+                            stripped.push(format!("{title} (value {value})"));
+                        }
+                        None => {
+                            out.push('[');
+                            out.push_str(&inner);
+                            out.push(']');
+                        }
+                    }
+                    i = end + 1;
+                    seg_start = i;
+                    continue;
+                }
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    CitationAlignment { cleaned: out, realigned, stripped }
+}
+
+enum AlignVerdict {
+    Realign { value: String, holder_label: String },
+    Strip { value: String },
+}
+
+/// Judge one citing segment against its cited chunk(s). `None` = aligned (or
+/// nothing checkable). Values = ID-shaped words + hyphen-digit runs in the
+/// segment; each must complete-run match inside the cited chunks' text.
+fn alignment_verdict(
+    segment: &str,
+    cited: &[usize],
+    norm_chunks: &[String],
+    norm_labels: &[Vec<String>],
+    orig_labels: &[Vec<String>],
+) -> Option<AlignVerdict> {
+    let nseg = normalize(segment);
+    let mut values: Vec<String> =
+        significant_words(segment).into_iter().filter(|w| id_shaped(w)).collect();
+    values.extend(hyphen_digit_runs(&nseg));
+    values.dedup();
+    if values.is_empty() {
+        return None;
+    }
+    let in_cited =
+        |v: &str| cited.iter().any(|&k| hay_contains_bounded(&norm_chunks[k], v));
+    let misplaced: Vec<&String> = values.iter().filter(|v| !in_cited(v)).collect();
+    if misplaced.is_empty() {
+        return None; // every value is in the cited chunk — aligned
+    }
+    // Values absent from the ENTIRE evidence are the value-presence gate's
+    // business; only values that live in a DIFFERENT chunk indicate mispairing.
+    let holders: Vec<usize> = (0..norm_chunks.len())
+        .filter(|k| !cited.contains(k))
+        .filter(|&k| misplaced.iter().all(|v| hay_contains_bounded(&norm_chunks[k], v)))
+        .collect();
+    let anywhere = misplaced
+        .iter()
+        .any(|v| (0..norm_chunks.len()).any(|k| hay_contains_bounded(&norm_chunks[k], v)));
+    if !anywhere {
+        return None;
+    }
+    let value = misplaced[0].to_string();
+    // A unique holder that ALSO holds the segment's remaining values is the
+    // true source — re-point. Prefer its title label (first) over corpus id.
+    let full_holders: Vec<usize> = holders
+        .iter()
+        .copied()
+        .filter(|&k| values.iter().all(|v| hay_contains_bounded(&norm_chunks[k], v)))
+        .collect();
+    if full_holders.len() == 1 {
+        let k = full_holders[0];
+        // The holder's most specific label: the first label unique to few
+        // chunks (titles precede corpus ids in construction order).
+        let label = orig_labels[k]
+            .iter()
+            .zip(norm_labels[k].iter())
+            .find(|(_, nl)| {
+                norm_labels.iter().filter(|ls| ls.iter().any(|l| l == *nl)).count() <= 2
+            })
+            .map(|(o, _)| o.clone())
+            .or_else(|| orig_labels[k].first().cloned());
+        if let Some(label) = label {
+            return Some(AlignVerdict::Realign { value, holder_label: label });
+        }
+    }
+    Some(AlignVerdict::Strip { value })
+}
+
 /// The per-title verdict: keep as cited, rewrite to a real label, or strip.
 enum TitleVerdict {
     Keep,
@@ -734,6 +912,99 @@ mod tests {
         let ok = "rule [Source: Decision — 2026-06-10 — Porch Smoking].";
         let r = attribute_citations(ok, &body, &labels);
         assert!(!r.changed());
+    }
+
+    // ── citation-value alignment (gen75-2026-07-02 NARA misattribution) ──
+
+    /// The real gen75 shapes: an INDEX corpus where every chunk carries its own
+    /// `NARA fileUnit N`, plus per-chunk labels (title, then corpus id).
+    fn index_chunks() -> (Vec<String>, Vec<Vec<String>>) {
+        let chunks = vec![
+            "U.S. Air Force Project Blue Book UFO case file. Location: Project BLUE BOOK \
+             (USAF SAT, 3 Feb. 1966). Status: see case file. (169 scanned pages; NARA \
+             fileUnit 461458900)."
+                .to_string(),
+            "U.S. Air Force Project Blue Book UFO case file. Location: FALLS CHURCH, VA.. \
+             Reported: 1952-01-01. Status: see case file. (1 scanned pages; NARA fileUnit \
+             28940827)."
+                .to_string(),
+        ];
+        let labels = vec![
+            vec![
+                "Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()".to_string(),
+                "uap-blue-book-index".to_string(),
+            ],
+            vec!["FALLS CHURCH, VA. (1952-01-01)".to_string(), "uap-blue-book-index".to_string()],
+        ];
+        (chunks, labels)
+    }
+
+    #[test]
+    fn misattributed_value_repoints_to_the_holder_chunk() {
+        // The gen75 step-85 failure verbatim: the value belongs to the FALLS
+        // CHURCH row, the citation names the SAT row.
+        let (chunks, labels) = index_chunks();
+        let answer = "The NARA file number for the Project Blue Book UFO case is \
+                      **28940827**.\n\n[Source: Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()]";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert_eq!(r.realigned.len(), 1, "must re-point: {:?}", r);
+        assert!(r.cleaned.contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
+        assert!(!r.cleaned.contains("USAF SAT"));
+    }
+
+    #[test]
+    fn aligned_citation_is_untouched() {
+        let (chunks, labels) = index_chunks();
+        let answer = "The NARA file number is **461458900**.\n\n\
+                      [Source: Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()]";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert!(!r.changed());
+        assert_eq!(r.cleaned, answer);
+    }
+
+    #[test]
+    fn corpus_id_citation_is_vacuously_aligned() {
+        // A corpus-id label names EVERY chunk — any in-corpus value is aligned.
+        let (chunks, labels) = index_chunks();
+        let answer = "One case file is numbered 28940827 [Source: uap-blue-book-index].";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert!(!r.changed());
+    }
+
+    #[test]
+    fn ambiguous_holder_strips_the_citation() {
+        // The segment mixes values from BOTH chunks: no single holder — drop
+        // the citation rather than guess.
+        let (chunks, labels) = index_chunks();
+        let answer = "The files are numbered 28940827 and 461458900 \
+                      [Source: FALLS CHURCH, VA. (1952-01-01)].";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert_eq!(r.realigned.len(), 0);
+        assert_eq!(r.stripped.len(), 1);
+        assert!(!r.cleaned.contains("[Source:"));
+        assert!(r.cleaned.contains("28940827 and 461458900"));
+    }
+
+    #[test]
+    fn value_absent_from_all_evidence_is_not_alignments_business() {
+        // A fabricated value is the value-presence gate's job — alignment must
+        // not touch the citation.
+        let (chunks, labels) = index_chunks();
+        let answer = "The file is numbered 99999999 [Source: FALLS CHURCH, VA. (1952-01-01)].";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert!(!r.changed());
+    }
+
+    #[test]
+    fn segment_scope_resets_at_the_previous_citation() {
+        // The first sentence's value must not leak into the second citation's
+        // segment: each citation is judged on ITS OWN claim span.
+        let (chunks, labels) = index_chunks();
+        let answer = "File 461458900 is the SAT case \
+                      [Source: Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()]. File 28940827 \
+                      is the Falls Church case [Source: FALLS CHURCH, VA. (1952-01-01)].";
+        let r = align_citation_values(answer, &chunks, &labels);
+        assert!(!r.changed(), "both correctly paired: {:?}", r);
     }
 
     #[test]

@@ -35,7 +35,7 @@ struct Cli {
 // (create/join/status across nodes) lives in the `sovereign mesh` CLI;
 // this binary manages the standalone commonwealth daemon. Commands that
 // once printed "(In production, this would …)" were removed 2026-07-01
-// rather than left as a façade (see SYSTEM_OVERVIEW §10.2).
+// rather than left as a façade (see sovereign/HISTORY.md).
 #[derive(Subcommand)]
 enum Commands {
     /// Create a new mesh

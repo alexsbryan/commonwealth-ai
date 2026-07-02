@@ -456,6 +456,44 @@ async fn gate_held_answer(
             );
             *full_text = cites.cleaned;
         }
+        // Citation-value ALIGNMENT (gen75 NARA misattribution): a citation can
+        // name a REAL label while its value came from a DIFFERENT chunk. When
+        // the true holder is unambiguous, re-point the citation (provenance
+        // becomes verifiable); when it isn't, drop the citation rather than
+        // release one that disconfirms itself. Runs after the label-fidelity
+        // pass so titles are already exact.
+        if !evidence.chunk_labels.is_empty() {
+            tracing::debug!(
+                target: "synth.citation",
+                stage = "align_input",
+                n_chunks = evidence.chunks.len(),
+                n_label_sets = evidence.chunk_labels.len(),
+                labeled = evidence.chunk_labels.iter().filter(|l| !l.is_empty()).count(),
+                distinct_titles = evidence
+                    .chunk_labels
+                    .iter()
+                    .filter_map(|l| l.first())
+                    .collect::<std::collections::HashSet<_>>()
+                    .len(),
+                first_labels = ?evidence.chunk_labels.first(),
+                "alignment input"
+            );
+            let align = crate::runtime::grounding::align_citation_values(
+                full_text,
+                &evidence.chunks,
+                &evidence.chunk_labels,
+            );
+            if align.changed() {
+                tracing::info!(
+                    target: "synth.citation",
+                    stage = "align",
+                    realigned = ?align.realigned,
+                    stripped = ?align.stripped,
+                    "re-pointed/stripped citations whose value lives in a different chunk"
+                );
+                *full_text = align.cleaned;
+            }
+        }
         // Glassbox: the full gate lifecycle. draft_tail complete + final_tail cut
         // ⇒ gate truncated; both cut ⇒ draft truncated; gate_out vs final differ
         // ⇒ present_answer. Join to the chaos journal by final_len + final_tail.
@@ -998,6 +1036,11 @@ impl Runtime {
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if gate_on {
                 crate::runtime::grounding::gate_evidence_chunks(&chunks)
+            } else {
+                Vec::new()
+            },
+            chunk_labels: if gate_on {
+                crate::runtime::grounding::gate_evidence_chunk_labels(&chunks)
             } else {
                 Vec::new()
             },
@@ -1815,6 +1858,11 @@ impl Runtime {
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if deep_gate_on {
                 crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
+            } else {
+                Vec::new()
+            },
+            chunk_labels: if deep_gate_on {
+                crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks)
             } else {
                 Vec::new()
             },

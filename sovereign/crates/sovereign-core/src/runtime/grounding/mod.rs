@@ -58,6 +58,10 @@ pub use value_presence::{assess_asserted_value, AssertedValue};
 // by a consumer — same `#[allow]` idiom as `grounding_gate_flags`.
 #[allow(unused_imports)]
 pub use citation_attribution::{attribute_citations, CitationAttribution};
+// The pairing half of citation trust: a real label cited next to a value that
+// lives in a DIFFERENT chunk (gen75 NARA misattribution). Consumed in
+// `gate_held_answer` after the label-fidelity pass.
+pub(crate) use citation_attribution::align_citation_values;
 
 pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfile};
 // Registry export: consumed by the config-module coverage test today;
@@ -96,6 +100,10 @@ pub(crate) struct EvidenceContext {
     /// fabrication. Empty when labels are unavailable (tool-transcript / step-
     /// summary evidence) — the check is then body-only.
     pub source_labels: Vec<String>,
+    /// Per-chunk labels PARALLEL to `chunks` (`gate_evidence_chunk_labels`) —
+    /// the mapping the citation-value ALIGNMENT check needs (WHICH chunk does a
+    /// cited label name). Empty when unavailable — alignment is then skipped.
+    pub chunk_labels: Vec<Vec<String>>,
     /// Claim-conditioned widening WITHIN the sealed universe.
     /// `None` = the snapshot IS the universe (e.g. tool transcripts).
     pub searcher: Option<Arc<dyn SealedEvidenceSearch>>,
@@ -162,6 +170,39 @@ pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk])
         }
     }
     out
+}
+
+/// Per-chunk citation labels, PARALLEL to `gate_evidence_chunks` (same raptor
+/// exclusion, same order): `chunk_labels[i]` = the labels (title first, then
+/// corpus id) a `[Source: …]` naming chunk `i` would use. The flat
+/// `source_labels` cannot reconstruct this mapping, and the citation-value
+/// ALIGNMENT check (`align_citation_values`) needs it: WHICH chunk does the
+/// cited label name, so the citing segment's values can be verified against
+/// that chunk specifically.
+pub(crate) fn gate_evidence_chunk_labels(
+    chunks: &[corpus_engine::ScoredChunk],
+) -> Vec<Vec<String>> {
+    let exclude = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true);
+    chunks
+        .iter()
+        .filter(|c| !(exclude && c.metadata.get("source").map(String::as_str) == Some("raptor")))
+        .map(|c| {
+            let mut labels = Vec::with_capacity(2);
+            if let Some(t) = c.title.as_deref() {
+                let t = t.trim();
+                if !t.is_empty() {
+                    labels.push(t.to_string());
+                }
+            }
+            let cid = c.corpus_id.trim();
+            if !cid.is_empty() {
+                labels.push(cid.to_string());
+            }
+            labels
+        })
+        .collect()
 }
 
 /// One audit-failed claim plus the claim-conditioned passages its
@@ -1237,6 +1278,7 @@ mod tests {
         EvidenceContext {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
             source_labels: Vec::new(),
+            chunk_labels: Vec::new(),
             searcher: None,
             entity_anchored: false,
             top_similarity: None,

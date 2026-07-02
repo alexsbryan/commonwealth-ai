@@ -318,6 +318,7 @@ impl Runtime {
                 // Step summaries are synthesized prose, not retrieved chunks — no
                 // source labels to widen the citation check; it runs body-only.
                 source_labels: Vec::new(),
+                chunk_labels: Vec::new(),
                 searcher: None,
                 entity_anchored: false,
                 top_similarity: None,

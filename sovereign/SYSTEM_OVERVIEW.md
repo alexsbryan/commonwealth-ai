@@ -7,7 +7,10 @@ the rules of engagement.
 
 This file is a contract per `ARCH_PRINCIPLES.md §1.1`: every claim
 must be verifiable against the code on the commit it appears in. If
-you change a subsystem, update its entry in the same PR.
+you change a subsystem, update its entry in the same PR. It states
+what IS; how the system came to be this shape — the reversals,
+decompositions, and archaeology — lives in
+[`HISTORY.md`](./HISTORY.md), linked from the entries it explains.
 
 ---
 
@@ -706,12 +709,12 @@ surface calls — CLI/bench, desktop, and the served daemon. Exemplars are baked
 into the binary (`include_str!` of `sovereign/router/*.toml`), so the stack
 works regardless of CWD or `.app`-bundle layout; a `SOVEREIGN_*` env var or
 repo-relative file overrides the baked default. This is **parity by
-construction**: before 2026-06-09 the stack was wired only in the CLI/bench
-bootstrap, so the desktop app (bare router) and the daemon (current-info only)
-silently under-routed to the fast slot while the benches — which *did* wire it
-— kept improving ("desktop kind of sucks even as benches get better"). The fix
-collapsed the three call sites onto one path; `tests/router_bootstrap_parity.rs`
-asserts `all_wired()` so it can't silently re-diverge. Effort-tier escalation +
+construction**: every surface gets the same stack because there is only one
+wiring path, and `tests/router_bootstrap_parity.rs` asserts `all_wired()` so
+the surfaces can't silently re-diverge. (How the stack once diverged —
+desktop and daemon silently under-routing while the benches improved — and
+was collapsed: [HISTORY](./HISTORY.md#router-stack-parity-2026-06-09).)
+Effort-tier escalation +
 robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
 `SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
 
@@ -755,16 +758,15 @@ end the "live path mis-identified three times" illegibility. `role.rs` is
 `role=synthesizer tier=…`), and the chaos bench sources the Critic's gate model
 from `default_profile_for(Role::Critic)` (`--critic-model`, default primary).
 
-**The production grounding gate (`runtime/grounding/`, shipped 2026-06-11) —
-and the keystone verdict it reversed.** The 2026-06-09 chaos result ruled
-Critic-as-gate out of prod empirically (competence 0.46 → 0.08: it gated
-present-answerable questions — `present-wife` at violation_prob 0.806 — when
-retrieval missed the supporting passage). What changed the verdict was not the
-judge but the **evidence universe**: the v12–v15 gate verifies claims against
-the *sealed corpus* (per-claim hybrid search via `ClaimSearcher`), not just the
-prompt snapshot, and feeds failed claims' corrective passages into the rewrite
-(replace, don't delete). Under that stack the gate is net-positive and PASSES
-the full bank (secret-agent 0.67/0.82/0.18 production-config, 2026-06-11;
+**The production grounding gate (`runtime/grounding/`).** The gate's
+load-bearing design decision is the **evidence universe**: it verifies claims
+against the *sealed corpus* (per-claim hybrid search via `ClaimSearcher`), not
+just the prompt snapshot, and feeds failed claims' corrective passages into
+the rewrite (replace, don't delete). That choice is what makes a gate
+net-positive at all — an earlier Critic-as-gate was empirically ruled out,
+then the verdict reversed by widening what the judge could see
+([HISTORY](./HISTORY.md#the-grounding-gate-verdict-reversal-2026-06-09--06-11)).
+It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
 holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
 (short answers) / per-claim audit → rewrite → annotate (long-form) → grounded
 abstention**, fail-open on judge failure. Judge prompts are byte-pinned to the
@@ -805,35 +807,26 @@ truncate, then route-aware expansion post-pipeline) and `deep_pipeline()`
 (DeepQuery / SimpleQuery, 17 steps; tail = plain truncate + strategy-driven
 top-sources expansion; attached-doc turns drop the head and the two grounding
 steps). Golden tests pin the step lists and the head+core identity, so
-reordering is an explicit, reviewed act. The Phase 2 convergence (2026-06-09,
-CI-bench-A/B'd) moved the deep path's atlas/RAPTOR grounding to the KQ
-post-floor position (the old pre-floor position let the noise floor silently
-drop zero-overlap virtual grounding chunks) and extended `dedupe_merged` to
-the KQ path; per-intent differences (comparison-aware entity boost/reserve)
-ride `PipelineState`, not divergent code. The injection helpers
-themselves (`apply_atlas_grounding`, `apply_raptor_grounding`,
-`meta_atlas_boost`, `fan_out_decomposed_queries`, `expand_from_top_sources`, …)
-are unchanged `impl Runtime` methods in `retrieval.rs`; the step bodies are
-verbatim transplants of the orchestration that previously lived inline (and
-duplicated, with silent drift) in `prepare_knowledge_query_plan` and
-`prepare_knowledge_context` — both handlers now build a `PipelineState` and
-call `pipeline.run(...)`, then keep their post-pipeline concerns
-(evidence-shape routing + route-aware expansion + prompt/request assembly on
-the KQ side; provenance + prompt/history assembly + seal audit on the deep
-side). `retrieval_pipeline_flags()` is the SSOT registry of every retrieval
-env knob (name + default + purpose). The 2026-06-10 divergence-archaeology
-pass resolved the remaining per-intent divergences (see the module doc's
-resolution log): deep's expansion decision now goes through the same
-`decide_expansion_strategy` SSOT the KQ planner uses (chunk-set-identical by
-the helper's internal guard; emits the same `expansion_decision` audit), the
-personal-scope filter is one shared whole-pool step on both paths (mesh
-strays now drop on personal-scope turns), and the store-search leg reuses
-the pipeline's query embedding (closing a missed `embed_query` retrofit from
-2026-05-18). The last accretion artifact — KnowledgeQuery turns silently
-skipping the mesh and the doc store (Deep/Simple have searched both since
-2026-04-21) — was resolved the same day by unifying both pipelines onto
-`shared_head_steps()`: which knowledge sources exist is a property of the
-install, not of the intent label. Environments without a mesh or
+reordering is an explicit, reviewed act. Per-intent differences
+(comparison-aware entity boost/reserve) ride `PipelineState`, not divergent
+code, and both pipelines share `shared_head_steps()` — which knowledge
+sources exist is a property of the install, not of the intent label. The
+injection helpers themselves (`apply_atlas_grounding`,
+`apply_raptor_grounding`, `meta_atlas_boost`, `fan_out_decomposed_queries`,
+`expand_from_top_sources`, …) are unchanged `impl Runtime` methods in
+`retrieval.rs`; both handlers build a `PipelineState` and call
+`pipeline.run(...)`, then keep their post-pipeline concerns (evidence-shape
+routing + route-aware expansion + prompt/request assembly on the KQ side;
+provenance + prompt/history assembly + seal audit on the deep side).
+Cross-path SSOTs hold on both paths: deep's expansion decision goes through
+the same `decide_expansion_strategy` the KQ planner uses, the personal-scope
+filter is one shared whole-pool step, and the store-search leg reuses the
+pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
+registry of every retrieval env knob (name + default + purpose). (How the
+two pipelines converged from silently-drifting inline duplicates — the
+Phase 2 A/B, the divergence-archaeology pass, the accretion artifacts it
+retired:
+[HISTORY](./HISTORY.md#retrieval-pipeline-convergence-2026-06-09--10).) Environments without a mesh or
 store-ingested corpora see identical behavior; the known mesh round-trip of
 local corpora is collapsed by the shared `dedupe_merged` step. Open
 follow-up: KQ provenance doesn't yet surface mesh peer attribution
@@ -1937,21 +1930,22 @@ Work intentionally deferred. Listed so the next engineer inherits a
 todo list rather than a surprise (per
 [`ARCH_PRINCIPLES.md`](./ARCH_PRINCIPLES.md) §14.3). A big file or
 a documented gap without an entry is a bug; a big file or gap with
-an entry is sequenced work.
+an entry is sequenced work. The ledger holds only LIVE deferrals:
+when an entry completes, its chronicle moves to
+[`HISTORY.md`](./HISTORY.md) (the `setup_cmd`/`daemon_cmd`/`mesh_cmd`
+splits and the commonwealth-CLI placeholder resolution live there
+now) and the row is dropped — or trimmed to the still-open residual.
 
 ### 10.1 Sovereign deferrals
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** `sovereign-cli-dev` is feature-gated out of the default/public build — the dispatcher gates its verbs behind `--features dev-tools` — so this developer-toolchain file is not part of the end-user product. Subcommand-per-file remains the eventual split shape; still gated on post-found project-lifecycle settling. |
-| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | **The 9,669-line `embedded.rs` monolith was decomposed (PR5b + 2026-06-10):** one concern per submodule under `embedded/` (engine ~2,965 · model_slot ~3,475 · rpc_distribution ~1,168 · grammar ~1,146 · prompt_helpers ~786 · rpc_warm_cache ~668 · sampler ~567 · embed_slot ~548 · rerank_slot ~509), re-exported flat so `crate::embedded::<Item>` paths are unchanged. The residual `model_slot.rs` holds the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
+| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~1,950 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
-| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, was 2347) | **In progress (2026-06-09):** config → `state/config.rs`, built-in skills → `state/builtin_skills.rs`, and four `bootstrap_with_progress` sub-phases → `state/builders/{health,store,inference,knowledge_view}.rs`. Each builder takes a **narrowed signature** (its own handles, not `&AppState` — §5.2) + a **mock-backed unit test** (a stub `InferenceProvider` + a temp `CorpusEngine`, plus the inference reuse-seam): **bootstrap phases ARE CI-testable via dependency injection** — only the literal model load isn't. 100 desktop tests green. **Extraction of the contiguous phases is complete.** The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path (§10.2). Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
-| `DesktopError` (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | **First PR landed (2026-06-09):** a structured `{code, message, suggested_action}` error replaces the `.map_err(\|e\| e.to_string())` → bare-`String` pattern (~295 handler sites). Rust `DesktopError` + snake_case `ErrorCode` (wire shape **pinned by a serialization test**) with `From<String>`/`From<&str>`, so a handler flips to `Result<_, DesktopError>` while its neighbours still return `String` and `?` keeps compiling across the seam. Frontend mirror: `DesktopError` type + pure, tested `isDesktopError`/`normalizeError` + `invokeChecked<T>()` + `toastError`. **Consumers so far:** `search_web` (via the additive `AppState::runtime()` accessor) + budget.rs's 4 daemon-HTTP commands (get/set_ingest_budget, get/set_mesh_quiesced — status/decode errors mapped to `upstream`). **Burn-down enabler (2026-06-09):** `invokeChecked` now throws the normalised error as an `Error` *instance* (structured fields attached via `Object.assign`), so the ~150 existing `e instanceof Error ? e.message : String(e)` catch blocks render the message unchanged — **migrating a command needs no per-caller edits**, just the Rust return-type flip + pointing its api.ts wrapper at `invokeChecked`. **Remaining (incremental, §10.2, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its wrapper. The `store()`/`corpus_engine()` accessors + `require_runtime!` retirement land with the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
+| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, was 2347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
+| `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. The `store()`/`corpus_engine()` accessors + `require_runtime!` retirement land with the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
 | `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** in the feature-gated `sovereign-cli-dev` developer toolchain (see `project_cmd.rs` row), not part of the public build. ATOS runner loop — subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, run-record persistence cohere as one state machine today. One-file-per-stage split when boundaries stabilise. |
-| `daemon_cmd.rs` split | `sovereign-cli-daemon/src/daemon_cmd/` (was 3803 → `mod.rs` 2378 + 5 submodules) | **Partial split done (2026-06-09):** the separable concerns moved to submodules following the `setup_cmd` recipe — `lifecycle` (start/stop/restart/reload/status + pidfile + port-probe + shutdown), `workspace` (auto-detect), `provider` (`LlamaCppFactory` hot-reload), `worker` (ephemeral-pod entry), `tool_registry` (MCP registry + merged SCIP graph). Cross-called fns are `pub(super)`; `home_dir_buf` stays in `mod.rs` as a shared ancestor-private; tests moved with their code (51 daemon tests green). **Then (also 2026-06-09)** the two **self-contained early phases** of the `run_daemon` bootstrap were extracted to `daemon_cmd/build/`: `preflight` (VRAM-capacity check — no outputs) and `inference` (`load_provider` — returns the provider + concrete engine handle + resolved embed family). Pure relocations, compile-verified (this startup path has no GGUF-free CI coverage); 51 daemon tests green. **Then (2026-06-15) the full bootstrap-TOC decomposition landed**, refuting the "interleaved → can't pure-relocate without reordering" call recorded here earlier: the remaining ~22 phases moved into `daemon_cmd/bootstrap.rs` (20 phase fns + a `WatcherAtlasSetup` bundle struct), taking `run_daemon` 1919→611 lines and `mod.rs` 2233→921. The enabling technique is **strict in-place extraction** — every call site stays in its exact position, so side-effect order is preserved *by construction* and any capture/borrow slip surfaces as a compile error, not a boot-time surprise — plus already-built handles passed as params, and for the one multi-output block (workspace watchers + work-atlas) a **return-bundle struct destructured at the call site back into the original local names**, leaving all ~7 downstream consumers byte-unchanged. `resolve_self_node_id` dedups the two byte-identical node-id resolutions. Verified: full-workspace `cargo check` + `cargo test` green. **Genuinely left inline** (a readability call, *not* interleaving): the config/stores preamble (flags → wizard → config → VRAM → stores) — already-readable guard-clauses whose only extraction blocker is early-`return <exit-code>` paths; threading those through `Result`/`ControlFlow` would add boot-path indirection for little gain. |
-| `mesh_cmd.rs` / `corpus_cmd.rs` split | `sovereign-cli-llm/src/{mesh_cmd,corpus_cmd}.rs` (was 3868 → mesh_cmd 915 + corpus_cmd 2956) | **DONE (2026-06-09):** the `corpus` half (~2960 lines of `cmd_corpus_*` + helpers + `HELP_CORPUS`) split out of `mesh_cmd.rs` into `corpus_cmd.rs`, fixing the dispatch naming lie (the one file served both the `mesh` AND `corpus` verbs). `run_corpus` re-pointed at both callers (`main.rs` + `alignment_cmd.rs`); `mesh_data_dir` now imported from `sovereign_cli_shared::dirs` in both files; `hostname` stays private to `mesh_cmd` — corpus turned out to use neither, so there's **no cross-module coupling**. 498 llm tests green; `mesh_cmd.rs` is now ~915 (under the §3.1 ceiling). **Then (also 2026-06-09)** `corpus_cmd.rs` was further broken into `corpus_cmd/{mod,fmt,inventory,diagnostics,partitions}.rs`: `fmt` is the shared-formatter leaf, `inventory`/`partitions` use it, `diagnostics` borrows the partition-discovery helpers, `mod` is the dispatcher. **All five files are now under the §3.1 ceiling** (mod 116, fmt 52, inventory 624, diagnostics 1155, partitions 1050); cross-submodule fns are `pub(super)`. 498 llm tests green. (A stale duplicate `sovereign-cli-dev/src/mesh_cmd.rs` — never compiled — was deleted 2026-06-01.) |
-| `setup_cmd.rs` split (CLI) | `sovereign-cli-daemon/src/setup_cmd/` (was 1609 lines → `mod.rs` 977 incl. tests + 6 submodules) | **DONE (2026-06-09):** behaviour-preserving §3.2 folder split into `args`/`catalog`/`byom`/`download`/`finish`/`opencode`. **The reusable recipe for the `daemon_cmd`/`mesh_cmd` splits above:** shared `Opts`/`ModelPaths`/`Pick` types stay in `mod.rs` (submodules read them as ancestor-privates → zero field-visibility churn); `run_setup`/`run_repair` orchestrate via `use` imports so their bodies stay byte-identical; cross-called fns are `pub(super)`; `download_with_progress` stays `pub(crate)` re-exported for `daemon_cmd`; test modules stay in `mod.rs` with explicit submodule `use`s. 51 daemon tests green. Related Phase 2 CLI infra (same period): the shared `sovereign_cli_shared::args` parser + collapse of the three `util.rs` re-export shims. |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
@@ -1989,7 +1983,6 @@ an entry is sequenced work.
 | mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. `all_entries_for_gossip` is defined but unused; sender half + `POST /internal/app/state` receiver missing. Workaround: explicit peer push at queue-handoff time. |
 | Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; attach mode silently returns empty for `mesh_get_contributions` / `mesh_set_peer_preference` because the daemon doesn't expose these over HTTP yet. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
-| ~~`commonwealth` CLI is mostly placeholders~~ **RESOLVED 2026-07-01** | `commonwealth-daemon/src/main.rs` | Decided per-command: `status`, `models`, `corpus status` implemented against the HTTP surface (`GET /status`, `/v1/models`, `/internal/corpus/status`); the 14 unbacked commands (join/pause/resume/leave/logs, corpus list/install/remove/update/consolidate/collaborate-status, mesh set/members/peer) plus the always-erroring `mesh revoke` were deleted. The grow-only-membership revocation constraint is preserved as a comment at the deletion site and in ARCHITECTURE.md §11. |
 
 ### 10.3 Doc posture
 
@@ -2000,4 +1993,7 @@ as historical record. They preserve the original design rationale
 (and the constitutional Design Philosophy section in
 ARCHITECTURE.md still governs the project) but are not maintained
 against current code shape. This file (§5 in particular) is the
-source of truth for the running system.
+source of truth for the running system. Completed-work chronicles
+extracted from this file live in [`HISTORY.md`](./HISTORY.md) —
+the overview states what IS, HISTORY preserves how it came to be,
+and dated entries there are never rewritten to match later code.

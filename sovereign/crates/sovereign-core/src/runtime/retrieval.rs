@@ -3238,11 +3238,23 @@ impl Runtime {
                             break;
                         }
                         by_id.entry(row.id).or_insert_with(|| {
-                            // Same document as the hit → inherit its
-                            // corpus/title/source ids and any other fields;
-                            // overwrite only content, id, and the score.
+                            // Same CORPUS as the hit, but the row keeps its OWN
+                            // provenance. The old "same document → inherit the
+                            // anchor's title" assumption is false for
+                            // row-per-document corpora (an INDEX of case files
+                            // ingested as one source_doc): the positional
+                            // neighbour is a DIFFERENT document, and inheriting
+                            // the anchor's title mislabels its content in the
+                            // synthesis prompt's [Source: …] headers, the
+                            // gate's citation labels, and every citation the
+                            // model copies from them (gen75 NARA
+                            // misattribution: the Stevens Point row entered the
+                            // evidence titled as the SAT case, so the model
+                            // "misattributed" its file number faithfully).
                             let mut n = hit.clone();
                             n.content = row.content;
+                            n.title = row.title.or_else(|| hit.title.clone());
+                            n.url = row.url.or_else(|| hit.url.clone());
                             n.chunk_id = Some(row.id);
                             n.score = 1.0;
                             n
