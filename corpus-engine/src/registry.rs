@@ -227,7 +227,9 @@ impl RecipeRegistry {
                                 live_version = live.schema_version,
                                 snapshot_version = self.snapshot.schema_version,
                                 "Live registry schema is newer than bundled snapshot — \
-                                 falling back to bundled. Run `cargo xtask update-registry-snapshot`."
+                                 falling back to bundled. The snapshot is vendored from \
+                                 `sovereign-recipes/registry.toml` at build time: update \
+                                 that tree (git pull) and rebuild."
                             );
                     } else {
                         tracing::debug!(

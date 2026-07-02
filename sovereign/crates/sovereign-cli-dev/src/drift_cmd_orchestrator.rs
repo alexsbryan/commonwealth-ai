@@ -44,10 +44,12 @@ use tracing::{debug, info, warn};
 /// Path to the `sovereign` binary used for subprocess fan-out.
 ///
 /// Resolved at orchestrator entry from, in order: `--sovereign-bin` CLI
-/// arg, `SOVEREIGN_BIN` env var, `std::env::current_exe()` (this same
-/// binary). The current-exe default is the right answer in production:
-/// the drift orchestrator is itself a subcommand of sovereign-cli, so
-/// re-invoking the same binary is portable across machines.
+/// arg, `SOVEREIGN_BIN` env var, the DISPATCHER sitting next to
+/// `std::env::current_exe()`. The last step matters: this orchestrator
+/// runs inside the `sovereign-cli-dev` sibling, but its fan-out verbs
+/// span siblings (`enrich`/`corpus`/`recipe` live in sovereign-cli-llm)
+/// — re-invoking current_exe therefore dies with "unknown subcommand
+/// 'enrich'". Only the dispatcher (`sovereign-cli`) routes every verb.
 fn resolve_sovereign_bin(cli_override: Option<&str>) -> PathBuf {
     if let Some(p) = cli_override {
         return PathBuf::from(p);
@@ -57,9 +59,16 @@ fn resolve_sovereign_bin(cli_override: Option<&str>) -> PathBuf {
             return PathBuf::from(p);
         }
     }
-    std::env::current_exe()
-        .ok()
-        .unwrap_or_else(|| PathBuf::from("sovereign"))
+    if let Ok(exe) = std::env::current_exe() {
+        // Running as a sibling (sovereign-cli-dev): fan out through the
+        // dispatcher in the same directory so cross-sibling verbs route.
+        let dispatcher = exe.with_file_name("sovereign-cli");
+        if dispatcher.is_file() && dispatcher != exe {
+            return dispatcher;
+        }
+        return exe;
+    }
+    PathBuf::from("sovereign")
 }
 
 #[derive(Debug, Default)]

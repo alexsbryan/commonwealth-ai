@@ -166,11 +166,10 @@ Built-in recipes ship for Wikipedia, OpenAlex, Stack Exchange, Project Gutenberg
 
 `RecipeRegistry` (`src/registry.rs`) manages the catalog of available corpora:
 
-- **Bundled snapshot** — `registry_snapshot.toml` is compiled into the crate via `include_str!` so the engine works fully offline.
+- **Bundled snapshot** — `build.rs` vendors `sovereign-recipes/registry.toml` into `OUT_DIR` and `registry.rs` `include_str!`s it from there, so the engine works fully offline with no checked-in snapshot copy to drift. Updating the snapshot = updating the `sovereign-recipes/` tree and rebuilding.
 - **Live refresh** — `RecipeRegistry::refresh()` fetches the latest `registry.toml` from GitHub. Each entry has a `toml_url` pointing to the raw recipe file.
-- **Resolution order** — local override on disk → fetch from `toml_url` → error.
+- **Resolution order** — local override on disk → remote (`toml_url`) → bundled fallback (`recipe_builtin.rs::bundled_recipe_toml`).
 - **SHA-256 verification** — when the registry entry's `sha256` field is non-empty, the fetched recipe is verified.
-- **Update the snapshot** — `cargo xtask update-registry-snapshot` refreshes the bundled snapshot from the live registry.
 
 Users can drop custom recipe TOML files into the local recipes directory and they get picked up by `engine.discover_recipes()`.
 
