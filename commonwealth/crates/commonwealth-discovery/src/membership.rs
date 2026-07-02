@@ -27,9 +27,9 @@ pub fn hash_join_key(key: &str) -> [u8; 32] {
 
 /// Verify a join key against a stored hash.
 pub fn verify_join_key(key: &str, expected_hash: &[u8; 32]) -> bool {
-    let actual = hash_join_key(key);
-    // Constant-time comparison to prevent timing attacks.
-    actual == *expected_hash
+    // blake3::Hash equality is constant-time (prevents timing attacks);
+    // a raw `[u8; 32] ==` would short-circuit on the first mismatch.
+    blake3::hash(key.as_bytes()) == blake3::Hash::from(*expected_hash)
 }
 
 /// Parse and validate join key format (`cwth-XXXX-XXXX-XXXX` where X is hex).

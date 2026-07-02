@@ -38,7 +38,8 @@ pub async fn run(args: &[String]) -> i32 {
                  \n\
                  USAGE\n  \
                    sovereign drift <feature-id>                    Show drift for one feature\n  \
-                   sovereign drift accept <feature-id> --reason X  Accept current spec\n\
+                   sovereign drift accept <feature-id> --reason X  Accept current spec\n  \
+                   sovereign drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report\n\
                  \n\
                  The no-arg multi-feature summary lands in Phase 5."
             );
@@ -49,15 +50,20 @@ pub async fn run(args: &[String]) -> i32 {
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "svrn drift",
-    summary: "Inspect and accept spec drift between approved and on-disk spec.md.",
+    summary: "Spec drift (approved vs. on-disk spec.md) + narrative-vs-code drift detection.",
     sections: &[
         crate::util::help::HelpSection::Usage(
             "svrn drift <feature-id>                       Diff approved vs. on-disk\n\
-             sovereign drift accept <feature-id> --reason X     Accept current spec",
+             sovereign drift accept <feature-id> --reason X     Accept current spec\n\
+             sovereign drift detect --code <path> --narrative <doc>...   Narrative-vs-code drift report",
         ),
         crate::util::help::HelpSection::Notes(
             "Replaces `svrn atos spec diff` and `svrn atos spec accept`. Old \
-             names still work and forward here.",
+             names still work and forward here.\n\
+             `detect` runs the narrative-vs-code pipeline (code index → \
+             structural atlas → enrich → drift report); read the results \
+             cheaply afterwards via the `drift_posture` / `drift_findings` \
+             tools.",
         ),
     ],
 };

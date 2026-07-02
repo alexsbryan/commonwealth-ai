@@ -201,6 +201,10 @@ const HELP: Help = Help {
             ("doctor", "Diagnose setup and daemon health"),
             ("recipe", "Run a corpus ingestion recipe"),
             (
+                "workflow",
+                "Run a Step·Artifact·Runner workflow TOML (run / list / copy / new)",
+            ),
+            (
                 "pipeline",
                 "Generic ingestion driver — durable worklist + retry + pause-resume",
             ),

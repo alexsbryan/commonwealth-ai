@@ -1282,6 +1282,22 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "map <path>",
                 "One-shot: index → summarize → derive → narrate → reconcile a codebase (+ optional --spec)",
             ),
+            (
+                "facts <path>",
+                "Extract the deterministic code-fact index → ~/.sovereign/indexes/<corpus>/facts.json",
+            ),
+            (
+                "check-spec",
+                "Diff spec claims against the code-fact index — corroborated / gap / todo per claim",
+            ),
+            (
+                "brief",
+                "Assemble a working-set brief for the current session (offline fallback for /v1/brief)",
+            ),
+            (
+                "reflect",
+                "Record a session reflection note (branch + diff + recent commits) to notes.db",
+            ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
