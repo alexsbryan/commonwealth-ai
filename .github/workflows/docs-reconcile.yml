@@ -29,6 +29,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Shared with ci.yml's arch-gate — both build only the tiny xtask
+          # tree, so one cache serves both workflows.
+          shared-key: xtask
       # No protoc/cmake needed — xtask only reads files. mold + clang ARE
       # needed: compiling xtask itself links through the pinned ld.mold
       # (workspace .cargo/config.toml).

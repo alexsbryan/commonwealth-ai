@@ -31,7 +31,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # Full Linux native stack (mirrors ci.yml's check job — keep in sync):
+        with:
+          # Read the CI test job's dependency cache; nightly never writes it.
+          shared-key: workspace
+          save-if: false
+      # Full Linux native stack (mirrors ci.yml's check+test job — keep in sync):
       # mold/clang are the pinned linker, the LunarG Vulkan SDK is a build
       # dep of ggml (Linux hardcodes llama-cpp-4/vulkan), and `--bins`
       # includes the Tauri desktop binary → webkit2gtk.

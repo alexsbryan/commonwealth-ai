@@ -28,10 +28,14 @@ commonwealth-ai/
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-├── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
-└── …                          # Supporting: vendor/ (pinned llama-cpp-4), scripts/ (CI bench + corpus setup),
-                               # docs/, landing/, gym/, baselines/; corpus-engine/xtask = the docs/arch CI gates
+└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
+
+Supporting directories outside the project tree: `vendor/` (pinned
+`llama-cpp-4`), `scripts/` (CI bench + corpus setup), `docs/`,
+`landing/`, `gym/`, `baselines/`, and `corpus-engine/xtask` (the
+docs-gate / arch-gate CI binaries). `models/` holds downloaded GGUF
+weights (created by `sovereign setup`, gitignored).
 
 | Project              | Role                                          | Depends on                                            |
 |----------------------|-----------------------------------------------|-------------------------------------------------------|
