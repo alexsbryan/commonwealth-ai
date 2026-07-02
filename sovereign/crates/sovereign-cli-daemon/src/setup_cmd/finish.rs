@@ -24,7 +24,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     let cfg = SetupConfig {
         models: ModelsSection {
             primary: paths.primary,
-            // `sovereign setup` always prompts for an explicit fast
+            // `svrn setup` always prompts for an explicit fast
             // GGUF (BYOM is committed; no blank-to-use-default).
             // Optional-fast is for non-interactive callers (pod
             // entrypoint, tests).
@@ -57,12 +57,12 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     };
     println!("    \u{2713} Wrote {}", config_path.display());
 
-    // Phase 4: when invoked from `sovereign daemon` first-boot or
-    // `sovereign daemon --setup-only`, we stop here. The daemon's
+    // Phase 4: when invoked from `svrn daemon` first-boot or
+    // `svrn daemon --setup-only`, we stop here. The daemon's
     // own startup loads models from this freshly-written config; a
     // service-manager registration would just compete with us for
-    // `:9741`. The legacy `sovereign setup` runs in this mode too —
-    // service install moved to the explicit `sovereign install-service`.
+    // `:9741`. The legacy `svrn setup` runs in this mode too —
+    // service install moved to the explicit `svrn install-service`.
     if opts.wizard_only {
         println!();
         println!("  \u{2713} Wizard complete.");
@@ -78,7 +78,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         Ok(p) => p,
         Err(e) => {
             eprintln!("  warning: cannot resolve current binary path: {e}");
-            eprintln!("  skipping service registration; run `sovereign daemon run` manually.");
+            eprintln!("  skipping service registration; run `svrn daemon run` manually.");
             return 0;
         }
     };
@@ -86,7 +86,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         Ok(()) => println!("    \u{2713} Service registered"),
         Err(e) => {
             eprintln!("  warning: service registration failed: {e}");
-            eprintln!("  run `sovereign daemon run` manually to start the daemon.");
+            eprintln!("  run `svrn daemon run` manually to start the daemon.");
             return 0;
         }
     }
@@ -115,7 +115,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     if exit_code != 0 {
         println!();
         println!("  \u{26a0} Setup completed but some checks failed.");
-        println!("    Run `sovereign doctor --fix` to attempt repairs.");
+        println!("    Run `svrn doctor --fix` to attempt repairs.");
     }
 
     // ── Banner ───────────────────────────────────────────────────
@@ -131,7 +131,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // Earlier the script just printed a snippet pointing at
     // `.opencode/config.json` (project-local). Real opencode reads
     // `~/.config/opencode/opencode.json`; users had to figure that
-    // out themselves. Auto-write so a fresh `sovereign setup` is
+    // out themselves. Auto-write so a fresh `svrn setup` is
     // immediately usable from opencode without copy-paste plumbing.
     match install_opencode_config(cfg.daemon.client_port) {
         Ok(OpencodeInstall::Created(path)) => {

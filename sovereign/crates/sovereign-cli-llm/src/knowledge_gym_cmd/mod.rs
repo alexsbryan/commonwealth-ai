@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign knowledge-gym …` — correctness harness for the
+//! `svrn knowledge-gym …` — correctness harness for the
 //! unified `knowledge_lookup` tool (Tool-Mastery framework Phase 5).
 //!
 //! Each fixture under `sovereign/bench/knowledge-gym/fixtures/`
@@ -45,7 +45,7 @@ pub async fn run_knowledge_gym(args: &[String]) -> i32 {
 
 fn print_help() {
     println!(
-        "sovereign knowledge-gym — correctness harness for knowledge_lookup\n\n\
+        "svrn knowledge-gym — correctness harness for knowledge_lookup\n\n\
          USAGE\n  sovereign knowledge-gym run [--fixture SLUG] [--replays N] \
          [--base-url URL] [--fixtures-dir PATH] [--json]\n\n\
          Each fixture dir holds input.json + mock_evidence.json + pass.toml.\n\

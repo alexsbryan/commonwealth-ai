@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign doctor` — diagnose and optionally repair the full stack.
+//! `svrn doctor` — diagnose and optionally repair the full stack.
 //!
 //! Checks are organized into three layers:
 //!   Sovereign  — server, indexes, config
@@ -99,7 +99,7 @@ async fn check_server_running() -> CheckResult {
             name: "server_running",
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
-            message: "sovereign server is reachable at :9741".into(),
+            message: "svrn server is reachable at :9741".into(),
             repair: Repair::None,
         }
     } else {
@@ -107,8 +107,8 @@ async fn check_server_running() -> CheckResult {
             name: "server_running",
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
-            message: "sovereign server not reachable at :9741".into(),
-            repair: Repair::Executable("sovereign project serve".into()),
+            message: "svrn server not reachable at :9741".into(),
+            repair: Repair::Executable("svrn project serve".into()),
         }
     }
 }
@@ -133,7 +133,7 @@ async fn check_server_tools() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "could not reach /mcp endpoint".into(),
-            repair: Repair::Executable("sovereign project serve".into()),
+            repair: Repair::Executable("svrn project serve".into()),
         },
         Some(r) => match r.json::<serde_json::Value>().await {
             Ok(json) => {
@@ -144,7 +144,7 @@ async fn check_server_tools() -> CheckResult {
                 // Canonical daemon registry is 12 tools (symbol/code
                 // search, recent_changes, callers, callees, blast_radius,
                 // 3× notes, session_reflection, project_context,
-                // check_doc_paths). `sovereign project serve` adds the
+                // check_doc_paths). `svrn project serve` adds the
                 // watcher-backed set (test_status, lint_status,
                 // run_tests, get_run_output, get_lint_output) for 17.
                 if count >= 12 {
@@ -237,12 +237,12 @@ async fn check_scip_indexed() -> CheckResult {
                  Call graph tools (callers/callees/blast) will return empty. \
                  Likely cause: the language exporter (rust-analyzer / scip-typescript / \
                  scip-python / scip-go) failed during the last rebuild — see daemon.err \
-                 for the stderr tail, then check `sovereign doctor` again for the \
+                 for the stderr tail, then check `svrn doctor` again for the \
                  scip_exporters finding.",
                 empty.len(),
             ),
             repair: Repair::Executable(format!(
-                "sovereign project refresh --name {example} --local"
+                "svrn project refresh --name {example} --local"
             )),
         };
     }
@@ -264,7 +264,7 @@ async fn check_scip_indexed() -> CheckResult {
         layer: Layer::Sovereign,
         status: CheckStatus::Failed,
         message: "no SCIP graph DB found — call graph tools unavailable".into(),
-        repair: Repair::Executable("sovereign project init".into()),
+        repair: Repair::Executable("svrn project init".into()),
     }
 }
 
@@ -288,7 +288,7 @@ async fn check_code_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "no code indexes found — semantic code search unavailable".into(),
-            repair: Repair::Executable("sovereign code index .".into()),
+            repair: Repair::Executable("svrn code index .".into()),
         };
     };
     let mut healthy = Vec::new();
@@ -329,7 +329,7 @@ async fn check_code_indexed() -> CheckResult {
                 broken.len()
             ),
             repair: Repair::Executable(format!(
-                "sovereign code index <path> --corpus-id {example}"
+                "svrn code index <path> --corpus-id {example}"
             )),
         };
     }
@@ -339,7 +339,7 @@ async fn check_code_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "no code indexes found — semantic code search unavailable".into(),
-            repair: Repair::Executable("sovereign code index .".into()),
+            repair: Repair::Executable("svrn code index .".into()),
         };
     }
     CheckResult {
@@ -371,7 +371,7 @@ fn check_notes_db() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "notes.db not found — note tools unavailable".into(),
-            repair: Repair::Executable("sovereign init".into()),
+            repair: Repair::Executable("svrn init".into()),
         }
     }
 }
@@ -396,7 +396,7 @@ fn check_project_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "project docs index not found — project_context search unavailable".into(),
-            repair: Repair::Executable("sovereign index project".into()),
+            repair: Repair::Executable("svrn index project".into()),
         }
     }
 }
@@ -472,7 +472,7 @@ async fn check_watcher_live() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "daemon /mcp unreachable — cannot probe watcher liveness".into(),
-            repair: Repair::Executable("sovereign daemon restart".into()),
+            repair: Repair::Executable("svrn daemon restart".into()),
         };
     };
     let Ok(json) = r.json::<serde_json::Value>().await else {
@@ -522,7 +522,7 @@ async fn check_watcher_live() -> CheckResult {
                         "lint/test watcher NOT live (reason: {reason}) — stored results are orphaned; \
                          the supervisor should restart it shortly"
                     ),
-                    repair: Repair::Executable("sovereign daemon restart".into()),
+                    repair: Repair::Executable("svrn daemon restart".into()),
                 }
             }
         }
@@ -533,7 +533,7 @@ async fn check_watcher_live() -> CheckResult {
             message:
                 "lint_status returned no `watcher` health object — daemon/tool version mismatch?"
                     .into(),
-            repair: Repair::Executable("sovereign daemon restart".into()),
+            repair: Repair::Executable("svrn daemon restart".into()),
         },
     }
 }
@@ -655,7 +655,7 @@ async fn check_daemon_memory(client_url: &str) -> CheckResult {
             ),
             repair: Repair::Manual(
                 "check loaded models vs the canonical config (primary 35B-IQ4 + fast 4B-Q8 \
-                 + embed 0.6B on 64GB); `sovereign daemon restart` reclaims leaked growth"
+                 + embed 0.6B on 64GB); `svrn daemon restart` reclaims leaked growth"
                     .into(),
             ),
         }
@@ -692,7 +692,7 @@ fn check_daemon_supervised() -> CheckResult {
             message: "daemon is NOT service-managed — it will not auto-restart \
                       after a crash or jetsam/OOM kill"
                 .into(),
-            repair: Repair::Executable("sovereign install-service".into()),
+            repair: Repair::Executable("svrn install-service".into()),
         }
     }
 }
@@ -744,7 +744,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Passed,
                     message: format!(
-                        "solo mesh \"{name}\" — run `sovereign mesh create` to invite peers"
+                        "solo mesh \"{name}\" — run `svrn mesh create` to invite peers"
                     ),
                     repair: Repair::None,
                 }
@@ -755,7 +755,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
                     status: CheckStatus::Warning,
                     message: "daemon running but no mesh formed yet".into(),
                     repair: Repair::Manual(
-                        "Run `sovereign mesh create` or accept a join link".into(),
+                        "Run `svrn mesh create` or accept a join link".into(),
                     ),
                 }
             }
@@ -765,7 +765,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Failed,
             message: format!("could not reach {url}"),
-            repair: Repair::Executable("sovereign daemon restart".into()),
+            repair: Repair::Executable("svrn daemon restart".into()),
         },
     }
 }
@@ -858,9 +858,9 @@ async fn check_inference_capable(client_url: &str) -> CheckResult {
                     name: "inference_capable",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Warning,
-                    message: "no models registered — /v1/models is empty. restart the daemon after `sovereign setup` completes.".into(),
+                    message: "no models registered — /v1/models is empty. restart the daemon after `svrn setup` completes.".into(),
                     repair: Repair::Executable(
-                        "sovereign daemon restart".into(),
+                        "svrn daemon restart".into(),
                     ),
                 }
             }
@@ -1017,7 +1017,7 @@ async fn check_mcp_live() -> CheckResult {
             layer: Layer::Omo,
             status: CheckStatus::Failed,
             message: "MCP /mcp unreachable — agents cannot use sovereign tools".into(),
-            repair: Repair::Executable("sovereign daemon restart".into()),
+            repair: Repair::Executable("svrn daemon restart".into()),
         },
     }
 }
@@ -1054,7 +1054,7 @@ async fn check_project_watchers() -> CheckResult {
                 layer: Layer::Sovereign,
                 status: CheckStatus::Warning,
                 message: "daemon unreachable — /v1/projects did not answer".into(),
-                repair: Repair::Executable("sovereign daemon restart".into()),
+                repair: Repair::Executable("svrn daemon restart".into()),
             };
         }
     };
@@ -1067,7 +1067,7 @@ async fn check_project_watchers() -> CheckResult {
             message:
                 "/v1/projects returned 404 — project_http_router not mounted (restart the daemon)"
                     .into(),
-            repair: Repair::Executable("sovereign daemon restart".into()),
+            repair: Repair::Executable("svrn daemon restart".into()),
         };
     }
 
@@ -1134,7 +1134,7 @@ async fn check_project_watchers() -> CheckResult {
                 disabled.len(),
                 disabled.join(", ")
             ),
-            repair: Repair::Executable("sovereign project watch restart <corpus_id>".into()),
+            repair: Repair::Executable("svrn project watch restart <corpus_id>".into()),
         };
     }
     if !crashed.is_empty() {
@@ -1226,7 +1226,7 @@ fn check_scip_integrity() -> CheckResult {
             repair: Repair::MultiExecutable(
                 corrupt
                     .iter()
-                    .map(|id| format!("sovereign project refresh --name {id} --local"))
+                    .map(|id| format!("svrn project refresh --name {id} --local"))
                     .collect(),
             ),
         };
@@ -1244,7 +1244,7 @@ fn check_scip_integrity() -> CheckResult {
             repair: Repair::MultiExecutable(
                 stale_schema
                     .iter()
-                    .map(|id| format!("sovereign project refresh --name {id} --local"))
+                    .map(|id| format!("svrn project refresh --name {id} --local"))
                     .collect(),
             ),
         };
@@ -1450,7 +1450,7 @@ async fn check_watcher_freshness() -> CheckResult {
                 registry
                     .entries()
                     .iter()
-                    .map(|e| format!("sovereign project refresh --name {} --local", e.corpus_id))
+                    .map(|e| format!("svrn project refresh --name {} --local", e.corpus_id))
                     .collect(),
             ),
         };
@@ -1463,11 +1463,11 @@ async fn check_watcher_freshness() -> CheckResult {
             message: format!(
                 "{} project(s) have uncommitted source edits the watcher hasn't picked up: {}. \
                  fs_change events may not be reaching the reindexer — check daemon.err for \
-                 `notify` errors or nudge with `sovereign project refresh`.",
+                 `notify` errors or nudge with `svrn project refresh`.",
                 wedged.len(),
                 wedged.join("; ")
             ),
-            repair: Repair::Executable("sovereign project refresh".into()),
+            repair: Repair::Executable("svrn project refresh".into()),
         };
     }
     if !slow_rebuild.is_empty() {
@@ -1758,7 +1758,7 @@ fn check_legacy_hooks() -> CheckResult {
             stale.join(", ")
         ),
         repair: Repair::Executable(
-            "sovereign project install-hooks  (in the affected repo — removes the legacy hook)"
+            "svrn project install-hooks  (in the affected repo — removes the legacy hook)"
                 .into(),
         ),
     }
@@ -1903,7 +1903,7 @@ fn print_human(results: &[CheckResult]) {
     if total_issues == 0 {
         println!("  All checks passed.");
     } else {
-        println!("  {total_issues} issue(s) found. Run `sovereign doctor --fix` to auto-repair where possible.");
+        println!("  {total_issues} issue(s) found. Run `svrn doctor --fix` to auto-repair where possible.");
     }
 }
 
@@ -2137,10 +2137,10 @@ async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign doctor",
+    command: "svrn doctor",
     summary: "Diagnose setup and daemon health across the Sovereign / Commonwealth / OmO layers.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign doctor [--fix] [--watch] [--json]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn doctor [--fix] [--watch] [--json]"),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--fix", "Attempt automatic repair for failing checks"),
             (

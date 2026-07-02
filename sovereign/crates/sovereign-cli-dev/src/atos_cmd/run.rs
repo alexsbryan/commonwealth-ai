@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos run` — the ralph-wiggum-style loop driver.
+//! `svrn atos run` — the ralph-wiggum-style loop driver.
 //!
 //! Reads `DESIGN.md` + `CHARTER.md` + `IMPLEMENTATION_PLAN.md` from the
 //! workdir, spawns `opencode` (or `claude`), and keeps re-spawning
@@ -652,7 +652,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
     let plan_path = run_dir.join("plan.json");
     let workdir_plan_md = cfg.workdir.join("PLAN.md");
     // Workdir-resident "live" plan — the source of truth that
-    // survives across `sovereign atos run` invocations. Each PLAN /
+    // survives across `svrn atos run` invocations. Each PLAN /
     // REASSESS save also writes here; runner startup loads from
     // here when --fresh-plan is not set, skipping the PLAN phase
     // entirely on resumption.
@@ -665,7 +665,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
 
     // Plan resumption: prefer the workdir-resident plan when one
     // exists and the operator hasn't asked for a fresh start. This
-    // makes `sovereign atos run` idempotent across invocations —
+    // makes `svrn atos run` idempotent across invocations —
     // partial progress (steps already done) is preserved, and the
     // next run picks up at the next pending step instead of
     // re-planning from scratch.
@@ -1591,7 +1591,7 @@ fn run_driver(cfg: &RunCfg, prompt: &str, feature_id: &str, run_id: &str) -> i32
 /// audit anchors (features.db, notes.db) live next to the project the
 /// runner is driving — not next to wherever the operator typed the
 /// command. The directory is created if missing so a fresh project can
-/// be driven immediately after `sovereign init` (or even before — the
+/// be driven immediately after `svrn init` (or even before — the
 /// runner is permissive about provisioning when the charter shape
 /// doesn't conform).
 fn open_orchestrator_for(workdir: &Path) -> Result<Arc<LocalAtosOrchestrator>, String> {
@@ -3631,7 +3631,7 @@ fn strip_fences(raw: &str) -> String {
 
 fn print_help() {
     eprintln!(
-        "sovereign atos run — ralph-wiggum-style loop driver\n\
+        "svrn atos run — ralph-wiggum-style loop driver\n\
          \n\
          Spawns a coding agent (opencode by default), waits for it to\n\
          write DONE.md, has a reviewer judge that DONE against the\n\

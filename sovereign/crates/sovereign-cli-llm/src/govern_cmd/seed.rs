@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern seed` — establish the governed rule baseline.
+//! `svrn govern seed` — establish the governed rule baseline.
 //!
 //! A rule is "governed" iff some oplog op touched its id — the oplog, not
 //! a claim-field heuristic, defines the rule set. Nothing auto-emits
@@ -26,7 +26,7 @@ pub fn cmd_seed(args: &[String]) -> i32 {
         Ok(a) => a,
         Err(e) => {
             eprintln!("error: reading atoms.json for `{corpus_id}`: {e}");
-            eprintln!("  run `sovereign enrich build {corpus_id} --full` first.");
+            eprintln!("  run `svrn enrich build {corpus_id} --full` first.");
             return 1;
         }
     };

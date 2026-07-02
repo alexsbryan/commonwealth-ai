@@ -293,7 +293,7 @@
   {/if}
 
   {#if details}
-    <!-- Top-line summary: how Sovereign currently sees the folder. -->
+    <!-- Top-line summary: how svrnmesh currently sees the folder. -->
     <div class="summary">
       <div class="metric">
         <span class="metric-label">Indexed</span>
@@ -376,7 +376,7 @@
       {/if}
     </section>
 
-    <!-- Indexed formats: what Sovereign DOES have. -->
+    <!-- Indexed formats: what svrnmesh DOES have. -->
     {#if formatsSorted.length > 0}
       <section class="section">
         <h3 class="section-title">Indexed formats</h3>
@@ -398,7 +398,7 @@
       <section class="section negative">
         <h3 class="section-title">What I don't have</h3>
         <p class="section-lede">
-          Files Sovereign noticed in this folder but couldn't index.
+          Files svrnmesh noticed in this folder but couldn't index.
           The system is explicit about gaps so you can decide what to
           do — convert, OCR, or accept the omission.
         </p>
@@ -458,7 +458,7 @@
 
       {#if details.enrichment.kind === "off"}
         <p class="section-lede">
-          Turn this on and Sovereign reads across the folder to build
+          Turn this on and svrnmesh reads across the folder to build
           a richer map of what's in it — section-level summaries, the
           words and phrases that recur and matter, and the people,
           places, and ideas that connect files to each other. Answers

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench gate <lane> --report <artifact>` — the baseline-relative
+//! `svrn bench gate <lane> --report <artifact>` — the baseline-relative
 //! CI gate for the *absolute-verdict* lanes.
 //!
 //! Three lanes in the CI suite (chaos-monkey, mechanism-fidelity, the
@@ -34,11 +34,11 @@ use super::lane_baseline::{diff, render_and_exit_code, LaneBaseline, LaneMetric}
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench gate",
+    command: "svrn bench gate",
     summary: "Baseline-relative CI gate for the absolute-verdict lanes (chaos-monkey, mechanism-fidelity, multiturn).",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench gate <lane> --report <artifact> [--bench-root <dir>] [--id <baseline-id>] [--update-baseline] [--regression-threshold <f>]",
+            "svrn bench gate <lane> --report <artifact> [--bench-root <dir>] [--id <baseline-id>] [--update-baseline] [--regression-threshold <f>]",
         ),
         HelpSection::Subcommands(&[
             ("chaos-monkey", "Gate the chaos JSONL on {competence, honesty, hallucination_rate} (+ distractor-evasion / citation-fidelity when the bank has v2 questions)."),

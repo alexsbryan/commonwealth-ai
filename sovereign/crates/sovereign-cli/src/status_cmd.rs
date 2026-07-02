@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign status` — unified health and project state report.
+//! `svrn status` — unified health and project state report.
 //!
-//! Renamed from `sovereign project status` per the CLI refactor plan.
+//! Renamed from `svrn project status` per the CLI refactor plan.
 //!
 //! Phase 1 (this file): delegates to [`crate::project_cmd::cmd_status`].
 //! Future phases merge in the additional sections the spec calls for

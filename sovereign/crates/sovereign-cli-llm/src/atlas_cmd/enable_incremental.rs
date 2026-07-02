@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas enable-incremental` — flip the per-corpus
+//! `svrn atlas enable-incremental` — flip the per-corpus
 //! `atlas_incremental_enabled` flag in `_corpus_meta.json`.
 //!
 //! Lights up the Move 6 P5.b/c post-update hook in
 //! `CorpusUpdater::apply_update` for the named corpus (or every
 //! installed atlas with `--all`). Pre-flight check: refuses to
 //! enable a corpus whose `atoms.json` still carries sequential-id
-//! atoms (`sovereign atlas migrate-ids` must run first) since the
+//! atoms (`svrn atlas migrate-ids` must run first) since the
 //! hook's `apply_atom_delta` would leave legacy atoms orphaned.
 
 use std::path::PathBuf;
@@ -34,7 +34,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--force" => force = true,
             "--help" | "-h" => {
                 println!(
-                    "sovereign atlas enable-incremental [--corpus <id>] [--all] [--disable] [--force]\n\
+                    "svrn atlas enable-incremental [--corpus <id>] [--all] [--disable] [--force]\n\
                     \n\
                     Move 6 P5.b/c: opt a corpus into the post-update incremental\n\
                     atlas hook. After this flag is set, CorpusUpdater::apply_update\n\
@@ -47,7 +47,7 @@ pub async fn run(args: &[String]) -> i32 {
                     --force         Skip the content-hash pre-flight (dangerous).\n\
                     \n\
                     Pre-flight: refuses corpora whose atoms.json still has\n\
-                    sequential-id atoms (run `sovereign atlas migrate-ids` first).\n\
+                    sequential-id atoms (run `svrn atlas migrate-ids` first).\n\
                     Override with --force only if you know what you're doing."
                 );
                 return 0;

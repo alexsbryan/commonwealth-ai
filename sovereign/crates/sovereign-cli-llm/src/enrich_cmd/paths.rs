@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Filesystem conventions for the `sovereign enrich` admin harness.
+//! Filesystem conventions for the `svrn enrich` admin harness.
 //!
 //! Layout under `~/.sovereign/enrichment/<corpus-id>/`:
 //!

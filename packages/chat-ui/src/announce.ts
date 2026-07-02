@@ -27,6 +27,6 @@ export function completionAnnouncement(
   opts: CompletionAnnouncementOpts = {},
 ): string {
   return opts.errored
-    ? "Sovereign hit an error responding."
-    : "Sovereign finished responding.";
+    ? "svrnmesh hit an error responding."
+    : "svrnmesh finished responding.";
 }

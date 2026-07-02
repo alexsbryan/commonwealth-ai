@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus snapshot` — publish and inspect prebuilt-index
+//! `svrn corpus snapshot` — publish and inspect prebuilt-index
 //! tarballs (.tar.zst) for cold-start onboarding.
 //!
 //! See `corpus-engine/src/snapshot.rs` for the manifest format and
@@ -26,10 +26,10 @@ fn home_dir() -> PathBuf {
 const PRODUCER_VERSION: &str = concat!("sovereign-cli/", env!("CARGO_PKG_VERSION"));
 
 const HELP_SNAPSHOT: Help = Help {
-    command: "sovereign corpus snapshot",
+    command: "svrn corpus snapshot",
     summary: "Publish, inspect, and restore prebuilt-index tarballs for cold-start onboarding.",
     sections: &[
-        HelpSection::Usage("sovereign corpus snapshot <subcommand> [args]"),
+        HelpSection::Usage("svrn corpus snapshot <subcommand> [args]"),
         HelpSection::Subcommands(&[
             ("publish <id>", "Build a .tar.zst snapshot of an installed corpus and (optionally) upload to HuggingFace"),
             ("inspect <archive>", "Print the manifest from an existing snapshot archive"),
@@ -43,11 +43,11 @@ const HELP_SNAPSHOT: Help = Help {
 };
 
 const HELP_SNAPSHOT_RESTORE: Help = Help {
-    command: "sovereign corpus snapshot restore",
+    command: "svrn corpus snapshot restore",
     summary: "Download a snapshot from HuggingFace (or use a local file) and extract it under `~/.sovereign/`.",
     sections: &[
         HelpSection::Usage(
-            "sovereign corpus snapshot restore <hf_repo>/<filename> [flags]\n\
+            "svrn corpus snapshot restore <hf_repo>/<filename> [flags]\n\
              sovereign corpus snapshot restore --archive <path> [flags]",
         ),
         HelpSection::Flags(&[
@@ -59,7 +59,7 @@ const HELP_SNAPSHOT_RESTORE: Help = Help {
             ("--embedding-dim <n>", "Compatibility check against this vector dimensionality (default: 1024)"),
         ]),
         HelpSection::Notes(
-            "After a successful restore, validate with `sovereign corpus diag <corpus_id>`.\n\
+            "After a successful restore, validate with `svrn corpus diag <corpus_id>`.\n\
              For empirical testing of the cold-start path, use `--as <something>-prebuilt-test`\n\
              so the existing install isn't touched.",
         ),
@@ -67,10 +67,10 @@ const HELP_SNAPSHOT_RESTORE: Help = Help {
 };
 
 const HELP_SNAPSHOT_PUBLISH: Help = Help {
-    command: "sovereign corpus snapshot publish",
+    command: "svrn corpus snapshot publish",
     summary: "Package an installed corpus into a .tar.zst snapshot for distribution. Build is resumable; upload retries with backoff.",
     sections: &[
-        HelpSection::Usage("sovereign corpus snapshot publish <corpus_id> [flags]"),
+        HelpSection::Usage("svrn corpus snapshot publish <corpus_id> [flags]"),
         HelpSection::Flags(&[
             ("--no-atlas", "Skip the enrichment/<id>/ subtree (smaller archive, restorers must re-enrich)"),
             ("--output <path>", "Where to write the archive (default ~/.sovereign/snapshots/<filename>)"),
@@ -91,7 +91,7 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
              upload (HF's multipart resume handles already-sent chunks). For an upload-only\n\
              retry after a frozen `hf upload`, just re-run the same command — the build is\n\
              skipped automatically.\n\n\
-             Pre-flight: run `sovereign corpus diag <id>` first to confirm completeness;\n\
+             Pre-flight: run `svrn corpus diag <id>` first to confirm completeness;\n\
              the resulting count goes into the manifest. After publish, paste the printed\n\
              [prebuilt] block into sovereign-recipes/<id>/recipe.toml.",
         ),
@@ -99,10 +99,10 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
 };
 
 const HELP_SNAPSHOT_INSPECT: Help = Help {
-    command: "sovereign corpus snapshot inspect",
+    command: "svrn corpus snapshot inspect",
     summary: "Print the manifest stored at the root of a snapshot archive.",
     sections: &[HelpSection::Usage(
-        "sovereign corpus snapshot inspect <archive.tar.zst>",
+        "svrn corpus snapshot inspect <archive.tar.zst>",
     )],
 };
 
@@ -262,7 +262,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     if !index_dir.exists() {
         eprintln!("Index directory not found: {}", index_dir.display());
         eprintln!(
-            "Install the corpus first with `sovereign corpus install {corpus_id}` or pull a partition."
+            "Install the corpus first with `svrn corpus install {corpus_id}` or pull a partition."
         );
         return 1;
     }
@@ -955,7 +955,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
         outcome.archive_size_bytes as f64 / 1.073e9_f64
     );
     println!();
-    println!("Next: `sovereign corpus diag {target_id}` to confirm chunk count + L5 coverage.");
+    println!("Next: `svrn corpus diag {target_id}` to confirm chunk count + L5 coverage.");
     0
 }
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign daemon run` — the hidden subcommand that launchd/systemd
+//! `svrn daemon run` — the hidden subcommand that launchd/systemd
 //! calls to actually run the embedded Commonwealth daemon in the
 //! foreground. Humans don't invoke this directly; they go through
-//! `sovereign setup` (which registers the service) and then let the
+//! `svrn setup` (which registers the service) and then let the
 //! service manager keep it alive.
 //!
 //! Responsibilities:
@@ -14,7 +14,7 @@
 //!    `.set_mcp()` so `:9741` serves both `/v1/*` and `/mcp/*`.
 //! 5. `try_resume()` the persisted mesh; on first run where no
 //!    `mesh.json` exists, create a silent "solo" mesh so the listener
-//!    comes up. `sovereign mesh rotate` (future) can later print a
+//!    comes up. `svrn mesh rotate` (future) can later print a
 //!    shareable join key.
 //! 6. Block on `tokio::signal::ctrl_c()` so the service manager
 //!    controls lifecycle.
@@ -52,18 +52,18 @@ use worker::run_worker_daemon;
 use workspace::resolve_workspace_dir;
 
 /// Entry point routed from `main.rs` when the user invokes
-/// `sovereign daemon` or one of its subcommands.
+/// `svrn daemon` or one of its subcommands.
 ///
 /// Phase 4 dispatch order:
-/// - `sovereign daemon`             → bare invocation falls through to `run`,
+/// - `svrn daemon`             → bare invocation falls through to `run`,
 ///                                    which inlines the setup wizard on
 ///                                    first boot if no config exists.
-/// - `sovereign daemon run [flags]` → unchanged; the OS-service entry point.
-/// - `sovereign daemon --flag ...`  → bare flags (e.g. `--setup-only`)
+/// - `svrn daemon run [flags]` → unchanged; the OS-service entry point.
+/// - `svrn daemon --flag ...`  → bare flags (e.g. `--setup-only`)
 ///                                    route to `run` so users can type
-///                                    `sovereign daemon --setup-only` without
+///                                    `svrn daemon --setup-only` without
 ///                                    the explicit `run` token.
-/// - `sovereign daemon <known>`     → start/stop/restart/reload/status as
+/// - `svrn daemon <known>`     → start/stop/restart/reload/status as
 ///                                    before.
 pub async fn run(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
@@ -78,7 +78,7 @@ pub async fn run(args: &[String]) -> i32 {
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
         Some(flag) if flag.starts_with("--") => {
-            // Bare flags like `sovereign daemon --setup-only` route
+            // Bare flags like `svrn daemon --setup-only` route
             // straight to run_daemon — the user means "start the
             // daemon (or its first-boot wizard) with these flags."
             run_daemon(args).await
@@ -89,7 +89,7 @@ pub async fn run(args: &[String]) -> i32 {
             1
         }
         None => {
-            // Bare `sovereign daemon` — Phase 4 routes this to
+            // Bare `svrn daemon` — Phase 4 routes this to
             // run_daemon so first-time users get a working daemon
             // without hunting for the magic `run` keyword. launchd
             // and systemd unit files keep using `daemon run`
@@ -99,11 +99,11 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
-/// Public entry for `sovereign setup` (Phase 4 shim). Runs only the
+/// Public entry for `svrn setup` (Phase 4 shim). Runs only the
 /// wizard portion (hardware detect → model pick → config write); does
 /// NOT register a service or load models. The setup_cmd module's
-/// `run_setup` calls into this so both `sovereign setup` and
-/// `sovereign daemon --setup-only` share one code path.
+/// `run_setup` calls into this so both `svrn setup` and
+/// `svrn daemon --setup-only` share one code path.
 pub async fn run_setup_only(args: &[String]) -> i32 {
     let mut forwarded = vec!["--wizard-only".to_string()];
     forwarded.extend(args.iter().cloned());
@@ -111,11 +111,11 @@ pub async fn run_setup_only(args: &[String]) -> i32 {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign daemon",
+    command: "svrn daemon",
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign daemon [--setup-only] | sovereign daemon <subcommand>",
+            "svrn daemon [--setup-only] | sovereign daemon <subcommand>",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
@@ -130,7 +130,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Logs: ~/.sovereign/logs/daemon.log. To register as a launchd/systemd service, run `sovereign install-service`.",
+            "Logs: ~/.sovereign/logs/daemon.log. To register as a launchd/systemd service, run `svrn install-service`.",
         ),
     ],
 };
@@ -138,7 +138,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 async fn run_daemon(args: &[String]) -> i32 {
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
     //
-    // `sovereign daemon run --worker-mode` runs an ephemeral worker
+    // `svrn daemon run --worker-mode` runs an ephemeral worker
     // daemon (see `sovereign/docs/EPHEMERAL_WORKER_PODS.md`) instead
     // of a full persistent peer. The worker boots with a bootstrap
     // blob (env `SOVEREIGN_BOOTSTRAP` or `--bootstrap-blob <file>`),
@@ -193,7 +193,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     //
     // Pre-Phase-4 the daemon refused to start with a "run sovereign
     // setup first" hint. Now we inline the wizard so a user typing
-    // `sovereign daemon` on a fresh box gets a working setup. The
+    // `svrn daemon` on a fresh box gets a working setup. The
     // wizard prompts for model selection, so it requires a TTY: a
     // launchd-spawned daemon with no config will fall through to
     // the same hint as before, since `is_terminal()` returns false
@@ -210,7 +210,7 @@ async fn run_daemon(args: &[String]) -> i32 {
             );
             eprintln!(
                 "hint: launchd/systemd can't run the interactive wizard. \
-                 Run `sovereign daemon --setup-only` from a terminal first."
+                 Run `svrn daemon --setup-only` from a terminal first."
             );
             return 1;
         }
@@ -289,7 +289,7 @@ async fn run_daemon(args: &[String]) -> i32 {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("error: {e}");
-                eprintln!("hint: run `sovereign daemon --setup-only` to (re-)create the config.");
+                eprintln!("hint: run `svrn daemon --setup-only` to (re-)create the config.");
                 return 1;
             }
         },
@@ -349,7 +349,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     //
     // launchd-spawned daemons don't inherit caller env, so flipping
     // this in setup_config.toml is the load-bearing path on macOS
-    // hosts running the daemon via `sovereign daemon start`.
+    // hosts running the daemon via `svrn daemon start`.
     if config.daemon.alternation_grammar && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
     {
         std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
@@ -785,7 +785,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     tracing::info!(
         client_port = config.daemon.client_port,
         internal_port = config.daemon.internal_port,
-        "sovereign daemon is running"
+        "svrn daemon is running"
     );
 
     let _work_atlas_gc_handle = bootstrap::finalize_work_atlas(
@@ -802,7 +802,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
 
     eprintln!(
-        "sovereign daemon running — http://localhost:{}/v1 + /mcp",
+        "svrn daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port
     );
 
@@ -845,7 +845,7 @@ async fn shutdown_daemon(
         }
     }
 
-    eprintln!("sovereign daemon stopped");
+    eprintln!("svrn daemon stopped");
 
     // macOS-specific: bypass C++ static destructors at process exit
     // to dodge a known `ggml-metal-device.m:618 GGML_ASSERT` firing
@@ -877,7 +877,7 @@ async fn shutdown_daemon(
     // systemd (`Restart=on-failure`) relaunch the daemon; every other
     // shutdown is deliberate and must stay 0 (= stays down).
     let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
-        eprintln!("sovereign daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
+        eprintln!("svrn daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
         102
     } else {
         0
@@ -896,7 +896,7 @@ async fn shutdown_daemon(
 }
 
 /// Build the tool registry that serves `/mcp/*`. Mirrors the subset of
-/// tools `sovereign project serve` registers. When no code indexes
+/// tools `svrn project serve` registers. When no code indexes
 /// are installed, tools return helpful "not indexed" messages rather
 /// than erroring, so a freshly-setup daemon is still useful for
 /// `write_note` / `read_notes`.
@@ -974,7 +974,7 @@ fn warn_orphaned_indexes(
         eprintln!("      {o}");
     }
     eprintln!(
-        "  Run `sovereign project register` in each repo to resume watching.\n\
+        "  Run `svrn project register` in each repo to resume watching.\n\
          (The daemon won't guess the filesystem path for you — bad guesses\n\
          point the FS watcher at the wrong directory.)"
     );

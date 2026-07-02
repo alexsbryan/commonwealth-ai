@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign search-gym …` — correctness harness for the
+//! `svrn search-gym …` — correctness harness for the
 //! web-search-during-inference flow.
 //!
 //! The gym hits the running daemon at `/v1/chat/completions` with a
@@ -34,12 +34,12 @@ use std::time::Duration;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign search-gym",
+    command: "svrn search-gym",
     summary: "Correctness harness for web-search-during-inference. Replay fixtures \
               against the running daemon, score tool-call judiciousness and synthesis.",
     sections: &[
         HelpSection::Usage(
-            "sovereign search-gym run [--fixture SLUG] [--replays N] [--base-url URL] \
+            "svrn search-gym run [--fixture SLUG] [--replays N] [--base-url URL] \
              [--fixtures-dir PATH] [--mock-corpus PATH] [--json]",
         ),
         HelpSection::Subcommands(&[
@@ -110,15 +110,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign search-gym run",
+                "svrn search-gym run",
                 "Replay every fixture 10× against the local daemon.",
             ),
             (
-                "sovereign search-gym run --fixture 01_should_search_temporal_news --replays 3",
+                "svrn search-gym run --fixture 01_should_search_temporal_news --replays 3",
                 "Iterate on a single fixture during fixture authoring.",
             ),
             (
-                "sovereign search-gym run --json > run-$(date +%s).json",
+                "svrn search-gym run --json > run-$(date +%s).json",
                 "Capture a machine-readable run for diffing across model changes.",
             ),
         ]),
@@ -127,7 +127,7 @@ const HELP: Help = Help {
              If a fixture's input induces the model to search for a query whose response \
              isn't in mock-corpus/, the fixture fails loudly with `mock search fixture \
              missing` rather than silently falling through. Record-mode for harvesting \
-             real Tavily responses lives separately under `sovereign bench search-tavily` \
+             real Tavily responses lives separately under `svrn bench search-tavily` \
              (Phase 4 — not landed yet).",
         ),
     ],
@@ -290,7 +290,7 @@ async fn execute_run(opts: RunOpts) -> i32 {
 
     if !daemon_reachable(&opts.base_url).await {
         eprintln!(
-            "search-gym: daemon not reachable at {} — start it with `sovereign daemon run`",
+            "search-gym: daemon not reachable at {} — start it with `svrn daemon run`",
             opts.base_url
         );
         return 2;
@@ -510,7 +510,7 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
     };
     if !daemon_reachable(&opts.base_url).await {
         eprintln!(
-            "search-gym calibrate-judge: daemon not reachable at {} — start it with `sovereign daemon run`",
+            "search-gym calibrate-judge: daemon not reachable at {} — start it with `svrn daemon run`",
             opts.base_url
         );
         return 2;

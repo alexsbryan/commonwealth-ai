@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas budget` — show or set the per-corpus Tier-2
+//! `svrn atlas budget` — show or set the per-corpus Tier-2
 //! triage budget.
 //!
 //! The budget caps how many top-priority articles the post-install
@@ -24,11 +24,11 @@ use sovereign_tools::atlas_postinstall::{
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign atlas budget",
+    command: "svrn atlas budget",
     summary: "Show or set the Tier-2 enrichment budget + expansion knobs for a corpus's atlas.",
     sections: &[
         HelpSection::Usage(
-            "sovereign atlas budget <corpus_id> [<count>] [--expansion-fraction <0..0.9>] \
+            "svrn atlas budget <corpus_id> [<count>] [--expansion-fraction <0..0.9>] \
              [--expansion-hops <1|2>] [--data-dir <path>] [--unset]",
         ),
         HelpSection::Flags(&[
@@ -56,20 +56,20 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign atlas budget wikipedia",
+                "svrn atlas budget wikipedia",
                 "Print the current budget + expansion config (or defaults if no override is set).",
             ),
             (
-                "sovereign atlas budget wikipedia 5000",
+                "svrn atlas budget wikipedia 5000",
                 "Set the Tier-2 budget for `wikipedia` to 5,000 articles. \
                  Existing expansion knobs are preserved.",
             ),
             (
-                "sovereign atlas budget wikipedia 1000 --expansion-fraction 0.4",
+                "svrn atlas budget wikipedia 1000 --expansion-fraction 0.4",
                 "1000 total picks, 40% (400) reserved for seed-expansion candidates.",
             ),
             (
-                "sovereign atlas budget wikipedia 1000 --expansion-fraction 0",
+                "svrn atlas budget wikipedia 1000 --expansion-fraction 0",
                 "Disable expansion entirely — full 1000 budget goes to vital + centrality seeds.",
             ),
         ]),
@@ -174,7 +174,7 @@ pub async fn run(args: &[String]) -> i32 {
                 );
                 println!(
                     "Takes effect on the next post-install triage rebuild \
-                     (`sovereign corpus install {}` or daemon resume).",
+                     (`svrn corpus install {}` or daemon resume).",
                     parsed.corpus_id
                 );
                 0

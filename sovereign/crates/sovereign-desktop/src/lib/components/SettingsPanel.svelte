@@ -62,7 +62,7 @@
   let bootstrap = $state<BootstrapSnapshot | null>(null);
 
   // ── Mobile access (opt-in phone host) ─────────────────────────
-  // Toggle serves the Sovereign mobile app from this machine. The host
+  // Toggle serves the svrnmesh mobile app from this machine. The host
   // (`sovereign-server`) delegates all inference to the running daemon, so it
   // loads no second copy of the models. Pairing card = address + tenant +
   // token, plus the no-VPN iroh pairing code once the server reports one.
@@ -75,7 +75,7 @@
   let mobileError = $state("");
   let mobilePollTimer: ReturnType<typeof setTimeout> | null = null;
   // QR of the pairing deep link: `sovereign://pair#<base64url(JSON)>`.
-  // The phone's camera shows "Open in Sovereign" and the app fills
+  // The phone's camera shows "Open in svrnmesh" and the app fills
   // every pairing field. Deliberately NOT raw JSON — iOS Camera spots
   // the https relay URL inside and offers Safari instead, losing the
   // payload (observed 2026-06-10). The Copy button carries the plain
@@ -166,7 +166,7 @@
   });
 
   // ── Canonical chat-slot context window ───────────────────────
-  // Sourced from `~/.sovereign/config.toml` via the
+  // Sourced from `~/.svrnmesh/config.toml` via the
   // `get_setup_context_size` Tauri command. Edits route through
   // `set_setup_context_size`, which writes the daemon config and
   // tears down + rebuilds the desktop-embedded inference Arc.
@@ -617,11 +617,11 @@
         <section class="doc-section">
           <span class="section-eyebrow">roles &middot; slots &middot; behaviour</span>
           <h2 class="doc-h2">Models</h2>
-          <p class="doc-intro">Four jobs, up to four models. Pick a file for each — Sovereign loads them only when something needs them.</p>
+          <p class="doc-intro">Four jobs, up to four models. Pick a file for each — svrnmesh loads them only when something needs them.</p>
 
           {#if attachedToDaemon}
             <div class="doc-note">
-              A daemon is already running outside this app. Swapping a model file takes effect immediately; changes to port or data directory need a restart — run <code>sovereign daemon restart</code> in a terminal.
+              A daemon is already running outside this app. Swapping a model file takes effect immediately; changes to port or data directory need a restart — run <code>svrn daemon restart</code> in a terminal.
             </div>
           {/if}
 
@@ -882,7 +882,7 @@
             {/if}
           </div>
 
-          <!-- Context window — sourced from ~/.sovereign/config.toml
+          <!-- Context window — sourced from ~/.svrnmesh/config.toml
                via the dedicated Tauri commands. Three values shown:
                  • configured (editable, daemon-canonical)
                  • effective (post-llama-pad, read-only)
@@ -901,7 +901,7 @@
                 {#if setupCtx?.n_ctx_train}
                   up to {setupCtx.n_ctx_train.toLocaleString()} in this model
                 {:else}
-                  ~/.sovereign/config.toml
+                  ~/.svrnmesh/config.toml
                 {/if}
               </span>
             </button>
@@ -1025,7 +1025,7 @@
           <!-- Custom instructions / persona — global standing guidance
                appended as the OUTERMOST layer of every system prompt
                (sovereign_core InferenceConfig.custom_instructions).
-               Append-only: it never replaces Sovereign's situated
+               Append-only: it never replaces svrnmesh's situated
                context. Visible verbatim in the Inner Work
                ProvenancePanel so the user can always see what was sent. -->
           <div class="cfg-entry" class:cfg-entry--open={editingPersona}>
@@ -1038,7 +1038,7 @@
             </button>
             {#if editingPersona}
               <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">Standing guidance for how the assistant should respond — tone, format, things to always or never do. It's layered on top of Sovereign's own instructions (never replacing them) and applies to every conversation. Leave empty for default behaviour.</p>
+                <p class="cfg-entry-question">Standing guidance for how the assistant should respond — tone, format, things to always or never do. It's layered on top of svrnmesh's own instructions (never replacing them) and applies to every conversation. Leave empty for default behaviour.</p>
                 <textarea
                   class="cfg-textarea"
                   rows="5"
@@ -1092,7 +1092,7 @@
               </div>
             </div>
 
-            <!-- Raw model (naked mode) — model with no Sovereign affordances -->
+            <!-- Raw model (naked mode) — model with no svrnmesh affordances -->
             <div class="cfg-entry">
               <div class="cfg-entry-display cfg-entry-display--static">
                 <span class="cfg-entry-name">Raw model</span>
@@ -1213,7 +1213,7 @@
       {#if activeTab === "sharing"}
         <section class="doc-section">
           <h2 class="doc-h2">Activity &amp; Sharing</h2>
-          <p class="doc-intro">See exactly what Sovereign has been doing on this machine — tokens, chunks, embeddings, all local — then take the reins on how hard it works.</p>
+          <p class="doc-intro">See exactly what svrnmesh has been doing on this machine — tokens, chunks, embeddings, all local — then take the reins on how hard it works.</p>
           <SharingSection />
         </section>
       {/if}
@@ -1313,7 +1313,7 @@
               <span class="cfg-entry-current">
                 <span class="cfg-entry-val">{config.data_dir || 'default'}</span>
                 {#if !config.data_dir}
-                  <span class="cfg-entry-tech">~/.local/share/sovereign</span>
+                  <span class="cfg-entry-tech">~/.local/share/svrnmesh</span>
                 {/if}
               </span>
               <span class="cfg-entry-prov">{provenance('data_dir')}</span>
@@ -1328,7 +1328,7 @@
                       type="text"
                       bind:value={config.data_dir}
                       oninput={() => markDirty('data_dir')}
-                      placeholder="~/.local/share/sovereign"
+                      placeholder="~/.local/share/svrnmesh"
                       aria-label="Data directory path"
                     />
                   </label>
@@ -1360,7 +1360,7 @@
       {#if activeTab === "mobile" && config}
         <section class="doc-section">
           <h2 class="doc-h2">Mobile access</h2>
-          <p class="doc-intro">Serve the Sovereign mobile app from this machine. The app pairs with a lightweight host here that forwards every chat and search to your already-running models — it loads no second copy of them. Pair with the no-VPN code (works from any network), or over your Tailscale tailnet.</p>
+          <p class="doc-intro">Serve the svrnmesh mobile app from this machine. The app pairs with a lightweight host here that forwards every chat and search to your already-running models — it loads no second copy of them. Pair with the no-VPN code (works from any network), or over your Tailscale tailnet.</p>
 
           <div class="cfg-entry cfg-entry--toggle">
             <label class="cfg-toggle-row">
@@ -1756,7 +1756,7 @@
 
   /* Inline file-path code style — matches the doc-body voice without
      pulling in monospace's heavier weight. Used for the
-     `~/.sovereign/indexes/` reference in the Catalog corpora lede. */
+     `~/.svrnmesh/indexes/` reference in the Catalog corpora lede. */
   .path-inline {
     font-family: var(--font-mono);
     font-size: 0.82em;

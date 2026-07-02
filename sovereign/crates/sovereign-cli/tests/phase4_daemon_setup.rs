@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Phase 4 — `sovereign daemon` absorbs the setup wizard, and
-//! `sovereign install-service` becomes an explicit top-level command.
+//! Phase 4 — `svrn daemon` absorbs the setup wizard, and
+//! `svrn install-service` becomes an explicit top-level command.
 //!
 //! These tests exercise the deterministic surfaces:
 //!  - help text contracts (so users can discover the new flow)
-//!  - dispatch routing (bare `sovereign daemon` no longer 1's out
+//!  - dispatch routing (bare `svrn daemon` no longer 1's out
 //!    on a help dump; it routes to run_daemon which then handles
 //!    the no-config / no-TTY case cleanly)
-//!  - alias semantics (`sovereign setup` still works and prints a
+//!  - alias semantics (`svrn setup` still works and prints a
 //!    one-time banner)
 //!
 //! The full first-boot wizard flow is not reproduced here because
 //! the wizard prompts interactively and downloads ~50 GB of model
 //! weights. That's covered by the manual lifecycle verification:
-//! `sovereign daemon --setup-only` from a fresh box.
+//! `svrn daemon --setup-only` from a fresh box.
 
 use std::process::{Command, Output};
 
@@ -68,7 +68,7 @@ fn combined(out: &Output) -> String {
     )
 }
 
-/// `sovereign daemon --help` documents the new bare-invocation
+/// `svrn daemon --help` documents the new bare-invocation
 /// behaviour and the `--setup-only` flag. This is the user-facing
 /// contract the Phase 4 plan promised — if either string disappears,
 /// users won't know how to drive the new flow.
@@ -92,7 +92,7 @@ fn daemon_help_documents_setup_only_and_bare_invocation() {
     );
 }
 
-/// `sovereign install-service --help` documents what the command
+/// `svrn install-service --help` documents what the command
 /// does so users can find it after Phase 4 splits it from setup.
 #[test]
 fn install_service_help_documents_purpose() {
@@ -135,7 +135,7 @@ fn install_service_rejects_unknown_flag() {
     );
 }
 
-/// `sovereign daemon status` is the safe-to-run-in-CI subcommand —
+/// `svrn daemon status` is the safe-to-run-in-CI subcommand —
 /// it makes a 3-second HTTP request to :9741 and returns 1 when the
 /// daemon isn't reachable. The test box may or may not have a
 /// daemon running, so we just assert the command doesn't panic
@@ -158,7 +158,7 @@ fn daemon_status_does_not_panic() {
     );
 }
 
-/// Direct `sovereign setup --help` still works and points at the
+/// Direct `svrn setup --help` still works and points at the
 /// new wizard-only behaviour. The user should be able to discover
 /// from `--help` that service registration moved.
 #[test]
@@ -179,7 +179,7 @@ fn setup_help_still_works_after_phase4_shim() {
     assert!(!text.is_empty(), "setup --help produced no output");
 }
 
-/// `sovereign daemon` with an unknown subcommand still surfaces an
+/// `svrn daemon` with an unknown subcommand still surfaces an
 /// error rather than silently routing to run_daemon. Bare flags
 /// (`--setup-only`) get the new fallthrough path; bare positional
 /// non-flag tokens like `frobnicate` should not.

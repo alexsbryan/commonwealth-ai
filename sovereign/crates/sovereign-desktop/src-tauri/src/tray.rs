@@ -14,7 +14,7 @@
 //! │     Until I resume             │
 //! │ Resume sharing                 │  ← enabled only when paused
 //! ├────────────────────────────────┤
-//! │ Open Sovereign                 │
+//! │ Open svrnmesh                 │
 //! │ Quit                           │
 //! └────────────────────────────────┘
 //! ```
@@ -67,7 +67,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let open = MenuItem::with_id(app, "open", "Open Sovereign", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open svrnmesh", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     let menu = Menu::with_items(
@@ -82,7 +82,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("Sovereign")
+        .tooltip("svrnmesh")
         .on_menu_event(move |app: &AppHandle, event| handle_event(app, event))
         .build(app)?;
 

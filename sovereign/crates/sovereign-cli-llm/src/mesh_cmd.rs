@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign mesh` subcommand handlers (the `corpus` half moved to
+//! `svrn mesh` subcommand handlers (the `corpus` half moved to
 //! `corpus_cmd` in the §3.2 split that fixed the dispatch naming lie).
 //!
 //! These are lightweight commands that don't require loading a full model
@@ -43,7 +43,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mesh warm-cache <gguf> [--cache-dir <dir>]`
+/// `svrn mesh warm-cache <gguf> [--cache-dir <dir>]`
 ///
 /// Pre-seed the RPC worker's tensor cache from a local GGUF — fully offline (no
 /// network, no GPU). When the cluster later serves this model, the host's
@@ -61,7 +61,7 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
                 cache_dir = args.get(i).map(std::path::PathBuf::from);
             }
             "--help" | "-h" => {
-                eprintln!("Usage: sovereign mesh warm-cache <model.gguf> [--cache-dir <dir>]");
+                eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
                 eprintln!();
                 eprintln!("  Pre-seeds the RPC tensor cache from a local GGUF so a mesh worker");
                 eprintln!("  serves this model with ZERO weight transfer over the network.");
@@ -80,7 +80,7 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
         i += 1;
     }
     let Some(model) = model else {
-        eprintln!("Usage: sovereign mesh warm-cache <model.gguf> [--cache-dir <dir>]");
+        eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
         return 2;
     };
     let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
@@ -117,7 +117,7 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]`
+/// `svrn mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]`
 ///
 /// The assertion engine for the multi-process soak (`scripts/mesh-soak.sh`):
 /// polls each node's `GET /v1/mesh/status` and evaluates the HTTP-observable
@@ -156,7 +156,7 @@ async fn cmd_check_invariants(args: &[String]) -> i32 {
             }
             "--json" => json = true,
             "--help" | "-h" => {
-                eprintln!("Usage: sovereign mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]");
+                eprintln!("Usage: svrn mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]");
                 eprintln!();
                 eprintln!("  Polls GET /v1/mesh/status on each node and asserts the mesh");
                 eprintln!("  invariants: convergence (all agree on the member set), no-ghost");
@@ -259,7 +259,7 @@ async fn cmd_check_invariants(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]`
+/// `svrn mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]`
 ///
 /// Layer 3 of the mesh QA plan: distils `mesh-soak-findings.jsonl` into SLIs
 /// (invariant violation rate, load success rate, load p50/p99) and gates each
@@ -281,7 +281,7 @@ async fn cmd_soak_gate(args: &[String]) -> i32 {
             }
             "--update-baseline" => update = true,
             "--help" | "-h" => {
-                eprintln!("Usage: sovereign mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]");
+                eprintln!("Usage: svrn mesh soak-gate <findings.jsonl> [--baseline <file>] [--update-baseline]");
                 eprintln!();
                 eprintln!("  Distils mesh-soak-findings.jsonl into SLIs (invariant violation");
                 eprintln!("  rate, load success rate, load p50/p99) and gates each against a");
@@ -368,10 +368,10 @@ async fn cmd_soak_gate(args: &[String]) -> i32 {
 
 /// Run a corpus subcommand. Returns the exit code.
 const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mesh",
+    command: "svrn mesh",
     summary: "Manage the local Commonwealth mesh (create / join / rotate / status).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mesh <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "create",
@@ -414,43 +414,43 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Run `sovereign mesh <subcommand> --help` for subcommand-specific flags.",
+            "Run `svrn mesh <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
 };
 
 const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mesh create",
+    command: "svrn mesh create",
     summary: "Promote the solo mesh to a joinable mesh and print the shareable invite.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mesh create [--name <name>]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh create [--name <name>]"),
         sovereign_cli_shared::help::HelpSection::Flags(&[(
             "--name <name>",
             "Human-readable mesh name (default: \"<host>'s Mesh\")",
         )]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Errors if a mesh already exists (e.g. from `sovereign setup`'s silent solo mesh).\n\
-             In that case, run `sovereign mesh rotate` to generate a new shareable key instead.",
+            "Errors if a mesh already exists (e.g. from `svrn setup`'s silent solo mesh).\n\
+             In that case, run `svrn mesh rotate` to generate a new shareable key instead.",
         ),
     ],
 };
 
 const HELP_MESH_JOIN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mesh join",
+    command: "svrn mesh join",
     summary: "Join an existing mesh using any of the three invite forms.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mesh join <arg>"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh join <arg>"),
         sovereign_cli_shared::help::HelpSection::Examples(&[
             (
-                "sovereign mesh join cwth-a1b2-c3d4-e5f6",
+                "svrn mesh join cwth-a1b2-c3d4-e5f6",
                 "Bare key typed from another user's terminal",
             ),
             (
-                "sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6",
+                "svrn mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6",
                 "Clickable https link from an email",
             ),
             (
-                "sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6",
+                "svrn mesh join sovereign://join/cwth-a1b2-c3d4-e5f6",
                 "Native app deep link",
             ),
         ]),
@@ -458,10 +458,10 @@ const HELP_MESH_JOIN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
 };
 
 const HELP_MESH_ROTATE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mesh rotate",
+    command: "svrn mesh rotate",
     summary: "Generate a new shareable join key (the previous key stops working for future joins).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mesh rotate"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh rotate"),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Existing members keep their connections. If the daemon is running, restart it\n\
              so the new key is active in-memory (the persisted mesh.json is updated on disk).",
@@ -485,7 +485,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     }
 
     // If a mesh already exists (e.g. the silent solo mesh created by
-    // `sovereign setup`), the join-key hash is stored but its plaintext
+    // `svrn setup`), the join-key hash is stored but its plaintext
     // is gone — we can't re-show it. Direct the user to `mesh rotate`
     // instead of blindly attempting another create_mesh (which errors
     // with AlreadyRunning or leaves them confused).
@@ -493,7 +493,7 @@ async fn cmd_create(args: &[String]) -> i32 {
         .map(|opt| opt.is_some())
         .unwrap_or(false)
     {
-        eprintln!("A mesh already exists (created during `sovereign setup`).");
+        eprintln!("A mesh already exists (created during `svrn setup`).");
         eprintln!("To generate a new shareable join key, run:");
         eprintln!();
         eprintln!("  sovereign mesh rotate");
@@ -583,7 +583,7 @@ async fn cmd_join(args: &[String]) -> i32 {
     }
     let Some(arg) = args.first() else {
         eprintln!("Missing join key.");
-        eprintln!("Usage: sovereign mesh join <key-or-url>");
+        eprintln!("Usage: svrn mesh join <key-or-url>");
         eprintln!();
         eprintln!("Accepted forms:");
         eprintln!("  cwth-XXXX-XXXX-XXXX");
@@ -757,7 +757,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
         }
         Ok(None) => {
             eprintln!(
-                "No mesh to rotate — run `sovereign setup` or `sovereign mesh create` first."
+                "No mesh to rotate — run `svrn setup` or `svrn mesh create` first."
             );
             1
         }
@@ -768,7 +768,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mesh status [--json] [--self] [--addr-only]`
+/// `svrn mesh status [--json] [--self] [--addr-only]`
 ///
 /// Reads the running daemon's `/v1/mesh/status` endpoint and renders
 /// the mesh view. Default output is human-readable; `--json` prints
@@ -795,7 +795,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
 ///   export SOVEREIGN_FOUNDER_ADDR=$(sovereign mesh status --self --addr-only)
 async fn cmd_status(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
-        eprintln!("Usage: sovereign mesh status [--json] [--self] [--addr-only]");
+        eprintln!("Usage: svrn mesh status [--json] [--self] [--addr-only]");
         eprintln!();
         eprintln!("Show mesh members, online status, and advertised addresses.");
         eprintln!("Reads /v1/mesh/status from the running daemon (default port 9741).");
@@ -818,7 +818,7 @@ async fn cmd_status(args: &[String]) -> i32 {
             "--addr-only" => addr_only = true,
             other => {
                 eprintln!("Unknown flag: {other}");
-                eprintln!("Try `sovereign mesh status --help` for usage.");
+                eprintln!("Try `svrn mesh status --help` for usage.");
                 return 2;
             }
         }
@@ -839,7 +839,7 @@ async fn cmd_status(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("mesh status: daemon at {url} not reachable: {e}");
             eprintln!(
-                "hint: `sovereign daemon status` to check, `sovereign daemon start` to launch."
+                "hint: `svrn daemon status` to check, `svrn daemon start` to launch."
             );
             return 1;
         }
@@ -921,7 +921,7 @@ async fn cmd_status(args: &[String]) -> i32 {
     // the join key + link at the bottom (the operator typically needs
     // one of those for whatever workflow led them here).
     if !status.running {
-        println!("mesh: daemon running, but no mesh active (`sovereign mesh create` or `mesh join` to bootstrap)");
+        println!("mesh: daemon running, but no mesh active (`svrn mesh create` or `mesh join` to bootstrap)");
         return 0;
     }
     let mesh_name = status.mesh_name.as_deref().unwrap_or("<unnamed>");
@@ -1060,7 +1060,7 @@ async fn cmd_logs() -> i32 {
     0
 }
 
-/// `sovereign mesh fetch-model <name> [--peer <peer-tailnet-addr>] [--out <dir>]`
+/// `svrn mesh fetch-model <name> [--peer <peer-tailnet-addr>] [--out <dir>]`
 ///
 /// Pulls a GGUF from a mesh peer over the tailnet. Used by the
 /// friend-onboarding flow (WS5) so a new node doesn't need R2 /
@@ -1082,7 +1082,7 @@ async fn cmd_logs() -> i32 {
 /// mismatch. See `sovereign_mesh::model_fetch::fetch_model_to_dir`.
 async fn cmd_fetch_model(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
-        eprintln!("Usage: sovereign mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
+        eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
         eprintln!();
         eprintln!("Pulls a GGUF from a mesh peer over the tailnet. No R2 credentials required.");
         eprintln!();
@@ -1094,7 +1094,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
 
     let Some(name) = args.first().cloned() else {
         eprintln!("Missing model file name.");
-        eprintln!("Usage: sovereign mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
+        eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
         return 1;
     };
 
@@ -1137,7 +1137,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
                 .unwrap_or_else(|| PathBuf::from(".")),
             Err(e) => {
                 eprintln!("error: could not load setup config to choose default --out dir: {e}");
-                eprintln!("hint: pass --out <dir> explicitly, or run `sovereign daemon --setup-only` first.");
+                eprintln!("hint: pass --out <dir> explicitly, or run `svrn daemon --setup-only` first.");
                 return 1;
             }
         },
@@ -1166,7 +1166,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
     } else {
         match collect_peer_internal_urls().await {
             Ok(urls) if urls.is_empty() => {
-                eprintln!("No mesh peers known. Run `sovereign mesh join <link>` first,");
+                eprintln!("No mesh peers known. Run `svrn mesh join <link>` first,");
                 eprintln!("or pass --peer <host:port> to target a specific node.");
                 return 1;
             }

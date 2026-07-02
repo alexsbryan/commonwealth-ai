@@ -281,7 +281,7 @@
 <div class="conversation-list">
   <div class="sidebar-brand">
     <BrandMark size={22} />
-    <span class="brand-name">SOVEREIGN</span>
+    <span class="brand-name">SVRNMESH</span>
   </div>
 
   <div class="list-header">

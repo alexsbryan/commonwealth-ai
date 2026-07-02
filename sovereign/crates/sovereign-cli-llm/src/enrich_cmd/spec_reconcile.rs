@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich spec-reconcile <corpus> --spec=<spec-stem>` — reconcile the
+//! `svrn enrich spec-reconcile <corpus> --spec=<spec-stem>` — reconcile the
 //! *conditioned claims* a spec makes (extracted by `enrich spec-intel`) against
 //! what the code in a corpus actually does (summarized by `enrich code-intel`).
 //!
@@ -63,7 +63,7 @@ const BUNDLE: usize = 10;
 const FLOOR: f32 = 0.45;
 /// First N chars of each function summary shown in the evidence bundle
 /// (prototype `summary[:140]`).
-const SUMMARY_CLIP: usize = 140;
+const SUMMARY_CLIP: usize = 400; // eval loop iter2: give the judge the full summary (was 140)
 /// Concurrency for the one-time function-embedding pass.
 const EMBED_CONCURRENCY: usize = 16;
 /// Concurrency for the per-claim adjudication chat calls (mirror
@@ -85,20 +85,20 @@ const PHASE_ID: &str = "spec_reconcile";
 const ADJ_SYSTEM: &str = r#"You decide whether code satisfies a spec claim. You get the claim + its conditions and a set of candidate functions (each with file:line and a summary). For EACH condition decide met/unmet and cite the function (file:line) for met ones — no citation means unmet. A condition is met ONLY if a cited function DIRECTLY implements the specific behavior it states; a function merely operating in the same general area does NOT count — mark those unmet. Verdict: 'entails' (every condition directly met), 'partial' (some met), 'contradicts' (a function actively implements the OPPOSITE of the claim — reserve this, not for silence), 'unrelated' (none of these functions address the claim). Output ONLY JSON: {"per_condition":[{"condition":"..","met":true,"evidence":"<fn> (<file>:<line>)"}],"verdict":"entails|partial|contradicts|unrelated","note":"<=20 words"}."#;
 
 const HELP: Help = Help {
-    command: "sovereign enrich spec-reconcile",
+    command: "svrn enrich spec-reconcile",
     summary: "Reconcile a spec's conditioned claims against what the corpus code actually does: corroborated / todo / drift / gap / unverifiable.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich spec-reconcile <corpus-id> --spec=<spec-stem> [--render-only]",
+            "svrn enrich spec-reconcile <corpus-id> --spec=<spec-stem> [--render-only]",
         ),
         HelpSection::Flags(&[
             (
                 "<corpus-id>",
-                "An installed CODE corpus with a code-intel cache (run `sovereign enrich code-intel <corpus>` first). id, name, or unique substring.",
+                "An installed CODE corpus with a code-intel cache (run `svrn enrich code-intel <corpus>` first). id, name, or unique substring.",
             ),
             (
                 "--spec=<stem>",
-                "Spec stem under <data_dir>/specs/<stem>/ — i.e. a spec already processed by `sovereign enrich spec-intel`, whose claims.json this reconciles.",
+                "Spec stem under <data_dir>/specs/<stem>/ — i.e. a spec already processed by `svrn enrich spec-intel`, whose claims.json this reconciles.",
             ),
             (
                 "--render-only",
@@ -582,7 +582,7 @@ fn render_markdown(set: &FindingSet) -> String {
     ));
     s.push_str(&format!(
         "_Conditioned claims reconciled against what the code actually does — {}. \
-         Regenerate with `sovereign enrich spec-reconcile {} --spec={}`._\n\n",
+         Regenerate with `svrn enrich spec-reconcile {} --spec={}`._\n\n",
         tally_line(set),
         set.corpus_id,
         set.spec,
@@ -705,7 +705,7 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
         },
         Err(e) => {
             eprintln!(
-                "error: reading {} (run `sovereign enrich spec-intel <spec.md>` first): {e}",
+                "error: reading {} (run `svrn enrich spec-intel <spec.md>` first): {e}",
                 claims_path.display()
             );
             return 1;
@@ -727,7 +727,7 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
         },
         Err(e) => {
             eprintln!(
-                "error: reading {} (run `sovereign enrich code-intel {}` first): {e}",
+                "error: reading {} (run `svrn enrich code-intel {}` first): {e}",
                 code_intel_path.display(),
                 corpus_id
             );
@@ -736,7 +736,7 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
     };
     if enrichments.is_empty() {
         eprintln!(
-            "error: empty code-intel cache {} — run `sovereign enrich code-intel {}`",
+            "error: empty code-intel cache {} — run `svrn enrich code-intel {}`",
             code_intel_path.display(),
             corpus_id
         );

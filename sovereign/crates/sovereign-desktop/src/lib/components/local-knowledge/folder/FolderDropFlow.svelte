@@ -697,7 +697,7 @@
     font-weight: 600;
   }
   /* Italic Georgia — the editorial "letter from the machine" beat.
-     Sovereign's voice reserves this kind of line for invitations
+     svrnmesh's voice reserves this kind of line for invitations
      (see README tone). */
   .invitation {
     margin: 0;

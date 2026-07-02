@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign stop` — stop the background MCP server or daemon.
+//! `svrn stop` — stop the background MCP server or daemon.
 //!
-//! New top-level command. `sovereign init` spawns `sovereign serve
+//! New top-level command. `svrn init` spawns `svrn serve
 //! --background`, which writes the child PID to two pointer files:
 //!
-//! - `<project>/.sovereign/server.pid` — for `sovereign stop`
+//! - `<project>/.sovereign/server.pid` — for `svrn stop`
 //!   invocations from inside the project directory tree.
 //! - `~/.sovereign/server.pid` — for invocations from anywhere
 //!   else, and as the canonical handle the daemon checks before
@@ -14,7 +14,7 @@
 //!
 //! 1. Walk up from cwd looking for a `.sovereign/server.pid`.
 //! 2. If none found, try `~/.sovereign/server.pid`.
-//! 3. If neither yields a live PID, forward to `sovereign daemon stop`
+//! 3. If neither yields a live PID, forward to `svrn daemon stop`
 //!    in case the daemon is what's actually holding the port.
 
 use std::path::PathBuf;
@@ -138,13 +138,13 @@ fn signal_term(_pid: i32) -> bool {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign stop",
+    command: "svrn stop",
     summary: "Stop the background MCP server or the running daemon.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign stop"),
+        crate::util::help::HelpSection::Usage("svrn stop"),
         crate::util::help::HelpSection::Notes(
-            "Reads .sovereign/server.pid (written by `sovereign init` in Phase 3); \
-             falls back to `sovereign daemon stop` when the daemon owns the port.",
+            "Reads .sovereign/server.pid (written by `svrn init` in Phase 3); \
+             falls back to `svrn daemon stop` when the daemon owns the port.",
         ),
     ],
 };

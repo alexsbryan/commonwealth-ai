@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign recipe-agent` — recipe-author project lifecycle CLI.
+//! `svrn recipe-agent` — recipe-author project lifecycle CLI.
 //!
 //! Thin command surface for M1:
 //!
 //! - `recipe-agent new --charter <file> [--title <title>]`
 //!   Provision a new recipe-author project. Prints the new
 //!   `feature_id` to stdout; the partner / driver hands this id to
-//!   the actual agent loop (`sovereign chat` with the
+//!   the actual agent loop (`svrn chat` with the
 //!   `recipe-author` skill activated).
 //!
 //! - `recipe-agent show <feature_id>`
@@ -46,7 +46,7 @@ fn print_help() {
         \"live-trial\" drives the agent end-to-end against the running\n\
         daemon's /v1/chat/completions, using a script of partner messages,\n\
         then validates the generated recipe + runs an initial fetch.\n\
-        See `sovereign recipe-agent live-trial --help` for flags.\n"
+        See `svrn recipe-agent live-trial --help` for flags.\n"
     );
 }
 
@@ -186,7 +186,7 @@ fn print_row(r: &RecipeProjectRow) {
     println!("{}\t{}", r.id, r.title);
 }
 
-/// `sovereign maintainer inbox` — dump every pending capability
+/// `svrn maintainer inbox` — dump every pending capability
 /// request from the global inbox under
 /// `~/.sovereign/capability-requests/inbox/`.
 ///
@@ -195,13 +195,13 @@ fn print_row(r: &RecipeProjectRow) {
 /// maintainer flips status fields by editing inbox files directly.
 pub async fn run_maintainer(args: &[String]) -> i32 {
     let Some(sub) = args.first() else {
-        eprintln!("Usage: sovereign maintainer inbox");
+        eprintln!("Usage: svrn maintainer inbox");
         return 1;
     };
     match sub.as_str() {
         "inbox" => run_inbox().await,
         "--help" | "-h" | "help" => {
-            eprintln!("Usage: sovereign maintainer inbox");
+            eprintln!("Usage: svrn maintainer inbox");
             0
         }
         other => {

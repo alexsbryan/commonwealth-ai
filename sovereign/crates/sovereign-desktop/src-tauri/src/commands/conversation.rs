@@ -778,7 +778,7 @@ pub async fn toggle_skill_impl(
 /// (the actual grounding passages). Pure + unit-tested so the **source
 /// ledger** can't silently regress to dead text.
 fn render_answer_markdown(content: &str, metadata: Option<&serde_json::Value>) -> String {
-    let mut md = String::from("# Sovereign answer\n\n");
+    let mut md = String::from("# svrnmesh answer\n\n");
 
     // Provenance meta line: who answered + which corpora grounded it.
     let mut meta_bits: Vec<String> = Vec::new();
@@ -858,7 +858,7 @@ fn render_answer_markdown(content: &str, metadata: Option<&serde_json::Value>) -
         );
     }
 
-    md.push_str("---\n*Exported from Sovereign — provenance preserved.*\n");
+    md.push_str("---\n*Exported from svrnmesh — provenance preserved.*\n");
     md
 }
 
@@ -968,7 +968,7 @@ enum Block {
 }
 
 fn doc_blocks(doc: &AnswerDoc) -> Vec<Block> {
-    let mut blocks = vec![Block::Title("Sovereign answer".to_string())];
+    let mut blocks = vec![Block::Title("svrnmesh answer".to_string())];
     if let Some(meta) = doc.meta_line() {
         blocks.push(Block::Meta(meta));
     }
@@ -1002,7 +1002,7 @@ fn doc_blocks(doc: &AnswerDoc) -> Vec<Block> {
         }
     }
     blocks.push(Block::Footer(
-        "Exported from Sovereign — provenance preserved.".to_string(),
+        "Exported from svrnmesh — provenance preserved.".to_string(),
     ));
     blocks
 }
@@ -1352,7 +1352,7 @@ mod export_tests {
             ]
         });
         let md = render_answer_markdown("Free will is compatible with determinism.", Some(&meta));
-        assert!(md.contains("# Sovereign answer"));
+        assert!(md.contains("# svrnmesh answer"));
         assert!(md.contains("Free will is compatible with determinism."));
         assert!(md.contains("answered by Qwen3-8B-Q4_K_M"));
         assert!(md.contains("searched sep"));

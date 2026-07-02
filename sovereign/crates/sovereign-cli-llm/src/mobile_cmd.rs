@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign mobile` — opt-in serving of the phone-facing API.
+//! `svrn mobile` — opt-in serving of the phone-facing API.
 //!
 //! The capability is the headless-first sibling of the desktop app's "Mobile
 //! access" toggle: it runs `sovereign-server` (the stateful
@@ -45,7 +45,7 @@ pub async fn run_mobile(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mobile serve [--bind <addr>]`
+/// `svrn mobile serve [--bind <addr>]`
 ///
 /// Generate the remote-backed `sovereign-server` config and run it in the
 /// foreground (so a service manager supervises one process). On Unix we
@@ -78,7 +78,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
     let setup = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Mobile host needs a configured node. Run `sovereign setup` first.\n  ({e})");
+            eprintln!("Mobile host needs a configured node. Run `svrn setup` first.\n  ({e})");
             return 1;
         }
     };
@@ -123,7 +123,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
         eprintln!(
             "warning: no daemon answering on 127.0.0.1:{} — the mobile host \
              delegates inference to it, so chat/retrieval will fail until \
-             `sovereign daemon` is running.",
+             `svrn daemon` is running.",
             setup.daemon.client_port
         );
     }
@@ -157,7 +157,7 @@ async fn cmd_serve(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mobile status` — is the daemon up, and is a host listening?
+/// `svrn mobile status` — is the daemon up, and is a host listening?
 async fn cmd_status() -> i32 {
     let setup = SetupConfig::load().ok();
     let mh = MobileHostConfig::load_or_create().ok();
@@ -172,7 +172,7 @@ async fn cmd_status() -> i32 {
             let listening = mh.as_ref().and_then(|m| port_of(&m.bind)).map(host_listening).unwrap_or(false);
             println!("  host:       {}", if listening { "listening ✓" } else { "not running" });
         }
-        None => println!("  settings:   (none yet — run `sovereign mobile pair` or `serve`)"),
+        None => println!("  settings:   (none yet — run `svrn mobile pair` or `serve`)"),
     }
     match &setup {
         Some(s) => {
@@ -183,12 +183,12 @@ async fn cmd_status() -> i32 {
                 s.daemon.client_port
             );
         }
-        None => println!("  daemon:     (no ~/.sovereign/config.toml — run `sovereign setup`)"),
+        None => println!("  daemon:     (no ~/.sovereign/config.toml — run `svrn setup`)"),
     }
     0
 }
 
-/// `sovereign mobile pair` — print the pairing card for the phone.
+/// `svrn mobile pair` — print the pairing card for the phone.
 async fn cmd_pair() -> i32 {
     let mh = match MobileHostConfig::load_or_create() {
         Ok(c) => c,
@@ -217,7 +217,7 @@ fn print_pairing(mh: &MobileHostConfig, address: String, iroh_dial: Option<Strin
     match &iroh_dial {
         Some(dial) => println!("  │  No-VPN code       : {dial}"),
         None if mh.iroh_enabled => {
-            println!("  │  No-VPN code       : (host not up yet — re-run `sovereign mobile pair` once it is)")
+            println!("  │  No-VPN code       : (host not up yet — re-run `svrn mobile pair` once it is)")
         }
         None => {}
     }
@@ -309,10 +309,10 @@ fn redact(token: &str) -> String {
 }
 
 const HELP_MOBILE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mobile",
+    command: "svrn mobile",
     summary: "Serve the phone-facing API, riding on the daemon's resident models (no second load).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mobile <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mobile <subcommand> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "serve [--bind <addr>]",
@@ -325,7 +325,7 @@ const HELP_MOBILE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
             ("pair", "Print the pairing card (address + tenant + token)"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Requires a configured node (`sovereign setup`) and a running `sovereign daemon` \
+            "Requires a configured node (`svrn setup`) and a running `svrn daemon` \
              (the host forwards chat + embeddings to it). Settings + token live in \
              ~/.sovereign/mobile-host.toml.",
         ),

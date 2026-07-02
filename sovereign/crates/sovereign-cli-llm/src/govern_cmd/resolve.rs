@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern resolve` — adjudicate a tension by superseding one
+//! `svrn govern resolve` — adjudicate a tension by superseding one
 //! of its two rules with the other, then marking the tension resolved.
 //!
 //! Writes a `Supersede` op (new = the kept rule, old = the other
@@ -86,7 +86,7 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     }
     let Some(keep) = parsed.keep else {
         eprintln!("error: resolve needs `--keep <rule-id>` (which tensioned rule wins).");
-        eprintln!("  run `sovereign govern tensions {}` to see the rule ids.", parsed.corpus_id);
+        eprintln!("  run `svrn govern tensions {}` to see the rule ids.", parsed.corpus_id);
         return 2;
     };
 
@@ -99,7 +99,7 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     };
     let Some(tension) = view.tensions.iter().find(|t| t.id.as_str() == parsed.tension_id) else {
         eprintln!(
-            "error: no tension `{}` in `{}` — run `sovereign govern tensions {}` to list them.",
+            "error: no tension `{}` in `{}` — run `svrn govern tensions {}` to list them.",
             parsed.tension_id, parsed.corpus_id, parsed.corpus_id
         );
         return 1;
@@ -163,6 +163,6 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     if !parsed.rationale.is_empty() {
         println!("  rationale: {}", parsed.rationale);
     }
-    println!("  (re-run `sovereign govern tensions {}` to confirm it cleared.)", parsed.corpus_id);
+    println!("  (re-run `svrn govern tensions {}` to confirm it cleared.)", parsed.corpus_id);
     0
 }

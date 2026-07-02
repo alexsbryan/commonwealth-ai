@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich diff <corpus> <run-a> <run-b>` — side-by-side
+//! `svrn enrich diff <corpus> <run-a> <run-b>` — side-by-side
 //! diff of two phase 1 run output files so the developer can see what
 //! changed between exemplar iterations.
 //!
@@ -14,10 +14,10 @@ use corpus_engine::enrichment::pipeline::{ExtractedQuestion, Phase1Output};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich diff",
+    command: "svrn enrich diff",
     summary: "Side-by-side compare two phase 1 run output files.",
     sections: &[
-        HelpSection::Usage("sovereign enrich diff <corpus-id> <run-a.json> <run-b.json>"),
+        HelpSection::Usage("svrn enrich diff <corpus-id> <run-a.json> <run-b.json>"),
         HelpSection::Notes(
             "Diff reports per-chapter added / removed / changed questions. Phase 3+ diffs land \
              in a follow-up iteration.",

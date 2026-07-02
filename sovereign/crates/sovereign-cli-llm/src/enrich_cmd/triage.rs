@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich triage-candidates <atlas-corpus>` — placeholder +
+//! `svrn enrich triage-candidates <atlas-corpus>` — placeholder +
 //! in-corpus degree distribution from a structure_first atlas.
 //!
 //! Emits two histograms + two top-K tables so an operator can decide:
@@ -24,11 +24,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich triage-candidates",
+    command: "svrn enrich triage-candidates",
     summary: "Rank atlas entities by inbound link degree to pick Tier-1.5 / Tier-2 enrichment candidates.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich triage-candidates <atlas-corpus> [--top-k N] [--json]",
+            "svrn enrich triage-candidates <atlas-corpus> [--top-k N] [--json]",
         ),
         HelpSection::Flags(&[
             (
@@ -42,7 +42,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich triage-candidates wiki-l5-struct --top-k 50",
+                "svrn enrich triage-candidates wiki-l5-struct --top-k 50",
                 "Top-50 placeholders + top-50 in-corpus by centrality.",
             ),
         ]),
@@ -78,7 +78,7 @@ pub async fn cmd_triage(args: &[String]) -> i32 {
     let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         eprintln!(
-            "error: no atlas at {} — run `sovereign enrich ingest {corpus_id} --strategy structure_first --source-corpus <id>` first",
+            "error: no atlas at {} — run `svrn enrich ingest {corpus_id} --strategy structure_first --source-corpus <id>` first",
             atlas_dir.display()
         );
         return 1;

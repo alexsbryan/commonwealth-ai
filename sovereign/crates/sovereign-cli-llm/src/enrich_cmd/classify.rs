@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich classify <corpus> [--chapters …|--full] [--force]` —
+//! `svrn enrich classify <corpus> [--chapters …|--full] [--force]` —
 //! Phase 0: per-section type classification.
 //!
 //! Reads each section in the corpus's chapters.json, dispatches one
@@ -34,11 +34,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich classify",
+    command: "svrn enrich classify",
     summary: "Phase 0 — per-section type classification. Writes cache/section_classifications.json.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich classify <corpus-id> [--chapters <id1,id2,...> | --full] [--force]",
+            "svrn enrich classify <corpus-id> [--chapters <id1,id2,...> | --full] [--force]",
         ),
         HelpSection::Flags(&[
             (
@@ -56,15 +56,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich classify obsidian-vault",
+                "svrn enrich classify obsidian-vault",
                 "Classify every section that isn't already cached at its current content_hash. Fast iteration loop once the classifier prompt is settled.",
             ),
             (
-                "sovereign enrich classify obsidian-vault --force",
+                "svrn enrich classify obsidian-vault --force",
                 "Re-classify everything from scratch after a classifier-prompt update.",
             ),
             (
-                "sovereign enrich classify obsidian-vault --chapters sec_00002,sec_00007",
+                "svrn enrich classify obsidian-vault --chapters sec_00002,sec_00007",
                 "Spot-classify two sections — useful while tuning the prompt against specific failure cases.",
             ),
         ]),
@@ -232,7 +232,7 @@ pub async fn cmd_classify(args: &[String]) -> i32 {
 
     if !probe_daemon(&cfg.base_url).await {
         eprintln!(
-            "error: daemon is not responding at {} — start it with `sovereign daemon start`",
+            "error: daemon is not responding at {} — start it with `svrn daemon start`",
             cfg.base_url
         );
         return 2;

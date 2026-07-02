@@ -35,7 +35,7 @@ pub fn init_tracing(default_filter: &str) {
         .with_env_filter(filter)
         .with_target(false)
         // `fmt()` defaults to stdout despite the historical docstring
-        // claiming stderr. That mismatch broke `sovereign search-gym
+        // claiming stderr. That mismatch broke `svrn search-gym
         // run --json > out.json`: the JSON payload and tracing WARN
         // lines interleaved on stdout, leaving the file unparseable.
         // Force stderr so subcommands that emit machine-readable

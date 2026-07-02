@@ -303,27 +303,31 @@ pub(super) async fn extract_claim_list(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     answer: &str,
+    max_claims: usize,
 ) -> Option<Vec<String>> {
     let prompt = format!(
         "A user asked: {}\n\nAn assistant wrote this long answer:\n\"\"\"\n{}\n\"\"\"\n\n\
          List the SPECIFIC factual claims the answer asserts — concrete who/what/when \
          relations a passage could confirm or refute (names, identifications, events, \
          attributions). One claim per line, each a short standalone sentence naming \
-         both sides of the relation. At most 4 lines; pick the most load-bearing \
-         claims. Skip opinions, summaries of the question, and anything the answer \
-         itself flags as not from the sources.\n\
+         both sides of the relation. At most {n} lines; pick the most load-bearing \
+         claims, and when the answer is long, sample across ALL of it — include \
+         specific claims from the later sections, not only the opening. Skip \
+         opinions, summaries of the question, and anything the answer itself flags \
+         as not from the sources.\n\
          Reply with exactly NO_CLAIM if there are no such checkable claims.",
         question.chars().take(400).collect::<String>(),
-        answer.chars().take(6000).collect::<String>(),
+        answer.chars().take(14_000).collect::<String>(),
+        n = max_claims,
     );
     let req = CompletionRequest {
         prompt,
-        system_message: Some(
-            "You extract claims precisely. Reply with up to 4 lines, or NO_CLAIM.".into(),
-        ),
+        system_message: Some(format!(
+            "You extract claims precisely. Reply with up to {max_claims} lines, or NO_CLAIM."
+        )),
         preferred_speed: Speed::Medium,
         model_id: Some("primary".into()),
-        max_tokens: Some(160),
+        max_tokens: Some((max_claims * 48).max(160)),
         temperature: Some(0.0),
         think_budget: Some(0),
         enable_thinking: Some(false),
@@ -346,12 +350,115 @@ pub(super) async fn extract_claim_list(
                             .to_string()
                     })
                     .filter(|l| l.len() > 12)
-                    .take(4)
+                    // Honour the caller's budget — was a hardcoded take(4) that
+                    // silently defeated the length-scaled claim_budget (up to
+                    // 10): a padded 6000-char answer still had only its first 4
+                    // claims extracted, so later-section fabricated specifics /
+                    // misattributions were never audited (2026-06-30 gate gap).
+                    .take(max_claims)
                     .collect(),
             )
         }
         Err(e) => {
             tracing::warn!(target: "grounding_gate", error = %e, "claim-list extraction failed");
+            None
+        }
+    }
+}
+
+/// Holistic supporting-specifics scan — the complement to the per-claim audit.
+///
+/// `extract_claim_list` pulls the answer's most LOAD-BEARING claims (its
+/// headline assertions), which on a padded answer are often the correct part;
+/// the fabrication hides in the SUPPORTING SPECIFICS a long answer invents to
+/// look thorough — a fake constant value, a quote misattributed to the wrong
+/// speaker (Hamilton's point credited to Madison), a section/version number
+/// that isn't in the sources, the wrong programming language. The per-claim
+/// audit never extracts those (2026-06-30 gate blind spot; see the faithfulness
+/// audit), so they ship inside a `released` verdict.
+///
+/// This is ONE holistic pass: the judge sees the WHOLE answer against the FULL
+/// evidence and returns the specific details that are absent from or
+/// contradicted by the evidence. It is deliberately CONSERVATIVE — instructed
+/// to list a detail only when confident it is unsupported — because the
+/// downstream action (route through the rewrite/annotate path) should correct
+/// real fabrications, not prune legitimately-grounded content. Returns the
+/// offending specifics verbatim (answer wording), or an empty vec when every
+/// specific checks out. `None` on inference error → caller fails open.
+pub(super) async fn scan_unsupported_specifics(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    answer: &str,
+    evidence_chunks: &[String],
+    max_items: usize,
+) -> Option<Vec<String>> {
+    let evidence: String = evidence_chunks
+        .iter()
+        .map(|c| c.chars().take(1_500).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    // No evidence to check against → nothing this scan can adjudicate.
+    if evidence.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    let prompt = format!(
+        "A user asked: {q}\n\n\
+         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n\
+         The assistant's ANSWER:\n\"\"\"\n{ans}\n\"\"\"\n\n\
+         Compare the ANSWER against the EVIDENCE and list every statement in the \
+         ANSWER that is UNSUPPORTED or WRONG given the evidence. Three kinds to \
+         catch:\n\
+         (1) A fabricated specific — a named person/place/thing, number, date, \
+         direct quotation, section/version/chapter reference, code identifier or \
+         value, or claimed programming language that is NOT in the evidence.\n\
+         (2) A misattribution — a statement, position, or quote the answer credits \
+         to the wrong author/source/speaker relative to what the evidence shows.\n\
+         (3) A false claim ABOUT the evidence — e.g. the answer says the sources do \
+         NOT contain something that they DO contain, or vice-versa.\n\
+         A detail the evidence states, even paraphrased, is SUPPORTED — do not list \
+         it. When genuinely unsure, leave it out, but DO flag a clear contradiction. \
+         Quote the answer's exact wording. One item per line. Reply with exactly \
+         NONE only if every statement in the answer is supported by the evidence.",
+        q = question.chars().take(400).collect::<String>(),
+        ev = evidence,
+        ans = answer.chars().take(12_000).collect::<String>(),
+    );
+    let req = CompletionRequest {
+        prompt,
+        system_message: Some(format!(
+            "You audit an answer's specifics against evidence, precisely and \
+             conservatively. Reply with up to {max_items} lines, or NONE."
+        )),
+        preferred_speed: Speed::Medium,
+        model_id: Some("primary".into()),
+        max_tokens: Some((max_items * 40).max(160)),
+        temperature: Some(0.0),
+        think_budget: Some(0),
+        enable_thinking: Some(false),
+        ..Default::default()
+    };
+    match inference.complete(&req).await {
+        Ok(resp) => {
+            let t = resp.text.trim();
+            if t.is_empty() || t.to_uppercase().contains("NONE") {
+                return Some(Vec::new());
+            }
+            Some(
+                t.lines()
+                    .map(|l| l.trim().trim_start_matches(['-', '*', '•']).trim())
+                    .map(|l| {
+                        l.trim_start_matches(|c: char| c.is_ascii_digit())
+                            .trim_start_matches(['.', ')'])
+                            .trim()
+                            .to_string()
+                    })
+                    .filter(|l| l.len() > 8)
+                    .take(max_items)
+                    .collect(),
+            )
+        }
+        Err(e) => {
+            tracing::warn!(target: "grounding_gate", error = %e, "specifics scan failed");
             None
         }
     }

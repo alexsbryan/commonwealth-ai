@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern ask` — answer a question from a governance corpus's
+//! `svrn govern ask` — answer a question from a governance corpus's
 //! *current law*.
 //!
 //! A turn sealed to the corpus (retrieval restricted via

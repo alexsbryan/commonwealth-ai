@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness eval` — score the current atlas against a
+//! `svrn awareness eval` — score the current atlas against a
 //! golden set.
 //!
 //! Two ways to load the golden set (mutually exclusive):

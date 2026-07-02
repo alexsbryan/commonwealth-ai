@@ -84,7 +84,7 @@
         cat[0] ??
         null;
       provenance = {
-        modelsDir: cfg?.data_dir ? `${cfg.data_dir}/models` : "~/.sovereign/models",
+        modelsDir: cfg?.data_dir ? `${cfg.data_dir}/models` : "~/.svrnmesh/models",
         primary: prim ? slim(prim) : null,
         fast: f ? slim(f) : null,
         embed: e ? slim(e) : null,

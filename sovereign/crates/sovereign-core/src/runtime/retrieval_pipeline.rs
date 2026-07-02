@@ -627,44 +627,46 @@ fn step_readiness_disclosure<'a, 'ctx>(
             Some(u) => u,
             None => return StepOutcome::default(),
         };
-        let (reason, cause) = match issue {
+        // `reason` is the internal log tag (full detail stays in the trace
+        // below — glassbox); `cause` is the PLAIN-language phrase the user
+        // actually reads. The user-facing phrase deliberately omits embedding
+        // dimensions / "vector index" / "SYSTEM NOTE" jargon — those leaked into
+        // answers verbatim and read as a cold, broken refusal.
+        let (reason, built_dims, cause) = match issue {
             ReadinessIssue::NotBuilt => (
                 "index_not_built",
-                "its index has not finished building (an ingest or sync may have \
-                 paused), so it has no searchable content yet"
-                    .to_string(),
+                0,
+                "hasn't finished building yet (a sync or import may have paused)",
             ),
-            ReadinessIssue::NoVectorIndex => (
-                "vector_index_missing",
-                "its search index is incomplete — the vector index was never built"
-                    .to_string(),
-            ),
-            ReadinessIssue::DimMismatch { built } => (
-                "dim_mismatch",
-                format!(
-                    "its index was built with a different embedding model \
-                     ({built}-dimensional vs the current {loaded_dims}-dimensional)"
-                ),
-            ),
+            ReadinessIssue::NoVectorIndex => ("vector_index_missing", 0, "isn't fully indexed for search yet"),
+            ReadinessIssue::DimMismatch { built } => ("dim_mismatch", built, "needs a quick rebuild first"),
         };
         tracing::info!(
             target: "retrieval.pipeline",
             corpus = %corpus,
             reason,
+            built_dims,
             loaded_dims,
             "{}: readiness glassbox — scoped corpus skipped; injecting rebuild disclosure",
             st.label
         );
+        // Assistant GUIDANCE, not a knowledge passage: the model must relay it in
+        // its own warm words and never quote/cite it. The old text was prefixed
+        // "SYSTEM NOTE" and carried the dim mismatch verbatim, which the model
+        // parroted ("...skipped entirely [Source: X]") — a cold refusal the UX
+        // judge scored as broken. Keep it brief, warm, and actionable.
         let content = format!(
-            "SYSTEM NOTE (corpus unavailable): The \"{corpus}\" material the user is \
-             asking about could NOT be searched — {cause}, so it was skipped \
-             entirely. Tell the user this plainly and ask them to rebuild it in \
-             Settings → Knowledge → Rebuild. Do NOT answer the question from \
-             general knowledge and do NOT invent an answer."
+            "(Assistant guidance — relay this in your own words; do NOT quote it \
+             or attach a [Source: ...] citation to it.) The \"{corpus}\" knowledge \
+             base the user is asking about can't be searched right now because it \
+             {cause}. In one or two warm, plain sentences, let them know you can't \
+             answer from it yet and that rebuilding it in Settings → Knowledge → \
+             Rebuild will fix it. Do not mention indexes, embedding models, or \
+             dimensions, and do not answer from general knowledge or invent an answer."
         );
         st.chunks.push(corpus_engine::ScoredChunk {
             content,
-            title: Some(format!("{corpus} (needs rebuild)")),
+            title: Some("Knowledge base status".to_string()),
             url: None,
             corpus_id: corpus,
             score: 1.0,

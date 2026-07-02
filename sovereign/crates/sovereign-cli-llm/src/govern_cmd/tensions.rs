@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern tensions` — the meeting agenda: open tensions,
+//! `svrn govern tensions` — the meeting agenda: open tensions,
 //! ranked (open-first, confidence-desc by `build_view`), each with both
 //! rule texts and a ready-to-run resolve command. Integrity issues are
 //! surfaced, never hidden (glass-box).
@@ -56,7 +56,7 @@ pub fn cmd_tensions(args: &[String]) -> i32 {
     println!("=== govern tensions — {corpus_id} ({} open) ===", open.len());
     if open.is_empty() {
         if view.rules.is_empty() {
-            println!("  no governed rules yet — run `sovereign govern seed {corpus_id}` first.");
+            println!("  no governed rules yet — run `svrn govern seed {corpus_id}` first.");
         } else {
             println!("  no open tensions — current law is internally consistent (as detected).");
         }

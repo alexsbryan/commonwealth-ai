@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign meshapp dev <id>` — a local dev loop for a mesh-app bundle.
+//! `svrn meshapp dev <id>` — a local dev loop for a mesh-app bundle.
 //!
 //! Serves the bundle's static files + the shared `_sdk/`, and injects a
 //! `window.meshApp` shim that proxies the bridge ops over HTTP to the SAME pure
@@ -169,7 +169,7 @@ async fn run_dev(args: &[String]) -> i32 {
     };
     if !bundle_dir.join("index.html").is_file() {
         eprintln!(
-            "meshapp dev: no index.html in {} — `sovereign meshapp install {app_id}` first, or pass --dir",
+            "meshapp dev: no index.html in {} — `svrn meshapp install {app_id}` first, or pass --dir",
             bundle_dir.display()
         );
         return 1;
@@ -193,7 +193,7 @@ async fn run_dev(args: &[String]) -> i32 {
         index.unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_indexes().join(&corpus));
     if !index_path.is_dir() {
         eprintln!(
-            "meshapp dev: corpus `{corpus}` not found at {} — install it first (`sovereign corpus install {corpus}`) or pass --index",
+            "meshapp dev: corpus `{corpus}` not found at {} — install it first (`svrn corpus install {corpus}`) or pass --index",
             index_path.display()
         );
         return 1;
@@ -429,8 +429,8 @@ const STARTER_INDEX_HTML: &str = r#"<!doctype html>
 </html>
 "#;
 
-const STARTER_APP_JS: &str = r#"// {{NAME}} — scaffolded by `sovereign meshapp new`.
-// Edit me, then run `sovereign meshapp dev {{ID}}` to see changes against real
+const STARTER_APP_JS: &str = r#"// {{NAME}} — scaffolded by `svrn meshapp new`.
+// Edit me, then run `svrn meshapp dev {{ID}}` to see changes against real
 // data. Everything is composed from the MeshApp SDK; the only host channel is
 // the permission-gated `window.meshApp` bridge (no inference).
 import {

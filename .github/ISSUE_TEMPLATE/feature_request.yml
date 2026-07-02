@@ -1,0 +1,31 @@
+name: Feature request or idea
+description: Suggest something new, or a change to how something works.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        Describe the need, not only the solution. What are you trying to
+        accomplish that's hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: The change you have in mind, if any. Rough is fine.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you've tried or considered
+      description: Workarounds you're using now, or other approaches you weighed.
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit
+      description: Optional, but it helps to know the shape.
+      options:
+        - label: This keeps data on the user's machine by default — nothing is made to phone home
+        - label: I've read the goals in the README and this fits them

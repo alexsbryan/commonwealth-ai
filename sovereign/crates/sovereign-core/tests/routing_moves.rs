@@ -606,6 +606,43 @@ async fn oversize_guard_also_applies_to_handle_turn() {
 }
 
 #[tokio::test]
+async fn degenerate_message_returns_clarification() {
+    // A turn carrying no actual question (e.g. "?") must NOT route into the
+    // generative path and produce a generic essay — the guard returns a graceful
+    // clarification hint before the router or any Fast-slot call fires.
+    let (sink, events) = RecordingRoutingEventSink::new();
+    let router = Box::new(FixedRouter {
+        classification: classification_with(0.95, vec![]),
+    });
+    let runtime = build_runtime(router, sink as Arc<dyn RoutingEventSink>).await;
+
+    let conv = uuid::Uuid::new_v4().to_string();
+    for degenerate in ["?", "?!", "...", "   ", ""] {
+        match runtime.handle_message_stream(degenerate, &conv).await {
+            Ok(_) => panic!("degenerate message {degenerate:?} must be rejected"),
+            Err(sovereign_core::error::Error::InvalidInput(msg)) => {
+                assert_eq!(msg, sovereign_core::runtime::DEGENERATE_MESSAGE_HINT);
+            }
+            Err(other) => panic!("expected InvalidInput for {degenerate:?}, got {other:?}"),
+        }
+        // Non-streaming path applies the same guard.
+        assert!(matches!(
+            runtime.handle_turn(degenerate, &conv).await,
+            Err(sovereign_core::error::Error::InvalidInput(_))
+        ));
+    }
+    // A real question in ANY script is NOT degenerate and passes the guard.
+    assert!(!sovereign_core::runtime::is_degenerate_message("What is X?"));
+    assert!(!sovereign_core::runtime::is_degenerate_message("什么是 X?"));
+    assert!(!sovereign_core::runtime::is_degenerate_message("42"));
+    assert!(sovereign_core::runtime::is_degenerate_message("?!"));
+    // No routing events fire — the guard runs before classify.
+    let rec = events.lock().await;
+    assert!(rec.interpretations.is_empty());
+    assert!(rec.clarifications.is_empty());
+}
+
+#[tokio::test]
 async fn oversize_guard_exempts_document_attached_prefix() {
     // The `[Document attached: ...]` prefix routes through map-reduce;
     // it's the correct path for long inputs, so the cap must not

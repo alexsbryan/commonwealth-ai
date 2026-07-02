@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared help formatter.
 //!
-//! Every `sovereign <cmd> --help` output is built from a single
+//! Every `svrn <cmd> --help` output is built from a single
 //! `Help` struct so the section order, indentation, and tone stay
 //! uniform across the CLI. Adding a new subcommand means:
 //!
 //! ```ignore
 //! const HELP: Help = Help {
-//!     command: "sovereign my-cmd",
+//!     command: "svrn my-cmd",
 //!     summary: "One-sentence imperative description.",
 //!     sections: &[
-//!         HelpSection::Usage("sovereign my-cmd [--flag]"),
+//!         HelpSection::Usage("svrn my-cmd [--flag]"),
 //!         HelpSection::Flags(&[("--flag <v>", "What it does")]),
 //!     ],
 //! };
@@ -29,7 +29,7 @@
 /// A rendered help block. All fields are `'static` because help text
 /// lives as compile-time string literals on module-level `const`s.
 pub struct Help {
-    /// Full command name shown in the banner, e.g. `"sovereign mesh create"`.
+    /// Full command name shown in the banner, e.g. `"svrn mesh create"`.
     pub command: &'static str,
     /// One-sentence imperative summary (no trailing period needed — we add it).
     pub summary: &'static str,
@@ -39,7 +39,7 @@ pub struct Help {
 
 /// A named, formatted block inside a `Help`.
 pub enum HelpSection {
-    /// Raw usage line(s). `"sovereign setup [--reset] [--yes]"`.
+    /// Raw usage line(s). `"svrn setup [--reset] [--yes]"`.
     Usage(&'static str),
     /// A list of subcommands. Each entry is `(name, one-line description)`.
     Subcommands(&'static [(&'static str, &'static str)]),

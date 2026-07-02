@@ -1,0 +1,38 @@
+# Config for the PR auto-labeler (.github/workflows/labeler.yml).
+# Path globs -> labels, so incoming PRs sort themselves by area and you're not
+# hand-labeling every one. Uses the actions/labeler v5 schema.
+# Missing labels are created automatically on first use.
+
+"area: corpus-engine":
+  - changed-files:
+      - any-glob-to-any-file: "corpus-engine*/**"
+
+"area: sovereign":
+  - changed-files:
+      - any-glob-to-any-file: "sovereign/**"
+
+"area: commonwealth":
+  - changed-files:
+      - any-glob-to-any-file: "commonwealth/**"
+
+"area: mesh":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "commonwealth/**"
+          - "sovereign/crates/sovereign-mesh/**"
+
+"area: desktop":
+  - changed-files:
+      - any-glob-to-any-file: "sovereign/crates/sovereign-desktop/**"
+
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"

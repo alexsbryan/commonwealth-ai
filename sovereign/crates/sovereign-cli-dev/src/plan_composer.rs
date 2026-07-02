@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Pure composer for `sovereign project plan`.
+//! Pure composer for `svrn project plan`.
 //!
 //! Takes a `DesignSignals` snapshot and the parsed state of
 //! `OPEN_QUESTIONS.md`; returns a list of plan items (one per
@@ -278,7 +278,7 @@ fn render_markdown(
         input.today, design_hash
     ));
     out.push_str(
-        "\n<!-- Regenerate with `sovereign project plan`. Blocks you want\n\
+        "\n<!-- Regenerate with `svrn project plan`. Blocks you want\n\
              to keep across regenerations can be wrapped in `<!-- keep -->`\n\
              markers (not yet wired; safe to author ahead of the feature). -->\n",
     );
@@ -544,7 +544,7 @@ Stuff.
 **Answer:**
 JSON with a versioned envelope.
 
-_Captured by `sovereign project design --solo` · session `design-123` · 2026-04-22_
+_Captured by `svrn project design --solo` · session `design-123` · 2026-04-22_
 
 ---
 

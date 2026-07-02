@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign serve` — foreground or background MCP server.
+//! `svrn serve` — foreground or background MCP server.
 //!
-//! Renamed from `sovereign project serve` per the CLI refactor plan.
+//! Renamed from `svrn project serve` per the CLI refactor plan.
 //!
 //! Two run modes:
 //!
 //! - **Foreground (default)** — same as the legacy
-//!   `sovereign project serve` path. Blocks the terminal; ctrl-c
+//!   `svrn project serve` path. Blocks the terminal; ctrl-c
 //!   stops the server. Forwards directly to
 //!   [`crate::project_cmd::cmd_serve`].
 //!
@@ -16,8 +16,8 @@
 //!   the project's `.sovereign/server.pid` AND `~/.sovereign/server.pid`,
 //!   detach from the parent's controlling terminal via `setsid()`,
 //!   and exit 0 once the child is up. The dual-PID-file write lets
-//!   `sovereign stop` find the process from inside *or* outside the
-//!   project tree, and lets `sovereign daemon` take over `:9741`
+//!   `svrn stop` find the process from inside *or* outside the
+//!   project tree, and lets `svrn daemon` take over `:9741`
 //!   without guessing.
 //!
 //! ## Why setsid()
@@ -26,7 +26,7 @@
 //! session. Closing the launching terminal sends SIGHUP to every
 //! process in the session — including our orphaned child — which
 //! kills the MCP server as soon as the user closes the window that
-//! ran `sovereign init`. `setsid()` puts the child in its own
+//! ran `svrn init`. `setsid()` puts the child in its own
 //! session with no controlling terminal, immune to that signal
 //! cascade.
 
@@ -47,7 +47,7 @@ pub async fn run(args: &[String]) -> i32 {
         Mode::Background => match spawn_background(&forwarded).await {
             Ok(()) => 0,
             Err(e) => {
-                eprintln!("sovereign serve --background: {e}");
+                eprintln!("svrn serve --background: {e}");
                 1
             }
         },
@@ -106,7 +106,7 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
     // gone, file lingered) is fine — we overwrite below.
     if let Some(pid) = read_pid(&project_pid_path).or_else(|| read_pid(&home_pid_path)) {
         if process_alive(pid) {
-            eprintln!("  serve already running (pid {pid}). Use `sovereign stop` first.");
+            eprintln!("  serve already running (pid {pid}). Use `svrn stop` first.");
             return Ok(());
         }
         // Stale: clean both pointers; the new spawn will overwrite.
@@ -344,15 +344,15 @@ async fn reachable(url: &str) -> bool {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign serve",
+    command: "svrn serve",
     summary: "Run the MCP code-intelligence server. \
          Default is foreground; pass --background to detach.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign serve [--background] [--port <n>]"),
+        crate::util::help::HelpSection::Usage("svrn serve [--background] [--port <n>]"),
         crate::util::help::HelpSection::Notes(
             "Foreground (default): blocks; ctrl-c stops. \
              Background: detaches via setsid; pid in .sovereign/server.pid; \
-             log at ~/.sovereign/logs/serve.log. Stop with `sovereign stop`.",
+             log at ~/.sovereign/logs/serve.log. Stop with `svrn stop`.",
         ),
     ],
 };

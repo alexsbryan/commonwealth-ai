@@ -461,7 +461,7 @@ export async function getSetupContextSize(): Promise<SetupContextWindow> {
 }
 
 /** Update the canonical chat-slot context window. Writes
- *  `~/.sovereign/config.toml`, kicks the daemon to reload (background),
+ *  `~/.svrnmesh/config.toml`, kicks the daemon to reload (background),
  *  then tears down + rebuilds the desktop-embedded inference Arc.
  *  Returns when the rebuild settles — typically 15-30s on Metal. */
 export async function setSetupContextSize(newCtx: number): Promise<void> {
@@ -488,7 +488,7 @@ export async function completeSetupAuto(primaryFile?: string): Promise<void> {
   return invoke("complete_setup_auto", { primaryFile: primaryFile ?? null });
 }
 
-/** The machine-readable setup report (`~/.sovereign/setup-report.json`) as a
+/** The machine-readable setup report (`~/.svrnmesh/setup-report.json`) as a
  *  raw JSON string, or null if setup hasn't run yet. Powers the "What setup
  *  did" panel in Settings → About; a `setup-report.md` sits beside it on
  *  disk. */
@@ -511,7 +511,7 @@ export async function detectHardware(): Promise<HardwareInfo> {
 /** Ask the backend whether a CLI-started daemon is already running
  *  and/or whether `~/.config/sovereign/config.toml` exists. The
  *  setup wizard uses this to skip the model and knowledge-tier
- *  screens when the user has already run `sovereign setup`. */
+ *  screens when the user has already run `svrn setup`. */
 export async function detectBootstrap(): Promise<BootstrapSnapshot> {
   return invoke("detect_bootstrap");
 }
@@ -848,7 +848,7 @@ export async function testMcpConnection(
 }
 
 /** Store (or, if blank, clear) a server's bearer token in the app secret file
- * (`~/.sovereign/secrets/`, 0600 — never in config or gossip). */
+ * (`~/.svrnmesh/secrets/`, 0600 — never in config or gossip). */
 export async function setMcpToken(name: string, token: string): Promise<void> {
   return invoke("mcp_set_token", { name, token });
 }
@@ -1137,7 +1137,7 @@ export type RecipeParameterSchema = {
 
 /** Import a recipe from a TOML string (paste or file drop). The
  *  desktop validates it and, on success, writes it under
- *  `~/.sovereign/recipes/<corpus_id>/recipe.toml` plus a registry
+ *  `~/.svrnmesh/recipes/<corpus_id>/recipe.toml` plus a registry
  *  entry. The next `listCorpora()` round-trip surfaces it as a
  *  local entry the user can install. */
 export async function corpusImportRecipe(
@@ -1630,7 +1630,7 @@ export async function enrichBuildAsync(
 
 // ── Run a workflow ──────────────────────────────────────────────
 
-/** List the workflows the user can run — their own (`~/.sovereign/workflows/`)
+/** List the workflows the user can run — their own (`~/.svrnmesh/workflows/`)
  *  plus the shipped starters, each with the input params it declares. */
 export async function workflowListRunnable(): Promise<WorkflowCatalogEntry[]> {
   return invoke("workflow_list_runnable");
@@ -1705,7 +1705,7 @@ export async function enrichListCorpora(): Promise<EnrichedCorpusSummary[]> {
 
 /** Idempotent bridge: wrap the local-corpus staged JSONL for a
  *  folder/Obsidian ingest as a synthetic plaintext source and
- *  invoke `sovereign enrich init` against it.
+ *  invoke `svrn enrich init` against it.
  *
  *  `pipelineId` must be `literary_atlas` or `philosophy_atlas` —
  *  only atlas-producing pipelines are allowed through this path.
@@ -1733,7 +1733,7 @@ export async function enrichInitForLocalCorpus(
 
 /** Pre-run estimate for an atlas build. Requires
  *  `enrich_init_for_local_corpus` (or equivalent) to have written
- *  `~/.sovereign/indexes/<corpus>/chapters.json`. The UI surfaces
+ *  `~/.svrnmesh/indexes/<corpus>/chapters.json`. The UI surfaces
  *  `minutes_low`..`minutes_high` as a range; the point estimates
  *  (`sections`, `est_tokens`) feed the transparency panel. */
 export async function enrichEstimate(
@@ -1783,7 +1783,7 @@ export async function isFirstRun(): Promise<boolean> {
   return invoke("is_first_run");
 }
 
-/** Write the `~/.sovereign/first_run_complete` marker so subsequent
+/** Write the `~/.svrnmesh/first_run_complete` marker so subsequent
  *  launches skip the first-corpus onboarding flow. */
 export async function markFirstRunComplete(): Promise<void> {
   return invoke("mark_first_run_complete");

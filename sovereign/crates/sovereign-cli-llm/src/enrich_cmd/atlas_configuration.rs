@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-configuration` — Phase A Step 5 (Phase 8).
+//! `svrn enrich atlas-configuration` — Phase A Step 5 (Phase 8).
 //!
 //! Reads the resolved atlas (atoms.json + edges.json),
 //! summarises it for the pipeline's Phase 8 prompt, dispatches the
@@ -31,16 +31,16 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-configuration",
+    command: "svrn enrich atlas-configuration",
     summary: "Detect 0–3 interpretive Configuration atoms from the resolved atlas (LLM).",
     sections: &[
-        HelpSection::Usage("sovereign enrich atlas-configuration <corpus-id>"),
+        HelpSection::Usage("svrn enrich atlas-configuration <corpus-id>"),
         HelpSection::Examples(&[(
-            "sovereign enrich atlas-configuration brothers_karamazov",
+            "svrn enrich atlas-configuration brothers_karamazov",
             "Summarise atlas → prompt the configured pipeline's Phase 8 → write configurations.json.",
         )]),
         HelpSection::Notes(
-            "Requires a prior `sovereign enrich atlas-resolve <corpus> --phase all`. \
+            "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all`. \
              Opt-in: only pipelines whose `runs_configuration_phase()` returns true \
              (`literary_atlas`, future `philosophy_atlas`) actually dispatch an LLM call. \
              Produces `~/.sovereign/indexes/<corpus>/atlas/configurations.json` and \
@@ -98,7 +98,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id
@@ -110,7 +110,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         Ok(e) => e,
         Err(err) => {
             eprintln!(
-                "error: reading {}/edges.json: {err}. Run `sovereign enrich atlas-resolve \
+                "error: reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id

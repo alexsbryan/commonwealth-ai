@@ -44,7 +44,7 @@ pub fn rotate_daemon_logs(log_dir: &Path, size_cap: u64, keep_n_baks: usize) -> 
     // is the launchd StandardOutPath (tracing → stderr defaults
     // notwithstanding, fmt() defaults to stdout), `daemon.err` is
     // StandardErrorPath, `daemon.out` is the manually-spawned
-    // counterpart from `sovereign daemon start`. Hard-coded because
+    // counterpart from `svrn daemon start`. Hard-coded because
     // the set is small, well-known, and won't grow with new
     // subsystems.
     const TARGETS: &[&str] = &["daemon.log", "daemon.err", "daemon.out"];

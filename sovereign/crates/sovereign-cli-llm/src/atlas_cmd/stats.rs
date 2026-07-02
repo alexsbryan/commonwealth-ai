@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas stats` — Move 6 P8 observability.
+//! `svrn atlas stats` — Move 6 P8 observability.
 //!
 //! Per-corpus inventory: atom count, doc count (from
 //! `doc_to_atoms.json` sidecar), articulation histogram, stream
@@ -28,7 +28,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--all" => {}
             "--help" | "-h" => {
                 println!(
-                    "sovereign atlas stats [--corpus <id>] [--all]\n\
+                    "svrn atlas stats [--corpus <id>] [--all]\n\
                     \n\
                     Per-corpus atlas inventory: atom count, doc count,\n\
                     articulation distribution, stream block. Read-only."

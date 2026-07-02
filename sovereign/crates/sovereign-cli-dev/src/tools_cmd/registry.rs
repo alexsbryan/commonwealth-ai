@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build a `ToolRegistry` with enough infrastructure for agent-driven
-//! `sovereign tools <cmd>` invocations.
+//! `svrn tools <cmd>` invocations.
 //!
 //! Distilled from `project_cmd::cmd_serve` — keeps the tool
 //! construction identical so both surfaces produce the same
@@ -11,7 +11,7 @@
 //! milliseconds, not seconds.
 //!
 //! Tools whose *execute* path needs a live watcher (e.g. `lint_status`
-//! without a running `sovereign daemon`) still register cleanly —
+//! without a running `svrn daemon`) still register cleanly —
 //! they just report `never_run` / `stale` when called, which is
 //! exactly the existing behaviour.
 //!
@@ -47,7 +47,7 @@ use sovereign_cli_shared::{
 };
 use sovereign_core::registry::ToolRegistry;
 
-/// Small bundle of handles held open across a single `sovereign tools`
+/// Small bundle of handles held open across a single `svrn tools`
 /// invocation. Built once in `open_tools_registry`, shared across the
 /// three subcommands so none of them re-opens SQLite.
 pub(super) struct ToolsEnv {
@@ -73,7 +73,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
     // Flat-file stores (lint_results.db, test_results.db) live at
     // `~/.sovereign/` directly — the canonical path the running
-    // `sovereign daemon` writes to. Resolving them under `data_dir`
+    // `svrn daemon` writes to. Resolving them under `data_dir`
     // (= `~/.sovereign/indexes/`) makes the CLI tool read from a
     // stale orphan DB and report `running` indefinitely while the
     // daemon's actual store reflects fresh results — observed
@@ -201,7 +201,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
     // repo_id resolution can hard-fail (no origin remote). The CLI
     // tools-call path still wants the tools registered so users see
-    // them in `sovereign tools list`; declare_scope just rejects at
+    // them in `svrn tools list`; declare_scope just rejects at
     // execute time. work_in_flight is independent of repo_id.
     let (atlas_repo_root, atlas_repo_id) = sovereign_work_atlas::resolve_repo_id(&repo_root)
         .unwrap_or_else(|_| (repo_root.clone(), String::new()));
@@ -237,7 +237,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // it can't see the daemon's in-memory heartbeat — but the daemon
     // mirrors it to a sidecar file. A reader heartbeat over that path
     // gives the CLI's status tools the SAME liveness the daemon reports,
-    // so `sovereign tools call test_status` distinguishes live / dead /
+    // so `svrn tools call test_status` distinguishes live / dead /
     // not-configured precisely instead of guessing from data age.
     // `with_workspace_root` enables per-file freshness queries
     // (`lint_status --files <paths>` and `lint_status --changed`).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness entities` — list extracted entities.
+//! `svrn awareness entities` — list extracted entities.
 //!
 //! Aggregates Entity atoms across both relational atlas dirs
 //! (personal-knowledge + conversation-history), joins them with
@@ -354,7 +354,7 @@ fn emit_text(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
                 eprintln!("  · {}", display_path(d));
             }
             eprintln!();
-            eprintln!("Run `sovereign awareness extract` (Phase 2) to populate them.");
+            eprintln!("Run `svrn awareness extract` (Phase 2) to populate them.");
         }
         return;
     }

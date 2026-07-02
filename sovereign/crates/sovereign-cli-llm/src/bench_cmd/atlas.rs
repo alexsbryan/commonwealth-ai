@@ -25,7 +25,7 @@
 //! Workflow:
 //!   1. Edit `~/.sovereign/config.toml` `[models].primary`.
 //!   2. `systemctl --user restart sovereign.service`
-//!   3. `sovereign bench atlas --output run-<label>.json`
+//!   3. `svrn bench atlas --output run-<label>.json`
 //!   4. Repeat for each candidate model.
 
 use std::path::PathBuf;
@@ -42,18 +42,18 @@ use crate::enrich_cmd::corpus_io::rebuild_corpus_state;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench atlas",
+    command: "svrn bench atlas",
     summary: "Measure atlas LLM throughput + correctness against the loaded primary.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench atlas [--corpus <id>] [--output <path>] [--tasks <ids>] [--no-warmup] [--max-tokens-cap <n>]",
+            "svrn bench atlas [--corpus <id>] [--output <path>] [--tasks <ids>] [--no-warmup] [--max-tokens-cap <n>]",
         ),
         HelpSection::Flags(&[
             (
                 "--corpus <id>",
                 "Corpus to source Phase 1 chapters from. Default: sep-al-farabi (the smallest \
                  ingested SEP article — three chapters give a usable size spread). Must already \
-                 be `sovereign enrich init`'d.",
+                 be `svrn enrich init`'d.",
             ),
             (
                 "--output <path>",
@@ -78,11 +78,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign bench atlas --output bench-qwopus.json",
+                "svrn bench atlas --output bench-qwopus.json",
                 "Run all tasks, write JSON to disk, print table.",
             ),
             (
-                "sovereign bench atlas --tasks phase1_medium,cluster_name_synth",
+                "svrn bench atlas --tasks phase1_medium,cluster_name_synth",
                 "Iterate on two specific tasks during model tuning.",
             ),
         ]),
@@ -273,7 +273,7 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
                 "error: loading enrichment config for `{}`: {e}",
                 parsed.corpus
             );
-            eprintln!("hint: run `sovereign enrich init {}` first", parsed.corpus);
+            eprintln!("hint: run `svrn enrich init {}` first", parsed.corpus);
             return 1;
         }
     };

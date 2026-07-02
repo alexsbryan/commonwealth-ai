@@ -13,15 +13,15 @@
 //! All install/uninstall operations are best-effort: failures return
 //! `Err(String)` with a human-readable reason but never panic. Setup
 //! should treat these as warnings rather than fatal errors — the user
-//! can always start the daemon manually with `sovereign daemon run`.
+//! can always start the daemon manually with `svrn daemon run`.
 
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
-const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.sovereign.daemon.plist");
+const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.svrnmesh.daemon.plist");
 
 #[cfg(target_os = "linux")]
-const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/sovereign.service");
+const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/svrnmesh.service");
 
 /// Install and enable the sovereign daemon service for the current
 /// user. `bin_path` must be absolute and point to the `sovereign`
@@ -48,14 +48,14 @@ pub fn install_service(bin_path: &Path) -> Result<(), String> {
         let _ = bin_path;
         Err(format!(
             "service registration is not supported on this platform \
-             (os={}). Run `sovereign daemon run` manually.",
+             (os={}). Run `svrn daemon run` manually.",
             std::env::consts::OS
         ))
     }
 }
 
 /// Stop the running sovereign daemon without unregistering it from
-/// the service manager. A subsequent `sovereign daemon restart` (or
+/// the service manager. A subsequent `svrn daemon restart` (or
 /// `launchctl start`) will bring it back.
 ///
 /// On macOS, sends SIGTERM via `launchctl stop`. Because the plist
@@ -71,7 +71,7 @@ pub fn stop_service() -> Result<(), String> {
     {
         use std::process::Command;
         let out = Command::new("launchctl")
-            .args(["stop", "com.sovereign.daemon"])
+            .args(["stop", "com.svrnmesh.daemon"])
             .output()
             .map_err(|e| format!("spawn launchctl: {e}"))?;
         if !out.status.success() {
@@ -83,15 +83,15 @@ pub fn stop_service() -> Result<(), String> {
             // macOS launchctl returns exit 3 with empty stderr when the
             // service is not registered. That's the pidfile-only-install
             // case: there's no service to stop because the user never
-            // ran `sovereign setup`. Treat as already-stopped so the
+            // ran `svrn setup`. Treat as already-stopped so the
             // caller (`stop_daemon` → `restart_daemon`) doesn't bail
             // before starting a fresh daemon.
             if out.status.code() == Some(3) && stderr.trim().is_empty() {
                 return Ok(());
             }
             return Err(format!(
-                "launchctl stop com.sovereign.daemon failed: {}\n\
-                 hint: if the daemon isn't registered, run `sovereign setup` first.",
+                "launchctl stop com.svrnmesh.daemon failed: {}\n\
+                 hint: if the daemon isn't registered, run `svrn setup` first.",
                 stderr.trim()
             ));
         }
@@ -101,7 +101,7 @@ pub fn stop_service() -> Result<(), String> {
     {
         use std::process::Command;
         let out = Command::new("systemctl")
-            .args(["--user", "stop", "sovereign.service"])
+            .args(["--user", "stop", "svrnmesh.service"])
             .output()
             .map_err(|e| format!("spawn systemctl: {e}"))?;
         if !out.status.success() {
@@ -116,7 +116,7 @@ pub fn stop_service() -> Result<(), String> {
     {
         Err(format!(
             "service stop is not supported on this platform (os={}). \
-             Send SIGTERM to the `sovereign daemon run` process manually.",
+             Send SIGTERM to the `svrn daemon run` process manually.",
             std::env::consts::OS
         ))
     }
@@ -142,7 +142,7 @@ pub fn uninstall_service() -> Result<(), String> {
 }
 
 /// Ensure the binary path is absolute and exists. Expanding
-/// `current_exe()` into an absolute path is what `sovereign setup`
+/// `current_exe()` into an absolute path is what `svrn setup`
 /// should pass in so the service manager doesn't need `PATH` lookup.
 fn canonicalize_binary(bin_path: &Path) -> Result<PathBuf, String> {
     let abs = if bin_path.is_absolute() {
@@ -157,6 +157,51 @@ fn canonicalize_binary(bin_path: &Path) -> Result<PathBuf, String> {
     Ok(abs)
 }
 
+/// Remove a leftover *legacy*-branded service registration
+/// (`com.sovereign.daemon` / `sovereign.service`) before installing the
+/// rebranded one. Without this, the old launchd job / systemd unit stays
+/// registered and a second daemon crash-loops against the API port the new
+/// one binds. Best-effort and idempotent — a no-op once the legacy files are
+/// gone.
+#[cfg(target_os = "macos")]
+fn migrate_legacy_service() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    let legacy = home
+        .join("Library")
+        .join("LaunchAgents")
+        .join("com.sovereign.daemon.plist");
+    if legacy.exists() {
+        let _ = std::process::Command::new("launchctl")
+            .args(["unload", legacy.to_string_lossy().as_ref()])
+            .output();
+        let _ = std::fs::remove_file(&legacy);
+        eprintln!("svrnmesh: removed legacy launchd service com.sovereign.daemon");
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn migrate_legacy_service() {
+    let Some(config) = dirs::config_dir() else {
+        return;
+    };
+    let legacy = config
+        .join("systemd")
+        .join("user")
+        .join("sovereign.service");
+    if legacy.exists() {
+        let _ = std::process::Command::new("systemctl")
+            .args(["--user", "disable", "--now", "sovereign.service"])
+            .output();
+        let _ = std::fs::remove_file(&legacy);
+        let _ = std::process::Command::new("systemctl")
+            .args(["--user", "daemon-reload"])
+            .output();
+        eprintln!("svrnmesh: removed legacy systemd unit sovereign.service");
+    }
+}
+
 // ─── macOS (launchd) ──────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
@@ -165,22 +210,33 @@ fn launchd_plist_path() -> Result<PathBuf, String> {
     Ok(home
         .join("Library")
         .join("LaunchAgents")
-        .join("com.sovereign.daemon.plist"))
+        .join("com.svrnmesh.daemon.plist"))
 }
 
 #[cfg(target_os = "macos")]
 fn install_launchd(bin_path: &Path) -> Result<(), String> {
+    // Remove any leftover legacy (com.sovereign.daemon) registration first so an
+    // upgrading user doesn't end up with two daemons fighting over the API port.
+    migrate_legacy_service();
+
     let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
     let plist_path = launchd_plist_path()?;
 
+    // Resolve the data root (prefers ~/.svrnmesh, falls back to a populated
+    // legacy ~/.sovereign). Using the resolved root for the daemon's logs +
+    // working dir means we never pre-create an empty ~/.svrnmesh here, which
+    // would otherwise defeat the startup data-dir migration's existence guard.
+    let data_dir = sovereign_cli_shared::dirs::sovereign_root();
+
     // Make sure logs directory exists — launchd refuses to start if
     // StandardOutPath's parent is missing.
-    let logs_dir = home.join(".sovereign").join("logs");
+    let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)
         .map_err(|e| format!("create {}: {e}", logs_dir.display()))?;
 
     let content = LAUNCHD_TEMPLATE
         .replace("{BINARY}", &bin_path.to_string_lossy())
+        .replace("{DATA_DIR}", &data_dir.to_string_lossy())
         .replace("{HOME}", &home.to_string_lossy());
 
     if let Some(parent) = plist_path.parent() {
@@ -235,11 +291,14 @@ fn systemd_unit_path() -> Result<PathBuf, String> {
     Ok(config
         .join("systemd")
         .join("user")
-        .join("sovereign.service"))
+        .join("svrnmesh.service"))
 }
 
 #[cfg(target_os = "linux")]
 fn install_systemd(bin_path: &Path) -> Result<(), String> {
+    // Remove any leftover legacy (sovereign.service) registration first.
+    migrate_legacy_service();
+
     let unit_path = systemd_unit_path()?;
     let content = SYSTEMD_TEMPLATE.replace("{BINARY}", &bin_path.to_string_lossy());
 
@@ -260,7 +319,7 @@ fn install_systemd(bin_path: &Path) -> Result<(), String> {
     }
 
     let out = std::process::Command::new("systemctl")
-        .args(["--user", "enable", "--now", "sovereign.service"])
+        .args(["--user", "enable", "--now", "svrnmesh.service"])
         .output()
         .map_err(|e| format!("systemctl enable --now: {e}"))?;
     if !out.status.success() {
@@ -280,7 +339,7 @@ fn uninstall_systemd() -> Result<(), String> {
 
     // Disable + stop first so systemd forgets about it.
     let _ = std::process::Command::new("systemctl")
-        .args(["--user", "disable", "--now", "sovereign.service"])
+        .args(["--user", "disable", "--now", "svrnmesh.service"])
         .output();
 
     std::fs::remove_file(&unit_path).map_err(|e| format!("remove {}: {e}", unit_path.display()))?;
@@ -312,7 +371,7 @@ pub fn service_installed() -> bool {
             return false;
         }
         std::process::Command::new("launchctl")
-            .args(["list", "com.sovereign.daemon"])
+            .args(["list", "com.svrnmesh.daemon"])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
@@ -320,7 +379,7 @@ pub fn service_installed() -> bool {
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("systemctl")
-            .args(["--user", "is-enabled", "sovereign.service"])
+            .args(["--user", "is-enabled", "svrnmesh.service"])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)

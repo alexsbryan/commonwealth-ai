@@ -2,7 +2,7 @@
 //! Tauri commands powering the desktop **Recipe Author Workspace**
 //! (M2). The workspace is a separate two-panel surface (conversation
 //! ⅔, dashboard ⅓) that lets a non-technical domain expert build a
-//! Sovereign corpus + investigation schema by conversation, while
+//! svrnmesh corpus + investigation schema by conversation, while
 //! every meaningful agent / partner action surfaces on a live
 //! dashboard.
 //!

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas build-doc-index` — Move 6 Phase 1 backfill.
+//! `svrn atlas build-doc-index` — Move 6 Phase 1 backfill.
 //!
 //! Derives the per-corpus `doc_to_atoms.json` sidecar from each
 //! atlas's `atoms.json`. Idempotent: re-running on a corpus that
@@ -25,7 +25,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--all" => {} // default
             "--help" | "-h" => {
                 println!(
-                    "sovereign atlas build-doc-index [--corpus <id>] [--all]\n\
+                    "svrn atlas build-doc-index [--corpus <id>] [--all]\n\
                     \n\
                     Move 6 P1: derive doc_to_atoms.json sidecar from each\n\
                     installed atlas's atoms.json. Maps source-doc handles\n\

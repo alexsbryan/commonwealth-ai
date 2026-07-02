@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign proxy ask` — answer a question about a company's ballot from
+//! `svrn proxy ask` — answer a question about a company's ballot from
 //! its SEC proxy statement, cite-or-abstain over the filing's verbatim text.
 //!
 //! A turn sealed to the corpus (retrieval restricted via `enabled_corpora`,

@@ -195,14 +195,14 @@ fn fail(msg: &str) -> i32 {
 }
 
 const PHASE_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign enrich <phase>",
+    command: "svrn enrich <phase>",
     summary: "Run one structural phase against a corpus (2-7).",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "sovereign enrich <cluster-questions|name-concerns|cluster-chunks|\n  extract-positions|detect-tensions|detect-gaps> <corpus-id>",
+            "svrn enrich <cluster-questions|name-concerns|cluster-chunks|\n  extract-positions|detect-tensions|detect-gaps> <corpus-id>",
         ),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Requires upstream caches. Run `sovereign enrich status <corpus>` to see \
+            "Requires upstream caches. Run `svrn enrich status <corpus>` to see \
              which phases are fresh, stale, or never-run.",
         ),
     ],

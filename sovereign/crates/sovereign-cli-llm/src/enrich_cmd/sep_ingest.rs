@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich sep-ingest <category>` — scaffold a per-article
+//! `svrn enrich sep-ingest <category>` — scaffold a per-article
 //! SEP enrichment corpus from the cached parquet.
 //!
 //! ## Flow
 //!
 //!   1. Read the SEP parquet at
 //!      `~/.sovereign/indexes/_downloads/sep.parquet` (downloaded
-//!      via `sovereign corpus acquire sep`).
+//!      via `svrn corpus acquire sep`).
 //!   2. Filter rows to the chosen `<category>` slug and render as
 //!      plaintext with `## Section NNN` markers (groups
 //!      `paragraphs_per_section` paragraphs per section).
@@ -16,7 +16,7 @@
 //!      file as the source and `pipeline = philosophy_atlas`.
 //!
 //! The result is an enrichment corpus named `sep-<category>` ready
-//! for `sovereign enrich build sep-<category>`. The split between
+//! for `svrn enrich build sep-<category>`. The split between
 //! this helper and `enrich init` keeps section detection, config
 //! writing, and manifest scaffolding in one place.
 
@@ -29,11 +29,11 @@ use sovereign_cli_shared::dirs::{sovereign_indexes, sovereign_root};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich sep-ingest",
+    command: "svrn enrich sep-ingest",
     summary: "Scaffold an enrichment corpus for one SEP article, ready for `enrich build`.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich sep-ingest <category-slug> \
+            "svrn enrich sep-ingest <category-slug> \
              [--paragraphs-per-section N] [--parquet <path>] [--list] [--force]",
         ),
         HelpSection::Flags(&[
@@ -61,21 +61,21 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich sep-ingest compatibilism",
+                "svrn enrich sep-ingest compatibilism",
                 "Scaffold `sep-compatibilism` with 5 paragraphs per section.",
             ),
             (
-                "sovereign enrich sep-ingest recursive-functions --paragraphs-per-section 10",
+                "svrn enrich sep-ingest recursive-functions --paragraphs-per-section 10",
                 "Coarser sectioning for long articles (542 paragraphs → ~55 sections).",
             ),
             (
-                "sovereign enrich sep-ingest --list | head -20",
+                "svrn enrich sep-ingest --list | head -20",
                 "Pick a category slug from the parquet.",
             ),
         ]),
         HelpSection::Notes(
             "Requires the SEP parquet cached locally. Acquire it with \
-             `sovereign corpus acquire sep` (downloads ~1 GB from HuggingFace).",
+             `svrn corpus acquire sep` (downloads ~1 GB from HuggingFace).",
         ),
     ],
 };
@@ -100,7 +100,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     if !parquet_path.exists() {
         eprintln!(
             "error: SEP parquet not found at {}.\n       \
-             Run `sovereign corpus acquire sep` to download it (~1 GB).",
+             Run `svrn corpus acquire sep` to download it (~1 GB).",
             parquet_path.display()
         );
         return 1;
@@ -143,7 +143,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
              (ASCII letters, digits, or hyphens only, 1-64 chars)."
         );
         eprintln!();
-        eprintln!("Hint: run `sovereign enrich sep-ingest --list` to see valid slugs.");
+        eprintln!("Hint: run `svrn enrich sep-ingest --list` to see valid slugs.");
         return 2;
     }
 
@@ -153,7 +153,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("error: {e}");
             eprintln!();
-            eprintln!("Hint: run `sovereign enrich sep-ingest --list` to see available slugs.");
+            eprintln!("Hint: run `svrn enrich sep-ingest --list` to see available slugs.");
             return 1;
         }
     };
@@ -251,7 +251,7 @@ fn is_valid_sep_slug(slug: &str) -> bool {
 }
 
 fn default_parquet_path() -> PathBuf {
-    // `sovereign corpus acquire sep` drops the parquet here. See
+    // `svrn corpus acquire sep` drops the parquet here. See
     // `recipes/sep/recipe.toml` for the URL.
     sovereign_indexes().join("_downloads").join("sep.parquet")
 }

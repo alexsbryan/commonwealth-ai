@@ -1,0 +1,25 @@
+{
+  "spec": "CODE_INTEL_CHAT",
+  "note": "Hand-verified GOLD tags — what a perfect tagger would emit. Purpose: isolate the fact-base ARCHITECTURE (extract + dispatch + scope) from TAGGER quality, so a tagger miss doesn't masquerade as an architecture failure. Keyed by a distinctive statement substring. OUT_OF_SCHEMA = genuinely not a single fact-checkable relation (capability/control/negative-absence/partial-nuance) -> the fact base should abstain and defer to the fuzzy path.",
+  "tags": [
+    {"match": "enriches each symbol",                         "relation": "EXISTS",  "target": "enrich_symbol",          "expected": "YES"},
+    {"match": "conceptual question matches",                  "relation": "EXISTS",  "target": "build_code_trace_block", "expected": "YES"},
+    {"match": "cosine similarity",                            "relation": "LITERAL", "literal": "/v1/embeddings",        "expected": "YES"},
+    {"match": "Chat summaries are generated",                 "relation": "LITERAL", "literal": "/v1/chat/completions",  "expected": "YES"},
+    {"match": "generates a summary using an intent-forced",   "relation": "LITERAL", "literal": "SUMMARY:",              "expected": "YES"},
+    {"match": "emits Function/Module entities",               "relation": "OUT_OF_SCHEMA"},
+    {"match": "SCIP supplies precise edges",                  "relation": "EXISTS",  "target": "find_callees",           "expected": "YES"},
+    {"match": "utilizes RAPTOR",                              "relation": "OUT_OF_SCHEMA"},
+    {"match": "GLiNER is dropped",                            "relation": "OUT_OF_SCHEMA"},
+    {"match": "generates an intent-forced summary and Question", "relation": "LITERAL", "literal": "ASKS:",             "expected": "YES"},
+    {"match": "summaries are embedded, indexed",              "relation": "OUT_OF_SCHEMA"},
+    {"match": "exposes symbols, callers, callees, and blast", "relation": "CONFIG",  "subject": "the code corpus query answer path", "field": "tools", "expected": "YES"},
+    {"match": "filters callee ty",                            "relation": "OUT_OF_SCHEMA"},
+    {"match": "identifies dynamic dispatch boundaries",       "relation": "LITERAL", "literal": "dyn-dispatch",          "expected": "YES"},
+    {"match": "Reflexive tool calls land",                    "relation": "OUT_OF_SCHEMA"},
+    {"match": "grades traces against a rubric",               "relation": "OUT_OF_SCHEMA"},
+    {"match": "For Q1",                                       "relation": "EXISTS",  "target": "select_route",           "expected": "YES"},
+    {"match": "For Q2",                                       "relation": "EXISTS",  "target": "gate_answer",            "expected": "YES"},
+    {"match": "tool-loop must treat top-K",                   "relation": "OUT_OF_SCHEMA"}
+  ]
+}

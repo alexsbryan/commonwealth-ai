@@ -38,7 +38,7 @@ use crate::state::DesktopConfig;
 ///    HTTP, then wire that into the runtime.)
 ///
 /// 2. **Settings → Knowledge → Enable KnowledgeView** — when the user
-///    has explicitly disabled the feature, Sovereign behaves exactly as
+///    has explicitly disabled the feature, svrnmesh behaves exactly as
 ///    it did before KnowledgeView existed.
 ///
 /// 3. Otherwise (Local / CliSetup mode, feature on) build the manager:

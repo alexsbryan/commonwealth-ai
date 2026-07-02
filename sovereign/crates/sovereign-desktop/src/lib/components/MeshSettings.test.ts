@@ -67,7 +67,7 @@ describe("MeshSettings — paste join link", () => {
     await fireEvent.click(preview);
 
     expect(
-      screen.getByText(/doesn't look like a sovereign join link/i),
+      screen.getByText(/doesn't look like a svrnmesh join link/i),
     ).toBeInTheDocument();
     expect(joinLinkStore.pending).toBeNull();
   });

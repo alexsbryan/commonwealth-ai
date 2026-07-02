@@ -40,6 +40,24 @@ spending a build (`check-desktop-version.sh` for desktop; an inline step in
 
 ---
 
+## The one-button path (recommended)
+
+**Actions → Release (manual) → Run workflow.** Pick what to ship (`both` /
+`cli` / `desktop`) and leave *version* blank to use the current workspace
+version. It's owner-only (repository owner), verifies the version against
+`Cargo.toml`, then **reuses the two pipelines below** (via `workflow_call`) to
+produce the same **draft** releases — which you still smoke-test and **Publish**
+by hand.
+
+Bump + commit the version first (above) and let CI go green on `main`; the
+workflow refuses to build if the version input disagrees with `Cargo.toml`.
+
+Everything below documents the underlying tag-triggered pipelines the button
+drives. Reach for the manual `git tag` path when you want to release a specific
+past commit rather than current `main`, or a single artifact out of band.
+
+---
+
 ## Releasing the CLI
 
 ### 1. Pre-flight
@@ -102,8 +120,8 @@ regardless of which stream published most recently. The unauthenticated
 CLI release. To pin a specific version: `SOVEREIGN_VERSION=cli-v0.1.18`.
 
 The installer downloads the three binaries into `~/.local/bin` (override with
-`SOVEREIGN_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
-checksum against `SHA256SUMS`, and prints `sovereign setup` as the next step.
+`SVRNMESH_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
+checksum against `SHA256SUMS`, and prints `svrn setup` as the next step.
 
 ---
 

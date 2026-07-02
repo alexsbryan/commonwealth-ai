@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign claim` — CLI surface for the work atlas.
+//! `svrn claim` — CLI surface for the work atlas.
 //!
 //! In-process MeshStore access so the CLI shows the same view the
 //! daemon does. No MCP round-trip — the daemon and CLI share
 //! `.sovereign/mesh.db`. Output is human-readable by default;
-//! `--format json` mirrors `sovereign tools` for scripting.
+//! `--format json` mirrors `svrn tools` for scripting.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ pub async fn run(args: &[String]) -> i32 {
         "check" => run_check(rest).await,
         "list" => run_list(rest).await,
         "release" => run_release(rest).await,
-        // `sovereign claim <symbol> --intent <text>` — the bare form.
+        // `svrn claim <symbol> --intent <text>` — the bare form.
         // No leading subcommand keyword.
         scope => run_declare(scope, rest).await,
     }
@@ -39,7 +39,7 @@ pub async fn run(args: &[String]) -> i32 {
 
 fn print_help() {
     eprintln!(
-        "sovereign claim — coordinate work with other agents on this mesh\n\
+        "svrn claim — coordinate work with other agents on this mesh\n\
          \n\
          Usage:\n  \
            sovereign claim <symbol-or-path> --intent <text> [--ttl <seconds>]\n  \

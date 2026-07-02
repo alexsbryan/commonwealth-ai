@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern accept` — record a tension as known-and-tolerated.
+//! `svrn govern accept` — record a tension as known-and-tolerated.
 //!
 //! Some tensions are genuine but intentional (a general rule with a
 //! deliberate exception). `accept` appends an `AcceptTension` op so the
@@ -60,7 +60,7 @@ pub fn cmd_accept(args: &[String]) -> i32 {
     };
     let Some(tension) = view.tensions.iter().find(|t| t.id.as_str() == tension_id) else {
         eprintln!(
-            "error: no tension `{tension_id}` in `{corpus_id}` — run `sovereign govern tensions {corpus_id}` to list them."
+            "error: no tension `{tension_id}` in `{corpus_id}` — run `svrn govern tensions {corpus_id}` to list them."
         );
         return 1;
     };

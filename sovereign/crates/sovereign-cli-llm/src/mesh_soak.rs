@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh soak invariant checker — the assertion engine behind
-//! `sovereign mesh check-invariants` and `scripts/mesh-soak.sh`.
+//! `svrn mesh check-invariants` and `scripts/mesh-soak.sh`.
 //!
 //! It polls each node's `GET /v1/mesh/status` and evaluates the mesh-level
 //! invariants a multi-process soak must hold — the HTTP-observable subset of

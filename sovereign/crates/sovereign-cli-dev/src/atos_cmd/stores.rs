@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Store-opening helpers used by every `sovereign atos` subcommand.
+//! Store-opening helpers used by every `svrn atos` subcommand.
 //!
 //! The CLI deliberately reuses the same `.sovereign/` layout as
-//! `sovereign project serve` — notes.db, features.db, and the
+//! `svrn project serve` — notes.db, features.db, and the
 //! project-docs FTS all live in the repo-rooted directory so
 //! artifacts produced by agents and operators reconcile against one
 //! view of the world.
@@ -19,7 +19,7 @@ use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
 
 /// `.sovereign/` at the current repo root — matches where
-/// `sovereign project serve` writes notes.db / features.db.
+/// `svrn project serve` writes notes.db / features.db.
 pub(super) fn sovereign_dir() -> PathBuf {
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))

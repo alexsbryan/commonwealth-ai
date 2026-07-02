@@ -248,7 +248,7 @@
       <div class="prompt-text">
         <h2 class="prompt-title">Organize {config.display_name}</h2>
         <p class="prompt-desc">
-          Sovereign clusters your notes by topic and proposes a tag for each
+          svrnmesh clusters your notes by topic and proposes a tag for each
           cluster. Nothing is written to your vault until you confirm.
         </p>
       </div>

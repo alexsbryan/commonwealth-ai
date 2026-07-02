@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! End-to-end test for the `sovereign enrich` admin harness.
+//! End-to-end test for the `svrn enrich` admin harness.
 //!
 //! Exercises: `init` args parsing → writing config.json + chapters.json →
 //! `extract` with a deterministic `(EmbedFn, ChatCompletionFn)` mock →

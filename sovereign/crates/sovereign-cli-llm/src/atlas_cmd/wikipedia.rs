@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas wikipedia ...` — Wikipedia-specific structural
+//! `svrn atlas wikipedia ...` — Wikipedia-specific structural
 //! enrichment commands. Today Layer 0 only (link graph build).
 
 use std::path::PathBuf;
@@ -10,10 +10,10 @@ use corpus_engine::{CorpusEngine, EmbedFn, WikipediaGraph};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign atlas wikipedia",
+    command: "svrn atlas wikipedia",
     summary: "Wikipedia link graph and structural enrichment.",
     sections: &[
-        HelpSection::Usage("sovereign atlas wikipedia <subcommand> [args]"),
+        HelpSection::Usage("svrn atlas wikipedia <subcommand> [args]"),
         HelpSection::Subcommands(&[(
             "build-graph",
             "Layer 0: deserialise Wikipedia extractor metadata into a SQLite link graph.",
@@ -22,11 +22,11 @@ const HELP: Help = Help {
 };
 
 const BUILD_GRAPH_HELP: Help = Help {
-    command: "sovereign atlas wikipedia build-graph",
+    command: "svrn atlas wikipedia build-graph",
     summary: "Build the Wikipedia link graph for an installed corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign atlas wikipedia build-graph <corpus-id> [--db-path <path>] [--rebuild]",
+            "svrn atlas wikipedia build-graph <corpus-id> [--db-path <path>] [--rebuild]",
         ),
         HelpSection::Flags(&[
             (
@@ -326,7 +326,7 @@ async fn cmd_build_graph(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: could not open index for corpus `{corpus_id}`: {e}\n\
-                 hint: run `sovereign corpus install {corpus_id}` first."
+                 hint: run `svrn corpus install {corpus_id}` first."
             );
             return 1;
         }

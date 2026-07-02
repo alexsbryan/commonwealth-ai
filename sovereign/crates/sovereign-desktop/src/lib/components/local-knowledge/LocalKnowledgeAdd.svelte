@@ -23,7 +23,7 @@
       <div class="choice-body">
         <span class="choice-title">Watch a folder</span>
         <span class="choice-sub">
-          Sovereign keeps a folder in sync — drop, edit, or remove files
+          svrnmesh keeps a folder in sync — drop, edit, or remove files
           and the index updates within a few minutes. Read-only on source.
         </span>
       </div>
