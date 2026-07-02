@@ -1,5 +1,8 @@
 # Commonwealth AI
 
+[![CI](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/ci.yml)
+[![docs reconciled](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml/badge.svg)](https://github.com/alexsbryan/commonwealth-ai/actions/workflows/docs-reconcile.yml)
+
 An AI assistant that runs on your own computer — and, when one machine isn't enough, across a few you trust. The model that answers you lives on your machine, not in someone's cloud. Nothing leaves your device unless you ask it to.
 
 It comes in two parts:
@@ -31,6 +34,11 @@ svrn mesh join <key>    # on each machine you're pooling in
 ```
 
 [Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
+(Already ran `svrn setup`? Your machine quietly founded a solo mesh — read its key with `svrn mesh status` instead of `create`.)
+
+Pooling **knowledge** instead of compute works the same way: the
+[two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a
+cited answer from a corpus that never leaves the other.
 
 ## Build a pipeline
 

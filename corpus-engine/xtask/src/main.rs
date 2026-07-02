@@ -3,8 +3,9 @@
 //!
 //! Usage:
 //!   cargo xtask arch-gate [--update-baseline]   Enforce ARCH §3.1 size ratchet + §1 doc-contract
+//!   cargo xtask docs-gate                       Every repo path the narrative docs cite must resolve
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -13,6 +14,7 @@ fn main() {
 
     let exit_code = match cmd {
         "arch-gate" => cmd_arch_gate(&args[1..]),
+        "docs-gate" => cmd_docs_gate(),
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -227,11 +229,270 @@ fn cmd_arch_gate(args: &[String]) -> i32 {
     }
 }
 
+// ── docs-gate ─────────────────────────────────────────────────────────────────
+//
+// SYSTEM_OVERVIEW §1.1 declares itself a contract: every claim verifiable
+// against the commit. This gate mechanizes the path half of that contract —
+// every repo path the narrative docs cite (inline `code` spans and markdown
+// link targets) must resolve on disk. It exists because doc rot of exactly
+// this class shipped: a `~/.claude/plans/…` machine-local citation survived
+// in §2 until an external review caught it (fixed 2026-07-01).
+
+/// The narrative contracts whose citations are gated.
+const DOCS_GATE_DOCS: &[&str] = &[
+    "sovereign/SYSTEM_OVERVIEW.md",
+    "sovereign/ARCH_PRINCIPLES.md",
+];
+
+/// Extensions worth resolving. Deliberately EXCLUDES runtime artifacts
+/// (`.db`, `.gguf`, `.lance`, `.json`, `.jsonl`) — those citations name
+/// files materialized under `~/.sovereign`/`target`, not the repo.
+const DOCS_GATE_EXTS: &[&str] = &[
+    ".rs", ".md", ".toml", ".sh", ".py", ".mjs", ".ts", ".yml", ".txt",
+];
+
+/// Build the resolution index: every file and directory path in the repo
+/// (skipping build/vendor/vcs trees) as component vectors. Citations are
+/// matched as ordered component subsequences against this index, because
+/// the docs deliberately cite in shorthand — `runtime/prompts.rs` for
+/// `sovereign/crates/sovereign-core/src/runtime/prompts.rs`,
+/// `commonwealth-api/admission.rs` skipping the `src/`. Subsequence
+/// matching tolerates that while still failing on a renamed, moved-away,
+/// or deleted terminal file.
+fn build_path_index(dir: &Path, root: &Path, out: &mut Vec<Vec<String>>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.is_dir() {
+            if matches!(
+                name.as_str(),
+                "target" | "vendor" | ".git" | "node_modules" | ".sovereign" | "dist"
+            ) {
+                continue;
+            }
+            push_components(&path, root, out);
+            build_path_index(&path, root, out);
+        } else {
+            push_components(&path, root, out);
+        }
+    }
+}
+
+fn push_components(path: &Path, root: &Path, out: &mut Vec<Vec<String>>) {
+    if let Ok(rel) = path.strip_prefix(root) {
+        out.push(
+            rel.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+                .collect(),
+        );
+    }
+}
+
+/// True when `span`'s components appear in order (gaps allowed) in some
+/// indexed path, ending exactly at the indexed path's last component.
+/// Anchoring the tail means `foo/bar.rs` never matches `foo/bar.rs.bak`,
+/// and a citation of a directory must name a real terminal directory.
+fn subsequence_resolves(index: &[Vec<String>], span: &str) -> bool {
+    let want: Vec<&str> = span.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
+    let Some(last) = want.last() else {
+        return false;
+    };
+    index.iter().any(|path| {
+        if path.last().map(String::as_str) != Some(*last) {
+            return false;
+        }
+        let mut it = path.iter();
+        want.iter()
+            .all(|w| it.by_ref().any(|c| c == w))
+    })
+}
+
+/// Extract candidate spans: inline `code` (outside fenced blocks — fences
+/// hold trees and shell transcripts, not citations) plus markdown link
+/// targets `](…)` on any line.
+fn candidate_spans(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_fence = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        let mut rest = line;
+        while let Some(open) = rest.find("](") {
+            let after = &rest[open + 2..];
+            match after.find(')') {
+                Some(close) => {
+                    out.push(after[..close].to_string());
+                    rest = &after[close + 1..];
+                }
+                None => break,
+            }
+        }
+        if in_fence {
+            continue;
+        }
+        let mut rest = line;
+        while let Some(open) = rest.find('`') {
+            let after = &rest[open + 1..];
+            match after.find('`') {
+                Some(close) => {
+                    out.push(after[..close].to_string());
+                    rest = &after[close + 1..];
+                }
+                None => break,
+            }
+        }
+    }
+    out
+}
+
+/// A span citing a machine-local location can never be verified by another
+/// reader — hard failure regardless of extension. The bare `~/.claude/`
+/// dir is exempt: it appears as a feature's default-config VALUE (the
+/// alignment working-set dir), which is legitimate; citing a document
+/// *inside* it is not.
+fn is_machine_local(span: &str) -> bool {
+    (span.starts_with("~/.claude/") && span.len() > "~/.claude/".len())
+        || span.starts_with("/Users/")
+        || span.starts_with("/home/")
+}
+
+/// Conservative "is this meant to be a repo path" filter: slash-bearing,
+/// single-token, relative, and ending in a gated extension or a `/`
+/// (directory citation). Everything else (shell commands, URLs, routes,
+/// `crate::paths`, HF repo slugs) is out of jurisdiction.
+fn looks_like_repo_path(span: &str) -> bool {
+    if !span.contains('/') || span.is_empty() {
+        return false;
+    }
+    if span.chars().any(char::is_whitespace) {
+        return false;
+    }
+    if ['*', '<', '>', '{', '}', '(', '|', '…', '`', '\\']
+        .iter()
+        .any(|c| span.contains(*c))
+    {
+        return false;
+    }
+    if span.starts_with('/')
+        || span.starts_with('~')
+        || span.starts_with('$')
+        || span.starts_with('#')
+        || span.starts_with('.') // ./ links are normalized; other dot-paths (.sovereign/…) are runtime artifacts
+        || span.starts_with("http")
+        || span.starts_with("mailto:")
+        || span.contains("://")
+    {
+        return false;
+    }
+    span.ends_with('/') || DOCS_GATE_EXTS.iter().any(|e| span.ends_with(e))
+}
+
+/// Strip link/citation decoration down to the resolvable path: leading
+/// `./`/`../` hops and a trailing `#anchor`. The trailing `/` of a
+/// directory citation is kept — `looks_like_repo_path` keys on it.
+fn normalize_span(span: &str) -> String {
+    let mut s = span.trim();
+    loop {
+        if let Some(rest) = s.strip_prefix("./") {
+            s = rest;
+        } else if let Some(rest) = s.strip_prefix("../") {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    s.split('#').next().unwrap_or(s).to_string()
+}
+
+fn cmd_docs_gate() -> i32 {
+    let root = repo_root();
+    let mut index: Vec<Vec<String>> = Vec::new();
+    build_path_index(&root, &root, &mut index);
+    let allowlist_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("doc_path_allowlist.txt");
+    let allow: BTreeSet<String> = std::fs::read_to_string(&allowlist_path)
+        .map(|t| {
+            t.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut fails: BTreeSet<String> = BTreeSet::new();
+    let mut checked = 0usize;
+
+    for doc in DOCS_GATE_DOCS {
+        let path = root.join(doc);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("error: cannot read {}: {e}", path.display());
+                return 1;
+            }
+        };
+        for raw in candidate_spans(&text) {
+            let raw = raw.trim();
+            if allow.contains(raw) {
+                continue;
+            }
+            if is_machine_local(raw) {
+                fails.insert(format!(
+                    "{doc}: cites machine-local path `{raw}` — unverifiable by any other reader"
+                ));
+                continue;
+            }
+            let norm = normalize_span(raw);
+            if allow.contains(norm.as_str()) || !looks_like_repo_path(&norm) {
+                continue;
+            }
+            checked += 1;
+            if !subsequence_resolves(&index, &norm) {
+                fails.insert(format!(
+                    "{doc}: cites `{raw}` but no file/dir in the repo matches — \
+                     fix the citation, or allowlist it in xtask/doc_path_allowlist.txt \
+                     if the reference to a removed/external path is intentional"
+                ));
+            }
+        }
+    }
+
+    eprintln!(
+        "docs-gate: {checked} cited paths checked across {} docs ({} allowlisted spans)",
+        DOCS_GATE_DOCS.len(),
+        allow.len()
+    );
+    for f in &fails {
+        eprintln!("  ✗ {f}");
+    }
+    if fails.is_empty() {
+        eprintln!("  ✓ every cited path resolves");
+        0
+    } else {
+        eprintln!();
+        eprintln!(
+            "docs-gate FAILED ({} unresolved citations). The narrative docs are a \
+             contract (SYSTEM_OVERVIEW §1.1) — update the doc with the code.",
+            fails.len()
+        );
+        1
+    }
+}
+
 fn print_usage() {
     eprintln!("Usage: cargo xtask <command>");
     eprintln!();
     eprintln!("Commands:");
     eprintln!(
         "  arch-gate [--update-baseline]  Enforce the §3.1 file-size ratchet + §1 doc-contract"
+    );
+    eprintln!(
+        "  docs-gate                      Resolve every repo path cited by the narrative docs"
     );
 }

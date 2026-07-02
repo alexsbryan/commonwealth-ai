@@ -1,0 +1,33 @@
+# Docs reconciliation — the narrative docs are a contract
+# (SYSTEM_OVERVIEW §1.1: every claim verifiable against the commit), and
+# this workflow mechanizes the path half of it: every repo path cited by
+# SYSTEM_OVERVIEW.md / ARCH_PRINCIPLES.md must resolve on disk, and no
+# machine-local path may be cited at all. Separate from ci.yml so the
+# README badge reports doc-truth independently of build/test state.
+#
+# The deeper reconciliation layers (capability-reconcile, drift detect,
+# spec↔code fact checking) are LLM-bound and run on the mesh, not on
+# hosted runners — docs/CHECK_CODE_AGAINST_SPEC.md is the map. This gate
+# is the deterministic floor beneath them.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-gate:
+    name: docs-gate (cited paths resolve)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # No protoc/cmake needed — xtask only reads files.
+      - run: cargo run -p xtask -- docs-gate

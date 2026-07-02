@@ -91,6 +91,15 @@ async fn main() {
         }
     };
 
+    // Fail-closed exposure check — before any model load, so a
+    // misconfigured remote bind errors instantly rather than after the
+    // weights are in memory.
+    let auth_enabled = config.auth.mode == "api_key" && !config.auth.keys.is_empty();
+    if let Err(e) = config::validate_exposure(&config.server, auth_enabled) {
+        eprintln!("Configuration error: {e}");
+        sovereign_inference::fast_exit_skip_destructors(1);
+    }
+
     // Always load a dedicated embedding model. The chat/fast slot is the
     // wrong tool for embeddings, and the prior `load_dual` path left the
     // embed slot empty — so `embed()` errored and corpus retrieval was
@@ -658,8 +667,9 @@ async fn main() {
 
     let runtime = Arc::new(runtime_builder);
 
-    // Auth state.
-    let auth_state = if config.auth.mode == "api_key" && !config.auth.keys.is_empty() {
+    // Auth state (`auth_enabled` was decided at startup, next to the
+    // exposure check that depends on it).
+    let auth_state = if auth_enabled {
         tracing::info!("Auth: API key ({} keys configured)", config.auth.keys.len());
         AuthState::new(config.auth.keys.clone())
     } else {
@@ -786,8 +796,28 @@ async fn main() {
         .layer(Extension(tdd_state))
         .layer(Extension(scheduler))
         .layer(Extension(reciprocity))
-        .layer(Extension(narration_tx))
-        .layer(CorsLayer::permissive());
+        .layer(Extension(narration_tx));
+
+    // Browser CORS follows the auth posture ("auto"): permissive only when
+    // a bearer key guards `/v1/*`, so an unauthenticated server never
+    // invites cross-origin browser calls — the classic exposed-local-LLM
+    // drive-by. CORS is a browser-only gate; native and mobile clients are
+    // unaffected either way. Operators can pin `[server] cors`.
+    let cors_permissive = match config.server.cors.as_str() {
+        "permissive" => true,
+        "off" => false,
+        "auto" => auth_enabled,
+        other => {
+            tracing::warn!(value = other, "unknown [server] cors value; using \"auto\"");
+            auth_enabled
+        }
+    };
+    let app = if cors_permissive {
+        app.layer(CorsLayer::permissive())
+    } else {
+        app
+    };
+    tracing::info!(cors_permissive, "CORS posture resolved");
 
     // Startup UX — mesh peer count from Commonwealth (non-fatal if daemon
     // isn't running).

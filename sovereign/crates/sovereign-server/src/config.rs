@@ -85,6 +85,19 @@ pub struct ServerSection {
     /// higher values let contributors jump the line further.
     #[serde(default = "default_reciprocity_k")]
     pub reciprocity_k: f64,
+    /// Explicit opt-in to serve a non-loopback bind with auth disabled.
+    /// Off by default: an unauthenticated LAN/tailnet surface must be a
+    /// deliberate operator choice, so startup refuses the combination
+    /// rather than warning past it. See `validate_exposure`.
+    #[serde(default)]
+    pub allow_unauthenticated_remote: bool,
+    /// Browser CORS posture: `"auto"` (permissive only when auth is
+    /// enabled), `"permissive"`, or `"off"`. Auto keeps a token-holding
+    /// browser client working while denying cross-origin drive-by calls
+    /// against an unauthenticated server — CORS is a browser-only gate,
+    /// so native and mobile clients are unaffected either way.
+    #[serde(default = "default_cors")]
+    pub cors: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -206,7 +219,39 @@ fn default_knowledge_view_enabled() -> bool {
 }
 
 fn default_bind() -> String {
-    "0.0.0.0:8080".to_string()
+    "127.0.0.1:8080".to_string()
+}
+fn default_cors() -> String {
+    "auto".to_string()
+}
+
+/// True when `bind` can only be reached from this machine. Fail-closed:
+/// anything unparseable or non-loopback counts as remote.
+pub fn bind_is_loopback(bind: &str) -> bool {
+    if let Ok(addr) = bind.parse::<std::net::SocketAddr>() {
+        return addr.ip().is_loopback();
+    }
+    // Hostname form — only `localhost:<port>` is known-loopback.
+    matches!(bind.rsplit_once(':'), Some((host, _)) if host.eq_ignore_ascii_case("localhost"))
+}
+
+/// Startup exposure check: a non-loopback bind with auth disabled is
+/// refused unless the operator opted in explicitly. Returning `Err` here
+/// must abort startup — the whole point is that an open unauthenticated
+/// listener can never happen by accident.
+pub fn validate_exposure(server: &ServerSection, auth_enabled: bool) -> Result<(), String> {
+    if bind_is_loopback(&server.bind) || auth_enabled || server.allow_unauthenticated_remote {
+        return Ok(());
+    }
+    Err(format!(
+        "refusing to serve on {} without authentication: every host that can reach \
+         this machine could drive inference and read conversations. Fix one of: \
+         configure `[auth] mode = \"api_key\"` with at least one key; bind loopback \
+         (`[server] bind = \"127.0.0.1:8080\"`); or set `[server] \
+         allow_unauthenticated_remote = true` if this network is a deliberate trust \
+         boundary (e.g. a firewalled tailnet).",
+        server.bind
+    ))
 }
 fn default_max_concurrent_turns() -> usize {
     4
@@ -246,6 +291,8 @@ fn default_server() -> ServerSection {
         max_per_user: default_max_per_user(),
         max_queue_depth: default_max_queue_depth(),
         reciprocity_k: default_reciprocity_k(),
+        allow_unauthenticated_remote: false,
+        cors: default_cors(),
     }
 }
 fn default_store() -> StoreSection {
@@ -277,5 +324,63 @@ impl ServerConfig {
         }
 
         Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod exposure_tests {
+    use super::*;
+
+    fn server(bind: &str, allow_unauthenticated_remote: bool) -> ServerSection {
+        let mut s = default_server();
+        s.bind = bind.to_string();
+        s.allow_unauthenticated_remote = allow_unauthenticated_remote;
+        s
+    }
+
+    #[test]
+    fn default_bind_is_loopback() {
+        assert!(bind_is_loopback(&default_bind()));
+    }
+
+    #[test]
+    fn loopback_binds_pass_without_auth() {
+        for bind in [
+            "127.0.0.1:8080",
+            "[::1]:8080",
+            "localhost:8080",
+            "LOCALHOST:9000",
+        ] {
+            assert!(
+                validate_exposure(&server(bind, false), false).is_ok(),
+                "loopback bind {bind} must not require auth"
+            );
+        }
+    }
+
+    #[test]
+    fn wildcard_binds_refused_without_auth() {
+        assert!(validate_exposure(&server("0.0.0.0:8080", false), false).is_err());
+        assert!(validate_exposure(&server("[::]:8080", false), false).is_err());
+    }
+
+    #[test]
+    fn lan_ip_refused_without_auth() {
+        assert!(validate_exposure(&server("192.168.1.20:8080", false), false).is_err());
+    }
+
+    #[test]
+    fn unresolvable_hostname_is_fail_closed() {
+        assert!(validate_exposure(&server("myhost.local:8080", false), false).is_err());
+    }
+
+    #[test]
+    fn auth_unlocks_remote_bind() {
+        assert!(validate_exposure(&server("0.0.0.0:8080", false), true).is_ok());
+    }
+
+    #[test]
+    fn explicit_optin_unlocks_remote_bind() {
+        assert!(validate_exposure(&server("0.0.0.0:8080", true), false).is_ok());
     }
 }

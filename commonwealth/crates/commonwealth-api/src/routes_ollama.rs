@@ -29,15 +29,18 @@
 //! streaming is a tracked follow-up.
 //!
 //! ## Trust posture (read before exposing this beyond loopback)
-//! These routes inherit the `:9741` port's posture: **no per-request auth and
-//! no CORS today** (see `sovereign-mesh::daemon` — the same TODO that governs
-//! `/v1/*`). The security model is a closed trust ring (Tailscale ACLs / LAN
-//! firewall). Adding `/api/*` widens the *unauthenticated* surface but adds no
-//! new privilege — it routes to the same handlers `/v1/*` already exposes. A
+//! These routes inherit the `:9741` port's posture: the `client_auth` bearer
+//! layer wraps them together with `/v1/*` — loopback callers are exempt, any
+//! non-loopback caller must present `Authorization: Bearer <client_token>`,
+//! and the layer fails closed when no token can be resolved (see
+//! [`crate::client_auth`]). Auth is one shared client token guarding the
+//! whole surface, not per-user tenancy. Adding `/api/*` widened no
+//! privilege — it routes to the same handlers `/v1/*` already exposes. A
 //! permissive CORS layer was deliberately NOT added here: it would silently
 //! broaden browser-origin reachability, and "honest disclosure over silent
-//! exposure" is the rule. Per-request auth (against `Mesh.join_key_hash`) and
-//! opt-in CORS for browser clients are both tracked follow-ups.
+//! exposure" is the rule. Opt-in CORS for browser clients is a tracked
+//! follow-up. The consolidated surface-by-surface posture lives in
+//! `docs/THREAT_MODEL.md` at the repo root.
 
 use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode};

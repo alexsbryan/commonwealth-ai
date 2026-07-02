@@ -317,7 +317,7 @@ Three concrete commitments that earn portability:
    Ready | Failed`) is universal; *where it lives* is per-corpus.
 
 Reference: `sovereign-core::document_asset::AssetState` +
-`corpus-engine/src/enrichment/pipeline/raptor_atlas.rs` (canonical
+`sovereign-tools/src/raptor_atlas.rs` (canonical
 shape). Counter-example: any function that needs an `if let Some(doc)
 = asset { … } else { … }` switch is reaching across this boundary
 and should be split.

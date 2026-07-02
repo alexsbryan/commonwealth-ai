@@ -60,6 +60,7 @@ If you'd rather be sure before you push, these are the same commands CI runs:
 cargo check --workspace --all-targets
 cargo test --workspace
 cargo run -p xtask -- arch-gate      # file-size ratchet + doc contracts
+cargo run -p xtask -- docs-gate      # every path the narrative docs cite must resolve
 ```
 
 Formatting and clippy also run in CI, but they're advisory for now — don't sweat

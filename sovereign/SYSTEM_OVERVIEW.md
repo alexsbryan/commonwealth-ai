@@ -845,7 +845,7 @@ as `impl Runtime` across files (no vtable hop on dispatch).
 
 ### Inference
 
-`sovereign-inference/src/embedded.rs` wraps `llama-cpp` with a
+`sovereign-inference/src/embedded/` wraps `llama-cpp` with a
 lazy-loaded slot system (Quick / Main / Code / Embed). Hybrid +
 remote providers wrap OpenAI-compatible servers (vLLM, Ollama,
 llama.cpp, TGI, Commonwealth). Full detail — slots, polished slot
@@ -947,8 +947,16 @@ plus a `.fingerprint`); `capability_posture` and `capability_findings`
 are the freshness-gated read tools, siblings to `drift_*`. This is
 "drift to the next level": the drift system reconciles *names*, this
 reconciles *capabilities* — does the code do what the doc claims. The
-planned next phase (symmetric `spec-intel` → a spec↔code bipartite diff)
-is sketched in [`docs/internal/THE_SPEC_CODE_LOOP.md`](./docs/internal/THE_SPEC_CODE_LOOP.md).
+once-planned next phase (symmetric `spec-intel` → a spec↔code bipartite
+diff) shipped as the spec↔code fact pipeline — `sovereign code facts` /
+`enrich spec-intel` / `code check-spec`; see
+[`../docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md).
+The deterministic floor of this stack runs in public CI: `cargo xtask
+docs-gate` (workflow `docs-reconcile.yml`, badged on the README)
+resolves every repo path THIS document and ARCH_PRINCIPLES cite —
+machine-local citations and paths that no longer exist fail the build.
+The LLM-bound layers above it (drift, capability-reconcile, check-spec)
+stay mesh-side.
 
 ### State, memory, skills
 
@@ -982,7 +990,7 @@ is sketched in [`docs/internal/THE_SPEC_CODE_LOOP.md`](./docs/internal/THE_SPEC_
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `ServerEvent::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `ServerEvent::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore; the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); scaffold pending a Tauri-mobile-toolchain build. See `docs/specs/MOBILE.md`. |
 
@@ -1128,7 +1136,7 @@ the plan healthy as nodes come and go.
   `LedgerEntry`, `MeshConfig`.
 - **Latency probing** — UDP RTT every 30s, magic bytes `CWLP`,
   EWMA α=0.3. `LatencyMatrix` shared via gossip.
-- **Hardware detection** — `discovery/hardware.rs` tries
+- **Hardware detection** — `commonwealth-discovery/src/hardware.rs` tries
   `nvidia-smi`, then `rocm-smi`, then Metal.
 - **TLS / mesh encryption** — A plaintext mesh (the default) serves
   the internal API (:9742) in the clear; the unused per-session-cert /
@@ -1151,7 +1159,9 @@ the plan healthy as nodes come and go.
     unreachable or downgrade it. **NOT covered:** the multi-host
     tensor-split RPC between `llama-server`/`rpc-server` (raw TCP, out of
     the transport seam) — the sole residual plaintext on an encrypted
-    mesh. Never claim blanket end-to-end encryption.
+    mesh. Never claim blanket end-to-end encryption. The consolidated
+    surface-by-surface posture (every listener, its default bind, auth,
+    and the honest gap ledger) lives in `../docs/THREAT_MODEL.md`.
 - **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
   `ModelAndKnowledgeSharing`, `Full`.
 
@@ -1431,21 +1441,22 @@ not gossiped onto the open mesh).
 
 ```
 commonwealth init --name "..."          Create a mesh, get a join key
-commonwealth join <key>                 Join an existing mesh
-commonwealth status                     Mesh state, members, models, capacity
-commonwealth balance                    Contribution ledger
-commonwealth corpus install/remove/update/list/consolidate
-commonwealth pause / resume             Graceful departure and return
-commonwealth leave                      Permanent departure
-commonwealth mesh members / set / revoke / peer
-commonwealth daemon start/stop/status
+commonwealth status                     Node + mesh state (GET /status)
+commonwealth balance                    Contribution ledger (local store)
+commonwealth models                     Models advertised (GET /v1/models)
+commonwealth corpus status              Ingestion/shard status (GET /internal/corpus/status)
+commonwealth corpus collaborate <id>    Recruit peers for a mid-flight ingestion
+commonwealth daemon start               Run the daemon
+commonwealth recipe test/validate       Community-recipe harness
+commonwealth peer-preference …          Per-peer affinity (local-only)
 ```
 
-The Commonwealth CLI is mostly placeholders today —
-`daemon start` and `balance` are real; most others print
-`(In production, this would …)` and exit 0. The HTTP API on :9741
-is the actual control plane. Lifecycle UX lives under `sovereign
-daemon`. See §7 Roadmap.
+Every command does real work (2026-07-01): the aspirational
+placeholders that printed `(In production, this would …)` and exited 0
+were removed, and `status`/`models`/`corpus status` were implemented as
+thin views over the HTTP control plane. Mesh lifecycle UX (create /
+join / rotate / status across nodes) lives under `sovereign mesh`;
+daemon lifecycle under `sovereign daemon`.
 
 ### Deployment
 
@@ -1789,10 +1800,10 @@ Default ports:
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
-| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd.rs::run_daemon` |
+| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md`                          |
-| Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` + `commonwealth-inference/src/scheduler/oicp_select.rs` + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
+| Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
@@ -1803,8 +1814,8 @@ Default ports:
 | See where KnowledgeView is injected              | `sovereign-core/src/runtime.rs::splice_landscape_digests` + `traits.rs::LandscapeDigestProvider` |
 | Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `charter.rs`, `approval.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
 | See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
-| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd.rs` + `contrib/launchd` + `contrib/systemd` |
-| Rotate daemon logs                               | `sovereign-cli-shared/src/util/log_rotation.rs`                     |
+| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
+| Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
@@ -1949,10 +1960,10 @@ an entry is sequenced work.
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store gossip replication | `commonwealth-api/src/routes_internal.rs` | Gossip replicates the `Mesh` member list only. `all_entries_for_gossip` is defined but unused; sender half + `POST /internal/app/state` receiver missing. Workaround: explicit peer push at queue-handoff time. |
+| mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. `all_entries_for_gossip` is defined but unused; sender half + `POST /internal/app/state` receiver missing. Workaround: explicit peer push at queue-handoff time. |
 | Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; attach mode silently returns empty for `mesh_get_contributions` / `mesh_set_peer_preference` because the daemon doesn't expose these over HTTP yet. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
-| `commonwealth` CLI is mostly placeholders | `commonwealth-daemon/src/main.rs` | `daemon start` and `balance` are real; many others print `(In production, this would …)` and exit 0. The HTTP API on :9741 is the actual control plane today. Decide per-command whether to implement against the HTTP surface or remove; don't bulk-fix in one PR. |
+| ~~`commonwealth` CLI is mostly placeholders~~ **RESOLVED 2026-07-01** | `commonwealth-daemon/src/main.rs` | Decided per-command: `status`, `models`, `corpus status` implemented against the HTTP surface (`GET /status`, `/v1/models`, `/internal/corpus/status`); the 14 unbacked commands (join/pause/resume/leave/logs, corpus list/install/remove/update/consolidate/collaborate-status, mesh set/members/peer) plus the always-erroring `mesh revoke` were deleted. The grow-only-membership revocation constraint is preserved as a comment at the deletion site and in ARCHITECTURE.md §11. |
 
 ### 10.3 Doc posture
 

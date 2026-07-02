@@ -6,7 +6,7 @@ This guide is for the harder case: getting nodes to reach each other when they'r
 
 ## On the same network
 
-If everyone is on the same Wi-Fi or Ethernet — a house, an office, a hackerspace — nodes find each other over mDNS, as long as your router isn't isolating clients. There's nothing to set up: create the mesh with `sovereign mesh create` and share the key.
+If everyone is on the same Wi-Fi or Ethernet — a house, an office, a hackerspace — nodes find each other over mDNS, as long as your router isn't isolating clients. There's nothing to set up: create the mesh with `sovereign mesh create` and share the key. (If it says a mesh already exists, `sovereign setup` founded a solo one on first boot — read its key with `sovereign mesh status`, or mint a fresh one with `sovereign mesh rotate`.)
 
 If discovery doesn't work on a network where you'd expect it to, the cause is almost always WiFi client isolation — see [Troubleshooting](#troubleshooting).
 

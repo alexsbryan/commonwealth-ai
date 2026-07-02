@@ -1,0 +1,20 @@
+# docs-gate allowlist — spans the narrative docs cite INTENTIONALLY even
+# though they resolve to nothing in the repo. Each entry needs a reason;
+# an entry without one is doc rot hiding from the gate.
+
+# SYSTEM_OVERVIEW cites the deleted TLS scaffolding by name — the whole
+# point of that passage is that the file was removed (2026-06-15) rather
+# than left as a security façade.
+discovery/tls.rs
+
+# ARCH_PRINCIPLES §"asset lives alongside its consumer" names a
+# hypothetical "distant config/ directory" rhetorically, not a real path.
+config/
+
+# §10 ledger forward-reference: the Gemini import recipe does not exist
+# yet — the row names where the work will land when someone builds it.
+sovereign-recipes/conversations-gemini/
+
+# §10 ledger documents the 2026-06-01 DELETION of this never-compiled
+# stale duplicate — the citation is the historical record of the removal.
+sovereign-cli-dev/src/mesh_cmd.rs
