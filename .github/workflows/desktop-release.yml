@@ -166,6 +166,12 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
+      # CACHE REF-SCOPING: tag-triggered runs save caches scoped to the tag
+      # ref, which no future run can restore — only main-scoped caches are
+      # visible to everyone. Release via the manual orchestrator
+      # (release.yml, dispatched on main) at least once so this key gets a
+      # main-scoped save; from then on every release restores warm. (See the
+      # longer note in cli-release.yml.)
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -173,6 +179,8 @@ jobs:
           # Targeting "." picks up the only Cargo.lock/target pair that exists.
           workspaces: "."
           key: desktop-release-${{ matrix.platform.target }}
+          # Seed even when a release attempt fails mid-build.
+          cache-on-failure: true
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
