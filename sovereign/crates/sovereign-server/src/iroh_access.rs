@@ -77,10 +77,21 @@ impl IrohAccess {
         let secret =
             commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
-        // Shared constructor (n0 public relays + address lookup; the
-        // relay-fleet self-hosting swap is W4 of the migration doc).
-        // The client serves only the client ALPN.
-        let endpoint = match build_relayed_endpoint(secret, vec![CLIENT_ALPN.to_vec()]).await {
+        // Shared constructor. `[iroh] relay_urls` + `discovery` map to
+        // a `RelayConfig`: n0 by default, self-hosted relays and/or a
+        // full n0 sever (H1) when configured. The client serves only
+        // the client ALPN.
+        let relay_cfg = commonwealth_transport::iroh::RelayConfig::from_parts(
+            config.iroh.relay_urls.clone(),
+            config.iroh.discovery.as_deref(),
+        );
+        let endpoint = match build_relayed_endpoint(
+            secret,
+            vec![CLIENT_ALPN.to_vec()],
+            &relay_cfg,
+        )
+        .await
+        {
             Ok(ep) => ep,
             Err(e) => {
                 tracing::error!(error = %e, "iroh: endpoint bind failed — dial-by-key access disabled");

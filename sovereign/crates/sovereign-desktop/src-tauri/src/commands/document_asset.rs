@@ -668,6 +668,7 @@ pub async fn promote_legacy_document(
         index_id: format!("legacy:{source}"),
         skeleton: None,
         state: sovereign_core::types::AssetState::PartiallyReady,
+        owner: None,
     };
 
     store

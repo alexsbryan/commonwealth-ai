@@ -33,6 +33,12 @@ pub struct DocumentAsset {
     /// None until the skeleton phase completes.
     pub skeleton: Option<DocumentSkeleton>,
     pub state: AssetState,
+    /// The principal that uploaded this document on a multi-user hub. `None`
+    /// for single-user / pre-multi-tenant documents — visible to everyone
+    /// (the back-compat default). When set, the document is visible only to
+    /// that principal (same deny-set rule the corpus surfaces use).
+    #[serde(default)]
+    pub owner: Option<String>,
 }
 
 impl DocumentAsset {

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::CorpusState;
+use sovereign_core::types::{CorpusState, CorpusVisibility};
 
 use super::registry::CorpusRegistry;
 
@@ -161,6 +161,7 @@ impl CorpusManager {
             version: now,
             deleted_at: None,
             vector_index_ready: false,
+            visibility: CorpusVisibility::Org,
         };
         self.store.save_corpus_state(&state).await?;
 
@@ -251,6 +252,7 @@ impl CorpusManager {
             version: now,
             deleted_at: None,
             vector_index_ready: false,
+            visibility: CorpusVisibility::Org,
         };
         self.store.save_corpus_state(&state).await?;
 

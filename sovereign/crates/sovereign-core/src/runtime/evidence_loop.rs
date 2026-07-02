@@ -551,7 +551,17 @@ impl Runtime {
         // (entity-anchored) verdict the caller uses to pick the right
         // insufficiency note.
         let lookup_ids: Vec<String> = match context.conversation.enabled_corpora.as_deref() {
-            Some(ids) if !ids.is_empty() => ids.to_vec(),
+            // Intersect the user's selection with the principal-scoped
+            // installed set, so a forged `enabled_corpora` can't widen
+            // retrieval into a forbidden (another principal's Private) corpus.
+            Some(ids) if !ids.is_empty() => {
+                let scoped: std::collections::HashSet<&str> =
+                    context.installed_corpora.iter().map(String::as_str).collect();
+                ids.iter()
+                    .filter(|id| scoped.contains(id.as_str()))
+                    .cloned()
+                    .collect()
+            }
             _ => merged_corpora(&chunks).into_iter().collect(),
         };
         let kw = question_keywords(message);
@@ -637,7 +647,17 @@ impl Runtime {
         // corpora round 0 actually drew from — agency must widen the
         // EVIDENCE, never the corpus scope.
         let allowed: HashSet<String> = match context.conversation.enabled_corpora.as_deref() {
-            Some(ids) if !ids.is_empty() => ids.iter().cloned().collect(),
+            // Same principal-scope intersection as `lookup_ids` above: a
+            // forged `enabled_corpora` cannot widen round-2 evidence into a
+            // forbidden corpus.
+            Some(ids) if !ids.is_empty() => {
+                let scoped: HashSet<&str> =
+                    context.installed_corpora.iter().map(String::as_str).collect();
+                ids.iter()
+                    .filter(|id| scoped.contains(id.as_str()))
+                    .cloned()
+                    .collect()
+            }
             _ => merged_corpora(&chunks),
         };
 

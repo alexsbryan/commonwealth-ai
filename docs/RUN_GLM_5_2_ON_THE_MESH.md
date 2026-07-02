@@ -31,10 +31,15 @@ One machine is the **host** — the one you talk to. It holds the model file on 
 just lends memory; they don't need the file at all — the host hands each of them
 only their slice automatically.
 
-And a network path between the machines. On a home or office network you already
-have it. Across locations, [Tailscale](https://tailscale.com) gives everyone a
-shared private address and the mesh rides on top — though a wired local network is
-noticeably snappier.
+And a network path between the machines. Splitting one model across several boxes
+is the one case that needs them on a **shared IP network**: the layers talk over
+raw TCP between the GPUs, so a LAN or VPC is ideal and a wired local network is
+noticeably snappier. On a home or office network you already have this. Across
+locations, put the GPU boxes on a shared overlay — [Tailscale](https://tailscale.com)
+gives everyone a shared private address and the split rides on top. (Ordinary mesh
+use — sharing one host's model, knowledge search, gossip — needs no VPN at all;
+see [getting-started](../commonwealth/docs/getting-started.md). It's specifically
+the cross-box tensor split here that wants shared IP locality.)
 
 ## Set it up
 

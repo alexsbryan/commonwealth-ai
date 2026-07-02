@@ -509,7 +509,7 @@ fn skill_registry_merge_memory_rules() {
 #[tokio::test]
 async fn build_context_new_conversation() {
     let store = MockStore::new();
-    let ctx = build_context(&store, "new-convo", "").await.unwrap();
+    let ctx = build_context(&store, "new-convo", "", None).await.unwrap();
     assert_eq!(ctx.conversation.id, "new-convo");
     assert!(ctx.conversation.messages.is_empty());
     assert!(ctx.memories.is_empty());
@@ -532,7 +532,7 @@ async fn build_context_existing_conversation() {
         .await
         .unwrap();
 
-    let ctx = build_context(&store, "c1", "hello").await.unwrap();
+    let ctx = build_context(&store, "c1", "hello", None).await.unwrap();
     assert_eq!(ctx.conversation.messages.len(), 1);
     assert_eq!(ctx.conversation.messages[0].content, "hello");
 }
@@ -555,6 +555,7 @@ fn format_history_empty() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -604,6 +605,7 @@ fn format_history_multi_turn() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -649,6 +651,7 @@ fn format_history_truncates_to_max() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -687,6 +690,7 @@ async fn passthrough_router_always_simple_query() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -720,6 +724,7 @@ async fn noop_planner_returns_not_implemented() {
         memories: Vec::new(),
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -1176,6 +1181,7 @@ async fn planner_generates_valid_plan() {
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,
@@ -1216,6 +1222,7 @@ async fn planner_fallback_on_garbage() {
         memories: vec![],
         working_memory: None,
         installed_corpora: vec![],
+        corpus_ceiling: None,
         document_session: None,
         topic_context: None,
         knowledge_view_digests: None,

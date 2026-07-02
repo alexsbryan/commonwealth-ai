@@ -108,6 +108,20 @@ impl MemberRecord {
         self.removed_at.is_none()
     }
 
+    /// Whether this member has ANY path we could dial — an IP address
+    /// OR an iroh path (a pubkey plus a relay or a direct addr). Peer
+    /// selection (inference roster, knowledge fan-out, RPC-worker
+    /// discovery) filters on this so a node reachable ONLY over iroh
+    /// (no gossiped IP — the no-VPN case) is not dropped before the
+    /// `PeerTransport` seam is even consulted. The seam still makes the
+    /// final per-class routing decision; this is only "is there any
+    /// point offering this peer at all."
+    pub fn is_dialable(&self) -> bool {
+        !self.addresses.is_empty()
+            || (self.node_pubkey.is_some()
+                && (self.relay_url.is_some() || !self.iroh_direct_addrs.is_empty()))
+    }
+
     /// The timestamp of this record's latest lifecycle event — the later of
     /// its self-stamped `last_seen` and its `removed_at` tombstone. This is the
     /// LWW key in [`Mesh::merge_from`]: a removal stamped after the node's last
@@ -461,6 +475,40 @@ mod tests {
             members: map,
             peers: vec![],
         }
+    }
+
+    #[test]
+    fn is_dialable_accepts_ip_or_iroh_paths() {
+        let node = NodeId::from_u128(7);
+
+        // No IP, no iroh → not dialable (the record the filters drop).
+        let bare = member(node, "bare", 1);
+        assert!(!bare.is_dialable());
+
+        // IP path.
+        let mut ip = member(node, "ip", 1);
+        ip.addresses = vec!["10.0.0.5:9742".parse().unwrap()];
+        assert!(ip.is_dialable());
+
+        // A pubkey ALONE is not a path — need a relay or a direct addr.
+        let mut key_only = member(node, "key", 1);
+        key_only.node_pubkey = Some(NodePubkey([9u8; 32]));
+        assert!(!key_only.is_dialable());
+
+        // pubkey + relay (the off-LAN no-VPN case).
+        let mut relayed = key_only.clone();
+        relayed.relay_url = Some("https://relay.example./".into());
+        assert!(relayed.is_dialable());
+
+        // pubkey + direct addr (the LAN-without-internet iroh case).
+        let mut direct = key_only.clone();
+        direct.iroh_direct_addrs = vec!["127.0.0.1:5000".parse().unwrap()];
+        assert!(direct.is_dialable());
+
+        // A relay/direct WITHOUT a pubkey is not dialable by key.
+        let mut no_key = member(node, "nokey", 1);
+        no_key.relay_url = Some("https://relay.example./".into());
+        assert!(!no_key.is_dialable());
     }
 
     #[test]

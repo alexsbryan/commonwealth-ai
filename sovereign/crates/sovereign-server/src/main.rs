@@ -4,6 +4,7 @@ mod approval;
 mod auth;
 mod busy;
 mod config;
+mod corpus_upload;
 mod iroh_access;
 mod narration;
 mod projection;
@@ -563,6 +564,12 @@ async fn main() {
     )
     .with_corpus_engine(Arc::clone(&corpus_engine))
     .with_routing_events(std::sync::Arc::new(narration_sink));
+    // Scope corpus retrieval per tenant (multi-user hub isolation): the
+    // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
+    // principal, and `build_context` then hides other principals' Private
+    // corpora from this turn's evidence.
+    runtime_builder = runtime_builder
+        .with_corpus_principal(std::sync::Arc::new(tenant::TenantPrincipalResolver));
     // Note store for commitment persistence (CommissiveQuery handler).
     if let Some(store) = note_store_for_runtime {
         runtime_builder = runtime_builder.with_note_store(store);
@@ -730,6 +737,7 @@ async fn main() {
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .merge(routes_documents::document_router())
+        .merge(corpus_upload::corpus_upload_router())
         .merge(routes_tdd::tdd_router())
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(Extension(auth_state));

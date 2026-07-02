@@ -270,7 +270,18 @@ pub struct PipelineState<'ctx> {
     pub context: &'ctx ConversationContext,
     pub intent: &'ctx Intent,
     pub scope: Option<&'ctx str>,
+    /// User's per-conversation corpus selection (display + Filter 4).
+    /// CLIENT-CONTROLLED and forgeable — NOT a security boundary. Drives
+    /// routing (`is_governance_turn`/`is_proxy_turn`) and the user-facing
+    /// allow-list; `None` ⇒ "all installed corpora".
     pub enabled_corpora: Option<&'ctx [String]>,
+    /// Per-principal retrieval ceiling (`{Org} ∪ {Private owned by the
+    /// principal}`) — the airtight upper bound applied as `corpus_ceiling`
+    /// Filter 5 at every chunk search, INDEPENDENT of the forgeable
+    /// `enabled_corpora` selection above. `None` on the single-user path
+    /// (no principal) ⇒ no ceiling, retrieval bit-identical to pre-feature.
+    /// See `ConversationContext::corpus_ceiling`.
+    pub corpus_ceiling: Option<&'ctx [String]>,
     /// Query-side embedding of the (follow-up-expanded) retrieval query.
     pub embedding: Vec<f32>,
     /// Grounding label: `"KnowledgeQuery"` or `"DeepQuery"` — the label
@@ -311,6 +322,7 @@ impl<'ctx> PipelineState<'ctx> {
             intent,
             scope,
             enabled_corpora: context.conversation.enabled_corpora.as_deref(),
+            corpus_ceiling: context.corpus_ceiling.as_deref(),
             embedding,
             label,
             search_label,
@@ -768,6 +780,7 @@ fn step_bridge_boost<'a, 'ctx>(
                 st.message,
                 &st.embedding,
                 st.enabled_corpora,
+                st.corpus_ceiling,
             )
             .await;
         StepOutcome {
@@ -787,7 +800,7 @@ fn step_meta_atlas_boost<'a, 'ctx>(
         // corpora and inject them with a score lift that survives
         // merge truncation. `None` registry / empty matches = no-op.
         st.meta_atlas_hits = rt
-            .meta_atlas_boost(&mut st.chunks, &st.entities, st.enabled_corpora)
+            .meta_atlas_boost(&mut st.chunks, &st.entities, st.enabled_corpora, st.corpus_ceiling)
             .await;
         if !st.meta_atlas_hits.is_empty() {
             let total_added: usize = st.meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
@@ -817,6 +830,7 @@ fn step_query_decomp<'a, 'ctx>(
                     &mut st.chunks,
                     "QueryDecomp",
                     st.enabled_corpora,
+                    st.corpus_ceiling,
                 )
                 .await;
             tracing::info!(
@@ -845,7 +859,13 @@ fn step_title_expand<'a, 'ctx>(
         let titles = rt.expand_question_to_titles(st.message, st.context).await;
         if let Some(t) = &titles {
             let added = rt
-                .fan_out_decomposed_queries(t, &mut st.chunks, "TitleExpand", st.enabled_corpora)
+                .fan_out_decomposed_queries(
+                    t,
+                    &mut st.chunks,
+                    "TitleExpand",
+                    st.enabled_corpora,
+                    st.corpus_ceiling,
+                )
                 .await;
             tracing::info!(
                 titles = ?t,
@@ -926,7 +946,7 @@ fn step_atom_enum<'a, 'ctx>(
         // Injected POST noise-floor on purpose: the chunks are metadata
         // (no query-token overlap) and the floor would drop them.
         if let Some(atom_chunks) = rt
-            .enumerate_typed_atom_chunks(st.message, st.enabled_corpora)
+            .enumerate_typed_atom_chunks(st.message, st.enabled_corpora, st.corpus_ceiling)
             .await
         {
             tracing::info!(
@@ -977,6 +997,7 @@ fn step_atlas_grounding<'a, 'ctx>(
             st.label,
             st.scope,
             st.enabled_corpora,
+            st.corpus_ceiling,
         )
         .await;
         // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding
@@ -1029,7 +1050,7 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
         // is exactly the bridge-concept signal a comparative answer
         // needs.
         if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(&st.chunks, st.message, st.enabled_corpora)
+            .expand_via_wikipedia_graph(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling)
             .await
         {
             if !neighbors.is_empty() {
@@ -1177,6 +1198,7 @@ fn step_entity_boost<'a, 'ctx>(
                         "EntityBoost",
                         None,
                         st.enabled_corpora,
+                        st.corpus_ceiling,
                     )
                     .await;
                 entity_added += entity_chunks.len();
@@ -1318,6 +1340,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
             &st.search_label,
             per_corpus_overrides.as_ref(),
             st.enabled_corpora,
+            st.corpus_ceiling,
         );
         let mesh_fut = async {
             match &rt.mesh_knowledge {

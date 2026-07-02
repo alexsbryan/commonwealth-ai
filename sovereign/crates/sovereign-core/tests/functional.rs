@@ -672,6 +672,7 @@ async fn rebuild_skeleton_from_stored_chunks() {
         index_id: format!("doc-{asset_id}"),
         skeleton: None,
         state: AssetState::PartiallyReady,
+        owner: None,
     };
     h.store.save_document_asset(&asset).await.unwrap();
 
@@ -861,6 +862,7 @@ async fn rebuild_skeleton_missing_chunks_returns_not_found() {
         index_id: format!("doc-{asset_id}"),
         skeleton: None,
         state: AssetState::Pending,
+        owner: None,
     };
     h.store.save_document_asset(&asset).await.unwrap();
 

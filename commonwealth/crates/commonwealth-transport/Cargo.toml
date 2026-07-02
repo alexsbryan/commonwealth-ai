@@ -22,6 +22,11 @@ rustls = { version = "0.23", default-features = false, features = ["ring"], opti
 
 [features]
 iroh = ["dep:iroh", "dep:tokio", "dep:rustls"]
+# Enables iroh's in-process relay test server for the UDP-blocked
+# relay-carried-connectivity test (H-plan item c). Test-only; pulls in
+# `iroh/test-utils`. Run: cargo test -p commonwealth-transport
+#   --features iroh-test-utils --test relay_tcp_only
+iroh-test-utils = ["iroh", "iroh/test-utils"]
 
 [dev-dependencies]
 tokio = { workspace = true }

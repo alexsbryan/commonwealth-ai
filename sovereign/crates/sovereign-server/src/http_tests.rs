@@ -173,6 +173,243 @@ fn build_app(
         .layer(Extension(narration_tx))
 }
 
+// ─── A0: cross-tenant isolation (the leak this work closes) ───
+//
+// Two end-users share one hub, each authenticating with their own API key
+// (resolved by the auth middleware to a distinct tenant). The promise of the
+// star hub is that one user can never reach another user's data. The test
+// below pins that promise — and FAILS today, which is the point: the failure
+// IS the leak that A2 closes by scoping retrieval to the calling tenant.
+
+/// Router with auth ENABLED and the store-wide read surface (`/v1/search`)
+/// included, so a two-tenant test can prove isolation (or expose its
+/// absence). Distinct from [`build_app`], which disables auth so every
+/// request collapses to the `default` tenant.
+fn build_isolation_app(
+    runtime: Arc<Runtime>,
+    approval: Arc<ServerApprovalChannel>,
+    sched: FairScheduler,
+    auth: AuthState,
+) -> Router {
+    let authed = Router::new()
+        .route("/v1/conversations", post(crate::routes::create_conversation))
+        .route(
+            "/v1/conversations/{id}/messages",
+            post(crate::routes::send_message),
+        )
+        .route("/v1/search", post(crate::routes::search))
+        .route("/v1/corpora", get(crate::routes::list_corpora))
+        .merge(crate::routes_documents::document_router())
+        .layer(middleware::from_fn(crate::auth::auth_middleware))
+        .layer(Extension(auth));
+    let (narration_tx, _narration_rx) =
+        tokio::sync::broadcast::channel::<sovereign_core::types::TurnNarration>(64);
+    authed
+        .layer(Extension(runtime))
+        .layer(Extension(approval))
+        .layer(Extension(sched))
+        .layer(Extension(ReciprocityTable::new()))
+        .layer(Extension(narration_tx))
+}
+
+/// A JSON request carrying a bearer token; the auth middleware maps the key
+/// to a tenant.
+fn bearer_json(
+    method: &str,
+    uri: &str,
+    bearer: &str,
+    body: serde_json::Value,
+) -> axum::http::Request<axum::body::Body> {
+    axum::http::Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {bearer}"))
+        .body(axum::body::Body::from(body.to_string()))
+        .unwrap()
+}
+
+fn two_tenant_auth() -> AuthState {
+    AuthState::new(std::collections::HashMap::from([
+        ("key-alice".to_string(), "alice".to_string()),
+        ("key-bob".to_string(), "bob".to_string()),
+    ]))
+}
+
+/// Alice stores a secret in her conversation; Bob must not surface it via
+/// `/v1/search`.
+///
+/// EXPECTED TO FAIL until A2: `routes::search` (routes.rs) takes no
+/// `TenantId` and runs `store.search_messages` across every tenant's
+/// messages, so Bob sees Alice's. The fix scopes the search to the caller.
+#[tokio::test]
+async fn search_does_not_leak_across_tenants() {
+    use axum::http::StatusCode;
+
+    let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
+    let (runtime, _store, approval) = build_runtime(inference);
+    let app = build_isolation_app(
+        runtime,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+        two_tenant_auth(),
+    );
+
+    // Distinctive enough that any match is unambiguously Alice's.
+    let secret = "zarquon-flathead-correct-horse-9417";
+
+    // Alice creates a conversation and stores the secret in it.
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "POST",
+            "/v1/conversations",
+            "key-alice",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "alice create conversation");
+    let convo_id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "POST",
+            &format!("/v1/conversations/{convo_id}/messages"),
+            "key-alice",
+            serde_json::json!({ "content": format!("the launch code is {secret}") }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "alice send message");
+
+    // Infra sanity: Alice CAN find her own secret (proves search works + the
+    // message persisted). If this fails, the harness is broken, not isolation.
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "POST",
+            "/v1/search",
+            "key-alice",
+            serde_json::json!({ "query": secret }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "alice search");
+    let alice_hits = body_json(resp).await;
+    assert!(
+        alice_hits.to_string().contains(secret),
+        "search infra check: Alice should find her own message; got {alice_hits}"
+    );
+
+    // The real assertion: Bob searches for the same secret and must get
+    // NOTHING of Alice's.
+    let resp = app
+        .oneshot(bearer_json(
+            "POST",
+            "/v1/search",
+            "key-bob",
+            serde_json::json!({ "query": secret }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "bob search");
+    let bob_hits = body_json(resp).await;
+    assert!(
+        !bob_hits.to_string().contains(secret),
+        "ISOLATION LEAK: Bob's /v1/search returned Alice's secret — \
+         routes::search ignores the tenant and queries the store globally. \
+         Response: {bob_hits}"
+    );
+}
+
+/// A3a: Alice's uploaded document is invisible to Bob — `list` omits it and a
+/// direct `get` 404s rather than revealing it exists. (Ingest needs a real
+/// file + inference, so the asset is seeded directly with an owner.)
+#[tokio::test]
+async fn documents_do_not_leak_across_tenants() {
+    use axum::http::StatusCode;
+    use sovereign_core::traits::*;
+
+    let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
+    let (runtime, store, approval) = build_runtime(inference);
+
+    let asset = sovereign_core::types::DocumentAsset {
+        id: "alice-doc-1".to_string(),
+        title: "Alice secret plan".to_string(),
+        filename: "secret.txt".to_string(),
+        file_size_mb: 0.1,
+        word_count: 10,
+        chunk_count: 1,
+        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
+        ingested_at: chrono::Utc::now(),
+        index_id: "doc-alice-1".to_string(),
+        skeleton: None,
+        state: sovereign_core::types::AssetState::Ready,
+        owner: Some("alice".to_string()),
+    };
+    store.save_document_asset(&asset).await.unwrap();
+
+    let app = build_isolation_app(
+        runtime,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+        two_tenant_auth(),
+    );
+
+    // Bob's document list must NOT include Alice's.
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents",
+            "key-bob",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bob_list = body_json(resp).await;
+    assert!(
+        !bob_list.to_string().contains("alice-doc-1"),
+        "ISOLATION LEAK: Bob's document list includes Alice's document: {bob_list}"
+    );
+
+    // Bob fetching Alice's document by id → 404 (don't reveal it exists).
+    let resp = app
+        .clone()
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents/alice-doc-1",
+            "key-bob",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "Bob must not be able to GET Alice's document"
+    );
+
+    // Sanity: Alice sees her own document.
+    let resp = app
+        .oneshot(bearer_json(
+            "GET",
+            "/v1/documents",
+            "key-alice",
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    let alice_list = body_json(resp).await;
+    assert!(
+        alice_list.to_string().contains("alice-doc-1"),
+        "Alice should see her own document: {alice_list}"
+    );
+}
+
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await

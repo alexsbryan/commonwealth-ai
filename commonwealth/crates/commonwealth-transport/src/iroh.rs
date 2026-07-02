@@ -60,7 +60,9 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 // exactly one place.
 pub use iroh::endpoint::presets;
 pub use iroh::endpoint::Builder as EndpointBuilder;
-pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey};
+// Per-peer connection observability (H2): `remote_info` returns these.
+pub use iroh::endpoint::TransportAddrUsage;
+pub use iroh::{Endpoint, EndpointAddr, PublicKey, RelayUrl, SecretKey, TransportAddr};
 
 /// The rustls crypto provider for `EndpointBuilder::crypto_provider`.
 /// iroh's `Builder::empty()` deliberately sets no provider (only
@@ -70,27 +72,205 @@ pub fn ring_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
 }
 
-/// Build a relay-enabled iroh endpoint from a node identity, serving
-/// `alpns`. Uses n0's public relays + address lookup (`presets::N0`);
-/// the relay-fleet self-hosting swap (W4 of TRANSPORT_MIGRATION.md)
-/// changes only the preset here.
+/// How an endpoint reaches the wider network — the sovereignty knob
+/// (H1 of the enterprise-hardening plan). Bundled into one struct so
+/// adding a relay/discovery option later is not another signature
+/// change across every constructor call site.
+#[derive(Debug, Clone)]
+pub struct RelayConfig {
+    /// Custom relay URLs. Empty = the default for the chosen discovery
+    /// posture (n0's public relays under `n0_services`, or NO relay —
+    /// direct-addr only — without it).
+    pub relay_urls: Vec<String>,
+    /// Use n0's public infrastructure — BOTH the public relays AND the
+    /// n0 DNS/pkarr address-lookup (`iroh.link`). `true` is the
+    /// bootstrap default. `false` severs ALL n0 contact: the endpoint
+    /// builds from `presets::Minimal` (crypto only — no n0 relay, no n0
+    /// DNS), so peers are reached ONLY via gossiped `iroh_direct_addrs`
+    /// (a flat LAN/VPC) and/or the `relay_urls` above (a self-hosted
+    /// relay for cross-subnet NAT traversal). This is the knob a
+    /// sovereignty- or air-gap-focused netops team requires — setting
+    /// `relay_urls` alone does NOT stop the n0 DNS lookup.
+    pub n0_services: bool,
+}
+
+impl Default for RelayConfig {
+    fn default() -> Self {
+        // Bootstrap posture: full n0 (relays + DNS). Callers that want
+        // sovereignty opt out via `from_parts(discovery = "none")`.
+        Self {
+            relay_urls: Vec::new(),
+            n0_services: true,
+        }
+    }
+}
+
+impl RelayConfig {
+    /// Build from operator config: the `relay_urls` list and a
+    /// `discovery` string (`"n0"` / absent = n0 services; `"none"` /
+    /// `"self"` / `"local"` = sever n0). An unknown value warns and
+    /// keeps the safe n0 default. Central so both `sovereign-mesh` and
+    /// `sovereign-server` map their configs identically.
+    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Self {
+        let n0_services = match discovery.map(str::trim) {
+            None | Some("") | Some("n0") => true,
+            Some("none") | Some("self") | Some("local") => false,
+            Some(other) => {
+                tracing::warn!(
+                    target: "transport",
+                    value = %other,
+                    "iroh: unknown [iroh] discovery — using n0 services (the safe default)"
+                );
+                true
+            }
+        };
+        Self {
+            relay_urls,
+            n0_services,
+        }
+    }
+}
+
+/// Build an iroh endpoint from a node identity, serving `alpns`, per a
+/// [`RelayConfig`]. With `n0_services` it starts from `presets::N0`
+/// (n0 relays + n0 DNS/pkarr lookup); without it, from `presets::Minimal`
+/// (crypto only — no n0 anything), so a sovereign/air-gapped node reaches
+/// peers by gossiped direct addrs and/or self-hosted `relay_urls` alone.
+/// Non-empty `relay_urls` overrides the relay set in either mode; an
+/// empty list under Minimal means relays disabled (direct-addr only).
+/// Always calls [`EndpointBuilder::proxy_from_env`], so a corporate
+/// `HTTP_PROXY`/`HTTPS_PROXY` (incl. Basic auth) is honored for the
+/// relay's WebSocket-over-TLS/443 connection — the path that carries the
+/// mesh when UDP is blocked.
 ///
 /// One constructor so every production caller — the mobile host
 /// ([`crate`] consumers like `sovereign-server::iroh_access`) and the
-/// mesh daemon — binds identically and any iroh-API churn in endpoint
-/// construction stays in this single function. Hermetic tests still
-/// use `EndpointBuilder::empty()` directly (no relays, deterministic).
+/// mesh daemon — binds identically and any iroh-API churn stays here.
+/// Hermetic tests still use `EndpointBuilder::empty()` directly.
 pub async fn build_relayed_endpoint(
     secret_key: SecretKey,
     alpns: Vec<Vec<u8>>,
+    cfg: &RelayConfig,
 ) -> Result<Endpoint, String> {
-    EndpointBuilder::new(presets::N0)
+    let preset_builder = if cfg.n0_services {
+        EndpointBuilder::new(presets::N0)
+    } else {
+        // Minimal = crypto only: no n0 relay, no n0 DNS. Nothing this
+        // endpoint does will contact n0 infrastructure.
+        EndpointBuilder::new(presets::Minimal)
+    };
+    let mut builder = preset_builder
         .crypto_provider(ring_crypto_provider())
         .secret_key(secret_key)
         .alpns(alpns)
+        // Honor corporate HTTP(S) proxies on the relay dial. No-op when
+        // the env vars are unset, so it's safe on every deployment.
+        .proxy_from_env();
+    // Glassbox the egress posture so netops can confirm — from the log,
+    // not by inference — which relays this node uses and whether a proxy
+    // is engaged. Credentials are redacted.
+    log_egress_posture(cfg);
+    match parse_relay_mode(&cfg.relay_urls) {
+        Some(mode) => builder = builder.relay_mode(mode),
+        None if !cfg.n0_services => {
+            // Sovereign mode, no custom relay: disable relays entirely.
+            // Peers are reached by gossiped direct addrs only (flat
+            // LAN/VPC). Minimal carries no relay by default, but be
+            // explicit so intent is unmistakable.
+            builder = builder.relay_mode(iroh::RelayMode::Disabled);
+        }
+        None => {} // n0_services + no custom relays → n0's default relays.
+    }
+    builder
         .bind()
         .await
         .map_err(|e| format!("iroh endpoint bind failed: {e}"))
+}
+
+/// Read the HTTP(S) proxy from the environment iroh's `proxy_from_env`
+/// consults, with any `user:pass@` userinfo redacted. `None` when no
+/// proxy is set. Public so the daemon's `doctor` can report the same
+/// value it logs.
+pub fn configured_proxy_redacted() -> Option<String> {
+    // iroh checks HTTPS_PROXY then HTTP_PROXY (and lowercase). Mirror
+    // that precedence so what we log is what it will actually use.
+    for var in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.trim().is_empty() {
+                return Some(redact_userinfo(&v));
+            }
+        }
+    }
+    None
+}
+
+/// Replace a URL's `user:pass@` with `***@` for safe logging. Falls
+/// back to the raw string if there's no userinfo to redact.
+fn redact_userinfo(url: &str) -> String {
+    match (url.find("://"), url.find('@')) {
+        (Some(scheme_end), Some(at)) if at > scheme_end + 3 => {
+            format!("{}***@{}", &url[..scheme_end + 3], &url[at + 1..])
+        }
+        _ => url.to_string(),
+    }
+}
+
+/// One-line, info-level egress summary at endpoint construction:
+/// discovery posture, relay set, and proxy (redacted). This is the
+/// audit surface a netops team greps to confirm what the node touches.
+fn log_egress_posture(cfg: &RelayConfig) {
+    let relays = if cfg.relay_urls.is_empty() {
+        if cfg.n0_services {
+            "n0-default".to_string()
+        } else {
+            "none (direct-addr only)".to_string()
+        }
+    } else {
+        cfg.relay_urls.join(",")
+    };
+    tracing::info!(
+        target: "transport",
+        n0_services = cfg.n0_services,
+        relays = %relays,
+        proxy = configured_proxy_redacted().as_deref().unwrap_or("none"),
+        "iroh egress posture (n0_services=false severs all n0 contact; \
+         proxy honored for relay TCP:443, Basic auth only)"
+    );
+}
+
+/// Turn operator-configured relay URL strings into a custom
+/// [`RelayMode`]. `None` (empty input, or every entry unparseable)
+/// leaves the caller on the preset default. Unparseable entries are
+/// logged and skipped rather than aborting the bind — a fat-fingered
+/// relay URL must not take a node offline when the default relays
+/// would still work.
+fn parse_relay_mode(relay_urls: &[String]) -> Option<iroh::RelayMode> {
+    if relay_urls.is_empty() {
+        return None;
+    }
+    let parsed: Vec<RelayUrl> = relay_urls
+        .iter()
+        .filter_map(|u| match u.parse::<RelayUrl>() {
+            Ok(url) => Some(url),
+            Err(e) => {
+                tracing::warn!(
+                    target: "transport",
+                    url = %u,
+                    error = %e,
+                    "iroh: ignoring unparseable relay_url — falling back to remaining/default relays"
+                );
+                None
+            }
+        })
+        .collect();
+    if parsed.is_empty() {
+        tracing::warn!(
+            target: "transport",
+            "iroh: all configured relay_urls were unparseable — using default relays"
+        );
+        return None;
+    }
+    Some(iroh::RelayMode::custom(parsed))
 }
 
 /// One client-side tunnel: a localhost `TcpListener` whose accepted
@@ -499,6 +679,43 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    #[test]
+    fn parse_relay_mode_empty_is_default() {
+        // Empty config = leave the caller on the preset (n0) relays.
+        assert!(parse_relay_mode(&[]).is_none());
+    }
+
+    #[test]
+    fn parse_relay_mode_valid_urls_build_custom() {
+        let mode = parse_relay_mode(&[
+            "https://relay.corp.example:443".to_string(),
+            "https://relay2.corp.example".to_string(),
+        ]);
+        assert!(
+            matches!(mode, Some(iroh::RelayMode::Custom(_))),
+            "valid relay URLs must build a custom relay map"
+        );
+    }
+
+    #[test]
+    fn parse_relay_mode_all_invalid_falls_back_to_default() {
+        // A fat-fingered relay URL must not abort — fall back to the
+        // default relays rather than take the node offline.
+        assert!(parse_relay_mode(&["not a url".to_string()]).is_none());
+    }
+
+    #[test]
+    fn parse_relay_mode_skips_bad_keeps_good() {
+        let mode = parse_relay_mode(&[
+            "://broken".to_string(),
+            "https://relay.corp.example:443".to_string(),
+        ]);
+        assert!(
+            matches!(mode, Some(iroh::RelayMode::Custom(_))),
+            "one valid URL among bad ones still yields a custom map"
+        );
+    }
+
     /// Bind an empty (no-relay, deterministic) endpoint serving `alpns`.
     async fn hermetic_endpoint(seed: u8, alpns: Vec<Vec<u8>>) -> Endpoint {
         EndpointBuilder::empty()
@@ -645,5 +862,80 @@ mod tests {
             got.is_empty(),
             "unrouted ALPN must be dropped, got {got:?}"
         );
+    }
+
+    #[test]
+    fn redact_userinfo_hides_credentials() {
+        assert_eq!(
+            redact_userinfo("https://user:secret@proxy.corp:443"),
+            "https://***@proxy.corp:443"
+        );
+        // No userinfo → unchanged.
+        assert_eq!(
+            redact_userinfo("https://proxy.corp:443"),
+            "https://proxy.corp:443"
+        );
+        // Non-URL → unchanged (don't mangle).
+        assert_eq!(redact_userinfo("proxy.corp:443"), "proxy.corp:443");
+    }
+
+    #[test]
+    fn relay_config_from_parts_maps_discovery() {
+        // Default / "n0" / absent → n0 services on.
+        assert!(RelayConfig::default().n0_services);
+        assert!(RelayConfig::from_parts(vec![], None).n0_services);
+        assert!(RelayConfig::from_parts(vec![], Some("n0")).n0_services);
+        // Sovereignty spellings → n0 severed.
+        for d in ["none", "self", "local"] {
+            assert!(
+                !RelayConfig::from_parts(vec![], Some(d)).n0_services,
+                "discovery={d} must sever n0"
+            );
+        }
+        // Unknown → safe default (n0 on).
+        assert!(RelayConfig::from_parts(vec![], Some("carrier-pigeon")).n0_services);
+        // relay_urls passes through.
+        let c = RelayConfig::from_parts(vec!["https://r.example:443".into()], Some("none"));
+        assert_eq!(c.relay_urls, vec!["https://r.example:443".to_string()]);
+        assert!(!c.n0_services);
+    }
+
+    #[tokio::test]
+    async fn build_relayed_endpoint_with_custom_relay_binds() {
+        // A configured self-hosted relay must not break endpoint
+        // construction: bind is a local operation, the relay connection
+        // is a background task (so this succeeds offline). Proves the
+        // relay_urls → custom RelayMode path threads through to a valid
+        // endpoint. proxy_from_env is a no-op here (env unset).
+        let ep = build_relayed_endpoint(
+            SecretKey::from_bytes(&[77u8; 32]),
+            vec![ALPN.to_vec()],
+            &RelayConfig {
+                relay_urls: vec!["https://relay.corp.example:443".to_string()],
+                n0_services: true,
+            },
+        )
+        .await
+        .expect("custom-relay endpoint must bind");
+        assert!(!ep.bound_sockets().is_empty(), "endpoint must bind a socket");
+    }
+
+    #[tokio::test]
+    async fn build_sovereign_endpoint_binds_without_n0() {
+        // Sovereign mode (n0 severed, no custom relay = direct-addr
+        // only): must still bind a real endpoint. This is the
+        // air-gapped-LAN posture — Minimal preset, relays Disabled, no
+        // n0 DNS. Nothing here should touch the network at all.
+        let ep = build_relayed_endpoint(
+            SecretKey::from_bytes(&[78u8; 32]),
+            vec![ALPN.to_vec()],
+            &RelayConfig {
+                relay_urls: vec![],
+                n0_services: false,
+            },
+        )
+        .await
+        .expect("sovereign (no-n0) endpoint must bind");
+        assert!(!ep.bound_sockets().is_empty(), "endpoint must bind a socket");
     }
 }

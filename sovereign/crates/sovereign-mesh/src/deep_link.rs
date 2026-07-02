@@ -23,18 +23,30 @@ const DEFAULT_HTTPS_HOST: &str = "sovereign.dev";
 /// A parsed deep link.
 #[derive(Debug, Clone)]
 pub enum DeepLink {
-    /// Join a mesh: `sovereign://join/<join-key>[?relay=<host>&name=<mesh-name>&iroh=<dial>&exp=<unix>]`
+    /// Join a mesh: `sovereign://join/<join-key>[?relay=<host>&name=<mesh-name>&iroh=<dial>|dial=<dial>&exp=<unix>]`
     Join {
         join_key: String,
         relay_hint: Option<String>,
         mesh_name: Option<String>,
         /// Founder's iroh dial string (`<hex-pubkey>@<relay-or-addr>[,…]`,
-        /// see `commonwealth_transport::iroh::format_dial_string`). Present
-        /// only for an ENCRYPTED mesh: the joiner dials the founder by key
-        /// over iroh and tunnels `/internal/join` through it, so the join
-        /// secret never crosses the wire in plaintext. `None` ⇒ legacy /
-        /// plaintext mesh, joined over plain HTTP as before.
+        /// see `commonwealth_transport::iroh::format_dial_string`). Which
+        /// query param carried it decides the join posture (`encrypted`
+        /// below): `iroh=` ⇒ encrypted mesh, fail-closed key-dialed join;
+        /// `dial=` ⇒ plaintext mesh, prefer-iroh join with IP/mDNS
+        /// fallback. `None` ⇒ legacy invite, joined over plain HTTP.
+        ///
+        /// The params are deliberately DISTINCT: a pre-`dial=` build
+        /// treats `iroh=` as "this mesh is encrypted" and joins
+        /// fail-closed — reusing `iroh=` for plaintext invites would
+        /// wedge old joiners into encrypted posture against a plaintext
+        /// mesh. Old builds simply ignore the unknown `dial=` param and
+        /// degrade to the legacy IP/mDNS join.
         iroh_dial: Option<String>,
+        /// True iff the dial string arrived via `iroh=` — the invite is
+        /// for an ENCRYPTED mesh (the join tunnels the key over QUIC
+        /// and never falls back to plaintext). Meaningless when
+        /// `iroh_dial` is `None`.
+        encrypted: bool,
         /// Unix-seconds after which this invite is no longer accepted
         /// (short-lived TTL). Display-only on the joiner; the founder is
         /// the authority and rejects an expired key at the join handler.
@@ -71,10 +83,11 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
             let params = parse_query_params(query);
             let relay_hint = params.get("relay").cloned();
             let mesh_name = params.get("name").map(|n| n.replace('+', " "));
-            // `iroh` / `exp` are already percent-decoded by
+            // `iroh` / `dial` / `exp` are already percent-decoded by
             // `parse_query_params`, so the dial string's `@ , : /` come
             // back verbatim. A non-numeric `exp` is treated as absent.
-            let iroh_dial = params.get("iroh").cloned();
+            // `iroh=` (encrypted) wins if both params are ever present.
+            let (iroh_dial, encrypted) = dial_from_params(&params);
             let expires_at = params.get("exp").and_then(|s| s.parse::<u64>().ok());
 
             Some(DeepLink::Join {
@@ -82,6 +95,7 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
                 relay_hint,
                 mesh_name,
                 iroh_dial,
+                encrypted,
                 expires_at,
             })
         }
@@ -116,13 +130,28 @@ pub fn parse_https_join(url: &str) -> Option<DeepLink> {
     }
 
     let params = parse_query_params(query);
+    let (iroh_dial, encrypted) = dial_from_params(&params);
     Some(DeepLink::Join {
         join_key: join_key.to_string(),
         relay_hint: params.get("relay").cloned(),
         mesh_name: params.get("name").map(|n| n.replace('+', " ")),
-        iroh_dial: params.get("iroh").cloned(),
+        iroh_dial,
+        encrypted,
         expires_at: params.get("exp").and_then(|s| s.parse::<u64>().ok()),
     })
+}
+
+/// Shared dial-param extraction: `iroh=` carries an encrypted-mesh
+/// dial (fail-closed join), `dial=` a plaintext-mesh dial (fail-soft).
+/// `iroh=` wins if both are present (never emitted; defensive).
+fn dial_from_params(
+    params: &std::collections::HashMap<String, String>,
+) -> (Option<String>, bool) {
+    if let Some(d) = params.get("iroh") {
+        (Some(d.clone()), true)
+    } else {
+        (params.get("dial").cloned(), false)
+    }
 }
 
 /// Accept any of the three user-facing join forms (bare key, HTTPS URL,
@@ -154,6 +183,7 @@ pub fn parse_join_argument(arg: &str) -> Option<DeepLink> {
             relay_hint: None,
             mesh_name: None,
             iroh_dial: None,
+            encrypted: false,
             expires_at: None,
         });
     }
@@ -167,12 +197,13 @@ pub fn build_https_join_link(
     relay_hint: Option<&str>,
     mesh_name: Option<&str>,
     iroh_dial: Option<&str>,
+    encrypted: bool,
     expires_at: Option<u64>,
 ) -> String {
     let host =
         std::env::var("SOVEREIGN_JOIN_HOST").unwrap_or_else(|_| DEFAULT_HTTPS_HOST.to_string());
     let mut url = format!("https://{host}/join/{join_key}");
-    let params = join_query_params(relay_hint, mesh_name, iroh_dial, expires_at);
+    let params = join_query_params(relay_hint, mesh_name, iroh_dial, encrypted, expires_at);
     if !params.is_empty() {
         url.push('?');
         url.push_str(&params.join("&"));
@@ -180,19 +211,22 @@ pub fn build_https_join_link(
     url
 }
 
-/// Build a deep link URL for joining a mesh. `iroh_dial` (the founder's
-/// dial-by-key string) and `expires_at` (TTL) are emitted only for an
-/// encrypted mesh; plaintext callers pass `None, None` and get the
-/// historical URL byte-for-byte.
+/// Build a deep link URL for joining a mesh. `iroh_dial` is the
+/// founder's dial-by-key string; `encrypted` picks the param that
+/// carries it (`iroh=` for an encrypted mesh — fail-closed join;
+/// `dial=` for a plaintext mesh — prefer-iroh join with IP fallback).
+/// Callers passing `None` for the dial get the historical URL
+/// byte-for-byte.
 pub fn build_join_link(
     join_key: &str,
     relay_hint: Option<&str>,
     mesh_name: Option<&str>,
     iroh_dial: Option<&str>,
+    encrypted: bool,
     expires_at: Option<u64>,
 ) -> String {
     let mut url = format!("sovereign://join/{join_key}");
-    let params = join_query_params(relay_hint, mesh_name, iroh_dial, expires_at);
+    let params = join_query_params(relay_hint, mesh_name, iroh_dial, encrypted, expires_at);
     if !params.is_empty() {
         url.push('?');
         url.push_str(&params.join("&"));
@@ -209,6 +243,7 @@ fn join_query_params(
     relay_hint: Option<&str>,
     mesh_name: Option<&str>,
     iroh_dial: Option<&str>,
+    encrypted: bool,
     expires_at: Option<u64>,
 ) -> Vec<String> {
     let mut params = Vec::new();
@@ -219,7 +254,8 @@ fn join_query_params(
         params.push(format!("name={}", name.replace(' ', "+")));
     }
     if let Some(dial) = iroh_dial {
-        params.push(format!("iroh={}", percent_encode(dial)));
+        let param = if encrypted { "iroh" } else { "dial" };
+        params.push(format!("{param}={}", percent_encode(dial)));
     }
     if let Some(exp) = expires_at {
         params.push(format!("exp={exp}"));
@@ -235,6 +271,7 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
             relay_hint,
             mesh_name,
             iroh_dial,
+            encrypted,
             expires_at,
         } => Some(JoinConfirmation {
             mesh_name: mesh_name
@@ -244,6 +281,7 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
             join_key: join_key.clone(),
             relay_hint: relay_hint.clone(),
             iroh_dial: iroh_dial.clone(),
+            encrypted: *encrypted,
             expires_at: *expires_at,
         }),
     }
@@ -383,6 +421,7 @@ mod tests {
             Some("10.0.0.5"),
             Some("My Mesh"),
             None,
+            false,
             None,
         );
         assert_eq!(
@@ -478,6 +517,7 @@ mod tests {
             Some("10.0.0.5"),
             Some("My Mesh"),
             None,
+            false,
             None,
         );
         assert_eq!(
@@ -550,6 +590,7 @@ mod tests {
             relay_hint: Some("relay.example.com".into()),
             mesh_name: Some("Test Mesh".into()),
             iroh_dial: None,
+            encrypted: false,
             expires_at: None,
         };
         let confirm = join_confirmation_from_link(&link).unwrap();
@@ -580,6 +621,7 @@ mod tests {
             None,
             Some("Secure Mesh"),
             Some(dial),
+            true,
             Some(1_900_000_000),
         );
         // The dial string is percent-encoded in the URL (no bare `@`/`/`).
@@ -591,49 +633,104 @@ mod tests {
         let DeepLink::Join {
             join_key,
             iroh_dial,
+            encrypted,
             expires_at,
             mesh_name,
             ..
         } = link;
         assert_eq!(join_key, "cwth-abcd-efgh-ijkl");
         assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert!(encrypted);
         assert_eq!(expires_at, Some(1_900_000_000));
         assert_eq!(mesh_name.as_deref(), Some("Secure Mesh"));
 
         // And the same fields reach the JoinConfirmation the UI shows.
         let confirm = join_confirmation_from_link(&parse_deep_link(&url).unwrap()).unwrap();
         assert_eq!(confirm.iroh_dial.as_deref(), Some(dial));
+        assert!(confirm.encrypted);
         assert_eq!(confirm.expires_at, Some(1_900_000_000));
     }
 
     #[test]
     fn https_form_round_trips_iroh_and_ttl() {
         let dial = "aabbccddeeff00112233@10.0.0.5:9742";
-        let url = build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), Some(42));
+        let url =
+            build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), true, Some(42));
         let DeepLink::Join {
             iroh_dial,
+            encrypted,
             expires_at,
             ..
         } = parse_https_join(&url).unwrap();
         assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert!(encrypted);
         assert_eq!(expires_at, Some(42));
     }
 
     #[test]
+    fn plaintext_dial_param_round_trips_unencrypted() {
+        // A plaintext mesh's no-VPN invite uses `dial=`, NOT `iroh=` —
+        // an old build must not mistake it for an encrypted invite
+        // (it ignores the unknown param and joins over IP/mDNS), and a
+        // new build must parse it as encrypted=false.
+        let dial = "aabbccddeeff00112233@https://relay.example./,10.0.0.5:9742";
+        let url = build_join_link(
+            "cwth-abcd-efgh-ijkl",
+            None,
+            Some("House Mesh"),
+            Some(dial),
+            false,
+            None,
+        );
+        assert!(url.contains("dial=aabbcc"));
+        assert!(!url.contains("iroh="));
+        assert!(!url.contains("exp="));
+
+        let DeepLink::Join {
+            iroh_dial,
+            encrypted,
+            expires_at,
+            ..
+        } = parse_deep_link(&url).unwrap();
+        assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert!(!encrypted);
+        assert!(expires_at.is_none());
+
+        let confirm = join_confirmation_from_link(&parse_deep_link(&url).unwrap()).unwrap();
+        assert_eq!(confirm.iroh_dial.as_deref(), Some(dial));
+        assert!(!confirm.encrypted);
+
+        // Same through the https form.
+        let https = build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), false, None);
+        let DeepLink::Join { iroh_dial, encrypted, .. } = parse_https_join(&https).unwrap();
+        assert_eq!(iroh_dial.as_deref(), Some(dial));
+        assert!(!encrypted);
+    }
+
+    #[test]
     fn plaintext_invite_has_no_iroh_or_exp() {
-        // Back-compat: a plaintext invite (None, None) is byte-identical
+        // Back-compat: a plaintext invite (no dial) is byte-identical
         // to before and parses with iroh_dial/expires_at absent.
-        let url = build_join_link("cwth-abcd-efgh-ijkl", Some("10.0.0.5"), Some("My Mesh"), None, None);
+        let url = build_join_link(
+            "cwth-abcd-efgh-ijkl",
+            Some("10.0.0.5"),
+            Some("My Mesh"),
+            None,
+            false,
+            None,
+        );
         assert_eq!(
             url,
             "sovereign://join/cwth-abcd-efgh-ijkl?relay=10.0.0.5&name=My+Mesh"
         );
         let DeepLink::Join {
             iroh_dial,
+            encrypted,
             expires_at,
             ..
         } = parse_deep_link(&url).unwrap();
         assert!(iroh_dial.is_none());
+        assert!(!encrypted);
         assert!(expires_at.is_none());
     }
 }

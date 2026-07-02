@@ -199,6 +199,7 @@ impl PostgresStateStore {
 
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'user';
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS corpus_id TEXT;
+            ALTER TABLE corpus_state ADD COLUMN IF NOT EXISTS visibility TEXT;
 
             -- KnowledgeView v1 additive columns (mirror of the SQLite
             -- run_knowledge_view_migrations). Nullable so existing rows
@@ -1170,12 +1171,13 @@ impl CorpusStateStore for PostgresStateStore {
             .get()
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
+        let visibility_json = serde_json::to_string(&state.visibility).ok();
         client
             .execute(
-                "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) \
-                 ON CONFLICT (corpus_id) DO UPDATE SET installed_at = $2, source_date = $3, chunks_count = $4, index_size_mb = $5, last_updated = $6, vector_index_ready = $7",
-                &[&state.corpus_id, &state.installed_at, &state.source_date, &state.chunks_count, &state.index_size_mb, &state.last_updated, &(state.vector_index_ready as i64)],
+                "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready, visibility) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+                 ON CONFLICT (corpus_id) DO UPDATE SET installed_at = $2, source_date = $3, chunks_count = $4, index_size_mb = $5, last_updated = $6, vector_index_ready = $7, visibility = $8",
+                &[&state.corpus_id, &state.installed_at, &state.source_date, &state.chunks_count, &state.index_size_mb, &state.last_updated, &(state.vector_index_ready as i64), &visibility_json],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
@@ -1190,7 +1192,7 @@ impl CorpusStateStore for PostgresStateStore {
             .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
-                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = $1",
+                "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0), visibility FROM corpus_state WHERE corpus_id = $1",
                 &[&corpus_id],
             )
             .await
@@ -1207,6 +1209,10 @@ impl CorpusStateStore for PostgresStateStore {
                 version: 0,
                 deleted_at: None,
                 vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
+                visibility: r
+                    .get::<_, Option<String>>("visibility")
+                    .and_then(|s| serde_json::from_str::<CorpusVisibility>(&s).ok())
+                    .unwrap_or_default(),
             }),
             None => Err(Error::NotFound(format!("Corpus {corpus_id}"))),
         }
@@ -1219,7 +1225,7 @@ impl CorpusStateStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
-            .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state ORDER BY installed_at DESC", &[])
+            .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0), visibility FROM corpus_state ORDER BY installed_at DESC", &[])
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
@@ -1235,6 +1241,10 @@ impl CorpusStateStore for PostgresStateStore {
                 version: 0,
                 deleted_at: None,
                 vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
+                visibility: r
+                    .get::<_, Option<String>>("visibility")
+                    .and_then(|s| serde_json::from_str::<CorpusVisibility>(&s).ok())
+                    .unwrap_or_default(),
             })
             .collect())
     }
