@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign audit` LLM-backed extraction pass (Phase 7.3 gap E).
+//! `svrn audit` LLM-backed extraction pass (Phase 7.3 gap E).
 //!
-//! When the user runs `sovereign audit`, this module:
+//! When the user runs `svrn audit`, this module:
 //!
 //! 1. Reads `.sovereign/audit_state.toml` for `last_extracted_head`.
 //! 2. Reads `git rev-parse HEAD` for the current head.
@@ -18,7 +18,7 @@
 //!
 //! Two layers:
 //!
-//! - Head-equality short-circuit: re-running `sovereign audit`
+//! - Head-equality short-circuit: re-running `svrn audit`
 //!   against an unchanged tree does NO LLM work. Cheap.
 //! - Body-content dedup: even if the head marker is forced
 //!   forward (e.g. user deletes `.sovereign/audit_state.toml`),

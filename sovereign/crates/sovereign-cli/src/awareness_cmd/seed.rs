@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness seed` — write synthetic conversations + memories
+//! `svrn awareness seed` — write synthetic conversations + memories
 //! into the StateStore.
 //!
 //! Two source modes:
@@ -123,7 +123,7 @@ pub(super) async fn cmd_seed(args: &[String]) -> i32 {
         if conv_count == 1 { "" } else { "s" },
         display_path(&db_path)
     );
-    println!("Run `sovereign awareness extract` to populate the entity atlases.");
+    println!("Run `svrn awareness extract` to populate the entity atlases.");
     0
 }
 

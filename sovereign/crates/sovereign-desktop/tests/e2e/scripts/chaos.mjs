@@ -293,15 +293,24 @@ async function judgeAsUser(question, answer) {
           "suggestion). A graceful honest decline scores LOW. An ABRASIVE, cold, or LECTURING refusal — a " +
           "wall of meta-commentary about 'source limitations', condescending or annoying to read — scores " +
           "HIGH even though it's honest, because it's bad UX. " +
-          'Respond ONLY as JSON: {"broken":true|false,"score":0-10,"why":"<one line>"}. 0=perfect, 10=totally broken.',
+          "If your input was very long (the header below states its true character count) and the app " +
+          "declined it as too long and suggested attaching it as a file, that is CORRECT, helpful " +
+          "behavior — score it LOW; do not treat the size it quotes as a fabrication. " +
+          'Respond ONLY as JSON: {"broken":true|false,"score":0-10,"why":"<one line>"}. 0=perfect, ' +
+          "10=totally broken. Keep the two consistent: set broken=true if and only if score>=6.",
       },
       {
         role: "user",
-        // The answer window must be large enough to show the judge the WHOLE
+        // Tell the judge the TRUE input length so it cannot mislabel a correct
+        // oversize-rejection (">16,000 characters, attach as a file") as a
+        // fabrication — it otherwise sees only the 600-char head and assumes a
+        // short input. The answer window must be large enough to show the WHOLE
         // answer — a 2000-char slice made it flag every long synthesis as "cut
         // off mid-sentence" because IT saw a truncation, not the app. 12k covers
         // the synthesis ceiling; genuinely-longer answers still truncate (rare).
-        content: `My question:\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(answer).slice(0, 12000)}\n\nJudge it.`,
+        content: `My question (${String(question).length} chars total${
+          String(question).length > 600 ? ", shown truncated to the first 600" : ""
+        }):\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(answer).slice(0, 12000)}\n\nJudge it.`,
       },
     ],
     { temperature: 0.2, maxTokens: 120 },
@@ -1063,6 +1072,19 @@ async function chaosStep(memorySummary) {
         retrieved: got.chunks.length,
         resolved: chunkTexts.length,
         chars: chunkTexts.reduce((n, t) => n + t.length, 0),
+        // Per-chunk provenance + evidence text so a post-run grounding-
+        // faithfulness audit can check the answer's claims against the SAME
+        // evidence the oracle saw, without re-running. MUST match the FULL
+        // chunkTexts the live oracle (scoreAnswerAligned, below) grounds against
+        // — the gate itself grounds on full chunk `content` (gate_evidence_chunks),
+        // so a correctly-grounded specific can live PAST an aggressive per-chunk
+        // cut. The old 1500/chunk cap dropped exactly those (measured 2026-07-01:
+        // "David Hart, COO of Knowledge Process Software" sat at offset 1645 in
+        // its chunk → truncated out of evidence.text → the offline re-judge mis-
+        // scored a grounded answer as fabrication). Per-chunk 12000 + total 120000
+        // keeps the journal bounded while faithfully reflecting the gate's view.
+        ids: got.chunks.map((c) => c.chunk_id ?? c.id ?? null),
+        text: chunkTexts.map((t) => t.slice(0, 12000)).join("\n---\n").slice(0, 120000),
       };
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
       userJudge = await judgeAsUser(question, answer);
@@ -1116,11 +1138,11 @@ async function chaosStep(memorySummary) {
     args: JSON.stringify(chosen.args ?? {}).slice(0, 200),
     ok,
     error: error ? error.slice(0, 240) : null,
-    answer: answer != null ? answer.slice(0, 200) : null,
-    // Full length + the last 80 chars: the journal stores only a 200-char head,
-    // so a real mid-sentence cut-off (early stream-end, no finish_reason=Length)
-    // is invisible without seeing how the answer actually ENDS. A complete answer
-    // ends on terminal punctuation; a cut-off ends mid-word/phrase.
+    // Store the full answer (capped) so a post-run faithfulness audit and a
+    // precise truncation cut-point read off the SAME text the oracle scored — a
+    // 200-char head hid the middle. len + tail remain the quick cut-off signal
+    // (complete = terminal punctuation; cut-off = mid-word/phrase).
+    answer: answer != null ? answer.slice(0, 12000) : null,
     answerLen: answer != null ? answer.length : null,
     answerTail: answer != null && answer.length > 200 ? answer.slice(-80) : null,
     aligned: aligned

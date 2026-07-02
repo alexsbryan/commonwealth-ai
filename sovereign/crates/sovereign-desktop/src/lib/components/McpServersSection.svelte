@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Settings → MCP Servers. Add / remove external HTTP MCP servers (the
-  // canonical `[[mcp_servers]]` list in ~/.sovereign/config.toml), test
+  // canonical `[[mcp_servers]]` list in ~/.svrnmesh/config.toml), test
   // reachability before saving, and see the live connection status from the
-  // last backend start. Mirrors `sovereign mcp add/remove/list` — same file
+  // last backend start. Mirrors `svrn mcp add/remove/list` — same file
   // underneath, so a server added here also works in `sovereign chat`.
   import { onMount } from "svelte";
   import {
@@ -36,7 +36,7 @@
   // The env var a bearer token can ALSO be read from — the headless / CI
   // override — derived from the server name with the same fold the daemon
   // uses (`secret_env_var`): non-alphanumeric → `_`, uppercased. The primary
-  // path is the in-app token field below (stored under ~/.sovereign/secrets);
+  // path is the in-app token field below (stored under ~/.svrnmesh/secrets);
   // this is surfaced as the alternative for nodes with no GUI.
   const tokenEnvVar = $derived(
     name.trim()
@@ -238,7 +238,7 @@
         />
       </label>
       <p class="bearer-note">
-        Stored under <code>~/.sovereign/secrets/</code> (owner-only) — never in
+        Stored under <code>~/.svrnmesh/secrets/</code> (owner-only) — never in
         your config, a backup, or gossiped to a peer.{#if tokenEnvVar} On a
         headless node or in CI, set <code>{tokenEnvVar}</code> instead.{/if}
       </p>
@@ -258,7 +258,7 @@
 
   <p class="hint">
     New servers connect on the next app start. To try it with no external service:
-    run <code>sovereign mcp demo-server</code> in a terminal, add
+    run <code>svrn mcp demo-server</code> in a terminal, add
     <code>http://127.0.0.1:4319/mcp</code>, restart, then ask the assistant for
     Vega's clearance code.
   </p>

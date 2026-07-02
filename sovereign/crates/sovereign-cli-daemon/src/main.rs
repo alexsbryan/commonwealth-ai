@@ -22,6 +22,11 @@ fn main() {
     if std::env::var_os("RUST_MIN_STACK").is_none() {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
+    // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
+    // The daemon is the migration authority — it runs before binding the API port.
+    sovereign_core::rebrand::promote_legacy_env();
+    sovereign_core::rebrand::run_startup_migration();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)

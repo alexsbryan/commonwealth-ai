@@ -138,7 +138,7 @@
           else if (!v.is_dir)
             additionalRootError = "Pick a folder, not a file.";
           else if (!v.readable)
-            additionalRootError = "Sovereign can't read that folder.";
+            additionalRootError = "svrnmesh can't read that folder.";
           else {
             additionalRoots = [...additionalRoots, picked];
           }
@@ -164,7 +164,7 @@
       if (!v.exists) validationError = "That path doesn't exist.";
       else if (!v.is_dir) validationError = "Pick a folder, not a file.";
       else if (!v.readable)
-        validationError = "Sovereign can't read that folder.";
+        validationError = "svrnmesh can't read that folder.";
       else validationError = "";
     } catch (e) {
       validationError = `Validation failed: ${e}`;
@@ -217,9 +217,9 @@
   <header class="head">
     <h2 class="title">Watch a folder.</h2>
     <p class="lede">
-      Sovereign keeps the index in sync with this folder. Drop files in,
+      svrnmesh keeps the index in sync with this folder. Drop files in,
       edit them, or remove them — changes appear in search within a few
-      minutes. Sovereign never writes to the folder.
+      minutes. svrnmesh never writes to the folder.
     </p>
   </header>
 
@@ -319,7 +319,7 @@
           <span>
             Continuous
             <span class="hint inline">
-              — Sovereign sweeps the folder every few minutes. Best for
+              — svrnmesh sweeps the folder every few minutes. Best for
               folders you actively maintain.
             </span>
           </span>
@@ -335,7 +335,7 @@
           <span>
             Manual
             <span class="hint inline">
-              — Sovereign only sweeps when you click "Sync now". Good for
+              — svrnmesh only sweeps when you click "Sync now". Good for
               inbox-style folders you curate in batches.
             </span>
           </span>
@@ -353,7 +353,7 @@
           disabled={syncMode === "manual"}
         />
         <p class="hint">
-          How often Sovereign checks the folder for changes. Floored at
+          How often svrnmesh checks the folder for changes. Floored at
           60s — tighter intervals just waste disk and shrink the
           deletion-guard reaction window. Ignored in Manual mode.
         </p>
@@ -427,7 +427,7 @@
       {:else}
         <p class="hint">
           OCR for scanned PDFs isn't available on this build —
-          Sovereign couldn't find a Tesseract sidecar. Scanned files
+          svrnmesh couldn't find a Tesseract sidecar. Scanned files
           will land in the "couldn't read" list with a note.
         </p>
       {/if}
@@ -456,7 +456,7 @@
         <span>
           Mark this folder sensitive
           <span class="hint inline">
-            — Sovereign won't draw from this folder when assembling
+            — svrnmesh won't draw from this folder when assembling
             ambient context for routine conversation. The folder
             stays searchable on explicit query and in Inner Work
             mode. Atlas state, if you enable enrichment later, also

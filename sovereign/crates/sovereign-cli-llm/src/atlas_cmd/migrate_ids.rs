@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas migrate-ids` — Move 6 Phase 0 migration command.
+//! `svrn atlas migrate-ids` — Move 6 Phase 0 migration command.
 //!
 //! Walks installed atlases and rewrites atoms.json + edges.json +
 //! cross_corpus_edges.json from sequential ids to content-hash ids.
@@ -27,7 +27,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--dry-run" => dry_run = true,
             "--help" | "-h" => {
                 println!(
-                    "sovereign atlas migrate-ids [--corpus <id>] [--all] [--dry-run]\n\
+                    "svrn atlas migrate-ids [--corpus <id>] [--all] [--dry-run]\n\
                     \n\
                     Move 6 P0: rewrite atoms.json + edges.json + cross_corpus_edges.json\n\
                     from sequential entity-NNNN ids to content-hash entity-<hex> ids.\n\

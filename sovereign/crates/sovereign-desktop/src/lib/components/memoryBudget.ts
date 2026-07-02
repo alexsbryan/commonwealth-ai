@@ -14,7 +14,7 @@ const GIB = 1024 ** 3;
  *  Q4–Q6 GGUFs. */
 export const RUNTIME_OVERHEAD = 1.15;
 
-/** Baseline reserve for the OS + Sovereign's own working set. */
+/** Baseline reserve for the OS + svrnmesh's own working set. */
 export const BASELINE_BYTES = 2 * 1024 ** 3;
 
 /** Per-slot GGUF file sizes in bytes; `null` when the slot is unset. */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign reading-diag` — headless validator for the glass-box
+//! `svrn reading-diag` — headless validator for the glass-box
 //! reading-surface chain.
 //!
 //! The desktop's reading surface stitches together six data flows:
@@ -19,7 +19,7 @@
 //! a tree-shaped report so you can bisect end-to-end without the UI
 //! loop.
 //!
-//! **Companion command:** `sovereign chat inspect "<query>"` already
+//! **Companion command:** `svrn chat inspect "<query>"` already
 //! handles the *retrieval* side — per-corpus hits with scores, dim
 //! eligibility, etc. Use it when "all citations came from the wrong
 //! corpus." Use `reading-diag` when "the citation deref returned
@@ -46,12 +46,12 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign reading-diag",
+    command: "svrn reading-diag",
     summary:
         "Validate the desktop reading-surface chain end-to-end without the UI.",
     sections: &[
         HelpSection::Usage(
-            "sovereign reading-diag query \"<question>\" [--corpus <id>] [--limit N] [--max-spans N] [--format text|json]",
+            "svrn reading-diag query \"<question>\" [--corpus <id>] [--limit N] [--max-spans N] [--format text|json]",
         ),
         HelpSection::Flags(&[
             ("--corpus <id>",     "Restrict retrieval to a single corpus_id (default: every installed)."),
@@ -64,15 +64,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign reading-diag query \"Is free will compatible with determinism?\"",
+                "svrn reading-diag query \"Is free will compatible with determinism?\"",
                 "Run a philosophy question across every installed corpus and walk the top-3 deref chains. Surfaces the 'wrong corpus winning' bug + each citation's atom-layer health.",
             ),
             (
-                "sovereign reading-diag query \"Who is Alyosha?\" --corpus brothers_karamazov --limit 1",
+                "svrn reading-diag query \"Who is Alyosha?\" --corpus brothers_karamazov --limit 1",
                 "Validate that a known-good citation in BK derefs cleanly: chunk + neighbors + atom_spans + atom card + elsewhere section→chunk resolution.",
             ),
             (
-                "sovereign reading-diag query \"...\" --format json | jq '.citations[].atom_spans'",
+                "svrn reading-diag query \"...\" --format json | jq '.citations[].atom_spans'",
                 "JSON output for piping into ad-hoc assertions.",
             ),
         ]),

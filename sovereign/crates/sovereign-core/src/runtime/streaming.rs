@@ -237,22 +237,48 @@ async fn run_synthesis_stream(
         break 'synth;
     }
 
-    // Glassbox: a Length finish means the model was cut off at its token cap
-    // mid-generation and the partial text is what gets released (FinishReason is
-    // otherwise recorded but never acted on). Logging the cap + the think budget
-    // + the produced token count makes "was the answer truncated, and by what
-    // budget?" answerable from logs — the signal needed to size the fix (raise
-    // the synthesis output budget vs. think-tokens eating the visible answer).
+    // Glassbox (truncation trace 2026-06-30): emit the draft lifecycle for EVERY
+    // grounded turn, not only Length finishes. The truncation is intermittent and
+    // is NOT a Length cut (0 Length events across a 120-chat run), so the open
+    // question is the finish reason + produced tokens vs the EFFECTIVE cap (after
+    // prompt_budget::enforce) + the answer tail. Join to the chaos journal by
+    // answer_chars + answer_tail; a mid-`[Source:` tail here = draft-side cut.
+    tracing::info!(
+        target: "synth.lifecycle",
+        finish = ?observed_finish,
+        completion_tokens = ?observed_completion_tokens,
+        max_tokens = ?request.max_tokens,
+        think_budget = ?request.think_budget,
+        answer_chars = full_text.chars().count(),
+        answer_tail = %tail_chars(&full_text, 48),
+        "{}: synth draft complete",
+        log_tag
+    );
     if matches!(observed_finish, Some(crate::types::FinishReason::Length)) {
         tracing::warn!(
             target: "synth.truncation",
             max_tokens = ?request.max_tokens,
-            think_budget = ?request.think_budget,
             completion_tokens = ?observed_completion_tokens,
-            answer_chars = full_text.chars().count(),
-            "{}: answer TRUNCATED at the token cap (finish_reason=Length) — partial released mid-generation",
+            "{}: answer TRUNCATED at the token cap (finish_reason=Length)",
             log_tag
         );
+    }
+
+    // Soft landing (truncation fix 2026-06-30): if the draft ended mid-thought,
+    // continue it to a natural boundary before returning. Detection is by
+    // CONTENT, not finish_reason — this model reports Stop even at the cap, so
+    // the Length branch above never fires for it. Skipped for cancelled turns.
+    if !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
+        continue_truncated_synthesis(
+            inference,
+            request,
+            tx,
+            cancel_for_stream,
+            full_text,
+            gate_on,
+            log_tag,
+        )
+        .await;
     }
 
     Some(SynthStreamOutcome {
@@ -260,6 +286,84 @@ async fn run_synthesis_stream(
         observed_finish,
         observed_completion_tokens,
     })
+}
+
+/// Last `n` chars of `s`, char-safe — for glassbox answer tails (truncation trace).
+fn tail_chars(s: &str, n: usize) -> String {
+    let mut v: Vec<char> = s.chars().rev().take(n).collect();
+    v.reverse();
+    v.into_iter().collect()
+}
+
+/// Soft-landing continuation for a draft that ended mid-thought.
+///
+/// This model family reports `finish=Stop` even when it stops at the token
+/// cap, so a truncation is detected by CONTENT (`ends_mid_thought`), never by
+/// `finish_reason`. We continue the assistant turn from the draft so far —
+/// carried as `assistant_prefix`, which the inference layer commits before the
+/// next generation token — in bounded rounds, until the answer lands on a
+/// boundary or the round budget is spent. In gate mode the appended text is
+/// held in `full_text` for the gate to re-verify the stitched whole; in
+/// non-gate mode it is streamed as it arrives. The round cap + a min-length
+/// guard keep a genuinely open-ended (or degenerate, e.g. a stray "search")
+/// draft from looping.
+async fn continue_truncated_synthesis(
+    inference: &Arc<dyn InferenceProvider>,
+    request: &CompletionRequest,
+    tx: &tokio::sync::mpsc::Sender<Result<String>>,
+    cancel: &tokio_util::sync::CancellationToken,
+    full_text: &mut String,
+    gate_on: bool,
+    log_tag: &'static str,
+) {
+    use crate::runtime::evidence::ends_mid_thought;
+    const MAX_ROUNDS: usize = 3;
+    const PER_ROUND_TOKENS: usize = 512;
+    const MIN_CHARS_TO_CONTINUE: usize = 40;
+
+    for round in 0..MAX_ROUNDS {
+        if cancel.is_cancelled()
+            || full_text.trim().chars().count() < MIN_CHARS_TO_CONTINUE
+            || !ends_mid_thought(full_text)
+        {
+            break;
+        }
+        let mut req = request.clone();
+        // Commit the answer-so-far as the assistant prefill and let the model
+        // continue it; `complete` returns only the NEW tokens after the prefix.
+        req.assistant_prefix = Some(full_text.clone());
+        req.max_tokens = Some(PER_ROUND_TOKENS);
+        req.think_budget = Some(0);
+        let added = match inference.complete(&req).await {
+            Ok(resp) if !resp.text.is_empty() => resp.text,
+            Ok(_) => break, // model had nothing to add
+            Err(e) => {
+                tracing::warn!(
+                    target: "synth.continue",
+                    round,
+                    error = %e,
+                    "{}: continuation call failed; releasing draft as-is",
+                    log_tag
+                );
+                break;
+            }
+        };
+        full_text.push_str(&added);
+        // Non-gate mode already streamed the draft, so stream the continuation
+        // too; gate mode holds everything until the verdict.
+        if !gate_on && tx.send(Ok(added.clone())).await.is_err() {
+            break; // receiver gone
+        }
+        tracing::info!(
+            target: "synth.continue",
+            round,
+            added_chars = added.chars().count(),
+            now_complete = !ends_mid_thought(full_text),
+            total_chars = full_text.chars().count(),
+            "{}: soft-landing continuation",
+            log_tag
+        );
+    }
 }
 
 /// Run the production grounding gate on the HELD answer (shared by the
@@ -277,6 +381,10 @@ async fn gate_held_answer(
     profile: &crate::runtime::grounding::GroundingProfile,
 ) -> Option<serde_json::Value> {
     if gate_on && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
+        // Truncation trace (2026-06-30): capture the draft BEFORE the gate takes it
+        // so we can localize a mid-`[Source:` cut to the draft vs the gate.
+        let draft_len = full_text.chars().count();
+        let draft_tail = tail_chars(full_text, 48);
         let outcome = crate::runtime::grounding::gate_answer(
             inference,
             question,
@@ -286,10 +394,56 @@ async fn gate_held_answer(
             profile,
         )
         .await;
+        let gate_action = outcome
+            .meta
+            .get("action")
+            .and_then(|a| a.as_str())
+            .unwrap_or("?")
+            .to_string();
+        let gate_out_len = outcome.text.chars().count();
+        let gate_out_tail = tail_chars(&outcome.text, 48);
         // Present the gated answer: strip phantom tool-call envelopes the model
         // reflexes (chat wires no tools) so the persisted record + non-desktop
         // surfaces don't carry a raw `<tool_call>` / `:code_search(...)` leak.
         *full_text = crate::pipeline::presenter::present_answer(&outcome.text);
+        // Citation-attribution (faithfulness audit 2026-06-30): the value gate
+        // passed the answer's TOP-LINE value, but synthesis may have propped it up
+        // with FABRICATED supporting citations — `[Source: Re: Advertising Campaign
+        // - NASCAR]` over an Enron corpus that never mentions NASCAR (audit turn
+        // #4). Strip `[Source: …]` markers whose title is absent from the very
+        // chunks the draft saw. Strip, don't gate: a false strip drops one marker,
+        // never a good answer; the fabrication rate rides the gate meta so a
+        // confabulation-heavy answer is visible to telemetry and the glassbox.
+        let cites = crate::runtime::grounding::attribute_citations(
+            full_text,
+            &evidence.chunks,
+            &evidence.source_labels,
+        );
+        if cites.changed() {
+            tracing::info!(
+                target: "synth.citation",
+                citations_total = cites.citations_total,
+                citations_stripped = cites.citations_stripped(),
+                fabrication_rate = cites.fabrication_rate(),
+                stripped = ?cites.stripped_titles,
+                "stripped unverifiable [Source:] citations absent from the evidence"
+            );
+            *full_text = cites.cleaned;
+        }
+        // Glassbox: the full gate lifecycle. draft_tail complete + final_tail cut
+        // ⇒ gate truncated; both cut ⇒ draft truncated; gate_out vs final differ
+        // ⇒ present_answer. Join to the chaos journal by final_len + final_tail.
+        tracing::info!(
+            target: "gate.lifecycle",
+            gate_action = %gate_action,
+            draft_len,
+            draft_tail = %draft_tail,
+            gate_out_len,
+            gate_out_tail = %gate_out_tail,
+            final_len = full_text.chars().count(),
+            final_tail = %tail_chars(full_text, 48),
+            "gate lifecycle"
+        );
         Some(outcome.meta)
     } else {
         None
@@ -492,6 +646,9 @@ impl Runtime {
     ) -> Result<StreamHandle> {
         if message.len() > MAX_TURN_MESSAGE_CHARS {
             return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
+        }
+        if is_degenerate_message(message) {
+            return Err(Error::InvalidInput(DEGENERATE_MESSAGE_HINT.to_string()));
         }
 
         // Prior history only — no working-memory / topic shaping.
@@ -815,6 +972,11 @@ impl Runtime {
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if gate_on {
                 crate::runtime::grounding::gate_evidence_chunks(&chunks)
+            } else {
+                Vec::new()
+            },
+            source_labels: if gate_on {
+                crate::runtime::grounding::gate_evidence_source_labels(&chunks)
             } else {
                 Vec::new()
             },
@@ -1506,6 +1668,19 @@ impl Runtime {
                     &|s| self.inference.count_tokens(s),
                     ctx,
                 );
+                let budget_trimmed =
+                    matches!(outcome, prompt_budget::BudgetOutcome::Trimmed { .. });
+                // Glassbox (truncation trace 2026-06-30): the EFFECTIVE response cap
+                // after the budget guard. If a big prompt (the truncated case had
+                // ~16k chars of evidence) made enforce shrink max_tokens, this is
+                // where a non-Length-looking short answer would originate.
+                tracing::info!(
+                    target: "synth.budget",
+                    ctx,
+                    budget_trimmed,
+                    effective_max_tokens = ?request.max_tokens,
+                    "prompt budget enforced"
+                );
                 // Phase 2: the memo records pre-trim DEMAND so the
                 // compaction sensor and next-turn allocator see what
                 // assembly actually wanted.
@@ -1614,6 +1789,11 @@ impl Runtime {
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: if deep_gate_on {
                 crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
+            } else {
+                Vec::new()
+            },
+            source_labels: if deep_gate_on {
+                crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks)
             } else {
                 Vec::new()
             },
@@ -1920,6 +2100,10 @@ impl Runtime {
                 "runtime:oversize_message rejected"
             );
             return Err(Error::InvalidInput(OVERSIZE_MESSAGE_HINT.to_string()));
+        }
+        if is_degenerate_message(message) {
+            tracing::info!("runtime: degenerate (contentless) message — returning clarification");
+            return Err(Error::InvalidInput(DEGENERATE_MESSAGE_HINT.to_string()));
         }
         // 1. Build context.
         let principal = self
@@ -2541,4 +2725,115 @@ impl Runtime {
         .await
     }
 
+}
+
+#[cfg(test)]
+mod continuation_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Minimal inference stub: every `complete` returns the same canned reply
+    /// and counts the calls, so the continuation loop is asserted
+    /// deterministically — no model, no routing (which we can't steer to the
+    /// kq path from a test anyway).
+    struct ContinuationMock {
+        reply: String,
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for ContinuationMock {
+        async fn complete(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<crate::types::CompletionResponse> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(crate::types::CompletionResponse {
+                text: self.reply.clone(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "continuation-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(crate::error::Error::NotImplemented(
+                "continuation mock: no streaming".into(),
+            ))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    fn stub(reply: &str) -> (Arc<dyn crate::traits::InferenceProvider>, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let inf: Arc<dyn crate::traits::InferenceProvider> = Arc::new(ContinuationMock {
+            reply: reply.to_string(),
+            calls: calls.clone(),
+        });
+        (inf, calls)
+    }
+
+    async fn run(inf: &Arc<dyn crate::traits::InferenceProvider>, full: &mut String) {
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let req = crate::types::CompletionRequest::default();
+        // gate_on=true: held flow, so no token is streamed to the (dropped) rx.
+        continue_truncated_synthesis(inf, &req, &tx, &cancel, full, true, "test").await;
+    }
+
+    #[tokio::test]
+    async fn lands_a_truncated_draft() {
+        let (inf, calls) = stub(" man, and so the only cure is to control its effects.");
+        let mut full =
+            "Madison argues the latent causes of faction are sown into the nature of".to_string();
+        assert!(crate::runtime::evidence::ends_mid_thought(&full));
+        run(&inf, &mut full).await;
+        assert!(
+            !crate::runtime::evidence::ends_mid_thought(&full),
+            "answer landed on a boundary: {full:?}"
+        );
+        assert!(full.ends_with("effects."), "continuation was stitched: {full:?}");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "one continuation sufficed");
+    }
+
+    #[tokio::test]
+    async fn bounded_when_never_landing() {
+        // A reply that itself ends mid-thought every time must NOT loop forever.
+        let (inf, calls) = stub(" and then it just keeps trailing on and on without any end so");
+        // Above the min-length guard, so the loop actually engages.
+        let mut full = "This particular answer was unfortunately cut off right at the".to_string();
+        run(&inf, &mut full).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 3, "stops at the round cap, never loops");
+    }
+
+    #[tokio::test]
+    async fn skips_complete_or_short_drafts() {
+        let (inf, calls) = stub(" extra text");
+        let mut done = "A complete sentence.".to_string();
+        run(&inf, &mut done).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "a complete draft is left alone");
+        // A sub-threshold degenerate stub (e.g. a stray "search") is not "continued".
+        let mut stubby = "search".to_string();
+        run(&inf, &mut stubby).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "a tiny stub is left alone");
+    }
 }

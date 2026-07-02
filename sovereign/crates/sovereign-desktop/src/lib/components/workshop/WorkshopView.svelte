@@ -80,7 +80,7 @@
         <h2>Connect tools</h2>
         <p class="lede">
           Plug in <strong>Model Context Protocol</strong> servers (vision, web,
-          filesystem…). Their tools appear in chat and your recipes — Sovereign
+          filesystem…). Their tools appear in chat and your recipes — svrnmesh
           asks before the first use.
         </p>
         <McpServersSection />
@@ -89,7 +89,7 @@
       <div class="workshop-panel">
         <h2>Open to apps</h2>
         <p class="lede">
-          Sovereign speaks the OpenAI API on your machine. Point Codex, Claude
+          svrnmesh speaks the OpenAI API on your machine. Point Codex, Claude
           Code, or any OpenAI-compatible client at it — nothing leaves your
           machine.
         </p>

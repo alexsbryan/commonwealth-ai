@@ -79,7 +79,7 @@ pub fn render_report(
     crash_log: &str,
 ) -> String {
     let mut out = String::new();
-    out.push_str("# Sovereign crash report\n\n");
+    out.push_str("# svrnmesh crash report\n\n");
     out.push_str(&format!("- App version: `{app_version}`\n"));
     out.push_str(&format!("- OS: `{os_label}`\n"));
     out.push_str(&format!(

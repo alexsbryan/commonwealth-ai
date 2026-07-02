@@ -612,7 +612,7 @@ fn main() -> ExitCode {
             commands::mcp_clear_token,
         ])
         .build(tauri::generate_context!())
-        .expect("error building Sovereign")
+        .expect("error building svrnmesh")
         .run(|_app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 // Graceful shutdown: skip C++ static destructors so ggml-metal's

@@ -39,6 +39,7 @@
 //! questions, where a GK caveat cannot exempt an in-world claim.
 
 mod citation;
+mod citation_attribution;
 mod config;
 mod judge;
 mod search;
@@ -49,6 +50,14 @@ mod value_presence;
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
 pub use value_presence::{assess_asserted_value, AssertedValue};
+
+// The supporting-specifics half of groundedness: `value_presence` checks the
+// answer's top-line VALUE, this strips `[Source: …]` citations whose title is
+// absent from the evidence. The gate consumes it in `gate_held_answer`.
+// `CitationAttribution` (the return type) is exported alongside but not yet named
+// by a consumer — same `#[allow]` idiom as `grounding_gate_flags`.
+#[allow(unused_imports)]
+pub use citation_attribution::{attribute_citations, CitationAttribution};
 
 pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfile};
 // Registry export: consumed by the config-module coverage test today;
@@ -69,7 +78,7 @@ use std::sync::Arc;
 use crate::traits::InferenceProvider;
 use crate::types::CompletionRequest;
 
-use judge::{claim_violation_joint, extract_claim_list};
+use judge::{claim_violation_joint, extract_claim_list, scan_unsupported_specifics};
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
@@ -77,6 +86,13 @@ use judge::{claim_violation_joint, extract_claim_list};
 pub(crate) struct EvidenceContext {
     /// Prompt-snapshot evidence the draft was synthesized from.
     pub chunks: Vec<String>,
+    /// Legitimate citation labels for the citation-attribution check — each
+    /// retrieved chunk's title and corpus id (what the synthesis presents as
+    /// `[Source: …]` headers and the model cites). A `[Source: X]` whose words are
+    /// absent from the chunk BODY but present in a label is grounded, not a
+    /// fabrication. Empty when labels are unavailable (tool-transcript / step-
+    /// summary evidence) — the check is then body-only.
+    pub source_labels: Vec<String>,
     /// Claim-conditioned widening WITHIN the sealed universe.
     /// `None` = the snapshot IS the universe (e.g. tool transcripts).
     pub searcher: Option<Arc<dyn SealedEvidenceSearch>>,
@@ -121,6 +137,30 @@ pub(crate) fn gate_evidence_chunks(chunks: &[corpus_engine::ScoredChunk]) -> Vec
         .collect()
 }
 
+/// The legitimate citation LABELS for `attribute_citations`: each chunk's title
+/// and corpus id — the source identifiers the synthesis presents as `[Source: …]`
+/// headers and the model cites. Unlike `gate_evidence_chunks` these are NOT body
+/// text; they only WIDEN what the citation check counts as grounded, so a citation
+/// naming a source by its corpus or section title is not mistaken for a fabrication.
+/// RAPTOR summaries are NOT excluded here: a summary's title/corpus is still a real
+/// label, and since labels never narrow groundedness, including them is always safe.
+pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+    let mut out = Vec::with_capacity(chunks.len() * 2);
+    for c in chunks {
+        if let Some(t) = c.title.as_deref() {
+            let t = t.trim();
+            if !t.is_empty() {
+                out.push(t.to_string());
+            }
+        }
+        let cid = c.corpus_id.trim();
+        if !cid.is_empty() {
+            out.push(cid.to_string());
+        }
+    }
+    out
+}
+
 /// One audit-failed claim plus the claim-conditioned passages its
 /// targeted search returned — the rewrite's correction material.
 struct FailedClaim {
@@ -140,10 +180,11 @@ struct FailedClaim {
 /// leakage.
 pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {
     format!(
-        "I can't answer this from your sources — none of the {chunks_checked} \
-         retrieved passages support an answer, so I'm not going to state one. If \
-         it's in your sources, try rephrasing with the specific names or terms \
-         involved; otherwise it may simply not be recorded there."
+        "I looked through the {chunks_checked} passages your sources turned up for \
+         this, but none of them actually cover it — so I'd rather not guess at an \
+         answer that isn't there. If you think it's in your sources, try rephrasing \
+         with the specific names or terms involved and I'll take another look; \
+         otherwise it may just not be recorded there."
     )
 }
 
@@ -293,6 +334,25 @@ pub(crate) async fn gate_answer(
                 "{answer}\n\nGrounded in the source: \"{}\"",
                 quote.chars().take(220).collect::<String>()
             );
+            // Second-opinion fabrication guard: the citation path grounds the
+            // asserted VALUE against a quote, but a confabulated quote wearing a
+            // real-passage shape can still slip a fabricated named entity
+            // through (measured: "David Hart, COO of Knowledge Process Software"
+            // over Enron evidence). Scan the asserted answer holistically; on a
+            // flag, correct-or-abstain instead of releasing the fabrication.
+            if let Some(guarded) = short_specifics_guard(
+                inference,
+                question,
+                &answer,
+                chunks,
+                evidence.searcher.as_ref(),
+                base_request,
+                profile,
+            )
+            .await
+            {
+                return guarded;
+            }
             return GateOutcome {
                 text: cited,
                 meta: serde_json::json!({
@@ -322,11 +382,26 @@ pub(crate) async fn gate_answer(
         chunks.len(),
         text.chars().take(240).collect::<String>()
     ));
-    // Structural exemption-closing: on an entity-anchored question, strip any GK
-    // caveat before extraction so the asserted claim is actually verified rather
-    // than exempted as NO_CLAIM. The released `text` is unchanged; only what the
-    // verifier reads is de-caveated.
-    let verify_text = if entity_anchored { strip_gk_caveat(&text) } else { text.clone() };
+    // Structural exemption-closing: strip any GK caveat before extraction so the
+    // asserted claim is actually verified rather than exempted as NO_CLAIM. This
+    // runs UNCONDITIONALLY now (not just entity_anchored): gate_answer only fires
+    // on the gated path, where documents WERE retrieved (gate_on requires
+    // documents_found > 0), so the grounding contract applies — a "from general
+    // knowledge" escape hatch must not ship confident specifics the retrieved
+    // evidence can't support (observed 2026-07-01: "Winnie's former lover was
+    // Eddie Henderson", a name absent from the Secret-Agent corpus, shipped under
+    // a GK caveat on a non-entity-anchored question). If the GK content is
+    // genuinely unsupported the gate now abstains — an honest "the sources don't
+    // cover it" beats a labelled-but-confident fabrication. strip_gk_caveat is a
+    // no-op when there is no caveat, so grounded answers are unaffected. The
+    // released `text` is unchanged; only what the verifier reads is de-caveated.
+    // Env-gated (SOVEREIGN_EXACTVAL_FIX=0 restores the prior entity_anchored-only
+    // strip) for a clean replay A/B.
+    let verify_text = if entity_anchored || config::exactval_fix_enabled() {
+        strip_gk_caveat(&text)
+    } else {
+        text.clone()
+    };
     match verify_grounding(
         inference,
         question,
@@ -414,11 +489,25 @@ pub(crate) async fn gate_answer(
                     retry_req.assistant_prefix = None;
                     match inference.complete(&retry_req).await {
                         Ok(resp) => {
+                            // Truncation trace (2026-06-30): the gate's non-streaming
+                            // retry bypasses the synth.truncation glassbox — log its
+                            // finish vs cap so a silent Length cut here is visible.
+                            tracing::info!(
+                                target: "gate.call",
+                                kind = "retry",
+                                finish = ?resp.finish_reason,
+                                completion_tokens = ?resp.completion_tokens,
+                                max_tokens = ?retry_req.max_tokens,
+                                resp_chars = resp.text.chars().count(),
+                                "gate internal completion"
+                            );
                             let second = resp.text;
-                            // Same structural strip on the retry: the documented
+                            // Same structural strip on the retry, matching the
+                            // first-pass strip above (env-gated): the documented
                             // leak is a retry that re-asserts the fabrication
                             // wearing the GK caveat and slips the exemption.
-                            let verify_second = if entity_anchored {
+                            let verify_second = if entity_anchored || config::exactval_fix_enabled()
+                            {
                                 strip_gk_caveat(&second)
                             } else {
                                 second.clone()
@@ -480,6 +569,26 @@ pub(crate) async fn gate_answer(
         top_similarity = ?evidence.top_similarity,
         "grounding gate verdict"
     );
+    // Second-opinion fabrication guard on a RELEASED single-claim answer — the
+    // per-claim verify grounds the load-bearing value but is blind to fabricated
+    // SUPPORTING specifics (a cited flag/number/entity absent from the
+    // evidence). Skip when the path already abstained (nothing asserted). On a
+    // flag: correct-or-abstain via one grounded rewrite.
+    if !action.starts_with("abstained") && !action.starts_with("judge_failed") {
+        if let Some(guarded) = short_specifics_guard(
+            inference,
+            question,
+            &text,
+            chunks,
+            evidence.searcher.as_ref(),
+            base_request,
+            profile,
+        )
+        .await
+        {
+            return guarded;
+        }
+    }
     GateOutcome {
         text,
         meta: serde_json::json!({
@@ -556,6 +665,204 @@ fn rewrite_system_note(failed: &[FailedClaim]) -> String {
 /// documented blind spot; measured v13: a correct maximal essay was
 /// rewritten into hedging because its synthesis claims had no single
 
+/// Claim-audit budget for an answer of `chars` characters. Scales with
+/// length so a long "exhaustive" answer — which buries fabricated specifics
+/// in its later sections, past the first few load-bearing claims — gets
+/// proportionate checking, instead of the fixed 4-claim audit that was
+/// structurally blind to body fabrication (observed 2026-06-30: 3/5 shipped
+/// fabrications were direct releases whose fabricated specifics were never
+/// extracted). Floored at the surface's `min_claims` and capped so per-claim
+/// judge latency stays bounded on very long answers.
+pub(super) fn claim_budget(chars: usize, min_claims: usize) -> usize {
+    // 600 chars/claim (not 900) so the empirical fabrication distribution
+    // actually scales: the fixed-1h shipped fabrications sat at 3630-8571
+    // chars, which at 900/claim only reached budget 4-9 (the 3630 case got
+    // NO lift) — measured under-powered on the fab-fix run-1 trace. At 600 the
+    // same cases get 6-10 claims audited. Cap 10 bounds the per-claim judge
+    // latency on the longest answers (each audited claim is a 35B judge call).
+    const MAX_AUDITED_CLAIMS: usize = 10;
+    const CHARS_PER_CLAIM: usize = 600;
+    (chars / CHARS_PER_CLAIM).clamp(min_claims, MAX_AUDITED_CLAIMS)
+}
+
+/// Whether the holistic supporting-specifics scan runs alongside the per-claim
+/// audit in `gate_longform`. ON by default; `SOVEREIGN_SPECIFICS_SCAN=0`
+/// disables it (the clean A/B lever — the per-claim audit alone is the prior
+/// behaviour). The scan is one extra judge call per audited text; it catches
+/// the fabricated specifics / misattributions the load-bearing claim extraction
+/// structurally misses.
+fn specifics_scan_enabled() -> bool {
+    !matches!(
+        std::env::var("SOVEREIGN_SPECIFICS_SCAN").ok().as_deref(),
+        Some("0") | Some("false") | Some("off")
+    )
+}
+
+/// Whether the SHORT-path second-opinion specifics scan runs. SHELVED — OFF by
+/// default; opt in with `SOVEREIGN_SHORT_SPECIFICS_SCAN=1`. The short-path
+/// "fabrication" category it targets proved to be ~90% measurement artifact
+/// (correctly-grounded answers mis-scored because the offline evidence was
+/// truncated); once that capture bug was fixed the guard's live A/B was no
+/// longer a meaningful composite lever, so it ships dormant as defense-in-depth
+/// pending a fresh clean-evidence validation. Kept separate from
+/// `SOVEREIGN_SPECIFICS_SCAN` (the long-form scan, ON) so each band is
+/// independently switchable.
+fn short_specifics_scan_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_SHORT_SPECIFICS_SCAN").ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
+/// True when a released short answer is itself an honest abstention / decline
+/// ("the sources don't cover it", "I'm not certain", the `grounded_abstention`
+/// prose). Such an answer asserts no verifiable value, so the specifics scan has
+/// nothing to fabricate-check — running it only surfaces kind-(3) noise (the
+/// scan second-guessing a correct "not in sources" as a false claim ABOUT the
+/// evidence). Skipping is a latency optimisation and errs fail-open: a false
+/// skip just preserves prior behaviour. Measured 2026-07-01: 6/7 short-band scan
+/// flags on GOOD answers were exactly these honest abstentions.
+fn answer_declines(text: &str) -> bool {
+    let h = text.trim_start().to_lowercase();
+    const DECLINES: &[&str] = &[
+        "i don't have reliable information",
+        "i do not have reliable information",
+        "i am not certain",
+        "i'm not certain",
+        "i do not have information",
+        "i don't have information",
+        "none of them actually cover it", // grounded_abstention prose
+        "i'd rather not guess",           // grounded_abstention prose
+        "do not contain",
+        "does not contain",
+        "not recorded there",
+        "the sources do not",
+        "the sources don't",
+        "sources do not contain",
+        "no passage",
+        "not in your sources",
+    ];
+    DECLINES.iter().any(|d| h.contains(d))
+}
+
+/// Second-opinion fabrication guard for the SHORT gate path (single-claim +
+/// citation). Those paths verify the LOAD-BEARING value but are structurally
+/// blind to fabricated SUPPORTING specifics — a named person/flag/number/quote
+/// the answer cites to `[Source: …]` that is absent from the evidence (observed
+/// 2026-07-01 on thin evidence: "David Hart, COO of Knowledge Process Software"
+/// shipped by the citation path, and tokei "--files"/"--sort"/".tokeignore"
+/// specifics padded onto a grounded top-line). Runs the holistic specifics scan
+/// on an already-RELEASED short answer; on a flag it routes into ONE corrective
+/// retry (each flagged specific re-searched so the rewrite has the truth) and
+/// re-scans the result, abstaining only if the rewrite still fabricates.
+///
+/// Never a blunt abstention: a truly-grounded specific gets its passage back and
+/// the rewrite keeps it (self-correcting away a false positive), and a
+/// mostly-grounded answer with one bad specific is rewritten, not discarded.
+/// Returns `None` to leave the release unchanged — disabled, no-retry surface,
+/// abstention-shaped answer, judge failure, or a clean scan.
+#[allow(clippy::too_many_arguments)]
+async fn short_specifics_guard(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    released: &str,
+    chunks: &[String],
+    searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+) -> Option<GateOutcome> {
+    // Only on retry-capable surfaces: the guard's whole remedy is a corrective
+    // re-synthesis. Verify-only surfaces have no second synthesis to give.
+    if !short_specifics_scan_enabled() || !profile.retry {
+        return None;
+    }
+    // Nothing asserted → nothing to fabricate-check (fail-open latency skip).
+    if answer_declines(released) {
+        return None;
+    }
+    // Small budget floored at 3 so even a terse citation answer ("David Hart")
+    // gets a real check; scales modestly on longer short answers.
+    let budget = claim_budget(released.chars().count(), 3);
+    let specifics =
+        scan_unsupported_specifics(inference, question, released, chunks, budget).await?;
+    if specifics.is_empty() {
+        return None; // clean — release unchanged
+    }
+    // Corrective evidence per flagged specific — the same material the long-form
+    // rewrite gets, and the self-correction for a false positive (a real
+    // specific's grounding passage comes back, so the rewrite keeps it).
+    let mut corrective: Vec<String> = Vec::new();
+    if let Some(s) = searcher {
+        for spec in specifics.iter().take(4) {
+            if let Some(hit) = s.search(spec).await.into_iter().next() {
+                corrective.push(hit);
+            }
+        }
+    }
+    let joined = specifics.join("\"; \"");
+    dbg(&format!(
+        "short_specifics_guard: {} flagged specific(s) [{:?}] → corrective retry",
+        specifics.len(),
+        joined.chars().take(90).collect::<String>()
+    ));
+    let mut retry_req = base_request.clone();
+    let base_sys = retry_req.system_message.clone().unwrap_or_default();
+    retry_req.system_message = Some(format!("{base_sys}{}", retry_system_note(&joined, &corrective)));
+    retry_req.assistant_prefix = None;
+    let second = match inference.complete(&retry_req).await {
+        Ok(r) => r.text,
+        Err(e) => {
+            tracing::warn!(
+                target: "grounding_gate",
+                error = %e,
+                "short specifics guard retry failed — keeping prior release"
+            );
+            return None; // fail-open: keep the original release
+        }
+    };
+    // Re-scan the rewrite. Still fabricating → abstain; clean → release the
+    // corrected answer. A re-scan judge failure falls open to keep the rewrite
+    // (written under the corrective note, no worse than the flagged draft).
+    match scan_unsupported_specifics(inference, question, &second, chunks, budget).await {
+        Some(v) if !v.is_empty() => {
+            tracing::info!(
+                target: "grounding_gate",
+                action = "abstained_specifics",
+                flagged = specifics.len(),
+                "short specifics guard: rewrite still fabricates — abstaining"
+            );
+            Some(GateOutcome {
+                text: grounded_abstention("", chunks.len().min(12)),
+                meta: serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "abstained_specifics",
+                    "retried": true,
+                    "flagged_specifics": specifics,
+                    "mode": "short_specifics",
+                }),
+            })
+        }
+        _ => {
+            tracing::info!(
+                target: "grounding_gate",
+                action = "retry_released_specifics",
+                flagged = specifics.len(),
+                "short specifics guard: corrective rewrite released"
+            );
+            Some(GateOutcome {
+                text: second,
+                meta: serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "retry_released_specifics",
+                    "retried": true,
+                    "flagged_specifics": specifics,
+                    "mode": "short_specifics",
+                }),
+            })
+        }
+    }
+}
+
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
 /// An essay with one bad claim is REWRITTEN, not abstained; if the
 /// rewrite still carries unsupported claims, they are listed in a
@@ -573,14 +880,17 @@ async fn gate_longform(
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let per_claim_chunks = profile.max_chunks;
-    let max_claims = profile.max_claims;
+    let min_claims = profile.max_claims;
     let audit = |text: String| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
         async move {
-            let claims = extract_claim_list(&inference, question, &text).await?;
+            // Budget scales with THIS text's length — audited afresh for the
+            // draft and again for the (possibly different-length) rewrite.
+            let budget = claim_budget(text.chars().count(), min_claims);
+            let claims = extract_claim_list(&inference, question, &text, budget).await?;
             let mut failed: Vec<FailedClaim> = Vec::new();
-            for claim in claims.iter().take(max_claims) {
+            for claim in claims.iter().take(budget) {
                 // Claim-conditioned retrieval: verify against the
                 // sealed CORPUS, not just the prompt snapshot. Hits
                 // go first (most relevant to THIS claim) and the cap
@@ -623,6 +933,42 @@ async fn gate_longform(
                         }
                     }
                     None => {} // unverifiable claim — fail open per claim
+                }
+            }
+            // Holistic supporting-specifics scan: catches the fabricated
+            // details the load-bearing claim extraction misses (misattribution,
+            // fake values, phantom section refs). One extra judge pass over the
+            // WHOLE text vs the FULL evidence; its findings join `failed` and
+            // ride the same rewrite/annotate path. Each flagged specific gets a
+            // claim-conditioned search so the rewrite has corrective material —
+            // which ALSO self-corrects a false positive: a truly-grounded
+            // specific gets its grounding passage back, so the rewrite keeps it.
+            if specifics_scan_enabled() {
+                if let Some(specifics) =
+                    scan_unsupported_specifics(&inference, question, &text, chunks, budget).await
+                {
+                    for spec in specifics {
+                        // Skip specifics already surfaced by the per-claim audit.
+                        if failed
+                            .iter()
+                            .any(|f| f.claim.contains(&spec) || spec.contains(&f.claim))
+                        {
+                            continue;
+                        }
+                        let corrective = match &searcher {
+                            Some(s) => s.search(&spec).await,
+                            None => Vec::new(),
+                        };
+                        dbg(&format!(
+                            "specifics_scan flagged {:?} (corrective_hits={})",
+                            spec.chars().take(60).collect::<String>(),
+                            corrective.len()
+                        ));
+                        failed.push(FailedClaim {
+                            claim: spec,
+                            evidence: corrective,
+                        });
+                    }
                 }
             }
             Some((text, claims.len(), failed))
@@ -683,8 +1029,33 @@ async fn gate_longform(
     let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
     rewrite_req.assistant_prefix = Some(LONGFORM_REWRITE_PREFIX.to_string());
+    // A corrective rewrite prunes/replaces the failed claims — it must only be
+    // able to TIGHTEN the draft, never regrow it. Cap its token budget to the
+    // draft's size (observed 2026-06-30: the rewrite inherited the base
+    // "exhaustive/1500-word" budget and inflated the answer x2-x7.5 — once to
+    // 23.8k chars of gibberish — after which the re-audit released the enlarged
+    // fabrication). ~4 chars/token is the usual English ratio; floor keeps a
+    // short draft's rewrite from being starved.
+    let draft_token_budget = (draft_backup.chars().count() / 4).max(256);
+    rewrite_req.max_tokens = Some(
+        rewrite_req
+            .max_tokens
+            .map_or(draft_token_budget, |m| m.min(draft_token_budget)),
+    );
     match inference.complete(&rewrite_req).await {
         Ok(resp) => {
+            // Truncation trace (2026-06-30): the longform rewrite is non-streaming
+            // and bypasses synth.truncation — log its finish vs cap so a silent
+            // Length cut on the rewrite (the prime suspect) is visible.
+            tracing::info!(
+                target: "gate.call",
+                kind = "rewrite",
+                finish = ?resp.finish_reason,
+                completion_tokens = ?resp.completion_tokens,
+                max_tokens = ?rewrite_req.max_tokens,
+                resp_chars = resp.text.chars().count(),
+                "gate internal completion"
+            );
             let second = format!("{LONGFORM_REWRITE_PREFIX}{}", resp.text);
             let second_backup = second.clone();
             match audit(second).await {
@@ -831,9 +1202,54 @@ mod tests {
     fn refinement_evidence() -> EvidenceContext {
         EvidenceContext {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
+            source_labels: Vec::new(),
             searcher: None,
             entity_anchored: false,
             top_similarity: None,
+        }
+    }
+
+    #[test]
+    fn claim_budget_scales_with_length_within_bounds() {
+        // Short answers keep the floor (the surface's min_claims).
+        assert_eq!(claim_budget(0, 4), 4);
+        assert_eq!(claim_budget(500, 4), 4);
+        assert_eq!(claim_budget(2_399, 4), 4, "under 4*600 stays at floor");
+        // The empirical fabrication distribution now scales meaningfully — at
+        // the old 900/claim these got budget 4-9 (3630 got NO lift).
+        assert_eq!(claim_budget(3_630, 4), 6, "3630-char fabrication -> 6, not 4");
+        assert_eq!(claim_budget(4_550, 4), 7, "4550-char fabrication -> 7");
+        // Very long answers are capped so per-claim judge latency stays bounded.
+        assert_eq!(claim_budget(8_571, 4), 10, "8571-char essay -> capped at 10");
+        assert_eq!(claim_budget(usize::MAX, 4), 10);
+        // The floor is the surface's min, not a hardcoded 4.
+        assert_eq!(claim_budget(500, 1), 1);
+    }
+
+    #[test]
+    fn answer_declines_skips_honest_abstentions_only() {
+        // The exact short-band answers the specifics scan flagged as GOOD-but-
+        // FLAGGED on 2026-07-01 — all honest abstentions the guard must SKIP so
+        // it never wastes a corrective retry re-abstaining them.
+        for decline in [
+            "I don't have reliable information on the specific four authors listed for Chapter E.",
+            "I am not certain of the value of `SWAP_THRESHOLD`. The provided sources do not contain this.",
+            "The provided knowledge base sources do not contain this specific constant or file.",
+            "I looked through the 12 passages your sources turned up for this, but none of them actually cover it — so I'd rather not guess.",
+            "Based on the provided knowledge base, I do not have information regarding a character named \"Winnie\".",
+            "The provided Rust snippets do not contain any assignment to a variable named `b`.",
+            grounded_abstention("x", 12).as_str(),
+        ] {
+            assert!(answer_declines(decline), "should skip decline: {decline:?}");
+        }
+        // Real ASSERTING short answers the guard MUST scan — including the two
+        // confirmed fabrications the guard exists to catch.
+        for assert_ans in [
+            "David Hart\n\nGrounded in the source: \"David Hart, Chief Operations Officer, Knowledge Process Software\"",
+            "The most important thing is what Tokei does: it shows file-level stats (`--files`) and sorting (`--sort`).",
+            "The three operations are index_stats, extract_shard, and merge_shards.",
+        ] {
+            assert!(!answer_declines(assert_ans), "should scan assertion: {assert_ans:?}");
         }
     }
 
@@ -861,8 +1277,11 @@ mod tests {
         );
         // grounded_abstention was rewritten (2026-06-17) to stop restating the
         // rejected claim verbatim (it leaked the fabrication + read as "answered"
-        // to the primary judge). The action is the invariant; the wording moved.
-        assert!(outcome.text.starts_with("I can't answer this from your sources"));
+        // to the primary judge), then re-toned (2026-06-30) to drop the abrupt
+        // "so I'm not going to state one" lecture for a warm, helpful refusal.
+        // The action is the invariant; the wording is graceful, not brusque.
+        assert!(outcome.text.starts_with("I looked through the"));
+        assert!(!outcome.text.contains("not going to state"));
     }
 
     /// Supported claims release unchanged under verify-only.

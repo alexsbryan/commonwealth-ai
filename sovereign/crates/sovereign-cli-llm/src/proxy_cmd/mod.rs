@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign proxy …` — query a Proxy Voting Corpus (SEC DEF 14A).
+//! `svrn proxy …` — query a Proxy Voting Corpus (SEC DEF 14A).
 //!
 //! The legibility surface: for one issuer's installed `proxy-cik…` corpus,
 //! answer "what is on the ballot and what are the sides?" under the

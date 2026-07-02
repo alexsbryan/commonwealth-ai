@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas status` — per-corpus atlas readiness display.
+//! `svrn atlas status` — per-corpus atlas readiness display.
 //!
 //! Phase D1 — surfaces what `/internal/atlas/status` returns: atlas
 //! atom + tier-2 counts, embed-cache presence, Tier-2 progress
@@ -15,10 +15,10 @@ use sovereign_tools::atlas_status::{compute_atlas_status, status_for_corpus};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign atlas status",
+    command: "svrn atlas status",
     summary: "Show atlas readiness for every installed corpus (or just one).",
     sections: &[
-        HelpSection::Usage("sovereign atlas status [<corpus_id>] [--data-dir <path>] [--json]"),
+        HelpSection::Usage("svrn atlas status [<corpus_id>] [--data-dir <path>] [--json]"),
         HelpSection::Flags(&[
             (
                 "--data-dir <path>",
@@ -31,11 +31,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign atlas status",
+                "svrn atlas status",
                 "Table of every installed corpus with atlas + Tier-2 + tokens columns.",
             ),
             (
-                "sovereign atlas status wikipedia --json",
+                "svrn atlas status wikipedia --json",
                 "JSON for one corpus — useful for scripting / desktop polling.",
             ),
         ]),

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-tensions-classify` — Phase 6 LLM Tension
+//! `svrn enrich atlas-tensions-classify` — Phase 6 LLM Tension
 //! classifier (Landing 4 of the v2 atlas pipeline).
 //!
 //! Reads `atlas/tension_candidates.json` (produced by the
@@ -40,11 +40,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-tensions-classify",
+    command: "svrn enrich atlas-tensions-classify",
     summary: "LLM-classify tension candidates and merge accepted ones into edges.json.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-tensions-classify <corpus-id> [--max-candidates <n>] [--dry-run]",
+            "svrn enrich atlas-tensions-classify <corpus-id> [--max-candidates <n>] [--dry-run]",
         ),
         HelpSection::Flags(&[
             (
@@ -61,17 +61,17 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-tensions-classify brothers_karamazov",
+                "svrn enrich atlas-tensions-classify brothers_karamazov",
                 "Classify every candidate in bk's tension_candidates.json and merge \
                  the accepted Tension edges into edges.json.",
             ),
             (
-                "sovereign enrich atlas-tensions-classify dubliners-test --max-candidates 5",
+                "svrn enrich atlas-tensions-classify dubliners-test --max-candidates 5",
                 "Quick prompt-tuning iteration: only classify the first 5 candidates.",
             ),
         ]),
         HelpSection::Notes(
-            "Requires `sovereign enrich atlas-tensions <corpus>` to have run first \
+            "Requires `svrn enrich atlas-tensions <corpus>` to have run first \
              (so tension_candidates.json exists) and a daemon at localhost:9741. \
              Replaces prior LlmPairwise Tension edges in edges.json; preserves every \
              other edge type and every other-provenance edge untouched.",
@@ -141,7 +141,7 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!(
                 "error: reading {}/tension_candidates.json: {e}. Run \
-                 `sovereign enrich atlas-tensions {}` first.",
+                 `svrn enrich atlas-tensions {}` first.",
                 atlas_dir.display(),
                 cfg.corpus_id
             );
@@ -231,7 +231,7 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
         Ok(e) => e,
         Err(e) => {
             eprintln!(
-                "error: reading {}/edges.json: {e}. Run `sovereign enrich atlas-resolve {} --phase all` first.",
+                "error: reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id
             );
@@ -474,7 +474,7 @@ async fn run_holistic_classifier(
         Ok(e) => e,
         Err(e) => {
             eprintln!(
-                "error: reading {}/edges.json: {e}. Run `sovereign enrich atlas-resolve {} --phase all` first.",
+                "error: reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
                 atlas_dir.display(),
                 cfg.corpus_id
             );

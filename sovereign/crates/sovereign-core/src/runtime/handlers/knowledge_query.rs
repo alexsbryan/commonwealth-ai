@@ -495,6 +495,11 @@ impl Runtime {
         // when this was inlined). `decision.reason` is surfaced in the trace.
         let decision = resolve_synthesis_route(&intent, has_atom_enum, &shape);
         let route = decision.route;
+        // Output budget sized to the task (intent depth + evidence breadth):
+        // `soft_target` steers the prompt, `hard_ceiling` is a generous
+        // max_tokens net that the auto-continue backstops — replacing the
+        // per-route static caps that truncated long fast-path answers.
+        let output_budget = resolve_output_budget(&intent, &shape);
         // MECE operation axis (QUERY_TAXONOMY_MECE.md) — emitted alongside the
         // legacy route for glassbox legibility. Naming-only today: nothing
         // routes on `operation` yet (Step 2 will wire effort → tier); the
@@ -886,7 +891,7 @@ impl Runtime {
                 // pins the model to a bounded axes structure rather
                 // than the open-ended essay shape.
                 let budget_note = crate::runtime::build_response_length_directive(
-                    FAST_KNOWLEDGE_MAX_TOKENS as usize,
+                    output_budget.soft_target,
                 );
                 // Synthesizer role builds the prompt body (SSOT). FastFocused
                 // forces think_budget=0 → no THINKING_DIRECTIVE. The
@@ -913,7 +918,7 @@ impl Runtime {
                     prompt,
                     system_message: Some(system),
                     preferred_speed: route_speed,
-                    max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
+                    max_tokens: Some(output_budget.hard_ceiling),
                     temperature: Some(self.inference_config.temperature),
                     think_budget: Some(0),
                     structured_output: None,
@@ -936,22 +941,14 @@ impl Runtime {
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
-                // Give synthesis a generous output budget so a thorough answer
-                // COMPLETES instead of truncating mid-sentence at the general
-                // cap (finish_reason=Length, released as-is — see synth.truncation
-                // telemetry). The enforce() ladder protects the output reservation
-                // by trimming evidence FIRST, so a larger reservation just gives
-                // the answer the room — the 16k context easily holds it. A
-                // truncated answer is wrong regardless of grounding; the length
-                // directive still steers conciseness. Env-tunable for calibration
-                // against the truncation telemetry, default 4096.
-                let synth_max = self.inference_config.max_tokens.max(
-                    std::env::var("SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR")
-                        .ok()
-                        .and_then(|v| v.parse::<usize>().ok())
-                        .unwrap_or(4096),
-                );
-                let budget_note = crate::runtime::build_response_length_directive(synth_max);
+                // Output budget is sized to the task (resolve_output_budget): the
+                // soft target steers the prompt toward an appropriate length, and
+                // the generous hard ceiling only acts as a safety net — the
+                // content-detected auto-continue lands any answer that overruns
+                // it, so a thorough answer COMPLETES instead of truncating
+                // mid-sentence. A truncated answer is wrong regardless of grounding.
+                let budget_note =
+                    crate::runtime::build_response_length_directive(output_budget.soft_target);
                 // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
                 // is a `<think>`-block contract — include it only when a think
                 // budget is allocated. Comparison routes to FastFocused, never here.
@@ -973,7 +970,7 @@ impl Runtime {
                     prompt,
                     system_message: Some(system),
                     preferred_speed: route_speed,
-                    max_tokens: Some(synth_max),
+                    max_tokens: Some(output_budget.hard_ceiling),
                     temperature: Some(self.inference_config.temperature),
                     think_budget: Some(self.inference_config.think_budget),
                     structured_output: None,
@@ -1234,6 +1231,7 @@ impl Runtime {
             // sealed to the conversation's corpora.
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
                 chunks: crate::runtime::grounding::gate_evidence_chunks(&plan.chunks),
+                source_labels: crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks),
                 searcher: Some(std::sync::Arc::new(self.claim_searcher(
                     context.conversation.enabled_corpora.as_deref(),
                     &plan.chunks,

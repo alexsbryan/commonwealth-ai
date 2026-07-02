@@ -93,7 +93,7 @@
 
   // Daemon-supplied catalog. Single source of truth lives in
   // `sovereign-inference::setup_planner` + `models.toml`; the desktop
-  // mirrors what the CLI's `sovereign setup` would offer so the two
+  // mirrors what the CLI's `svrn setup` would offer so the two
   // surfaces never drift on which file is recommended for which tier.
   let detectedProfile: ProfileName | null = $state(null);
   let catalog: PrimaryOption[] = $state([]);
@@ -225,7 +225,7 @@
     // recommended profile and catalog. Single source of truth: the
     // CLI and desktop both go through `sovereign-inference::setup_planner`
     // → `models.toml`, so a recommendation here matches what
-    // `sovereign setup` would offer at a terminal.
+    // `svrn setup` would offer at a terminal.
     try {
       hardware = await detectHardware();
     } catch (e) {

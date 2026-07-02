@@ -325,7 +325,7 @@ async fn run_conversation_import(
                 error = %e,
                 "imports: POST /internal/corpus/install failed"
             );
-            "Couldn't reach Sovereign. Make sure the daemon is running \
+            "Couldn't reach svrnmesh. Make sure the daemon is running \
              (try `sovereign daemon start`) and click Import again."
                 .to_string()
         })?;
@@ -339,7 +339,7 @@ async fn run_conversation_import(
             "imports: daemon /internal/corpus/install returned non-success"
         );
         return Err(format!(
-            "Sovereign rejected the import (HTTP {status}). Check the \
+            "svrnmesh rejected the import (HTTP {status}). Check the \
              daemon logs at ~/.sovereign/logs/daemon.out for details."
         ));
     }

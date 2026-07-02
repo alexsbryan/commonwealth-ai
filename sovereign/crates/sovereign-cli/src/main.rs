@@ -3,7 +3,7 @@
 //   * dev_bin / llm_bin — exec dispatchers into the two sibling
 //     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).
 //   * Pure delegators that translate the new flat CLI surface
-//     (`sovereign status`, `sovereign drift accept`, etc.) into the
+//     (`svrn status`, `svrn drift accept`, etc.) into the
 //     legacy `atos`/`project`/`code` handler arguments before exec'ing.
 //   * Light commands that touch only SQLite stores + filesystem
 //     (notes, claim, reflect, rough-edges, archaeology-eval,
@@ -168,11 +168,11 @@ use crate::util::help::{Help, HelpSection};
 /// is given). The subcommand table points users at the modern flow
 /// (setup / project / mesh) rather than the legacy REPL.
 const HELP: Help = Help {
-    command: "sovereign",
+    command: "svrn",
     summary: "Local AI assistant with code intelligence, knowledge bases, and an optional mesh.",
     sections: &[
         HelpSection::Usage(
-            "sovereign <subcommand> [flags]\n\
+            "svrn <subcommand> [flags]\n\
              sovereign --model <path.gguf> [options]   (legacy interactive REPL)",
         ),
         HelpSection::Subcommands(&[
@@ -253,9 +253,10 @@ const HELP: Help = Help {
             ("--brave-api-key <key>", "Brave Search key (optional)"),
             ("--tavily-api-key <key>", "Tavily Search key (optional)"),
             ("--help, -h", "Show this message"),
+            ("--version, -V", "Print the version and exit"),
         ]),
         HelpSection::Notes(
-            "Run `sovereign <subcommand> --help` for detail on any specific subcommand.",
+            "Run `svrn <subcommand> --help` for detail on any specific subcommand.",
         ),
     ],
 };
@@ -276,7 +277,7 @@ const DEV_VERBS: &[&str] = &[
 ];
 
 /// Every top-level verb the dispatcher routes — the complete surface
-/// `sovereign __dump-commands` reports for the CLI-contract reverse check.
+/// `svrn __dump-commands` reports for the CLI-contract reverse check.
 /// Independent of feature flags (it lists the dev-tools and awareness verbs
 /// too) so the contract sees the whole surface in any build. Kept sorted; the
 /// `all_verbs_is_complete_and_sorted` test pins it against `DEV_VERBS` + `HELP`
@@ -377,7 +378,7 @@ fn print_usage() {
     crate::util::help::print_subcommands_titled("Developer toolchain", DEV_SUBCOMMANDS);
 }
 
-/// `sovereign nudge dismiss <id>` — record a nudge id in
+/// `svrn nudge dismiss <id>` — record a nudge id in
 /// `~/.sovereign/dismissed_nudges.json` so the audit / status
 /// surfaces stop showing it. The id can be a family name (e.g.
 /// `recipe-publish`) to dismiss every variant, or a specific
@@ -385,13 +386,13 @@ fn print_usage() {
 /// just that one.
 async fn run_nudge(args: &[String]) -> i32 {
     if args.is_empty() {
-        eprintln!("Usage: sovereign nudge dismiss <id>");
+        eprintln!("Usage: svrn nudge dismiss <id>");
         eprintln!("Example: sovereign nudge dismiss recipe-publish");
         return 2;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
         println!(
-            "Usage: sovereign nudge <subcommand> [args]\n\n\
+            "Usage: svrn nudge <subcommand> [args]\n\n\
              Subcommands:\n\
                dismiss <id>   Suppress a nudge id (family or specific instance).\n\n\
              Examples:\n\
@@ -564,12 +565,12 @@ fn main() {
             "<non-string panic payload>"
         };
         // eprintln first — survives before/after tracing setup.
-        eprintln!("sovereign panic at {location}: {payload}\nbacktrace:\n{backtrace}");
+        eprintln!("svrn panic at {location}: {payload}\nbacktrace:\n{backtrace}");
         tracing::error!(
             location = %location,
             payload = %payload,
             backtrace = %backtrace,
-            "sovereign panic — see backtrace above"
+            "svrn panic — see backtrace above"
         );
         // Chain to the previous hook so any installed test harness /
         // tracing layer still sees the panic.
@@ -581,6 +582,12 @@ fn main() {
     // what corpus-engine's tree-sitter path needs on deeply-nested
     // wikitext templates. Use `enable_all` to match `#[tokio::main]`'s
     // default feature set (IO + time drivers).
+    // Rebrand back-compat: bridge legacy SOVEREIGN_* env vars and migrate the
+    // ~/.sovereign data dirs to ~/.svrnmesh before any threads spawn or state
+    // is opened. Both are idempotent + non-destructive (see sovereign_core::rebrand).
+    sovereign_core::rebrand::promote_legacy_env();
+    sovereign_core::rebrand::run_startup_migration();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)
@@ -590,12 +597,20 @@ fn main() {
     runtime.block_on(async_main());
 }
 
+/// The `--version` line: program name + the workspace version the three
+/// product binaries share (each inherits it via `version.workspace = true`).
+/// It matches the `cli-vX.Y.Z` release tag, so it's the string a bug report
+/// should carry. Pure + testable; the dispatch below prints it and exits.
+fn version_line() -> String {
+    format!("sovereign {}", env!("CARGO_PKG_VERSION"))
+}
+
 async fn async_main() {
     // Check for subcommands before standard arg parsing.
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
 
     // Top-level --help / help short-circuit. A lone "help" (no
-    // subcommand) prints the banner; `sovereign mesh --help` is
+    // subcommand) prints the banner; `svrn mesh --help` is
     // handled by the subcommand dispatcher below.
     if let Some(first) = raw_args.first() {
         if matches!(first.as_str(), "--help" | "-h" | "help") && raw_args.len() == 1 {
@@ -604,7 +619,19 @@ async fn async_main() {
         }
     }
 
-    // Hidden introspection: `sovereign __dump-commands` prints every top-level
+    // Top-level --version / -V (or a lone `version`). A bug report needs a
+    // version string, and before this there was none — `svrn --version` fell
+    // through to the banner. `svrn <subcommand> --version` still routes to the
+    // subcommand dispatcher below, unshadowed.
+    if let Some(first) = raw_args.first() {
+        let f = first.as_str();
+        if f == "--version" || f == "-V" || (f == "version" && raw_args.len() == 1) {
+            println!("{}", version_line());
+            std::process::exit(0);
+        }
+    }
+
+    // Hidden introspection: `svrn __dump-commands` prints every top-level
     // verb the CLI dispatches (one per line) for the cli_contract_code reverse
     // check. Not advertised in HELP; runs in any build (before the dev-tools
     // gate) so the contract sees the whole surface regardless of features.
@@ -615,7 +642,7 @@ async fn async_main() {
         std::process::exit(0);
     }
 
-    // Hidden introspection: `sovereign __contract-smoke` prints the manifest's
+    // Hidden introspection: `svrn __contract-smoke` prints the manifest's
     // read-only smoke probes as TSV (`<expect_exit>\t<args>\t<expect_substr>`)
     // for the cli-contract-live-verify.sh harness. Reads docs/cli-contract.toml
     // (present in a dev checkout only); a no-op in the shipped binary.
@@ -678,8 +705,8 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "init" => {
-                // Top-level `sovereign init` — replaces
-                // `sovereign project init`. The old name continues
+                // Top-level `svrn init` — replaces
+                // `svrn project init`. The old name continues
                 // to work via the alias arm in
                 // `project_cmd::run_project`.
                 let code = init::run(&raw_args[1..]).await;
@@ -858,7 +885,7 @@ async fn async_main() {
     // linking llama-cpp-2 + lance.
     //
     // Bare `sovereign` now prints usage and exits. Users who want the
-    // interactive shell type `sovereign chat`.
+    // interactive shell type `svrn chat`.
     print_usage();
     std::process::exit(1);
 }
@@ -866,6 +893,22 @@ async fn async_main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `--version` must carry the real workspace version — the string a bug
+    /// report should include. Guards against the earlier regression where
+    /// `svrn --version` printed the banner with no version at all.
+    #[test]
+    fn version_line_carries_the_workspace_version() {
+        let v = version_line();
+        assert_eq!(v, format!("sovereign {}", env!("CARGO_PKG_VERSION")));
+        let num = v
+            .strip_prefix("sovereign ")
+            .expect("version line is prefixed with `sovereign `");
+        assert!(
+            num.split('.').count() >= 3 && num.starts_with(|c: char| c.is_ascii_digit()),
+            "version_line() should be `sovereign <semver>`, got `{v}`"
+        );
+    }
 
     /// The public `--help` must never advertise a verb the default build
     /// rejects. Pins the gating invariant: every `Subcommands` entry in

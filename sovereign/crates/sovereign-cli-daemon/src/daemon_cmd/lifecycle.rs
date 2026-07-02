@@ -5,10 +5,10 @@
 
 use super::home_dir_buf;
 
-/// `sovereign daemon restart` — hard-restart the registered service.
+/// `svrn daemon restart` — hard-restart the registered service.
 /// Most users reach for this when the daemon feels stuck or after a
 /// change that isn't hot-reloadable (port, data_dir). For model-only
-/// changes, prefer `sovereign daemon reload` — no gap in availability.
+/// changes, prefer `svrn daemon reload` — no gap in availability.
 pub(super) async fn stop_daemon() -> i32 {
     eprintln!("stopping sovereign daemon …");
 
@@ -240,14 +240,14 @@ mod stop_daemon_tests {
     }
 }
 
-/// `sovereign daemon start` — spawn `daemon run` as a detached child
+/// `svrn daemon start` — spawn `daemon run` as a detached child
 /// so it keeps running after this CLI exits. Writes the child pid to
 /// `~/.sovereign/daemon.pid` and tails logs to `~/.sovereign/logs/`.
 ///
 /// Idempotent: if `:9741` already answers, prints the running pid (if
 /// we wrote it) and returns 0.
 ///
-/// This is the dev-workflow counterpart to `sovereign setup`'s
+/// This is the dev-workflow counterpart to `svrn setup`'s
 /// launchd/systemd registration — when you don't want a service
 /// manager owning lifecycle, `start` gives you a one-liner.
 pub(super) async fn start_daemon() -> i32 {
@@ -282,8 +282,8 @@ pub(super) async fn start_daemon() -> i32 {
             eprintln!(
                 "✗ :9741 is held by pid {holder_pid} but the readiness probe failed.\n  \
                  something else owns the port (stale debug build, half-shut daemon, foreign process).\n  \
-                 Stop it first: `kill {holder_pid}` (or `sovereign daemon stop` if it's a managed sovereign),\n  \
-                 then re-run `sovereign daemon start`."
+                 Stop it first: `kill {holder_pid}` (or `svrn daemon stop` if it's a managed sovereign),\n  \
+                 then re-run `svrn daemon start`."
             );
             return 1;
         }
@@ -388,7 +388,7 @@ pub(super) async fn start_daemon() -> i32 {
     // the /dev/null stdin + redirected stdio above, this is enough
     // for the common dev case (launch-from-shell, close shell). For
     // truly hostile environments (ssh disconnect on a flaky link),
-    // use the launchd/systemd path via `sovereign setup` instead.
+    // use the launchd/systemd path via `svrn setup` instead.
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -435,7 +435,7 @@ pub(super) async fn start_daemon() -> i32 {
     }
     eprintln!(
         "⚠ pid {pid} started but :9741 didn't respond within {}s\n\
-         the daemon may still be loading models — re-check with `sovereign daemon status`\n\
+         the daemon may still be loading models — re-check with `svrn daemon status`\n\
          tail {} for details",
         timeout.as_secs(),
         err_path.display()
@@ -495,12 +495,12 @@ extern "C" {
     #[link_name = "kill"]
     fn libc_kill(pid: i32, sig: i32) -> i32;
 }
-/// `sovereign daemon restart` — stop the running daemon (whichever
+/// `svrn daemon restart` — stop the running daemon (whichever
 /// lifecycle owns it: pidfile or launchd) and start a fresh one.
 ///
 /// Earlier versions of this command went straight to `launchctl
-/// kickstart -k gui/<uid>/com.sovereign.daemon`. That broke for every
-/// user who started the daemon via `sovereign daemon start` (the
+/// kickstart -k gui/<uid>/com.svrnmesh.daemon`. That broke for every
+/// user who started the daemon via `svrn daemon start` (the
 /// pidfile-managed path), because the launchd service isn't loaded
 /// in the gui domain — kickstart errors out with "Could not find
 /// service in domain for user". The asymmetry was: `start` and
@@ -514,7 +514,7 @@ extern "C" {
 /// `daemon start`'s detached-child path — consistent with what
 /// `daemon stop && daemon start` already does, and which any user
 /// who actually wants strict launchd accounting can run via
-/// `launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon`
+/// `launchctl kickstart -k gui/$(id -u)/com.svrnmesh.daemon`
 /// directly.
 pub(super) async fn restart_daemon() -> i32 {
     eprintln!("restarting sovereign daemon …");
@@ -528,10 +528,10 @@ pub(super) async fn restart_daemon() -> i32 {
     start_daemon().await
 }
 
-/// `sovereign daemon reload` — POST /v1/admin/reload. Hot-reloads
+/// `svrn daemon reload` — POST /v1/admin/reload. Hot-reloads
 /// changed model paths in place without dropping connections.
 /// Reports which fields hot-reloaded and which require a full
-/// restart; a subsequent `sovereign daemon restart` picks those up.
+/// restart; a subsequent `svrn daemon restart` picks those up.
 pub(super) async fn reload_daemon() -> i32 {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -553,7 +553,7 @@ pub(super) async fn reload_daemon() -> i32 {
         Err(e) => {
             eprintln!(
                 "error: could not reach daemon at :9741 ({e}).\n\
-                 hint: is it running? try `sovereign daemon status`."
+                 hint: is it running? try `svrn daemon status`."
             );
             return 1;
         }
@@ -600,13 +600,13 @@ pub(super) async fn reload_daemon() -> i32 {
             .unwrap_or_default();
         eprintln!(
             "⚠ these changes need a full restart: {pending}\n\
-             run `sovereign daemon restart` to apply them."
+             run `svrn daemon restart` to apply them."
         );
     }
     0
 }
 
-/// `sovereign daemon status` — is the daemon alive and answering?
+/// `svrn daemon status` — is the daemon alive and answering?
 pub(super) async fn status_daemon() -> i32 {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
@@ -643,8 +643,8 @@ pub(super) async fn status_daemon() -> i32 {
         Err(_) => {
             eprintln!(
                 "✗ daemon not reachable on :9741.\n\
-                 start it with `sovereign daemon restart` (if installed)\n\
-                 or run `sovereign setup` (if not yet configured)."
+                 start it with `svrn daemon restart` (if installed)\n\
+                 or run `svrn setup` (if not yet configured)."
             );
             1
         }
@@ -707,7 +707,7 @@ pub(super) async fn wait_for_shutdown() {
     // Glassbox: shutdown forensics. A 2026-05-20 incident left the
     // daemon abort-crashing in ggml-metal's `__cxa_finalize_ranges`
     // path with no breadcrumb naming the trigger — was it SIGINT
-    // from a stray Ctrl-C, SIGTERM from a peer `sovereign daemon
+    // from a stray Ctrl-C, SIGTERM from a peer `svrn daemon
     // stop`, launchd OOM, or something else? Without a log, the
     // post-mortem stalls. Emit the signal source + process context
     // (PID, PPID, peak RSS, jetsam hint) so the next incident

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus watch …` subcommand handlers.
+//! `svrn corpus watch …` subcommand handlers.
 //!
 //! Thin HTTP clients for the daemon's `/internal/corpus/watch/*`
 //! routes (mounted by `sovereign-mesh::corpus_watch_http`). All
@@ -67,20 +67,20 @@ fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
         format!(
             "Request to {url} timed out — the daemon accepted the connection but did not respond \
              in time. For a `watch` register with sync_initial=true this usually means the \
-             initial sweep is still running. Try `sovereign corpus watch-status <id>` to check \
+             initial sweep is still running. Try `svrn corpus watch-status <id>` to check \
              progress, or re-register without --sync-initial to return immediately."
         )
     } else if err.is_connect() {
         format!(
             "Could not connect to the daemon at {url}: {err}\n\n\
-             Is `sovereign daemon` running? Try: sovereign daemon status"
+             Is `svrn daemon` running? Try: sovereign daemon status"
         )
     } else {
         format!("Request to {url} failed: {err}")
     }
 }
 
-// ─── `sovereign corpus watch <PATH> [flags]` ────────────────
+// ─── `svrn corpus watch <PATH> [flags]` ────────────────
 
 pub async fn run_register(args: &[String]) -> i32 {
     if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
@@ -140,7 +140,7 @@ pub async fn run_register(args: &[String]) -> i32 {
     }
 
     let Some(path) = path else {
-        eprintln!("Missing folder path. Usage: sovereign corpus watch <PATH> [flags]");
+        eprintln!("Missing folder path. Usage: svrn corpus watch <PATH> [flags]");
         return 1;
     };
     let abs_path = match std::fs::canonicalize(&path) {
@@ -187,7 +187,7 @@ pub async fn run_register(args: &[String]) -> i32 {
     }
     if manual {
         // Folder-ingest v1 §3.5: opt out of periodic sweeps. The
-        // corpus only sweeps when `sovereign corpus watch-sync-now`
+        // corpus only sweeps when `svrn corpus watch-sync-now`
         // is called.
         config["sync_mode"] = json!("manual");
     }
@@ -281,7 +281,7 @@ pub async fn run_register(args: &[String]) -> i32 {
 }
 
 fn print_register_help() {
-    eprintln!("sovereign corpus watch <PATH> [flags]");
+    eprintln!("svrn corpus watch <PATH> [flags]");
     eprintln!();
     eprintln!("Register a folder the daemon keeps in sync. Adds, edits, and");
     eprintln!("deletes are reflected in the index every ~2 minutes (or whatever");
@@ -302,7 +302,7 @@ fn print_register_help() {
     eprintln!("  --ocr                    OCR scanned PDFs (requires the daemon's OcrCtx to be installed)");
     eprintln!("  --manual                 Manual sync mode — only sweeps on `watch-sync-now` (default: continuous)");
     eprintln!("  --sensitive              Mark folder sensitive — excluded from ambient situated-context assembly");
-    eprintln!("  --on-change <WORKFLOW>   Run a workflow (a `sovereign workflow` name or .toml path)");
+    eprintln!("  --on-change <WORKFLOW>   Run a workflow (a `svrn workflow` name or .toml path)");
     eprintln!("                           automatically on every change — the living trigger. Shows what");
     eprintln!("                           the workflow can do and asks for consent (it runs unattended).");
     eprintln!("  --allow                  Skip the --on-change consent prompt (for scripting)");
@@ -356,7 +356,7 @@ async fn attach_consent(workflow: &str, allow: bool) -> std::result::Result<bool
 
 pub async fn run_list(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
-        eprintln!("sovereign corpus watch-list");
+        eprintln!("svrn corpus watch-list");
         eprintln!();
         eprintln!("List every registered watched-folder corpus and its current status.");
         return 0;
@@ -402,7 +402,7 @@ pub async fn run_status(args: &[String]) -> i32 {
             "--skipped" => want_skipped = true,
             "--failures" => want_failures = true,
             "--help" | "-h" | "help" => {
-                eprintln!("sovereign corpus watch-status <CORPUS_ID> [--skipped] [--failures]");
+                eprintln!("svrn corpus watch-status <CORPUS_ID> [--skipped] [--failures]");
                 eprintln!();
                 eprintln!("Without flags: prints the top-level status enum.");
                 eprintln!("--skipped:  per-extension breakdown of files the walker skipped");
@@ -421,7 +421,7 @@ pub async fn run_status(args: &[String]) -> i32 {
         }
     }
     let Some(id) = corpus_id else {
-        eprintln!("Missing corpus_id. Usage: sovereign corpus watch-status <CORPUS_ID>");
+        eprintln!("Missing corpus_id. Usage: svrn corpus watch-status <CORPUS_ID>");
         return 1;
     };
 
@@ -514,7 +514,7 @@ pub async fn run_pause(args: &[String]) -> i32 {
         match a.as_str() {
             "--reason" => reason = iter.next().cloned(),
             "--help" | "-h" => {
-                eprintln!("sovereign corpus watch-pause <CORPUS_ID> [--reason TEXT]");
+                eprintln!("svrn corpus watch-pause <CORPUS_ID> [--reason TEXT]");
                 return 0;
             }
             other if !other.starts_with("--") && corpus_id.is_none() => {
@@ -527,7 +527,7 @@ pub async fn run_pause(args: &[String]) -> i32 {
         }
     }
     let Some(id) = corpus_id else {
-        eprintln!("Missing corpus_id. Usage: sovereign corpus watch-pause <CORPUS_ID>");
+        eprintln!("Missing corpus_id. Usage: svrn corpus watch-pause <CORPUS_ID>");
         return 1;
     };
     let url = format!("{}/internal/corpus/watch/pause/{id}", daemon_base_url());
@@ -554,7 +554,7 @@ pub async fn run_confirm_deletion(args: &[String]) -> i32 {
     post_ack(&url, json!({})).await
 }
 
-/// `sovereign corpus watch-sync-now <CORPUS_ID>` — request a Manual-
+/// `svrn corpus watch-sync-now <CORPUS_ID>` — request a Manual-
 /// mode sweep. Server returns 409 if the corpus is in Continuous
 /// mode, since the request would otherwise silently no-op.
 pub async fn run_sync_now(args: &[String]) -> i32 {
@@ -565,13 +565,13 @@ pub async fn run_sync_now(args: &[String]) -> i32 {
     post_ack(&url, json!({})).await
 }
 
-/// `sovereign corpus watch-add-root <CORPUS_ID> <PATH>` —
+/// `svrn corpus watch-add-root <CORPUS_ID> <PATH>` —
 /// folder-ingest v1 §3.1, layer an additional root onto an
 /// existing watched corpus.
 pub async fn run_add_root(args: &[String]) -> i32 {
     if args.len() < 2 {
         eprintln!(
-            "sovereign corpus watch-add-root <CORPUS_ID> <PATH>\n\n\
+            "svrn corpus watch-add-root <CORPUS_ID> <PATH>\n\n\
              Layer an additional root onto an existing watched corpus."
         );
         return 1;
@@ -596,14 +596,14 @@ pub async fn run_add_root(args: &[String]) -> i32 {
     post_ack(&url, json!({ "path": path })).await
 }
 
-/// `sovereign corpus watch-remove-root <CORPUS_ID> <IDX>` —
+/// `svrn corpus watch-remove-root <CORPUS_ID> <IDX>` —
 /// folder-ingest v1 §3.1, detach an additional root by 0-based
 /// index. The next sweep classifies the removed root's entries
 /// as deletions; the deletion guard still applies.
 pub async fn run_remove_root(args: &[String]) -> i32 {
     if args.len() < 2 {
         eprintln!(
-            "sovereign corpus watch-remove-root <CORPUS_ID> <IDX>\n\n\
+            "svrn corpus watch-remove-root <CORPUS_ID> <IDX>\n\n\
              Detach an additional root by 0-based index. List the corpus's\n\
              roots first with `corpus watch-status <id>`."
         );
@@ -687,7 +687,7 @@ async fn reject_failed(resp: reqwest::Response) -> i32 {
 
 fn require_corpus_id(args: &[String], cmd: &str) -> Option<String> {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        eprintln!("Usage: sovereign corpus {cmd} <CORPUS_ID>");
+        eprintln!("Usage: svrn corpus {cmd} <CORPUS_ID>");
         return None;
     }
     Some(args[0].clone())

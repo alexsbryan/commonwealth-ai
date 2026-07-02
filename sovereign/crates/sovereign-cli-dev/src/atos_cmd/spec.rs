@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos spec diff|accept` — first-class gestures for spec
+//! `svrn atos spec diff|accept` — first-class gestures for spec
 //! drift.
 //!
 //! `spec diff <id>` resolves the approved spec content (via MeshStore
@@ -56,7 +56,7 @@ pub(crate) async fn cmd_spec_diff(args: &[String]) -> i32 {
             None => {
                 eprintln!(
                     "spec diff: no approval found for '{feature_id}' — \
-                 `git commit` the spec or run `sovereign atos feature approve {feature_id}`"
+                 `git commit` the spec or run `svrn atos feature approve {feature_id}`"
                 );
                 return 1;
             }

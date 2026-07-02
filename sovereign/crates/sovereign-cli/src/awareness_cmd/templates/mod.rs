@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Built-in scenario templates for `sovereign awareness seed
+//! Built-in scenario templates for `svrn awareness seed
 //! --from-template <name>`.
 //!
 //! Each template ships as a TOML file checked in alongside this

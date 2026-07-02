@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign meta-atlas` subcommand — build + inspect the
+//! `svrn meta-atlas` subcommand — build + inspect the
 //! cross-corpus canonical meta-atlas.
 //!
 //! Move 5 Stage 3.
@@ -49,7 +49,7 @@ pub async fn run_meta_atlas(args: &[String]) -> i32 {
 
 fn print_help() {
     println!(
-        "sovereign meta-atlas <subcommand> [args]\n\
+        "svrn meta-atlas <subcommand> [args]\n\
         \n\
         Subcommands:\n\
           build               Walk installed atlases and build canonical_atoms.json.\n\
@@ -218,7 +218,7 @@ async fn cmd_align(args: &[String]) -> i32 {
             embed
         }
         Err(e) => {
-            eprintln!("error: daemon client (embed): {e}\nIs the daemon running? Try `sovereign daemon start`.");
+            eprintln!("error: daemon client (embed): {e}\nIs the daemon running? Try `svrn daemon start`.");
             return 1;
         }
     };
@@ -426,7 +426,7 @@ async fn cmd_build(args: &[String]) -> i32 {
                 }
             },
             "--help" | "-h" => {
-                println!("sovereign meta-atlas build [--out <path>] [--indexes-dir <path>]");
+                println!("svrn meta-atlas build [--out <path>] [--indexes-dir <path>]");
                 return 0;
             }
             other => {
@@ -573,7 +573,7 @@ async fn cmd_list(args: &[String]) -> i32 {
             },
             "--help" | "-h" => {
                 println!(
-                    "sovereign meta-atlas list [--key <name>] [--axis <inventory|argument|trace>] [--limit <N>]"
+                    "svrn meta-atlas list [--key <name>] [--axis <inventory|argument|trace>] [--limit <N>]"
                 );
                 return 0;
             }
@@ -588,7 +588,7 @@ async fn cmd_list(args: &[String]) -> i32 {
         Ok(f) => f,
         Err(e) => {
             eprintln!("error: read {}: {e}", path.display());
-            eprintln!("hint: run `sovereign meta-atlas build` first.");
+            eprintln!("hint: run `svrn meta-atlas build` first.");
             return 1;
         }
     };

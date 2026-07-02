@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Flag parsing shared by every `sovereign awareness` subcommand.
+//! Flag parsing shared by every `svrn awareness` subcommand.
 //!
 //! Mirrors `atos_cmd/args.rs` — manual split into positional + flag
 //! pairs, then subcommands look up flags by name. Boolean flags that

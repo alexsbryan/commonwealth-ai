@@ -49,7 +49,7 @@ pub enum OnboardOutcome {
 /// agent treats as scaffolding (not content) or (b) a heading that
 /// structures future edits. `DesignSignals::extract` on this exact
 /// template yields zero anchors, empty-section gaps for each body,
-/// and zero keyword hits — so `sovereign project design --solo` on a
+/// and zero keyword hits — so `svrn project design --solo` on a
 /// fresh template will walk through every gap, which is exactly the
 /// intended UX for "start from nothing."
 pub const DESIGN_TEMPLATE: &str = r#"# <project> — Design
@@ -80,7 +80,7 @@ pub const DESIGN_TEMPLATE: &str = r#"# <project> — Design
 ## Open questions
 
 <!-- Anything you know you don't know. Prefix with "TBD:" or leave
-     short stubs. `sovereign project plan` treats these as
+     short stubs. `svrn project plan` treats these as
      load-bearing; they become OPEN_QUESTIONS.md entries. -->
 
 -

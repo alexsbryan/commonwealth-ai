@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign awareness filter` — second-pass model filter that
+//! `svrn awareness filter` — second-pass model filter that
 //! drops extracted initiatives that look like work artifacts
 //! ("Migration plan", "usage-based proposal") rather than stable,
 //! multi-conversation strategic efforts.
@@ -164,7 +164,7 @@ async fn build_filter_client(flags: &[(String, String)]) -> Result<DaemonInferen
     if !probe_daemon(&base_url).await {
         return Err(format!(
             "daemon not reachable at {base_url}/v1/models — start it with \
-             `sovereign daemon run`"
+             `svrn daemon run`"
         ));
     }
 

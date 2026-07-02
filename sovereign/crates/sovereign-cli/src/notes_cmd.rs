@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign notes` — read and write durable working notes.
+//! `svrn notes` — read and write durable working notes.
 //!
 //! Merges:
 //!
-//! - `sovereign reflect` (the developer-facing read view)  → `sovereign notes`
-//! - `sovereign atos promote <id> --to <scope>`            → `sovereign notes promote ...`
-//! - new write surface (used by Phase 7 commit harvester)  → `sovereign notes add ...`
+//! - `svrn reflect` (the developer-facing read view)  → `svrn notes`
+//! - `svrn atos promote <id> --to <scope>`            → `svrn notes promote ...`
+//! - new write surface (used by Phase 7 commit harvester)  → `svrn notes add ...`
 //!
 //! Phase 1 (this file): scaffolds the three surfaces. The default
 //! read path delegates to [`crate::reflect_cmd::run_reflect`] so the
@@ -46,7 +46,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign notes add` — append a new note.
+/// `svrn notes add` — append a new note.
 ///
 /// Used by the Phase 7 commit-message harvester when the daemon's
 /// reindexer notices a new commit. Also useful for ad-hoc human
@@ -160,7 +160,7 @@ async fn cmd_add(args: &[String]) -> i32 {
 
     let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
         eprintln!(
-            "notes add: could not locate notes.db. Run `sovereign init` in this \
+            "notes add: could not locate notes.db. Run `svrn init` in this \
              repo (or pass --data-dir <path>)."
         );
         return 1;
@@ -208,7 +208,7 @@ async fn cmd_add(args: &[String]) -> i32 {
     0
 }
 
-/// `sovereign notes migrate-from <path>` — merge a stray local
+/// `svrn notes migrate-from <path>` — merge a stray local
 /// `notes.db` into the canonical store (`~/.sovereign/notes.db`).
 ///
 /// Use case: pre-unification, some CLI surfaces opened a
@@ -352,18 +352,18 @@ async fn cmd_migrate_from(args: &[String]) -> i32 {
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign notes",
+    command: "svrn notes",
     summary: "Read and write durable working notes (the audit's primary input).",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign notes                           30-day reflection view (default)\n\
+            "svrn notes                           30-day reflection view (default)\n\
              sovereign notes add --kind <k> -m \"...\"   Append a note\n\
              sovereign notes promote <id> --to <s>     Promote scope\n\
              sovereign notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
              sovereign notes --since 7d --tool <name>  Reflection filters",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces `sovereign reflect` and `sovereign atos promote`. Old names \
+            "Replaces `svrn reflect` and `svrn atos promote`. Old names \
              still work and forward here. The Phase 7 audit-hardening rewrite adds \
              multi-source views (--kind, --source, --feature filters).",
         ),

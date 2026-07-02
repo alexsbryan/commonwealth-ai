@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich raptor-index <corpus>` — (re)build the derived RAPTOR
+//! `svrn enrich raptor-index <corpus>` — (re)build the derived RAPTOR
 //! summary-node ANN index (`raptor_summaries.lance`) from a corpus's
 //! `conv_raptor_nodes`.
 //!
@@ -73,7 +73,7 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
 
 fn print_usage() {
     eprintln!(
-        "Usage: sovereign enrich raptor-index <corpus>\n\n\
+        "Usage: svrn enrich raptor-index <corpus>\n\n\
          (Re)build the RAPTOR summary-node ANN index (raptor_summaries.lance)\n\
          from a corpus's conv_raptor_nodes. Run `enrich raptor` first to build\n\
          the trees; this verb is the re-runnable index refresh (the `enrich\n\

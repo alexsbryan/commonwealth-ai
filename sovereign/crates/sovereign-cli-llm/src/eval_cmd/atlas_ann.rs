@@ -12,7 +12,7 @@
 //! `atlas/atoms_ann.lance`, and `open_and_attach_ann_seed_table` loads it. The
 //! `--atlas-seed ann` arm opens those same persistent tables and drives the
 //! production navigate, so the gate exercises the daemon's exact code path.
-//! Backfill the atlases first (`sovereign atlas backfill-ann <corpus>`), then
+//! Backfill the atlases first (`svrn atlas backfill-ann <corpus>`), then
 //! run the gate — a graph without a table contributes name-match seeds only,
 //! which the run banner flags.
 

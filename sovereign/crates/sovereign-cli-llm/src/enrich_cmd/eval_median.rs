@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich eval-median <corpus> <golden> --runs N` —
+//! `svrn enrich eval-median <corpus> <golden> --runs N` —
 //! variance-aware version of `enrich eval`.
 //!
 //! Single-run F1 numbers are noisy: a temperature-driven LLM emits
@@ -47,11 +47,11 @@ use super::{build, paths};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich eval-median",
+    command: "svrn enrich eval-median",
     summary: "Run the enrichment pipeline N times against an initialised corpus and report median F1 per phase.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich eval-median <corpus-id> <golden-set-path> \\\n  [--runs <N>] [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>] [--keep-state]",
+            "svrn enrich eval-median <corpus-id> <golden-set-path> \\\n  [--runs <N>] [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>] [--keep-state]",
         ),
         HelpSection::Flags(&[
             ("--runs <N>", "Number of full pipeline runs to aggregate. Default: 3."),
@@ -70,11 +70,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich eval-median fwd-test bench/philosophy/free-will-debate.toml",
+                "svrn enrich eval-median fwd-test bench/philosophy/free-will-debate.toml",
                 "Three runs (~5-7 min each on Gemma-4B), per-phase median F1.",
             ),
             (
-                "sovereign enrich eval-median fwd-test bench/philosophy/free-will-debate.toml --runs 5 --report /tmp/median.json",
+                "svrn enrich eval-median fwd-test bench/philosophy/free-will-debate.toml --runs 5 --report /tmp/median.json",
                 "Five runs for tighter spread estimates; persist aggregated report.",
             ),
         ]),
@@ -102,7 +102,7 @@ pub async fn cmd_eval_median(args: &[String]) -> i32 {
 
     if EnrichConfig::require(&parsed.corpus_id).is_err() {
         eprintln!(
-            "error: no enrichment config for corpus '{}' — run `sovereign enrich init {}` first",
+            "error: no enrichment config for corpus '{}' — run `svrn enrich init {}` first",
             parsed.corpus_id, parsed.corpus_id
         );
         return 1;

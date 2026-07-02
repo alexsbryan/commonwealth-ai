@@ -280,18 +280,22 @@ pub async fn send_message_stream(
                         // full_text, plus an `intent` marker so the turn is
                         // visible to the provenance surface (and clears the
                         // loading state) instead of an intent-less blank.
-                        let oversize = matches!(
-                            &e,
+                        // Both the oversize and degenerate-input guards surface a
+                        // graceful, user-facing hint via InvalidInput; render
+                        // either as a calm assistant turn, not an "Error:" bubble
+                        // that reads as a crash.
+                        let (body, intent) = match &e {
                             sovereign_core::Error::InvalidInput(m)
-                                if m.as_str() == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT
-                        );
-                        let (body, intent) = if oversize {
-                            (
-                                sovereign_core::runtime::OVERSIZE_MESSAGE_HINT.to_string(),
-                                "oversize_guidance",
-                            )
-                        } else {
-                            (format!("Error: {e}"), "error")
+                                if m.as_str() == sovereign_core::runtime::OVERSIZE_MESSAGE_HINT =>
+                            {
+                                (m.clone(), "oversize_guidance")
+                            }
+                            sovereign_core::Error::InvalidInput(m)
+                                if m.as_str() == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT =>
+                            {
+                                (m.clone(), "clarification")
+                            }
+                            _ => (format!("Error: {e}"), "error"),
                         };
                         let _ = app.emit(
                             "message-chunk",

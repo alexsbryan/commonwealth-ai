@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat list` — enumerate recent conversations.
+//! `svrn chat list` — enumerate recent conversations.
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat list",
+    command: "svrn chat list",
     summary: "List recent conversations from the state store.",
     sections: &[
-        HelpSection::Usage("sovereign chat list [--limit N] [--offset N]"),
+        HelpSection::Usage("svrn chat list [--limit N] [--offset N]"),
         HelpSection::Flags(&[
             ("--limit <N>", "Max conversations to show (default: 20)."),
             ("--offset <N>", "Skip the first N (default: 0)."),

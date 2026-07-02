@@ -1,0 +1,99 @@
+name: Release (manual)
+
+# One button to cut a coordinated release of the CLI and/or the desktop app.
+# Owner-only. Reuses the existing cli-release.yml and desktop-release.yml build
+# pipelines via `workflow_call` — no duplicated build matrix, and no release
+# PAT to manage. Each produces its own DRAFT GitHub Release that you smoke-test
+# and Publish by hand, exactly like the tag-driven path in RELEASING.md.
+#
+# Prereq: bump the workspace version first (scripts/bump-desktop-version.sh),
+# commit it, and let CI go green on main. This workflow refuses to build if the
+# version input disagrees with Cargo.toml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0. Blank = current workspace version in Cargo.toml."
+        required: false
+        type: string
+      targets:
+        description: "What to release."
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - cli
+          - desktop
+
+permissions:
+  contents: write # the reused workflows create/upload draft GitHub Releases
+
+jobs:
+  guard:
+    name: authorize + resolve version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      cli: ${{ steps.plan.outputs.cli }}
+      desktop: ${{ steps.plan.outputs.desktop }}
+    steps:
+      # Only the repository owner (the top-level CODEOWNER, @alexsbryan) may cut
+      # a release. workflow_dispatch already requires write access — fork-based
+      # contributors can't trigger it at all — so this is defence in depth for
+      # the day a collaborator is added who shouldn't ship. To authorize more
+      # people, swap this for an allowlist:
+      #   case "${{ github.actor }}" in alexsbryan|someone-else) ;; *) exit 1 ;; esac
+      - name: Authorize
+        shell: bash
+        run: |
+          if [ "${{ github.actor }}" != "${{ github.repository_owner }}" ]; then
+            echo "::error::${{ github.actor }} is not authorized to cut a release (repository owner only)." >&2
+            exit 1
+          fi
+          echo "authorized: ${{ github.actor }}"
+
+      - uses: actions/checkout@v4
+
+      - name: Resolve + verify version
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          want="${{ inputs.version }}"
+          actual="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          if [ -n "$want" ] && [ "$want" != "$actual" ]; then
+            echo "::error::requested version '$want' but Cargo.toml [workspace.package] is '$actual'. Bump with scripts/bump-desktop-version.sh and commit first, or leave the version input blank." >&2
+            exit 1
+          fi
+          echo "version=$actual" >> "$GITHUB_OUTPUT"
+          echo "releasing version $actual"
+
+      - name: Plan targets
+        id: plan
+        shell: bash
+        run: |
+          case "${{ inputs.targets }}" in
+            both)    echo "cli=true"  >> "$GITHUB_OUTPUT"; echo "desktop=true"  >> "$GITHUB_OUTPUT" ;;
+            cli)     echo "cli=true"  >> "$GITHUB_OUTPUT"; echo "desktop=false" >> "$GITHUB_OUTPUT" ;;
+            desktop) echo "cli=false" >> "$GITHUB_OUTPUT"; echo "desktop=true"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  cli:
+    name: CLI
+    needs: guard
+    if: needs.guard.outputs.cli == 'true'
+    uses: ./.github/workflows/cli-release.yml
+    with:
+      tag: cli-v${{ needs.guard.outputs.version }}
+    secrets: inherit
+
+  desktop:
+    name: Desktop
+    needs: guard
+    if: needs.guard.outputs.desktop == 'true'
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      tag: desktop-v${{ needs.guard.outputs.version }}
+    secrets: inherit

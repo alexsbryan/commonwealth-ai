@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign govern` — the runnable governance loop over a corpus's
+//! `svrn govern` — the runnable governance loop over a corpus's
 //! event-sourced common law (Governance Atlas / FR-9).
 //!
 //! Model-free verbs (no daemon) read the [`GovernanceView`] read-model or
@@ -29,11 +29,11 @@ pub mod seed;
 pub mod tensions;
 
 const HELP: Help = Help {
-    command: "sovereign govern",
+    command: "svrn govern",
     summary: "Governance over a corpus's event-sourced common law (FR-9): seed rules, surface tensions, adjudicate, ask current law.",
     sections: &[
         HelpSection::Usage(
-            "sovereign govern <seed|tensions|resolve|accept|ask> <corpus-id> [args]",
+            "svrn govern <seed|tensions|resolve|accept|ask> <corpus-id> [args]",
         ),
         HelpSection::SubcommandsTitled(
             "Verbs",
@@ -51,11 +51,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign govern seed maple-house",
+                "svrn govern seed maple-house",
                 "Establish the governed rule baseline after enrichment.",
             ),
             (
-                "sovereign govern ask maple-house \"how many nights can a guest stay?\"",
+                "svrn govern ask maple-house \"how many nights can a guest stay?\"",
                 "Answer from current law, dropping any superseded rule's evidence.",
             ),
         ]),
@@ -101,7 +101,7 @@ pub(crate) fn load_view(corpus_id: &str) -> Result<GovernanceView, String> {
     let dir = atlas_dir(corpus_id);
     if !dir.join("atoms.json").exists() {
         return Err(format!(
-            "no enriched atlas for `{corpus_id}` at {} — run `sovereign enrich build {corpus_id} --full` first",
+            "no enriched atlas for `{corpus_id}` at {} — run `svrn enrich build {corpus_id} --full` first",
             dir.display()
         ));
     }

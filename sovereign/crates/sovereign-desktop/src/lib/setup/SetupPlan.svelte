@@ -4,7 +4,7 @@
   SetupFlow (the only step that downloads or creates anything) and fetches the
   plan data via READ-ONLY commands (hardware + the recommended models), then
   renders SetupPlanView. Nothing on the machine changes until the user hits
-  "Set up Sovereign" — this screen only reads.
+  "Set up svrnmesh" — this screen only reads.
 
   The view/container split mirrors SetupScreen/SetupFlow: SetupPlanView is a
   pure, backend-free view the dev screen gallery can drive with fixtures, so
@@ -33,8 +33,8 @@
   let catalog = $state<PrimaryOption[]>([]);
   let fast = $state<SlotConfig | null>(null);
   let embed = $state<SlotConfig | null>(null);
-  let modelsDir = $state("~/.sovereign/models");
-  let dataDir = $state("~/.sovereign");
+  let modelsDir = $state("~/.svrnmesh/models");
+  let dataDir = $state("~/.svrnmesh");
 
   onMount(async () => {
     try {

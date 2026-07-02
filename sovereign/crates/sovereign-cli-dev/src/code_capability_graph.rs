@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign code capability-graph <corpus-id> [--out <path>]`
+//! `svrn code capability-graph <corpus-id> [--out <path>]`
 //!
 //! Emits a SELF-CONTAINED interactive `graph.html` for a capability graph
 //! that the `capability-map` (+ optional `capability-findings`) pipeline has
@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 // ─── on-disk shapes (subset; serde ignores the fields we don't name) ───────
 
-/// `capability_map.json` — produced by `sovereign code capability-map`.
+/// `capability_map.json` — produced by `svrn code capability-map`.
 #[derive(Deserialize)]
 struct CapMapFile {
     #[serde(default)]
@@ -190,7 +190,7 @@ fn load_fn_vecs(data_dir: &Path, corpus_id: &str) -> Result<FnVecs, String> {
     let side_path = dir.join(format!("{corpus_id}.json"));
     let missing = || {
         format!(
-            "no embeddings for {corpus_id} — run `sovereign enrich spec-reconcile {corpus_id} \
+            "no embeddings for {corpus_id} — run `svrn enrich spec-reconcile {corpus_id} \
              --spec <any>` once to build them, or use --layout force."
         )
     };
@@ -325,7 +325,7 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
         .join("scip_graph.db");
     if !db_path.exists() {
         eprintln!(
-            "error: no SCIP graph at {} — run `sovereign code capability-map {corpus_id}` first",
+            "error: no SCIP graph at {} — run `svrn code capability-map {corpus_id}` first",
             db_path.display()
         );
         return 1;
@@ -369,7 +369,7 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
         },
         Err(e) => {
             eprintln!(
-                "error: cannot read {} ({e}) — run `sovereign code capability-map {corpus_id}` first",
+                "error: cannot read {} ({e}) — run `svrn code capability-map {corpus_id}` first",
                 map_path.display()
             );
             return 1;

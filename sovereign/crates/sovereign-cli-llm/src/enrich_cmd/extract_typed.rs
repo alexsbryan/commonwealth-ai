@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich extract-typed <corpus> [--chapters …|--full] [--force]`
+//! `svrn enrich extract-typed <corpus> [--chapters …|--full] [--force]`
 //!
 //! Workstream B routed-Phase-1 v1: second pass after `enrich extract`.
 //! Reads the Phase 0 classification cache, runs the per-type
@@ -65,11 +65,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich extract-typed",
+    command: "svrn enrich extract-typed",
     summary: "Routed-Phase-1 v1 — run the per-section-type typed extension over an already-extracted corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich extract-typed <corpus-id> [--chapters <id1,id2,...> | --full] [--force]",
+            "svrn enrich extract-typed <corpus-id> [--chapters <id1,id2,...> | --full] [--force]",
         ),
         HelpSection::Flags(&[
             (
@@ -87,11 +87,11 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich extract-typed obsidian-vault",
+                "svrn enrich extract-typed obsidian-vault",
                 "Run typed extension over every ArgumentativeEssay-classified section.",
             ),
             (
-                "sovereign enrich extract-typed obsidian-vault --chapters sec_00002 --force",
+                "svrn enrich extract-typed obsidian-vault --chapters sec_00002 --force",
                 "Re-run a single section after revising the argumentative prompt.",
             ),
         ]),
@@ -319,7 +319,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
 
     if !probe_daemon(&cfg.base_url).await {
         eprintln!(
-            "error: daemon is not responding at {} — start it with `sovereign daemon start`",
+            "error: daemon is not responding at {} — start it with `svrn daemon start`",
             cfg.base_url
         );
         return 2;
@@ -332,7 +332,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("error: {e}");
             eprintln!(
-                "hint: run `sovereign enrich classify {}` first to produce the classification cache.",
+                "hint: run `svrn enrich classify {}` first to produce the classification cache.",
                 cfg.corpus_id
             );
             return 1;
@@ -372,7 +372,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
         Ok(Some(o)) => o,
         Ok(None) => {
             eprintln!(
-                "error: cache/questions.json missing — run `sovereign enrich extract {}` first.",
+                "error: cache/questions.json missing — run `svrn enrich extract {}` first.",
                 cfg.corpus_id
             );
             return 1;

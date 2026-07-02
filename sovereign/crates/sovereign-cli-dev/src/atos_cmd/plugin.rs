@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos install-plugin` — (re)install the opencode plugin
+//! `svrn atos install-plugin` — (re)install the opencode plugin
 //! shipped with this CLI into `<repo>/.opencode/plugins/sovereign-atos.ts`.
 //!
 //! Idempotent — a second invocation reports `up to date`. Upgrades

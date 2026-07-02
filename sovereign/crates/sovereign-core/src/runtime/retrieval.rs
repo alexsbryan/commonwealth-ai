@@ -2896,7 +2896,12 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
     ) -> Vec<MetaAtlasHitRecord> {
-        let Some(index) = self.meta_atlas.as_ref() else {
+        // Clone the `Arc` out and drop the guard before the awaits below
+        // (`index` is consulted across them; a std `RwLock` guard is not
+        // `Send`). `None` until the desktop's deferred warm attaches the
+        // index — boost simply short-circuits until then.
+        let index = self.meta_atlas.read().ok().and_then(|g| g.clone());
+        let Some(index) = index else {
             return Vec::new();
         };
         if index.is_empty() || entities.is_empty() {

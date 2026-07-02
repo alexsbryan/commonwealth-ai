@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich code-intel <corpus>` — generate per-symbol intent summaries
+//! `svrn enrich code-intel <corpus>` — generate per-symbol intent summaries
 //! for a SCIP-indexed CODE corpus and index them as searchable chunks.
 //!
 //! This is the conceptual->code retrieval bridge (see
@@ -16,10 +16,10 @@ use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich code-intel",
+    command: "svrn enrich code-intel",
     summary: "Summarize every function in a CODE corpus and index the summaries as searchable chunks.",
     sections: &[
-        HelpSection::Usage("sovereign enrich code-intel <corpus-id>"),
+        HelpSection::Usage("svrn enrich code-intel <corpus-id>"),
         HelpSection::Flags(&[
             (
                 "<corpus-id>",

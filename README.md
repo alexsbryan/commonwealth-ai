@@ -4,7 +4,7 @@ An AI assistant that runs on your own computer — and, when one machine isn't e
 
 It comes in two parts:
 
-- **Sovereign** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through — the model answering you lives on the machine in front of you.
+- **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through — the model answering you lives on the machine in front of you.
 - **Commonwealth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
 
 ## What you get
@@ -15,19 +15,19 @@ Your conversations, documents, and memory stay on your machine. Answers come gro
 
 ```sh
 curl -fsSL https://svrnme.sh/install.sh | sh
-sovereign setup          # finds models that fit your hardware, downloads them, starts the daemon
-sovereign chat session   # start talking
+svrn setup          # finds models that fit your hardware, downloads them, starts the daemon
+svrn chat session   # start talking
 ```
 
-That's the whole loop. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it — both in [the Sovereign guide](./sovereign/README.md).
+That's the whole loop. There's a desktop app too, and the daemon serves an OpenAI-compatible API so you can point your own tools at it — both in [the svrnmesh guide](./sovereign/README.md).
 
 ## Run a model bigger than your machine
 
 Some models won't fit on one computer. You can run them anyway by pooling a second — or a few — that you or people you trust already own. The model's layers spread across the machines, and you talk to it as if it were running locally. Three 64 GB machines can hold a model no one of them could.
 
 ```sh
-sovereign mesh create        # on the host — prints a key like cwth-a1b2-c3d4-e5f6
-sovereign mesh join <key>    # on each machine you're pooling in
+svrn mesh create        # on the host — prints a key like cwth-a1b2-c3d4-e5f6
+svrn mesh join <key>    # on each machine you're pooling in
 ```
 
 [Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks through the whole thing.
@@ -37,14 +37,18 @@ sovereign mesh join <key>    # on each machine you're pooling in
 Have an idea shaped like a pipeline — read a folder of things, run a model over each, call a tool in between, save the results? Write it as a small TOML file and run it, no code. Mix in any tool you've connected, and swap a single line to repurpose the whole thing into something else.
 
 ```sh
-sovereign workflow run my-pipeline.toml
+svrn workflow run my-pipeline.toml
 ```
 
 [Write a workflow](./docs/WRITE_A_WORKFLOW.md) shows you how.
 
 ## Going deeper
 
-The [Sovereign guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it.
+The [svrnmesh guide](./sovereign/README.md) covers the desktop app, knowledge bases, code intelligence, and troubleshooting. If you came to read or build the code, [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem and [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) lays out the design rules behind it.
+
+## Contributing
+
+Commonwealth AI is opening up to contributions. If you'd like to help — a bug report, a fix, a doc correction — start with [CONTRIBUTING.md](./CONTRIBUTING.md). Security or privacy issues go through [SECURITY.md](./SECURITY.md), not the public issue tracker.
 
 ---
 

@@ -26,6 +26,9 @@ pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
+pub mod facts;
+#[cfg(feature = "treesitter")]
+pub mod facts_check;
 pub mod filters;
 pub mod freshness;
 pub mod harness;

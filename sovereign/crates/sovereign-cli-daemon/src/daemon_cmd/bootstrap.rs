@@ -240,7 +240,7 @@ pub(super) fn build_corpus_engine(
             .unwrap_or("unknown-embed-model")
             .to_string();
         // recipes_dir doubles as the registry's overrides_dir. Locally-
-        // published recipes from `sovereign recipe publish` land at
+        // published recipes from `svrn recipe publish` land at
         // `~/.sovereign/recipes/<id>/recipe.toml` and only resolve when
         // the engine's overrides_dir points there. Earlier this passed
         // `indexes_dir` for the recipes argument, which made every
@@ -1355,7 +1355,7 @@ pub(super) async fn build_mesh_providers(
                     expires_unix,
                     expired_secs_ago = now_unix.saturating_sub(expires_unix),
                     "daemon_cmd: pinned-pod snapshot token EXPIRED — \
-                     skipping (tear down with `sovereign pipeline pod down {id}` \
+                     skipping (tear down with `svrn pipeline pod down {id}` \
                      or relaunch with `--ttl-hours <N>` to refresh)",
                     id = snap.vast_id,
                 );
@@ -1513,10 +1513,10 @@ pub(super) fn install_foreground_yield_hook(
 pub(super) fn write_pidfile() -> (std::path::PathBuf, u32) {
     // ── Pidfile ───────────────────────────────────────────────────
     //
-    // `sovereign daemon stop` keys off `~/.sovereign/daemon.pid` to
+    // `svrn daemon stop` keys off `~/.sovereign/daemon.pid` to
     // know which process to SIGTERM. Previously only `daemon start`
     // (the detached-child launcher) wrote that file, so any other
-    // launch path — `sovereign daemon run` from a shell, `cargo run
+    // launch path — `svrn daemon run` from a shell, `cargo run
     // -- daemon run`, systemd's `ExecStart` — left no pidfile and
     // `stop` silently fell back to `systemctl/launchctl stop`, which
     // is a no-op for daemons launched outside the service manager.
@@ -1714,7 +1714,7 @@ pub(super) fn setup_watchers_and_work_atlas(
                 work_atlas_repo_id = Some(repo_id);
                 work_atlas_branch = branch;
                 eprintln!(
-                    "sovereign daemon: work-atlas observer wired on {}",
+                    "svrn daemon: work-atlas observer wired on {}",
                     ws.display()
                 );
             }
@@ -1762,7 +1762,7 @@ pub(super) fn setup_watchers_and_work_atlas(
             _watcher_monitor = supervisor.spawn();
             if _watcher_monitor.is_some() {
                 eprintln!(
-                    "sovereign daemon: watcher supervisor live on {} (self-healing)",
+                    "svrn daemon: watcher supervisor live on {} (self-healing)",
                     ws.display()
                 );
             }

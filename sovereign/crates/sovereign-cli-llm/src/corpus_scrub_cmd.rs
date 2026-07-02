@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign corpus scrub` — surface classified entities from a
+//! `svrn corpus scrub` — surface classified entities from a
 //! corpus's atlas + apply an EntityMap to bench TOMLs.
 //!
 //! Two modes, selected by flags:
@@ -34,11 +34,11 @@ use serde::{Deserialize, Serialize};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign corpus scrub",
+    command: "svrn corpus scrub",
     summary: "Surface classified entities from a corpus's atlas + apply EntityMap to bench TOMLs.",
     sections: &[
         HelpSection::Usage(
-            "sovereign corpus scrub <corpus_id> [--out <path>] [--min-salience <f>]\n\
+            "svrn corpus scrub <corpus_id> [--out <path>] [--min-salience <f>]\n\
              sovereign corpus scrub --apply-to <bank.toml> --map <map.json>",
         ),
         HelpSection::Flags(&[

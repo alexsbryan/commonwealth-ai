@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich errors <corpus> [--phase P] [--kind K] [--json]`
+//! `svrn enrich errors <corpus> [--phase P] [--kind K] [--json]`
 //!
 //! One surface for every structured failure across every phase of a
 //! corpus's enrichment run. The aggregator walks:
@@ -37,11 +37,11 @@ use sovereign_cli_shared::dirs::sovereign_indexes;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich errors",
+    command: "svrn enrich errors",
     summary: "Aggregate structured failures across every phase of a corpus's enrichment run.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich errors <corpus-id> [--phase <phase>] [--kind <kind>] [--json]",
+            "svrn enrich errors <corpus-id> [--phase <phase>] [--kind <kind>] [--json]",
         ),
         HelpSection::Flags(&[
             (
@@ -61,26 +61,26 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich errors dopesick_jesus",
+                "svrn enrich errors dopesick_jesus",
                 "Print every failure group with remediation + retry command.",
             ),
             (
-                "sovereign enrich errors dopesick_jesus --kind parse_drift",
+                "svrn enrich errors dopesick_jesus --kind parse_drift",
                 "Only parse-drift failures (across every LLM-driven phase).",
             ),
             (
-                "sovereign enrich errors dopesick_jesus --phase atlas-named-clusters",
+                "svrn enrich errors dopesick_jesus --phase atlas-named-clusters",
                 "Only Phase 3 atlas cluster-naming failures.",
             ),
             (
-                "sovereign enrich errors dopesick_jesus --json",
+                "svrn enrich errors dopesick_jesus --json",
                 "Machine-readable output — pipe into jq, send to the desktop app, etc.",
             ),
         ]),
         HelpSection::Notes(
             "No LLM calls. Reads only cached phase outputs + `atlas/resolution_failures.json`. \
              A corpus that hasn't run Phase 1 yet will report zero failures (and nothing to fix), \
-             not an error — run `sovereign enrich build <corpus>` first.",
+             not an error — run `svrn enrich build <corpus>` first.",
         ),
     ],
 };
@@ -268,7 +268,7 @@ where
 ///
 ///   [atlas-named-clusters / parse_drift] — 4 failure(s)
 ///     Sample: `cluster:claim:cl_c_14` — parse error naming cluster cl_c_14...
-///     Remediate: Retry with `sovereign enrich extract <corpus> --retry-failed`...
+///     Remediate: Retry with `svrn enrich extract <corpus> --retry-failed`...
 ///     Retry: sovereign enrich name-atlas-clusters <corpus>
 /// ```
 ///
@@ -351,17 +351,17 @@ fn group_by_phase_kind(
 fn retry_command(phase: PipelinePhase, corpus_id: &str) -> Option<String> {
     match phase {
         PipelinePhase::Questions => Some(format!(
-            "sovereign enrich extract {corpus_id} --retry-failed"
+            "svrn enrich extract {corpus_id} --retry-failed"
         )),
-        PipelinePhase::Concerns => Some(format!("sovereign enrich name-concerns {corpus_id}")),
-        PipelinePhase::AtlasClusters => Some(format!("sovereign enrich cluster-atlas {corpus_id}")),
+        PipelinePhase::Concerns => Some(format!("svrn enrich name-concerns {corpus_id}")),
+        PipelinePhase::AtlasClusters => Some(format!("svrn enrich cluster-atlas {corpus_id}")),
         PipelinePhase::AtlasNamedClusters => {
-            Some(format!("sovereign enrich name-atlas-clusters {corpus_id}"))
+            Some(format!("svrn enrich name-atlas-clusters {corpus_id}"))
         }
-        PipelinePhase::Positions => Some(format!("sovereign enrich extract-positions {corpus_id}")),
-        PipelinePhase::Tensions => Some(format!("sovereign enrich detect-tensions {corpus_id}")),
-        PipelinePhase::Gaps => Some(format!("sovereign enrich detect-gaps {corpus_id}")),
-        PipelinePhase::SeedExtraction => Some(format!("sovereign enrich seed {corpus_id} --force")),
+        PipelinePhase::Positions => Some(format!("svrn enrich extract-positions {corpus_id}")),
+        PipelinePhase::Tensions => Some(format!("svrn enrich detect-tensions {corpus_id}")),
+        PipelinePhase::Gaps => Some(format!("svrn enrich detect-gaps {corpus_id}")),
+        PipelinePhase::SeedExtraction => Some(format!("svrn enrich seed {corpus_id} --force")),
         PipelinePhase::Ingest | PipelinePhase::QuestionClusters | PipelinePhase::ChunkClusters => {
             None
         }
@@ -620,7 +620,10 @@ mod tests {
         use corpus_engine::enrichment::pipeline::{Phase1Failure, Phase1Output, PhaseCache};
         use std::fs;
 
-        let guard = scoped_home();
+        // RAII: keep the scoped HOME override alive for the whole test (its
+        // Drop restores HOME). We no longer read `guard.path()` directly —
+        // paths resolve through `sovereign_indexes()` under the scoped HOME.
+        let _guard = scoped_home();
 
         // Minimal config so `EnrichConfig::require` wouldn't trip —
         // not used by collect_failures directly but the caller
@@ -654,7 +657,11 @@ mod tests {
         cache.write(PipelinePhase::Questions, &p1).unwrap();
 
         // Seed an atlas/resolution_failures.json with two more.
-        let indexes_root = guard.path().join(".sovereign").join("indexes");
+        // Resolve via the same getter the code under test uses, rather than
+        // hard-coding the legacy `.sovereign` dir name — `sovereign_indexes()`
+        // prefers `~/.svrnmesh` once it's populated (the cache write above does
+        // that), so a hard-coded `.sovereign` path would miss the atlas source.
+        let indexes_root = sovereign_cli_shared::dirs::sovereign_indexes();
         let atlas_dir = indexes_root.join(corpus_id).join(ATLAS_DIRNAME);
         let atlas_failures = vec![
             PhaseFailure {

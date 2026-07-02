@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich show <corpus> <target>` — formatted view of a cached
+//! `svrn enrich show <corpus> <target>` — formatted view of a cached
 //! phase output. Landing 2 implements `phase1` (with optional
 //! `--chapter <id>` filter); other targets land incrementally.
 
@@ -13,10 +13,10 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich show",
+    command: "svrn enrich show",
     summary: "Inspect cached phase output without opening JSON files.",
     sections: &[
-        HelpSection::Usage("sovereign enrich show <corpus-id> <target> [--chapter <id>]"),
+        HelpSection::Usage("svrn enrich show <corpus-id> <target> [--chapter <id>]"),
         HelpSection::Subcommands(&[
             ("phase1", "Per-chapter questions from the last --full run."),
             (

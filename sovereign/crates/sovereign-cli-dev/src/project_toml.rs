@@ -122,7 +122,7 @@ pub struct DepEntry {
     pub kind: String,
 }
 
-/// Lifecycle fields populated by `sovereign project found` /
+/// Lifecycle fields populated by `svrn project found` /
 /// `amend`. M6.1 leaves them at defaults; M6.3+ fills them in.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]

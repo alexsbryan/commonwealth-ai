@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos replay` — reconstruct a historical commit as an
+//! `svrn atos replay` — reconstruct a historical commit as an
 //! ATOS Runner task.
 //!
 //! Flow:
@@ -8,7 +8,7 @@
 //!   3. Ask the Fast slot to synthesize `DESIGN.md` + `CHARTER.md`
 //!      from the commit message and diff — what the design WOULD have
 //!      looked like before the commit.
-//!   4. Hand off to `sovereign atos run` with the synthesized artifacts
+//!   4. Hand off to `svrn atos run` with the synthesized artifacts
 //!      in the workdir; the existing drive loop runs unchanged.
 //!
 //! After the loop terminates, `git diff <parent_sha>..<commit_sha>` is
@@ -211,7 +211,7 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
         return 0;
     }
 
-    // ── 5. Delegate to `sovereign atos run` ──────────────────────
+    // ── 5. Delegate to `svrn atos run` ──────────────────────
     let workdir_str = workdir.to_string_lossy().to_string();
     let run_args = vec![
         "--workdir".to_string(),
@@ -430,7 +430,7 @@ fn home_dir() -> PathBuf {
 
 fn print_help() {
     eprintln!(
-        "sovereign atos replay — reconstruct a historical commit as a Runner task\n\
+        "svrn atos replay — reconstruct a historical commit as a Runner task\n\
          \n\
          USAGE\n    sovereign atos replay --commit <sha> --workdir <repo> [flags]\n\
          \n\

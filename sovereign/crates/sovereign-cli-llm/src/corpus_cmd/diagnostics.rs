@@ -20,7 +20,7 @@ fn csv_escape(s: &str) -> String {
     }
 }
 
-/// `sovereign corpus export-parcels --corpus <id> [--out <path>]` — write a
+/// `svrn corpus export-parcels --corpus <id> [--out <path>]` — write a
 /// corpus's deterministic parcel atoms to CSV so a reader can re-sum the
 /// figures independently (open in Excel, sum `assessed_land_value`). This
 /// is the reproducibility half of the SF-LVT "no confabulated numbers"
@@ -191,7 +191,7 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
 /// `committed_iter_pos` coordinate space shifted between runs as
 /// `processed_shards` shrunk the assigned set.
 ///
-/// `sovereign corpus stream-axes` — backfill per-corpus stream-axis
+/// `svrn corpus stream-axes` — backfill per-corpus stream-axis
 /// blocks into installed `_corpus_meta.json` files.
 ///
 /// Walks installed corpora; for each one that lacks a `stream` block
@@ -216,7 +216,7 @@ pub(super) async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
             "--all" => {} // default behaviour
             "--help" | "-h" => {
                 println!(
-                    "sovereign corpus stream-axes [--corpus <id>] [--force]\n\
+                    "svrn corpus stream-axes [--corpus <id>] [--force]\n\
                     \n\
                     Backfill per-corpus stream-axis (stability) block into\n\
                     installed _corpus_meta.json files. Derives from corpus\n\
@@ -380,7 +380,7 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus diag <corpus_id> \
+                    "Usage: svrn corpus diag <corpus_id> \
                      [--titles-file <path>] [--sample <n>] [--check-duplicates] \
                      [--total-shards <n>]\n\n\
                      Audit a corpus index against its filter title list. \
@@ -410,7 +410,7 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus diag <corpus_id>");
+        eprintln!("Missing corpus ID. Usage: svrn corpus diag <corpus_id>");
         return 1;
     };
 
@@ -683,7 +683,7 @@ fn load_title_set(bytes: &[u8]) -> std::collections::HashSet<String> {
     out
 }
 
-/// `sovereign corpus dedupe <corpus_id> [--yes]`
+/// `svrn corpus dedupe <corpus_id> [--yes]`
 ///
 /// Run the one-shot rescue pass on an installed corpus: collapse
 /// duplicate-content rows (same `content_hash`) so the index reflects
@@ -710,7 +710,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
             "--yes" | "-y" => yes = true,
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus dedupe <corpus_id> [--yes]\n\n\
+                    "Usage: svrn corpus dedupe <corpus_id> [--yes]\n\n\
                      Collapse duplicate-content rows in an installed corpus. \
                      Detected via the chunk's content_hash. Hashless legacy \
                      rows are preserved (no signal to compare). Resolves \
@@ -733,7 +733,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus dedupe <corpus_id>");
+        eprintln!("Missing corpus ID. Usage: svrn corpus dedupe <corpus_id>");
         return 1;
     };
 
@@ -899,10 +899,10 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: sovereign corpus repair <corpus_id> [--yes] [--total-shards N]\n\n\
+                    "Usage: svrn corpus repair <corpus_id> [--yes] [--total-shards N]\n\n\
                      Reset a partition that completed with missing shards \
                      back to in-progress, so the daemon's auto-resume or a \
-                     subsequent `sovereign corpus install` picks it up.\n\n\
+                     subsequent `svrn corpus install` picks it up.\n\n\
                      Specifically:\n\
                      - Clears indexes_built / vector_index_built / \
                      content_fts_built / title_fts_built\n\
@@ -933,7 +933,7 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
     }
 
     let Some(corpus_id) = corpus_id else {
-        eprintln!("Missing corpus ID. Usage: sovereign corpus repair <corpus_id>");
+        eprintln!("Missing corpus ID. Usage: svrn corpus repair <corpus_id>");
         return 1;
     };
 
@@ -1148,7 +1148,7 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
     println!();
     println!("Next steps:");
     println!("  - The daemon's auto-resume loop will pick this up on its next tick.");
-    println!("  - Or run `sovereign corpus install {corpus_id}` to kick off resume now.");
+    println!("  - Or run `svrn corpus install {corpus_id}` to kick off resume now.");
     println!(
         "  - Either path will skip already-embedded content_hashes via the embed-side dedup gate."
     );

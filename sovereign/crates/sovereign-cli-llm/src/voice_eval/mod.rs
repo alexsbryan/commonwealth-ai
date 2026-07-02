@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign voice eval` — Tier-B harness for the glass-box voice
+//! `svrn voice eval` — Tier-B harness for the glass-box voice
 //! contract.
 //!
 //! Drives one or all scenarios under `sovereign/bench/voice/*.toml`
@@ -208,7 +208,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
             Err(e) => {
                 eprintln!("voice eval: live run failed: {e}");
                 eprintln!(
-                    "Hint: ensure the sovereign daemon is running (`sovereign daemon start`) \
+                    "Hint: ensure the sovereign daemon is running (`svrn daemon start`) \
                      and the bundled skills directory is reachable. Pass --canned-response \
                      to skip the live path."
                 );
@@ -266,7 +266,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
 }
 
 fn print_help() {
-    eprintln!("sovereign voice eval — score the relational voice contract");
+    eprintln!("svrn voice eval — score the relational voice contract");
     eprintln!();
     eprintln!("USAGE");
     eprintln!("  sovereign voice eval [--scenario <id> | --skill <id> | --all]");

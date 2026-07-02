@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign chat inspect "<question>"` — retrieval without the LLM.
+//! `svrn chat inspect "<question>"` — retrieval without the LLM.
 //!
 //! Re-runs the embedding + per-corpus search loop `Runtime::search_corpus_indexes`
 //! runs on every chat turn, but stops before any generation happens.
@@ -25,10 +25,10 @@ use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign chat inspect",
+    command: "svrn chat inspect",
     summary: "Run the retrieval stage without the LLM; print every chunk considered.",
     sections: &[
-        HelpSection::Usage("sovereign chat inspect \"<question>\" [flags]"),
+        HelpSection::Usage("svrn chat inspect \"<question>\" [flags]"),
         HelpSection::Flags(&[
             (
                 "--limit <N>",
@@ -117,7 +117,7 @@ pub async fn cmd_inspect(args: &[String]) -> i32 {
     }
 
     let Some(question) = question else {
-        eprintln!("error: missing question. Usage: sovereign chat inspect \"<question>\"");
+        eprintln!("error: missing question. Usage: svrn chat inspect \"<question>\"");
         return 2;
     };
 
@@ -191,7 +191,7 @@ async fn run_inspect(
             session_indexes_dir(session)
         );
         eprintln!(
-            "install one via `sovereign corpus install <id>` or the desktop folder-drop flow."
+            "install one via `svrn corpus install <id>` or the desktop folder-drop flow."
         );
         return 0;
     }

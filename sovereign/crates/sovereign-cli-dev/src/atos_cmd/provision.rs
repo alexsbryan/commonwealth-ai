@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atos provision <id>` (retired Phase 6) and
-//! `sovereign atos archive <id>`.
+//! `svrn atos provision <id>` (retired Phase 6) and
+//! `svrn atos archive <id>`.
 //!
 //! ## Phase 6 retirement
 //!
 //! `provision` is no longer required. The default user flow now is:
 //!
-//!   `sovereign init` → write `.sovereign/features/<id>/spec.md`
+//!   `svrn init` → write `.sovereign/features/<id>/spec.md`
 //!                    → `git commit` (= approval — see approval_gate)
 //!                    → work
 //!
@@ -30,7 +30,7 @@ use super::stores::open_orchestrator;
 
 pub(crate) async fn cmd_provision(_args: &[String]) -> i32 {
     sovereign_cli_shared::deprecation::announce_retired(
-        "sovereign atos provision",
+        "svrn atos provision",
         "Provisioning is implicit now: an existing \
          `.sovereign/features/<id>/spec.md` (committed for write \
          tools to be approved) is sufficient. The auditor and the \

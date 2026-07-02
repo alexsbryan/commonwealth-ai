@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign atlas backfill-ann <corpus>...` — ATLAS_STORAGE_V2 step 3b.
+//! `svrn atlas backfill-ann <corpus>...` — ATLAS_STORAGE_V2 step 3b.
 //!
 //! Build the persistent per-corpus ANN seed table (`atlas/atoms_ann.lance`) for
 //! each named atlas corpus. This is a cheap one-time TRANSFORM of data that

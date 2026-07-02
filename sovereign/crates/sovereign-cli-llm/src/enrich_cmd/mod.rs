@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich ...` — user-facing driver for the v2 atlas
+//! `svrn enrich ...` — user-facing driver for the v2 atlas
 //! enrichment pipeline.
 //!
 //! The primary flow is `build` — one command that runs every atlas
@@ -72,10 +72,10 @@ pub mod validate;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich",
+    command: "svrn enrich",
     summary: "Build, query, and audit v2 atlas enrichments of a corpus.",
     sections: &[
-        HelpSection::Usage("sovereign enrich <subcommand> [args]"),
+        HelpSection::Usage("svrn enrich <subcommand> [args]"),
 
         // Primary flow — the commands a user reaches for first.
         HelpSection::SubcommandsTitled(

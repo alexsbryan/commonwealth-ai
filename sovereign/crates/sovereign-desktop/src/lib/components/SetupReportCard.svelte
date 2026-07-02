@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   SetupReportCard — renders the "What setup did" record written at the end of
-  onboarding (~/.sovereign/setup-report.json). Part of making setup glassbox:
+  onboarding (~/.svrnmesh/setup-report.json). Part of making setup glassbox:
   the consequential decisions (hardware → profile → models, with their sources
   and destinations) stay inspectable after the fact, not just during setup.
   Renders nothing if no report exists (e.g. a desktop attached to a daemon
@@ -70,7 +70,7 @@
     <p class="note">
       Primary model:
       {report.primary_customized ? "customized by you at setup" : "hardware-recommended default"}.
-      Full record at <code>~/.sovereign/setup-report.json</code> (and <code>.md</code>).
+      Full record at <code>~/.svrnmesh/setup-report.json</code> (and <code>.md</code>).
     </p>
   </div>
 {/if}

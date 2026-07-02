@@ -87,6 +87,23 @@ pub(crate) fn citation_broad_enabled() -> bool {
         .unwrap_or(true)
 }
 
+/// Exact-value + GK-fabrication fidelity fixes (2026-07-01). ON by default;
+/// `SOVEREIGN_EXACTVAL_FIX=0` restores the prior behaviour for a clean replay
+/// A/B. Gates two changes together (both target the same exact-value residual):
+/// (1) citation `answer_supported_by_quote` requires a numeric answer token to
+/// match a COMPLETE digit-run in the quote, not a substring (kills truncated-
+/// number grounding, "289494" vs "28949423"); (2) `gate_answer` strips the GK
+/// caveat UNCONDITIONALLY before verifying (the gated path always has retrieved
+/// docs, so a "from general knowledge" escape hatch must be held to the evidence,
+/// not exempted as NO_CLAIM — kills confident GK fabrication like "Eddie
+/// Henderson").
+pub(crate) fn exactval_fix_enabled() -> bool {
+    !matches!(
+        std::env::var("SOVEREIGN_EXACTVAL_FIX").ok().as_deref(),
+        Some("0") | Some("false") | Some("off")
+    )
+}
+
 /// The closed set of answer-producing surfaces the gate covers.
 /// Adding a surface = adding a variant + a profile + a bank — there
 /// is no open registration, by design: every gated surface must have
@@ -309,6 +326,22 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_CITATION_GROUNDING",
                 default: "off",
                 purpose: "Active citation-grounding on entity-anchored fact queries: the model must copy a verbatim supporting sentence before answering, grounded by quote-existence (curing A3B context-under-utilisation + the substring verifier's title/paraphrase false-negatives). No findable quote → honest abstention.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_SPECIFICS_SCAN",
+                default: "on",
+                purpose: "Long-form holistic specifics scan inside gate_longform: one judge pass (whole answer vs full evidence) catching fabricated supporting specifics / misattributions the per-claim audit misses. =0 disables (clean A/B lever).",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_SHORT_SPECIFICS_SCAN",
+                default: "off",
+                purpose: "SHELVED (default off; =1 enables). Short-path second-opinion specifics scan on RELEASED single-claim/citation answers: catches fabricated cited specifics (a named entity/flag/number absent from evidence) the value-only verify waves through, then correct-or-abstains via one grounded rewrite. Skips abstention-shaped answers. Dormant pending clean-evidence validation — its target category proved ~90% measurement artifact.",
             },
         ),
     ]

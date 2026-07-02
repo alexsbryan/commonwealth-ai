@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign audit [feature-id] [--archive]` — the deliverable.
+//! `svrn audit [feature-id] [--archive]` — the deliverable.
 //!
 //! Merges three older commands under one flat name:
 //!
-//! - `sovereign project audit` (no args)             → `sovereign audit`
-//! - `sovereign atos report <id>`                    → `sovereign audit <id>`
-//! - `sovereign atos teardown <id>` / `atos archive` → `sovereign audit <id> --archive`
+//! - `svrn project audit` (no args)             → `svrn audit`
+//! - `svrn atos report <id>`                    → `svrn audit <id>`
+//! - `svrn atos teardown <id>` / `atos archive` → `svrn audit <id> --archive`
 //!
 //! Phase 1 (this file): a dispatcher over the existing handlers.
 //! Phase 7 rewrites the project-wide path to merge in the four
@@ -15,9 +15,9 @@
 //! path benefits too.
 //!
 //! Argument shape:
-//! - `sovereign audit`                       → project-wide rollup
-//! - `sovereign audit <feature-id>`          → feature-specific report
-//! - `sovereign audit <feature-id> --archive`→ archive the feature
+//! - `svrn audit`                       → project-wide rollup
+//! - `svrn audit <feature-id>`          → feature-specific report
+//! - `svrn audit <feature-id> --archive`→ archive the feature
 
 pub async fn run(args: &[String]) -> i32 {
     // Help passes straight through — each underlying handler owns
@@ -52,18 +52,18 @@ pub async fn run(args: &[String]) -> i32 {
 
     match (feature_id, archive_requested) {
         (Some(_), true) => {
-            // `sovereign audit <id> --archive` → teardown the feature.
+            // `svrn audit <id> --archive` → teardown the feature.
             // Handler lives in the sovereign-cli-atos sibling binary.
             crate::dev_bin::exec("atos-teardown", &forwarded)
         }
         (Some(_), false) => {
-            // `sovereign audit <id>` → per-feature report. The atos
+            // `svrn audit <id>` → per-feature report. The atos
             // report handler accepts the feature id as the first
             // positional arg, matching this surface.
             crate::dev_bin::exec("atos-status-report", &forwarded)
         }
         (None, true) => {
-            // `sovereign audit --archive` with no id is a user error
+            // `svrn audit --archive` with no id is a user error
             // — there's no obvious target. Print a short hint rather
             // than silently archiving the most-recent feature.
             eprintln!(
@@ -77,24 +77,24 @@ pub async fn run(args: &[String]) -> i32 {
             2
         }
         (None, false) => {
-            // `sovereign audit` (no args) → project-wide rollup.
+            // `svrn audit` (no args) → project-wide rollup.
             crate::dev_bin::exec("project-audit", &forwarded)
         }
     }
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
-    command: "sovereign audit",
+    command: "svrn audit",
     summary: "Reviewer rollup: founding, phases, decisions, deviations, drift, milestones.",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign audit                            Project-wide audit\n\
+            "svrn audit                            Project-wide audit\n\
              sovereign audit <feature-id>               Feature-specific report\n\
              sovereign audit <feature-id> --archive     Archive the feature",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces the older `sovereign project audit` + `sovereign atos report` \
-             + `sovereign atos teardown` triple. Old names still work and forward here.",
+            "Replaces the older `svrn project audit` + `svrn atos report` \
+             + `svrn atos teardown` triple. Old names still work and forward here.",
         ),
     ],
 };

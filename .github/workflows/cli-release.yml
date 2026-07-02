@@ -29,6 +29,17 @@ on:
       tag:
         description: "Tag to attach the release to (e.g. cli-v0.1.0). Blank = workflow ref."
         required: false
+  # Callable by the manual "Release (manual)" orchestrator (release.yml) so one
+  # button ships CLI + desktop together. `inputs.tag` is populated for both
+  # workflow_dispatch and workflow_call; on a plain tag push it's empty and the
+  # version-check / resolve-tag steps fall back to GITHUB_REF.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to attach the release to (e.g. cli-v0.1.0)."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write # create / upload to a GitHub Release
@@ -75,7 +86,7 @@ jobs:
         # name. Mirrors desktop-release.yml's check-desktop-version.sh discipline.
         shell: bash
         run: |
-          ref="${{ github.event.inputs.tag }}"
+          ref="${{ inputs.tag }}"
           [ -n "$ref" ] || ref="${GITHUB_REF#refs/tags/}"
           case "$ref" in
             cli-v*)
@@ -190,7 +201,7 @@ jobs:
         id: tag
         shell: bash
         run: |
-          t="${{ github.event.inputs.tag }}"
+          t="${{ inputs.tag }}"
           [ -n "$t" ] || t="${GITHUB_REF#refs/tags/}"
           echo "tag=$t" >> "$GITHUB_OUTPUT"
 

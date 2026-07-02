@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench …` — throughput + correctness benchmarks for
+//! `svrn bench …` — throughput + correctness benchmarks for
 //! enrichment-pipeline LLM tasks. Used to pick a primary model
 //! before committing to a long batch (the SEP 1800-article ingest
 //! is the motivating workload).
@@ -15,7 +15,7 @@
 //! localhost:9741) so the model under test is whichever
 //! `[models].primary` the daemon was started with. To compare
 //! candidates: edit `~/.sovereign/config.toml`, restart
-//! `sovereign.service`, run `sovereign bench atlas --output run.json`,
+//! `sovereign.service`, run `svrn bench atlas --output run.json`,
 //! repeat. Results carry the daemon-reported `model_id` so
 //! mislabelled archives can't sneak through.
 //!
@@ -52,10 +52,10 @@ mod uap;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench",
+    command: "svrn bench",
     summary: "Throughput + correctness benchmarks for enrichment LLM tasks.",
     sections: &[
-        HelpSection::Usage("sovereign bench <subcommand> [args]"),
+        HelpSection::Usage("svrn bench <subcommand> [args]"),
         HelpSection::Subcommands(&[
             (
                 "all",

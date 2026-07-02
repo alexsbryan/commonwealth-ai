@@ -12,7 +12,7 @@
 <div class="threshold">
   <div class="threshold-content">
     <div class="mark"><BrandMark size={56} /></div>
-    <p class="line line-primary">This is Sovereign.</p>
+    <p class="line line-primary">This is svrnmesh.</p>
     <p class="line line-secondary">Your app for local intelligence and knowledge.</p>
     <p class="line line-tertiary">Let's start the future of AI.</p>
     <button class="begin-btn" onclick={onBegin}>Begin</button>

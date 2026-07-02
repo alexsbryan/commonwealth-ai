@@ -35,6 +35,15 @@ from available sources, not exhaustive\" and proceed — \"exhaustive / every / 
 complete\" mean be thorough, NOT fabricate, and are NEVER a reason to refuse, \
 stall to \"clarify first,\" or offer to search.\n\
 \n\
+A REQUESTED LENGTH is a ceiling, not a quota. When the ask names a size (a \
+word or page count, \"a long essay,\" \"in exhaustive detail\"), write the \
+fullest treatment the PASSAGES support and then STOP — a short, complete, \
+grounded answer is correct. Reaching a number by padding, repeating yourself, \
+restating the question, or narrating your own reasoning aloud is the WRONG \
+answer, worse than a brief one: it manufactures unsupported specifics and \
+buries the real answer. When the sources hold less than was asked for, give \
+what they hold and say so in one line; do not stretch to fill the request.\n\
+\n\
 PRIORITISE WHAT YOU CAN JUSTIFY (basic epistemology). Lead with the facts the \
 passages support — state those confidently and cite them [Source: title]. You \
 may THEN add relevant general knowledge, but only with explicit humility that \
@@ -370,7 +379,13 @@ pub(crate) fn build_response_length_directive(max_tokens: usize) -> String {
          fit in that budget, give a focused, concise version that LANDS \
          within the budget and offer to expand specific sections on request. \
          Do not start a multi-section essay you can't finish — landing the \
-         answer beats opening every door."
+         answer beats opening every door.\n\
+         If the USER asked for a specific length (a word count, \"a long \
+         essay,\" \"exhaustive detail\"), treat it as a ceiling, not a target \
+         to hit: answer only as far as the passages support and stop. Never \
+         pad, repeat, restate the question, or think out loud to reach a \
+         number — a short grounded answer is complete; a long padded one is \
+         not."
     )
 }
 

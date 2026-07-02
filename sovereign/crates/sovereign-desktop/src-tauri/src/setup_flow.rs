@@ -570,7 +570,7 @@ fn write_setup_report(
 
 fn render_setup_report_md(r: &SetupReport) -> String {
     let mut s = String::new();
-    s.push_str("# Sovereign — setup report\n\n");
+    s.push_str("# svrnmesh — setup report\n\n");
     s.push_str(&format!("Completed: {}\n\n", r.completed_at));
     s.push_str(&format!(
         "Hardware: {:.0} GB {} · profile `{}`\n\n",

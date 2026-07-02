@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign pipeline …` — generic ingestion-pipeline driver.
+//! `svrn pipeline …` — generic ingestion-pipeline driver.
 //!
 //! Surface:
 //!
@@ -24,10 +24,10 @@ use tokio::sync::Mutex;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign pipeline",
+    command: "svrn pipeline",
     summary: "Generic ingestion-pipeline driver — durable worklist + retry + pause-resume.",
     sections: &[
-        HelpSection::Usage("sovereign pipeline <run | status | list> [flags]"),
+        HelpSection::Usage("svrn pipeline <run | status | list> [flags]"),
         HelpSection::Subcommands(&[
             (
                 "run <recipe.toml>",
@@ -44,7 +44,7 @@ const HELP: Help = Help {
                 "pause <recipe-id>",
                 "Gracefully stop active drivers for this recipe across the mesh \
                  (SIGTERM → drain → exit). Worklist state persists; \
-                 `sovereign pipeline run` resumes from where it left off. \
+                 `svrn pipeline run` resumes from where it left off. \
                  Use --force for SIGKILL. Use --local-only to skip the mesh \
                  fanout and only signal local PIDs.",
             ),
@@ -91,15 +91,15 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml",
+                "svrn pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml",
                 "Drive the SEP ingest. Safe to Ctrl-C; resumes on next run.",
             ),
             (
-                "sovereign pipeline status sep-core-v1",
+                "svrn pipeline status sep-core-v1",
                 "Read-only summary — useful while a driver is running or after it paused.",
             ),
             (
-                "sovereign pipeline pause sep-core-v1",
+                "svrn pipeline pause sep-core-v1",
                 "Pause the SEP ingest mid-run. In-flight slugs drain, then the driver exits; \
                  resume with the same `run` invocation.",
             ),
@@ -415,7 +415,9 @@ fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
         // Match shape: `... sovereign pipeline run <recipe-path>`.
         // Anything else isn't a pipeline driver we care about.
         let is_driver = argv.windows(3).any(|w| {
-            (w[0].ends_with("sovereign") || w[0].ends_with("sovereign-cli"))
+            (w[0].ends_with("svrn")
+                || w[0].ends_with("sovereign")
+                || w[0].ends_with("sovereign-cli"))
                 && w[1] == "pipeline"
                 && w[2] == "run"
         });
@@ -1277,7 +1279,7 @@ fn spawn_signal_handler(shutdown: Shutdown) {
     });
 }
 
-/// `sovereign pipeline pod pool` — multi-pod variant of `pod up`.
+/// `svrn pipeline pod pool` — multi-pod variant of `pod up`.
 ///
 /// Reads a JSONL manifest of work units, fans them out across `N`
 /// Vast pods (round-robin), drains completions to an output file,
@@ -1726,7 +1728,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         } else {
             eprintln!(
                 "{}/{pod_count} pod destroys failed — check `vastai show instances` and \
-                 `sovereign pipeline pod down <id>` to clean up.",
+                 `svrn pipeline pod down <id>` to clean up.",
                 failures
             );
             for (i, r) in destroy_results.iter() {
@@ -1741,7 +1743,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         for snap in pool.snapshot().await {
             println!("  pod {} vast={}", snap.pod_index, snap.instance_id);
         }
-        println!("destroy each with `sovereign pipeline pod down <vast-id>`.");
+        println!("destroy each with `svrn pipeline pod down <vast-id>`.");
     }
     if summary.timed_out {
         1

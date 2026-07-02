@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich seed` — Stage 1a driver.
+//! `svrn enrich seed` — Stage 1a driver.
 //!
 //! Runs the pipeline's seed-extraction strategy against the first
 //! section of a corpus and writes the seed entity list to
-//! `cache/seed.json`. Subsequent `sovereign enrich extract` runs
+//! `cache/seed.json`. Subsequent `svrn enrich extract` runs
 //! read this file and thread the canonical-names block into every
 //! per-chapter Phase 1 prompt.
 //!
@@ -23,10 +23,10 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich seed",
+    command: "svrn enrich seed",
     summary: "Stage 1a: extract the seed entity list from the first section.",
     sections: &[
-        HelpSection::Usage("sovereign enrich seed <corpus-id> [--force]"),
+        HelpSection::Usage("svrn enrich seed <corpus-id> [--force]"),
         HelpSection::Flags(&[(
             "--force",
             "Recompute even when a seed list is already cached. Useful when the opening \
@@ -34,16 +34,16 @@ const HELP: Help = Help {
         )]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich seed brothers_karamazov",
+                "svrn enrich seed brothers_karamazov",
                 "Read chapter 1, emit canonical entity list, cache to cache/seed.json.",
             ),
             (
-                "sovereign enrich seed bk --force",
+                "svrn enrich seed bk --force",
                 "Re-run even if the seed cache is warm.",
             ),
         ]),
         HelpSection::Notes(
-            "Every subsequent `sovereign enrich extract` call reads the cached seed and \
+            "Every subsequent `svrn enrich extract` call reads the cached seed and \
              threads the canonical-names block into every per-chapter Phase 1 prompt. \
              This is what keeps `Fyodor Pavlovich Karamazov` from fragmenting into \
              `Fyodor Karam`, `Fyo Karamzov`, and similar variants across chapters.",

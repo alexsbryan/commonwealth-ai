@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign enrich atlas-cross-corpus` — Phase C Step 8 driver.
+//! `svrn enrich atlas-cross-corpus` — Phase C Step 8 driver.
 //!
 //! Detects cross-corpus Grounding edges between two resolved
 //! atlases and writes a bidirectional
@@ -30,11 +30,11 @@ use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign enrich atlas-cross-corpus",
+    command: "svrn enrich atlas-cross-corpus",
     summary: "Detect cross-corpus Grounding edges between two resolved atlases.",
     sections: &[
         HelpSection::Usage(
-            "sovereign enrich atlas-cross-corpus <local-corpus> <peer-corpus> [--explain <edge-id>]",
+            "svrn enrich atlas-cross-corpus <local-corpus> <peer-corpus> [--explain <edge-id>]",
         ),
         HelpSection::Flags(&[(
             "--explain <edge-id>",
@@ -43,16 +43,16 @@ const HELP: Help = Help {
         )]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-cross-corpus brothers_karamazov sep",
+                "svrn enrich atlas-cross-corpus brothers_karamazov sep",
                 "Match entity atoms across BK and SEP; write cross_corpus_edges.json into both atlases.",
             ),
             (
-                "sovereign enrich atlas-cross-corpus bk sep --explain cc-bk-0003",
+                "svrn enrich atlas-cross-corpus bk sep --explain cc-bk-0003",
                 "Inspect the exact signal path that accepted edge cc-bk-0003.",
             ),
         ]),
         HelpSection::Notes(
-            "Both corpora must have been resolved via `sovereign enrich atlas-resolve \
+            "Both corpora must have been resolved via `svrn enrich atlas-resolve \
              <corpus> --phase all`. Zero LLM calls — the Grounding detector is \
              fully deterministic. Framing + Provenance detectors land in follow-ups.",
         ),
@@ -99,7 +99,7 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
         Ok(v) => v,
         Err(e) => {
             eprintln!(
-                "error: reading local atlas at {}: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading local atlas at {}: {e}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 local_dir.display(),
                 local_cfg.corpus_id
@@ -111,7 +111,7 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
         Ok(v) => v,
         Err(e) => {
             eprintln!(
-                "error: reading peer atlas at {}: {e}. Run `sovereign enrich atlas-resolve \
+                "error: reading peer atlas at {}: {e}. Run `svrn enrich atlas-resolve \
                  {} --phase all` first.",
                 peer_dir.display(),
                 peer_cfg.corpus_id

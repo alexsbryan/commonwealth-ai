@@ -873,6 +873,17 @@ if [ "$DESKTOPS" = 1 ]; then
   wait_drivers_warm   # barrier: surface established before chaos starts
 fi
 
+# ── P2: bring up app-user desktops + persona drivers on every node, BEFORE the
+# chaos starts, so real users are operating the app while the mesh is savaged. ──
+if [ "$DESKTOPS" = 1 ]; then
+  [ -x "$DESKTOP_BIN" ] || { echo "  --with-desktops: desktop binary missing at $DESKTOP_BIN (build it or set SOVEREIGN_DESKTOP_BIN)"; FAILS=$((FAILS+1)); }
+  log "P2: spawning $NODES app desktops + persona drivers (attach-mode, in-netns)"
+  for i in $(seq 0 $((NODES-1))); do
+    spawn_desktop_for_node "$i" && spawn_driver_for_node "$i"
+  done
+  wait_drivers_warm   # barrier: surface established before chaos starts
+fi
+
 # ── workload: ingest×inference contention, or repeated crash/churn cycles ─────
 if [ "$WORKLOAD" = "ingest" ]; then
   run_ingest_workload

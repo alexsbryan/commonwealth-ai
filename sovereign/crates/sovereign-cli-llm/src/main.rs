@@ -56,6 +56,10 @@ fn main() {
     if std::env::var_os("RUST_MIN_STACK").is_none() {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
+    // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
+    sovereign_core::rebrand::promote_legacy_env();
+    sovereign_core::rebrand::run_startup_migration();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_stack_size(8 * 1024 * 1024)
@@ -92,6 +96,11 @@ async fn async_main() {
         // atlas-grounding retrieval decisions, or `agentic_kq=info`) on demand.
         "bench" if std::env::var_os("RUST_LOG").is_some() => {
             init_tracing("sovereign_cli_llm=info")
+        }
+        // chat: glassbox the grounded synth/gate lifecycle on demand (truncation
+        // trace 2026-06-30) — quiet by default so `--format json` stays parseable.
+        "chat" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_cli_llm=info,sovereign_core=info")
         }
         _ => {}
     }

@@ -441,7 +441,7 @@
           <BrandMark size={72} />
         </div>
       </div>
-      <h1>SOVEREIGN</h1>
+      <h1>SVRNMESH</h1>
       <p class="loading-tagline">ai for the rest of us</p>
       {#if backendError}
         <p class="error">{backendError}</p>
@@ -579,7 +579,7 @@
   <button
     class="attach-badge"
     class:dismissed={badgeDismissed}
-    title="Using daemon started by 'sovereign daemon run' on :{bootstrap?.client_port ?? 9741}. Click to re-show."
+    title="Using daemon started by 'svrn daemon run' on :{bootstrap?.client_port ?? 9741}. Click to re-show."
     aria-live="polite"
     onclick={() => { badgeDismissed = false; setTimeout(() => { badgeDismissed = true; }, 4000); }}
   >

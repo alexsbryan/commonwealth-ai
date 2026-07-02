@@ -355,12 +355,20 @@ pub fn doc_id_for(root: &Path, path: &Path) -> Option<String> {
     }
 }
 
-/// Build a gitignore matcher from `{root}/.sovereignignore`. Returns
-/// `None` when the file doesn't exist (the common case). Soft-fails
-/// on read or parse errors with a `warn!` rather than wedging the
-/// sweep — a malformed ignore file shouldn't take a corpus offline.
+/// Build a gitignore matcher from `{root}/.svrnmeshignore` (preferred) or the
+/// legacy `{root}/.sovereignignore` (back-compat during the rebrand). Returns
+/// `None` when neither file exists (the common case). Soft-fails on read or
+/// parse errors with a `warn!` rather than wedging the sweep — a malformed
+/// ignore file shouldn't take a corpus offline.
 pub fn build_sovereignignore_matcher(root: &Path) -> Option<ignore::gitignore::Gitignore> {
-    let path = root.join(".sovereignignore");
+    let path = {
+        let new = root.join(".svrnmeshignore");
+        if new.exists() {
+            new
+        } else {
+            root.join(".sovereignignore")
+        }
+    };
     if !path.exists() {
         return None;
     }
@@ -530,7 +538,7 @@ mod tests {
         let dir = tempdir().unwrap();
         write(&dir.path().join("a.md"), "keep");
         write(&dir.path().join("draft/b.md"), "drop");
-        write(&dir.path().join(".sovereignignore"), "draft/\n");
+        write(&dir.path().join(".svrnmeshignore"), "draft/\n");
 
         let cfg = watched_cfg(dir.path());
         let out = walk_folder(&cfg, &HashMap::new(), &[]).unwrap();

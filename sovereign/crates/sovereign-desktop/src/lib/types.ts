@@ -131,7 +131,7 @@ export interface DesktopConfig {
   enabled_tools: string[];
   /** **Deprecated.** Kept for backwards compat with desktop.toml files
    *  written before the SetupConfig merge. The canonical home is now
-   *  `~/.sovereign/config.toml`'s `[models].context_size`, surfaced via
+   *  `~/.svrnmesh/config.toml`'s `[models].context_size`, surfaced via
    *  the `get_setup_context_size` / `set_setup_context_size` Tauri
    *  commands. Settings UI reads/writes through those; this field
    *  exists only so existing TOMLs deserialise without losing the
@@ -154,7 +154,7 @@ export interface DesktopConfig {
    *  draft for thin evidence and may surface an InformationRequest
    *  card. Default on. */
   auto_collaborate: boolean;
-  /** Naked mode — run the loaded model raw, with none of the Sovereign
+  /** Naked mode — run the loaded model raw, with none of the svrnmesh
    *  affordances (retrieval, router, grounding gate, tools, atlas, gap
    *  check). Chat history → model → reply, with only a minimal assistant
    *  preamble + custom_instructions. Default off. */
@@ -186,7 +186,7 @@ export interface DesktopConfig {
    *  retroactively. */
   node_name: string;
   /** Master toggle for the KnowledgeView landscape-digest feature.
-   *  When false, Sovereign skips the three enriched views
+   *  When false, svrnmesh skips the three enriched views
    *  (personal / conversational / institutional) + cross-view
    *  resonance, and behaves exactly as it did before KnowledgeView
    *  existed. Requires a desktop restart to take effect. Default on. */
@@ -198,19 +198,19 @@ export interface DesktopConfig {
    *  default), the workspace switcher is hidden in the chat sidebar.
    *  Toggled from Settings → Advanced. */
   enable_recipe_authoring: boolean;
-  /** Opt-in: serve the phone-facing sovereign-server API so the Sovereign
+  /** Opt-in: serve the phone-facing sovereign-server API so the svrnmesh
    *  mobile app can pair over the tailnet. The host delegates inference to the
    *  daemon (no second model load). Toggled from Settings → Mobile access. */
   mobile_access_enabled: boolean;
 }
 
 /** Snapshot of the canonical chat-slot context window state, sourced
- *  from `~/.sovereign/config.toml` plus the loaded gguf's
+ *  from `~/.svrnmesh/config.toml` plus the loaded gguf's
  *  `n_ctx_train`. Returned by the `get_setup_context_size` Tauri
  *  command; the Settings panel renders the triple side-by-side so the
  *  user can see configured vs. effective vs. gguf-ceiling. */
 export interface SetupContextWindow {
-  /** Value persisted in `~/.sovereign/config.toml`'s
+  /** Value persisted in `~/.svrnmesh/config.toml`'s
    *  `[models].context_size`, or the daemon-side default (16384) when
    *  no explicit value is set. Editable. */
   configured: number;
@@ -253,7 +253,7 @@ export interface SetupConfig {
 /** Snapshot of the desktop's bootstrap probe. Emitted by the
  *  `detect_bootstrap` Tauri command. The wizard inspects this at
  *  start to decide which screens to skip: if `cli_config_present`
- *  is true, the user has already run `sovereign setup`, so the
+ *  is true, the user has already run `svrn setup`, so the
  *  model-path and knowledge-tier steps are covered. */
 export interface BootstrapSnapshot {
   daemon_running: boolean;

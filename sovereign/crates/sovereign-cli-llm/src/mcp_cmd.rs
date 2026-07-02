@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign mcp` subcommand handlers.
+//! `svrn mcp` subcommand handlers.
 //!
 //! Manage and inspect configured MCP servers — `add` / `remove` edit the
 //! canonical `[[mcp_servers]]` list in `~/.sovereign/config.toml` (the same
@@ -38,10 +38,10 @@ pub async fn run_mcp(args: &[String]) -> i32 {
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "sovereign mcp",
+    command: "svrn mcp",
     summary: "Inspect and test configured MCP (Model Context Protocol) servers.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("sovereign mcp <command> [args]"),
+        sovereign_cli_shared::help::HelpSection::Usage("svrn mcp <command> [args]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list", "List configured MCP servers with status"),
             (
@@ -88,7 +88,7 @@ async fn cmd_list() -> i32 {
 
 async fn cmd_test(args: &[String]) -> i32 {
     if args.is_empty() {
-        eprintln!("Usage: sovereign mcp test <server-name>");
+        eprintln!("Usage: svrn mcp test <server-name>");
         return 1;
     }
     let name = &args[0];
@@ -151,14 +151,14 @@ async fn cmd_tools(args: &[String]) -> i32 {
     0
 }
 
-/// `sovereign mcp add <name> --url <url> [--description <t>] [--bearer] [--disabled]`
+/// `svrn mcp add <name> --url <url> [--description <t>] [--bearer] [--disabled]`
 ///
 /// Writes an HTTP MCP server into the canonical `[[mcp_servers]]` list and
 /// probes it once for immediate feedback. HTTP-only by design — Sovereign does
 /// not spawn/supervise stdio subprocesses.
 async fn cmd_add(args: &[String]) -> i32 {
     let usage =
-        "Usage: sovereign mcp add <name> --url <https://host/mcp> [--description <text>] [--bearer] [--disabled]";
+        "Usage: svrn mcp add <name> --url <https://host/mcp> [--description <text>] [--bearer] [--disabled]";
     let Some(name) = args.first().cloned() else {
         eprintln!("{usage}");
         return 1;
@@ -202,7 +202,7 @@ async fn cmd_add(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Could not load ~/.sovereign/config.toml ({e}).");
-            eprintln!("Run `sovereign setup` first, then add MCP servers.");
+            eprintln!("Run `svrn setup` first, then add MCP servers.");
             return 1;
         }
     };
@@ -245,7 +245,7 @@ async fn cmd_add(args: &[String]) -> i32 {
                     Err(e) => eprintln!("not reachable yet ({e})."),
                 }
             }
-            eprintln!("Available in `sovereign chat` and the desktop on next start.");
+            eprintln!("Available in `svrn chat` and the desktop on next start.");
             0
         }
         Err(e) => {
@@ -255,10 +255,10 @@ async fn cmd_add(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign mcp remove <name>` — drop a server from the canonical list.
+/// `svrn mcp remove <name>` — drop a server from the canonical list.
 async fn cmd_remove(args: &[String]) -> i32 {
     let Some(name) = args.first() else {
-        eprintln!("Usage: sovereign mcp remove <server-name>");
+        eprintln!("Usage: svrn mcp remove <server-name>");
         return 1;
     };
     let mut cfg = match SetupConfig::load() {

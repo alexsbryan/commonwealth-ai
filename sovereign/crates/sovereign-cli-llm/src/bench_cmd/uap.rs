@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench uap run|diagnose` — disposition-classification bench
+//! `svrn bench uap run|diagnose` — disposition-classification bench
 //! for the `uap-blue-book` corpus. The classification analog of
-//! `sovereign bench enron` (entity resolution).
+//! `svrn bench enron` (entity resolution).
 //!
 //! `run` classifies each case's disposition via the daemon chat model
 //! (schema-constrained to the era-possible category set), scores against
@@ -34,11 +34,11 @@ use corpus_engine::enrichment::pipeline::types::ChatPrompt;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench uap",
+    command: "svrn bench uap",
     summary: "Disposition-classification bench over the uap-blue-book corpus.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench uap run --corpus uap-blue-book --split {train|test|holdout} [--policy {baseline|tuned}] [--base-url <url>] [--no-strip-disposition-tail] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
+            "svrn bench uap run --corpus uap-blue-book --split {train|test|holdout} [--policy {baseline|tuned}] [--base-url <url>] [--no-strip-disposition-tail] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
         ),
         HelpSection::Subcommands(&[
             ("run", "Classify each case's disposition and score against the frozen gold labels."),
@@ -430,7 +430,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         let mut budget = PeekBudget::load(&budget_path)
             .map_err(|e| format!("peek budget: {e}"))?;
         let n = budget.burn(
-            "--unseal-holdout from `sovereign bench uap run`",
+            "--unseal-holdout from `svrn bench uap run`",
             git_head_short(),
         );
         budget
@@ -481,7 +481,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         source: "fixture".to_string(),
         delta_from_baseline_accuracy: delta,
         notes: format!(
-            "Written by `sovereign bench uap run`. Narrative source: fixture cases.jsonl. \
+            "Written by `svrn bench uap run`. Narrative source: fixture cases.jsonl. \
              n_aligned={} — small-N fixture, read per-category F1 with the support column.",
             report.n_aligned
         ),
@@ -504,7 +504,7 @@ fn compute_delta_from_baseline(baseline_path: &Path, accuracy: f64) -> Option<f6
 }
 
 fn print_summary(parsed: &Args, model_id: &str, report: &DispositionReport) {
-    println!("sovereign bench uap — {}", parsed.policy.as_str());
+    println!("svrn bench uap — {}", parsed.policy.as_str());
     println!("  corpus:    {}", parsed.corpus);
     println!("  split:     {}", parsed.split.as_str());
     println!("  model:     {}", if model_id.is_empty() { "(none)" } else { model_id });
@@ -540,7 +540,7 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
     let (predicted, model_id, gold, axis) = classify_split(&parsed).await?;
     let report = score_with_axis(&predicted, &gold, &axis);
 
-    println!("sovereign bench uap diagnose — tuned");
+    println!("svrn bench uap diagnose — tuned");
     let model_disp = if model_id.is_empty() { "(none)" } else { model_id.as_str() };
     println!("  corpus: {}  split: {}  model: {}", parsed.corpus, parsed.split.as_str(), model_disp);
     println!("  accuracy: {:.3}  macro-F1: {:.3}  ({} cases)\n", report.accuracy, report.macro_f1, report.n_aligned);

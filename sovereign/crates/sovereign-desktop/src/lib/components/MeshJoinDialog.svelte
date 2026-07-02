@@ -56,7 +56,7 @@
     joinError = null;
     try {
       // `join_mesh` on the daemon auto-leaves any existing mesh
-      // (including the silent solo mesh `sovereign setup` creates on
+      // (including the silent solo mesh `svrn setup` creates on
       // first boot). Calling `meshLeave` here first would race with
       // the launchd-managed daemon's auto-restart — the HTTP listener
       // dies between the two round-trips and the join arrives at

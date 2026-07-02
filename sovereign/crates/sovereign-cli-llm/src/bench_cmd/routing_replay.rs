@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign bench routing-replay` — replay a routing bank through a
+//! `svrn bench routing-replay` — replay a routing bank through a
 //! live desktop's production chat path and score the intent that
 //! ACTUALLY fired, read back from each turn's glassbox metadata
 //! (`provenance.intent`).
@@ -23,11 +23,11 @@ use super::desktop_bridge::{run_bridge_live, BridgeClient, DEFAULT_BRIDGE_URL};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
-    command: "sovereign bench routing-replay",
+    command: "svrn bench routing-replay",
     summary: "Replay a routing bank through a live desktop (command bridge) and score provenance.intent against the bank's expected categories.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench routing-replay --bank <bank.toml> [--bridge-url <url>] [--limit N] [--out <json>]",
+            "svrn bench routing-replay --bank <bank.toml> [--bridge-url <url>] [--limit N] [--out <json>]",
         ),
         HelpSection::Notes(
             "Requires a desktop running with SOVEREIGN_COMMAND_BRIDGE=1. Each question runs the FULL \
