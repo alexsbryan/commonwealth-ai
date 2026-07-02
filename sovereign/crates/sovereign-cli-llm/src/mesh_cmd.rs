@@ -508,7 +508,12 @@ async fn cmd_create(args: &[String]) -> i32 {
     daemon.expose_client_api();
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
-            print_mesh_share(&result.mesh_name, &result.join_key, result.client_token.as_deref());
+            print_mesh_share(
+                &result.mesh_name,
+                &result.join_key,
+                result.client_token.as_deref(),
+                Some(&result.join_link),
+            );
             0
         }
         Err(e) => {
@@ -521,8 +526,35 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// Spec-format banner for a freshly-created or freshly-rotated mesh.
 /// Prints both the https share URL and the CLI form so the inviter
 /// can pick whichever suits the invitee's environment.
-fn print_mesh_share(mesh_name: &str, join_key: &str, client_token: Option<&str>) {
-    let app_link = build_https_join_link(join_key, None, Some(mesh_name), None, None);
+///
+/// `join_link` is the daemon-built deep link (it carries the founder's
+/// no-VPN dial string + TTL when the iroh endpoint is up); the https
+/// form is derived from it so both printed forms share params. `None`
+/// (the offline rotate path — no running daemon, no dial to read)
+/// prints the bare form.
+fn print_mesh_share(
+    mesh_name: &str,
+    join_key: &str,
+    client_token: Option<&str>,
+    join_link: Option<&str>,
+) {
+    let app_link = match join_link.and_then(parse_join_argument) {
+        Some(sovereign_mesh::deep_link::DeepLink::Join {
+            relay_hint,
+            iroh_dial,
+            encrypted,
+            expires_at,
+            ..
+        }) => build_https_join_link(
+            join_key,
+            relay_hint.as_deref(),
+            Some(mesh_name),
+            iroh_dial.as_deref(),
+            encrypted,
+            expires_at,
+        ),
+        None => build_https_join_link(join_key, None, Some(mesh_name), None, false, None),
+    };
     println!();
     println!("Mesh created.");
     println!();
@@ -712,7 +744,10 @@ async fn cmd_rotate(args: &[String]) -> i32 {
             // Rotation is an offline persist op — the API token is
             // unchanged, so it isn't reprinted here (shown on create /
             // `mesh status`).
-            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None);
+            // Offline persist op — no running daemon to read a dial
+            // string from; the daemon's status poll (`current_invite`)
+            // serves the dial-bearing link once it's back up.
+            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None, None);
             0
         }
         Ok(None) => {

@@ -711,9 +711,13 @@ export interface JoinConfirmation {
   invited_by: string | null;
   join_key: string;
   relay_hint: string | null;
-  /** Founder's iroh dial string — present iff this is an ENCRYPTED mesh
-   *  invite (the join runs over an encrypted, key-verified channel). */
+  /** Founder's iroh dial string — present when the invite carries a
+   *  no-VPN connect path (either mesh kind). `encrypted` says which. */
   iroh_dial: string | null;
+  /** True iff the invite is for an ENCRYPTED mesh (fail-closed
+   *  key-dialed join). False with `iroh_dial` present = a plaintext
+   *  mesh reachable over iroh (prefer-iroh join, IP/mDNS fallback). */
+  encrypted?: boolean;
   /** Unix-seconds TTL after which the invite is rejected (display). */
   expires_at: number | null;
 }

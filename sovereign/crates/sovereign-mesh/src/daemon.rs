@@ -225,11 +225,14 @@ enum DaemonState {
         _gossip_handle: GossipHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// Server-half iroh endpoint + acceptor (Track W, W1 — see
-        /// `crate::iroh_access`). `None` unless `[iroh] enabled`. Held
-        /// purely for its Drop: tying it to the Running variant means
-        /// leaving the mesh / stopping the daemon also stops accepting
-        /// dial-by-key traffic, same pattern as `_browse_handle`.
-        _iroh_access: Option<crate::iroh_access::MeshIrohAccess>,
+        /// `crate::iroh_access`). `None` unless iroh is enabled
+        /// (explicit config or mesh participation). Read live by
+        /// invite generation (`create_mesh_with` / `current_invite`)
+        /// for the dial string; its Drop ties the acceptor to the
+        /// Running variant, so leaving the mesh / stopping the daemon
+        /// also stops accepting dial-by-key traffic, same pattern as
+        /// `_browse_handle`.
+        iroh_access: Option<crate::iroh_access::MeshIrohAccess>,
     },
 }
 
@@ -801,43 +804,63 @@ impl EmbeddedDaemon {
             .copied()
             .ok_or_else(|| MeshError::Config("no node in mesh".into()))?;
 
-        // Plaintext link by default. For an ENCRYPTED mesh we rebuild
-        // this AFTER `start_daemon` below, once the founder's iroh
-        // endpoint has bound and learned a dial string — the join then
-        // runs over a key-verified QUIC tunnel, never plaintext.
+        // Plaintext link by default; rebuilt AFTER `start_daemon`
+        // below once the founder's iroh endpoint has bound and learned
+        // a dial string — for BOTH mesh kinds. Encrypted: the dial
+        // rides `iroh=` + a TTL, and the join runs over a key-verified
+        // QUIC tunnel, never plaintext. Plaintext: the dial rides
+        // `dial=` (no TTL) so a no-VPN joiner can reach this founder
+        // by key, with IP/mDNS fallback intact.
         let mut join_link = crate::deep_link::build_join_link(
             &join_key,
             None, // relay_hint — local network for now
             Some(mesh_name),
             None,
+            false,
             None,
         );
 
         self.start_daemon(mesh, node_id).await?;
 
-        // ENCRYPTED mesh: stamp the founder's dial-by-key string + a
-        // short-lived TTL into the invite, and arm the founder-side TTL
-        // check. The iroh endpoint is up now (start_daemon binds it for
-        // an encrypted mesh, or hard-fails), so its dial string exists.
-        if require_encryption {
+        // Stamp the founder's dial-by-key string into the invite. The
+        // iroh endpoint is up now for any mesh-participating daemon
+        // (auto-enable via the client-exposed marker), and hard-failed
+        // already if an encrypted mesh couldn't bind it. Encrypted
+        // additionally arms the founder-side TTL check.
+        {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            let expires_at = now + INVITE_TTL_SECS;
-            let dial = {
+            let expires_at = require_encryption.then_some(now + INVITE_TTL_SECS);
+            // Clone the endpoint handle out of the state lock — the
+            // relay wait below must not hold the daemon-state read
+            // lock across its await.
+            let endpoint = {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running {
                         app_state,
-                        _iroh_access: Some(access),
+                        iroh_access: Some(access),
                         ..
                     } => {
-                        app_state.set_join_key_expiry(Some(expires_at));
-                        access.dial_string()
+                        if expires_at.is_some() {
+                            app_state.set_join_key_expiry(expires_at);
+                        }
+                        Some(access.endpoint_handle())
                     }
                     _ => None,
                 }
+            };
+            let dial = match &endpoint {
+                Some(ep) => {
+                    crate::iroh_access::MeshIrohAccess::wait_for_relay(
+                        ep,
+                        std::time::Duration::from_secs(8),
+                    )
+                    .await
+                }
+                None => None,
             };
             match dial {
                 Some(dial) => {
@@ -846,15 +869,25 @@ impl EmbeddedDaemon {
                         None,
                         Some(mesh_name),
                         Some(dial.as_str()),
-                        Some(expires_at),
+                        require_encryption,
+                        expires_at,
                     );
                 }
-                None => {
+                None if require_encryption => {
                     warn!(
                         "encrypted mesh created but the iroh endpoint has no dial \
                          string yet — invite omits the encrypted dial path; \
                          re-share once a relay/address is discovered"
                     );
+                }
+                None => {
+                    if endpoint.is_some() {
+                        warn!(
+                            "mesh created but the iroh endpoint has no dial string \
+                             yet — invite is IP/mDNS-only; a later status read \
+                             (current_invite) picks the dial up live"
+                        );
+                    }
                 }
             }
         }
@@ -978,18 +1011,20 @@ impl EmbeddedDaemon {
             let _ = self.leave().await;
         }
 
-        let (join_key, url_mesh_name, relay_hint, iroh_dial) = match link {
+        let (join_key, url_mesh_name, relay_hint, iroh_dial, invite_encrypted) = match link {
             DeepLink::Join {
                 join_key,
                 mesh_name,
                 relay_hint,
                 iroh_dial,
+                encrypted,
                 ..
             } => (
                 join_key.clone(),
                 mesh_name.clone(),
                 relay_hint.clone(),
                 iroh_dial.clone(),
+                *encrypted,
             ),
         };
         let mesh_name = url_mesh_name
@@ -1017,13 +1052,14 @@ impl EmbeddedDaemon {
         let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
         let (mut placeholder_mesh, _throwaway_key) =
             membership::init_mesh_with_node_id(&mesh_name, node_name, addrs.clone(), stable_id);
-        // An encrypted-mesh invite carries the founder's iroh dial
-        // string. That tells us we're joining an ENCRYPTED mesh, so
-        // bring the joiner up in encrypted mode from the start: its
-        // transport enforces no-plaintext immediately and already
-        // matches the (encrypted) mesh we adopt after the handshake —
-        // no post-join restart needed.
-        if iroh_dial.is_some() {
+        // An ENCRYPTED-mesh invite (dial via `iroh=`) brings the
+        // joiner up in encrypted mode from the start: its transport
+        // enforces no-plaintext immediately and already matches the
+        // (encrypted) mesh we adopt after the handshake — no post-join
+        // restart needed. A plaintext invite's `dial=` does NOT trip
+        // this: it only offers a no-VPN path to the founder, the mesh
+        // itself stays plaintext.
+        if invite_encrypted {
             placeholder_mesh.require_encryption = true;
         }
         let placeholder_node_id = stable_id;
@@ -1056,19 +1092,33 @@ impl EmbeddedDaemon {
             ),
         ));
 
-        let handshake = if let Some(dial) = iroh_dial.as_deref() {
+        // Self-hosted relays (if configured) for the join's one-shot
+        // iroh endpoint, so a joiner behind a firewall that blocks n0's
+        // relays reaches the founder via the fleet's own relay (W4).
+        // Empty = n0 default.
+        let join_relay_urls: Vec<String> = {
+            let guard = self.setup_config.read().await;
+            guard
+                .as_ref()
+                .map(|c| c.iroh.relay_urls.clone())
+                .unwrap_or_default()
+        };
+        let handshake = if let (Some(dial), true) = (iroh_dial.as_deref(), invite_encrypted) {
             // ENCRYPTED join: dial the founder by key over iroh and
             // tunnel `/internal/join` through the QUIC bridge — the join
             // secret never crosses the wire in plaintext, and the joiner
             // cryptographically verifies it reached the real founder.
             // Fail closed: no mDNS / plaintext fallback for an encrypted
             // mesh. (The on-wire handshake is validated on two boxes.)
+            // A plaintext invite's `dial=` takes the perform_join path
+            // below — prefer-iroh, fail-soft (W2c).
             crate::join::perform_encrypted_join(
                 dial,
                 &join_key,
                 node_name,
                 addrs,
                 identity_key.to_bytes(),
+                &join_relay_urls,
                 Some(stable_id),
                 identity,
             )
@@ -1079,6 +1129,13 @@ impl EmbeddedDaemon {
                 &join_key,
                 node_name,
                 addrs,
+                // A plaintext invite's `dial=` connect code: dial the
+                // founder by key first (no shared IP route needed),
+                // fall back to the hint + mDNS below.
+                iroh_dial
+                    .as_deref()
+                    .map(|d| (d, identity_key.to_bytes())),
+                &join_relay_urls,
                 relay_hint.as_deref(),
                 mdns.as_deref(),
                 std::time::Duration::from_secs(5),
@@ -1315,17 +1372,46 @@ impl EmbeddedDaemon {
     pub async fn current_invite(&self) -> Option<(String, String)> {
         let key = self.join_key_plaintext.read().await.clone()?;
         let state = self.state.read().await;
-        let app_state = match &*state {
-            DaemonState::Running { app_state, .. } => app_state.clone(),
+        let (app_state, endpoint) = match &*state {
+            DaemonState::Running {
+                app_state,
+                iroh_access,
+                ..
+            } => (
+                app_state.clone(),
+                iroh_access.as_ref().map(|a| a.endpoint_handle()),
+            ),
             DaemonState::Stopped => return None,
         };
         drop(state);
-        let mesh_name = app_state.inner.mesh.read().await.name.clone();
-        // Rotation currently produces a plaintext-form link. An
-        // encrypted mesh's rotated invite needs the founder dial string
-        // + a fresh TTL re-stamped here too — tracked as a follow-up;
-        // for now an encrypted mesh should re-share via create-time flow.
-        let link = crate::deep_link::build_join_link(&key, None, Some(&mesh_name), None, None);
+        let (mesh_name, require_encryption) = {
+            let mesh = app_state.inner.mesh.read().await;
+            (mesh.name.clone(), mesh.require_encryption)
+        };
+        // Live-read the dial string on every call — the desktop's
+        // status poll merges this in, so the share card upgrades
+        // itself as the relay connects (and a rotated invite keeps its
+        // no-VPN path; this closed the old rotation-loses-the-dial
+        // wart). No relay wait here: polls repeat.
+        let dial =
+            endpoint.and_then(|ep| crate::iroh_access::MeshIrohAccess::dial_for_endpoint(&ep));
+        // The exp param mirrors the ARMED founder-side expiry — read,
+        // never re-armed here, or every status poll would extend the
+        // invite forever. Rotation is what re-arms (see mesh_http's
+        // rotate handler).
+        let expires_at = if require_encryption {
+            app_state.join_key_expiry()
+        } else {
+            None
+        };
+        let link = crate::deep_link::build_join_link(
+            &key,
+            None,
+            Some(&mesh_name),
+            dial.as_deref(),
+            require_encryption,
+            expires_at,
+        );
         Some((key, link))
     }
 
@@ -1335,6 +1421,30 @@ impl EmbeddedDaemon {
     /// a daemon restart.
     pub async fn set_join_key(&self, key: String) {
         *self.join_key_plaintext.write().await = Some(key);
+    }
+
+    /// Arm a fresh invite TTL for an ENCRYPTED mesh's rotated key.
+    /// Rotation is the one place a TTL gets re-armed — `current_invite`
+    /// only READS the armed expiry (re-arming on status polls would
+    /// extend the invite forever). No-op (returns `None`) on a
+    /// plaintext mesh or a stopped daemon.
+    pub async fn rearm_join_key_expiry(&self) -> Option<u64> {
+        let state = self.state.read().await;
+        let app_state = match &*state {
+            DaemonState::Running { app_state, .. } => app_state.clone(),
+            DaemonState::Stopped => return None,
+        };
+        drop(state);
+        if !app_state.inner.mesh.read().await.require_encryption {
+            return None;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let expires_at = now + INVITE_TTL_SECS;
+        app_state.set_join_key_expiry(Some(expires_at));
+        Some(expires_at)
     }
 
     /// Get the Commonwealth API address (for internal use).
@@ -1399,7 +1509,7 @@ impl EmbeddedDaemon {
                             | commonwealth_core::mesh::NodeStatus::Busy
                     )
                 })
-                .filter(|m| !m.addresses.is_empty())
+                .filter(|m| m.is_dialable())
                 .cloned()
                 .collect()
         };
@@ -1508,7 +1618,7 @@ impl EmbeddedDaemon {
                             | commonwealth_core::mesh::NodeStatus::Busy
                     )
                 })
-                .filter(|m| !m.addresses.is_empty())
+                .filter(|m| m.is_dialable())
                 // Anchor-tier gate: only pull peers that declare themselves
                 // shared-model anchors into the RPC layer-split. A peer that
                 // explicitly advertises `can_anchor = false` is a consumer and
@@ -2303,29 +2413,43 @@ impl EmbeddedDaemon {
         // failure logs and yields `None`, leaving the `IpTransport`
         // path untouched. Forwarding is lazy per stream, so binding
         // after the listener spawn (which races to bind) is safe.
-        let (cfg_iroh_enabled, iroh_transport_cfg) = {
+        let (cfg_iroh_enabled, iroh_transport_cfg, iroh_relay_urls) = {
             let guard = self.setup_config.read().await;
             match guard.as_ref() {
-                Some(c) => (c.iroh.enabled, c.iroh.transport.clone()),
-                None => (false, Default::default()),
+                Some(c) => (
+                    c.iroh.enabled,
+                    c.iroh.transport.clone(),
+                    c.iroh.relay_urls.clone(),
+                ),
+                None => (None, Default::default(), Vec::new()),
             }
         };
-        // The mesh-wide encryption policy FORCES iroh on: an encrypted
-        // mesh must be dialable by key and must dial peers by key,
-        // regardless of the local `[iroh] enabled` knob.
-        let iroh_enabled = cfg_iroh_enabled || require_encryption;
+        // Enablement is tri-state: explicit `[iroh] enabled` wins;
+        // otherwise mesh participation decides — the `client-exposed`
+        // marker every explicit create/join surface writes (and
+        // `leave()` clears), so joining a mesh turns iroh on and a
+        // meshless daemon never contacts relays. The mesh-wide
+        // encryption policy still FORCES iroh on: an encrypted mesh
+        // must be dialable by key and must dial peers by key.
+        let iroh_enabled = crate::iroh_access::resolve_enabled(
+            cfg_iroh_enabled,
+            persist::client_exposed(&self.data_dir),
+            require_encryption,
+        );
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             client_port,
             iroh_enabled,
+            &iroh_relay_urls,
         )
         .await;
         // Which classes route over iroh, and which of those are
         // REQUIRED (no plaintext fallback). Under `require_encryption`
         // the policy is the driver: every class routes over iroh AND is
-        // required. Otherwise the opportunistic `[iroh.transport]` config
-        // flips apply with no required classes (prefer-iroh, fall back).
+        // required. Otherwise iroh-first is the default for EVERY class
+        // with no required classes (prefer-iroh, fall back to IP per
+        // dial); `[iroh.transport] <class> = "ip"` opts a class out.
         let (iroh_routed_classes, iroh_required_classes): (
             Vec<commonwealth_transport::TrafficClass>,
             std::collections::HashSet<commonwealth_transport::TrafficClass>,
@@ -2385,11 +2509,14 @@ impl EmbeddedDaemon {
                  refusing to start on a plaintext transport"
                     .into(),
             ));
-        } else if !iroh_routed_classes.is_empty() {
+        } else if crate::iroh_access::has_explicit_iroh_routes(&iroh_transport_cfg) {
+            // Under opt-out semantics `iroh_routed_classes` is non-empty
+            // even for an empty section, so this warning keys off
+            // explicit `"iroh"` entries — someone wrote config that
+            // cannot take effect while the endpoint is off.
             warn!(
-                classes = ?iroh_routed_classes.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
-                "iroh(mesh): [iroh.transport] routes classes to iroh but [iroh] enabled=false \
-                 — ignoring, staying on IP. Set [iroh] enabled=true to activate."
+                "iroh(mesh): [iroh.transport] names iroh for one or more classes but the \
+                 iroh endpoint is off — staying on IP. Set [iroh] enabled=true to activate."
             );
         }
 
@@ -2402,7 +2529,7 @@ impl EmbeddedDaemon {
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
             _shutdown_tx: shutdown_tx,
-            _iroh_access: iroh_access,
+            iroh_access,
         };
 
         Ok(())

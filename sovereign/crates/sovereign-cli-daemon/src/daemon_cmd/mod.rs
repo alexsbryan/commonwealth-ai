@@ -725,6 +725,7 @@ async fn run_daemon(args: &[String]) -> i32 {
                             relay_hint: Some(seed.clone()),
                             mesh_name: None,
                             iroh_dial: None,
+                            encrypted: false,
                             expires_at: None,
                         };
                         match daemon.join_mesh(&link, &hostname).await {

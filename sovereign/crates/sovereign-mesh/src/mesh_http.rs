@@ -466,6 +466,15 @@ async fn mesh_rotate(
             // members already in the mesh remain connected, only new
             // joins use the new key.)
             daemon.set_join_key(rotated.join_key.clone()).await;
+            // Rotation exists to SHARE the new key — arm a fresh
+            // invite TTL for an encrypted mesh (create-time was the
+            // only arming site before, so a rotated encrypted invite
+            // carried a stale/absent expiry), and mark the daemon
+            // client-exposed so a soloist rotating-to-share hands out
+            // an invite for a daemon that will actually serve peers
+            // (bind + token apply on next start, same as create).
+            daemon.rearm_join_key_expiry().await;
+            daemon.expose_client_api();
             (
                 StatusCode::OK,
                 Json(

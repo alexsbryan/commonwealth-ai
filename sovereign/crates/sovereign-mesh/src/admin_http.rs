@@ -169,6 +169,16 @@ impl ConfigDiff {
         if old.data.dir != new.data.dir {
             d.restart_required.push("data.dir");
         }
+        if old.iroh.enabled != new.iroh.enabled {
+            // The iroh endpoint is bound (or not) during start_daemon;
+            // the acceptor + RoutedTransport install can't be hot-swapped.
+            d.restart_required.push("iroh.enabled");
+        }
+        if old.iroh.transport != new.iroh.transport {
+            // Per-class routing is baked into the RoutedTransport
+            // installed at startup.
+            d.restart_required.push("iroh.transport");
+        }
         d
     }
 
@@ -269,6 +279,44 @@ mod tests {
         };
         cfg.save_to(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn config_diff_flags_iroh_changes_as_restart_required() {
+        let base = SetupConfig {
+            models: ModelsSection {
+                primary: PathBuf::from("/m/primary.gguf"),
+                fast: None,
+                embed: PathBuf::from("/m/embed.gguf"),
+                code: None,
+                context_size: None,
+                max_extras_memory_gb: None,
+                extra: std::collections::BTreeMap::new(),
+                primary_pool: None,
+            },
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: Default::default(),
+            memory: Default::default(),
+            iroh: Default::default(),
+            shared_model: Default::default(),
+            discovery: Default::default(),
+            mcp_servers: Vec::new(),
+        };
+
+        let mut enabled_flipped = base.clone();
+        enabled_flipped.iroh.enabled = Some(true);
+        let d = ConfigDiff::diff(&base, &enabled_flipped);
+        assert_eq!(d.restart_required, vec!["iroh.enabled"]);
+        assert!(d.models_changed.is_empty());
+
+        let mut class_pinned = base.clone();
+        class_pinned.iroh.transport.inference = Some("ip".into());
+        let d = ConfigDiff::diff(&base, &class_pinned);
+        assert_eq!(d.restart_required, vec!["iroh.transport"]);
+
+        let d = ConfigDiff::diff(&base, &base.clone());
+        assert!(d.restart_required.is_empty());
     }
 
     async fn spawn(daemon: Arc<EmbeddedDaemon>) -> String {

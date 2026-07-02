@@ -187,7 +187,15 @@ pub async fn capabilities(
     // formats an *advertised* URL for a federated peer MESH
     // (`MeshPeering.contact_nodes` — no `MemberRecord`/`NodeId`
     // exists), embedded in the manifest for clients to read. It is
-    // content, not a dial this daemon performs.
+    // content, not a dial this daemon performs. NOTE (no-VPN mesh):
+    // this stays IP-shaped on purpose — cross-mesh federation is a
+    // separate, IP-reachable trust domain. This node's OWN
+    // capabilities dial (peer inference scoring) rides the seam via
+    // `peer_inference_endpoints`/`TrafficClass::Inference`, so a
+    // no-IP peer is scored correctly; only the advertised
+    // cross-mesh federation URL here is IP-shaped, and that is not a
+    // W-track dial. Do not "seam-ify" this without a federation
+    // trust-model change.
     let peers: Vec<PeerDescriptor> = mesh
         .peers
         .iter()

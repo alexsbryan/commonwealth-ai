@@ -121,6 +121,59 @@ relay yet, so for a single-VPC fleet where the machines reach each other
 directly, your own network isolation is the simpler and stronger answer. (A
 self-hostable relay is the open item for air-gapped / multi-site fleets.)
 
+## Per-user isolation on the hub
+
+The fleet is one trust domain; your **users** are not. When many users share one
+hub, the guarantee is that no user can reach another's data — across search,
+corpus listings, chunk reads, documents, and RAG retrieval. Each API key maps to
+a tenant (the principal); the server derives the principal per request and the
+`Runtime` only ever sees an opaque corpus allow-list, never the tenant identity
+(`ARCHITECTURE.md` §10).
+
+Two corpus layers, and retrieval spans both:
+
+- **`Org`** — shared corpora the operator installs; every user queries them.
+  This is the default visibility, so single-user and operator-curated
+  deployments are unaffected.
+- **`Private { owner }`** — owned by one user; enters *only* that user's
+  retrieval, never anyone else's.
+
+Enforcement is a per-request **ceiling** — `{Org} ∪ {Private you own}`, computed
+server-side and applied as a hard filter at every corpus search. It is
+independent of the user's per-conversation corpus selection, so a client that
+sends no selection, or forges one naming another tenant's private corpus, still
+cannot widen retrieval past what it owns. An absent selection defaults to the
+ceiling, never to "everything."
+
+### Per-user uploads
+
+A user turns a file into a private corpus with:
+
+```
+POST /v1/corpora/upload      Authorization: Bearer <user's API key>
+{ "file_path": "/path/readable/on/the/server.md", "name": "My Notes" }
+```
+
+`file_path` is a path on the **server's** filesystem — stage the bytes there with
+your upload front-end first (same shape as `/v1/documents/upload`). The server
+ingests the file into a real searchable index and stamps it
+`Private { owner = <that user> }`, so it is retrievable in that user's chats
+alongside the `Org` corpora and invisible to everyone else. The id is
+owner-namespaced (`user:<tenant>:<slug>`); re-uploading the same name updates it.
+
+Two facts worth knowing when you operate this:
+
+- A private corpus is **two artifacts under one id** — a LanceDB index *and* a
+  `Private{owner}` record, both written by the server. If you ever touch corpus
+  state by hand: an index with no record is unsearchable even by its owner, and a
+  record with no index is empty.
+- v1 ingests **text and Markdown**. Other formats (PDF, …) need the extraction
+  the desktop app does and are a follow-on.
+
+Identity today is a static API-key→tenant file — fine for a fixed user set. An
+OIDC/JWT mode (map a token's `sub` to the principal) and per-user usage metering
+are the natural next steps for a larger base.
+
 ## Checklist
 
 - [ ] `mdns = false` on every node (or `SOVEREIGN_DISABLE_MDNS=1`)
@@ -131,3 +184,4 @@ self-hostable relay is the open item for air-gapped / multi-site fleets.)
 - [ ] security groups restrict `:9742` and the RPC ports to the fleet subnet
 - [ ] (optional) `internal_bind` pinned to the private NIC
 - [ ] users reach `sovereign-server` over your TLS-terminating ingress
+- [ ] each user's API key maps to a distinct tenant (per-user isolation keys off it)

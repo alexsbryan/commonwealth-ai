@@ -33,7 +33,14 @@
 # Usage:
 #   scripts/mesh-soak.sh [--nodes N] [--minutes M] [--seed S]
 #                        [--workload crash|ingest|corrupt] [--keep] [--gate]
-#                        [--with-desktops] [--driver-minutes M]
+#                        [--with-desktops] [--driver-minutes M] [--iroh]
+#
+#   --iroh (SOAK_IROH) runs the transport-migration axis: every node boots with
+#     `[iroh] enabled = true` (all traffic classes route iroh-first, IP fallback
+#     retained), peers join over the founder's dial-by-key invite, and the run
+#     asserts each node actually carried mesh traffic over iroh. The netns is
+#     loopback-only (no internet → no relay); nodes dial by key over gossiped
+#     direct addrs — the LAN-without-internet iroh path. See TRANSPORT_MIGRATION.md W3.
 #
 #   --with-desktops (P2) hangs a headless desktop (attach-mode) + an app-user
 #     persona driver on EACH node, in the netns, so user-visible TURN invariants
@@ -70,6 +77,14 @@ WORKLOAD="${WORKLOAD:-crash}"
 # invariants are asserted WHILE the node is killed/restarted underneath. Forces a
 # generative primary (chat must work). DRIVER_MINUTES defaults to MINUTES.
 DESKTOPS="${DESKTOPS:-0}"; DRIVER_MINUTES="${DRIVER_MINUTES:-}"
+# --iroh (SOAK_IROH): the transport-migration axis. Boots every node with
+# `[iroh] enabled = true` so all traffic classes route iroh-first (IP fallback
+# retained), joins peers over the founder's dial-bearing invite (the `dial=`
+# path), and asserts each node actually carried mesh traffic over iroh. The
+# netns is loopback-only with no internet, so relays are unreachable — nodes
+# dial by key over gossiped `iroh_direct_addrs` (127.0.0.1), which is exactly
+# the LAN-without-internet iroh path. See TRANSPORT_MIGRATION.md W3.
+SOAK_IROH="${SOAK_IROH:-0}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --nodes)    NODES="$2"; shift 2;;
@@ -77,6 +92,7 @@ while [ $# -gt 0 ]; do
     --seed)     SEED="$2"; shift 2;;
     --workload) WORKLOAD="$2"; shift 2;;
     --with-desktops) DESKTOPS=1; shift;;
+    --iroh)     SOAK_IROH=1; shift;;
     --driver-minutes) DRIVER_MINUTES="$2"; shift 2;;
     --keep)     KEEP=1; shift;;
     --gate)     GATE=1; shift;;
@@ -85,13 +101,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$WORKLOAD" in crash|ingest|corrupt) ;; *) echo "bad --workload: $WORKLOAD (crash|ingest|corrupt)" >&2; exit 2;; esac
+# Normalise SOAK_IROH to a shell flag (0/1) + a TOML bool the config heredoc
+# splices verbatim. Accept the usual truthy spellings so `SOAK_IROH=true` and
+# `--iroh` and `SOAK_IROH=1` all mean the same thing.
+case "$SOAK_IROH" in 1|true|yes|on) IROH_ON=1; IROH_TOML=true;; *) IROH_ON=0; IROH_TOML=false;; esac
 
 # ── Re-exec into a fresh rootless netns (loopback up) for the local backend ────
 if [ "$BACKEND" = "local" ] && [ -z "${MESH_SOAK_IN_NETNS:-}" ]; then
   exec unshare -rn env MESH_SOAK_IN_NETNS=1 \
     NODES="$NODES" MINUTES="$MINUTES" SEED="$SEED" KEEP="$KEEP" GATE="$GATE" \
     MESH_SOAK_BACKEND="$BACKEND" WORKLOAD="$WORKLOAD" \
-    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" bash "$0"
+    DESKTOPS="$DESKTOPS" DRIVER_MINUTES="$DRIVER_MINUTES" SOAK_IROH="$SOAK_IROH" bash "$0"
 fi
 [ "$BACKEND" = "local" ] && ip link set lo up
 
@@ -176,8 +196,27 @@ client_bind = "127.0.0.1"
 $YIELD_TOML
 [data]
 dir = "$d"
+[iroh]
+# Pinned explicitly: soak nodes join via /v1/mesh/join, which writes the
+# client-exposed marker — without this pin, auto-enable would silently point
+# every soak node at public relay infrastructure. --iroh / SOAK_IROH is the
+# transport-migration soak axis (see TRANSPORT_MIGRATION.md W3).
+enabled = $IROH_TOML
 EOF
-  "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
+  # Under the iroh axis, raise the `transport` tracing target to debug so each
+  # node's log carries the per-dial `transport: resolved` lines (target:
+  # "transport") the assertion greps for — proof iroh actually carried traffic,
+  # not just that the endpoint bound. RUST_LOG is honoured by init_tracing's
+  # EnvFilter. Left unset otherwise so the crash lane's log volume is unchanged.
+  # `sovereign_mesh=info` surfaces the "routing classes over iroh" install
+  # line (its target is the sovereign_mesh module, not `transport`);
+  # `transport=debug` surfaces the per-dial "transport: resolved" lines.
+  # Both targets are needed — an EnvFilter directive for one leaves the other
+  # OFF, which is exactly what silently zeroed the install check on the first
+  # smoke run.
+  local rust_log=""
+  [ "$IROH_ON" = 1 ] && rust_log="RUST_LOG=sovereign_cli_daemon=info,sovereign_mesh=info,transport=debug"
+  env $rust_log "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
   PIDS[$i]=$!
 }
 wait_port() { local i="$1" _; for _ in $(seq 1 40); do
@@ -201,10 +240,19 @@ torture_restart() {  # torture_restart <i>
   boot_node "$v"                     # clean restart — must resume the same id
 }
 
-join_to_founder() {  # join_to_founder <i> <founder_key>
-  local i="$1" key="$2"
-  local body; body=$(printf '{"key_or_url":"sovereign://join/%s?relay=127.0.0.1:%s","node_name":"node%s"}' \
-    "$key" "$(iport 0)" "$i")
+join_to_founder() {  # join_to_founder <i> <founder_key_or_link>
+  local i="$1" key_or_link="$2" url
+  # Under the iroh axis the caller passes the founder's FULL dial-bearing
+  # invite link (`sovereign://join/<key>?...&dial=<hex>@127.0.0.1:<udp>`) read
+  # live from node0's status — so the joiner dials the founder BY KEY over
+  # iroh (the `dial=` plaintext path, W2c), IP/mDNS fallback intact. Otherwise
+  # the legacy hand-built `?relay=127.0.0.1` IP hint.
+  if [ "$IROH_ON" = 1 ]; then
+    url="$key_or_link"
+  else
+    url="sovereign://join/${key_or_link}?relay=127.0.0.1:$(iport 0)"
+  fi
+  local body; body=$(python3 -c 'import json,sys; print(json.dumps({"key_or_url": sys.argv[1], "node_name": "node"+sys.argv[2]}))' "$url" "$i")
   curl -s -m 25 -X POST "http://127.0.0.1:$(cport $i)/v1/mesh/join" \
     -H 'content-type: application/json' -d "$body" >/dev/null 2>&1
 }
@@ -226,6 +274,54 @@ wait_online_eq() { local target="$1" excl="${2:-x}" i; for _ in $(seq 1 90); do 
   for i in $(seq 0 $((NODES-1))); do [ "$i" = "$excl" ] && continue
     [ "$(online_count $i)" = "$target" ] || ok=0; done
   [ "$ok" = 1 ] && return 0; sleep 1; done; return 1; }
+
+# Iroh axis (--iroh / SOAK_IROH): prove each node actually routed mesh traffic
+# over iroh — not merely that the endpoint bound. Two signals per node log:
+#   1. install  (info): "routing classes over iroh" — the RoutedTransport with
+#      iroh in the per-class map was installed at start_daemon.
+#   2. carried  (debug, `transport` target, hence RUST_LOG=transport=debug in
+#      boot_node): a "transport: resolved" line naming iroh — a real dial
+#      candidate was produced over iroh, and since iroh candidates are listed
+#      FIRST and loopback is reachable, that request rode iroh.
+# A node missing either signal fails the run. Findings stream to the verdict.
+# Called once after initial convergence — by then ≥1 gossip round has run, so
+# every node has both dialed a peer and been dialed over iroh.
+# Per-node log predicates. `install` is emitted at startup (immediate);
+# `carried` needs a gossip round in each direction (the founder only dials a
+# joiner over iroh once it has merged that joiner's self-stamped dial info),
+# so the caller POLLS for it rather than asserting eagerly.
+iroh_installed() { grep -qs "routing classes over iroh" "$WORK/node$1"/daemon.*.log; }
+iroh_carried()   { grep -hs "transport: resolved" "$WORK/node$1"/daemon.*.log 2>/dev/null | grep -q iroh; }
+
+assert_iroh_carried_traffic() {
+  [ "$IROH_ON" = 1 ] || return 0
+  log "iroh axis — asserting each node routed mesh traffic over iroh"
+  # Poll up to ~40s: install is immediate, but carried-over-iroh needs the
+  # founder↔joiner gossip round that merges dial info (10s cadence). Bounded —
+  # if a node never routes over iroh, the check below still runs and FAILS.
+  local i deadline=$(( $(date +%s) + 40 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    local all=1
+    for i in $(seq 0 $((NODES-1))); do
+      { iroh_installed "$i" && iroh_carried "$i"; } || all=0
+    done
+    [ "$all" = 1 ] && break
+    sleep 2
+  done
+  local installed carried
+  for i in $(seq 0 $((NODES-1))); do
+    iroh_installed "$i" && installed=1 || installed=0
+    iroh_carried "$i" && carried=1 || carried=0
+    finding "{\"kind\":\"iroh\",\"check\":\"install\",\"node\":$i,\"ok\":$([ $installed = 1 ] && echo true || echo false)}"
+    finding "{\"kind\":\"iroh\",\"check\":\"carried_over_iroh\",\"node\":$i,\"ok\":$([ $carried = 1 ] && echo true || echo false)}"
+    if [ "$installed" = 1 ] && [ "$carried" = 1 ]; then
+      echo "  node$i: iroh install ✓  carried-over-iroh ✓"
+    else
+      echo "  node$i: iroh install=$installed carried-over-iroh=$carried  ✗"
+      FAILS=$((FAILS+1))
+    fi
+  done
+}
 
 # Forensic capture — dump the DURABLE identity state + daemon identity events at
 # the moment of a violation, and copy node_id/mesh.json/logs into a stable bundle
@@ -719,8 +815,25 @@ for i in $(seq 0 $((NODES-1))); do boot_node "$i"; done
 for i in $(seq 0 $((NODES-1))); do wait_port "$i" && echo "  node$i up" || echo "  node$i FAILED to bind"; done
 
 FKEY=$(jget "$(status_url 0)" 'd["join_key"]')
-log "founder key=$FKEY — joining $((NODES-1)) peers over localhost relay"
-for i in $(seq 1 $((NODES-1))); do join_to_founder "$i" "$FKEY"; done
+if [ "$IROH_ON" = 1 ]; then
+  # Read the founder's dial-bearing invite live — current_invite stamps the
+  # `dial=` connect code once the endpoint has an address (direct addrs are
+  # immediate in-netns; no relay to wait for). Retry until it carries `dial=`.
+  FLINK=""
+  for _ in $(seq 1 20); do
+    FLINK=$(jget "$(status_url 0)" 'd.get("join_link","")')
+    case "$FLINK" in *dial=*) break;; esac
+    sleep 0.5
+  done
+  case "$FLINK" in
+    *dial=*) log "founder key=$FKEY — joining $((NODES-1)) peers over iroh (dial-by-key)";;
+    *) log "founder key=$FKEY — WARNING: node0 invite carries no dial= yet; joining may fall back to IP"; FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"founder_dial_in_invite","ok":false}';;
+  esac
+  for i in $(seq 1 $((NODES-1))); do join_to_founder "$i" "$FLINK"; done
+else
+  log "founder key=$FKEY — joining $((NODES-1)) peers over localhost relay"
+  for i in $(seq 1 $((NODES-1))); do join_to_founder "$i" "$FKEY"; done
+fi
 
 log "waiting for convergence to $NODES members"
 for _ in $(seq 1 45); do conv=1
@@ -731,6 +844,8 @@ ALL_NODES=$(for i in $(seq 0 $((NODES-1))); do printf '127.0.0.1:%s,' "$(cport $
 ALL_IDS=$(IFS=,; echo "${NODE_IDS[*]}")
 echo "  converged: node0 online=$(online_count 0)/$NODES"
 check "healthy" "$ALL_NODES" "$ALL_IDS"
+# Iroh axis: the mesh converged — now prove it converged OVER iroh.
+assert_iroh_carried_traffic
 
 # ── P2: bring up app-user desktops + persona drivers on every node, BEFORE the
 # chaos starts, so real users are operating the app while the mesh is savaged. ──
@@ -850,6 +965,16 @@ else:
     print("                    (cheap embed-only daemons take no peer-inference / run no")
     print("                    shared model) — exercised by --workload ingest + the DST suite.")
 PY
+if [ "$IROH_ON" = 1 ]; then
+  # grep -c prints "0" AND exits 1 on no-match — a trailing `|| echo 0` would
+  # double it. Take grep's own count, default empty (missing file) to 0.
+  ok=$(grep -c '"kind":"iroh".*"ok":true' "$FINDINGS" 2>/dev/null); ok=${ok:-0}
+  bad=$(grep -c '"kind":"iroh".*"ok":false' "$FINDINGS" 2>/dev/null); bad=${bad:-0}
+  echo "  ── iroh axis ────────────────────────────────────────────"
+  echo "  transport       : iroh-first, all classes (IP fallback retained)"
+  echo "  join path       : dial-by-key over the founder's dial= invite"
+  echo "  iroh checks     : ${ok} ok / ${bad} failed (install + carried-over-iroh per node)"
+fi
 if [ "$GATE" = 1 ]; then
   log "SLO gate"
   "$CLI" mesh soak-gate "$FINDINGS" --baseline "$ROOT/mesh-soak-baseline.json" || true
