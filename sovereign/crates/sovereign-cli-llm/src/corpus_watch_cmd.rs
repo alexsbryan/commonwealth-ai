@@ -880,13 +880,12 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
-            for stream in listener.incoming().flatten() {
+            if let Some(stream) = listener.incoming().flatten().next() {
                 // Hold the connection open without responding so the
                 // client times out. Drop the stream on this thread's
                 // exit; the test only needs one accept.
                 std::thread::sleep(Duration::from_secs(5));
                 drop(stream);
-                break;
             }
         });
         let client = reqwest::Client::builder()

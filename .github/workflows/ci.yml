@@ -63,10 +63,19 @@ jobs:
       - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup /opt/hostedtoolcache \
             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
           sudo docker image prune --all --force >/dev/null 2>&1 || true
-          df -h / | tail -1
+          # The hosted runner has a second, mostly-empty ~65 GB scratch disk
+          # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
+          # a plain dir) and point TMPDIR there too, so neither the build tree
+          # nor compiler scratch can fill the root disk again.
+          sudo mkdir -p /mnt/target /mnt/tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+          mkdir -p target
+          sudo mount --bind /mnt/target target
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+          df -h / /mnt | tail -2
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -80,12 +89,15 @@ jobs:
       # target/ — which would delete target/llama-cmake-cache (the shared
       # CMake tree llama-cpp-sys links against) while KEEPING the crate's
       # "already built" fingerprint: a poisoned cache that link-fails on
-      # every warm run. Cache the tree separately; this step's save runs
-      # BEFORE rust-cache's cleanup because post hooks run in reverse
-      # declaration order. The C++ is CMAKE_BUILD_TYPE=Release regardless
-      # of cargo profile, so this key also serves the release workflows.
-      - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+      # every warm run. Cache the tree separately. Restore/save are split
+      # so the save (an explicit step below, `if: always()`) seeds the
+      # cache even when check/test fail — while CI is stabilizing, a red
+      # run must still bank the 20-minute C++ build. The C++ is
+      # CMAKE_BUILD_TYPE=Release regardless of cargo profile, so this key
+      # also serves the release workflows.
+      - name: Restore llama.cpp CMake tree
+        id: llama-cache
+        uses: actions/cache/restore@v4
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
@@ -95,7 +107,7 @@ jobs:
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
-          if [ ! -d target/llama-cmake-cache ]; then
+          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
           fi
       # The workspace needs the full Linux native stack (mirrors
@@ -128,7 +140,24 @@ jobs:
       # Tests are CI-safe by contract (no GPU / network / model weights —
       # ARCH_PRINCIPLES §12.4): DeterministicInference + in-memory SQLite + FTS5.
       # (The Vulkan SDK above is a BUILD dep of ggml; tests still run CPU-only.)
-      - run: cargo test --workspace
+      # -j 3: the tail of this build links dozens of integration-test binaries,
+      # each statically linking the llama+ggml-vulkan archives — four parallel
+      # mold links can OOM the 16 GB runner hard enough to kill the runner
+      # agent itself (the "log just stops, no artifacts" failure, 2026-07-02).
+      - run: cargo test --workspace -j 3
+      # Bank the C++ build even on a red run (see the restore step's comment).
+      - name: Save llama.cpp CMake tree
+        if: always() && steps.llama-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: target/llama-cmake-cache
+          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      # When something dies, say WHICH resource died — the ENOSPC failure
+      # (2026-07-02) surfaced as a bare "error writing /tmp/…: No space left"
+      # deep in a C++ trace.
+      - name: Resource state at failure
+        if: failure()
+        run: df -h; echo; free -h; echo; du -sh target 2>/dev/null || true
 
   mesh-dst:
     name: Mesh DST (fault-injection / invariants)
@@ -139,10 +168,19 @@ jobs:
       - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup /opt/hostedtoolcache \
             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
           sudo docker image prune --all --force >/dev/null 2>&1 || true
-          df -h / | tail -1
+          # The hosted runner has a second, mostly-empty ~65 GB scratch disk
+          # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
+          # a plain dir) and point TMPDIR there too, so neither the build tree
+          # nor compiler scratch can fill the root disk again.
+          sudo mkdir -p /mnt/target /mnt/tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+          mkdir -p target
+          sudo mount --bind /mnt/target target
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+          df -h / /mnt | tail -2
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -163,7 +201,7 @@ jobs:
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
-          if [ ! -d target/llama-cmake-cache ]; then
+          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
           fi
       # sovereign-mesh pulls sovereign-inference → the Vulkan build stack is
@@ -227,10 +265,19 @@ jobs:
       - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup /opt/hostedtoolcache \
             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
           sudo docker image prune --all --force >/dev/null 2>&1 || true
-          df -h / | tail -1
+          # The hosted runner has a second, mostly-empty ~65 GB scratch disk
+          # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
+          # a plain dir) and point TMPDIR there too, so neither the build tree
+          # nor compiler scratch can fill the root disk again.
+          sudo mkdir -p /mnt/target /mnt/tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+          mkdir -p target
+          sudo mount --bind /mnt/target target
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+          df -h / /mnt | tail -2
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -252,7 +299,7 @@ jobs:
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
-          if [ ! -d target/llama-cmake-cache ]; then
+          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
           fi
       # Same native stack as the check+test job (see its comment) — keep in sync.

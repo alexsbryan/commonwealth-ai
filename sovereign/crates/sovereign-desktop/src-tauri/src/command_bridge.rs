@@ -270,21 +270,19 @@ async fn events_stream(
 ) -> Sse<impl futures::Stream<Item = Result<SseEvent, std::convert::Infallible>>> {
     let rx = state.events.tx.subscribe();
     let stream = futures::stream::unfold(rx, |mut rx| async move {
-        loop {
-            match rx.recv().await {
-                Ok(row) => {
-                    let data = serde_json::to_string(&row)
-                        .unwrap_or_else(|_| "{\"event\":\"__serialize_error__\"}".into());
-                    return Some((Ok(SseEvent::default().data(data)), rx));
-                }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    return Some((
-                        Ok(SseEvent::default().data(format!("{{\"lagged\":{n}}}"))),
-                        rx,
-                    ));
-                }
-                Err(broadcast::error::RecvError::Closed) => return None,
+        // Every arm yields (unfold re-enters for the next event), so a
+        // bare match is the whole body — no loop needed.
+        match rx.recv().await {
+            Ok(row) => {
+                let data = serde_json::to_string(&row)
+                    .unwrap_or_else(|_| "{\"event\":\"__serialize_error__\"}".into());
+                Some((Ok(SseEvent::default().data(data)), rx))
             }
+            Err(broadcast::error::RecvError::Lagged(n)) => Some((
+                Ok(SseEvent::default().data(format!("{{\"lagged\":{n}}}"))),
+                rx,
+            )),
+            Err(broadcast::error::RecvError::Closed) => None,
         }
     });
     Sse::new(stream).keep_alive(KeepAlive::default())

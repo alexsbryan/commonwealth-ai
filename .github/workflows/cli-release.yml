@@ -136,7 +136,7 @@ jobs:
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
-          if [ ! -d target/llama-cmake-cache ]; then
+          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
           fi
 
