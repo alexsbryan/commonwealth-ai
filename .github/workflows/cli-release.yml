@@ -60,18 +60,22 @@ jobs:
           # can't block the Linux tarball. Runner setup lives in the desktop
           # RELEASING.md "macOS Intel (x86_64) — self-hosted runner" section.
           #
-          # macOS arm64 is ready to enable — uncomment once a local
-          # `cargo build --release --target aarch64-apple-darwin` of the three
-          # binaries is validated (keep arm64 on macos-14).
           - name: linux-x86_64
             runner: ubuntu-22.04 # older glibc → runs on newer distros too
             target: x86_64-unknown-linux-gnu
           - name: macos-x86_64
             runner: [self-hosted, macOS, X64] # native Intel; start ./run.sh before tagging
             target: x86_64-apple-darwin
-          # - name: macos-arm64
-          #   runner: macos-14
-          #   target: aarch64-apple-darwin
+          # Enabled 2026-07-02: landing/install.sh already maps M-series Macs
+          # to this target, so its ABSENCE 404'd every Apple Silicon install.
+          # The old "validate locally first" note is retired by proxy —
+          # desktop-release has been building the same dep stack natively on
+          # this exact macos-14 image for weeks. `fail-fast: false` + the
+          # decoupled release job mean a failure here can't sink the other
+          # legs; validate with one workflow_dispatch run before tagging.
+          - name: macos-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
           # - name: windows-x86_64
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
@@ -132,7 +136,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |

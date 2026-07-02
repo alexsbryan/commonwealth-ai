@@ -191,7 +191,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |

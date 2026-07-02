@@ -100,7 +100,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       # Belt: if the tree is missing while the fingerprint survived
       # (partial restore / LRU eviction), force the build script to rerun
       # rather than link against nothing.
@@ -151,7 +151,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       # When something dies, say WHICH resource died — the ENOSPC failure
       # (2026-07-02) surfaced as a bare "error writing /tmp/…: No space left"
       # deep in a C++ trace.
@@ -197,7 +197,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |
@@ -221,7 +221,13 @@ jobs:
       # Deterministic-simulation mesh suite (Layer 1 of commonwealth/docs/MESH_QA.md):
       # drives REAL gossip under a per-node FaultTransport + seeded fault schedule
       # and asserts the invariant pack. In-process — no GPU/network/weights, CI-safe.
-      - run: cargo test -p sovereign-mesh --features dst --test dst_scenarios
+      # `treesitter` alongside `dst` is FEATURE-UNIFICATION HYGIENE, not a test
+      # need: the restored `workspace` cache was built with corpus-engine's
+      # treesitter feature on (the daemon/server/cli members require it); a bare
+      # `-p sovereign-mesh` build resolves it OFF, so cargo rebuilt corpus-engine
+      # + its 17 dependents from scratch on every run. Matching the feature set
+      # makes the cache actually hit.
+      - run: cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
 
   arch-gate:
     name: Arch-gate (file-size ratchet + §1 doc-contract, advisory)
@@ -295,7 +301,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       - name: Guard llama fingerprint vs missing CMake tree
         shell: bash
         run: |

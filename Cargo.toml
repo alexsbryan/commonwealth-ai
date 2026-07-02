@@ -279,6 +279,19 @@ strip = "symbols"
 lto = "thin"
 codegen-units = 1
 
+# The "release builds are cut rarely" assumption above is true for tagged
+# releases but NOT for the local deployed-daemon loop, which also builds
+# release — and pays thin-LTO + CGU=1 on every one-line change (measured
+# 7m29s for a one-line loop, 2026-07-02). A custom `[profile.release-dev]`
+# is NOT usable here: llama-cpp-sys-4's build script resolves the target
+# dir by matching a path component against cargo's `PROFILE` env, which
+# reports the BASE profile ("release") while the directory is named after
+# the custom profile — the build script panics "not found" under any
+# custom profile. Instead, `scripts/dev-release.sh` builds --release with
+# cargo's per-knob env overrides (LTO off, codegen-units 16, incremental),
+# collapsing the loop to seconds while keeping opt-level 3. Tagged
+# releases and CI build plain --release and keep the shipping settings.
+
 # ── Patches ──────────────────────────────────────────────────────────────
 # Vendored `llama-cpp-4` (currently 0.3.1) carries THREE sovereign divergences
 # from the published crate. When re-vendoring a newer upstream version, re-apply
