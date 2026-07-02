@@ -77,6 +77,68 @@ async function judge(entry) {
 
 const BROKE = (c) => !["good", "honest_limitation"].includes(c);
 
+// ── deterministic verification wrappers (the anti-FP layer) ──────────────
+// The judge is receipt-stable on fabrications (sensitivity 100%) but flags
+// hard-but-good shapes; prompt edits traded sensitivity away (measured 70%).
+// So the rubric stays untouched and these MECHANICAL checks overturn only
+// what can be verified deterministically.
+const squash = (s) => String(s).toLowerCase().split(/\s+/).join(" ");
+const DECLINE_RE =
+  /\b(do(es)? not (contain|cover|include|identify|state)|don'?t have (reliable )?(information|this)|not (in|covered by) (your|the|these) (sources|passages|documents)|passages do not|no (passage|source|document) (contains|covers)|none of (them|these|the \w+) (actually )?(cover|contain|mention|state)|rather not guess|couldn'?t find (this|that|it) in)\b/i;
+
+export async function verifiedJudge(entry, judgeFn, model, daemon) {
+  const first = await judgeFn(entry);
+  if (first === null || !BROKE(first) || first === "incoherent") return { category: first };
+  // 1. Decline shape → honest_limitation, mechanically.
+  if (DECLINE_RE.test(String(entry.answer).slice(0, 600))) {
+    return { category: "honest_limitation", overturned: "decline-shape" };
+  }
+  // 2. Extract the disputed strings; overturn ONLY if every one verifies
+  //    deterministically (all-must-verify: the burden is on the overturn).
+  const user = `EVIDENCE:\n"""\n${String(entry.evidence).slice(0, 60000)}\n"""\n\nANSWER:\n"""\n${String(entry.answer).slice(0, 12000)}\n"""\n\nYou flagged this answer as containing invented/absent quotes, citations, or specifics. Copy up to 3 of the most damning such texts EXACTLY as they appear in the ANSWER. Reply ONLY as JSON: {"disputed":["...", "..."]}`;
+  try {
+    const res = await fetch(`${daemon}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: user }],
+        temperature: 0.0,
+        max_tokens: 120,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    const j = firstJson((await res.json()).choices?.[0]?.message?.content ?? "");
+    const list = Array.isArray(j?.disputed) ? j.disputed : j?.disputed ? [j.disputed] : [];
+    const cands = list.map((x) => String(x)).filter((x) => x.trim().length >= 8);
+    if (cands.length) {
+      const hay = squash(entry.evidence) + " " + (entry.labels ?? []).map(squash).join(" ");
+      // A candidate VERIFIES iff it is verbatim-present, OR it carries
+      // ID-shaped tokens and every one is present (a real value the judge
+      // disputes on pairing/framing grounds — receipts showed these are
+      // ambiguity calls, not fabrications). NO fuzzy word-fraction rule:
+      // misattribution fabrications are DEFINED by "most words present, one
+      // token wrong" (the gate caught that rule wrongly clearing a proven
+      // date-garble at 7/8 words present).
+      const verifies = (raw) => {
+        const d = squash(raw).replace(/^[\["'“]+|[\]"'”.]+$/g, "");
+        if (d.length >= 8 && hay.includes(d)) return true;
+        const ids = (d.match(/[a-z0-9-]{6,}/g) ?? []).filter((t) => /\d/.test(t));
+        return ids.length > 0 && ids.every((t) => hay.includes(t)) && d.length <= 120;
+      };
+      if (cands.every(verifies)) {
+        return {
+          category: "good",
+          overturned: `all ${cands.length} disputed texts verify: ${cands[0].slice(0, 50)}…`,
+        };
+      }
+    }
+  } catch {
+    /* verification unavailable — keep the flag */
+  }
+  return { category: first };
+}
+
 async function main() {
   await discoverModel();
   const bank = fs
@@ -90,14 +152,14 @@ async function main() {
     tn = 0,
     fp = 0;
   for (const e of bank) {
-    const got = await judge(e);
+    const { category: got, overturned } = await verifiedJudge(e, judge, MODEL, DAEMON);
     const goldBroke = BROKE(e.gold);
     const gotBroke = got === null ? goldBroke /* judge error: don't penalize */ : BROKE(got);
     const ok = goldBroke === gotBroke;
     if (goldBroke) ok ? tp++ : fn++;
     else ok ? tn++ : fp++;
     console.log(
-      `  ${ok ? "ok  " : "MISS"} ${e.id.padEnd(22)} gold=${e.gold.padEnd(17)} judged=${got ?? "ERROR"}`,
+      `  ${ok ? "ok  " : "MISS"} ${e.id.padEnd(22)} gold=${e.gold.padEnd(17)} judged=${got ?? "ERROR"}${overturned ? ` (overturned: ${overturned})` : ""}`,
     );
     if (!ok) console.log(`       receipt: ${e.receipt}`);
   }
@@ -115,4 +177,6 @@ async function main() {
   process.exit(pass ? 0 : 1);
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

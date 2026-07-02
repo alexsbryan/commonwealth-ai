@@ -17,9 +17,15 @@
 // Usage: node rejudge-length-blind.mjs <journal.jsonl> <out-sidecar.jsonl>
 import fs from "node:fs";
 import { SYSTEM } from "./rejudge-rubric.mjs";
+import { verifiedJudge } from "./calibrate-judge.mjs";
+// --verified: wrap the judge in the deterministic verification layer
+// (calibrated 100% sensitivity / 75% specificity vs the raw rubric's 100/38;
+// residual FPs are two documented contested boundary cases). Dual-report runs
+// with and without to expose the layer's effect.
+const VERIFIED = process.argv.includes("--verified");
 
 const DAEMON = process.env.SOVEREIGN_DAEMON ?? "http://127.0.0.1:9741";
-const [journalF, outF] = process.argv.slice(2);
+const [journalF, outF] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 if (!journalF || !outF) {
   console.error("usage: node rejudge-length-blind.mjs <journal.jsonl> <out.jsonl>");
   process.exit(2);
@@ -146,6 +152,20 @@ async function main() {
     let v = null;
     try {
       v = await judge(qof(c), ev, c.answer, labels);
+      if (VERIFIED && v) {
+        const entry = { question: qof(c), evidence: ev, labels, answer: c.answer };
+        const r = await verifiedJudge(entry, () => Promise.resolve(v.category), MODEL, DAEMON);
+        if (r.category !== v.category) {
+          const broken = !["good", "honest_limitation"].includes(r.category);
+          v = {
+            ...v,
+            broken,
+            score: broken ? 8 : 0,
+            category: r.category,
+            why: `[overturned: ${r.overturned}] ${v.why}`.slice(0, 220),
+          };
+        }
+      }
     } catch (e) {
       console.log(`  step ${c.step}: judge error ${e.message}`);
     }
