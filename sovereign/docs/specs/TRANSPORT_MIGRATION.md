@@ -1,15 +1,25 @@
 # Transport Migration — iroh for mobile first, then the mesh
 
-Status: **Track M implemented in code** (2026-06-10, same day as the
-seam); **W1 (server half) + W2 (dial info in trust ring) + W3
-mechanism (`RoutedTransport` + `[iroh.transport]` config) implemented**
-(2026-06-18, on iroh 1.0 stable). Remaining: W2b (join over iroh),
-**doing** the W3 per-class flips (config + soak, gossip first), W4
-(self-hosted relays), W5 (Tailscale optional). The plumbing for iroh
-to carry live mesh traffic is in place behind config; no class is
-flipped by default. Tailscale remains the production transport until
-each phase's exit criteria are met, and every phase is independently
-reversible.
+Status (2026-07-01): **Track M implemented** (M4 default flip
+pending device battery numbers); **W1 + W2 + W2b-encrypted + W3
+mechanism implemented**. Since the last revision the encrypted-mesh
+mode shipped and became the **existence proof for the end state**: a
+mesh created with `require_encryption` routes EVERY traffic class
+over iroh in fail-closed REQUIRE mode (`RoutedTransport::with_required`,
+no plaintext fallback), binds its HTTP listeners loopback-only (the
+iroh acceptor is the sole network ingress), signs per-node dial info
+(`dial_sig`, monotonic version), and admits joiners over a
+founder-key-dialed iroh channel — a fully Tailscale-free mesh,
+today, as an opt-in. What remains is bringing the DEFAULT
+(plaintext) mesh and the off-seam surfaces to the same place: the W3
+per-class flips (config + soak, gossip first), **W2c** (plaintext
+join over iroh), W4 (self-hosted relays), **W6** (the raw-TCP
+tensor-split exception, promoted from an open question to a decided
+posture in §4), then W5 (Tailscale optional). §5 is the
+feature-by-feature coverage map this plan is now driven by.
+Tailscale remains the production transport for plaintext meshes
+until each phase's exit criteria are met, and every phase is
+independently reversible.
 
 iroh dependency: **1.0.0 stable** (shipped 2026-06-15; wire-protocol
 stable — any v1 endpoint interops with any other v1 endpoint). Bumped
@@ -269,8 +279,31 @@ fallback — so the join secret never crosses the wire in clear and the
 joiner authenticates the founder. This shipped as part of the
 encrypted-mesh feature (a mesh created with `require_encryption`); a
 plaintext mesh still joins over the legacy IP path with the `?relay=`
-hint. Remaining nicety: a `--encrypt`-less mesh has no `iroh=` in its
-invite, so the `?relay=` wart persists for plaintext meshes only.
+hint.
+
+**W2c — plaintext join over iroh (specced, not started).** The
+`?relay=` hint is the last place the product literally asks a person
+for a Tailscale address (`join.rs`'s isolation-failure error text
+says "try a Tailscale `?relay=…`"). The fix is small because W2b
+built all the machinery:
+
+- The invite for a plaintext mesh gains the same
+  `&iroh=<endpoint-id>@<relay-or-addr>[,…]&exp=<ttl>` fields the
+  encrypted invite carries — the founder's endpoint is already bound
+  whenever `[iroh] enabled` (and `require_encryption` force-enables
+  it; for plaintext meshes the invite generator enables it or omits
+  the param, never emits a dead one).
+- `join::perform_join` (the plaintext path) prefers the iroh tunnel
+  when `iroh=` is present — the same one-shot endpoint +
+  `HttpBridge` dial W2b uses — and falls back to the legacy IP path
+  when absent or unreachable (unlike the encrypted path, fallback is
+  allowed: the mesh's own traffic is plaintext anyway, so
+  fail-closed buys nothing here).
+- The `?relay=` hint stays accepted for old invites but drops out of
+  generated invites and error text once this lands.
+
+Exit: a fresh off-LAN machine with no VPN joins a **plaintext** mesh
+from a deep link; the Tailscale suggestion is gone from join errors.
 
 ### W3 — per-class flips via `RoutedTransport`
 
@@ -304,6 +337,20 @@ degrades to the IP candidate alone). `IrohTransport` selects the ALPN
 per class (`alpn_for_class`), so a flipped class reaches the right
 peer router.
 
+Two facts have changed the risk picture since this section was
+written. First, **encrypted meshes already run all six classes over
+iroh in REQUIRE mode** — every e2e and manual session on an
+encrypted mesh is evidence for the flip mechanism under real
+traffic. Second, the soak harness has a gap: `scripts/mesh-soak.sh`
+(the chaos runner that validated the mesh through 120-cycle soaks)
+sets no `[iroh.transport]` — every soak to date ran on the IP path.
+**The first flip work item is therefore the harness, not the
+config:** add an iroh axis to the soak matrix (env-selectable
+`[iroh.transport]` block in the generated node configs, plus a
+run-mode that creates the mesh with `require_encryption` to soak the
+REQUIRE path), so each class flip below is validated by the same
+instrument that hardened the IP path.
+
 What remains is **doing** the flips — each is a one-line config change
 + a soak, in this order, one class per step:
 
@@ -329,11 +376,35 @@ What remains is **doing** the flips — each is a one-line config change
 
 ### W4 — self-hosted relays
 
-- Deploy `iroh-relay` (fully self-hostable) — one cheap VPS to
-  start; `relay_url` in mesh config + gossiped per member. n0's
-  public relays remain the bootstrap default; the self-hosted fleet
-  is the sovereignty/monetisation end-state (the relay fleet is the
-  thing a subscription can sell, à la Nabu Casa).
+Today every endpoint builds with `presets::N0`
+(`build_relayed_endpoint` — n0's public relays + address discovery),
+and `IrohSection` deliberately carries no relay knob ("omitted until
+it is actually consumed, so there is no inert knob"). W4 is where it
+gets consumed:
+
+- **Config:** `[iroh] relay_urls = ["https://relay.example.com"]`
+  (list; unset/empty = n0 presets, the bootstrap default).
+  `build_relayed_endpoint` grows the argument and builds a custom
+  relay map instead of the preset. One knob, consumed at every
+  endpoint construction site (mesh daemon, sovereign-server, join
+  one-shots) since they all funnel through this one function.
+- **No flag-day — relays are per-node, not per-mesh.** W2 already
+  gossips each member's `relay_url` and `IrohTransport` dials with
+  the *peer's own* relay from its contact. A mixed mesh (some nodes
+  on a self-hosted relay, some still on n0) interops with zero
+  coordination; nodes migrate one at a time.
+- **Deployment:** `iroh-relay` is a single self-hostable binary —
+  one small VPS + a TLS cert. `ENTERPRISE_FLEET_DEPLOY.md` names
+  the self-hostable relay as *the* open item for air-gapped and
+  multi-site fleets: the air-gapped case runs the relay inside the
+  boundary (a pure-LAN mesh needs no relay at all — gossiped
+  `iroh_direct_addrs` suffice); the multi-site fleet runs it
+  wherever both sites reach.
+- **The SaaS tie-in:** the hosted relay fleet is the natural
+  subscription artifact (the Nabu Casa model, as before) — and it
+  now has a concrete home: the same hub that maps API keys to
+  tenants and meters per-user usage on the `saas` branch is the
+  account system a hosted-relay entitlement hangs off.
 - Exit: a join + a week of mesh traffic with n0 relay URLs nowhere
   in config or logs.
 
@@ -341,11 +412,19 @@ What remains is **doing** the flips — each is a one-line config change
 
 Decommission criteria, all required:
 
-- [ ] Every `TrafficClass` flipped and soaked (W3 complete).
-- [ ] Join + rejoin proven over iroh from off-LAN (W2).
+- [ ] Every `TrafficClass` flipped and soaked on a **plaintext** mesh
+      (W3 complete; encrypted meshes already run all-iroh REQUIRE).
+- [ ] Join + rejoin proven over iroh from off-LAN for **both** mesh
+      kinds (encrypted: done, W2b; plaintext: W2c).
 - [ ] Phone on iroh by default (M4).
 - [ ] Relays self-hosted or consciously delegated (W4).
-- [ ] The **raw-TCP exception resolved or accepted** (§4).
+- [ ] The **raw-TCP posture documented** per W6 (§4): anchors share
+      an IP network by requirement, stated in getting-started +
+      fleet docs; Option B specced as the multi-site escape hatch.
+- [ ] Docs sweep: getting-started.md drops the "install Tailscale"
+      prerequisite; `join.rs` error text stops suggesting a Tailscale
+      `?relay=`; `MOBILE.md`, `RUN_GLM_5_2_ON_THE_MESH.md`, and
+      `ENTERPRISE_FLEET_DEPLOY.md`'s open relay item all updated.
 
 Then "install Tailscale" moves from prerequisite to optional
 appendix in getting-started.md — needed only for the §4 case below
@@ -354,17 +433,17 @@ and for ssh/ops convenience. The tailnet is never actively removed;
 
 ---
 
-## 4. What stays on IP (the honest exception)
+## 4. W6 — what stays on IP (the honest exception, decided)
 
 Distributed inference spawns **third-party binaries** —
 `llama-server` / `rpc-server` (`SOVEREIGN_RPC_WORKERS`,
 `SOVEREIGN_RPC_TENSOR_SPLIT`) — speaking raw TCP to IPs. An
-application-layer transport only covers protocols we own. Options,
-deliberately deferred until W5 forces the decision:
+application-layer transport only covers protocols we own. The
+options considered:
 
-- **A. Keep an IP overlay on inference rigs only.** Tailscale/
-  WireGuard between the 2–3 GPU hosts; phones and storage-only
-  members never need it. Cheap, boring, probably right.
+- **A. Require IP locality on inference rigs only.** The 2–3 GPU
+  anchors must share *an* IP network; phones and storage-only
+  members never need one. Cheap, boring.
 - **B. Tunnel-proxy sidecar.** Per-worker localhost TCP listener ↔
   iroh stream (the same `pump()` the spike uses), with
   `SOVEREIGN_RPC_WORKERS` pointing at the local proxies. Doable;
@@ -373,12 +452,71 @@ deliberately deferred until W5 forces the decision:
 - **C. Wait for upstream.** llama.cpp RPC transport pluggability or
   iroh TUN-style interfaces may make this moot.
 
+**Decision (2026-07-01): Option A is the accepted W5 posture, with
+one reframe — "needs IP locality" ≠ "needs Tailscale."** Look at
+where tensor-split anchors actually live: a house mesh's GPU boxes
+share the LAN; an enterprise fleet's share the VPC
+(`ENTERPRISE_FLEET_DEPLOY.md` already restricts the RPC ports to the
+fleet subnet). Tailscale was only ever a way to *fake* that locality
+across sites — and a cross-site tensor split is latency-hopeless on
+the hottest path regardless of transport, so the case Option A
+"gives up" is one we don't want to serve anyway. W5's bar is
+therefore documentation, not code: anchors must share an IP network
+(LAN or VPC), stated plainly in getting-started and the fleet
+runbooks. No VPN requirement survives for any supported topology.
+
+**Option B stays specced as the escape hatch**, for two futures that
+may make it worth its hop: (1) a genuinely multi-site anchor set an
+operator insists on, eyes open about latency; (2) the encrypted-mesh
+residual — SYSTEM_OVERVIEW is explicit that the tensor-split RPC is
+the sole plaintext traffic left on a `require_encryption` mesh, and
+the iroh sidecar is also the encryption fix. Gate: flag-guarded
+(`SOVEREIGN_RPC_IROH_PROXY=1`), adopted only with a tok/s A/B
+showing acceptable regression on the shared-fleet bench.
+
 The seam's `RpcWorker` discovery already resolves worker hosts via
 `StatusProbe`, so whichever option wins, discovery doesn't change.
 
 ---
 
-## 5. Risks and rollbacks
+## 5. Feature coverage — every mesh feature, without Tailscale
+
+The question this spec must now answer is no longer "can iroh carry
+a class" (it can — encrypted meshes carry all six) but "is every
+feature's network path accounted for." The audit, by feature:
+
+| Feature | Network path | Without Tailscale today | Remaining |
+|---|---|---|---|
+| Gossip / membership / anti-entropy, work-atlas + app-state push | seam, `Gossip` | works over iroh (REQUIRE on encrypted meshes; `[iroh.transport] gossip="iroh"` elsewhere) | W3 soak, plaintext mesh |
+| Corpus queue / collaborate / ingest partitioning, pipeline pause | seam, `ControlPlane` | same | W3 |
+| Knowledge search fan-out | seam, `KnowledgeSearch` | same | W3 |
+| GGUF/shard pulls, rpc-warm push | seam, `ModelTransfer` | same; iroh-blobs is the optional upgrade | W3 |
+| Peer inference + capability/status probes | seam, `Inference`/`StatusProbe` (client ALPN) | same | W3 + TTFT A/B gate |
+| Join — encrypted mesh | one-shot iroh dial of the founder key | **done** (W2b), fail-closed | — |
+| Join — plaintext mesh | legacy IP + `?relay=` hint | **not covered** — error text suggests a Tailscale address | W2c |
+| Mobile (chat, stream, citations, history) | `cwth/client/0` bridge | **done** (M1–M3, LTE-proven) | M4 default flip (battery numbers) |
+| Desktop mobile-host pairing | `/status.iroh.dial` no-VPN code + QR deep link | **done** | — |
+| mDNS LAN discovery | LAN multicast | never involved a VPN (multicast doesn't traverse one) | — |
+| UDP latency probe (`CWLP`) | raw UDP to gossiped IPs | LAN-only without an overlay; pure telemetry — OICP's `latency_class` is model-config-derived, nothing user-facing keys off the probe | optional: surface iroh's own path RTT instead |
+| SaaS hub — multi-tenant users | HTTPS ingress → `sovereign-server`, API-key→tenant | users never needed Tailscale | — |
+| Fleet intra-site traffic | `IpTransport` over the VPC/LAN | any IP fabric works; Tailscale was one choice among several | W4 for multi-site / air-gapped |
+| Shared-fleet distributed primary (anchor tensor split) | raw TCP `llama-server`↔`rpc-server`, outside the seam | needs shared IP locality (LAN/VPC) — not a VPN | W6 posture (§4); Option B for multi-site |
+| Worker pods | `PinnedTransport` — pinned-cert HTTPS to an owner-supplied URL | reachability-agnostic by design; the owner-supplied URL is *often* a tailnet address today | document non-VPN reachability options; iroh bridge is the natural upgrade (shares machinery with the parked access-grants design) |
+
+Two classifications keep this table honest:
+
+- **"Needs IP locality" ≠ "needs Tailscale."** The tensor split and
+  intra-fleet traffic need peers to share *an* IP network — at home
+  the LAN, in a fleet the VPC. Tailscale only ever faked that
+  locality across sites; §4 decides what happens when the locality
+  genuinely isn't there.
+- **Degradable telemetry is allowed to degrade.** The CWLP probe
+  simply gets no samples from an off-LAN no-VPN peer; that is a
+  missing data point, not a broken feature, and not a W5 blocker.
+
+---
+
+## 6. Risks and rollbacks
 
 | Risk | Containment |
 |---|---|
@@ -394,7 +532,7 @@ Nothing in this plan deletes the IP path.
 
 ---
 
-## 6. Verification ladder
+## 7. Verification ladder
 
 - **Per phase:** the phase's exit criteria above, plus
   `lint_status`/`test_status` `fresh_passing` (iroh stays

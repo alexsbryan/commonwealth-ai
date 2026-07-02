@@ -92,12 +92,17 @@ pub struct JoinConfirmation {
     pub invited_by: Option<String>,
     pub join_key: String,
     pub relay_hint: Option<String>,
-    /// Founder's iroh dial string — present iff this is an ENCRYPTED
-    /// mesh invite. Its presence tells the joiner (and the desktop
-    /// preview) "this join will be encrypted, dialed by the founder's
-    /// key." `None` ⇒ legacy/plaintext join.
+    /// Founder's iroh dial string — present when the invite carries a
+    /// no-VPN connect path (either mesh kind). `encrypted` below says
+    /// which join posture it implies; `None` ⇒ legacy IP/mDNS join.
     #[serde(default)]
     pub iroh_dial: Option<String>,
+    /// True iff the invite is for an ENCRYPTED mesh (`iroh=` param —
+    /// fail-closed key-dialed join). False with `iroh_dial` present
+    /// means a plaintext mesh reachable over iroh (`dial=` param —
+    /// prefer-iroh join, IP/mDNS fallback).
+    #[serde(default)]
+    pub encrypted: bool,
     /// Unix-seconds TTL after which the invite is rejected (display).
     #[serde(default)]
     pub expires_at: Option<u64>,

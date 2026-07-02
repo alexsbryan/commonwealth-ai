@@ -71,9 +71,16 @@ pub fn ring_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
 }
 
 /// Build a relay-enabled iroh endpoint from a node identity, serving
-/// `alpns`. Uses n0's public relays + address lookup (`presets::N0`);
-/// the relay-fleet self-hosting swap (W4 of TRANSPORT_MIGRATION.md)
-/// changes only the preset here.
+/// `alpns`. Starts from n0's public relays + address lookup
+/// (`presets::N0`); when `relay_urls` is non-empty it overrides the
+/// relay set with those self-hosted relays (W4 of
+/// TRANSPORT_MIGRATION.md) while KEEPING the n0 address-lookup
+/// services, so a fleet can point at its own `iroh-relay` on an
+/// allowlisted domain. An empty slice = the n0 default (the bootstrap
+/// posture). Always calls [`EndpointBuilder::proxy_from_env`], so a
+/// corporate `HTTP_PROXY`/`HTTPS_PROXY` is honored for the relay
+/// (WebSocket-over-TLS/443) connection — the path that keeps the mesh
+/// working when UDP is blocked outright.
 ///
 /// One constructor so every production caller — the mobile host
 /// ([`crate`] consumers like `sovereign-server::iroh_access`) and the
@@ -83,14 +90,57 @@ pub fn ring_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
 pub async fn build_relayed_endpoint(
     secret_key: SecretKey,
     alpns: Vec<Vec<u8>>,
+    relay_urls: &[String],
 ) -> Result<Endpoint, String> {
-    EndpointBuilder::new(presets::N0)
+    let mut builder = EndpointBuilder::new(presets::N0)
         .crypto_provider(ring_crypto_provider())
         .secret_key(secret_key)
         .alpns(alpns)
+        // Honor corporate HTTP(S) proxies on the relay dial. No-op when
+        // the env vars are unset, so it's safe on every deployment.
+        .proxy_from_env();
+    if let Some(mode) = parse_relay_mode(relay_urls) {
+        builder = builder.relay_mode(mode);
+    }
+    builder
         .bind()
         .await
         .map_err(|e| format!("iroh endpoint bind failed: {e}"))
+}
+
+/// Turn operator-configured relay URL strings into a custom
+/// [`RelayMode`]. `None` (empty input, or every entry unparseable)
+/// leaves the caller on the preset default. Unparseable entries are
+/// logged and skipped rather than aborting the bind — a fat-fingered
+/// relay URL must not take a node offline when the default relays
+/// would still work.
+fn parse_relay_mode(relay_urls: &[String]) -> Option<iroh::RelayMode> {
+    if relay_urls.is_empty() {
+        return None;
+    }
+    let parsed: Vec<RelayUrl> = relay_urls
+        .iter()
+        .filter_map(|u| match u.parse::<RelayUrl>() {
+            Ok(url) => Some(url),
+            Err(e) => {
+                tracing::warn!(
+                    target: "transport",
+                    url = %u,
+                    error = %e,
+                    "iroh: ignoring unparseable relay_url — falling back to remaining/default relays"
+                );
+                None
+            }
+        })
+        .collect();
+    if parsed.is_empty() {
+        tracing::warn!(
+            target: "transport",
+            "iroh: all configured relay_urls were unparseable — using default relays"
+        );
+        return None;
+    }
+    Some(iroh::RelayMode::custom(parsed))
 }
 
 /// One client-side tunnel: a localhost `TcpListener` whose accepted
@@ -499,6 +549,43 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    #[test]
+    fn parse_relay_mode_empty_is_default() {
+        // Empty config = leave the caller on the preset (n0) relays.
+        assert!(parse_relay_mode(&[]).is_none());
+    }
+
+    #[test]
+    fn parse_relay_mode_valid_urls_build_custom() {
+        let mode = parse_relay_mode(&[
+            "https://relay.corp.example:443".to_string(),
+            "https://relay2.corp.example".to_string(),
+        ]);
+        assert!(
+            matches!(mode, Some(iroh::RelayMode::Custom(_))),
+            "valid relay URLs must build a custom relay map"
+        );
+    }
+
+    #[test]
+    fn parse_relay_mode_all_invalid_falls_back_to_default() {
+        // A fat-fingered relay URL must not abort — fall back to the
+        // default relays rather than take the node offline.
+        assert!(parse_relay_mode(&["not a url".to_string()]).is_none());
+    }
+
+    #[test]
+    fn parse_relay_mode_skips_bad_keeps_good() {
+        let mode = parse_relay_mode(&[
+            "://broken".to_string(),
+            "https://relay.corp.example:443".to_string(),
+        ]);
+        assert!(
+            matches!(mode, Some(iroh::RelayMode::Custom(_))),
+            "one valid URL among bad ones still yields a custom map"
+        );
+    }
+
     /// Bind an empty (no-relay, deterministic) endpoint serving `alpns`.
     async fn hermetic_endpoint(seed: u8, alpns: Vec<Vec<u8>>) -> Endpoint {
         EndpointBuilder::empty()
@@ -645,5 +732,22 @@ mod tests {
             got.is_empty(),
             "unrouted ALPN must be dropped, got {got:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn build_relayed_endpoint_with_custom_relay_binds() {
+        // A configured self-hosted relay must not break endpoint
+        // construction: bind is a local operation, the relay connection
+        // is a background task (so this succeeds offline). Proves the
+        // relay_urls → custom RelayMode path threads through to a valid
+        // endpoint. proxy_from_env is a no-op here (env unset).
+        let ep = build_relayed_endpoint(
+            SecretKey::from_bytes(&[77u8; 32]),
+            vec![ALPN.to_vec()],
+            &["https://relay.corp.example:443".to_string()],
+        )
+        .await
+        .expect("custom-relay endpoint must bind");
+        assert!(!ep.bound_sockets().is_empty(), "endpoint must bind a socket");
     }
 }

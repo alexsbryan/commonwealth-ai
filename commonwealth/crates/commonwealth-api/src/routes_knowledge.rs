@@ -518,5 +518,8 @@ fn build_response(
 /// permissive with `Busy` (a node serving inference still answers
 /// knowledge search cheaply) and strict with `Offline`.
 fn is_queryable(m: &MemberRecord) -> bool {
-    matches!(m.status, NodeStatus::Online | NodeStatus::Busy) && !m.addresses.is_empty()
+    // `is_dialable` accepts an iroh-only peer (pubkey + relay/direct,
+    // no gossiped IP — the no-VPN case); the seam still decides the
+    // KnowledgeSearch route per dial.
+    matches!(m.status, NodeStatus::Online | NodeStatus::Busy) && m.is_dialable()
 }
