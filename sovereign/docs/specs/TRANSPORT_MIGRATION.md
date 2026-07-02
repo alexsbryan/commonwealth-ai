@@ -1,25 +1,57 @@
 # Transport Migration — iroh for mobile first, then the mesh
 
-Status (2026-07-01): **Track M implemented** (M4 default flip
-pending device battery numbers); **W1 + W2 + W2b-encrypted + W3
-mechanism implemented**. Since the last revision the encrypted-mesh
-mode shipped and became the **existence proof for the end state**: a
-mesh created with `require_encryption` routes EVERY traffic class
-over iroh in fail-closed REQUIRE mode (`RoutedTransport::with_required`,
-no plaintext fallback), binds its HTTP listeners loopback-only (the
-iroh acceptor is the sole network ingress), signs per-node dial info
-(`dial_sig`, monotonic version), and admits joiners over a
-founder-key-dialed iroh channel — a fully Tailscale-free mesh,
-today, as an opt-in. What remains is bringing the DEFAULT
-(plaintext) mesh and the off-seam surfaces to the same place: the W3
-per-class flips (config + soak, gossip first), **W2c** (plaintext
-join over iroh), W4 (self-hosted relays), **W6** (the raw-TCP
-tensor-split exception, promoted from an open question to a decided
-posture in §4), then W5 (Tailscale optional). §5 is the
-feature-by-feature coverage map this plan is now driven by.
-Tailscale remains the production transport for plaintext meshes
-until each phase's exit criteria are met, and every phase is
-independently reversible.
+Status (2026-07-01): **the no-VPN mesh is implemented for both mesh
+kinds** (uncommitted on the `saas` branch; unit + feature-gated e2e
++ soak-axis verified, awaiting multi-box burn-in). Track M
+implemented (M4 default flip pending device battery numbers); W1,
+W2, W2b-encrypted, and the W3 mechanism were already in. This arc
+added, as PR-sized increments each landed green:
+
+- **Iroh-first routing (W3 semantics).** Iroh enabled ⇒ EVERY
+  traffic class routes iroh-first with automatic per-dial IP
+  fallback; `[iroh.transport] <class> = "ip"` is now an opt-OUT
+  (was opt-in). `iroh_routed_classes` / `daemon.rs` install.
+- **Enablement by mesh participation.** `[iroh] enabled` is
+  tri-state `Option<bool>`: absent = AUTO (on iff this node is in a
+  mesh — the `client-exposed` marker), `Some(false)` = kill-switch,
+  plus a `SOVEREIGN_IROH=off` env override. A meshless daemon never
+  contacts relays.
+- **W2c — plaintext join over iroh.** Plaintext invites carry a
+  `dial=` connect code (distinct from the encrypted `iroh=`, so old
+  joiners don't misread it); `perform_join` dials the founder by key
+  first, fail-SOFT to `?relay=`/mDNS. The "try a Tailscale ?relay="
+  error text is gone.
+- **Invite plumbing.** `create_mesh_with` stamps the founder dial
+  for both mesh kinds; `current_invite` live-reads it (fixing the
+  rotation-loses-the-dial wart) and rotation re-arms the TTL +
+  exposes the client API.
+- **W4 — self-hosted relays + corporate proxy.**
+  `build_relayed_endpoint` takes a `RelayConfig` (`[iroh] relay_urls`
+  + `[iroh] discovery`) and always calls `proxy_from_env`, so a fleet
+  points at its own `iroh-relay` on an allowlisted domain:443 and a
+  corporate `HTTP_PROXY` (Basic auth) is honored. Relays are per-node
+  (gossiped), so mixed fleets need no flag-day.
+- **H1 — sever all n0 services (sovereignty).** `relay_urls` alone
+  keeps n0's DNS/pkarr address-lookup, so it is NOT a no-third-party
+  posture. `[iroh] discovery = "none"` builds from `presets::Minimal`
+  (crypto only — no n0 relay, no n0 DNS): peers are reached by
+  gossiped `iroh_direct_addrs` (flat LAN/VPC) and/or self-hosted
+  `relay_urls` only. This is the knob a netops/air-gap review
+  requires; see the enterprise-hardening plan.
+- **W6 — raw-TCP tensor split: decided (§4).** Option A accepted:
+  anchors must share an IP network (LAN/VPC), which every supported
+  topology already does; Option B (iroh sidecar) stays specced.
+- **Soak axis.** `mesh-soak.sh --iroh` boots every node iroh-first,
+  joins over the `dial=` invite, and asserts each node carried mesh
+  traffic over iroh — passing across kill-9 + restart.
+
+Encrypted meshes remain the fail-closed variant (all classes REQUIRE
+iroh, loopback-only listeners, signed dial info). §5 is the
+feature-by-feature coverage map. What remains for **W5** (Tailscale
+truly optional) is operational, not code: the multi-box burn-in, the
+plaintext-mesh long soak, M4's device numbers, and the docs sweep
+(this revision + getting-started). Every phase stays independently
+reversible; `IpTransport` is the permanent fallback.
 
 iroh dependency: **1.0.0 stable** (shipped 2026-06-15; wire-protocol
 stable — any v1 endpoint interops with any other v1 endpoint). Bumped
@@ -410,21 +442,29 @@ gets consumed:
 
 ### W5 — Tailscale becomes optional
 
-Decommission criteria, all required:
+Decommission criteria (code-complete items checked; the rest are
+operational burn-in, not code):
 
-- [ ] Every `TrafficClass` flipped and soaked on a **plaintext** mesh
-      (W3 complete; encrypted meshes already run all-iroh REQUIRE).
-- [ ] Join + rejoin proven over iroh from off-LAN for **both** mesh
-      kinds (encrypted: done, W2b; plaintext: W2c).
-- [ ] Phone on iroh by default (M4).
-- [ ] Relays self-hosted or consciously delegated (W4).
-- [ ] The **raw-TCP posture documented** per W6 (§4): anchors share
-      an IP network by requirement, stated in getting-started +
-      fleet docs; Option B specced as the multi-site escape hatch.
-- [ ] Docs sweep: getting-started.md drops the "install Tailscale"
-      prerequisite; `join.rs` error text stops suggesting a Tailscale
-      `?relay=`; `MOBILE.md`, `RUN_GLM_5_2_ON_THE_MESH.md`, and
-      `ENTERPRISE_FLEET_DEPLOY.md`'s open relay item all updated.
+- [~] Every `TrafficClass` flipped and soaked on a **plaintext** mesh.
+      Code + `mesh-soak.sh --iroh` axis done (all classes iroh-first,
+      asserts carried-over-iroh, passes across kill-9/restart); the
+      remaining box is a **long multi-box soak**, not a code change.
+- [x] Join + rejoin over iroh from off-LAN for **both** mesh kinds
+      (encrypted W2b; plaintext W2c — `perform_join` prefer-iroh
+      fail-soft, e2e `plaintext_join_over_iroh_e2e`).
+- [ ] Phone on iroh by default (M4 — pending device battery numbers).
+- [x] Relays self-hostable and proxy-aware (W4 — `[iroh] relay_urls`
+      + `proxy_from_env` in `build_relayed_endpoint`; per-node,
+      gossiped, no flag-day).
+- [x] The **raw-TCP posture decided + documented** per W6 (§4):
+      anchors share an IP network by requirement, stated in
+      getting-started + the GLM runbook + fleet docs; Option B specced
+      as the multi-site escape hatch.
+- [x] Docs sweep: getting-started.md leads with the no-VPN connect
+      code (Tailscale demoted to an optional appendix); `join.rs`
+      error text no longer suggests Tailscale; `RUN_GLM_5_2_ON_THE_MESH.md`
+      and `ENTERPRISE_FLEET_DEPLOY.md`'s relay item updated
+      (`MOBILE.md` had no VPN-prerequisite language to change).
 
 Then "install Tailscale" moves from prerequisite to optional
 appendix in getting-started.md — needed only for the §4 case below

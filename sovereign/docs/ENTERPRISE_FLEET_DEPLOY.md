@@ -115,11 +115,40 @@ TLS, and users authenticate to `sovereign-server` with bearer tokens.
 
 There is an opt-in mesh mode (`require_encryption`, founder-set at mesh creation)
 that forces all mesh traffic onto the iroh QUIC transport — encrypted and dialed
-by Ed25519 key — and binds the plaintext listeners loopback-only. It works, but
-today it relies on public relays for NAT traversal and there is no self-hosted
-relay yet, so for a single-VPC fleet where the machines reach each other
-directly, your own network isolation is the simpler and stronger answer. (A
-self-hostable relay is the open item for air-gapped / multi-site fleets.)
+by Ed25519 key — and binds the plaintext listeners loopback-only. For a
+single-VPC fleet where the machines reach each other directly, your own network
+isolation is still the simpler and stronger answer. But for **air-gapped or
+multi-site fleets** the relay is no longer an open item: set `relay_urls` under
+`[iroh]` to point every node at a relay you host (the `iroh-relay` binary on one
+small TLS-terminated box), instead of the public relays.
+
+```toml
+# on every node — ~/.sovereign/config.toml
+[iroh]
+enabled = true
+relay_urls = ["https://relay.internal.example:443"]
+discovery = "none"                 # sever ALL contact with iroh's public services
+```
+
+**`relay_urls` alone is not enough for a no-third-party posture.** By default a
+node also uses iroh's public DNS/pkarr service to publish and resolve peer
+addresses; `relay_urls` only moves the *relay*. `discovery = "none"` severs that
+too — peers are then found only via your own relay and gossiped addresses, and
+the daemon contacts no iroh-operated infrastructure. On a flat LAN/VPC where
+nodes already reach each other you can drop `relay_urls` entirely (gossiped
+direct addresses suffice); across subnets, keep your own relay for NAT
+traversal. Both settings are per-node and gossiped, so nodes migrate one at a
+time with no flag-day.
+
+The relay path is TCP/443, so it also carries the mesh where UDP egress is
+blocked; if the fleet reaches out through an HTTP proxy, set
+`HTTP_PROXY`/`HTTPS_PROXY` in the daemon environment (Basic-auth proxies are
+honored via `https://user:pass@proxy:443`; NTLM/Kerberos proxies are not
+supported).
+
+The one residual: the multi-host tensor-split RPC (`llama-server`/`rpc-server`)
+is raw TCP between GPU boxes and stays on your IP network by design — anchors
+must share a LAN/VPC, which a GPU fleet already does.
 
 ## Per-user isolation on the hub
 

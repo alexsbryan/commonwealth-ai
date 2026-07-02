@@ -27,6 +27,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "join" => cmd_join(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
+        "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,
         "leave" => cmd_leave().await,
         "logs" => cmd_logs().await,
@@ -387,6 +388,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             (
                 "status",
                 "Show mesh members, hosted knowledge, loaded models",
+            ),
+            (
+                "transport",
+                "Show each peer's live iroh path (direct / relayed / mixed)",
             ),
             ("balance", "Show your contribution to the mesh"),
             ("leave", "Leave the current mesh"),
@@ -955,6 +960,87 @@ async fn cmd_status(args: &[String]) -> i32 {
         if let Some(l) = status.join_link.as_deref() {
             println!("join link: {l}");
         }
+    }
+    0
+}
+
+/// `sovereign mesh transport` — the operator's "is anyone actually on
+/// iroh, and via a direct path or the relay?" surface (H2). Reads the
+/// `iroh_transport` block of `/v1/mesh/status`.
+async fn cmd_transport(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: sovereign mesh transport [--json]");
+        eprintln!();
+        eprintln!("Show each peer's live iroh connection path (direct / relayed / mixed / idle).");
+        eprintln!("Empty output means iroh isn't carrying mesh traffic (the mesh is on the IP path).");
+        return 0;
+    }
+    let json_out = args.iter().any(|a| a == "--json");
+
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("reqwest client builds");
+    let body = match client.get(&url).send().await {
+        Ok(r) if r.status().is_success() => match r.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("mesh transport: read body: {e}");
+                return 1;
+            }
+        },
+        Ok(r) => {
+            eprintln!("mesh transport: daemon returned HTTP {} from {url}", r.status());
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("mesh transport: daemon at {url} not reachable: {e}");
+            return 1;
+        }
+    };
+    let status: sovereign_mesh::mesh_http::StatusResponse = match serde_json::from_str(&body) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");
+            println!("{body}");
+            return 1;
+        }
+    };
+
+    if json_out {
+        match serde_json::to_string_pretty(&status.iroh_transport) {
+            Ok(s) => println!("{s}"),
+            Err(e) => {
+                eprintln!("mesh transport: serialize: {e}");
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    if status.iroh_transport.is_empty() {
+        println!("iroh transport: no peers on iroh (mesh is on the IP path, or iroh is disabled).");
+        return 0;
+    }
+    println!("  {:<12} {:<9} relay / direct", "peer", "path");
+    println!("  {:-<12} {:-<9} {:-<30}", "", "", "");
+    for p in &status.iroh_transport {
+        let name: String = p.name.chars().take(12).collect();
+        let (path, detail) = match &p.path {
+            Some(tp) => {
+                let detail = match &tp.relay {
+                    Some(r) => format!("relay={r}  direct={}", tp.active_direct_addrs),
+                    None => format!("direct={}", tp.active_direct_addrs),
+                };
+                (tp.path.as_str(), detail)
+            }
+            None => ("unknown", "no endpoint record yet".to_string()),
+        };
+        println!("  {name:<12} {path:<9} {detail}");
     }
     0
 }

@@ -127,7 +127,7 @@ async fn plaintext_join_completes_over_iroh_tunnel() {
         "IrohJoiner",
         vec![joiner_addr],
         Some((founder_dial.as_str(), joiner_seed)),
-        &[], // relay_urls: n0 default (unused — direct-addr dial in-netns)
+        &commonwealth_transport::iroh::RelayConfig::default(),
         None, // no relay hint
         None, // no mDNS
         Duration::from_secs(5),
@@ -173,7 +173,7 @@ async fn bad_iroh_dial_falls_back_to_direct_hint() {
         "FallbackJoiner",
         vec!["127.0.0.1:9876".parse().unwrap()],
         Some(("not-a-valid-dial-string", [33u8; 32])),
-        &[],
+        &commonwealth_transport::iroh::RelayConfig::default(),
         Some(&addr.to_string()), // working direct hint
         None,
         Duration::from_secs(5),
@@ -207,7 +207,7 @@ async fn join_failure_never_suggests_tailscale() {
         "LonelyJoiner",
         vec!["127.0.0.1:9876".parse().unwrap()],
         Some(("also-garbage", [44u8; 32])),
-        &[],
+        &commonwealth_transport::iroh::RelayConfig::default(),
         Some(&unreachable.to_string()),
         None,
         Duration::from_millis(200),

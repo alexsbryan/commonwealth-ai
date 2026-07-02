@@ -51,6 +51,11 @@ pub struct IrohSection {
     /// domain). Consumed by `build_relayed_endpoint`.
     #[serde(default)]
     pub relay_urls: Vec<String>,
+    /// Sovereignty knob (H1). `"n0"`/absent = n0 relays + n0 DNS
+    /// lookup; `"none"`/`"self"`/`"local"` = sever all n0 contact
+    /// (self-hosted `relay_urls` and/or direct addrs only).
+    #[serde(default)]
+    pub discovery: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

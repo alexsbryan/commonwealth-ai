@@ -272,7 +272,7 @@ pub async fn perform_encrypted_join(
     joining_node_name: &str,
     joining_node_addresses: Vec<SocketAddr>,
     joiner_seed: [u8; 32],
-    relay_urls: &[String],
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
     proposed_node_id: Option<NodeId>,
     identity: Option<(commonwealth_core::ids::NodePubkey, String)>,
 ) -> Result<JoinHandshakeResult, JoinError> {
@@ -295,7 +295,7 @@ pub async fn perform_encrypted_join(
         founder = %founder_dial,
         "handshake_sent: encrypted join over iroh, POST /internal/join"
     );
-    match iroh_tunnel_handshake(founder_dial, joiner_seed, relay_urls, &body).await {
+    match iroh_tunnel_handshake(founder_dial, joiner_seed, relay_cfg, &body).await {
         Ok(parsed) => Ok(JoinHandshakeResult {
             mesh: parsed.mesh.into_mesh(),
             assigned_node_id: parsed.assigned_node_id,
@@ -336,7 +336,7 @@ enum TunnelFailure {
 async fn iroh_tunnel_handshake(
     founder_dial: &str,
     joiner_seed: [u8; 32],
-    relay_urls: &[String],
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
     body: &JoinRequestWire,
 ) -> Result<JoinResponseWire, TunnelFailure> {
     use commonwealth_transport::iroh::{
@@ -348,7 +348,7 @@ async fn iroh_tunnel_handshake(
     })?;
 
     let secret = SecretKey::from_bytes(&joiner_seed);
-    let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()], relay_urls)
+    let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()], relay_cfg)
         .await
         .map_err(|e| TunnelFailure::Setup(format!("failed to build iroh endpoint for join: {e}")))?;
 
@@ -389,9 +389,9 @@ pub async fn perform_join(
     joining_node_name: &str,
     joining_node_addresses: Vec<SocketAddr>,
     iroh: Option<(&str, [u8; 32])>,
-    // Self-hosted relays for the iroh tunnel attempt (empty = n0
-    // default). Only consulted when `iroh` is `Some`.
-    relay_urls: &[String],
+    // Relay/discovery posture for the iroh tunnel attempt (default =
+    // n0). Only consulted when `iroh` is `Some`.
+    relay_cfg: &commonwealth_transport::iroh::RelayConfig,
     direct_peer_hint: Option<&str>,
     mdns: Option<&MdnsDiscovery>,
     timeout: Duration,
@@ -434,7 +434,7 @@ pub async fn perform_join(
         );
         match tokio::time::timeout(
             Duration::from_secs(10),
-            iroh_tunnel_handshake(dial, seed, relay_urls, &body),
+            iroh_tunnel_handshake(dial, seed, relay_cfg, &body),
         )
         .await
         {
@@ -736,7 +736,7 @@ mod tests {
             "joiner",
             vec![],
             [0u8; 32],
-            &[], // relay_urls: n0 default
+            &commonwealth_transport::iroh::RelayConfig::default(),
             None,
             None,
         )
