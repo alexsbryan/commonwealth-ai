@@ -84,6 +84,13 @@ const SNAP_FLOOR: f32 = 0.75;
 /// prefix inflates full-string similarity; only the margin catches it.)
 const SNAP_MARGIN: f32 = 0.10;
 
+/// An UNCLOSED `[Source:` (the model truncates brackets) must not swallow
+/// everything up to some ']' hundreds of chars later in unrelated text —
+/// title.rs's scanner caps its marker for the same reason. A real citation
+/// bracket is short and single-line; past either bound the open is handled by
+/// `recover_unclosed_title` (or left literal).
+const MAX_BRACKET_CHARS: usize = 300;
+
 /// A significant word this long that carries a digit is ID-shaped (hash ids,
 /// record numbers) and must match a COMPLETE token in the evidence — partial
 /// matches are how truncated/garbled identifiers masquerade as grounded. Short
@@ -167,38 +174,73 @@ pub fn attribute_citations(
     let mut citations_total = 0usize;
     let mut stripped_titles: Vec<String> = Vec::new();
     let mut snapped_titles: Vec<(String, String)> = Vec::new();
-    // An UNCLOSED `[Source:` (the model truncates brackets) must not swallow
-    // everything up to some ']' hundreds of chars later in unrelated text —
-    // title.rs's scanner caps its marker for the same reason. A real citation
-    // bracket is short and single-line; past either bound the '[' is literal.
-    const MAX_BRACKET_CHARS: usize = 300;
     let mut i = 0usize;
     while i < chars.len() {
         if chars[i] == '[' {
-            if let Some(rel) = chars[i + 1..].iter().position(|&c| c == ']') {
+            let close = chars[i + 1..].iter().position(|&c| c == ']');
+            let bounded = close.is_some_and(|rel| {
+                rel <= MAX_BRACKET_CHARS && !chars[i + 1..i + 1 + rel].contains(&'\n')
+            });
+            let looks_source = chars[i + 1..]
+                .iter()
+                .take(12)
+                .collect::<String>()
+                .trim_start()
+                .to_lowercase()
+                .starts_with("source:");
+            if bounded && looks_source {
+                let rel = close.unwrap();
                 let end = i + 1 + rel; // absolute index of ']'
                 let inner: String = chars[i + 1..end].iter().collect();
-                if inner.trim_start().to_lowercase().starts_with("source:")
-                    && rel <= MAX_BRACKET_CHARS
-                    && !inner.contains('\n')
-                {
-                    let (rebuilt, total, stripped, snapped) =
-                        process_bracket(&inner, &hay, &label_set);
-                    citations_total += total;
-                    stripped_titles.extend(stripped);
-                    snapped_titles.extend(snapped);
-                    if rebuilt.is_empty() {
-                        // Whole bracket removed — consume one preceding space so
-                        // "claim [Source: X]." collapses to "claim." not "claim .".
-                        if out.ends_with(' ') {
-                            out.pop();
-                        }
-                    } else {
-                        out.push('[');
-                        out.push_str(&rebuilt);
-                        out.push(']');
+                let (rebuilt, total, stripped, snapped) = process_bracket(&inner, &hay, &label_set);
+                citations_total += total;
+                stripped_titles.extend(stripped);
+                snapped_titles.extend(snapped);
+                if rebuilt.is_empty() {
+                    // Whole bracket removed — consume one preceding space so
+                    // "claim [Source: X]." collapses to "claim." not "claim .".
+                    if out.ends_with(' ') {
+                        out.pop();
                     }
-                    i = end + 1;
+                } else {
+                    out.push('[');
+                    out.push_str(&rebuilt);
+                    out.push(']');
+                }
+                i = end + 1;
+                continue;
+            }
+            if !bounded && looks_source {
+                // UNCLOSED `[Source:` (the model forgot the `]` and flowed into
+                // prose — observed gen75b step 157: "[Source: Decision —
+                // 2026-12-28 — Visitor and Guest Parking. However, it is
+                // critical…", an INVENTED date that shipped because the bounded
+                // scanner skipped the malformed bracket entirely). Recover the
+                // intended title conservatively, judge it with the SAME ordered
+                // procedure, and re-emit it properly closed (or drop it).
+                if let Some((title_len, title)) = recover_unclosed_title(&chars[i + 1..], &label_set)
+                {
+                    citations_total += 1;
+                    match judge_title(&title, &hay, &label_set) {
+                        TitleVerdict::Keep => {
+                            out.push_str("[Source: ");
+                            out.push_str(&title);
+                            out.push(']');
+                        }
+                        TitleVerdict::Snap(label) => {
+                            out.push_str("[Source: ");
+                            out.push_str(&label);
+                            out.push(']');
+                            snapped_titles.push((title.clone(), label));
+                        }
+                        TitleVerdict::Strip => {
+                            if out.ends_with(' ') {
+                                out.pop();
+                            }
+                            stripped_titles.push(title.clone());
+                        }
+                    }
+                    i += 1 + title_len;
                     continue;
                 }
             }
@@ -469,6 +511,75 @@ fn alignment_verdict(
         }
     }
     Some(AlignVerdict::Strip { value })
+}
+
+/// Recover the intended TITLE of an unclosed `[Source:` bracket. `after_open`
+/// starts just past the `[`. Returns `(chars consumed after '[', title)`.
+/// Two strategies, ordered:
+/// 1. LABEL-PREFIX: the longest real label whose normalized text is a prefix of
+///    the post-`Source:` text — the model wrote a real citation and forgot the
+///    `]` (recovery is exact).
+/// 2. SENTENCE BOUNDARY: cut at the first `. ` followed by an uppercase letter
+///    (a label's internal dots — "VA. (1952…", "3 Feb. 1966" — don't match
+///    that shape), or at a newline, within `MAX_BRACKET_CHARS`. The recovered
+///    text is then judged normally — an invented title strips on its own
+///    merits. `None` when no boundary exists in range (leave the text alone).
+fn recover_unclosed_title(
+    after_open: &[char],
+    labels: &[(String, String)],
+) -> Option<(usize, String)> {
+    let text: String = after_open.iter().take(MAX_BRACKET_CHARS).collect();
+    let low = text.trim_start().to_lowercase();
+    debug_assert!(low.starts_with("source:"));
+    let lead_ws = text.len() - text.trim_start().len();
+    let body_byte_start = {
+        let after_kw = &text[lead_ws + "source:".len()..];
+        lead_ws + "source:".len() + (after_kw.len() - after_kw.trim_start().len())
+    };
+    let body = &text[body_byte_start..];
+    let consumed_prefix = text[..body_byte_start].chars().count();
+    // 1. Longest label-prefix match (case/whitespace-normalized compare), with a
+    //    word boundary after the match so a label can't consume mid-word.
+    let nb = normalize(body);
+    if let Some((orig, norm)) = labels
+        .iter()
+        .filter(|(_, ln)| nb.starts_with(ln.as_str()))
+        .max_by_key(|(_, ln)| ln.chars().count())
+    {
+        let mut taken = String::new();
+        let mut it = body.chars().peekable();
+        while let Some(c) = it.next() {
+            taken.push(c);
+            if normalize(&taken) == *norm {
+                let boundary_ok = it.peek().is_none_or(|n| !n.is_alphanumeric());
+                if boundary_ok {
+                    let consumed = consumed_prefix + taken.chars().count();
+                    return Some((consumed, orig.clone()));
+                }
+            }
+        }
+    }
+    // 2. Sentence boundary: ". " + uppercase, or newline.
+    let bchars: Vec<char> = body.chars().collect();
+    for k in 0..bchars.len() {
+        if bchars[k] == '\n' {
+            let title: String = bchars[..k].iter().collect();
+            let title = title.trim().trim_end_matches(['.', ',']).trim();
+            return (!title.is_empty())
+                .then(|| (consumed_prefix + k, title.to_string()));
+        }
+        if bchars[k] == '.'
+            && bchars.get(k + 1).is_some_and(|c| c.is_whitespace())
+            && bchars.get(k + 2).is_some_and(|c| c.is_uppercase())
+        {
+            let title: String = bchars[..k].iter().collect();
+            let title = title.trim().trim_end_matches(',').trim();
+            // Consume through the '.' so the prose resumes at " However …".
+            return (!title.is_empty())
+                .then(|| (consumed_prefix + k + 1, title.to_string()));
+        }
+    }
+    None
 }
 
 /// The per-title verdict: keep as cited, rewrite to a real label, or strip.
@@ -1125,13 +1236,45 @@ mod tests {
     #[test]
     fn unclosed_bracket_never_swallows_following_text() {
         // The model truncates a bracket; the next ']' lives inside LATER text
-        // (here a verification-note item). The scanner must leave the whole
-        // span untouched rather than parse ~100 chars as one "citation".
+        // (here a verification-note item). The scanner must not parse ~100
+        // chars as one "citation" — it recovers the REAL label at the newline
+        // boundary, re-emits it properly closed, and leaves the note intact.
         let answer = "grounded [Source: public-goods\n\n---\n*Verification note:*\n\
                       - “supported by [unverified excerpt: Mill argued tolls]”";
         let r = attribute_citations(answer, &[], &["public-goods".to_string()]);
-        assert_eq!(r.cleaned, answer);
-        assert!(!r.changed());
+        assert!(r.cleaned.contains("[Source: public-goods]"));
+        assert!(r.cleaned.contains("Verification note"));
+        assert!(r.cleaned.contains("[unverified excerpt: Mill argued tolls]"));
+    }
+
+    #[test]
+    fn unclosed_invented_citation_is_recovered_and_stripped() {
+        // gen75b step 157 verbatim: an INVENTED date label with a forgotten `]`
+        // flowed into prose and shipped raw — the bounded scanner skipped it,
+        // bypassing the veto. Recovery cuts at the sentence boundary, the
+        // composite date veto strips the invented title, and the prose resumes.
+        let labels = vec!["Decision — 2026-03-28 — Guest Parking".to_string(), "maple-house".to_string()];
+        let body = vec!["Guests are welcome to leave a vehicle parked in those two spaces \
+                         overnight without needing any permit."
+            .to_string()];
+        let answer = "no permit needed \
+                      [Source: Decision — 2026-12-28 — Visitor and Guest Parking. However, \
+                      it is critical to note that parking is unrestricted.";
+        let r = attribute_citations(answer, &body, &labels);
+        assert_eq!(r.citations_stripped(), 1, "{:?}", r);
+        assert!(!r.cleaned.contains("2026-12-28"));
+        assert!(r.cleaned.contains("However, it is critical"));
+        assert!(!r.cleaned.contains("[Source:"));
+    }
+
+    #[test]
+    fn forgotten_close_bracket_on_a_real_label_is_repaired() {
+        let labels = vec!["FALLS CHURCH, VA. (1952-01-01)".to_string()];
+        let body = vec!["NARA fileUnit 28940827.".to_string()];
+        let answer = "the file [Source: FALLS CHURCH, VA. (1952-01-01) has one page.";
+        let r = attribute_citations(answer, &body, &labels);
+        assert!(r.cleaned.contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
+        assert!(r.cleaned.contains(" has one page."));
     }
 
     #[test]

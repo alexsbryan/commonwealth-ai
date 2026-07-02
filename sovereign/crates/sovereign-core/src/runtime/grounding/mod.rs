@@ -983,13 +983,40 @@ async fn gate_longform(
     let audit = |text: String| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
+        let evidence_labels = evidence.source_labels.clone();
         async move {
             // Budget scales with THIS text's length — audited afresh for the
             // draft and again for the (possibly different-length) rewrite.
             let budget = claim_budget(text.chars().count(), min_claims);
             let claims = extract_claim_list(&inference, question, &text, budget).await?;
             let mut failed: Vec<FailedClaim> = Vec::new();
+            // Evidence + labels, lowercased once, for the deterministic
+            // in-world attribution veto below.
+            let hay_lower = {
+                let mut h = chunks.join(" ").to_lowercase();
+                for l in &evidence_labels {
+                    h.push(' ');
+                    h.push_str(&l.to_lowercase());
+                }
+                h
+            };
             for claim in claims.iter().take(budget) {
+                // Deterministic pre-check: an in-world attribution naming a
+                // person absent from the ENTIRE evidence is fabricated — do
+                // not ask the yes-biased joint judge (measured: "Betty
+                // Alexander sent an email…" cleared at vp=0.010 despite the
+                // name existing nowhere in the corpus; it shipped in 3 runs).
+                if let Some(name) = judge::absent_name_attribution(claim, &hay_lower) {
+                    dbg(&format!(
+                        "longform claim VETOED — in-world attribution names {name:?}, absent from evidence: {claim:?}"
+                    ));
+                    let extra = match &searcher {
+                        Some(s) => s.search(claim).await,
+                        None => Vec::new(),
+                    };
+                    failed.push(FailedClaim { claim: claim.clone(), evidence: extra });
+                    continue;
+                }
                 // Claim-conditioned retrieval: verify against the
                 // sealed CORPUS, not just the prompt snapshot. Hits
                 // go first (most relevant to THIS claim) and the cap
