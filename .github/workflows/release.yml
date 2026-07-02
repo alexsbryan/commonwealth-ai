@@ -54,7 +54,7 @@ jobs:
           fi
           echo "authorized: ${{ github.actor }}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve + verify version
         id: resolve
