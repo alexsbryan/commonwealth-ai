@@ -43,7 +43,7 @@ chrono = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
 
 # SCIP protobuf decoder — Sourcegraph's `.scip` wire format.
-prost = "0.13"
+prost = "0.14"
 
 # Cross-process file locking for the rebuild guard (`ScipGraph::try_rebuild_lock`).
 # Kernel releases on process death, so we can't leak a stale lock.
