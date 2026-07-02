@@ -185,7 +185,7 @@ ndarray = { version = "0.16", optional = true }
 imageproc = { version = "0.26", optional = true }
 # Polygon offset ("unclip") for detection boxes. Already in the tree
 # transitively (4.0.7); pinning `4` here resolves the single version.
-i_overlay = { version = "4", optional = true }
+i_overlay = { version = "7", optional = true }
 
 [features]
 default = []
