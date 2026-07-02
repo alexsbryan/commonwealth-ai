@@ -142,9 +142,16 @@ async fn cmd_neighbors(args: &[String]) -> i32 {
         Ok(g) => {
             let t = std::time::Instant::now();
             let n = g.neighbors(title, limit).await;
-            println!("=== columnar ({} neighbors, {} ms) ===", n.len(), t.elapsed().as_millis());
+            println!(
+                "=== columnar ({} neighbors, {} ms) ===",
+                n.len(),
+                t.elapsed().as_millis()
+            );
             for x in &n {
-                println!("  {} [{}] occ={} in_scope={}", x.title, x.relationship_type, x.occurrence_count, x.in_scope);
+                println!(
+                    "  {} [{}] occ={} in_scope={}",
+                    x.title, x.relationship_type, x.occurrence_count, x.in_scope
+                );
             }
             Some(key(&n))
         }
@@ -157,9 +164,16 @@ async fn cmd_neighbors(args: &[String]) -> i32 {
         Ok(g) => {
             let t = std::time::Instant::now();
             let n = g.neighbors(title, limit).await;
-            println!("\n=== sqlite ({} neighbors, {} ms) ===", n.len(), t.elapsed().as_millis());
+            println!(
+                "\n=== sqlite ({} neighbors, {} ms) ===",
+                n.len(),
+                t.elapsed().as_millis()
+            );
             for x in &n {
-                println!("  {} [{}] occ={} in_scope={}", x.title, x.relationship_type, x.occurrence_count, x.in_scope);
+                println!(
+                    "  {} [{}] occ={} in_scope={}",
+                    x.title, x.relationship_type, x.occurrence_count, x.in_scope
+                );
             }
             Some(key(&n))
         }

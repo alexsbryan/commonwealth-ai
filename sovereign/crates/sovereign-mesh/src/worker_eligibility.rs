@@ -388,7 +388,11 @@ mod tests {
         assert!(e.eligible(t + Duration::from_secs(60)).is_empty());
         let t2 = t + Duration::from_secs(95); // past 90s settle
         e.observe(&w("a:1"), t2);
-        assert_eq!(e.eligible(t2), vec!["a:1".to_string()], "eligible after settle");
+        assert_eq!(
+            e.eligible(t2),
+            vec!["a:1".to_string()],
+            "eligible after settle"
+        );
     }
 
     #[test]
@@ -402,7 +406,10 @@ mod tests {
             e.observe(&w(""), t); // disappears → flap
             t += Duration::from_secs(20);
         }
-        assert!(e.eligible(t).is_empty(), "a flapping worker is never eligible");
+        assert!(
+            e.eligible(t).is_empty(),
+            "a flapping worker is never eligible"
+        );
         // After 3 flaps it is quarantined; even continuous presence now can't make
         // it eligible until the cooldown elapses.
         let views = e.status_views(t);

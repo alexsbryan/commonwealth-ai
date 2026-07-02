@@ -4,8 +4,8 @@
 //! (no runtime/inference types), so it unit-tests without a model.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use sovereign_core::model_family::ModelFamily;
+use std::path::PathBuf;
 
 // ─── Desktop Config ──────────────────────────────────────────
 

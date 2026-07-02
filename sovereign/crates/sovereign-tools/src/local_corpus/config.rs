@@ -798,12 +798,10 @@ impl LocalCorpusSourceType {
                     icon: Some("book-open".to_string()),
                 })
             }
-            LocalCorpusSourceType::WatchedFolder(_) => {
-                Some(corpus_engine::recipe::DisplayMeta {
-                    category: Some("watched_folder".to_string()),
-                    icon: Some("folder".to_string()),
-                })
-            }
+            LocalCorpusSourceType::WatchedFolder(_) => Some(corpus_engine::recipe::DisplayMeta {
+                category: Some("watched_folder".to_string()),
+                icon: Some("folder".to_string()),
+            }),
             LocalCorpusSourceType::DocumentFolder => None,
         }
     }
@@ -993,11 +991,20 @@ mod tests {
         assert_eq!(id.len(), "obsidian-vault-".len() + 12, "{id}");
 
         let watched = corpus_id_for("watched", Path::new("/x/Research Notes (2026)"));
-        assert!(watched.starts_with("watched-research-notes-2026-"), "{watched}");
+        assert!(
+            watched.starts_with("watched-research-notes-2026-"),
+            "{watched}"
+        );
 
         // Deterministic: same path → same id; different path → different id.
-        assert_eq!(id, corpus_id_for("obsidian", Path::new("/x/Obsidian Vault")));
-        assert_ne!(id, corpus_id_for("obsidian", Path::new("/y/Obsidian Vault")));
+        assert_eq!(
+            id,
+            corpus_id_for("obsidian", Path::new("/x/Obsidian Vault"))
+        );
+        assert_ne!(
+            id,
+            corpus_id_for("obsidian", Path::new("/y/Obsidian Vault"))
+        );
 
         // Unsluggable basenames fall back to the bare `<kind>-<hash>`.
         let bare = corpus_id_for("watched", Path::new("/x/委員会"));
@@ -1192,7 +1199,10 @@ mod tests {
             .expect("vault recipe parses");
         let vault_meta = vault.source_type.display_meta().expect("vault has display");
         assert_eq!(
-            vault_recipe.display.as_ref().and_then(|d| d.category.clone()),
+            vault_recipe
+                .display
+                .as_ref()
+                .and_then(|d| d.category.clone()),
             vault_meta.category
         );
         assert_eq!(vault_meta.category.as_deref(), Some("vault"));
@@ -1209,7 +1219,10 @@ mod tests {
             .display_meta()
             .expect("watched folder has display");
         assert_eq!(
-            watched_recipe.display.as_ref().and_then(|d| d.category.clone()),
+            watched_recipe
+                .display
+                .as_ref()
+                .and_then(|d| d.category.clone()),
             watched_meta.category
         );
         assert_eq!(watched_meta.category.as_deref(), Some("watched_folder"));

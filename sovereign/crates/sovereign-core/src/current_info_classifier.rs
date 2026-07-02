@@ -92,7 +92,10 @@ impl CurrentInfoClassifier {
     /// embedding slot serialises anyway).
     pub async fn load(path: &Path, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| {
-            Error::InvalidInput(format!("read current-info examples {}: {e}", path.display()))
+            Error::InvalidInput(format!(
+                "read current-info examples {}: {e}",
+                path.display()
+            ))
         })?;
         Self::from_toml_str(&raw, inference).await
     }
@@ -125,9 +128,12 @@ impl CurrentInfoClassifier {
 
         let centroid_current =
             compute_centroid(&parsed.current.examples, &*inference, cache.as_deref_mut()).await?;
-        let centroid_evergreen =
-            compute_centroid(&parsed.evergreen.examples, &*inference, cache.as_deref_mut())
-                .await?;
+        let centroid_evergreen = compute_centroid(
+            &parsed.evergreen.examples,
+            &*inference,
+            cache.as_deref_mut(),
+        )
+        .await?;
 
         if centroid_current.len() != centroid_evergreen.len() {
             return Err(Error::InvalidInput(format!(

@@ -63,10 +63,7 @@ impl Tool for VectorMeanTool {
             .get("weight_key")
             .and_then(|v| v.as_str())
             .unwrap_or("weight");
-        let baseline = params
-            .get("baseline")
-            .and_then(num)
-            .unwrap_or(0.0);
+        let baseline = params.get("baseline").and_then(num).unwrap_or(0.0);
 
         let mut acc: Vec<f64> = Vec::new();
         let mut wsum: f64 = 0.0;
@@ -74,7 +71,9 @@ impl Tool for VectorMeanTool {
             let vec = get_path(item, vector_key)
                 .and_then(|v| v.as_array())
                 .ok_or_else(|| {
-                    Error::Execution(format!("vector_mean: item missing vector at `{vector_key}`"))
+                    Error::Execution(format!(
+                        "vector_mean: item missing vector at `{vector_key}`"
+                    ))
                 })?;
             let w = get_path(item, weight_key).and_then(num).ok_or_else(|| {
                 Error::Execution(format!(
@@ -101,7 +100,8 @@ impl Tool for VectorMeanTool {
 
         if acc.is_empty() || wsum.abs() < 1e-9 {
             return Err(Error::Execution(
-                "vector_mean: no weighted vectors to average (empty, or weights sum to zero)".into(),
+                "vector_mean: no weighted vectors to average (empty, or weights sum to zero)"
+                    .into(),
             ));
         }
         let mean: Vec<serde_json::Value> = acc
@@ -125,7 +125,9 @@ fn collection_param(params: &serde_json::Value, key: &str) -> Result<serde_json:
         Some(serde_json::Value::String(s)) => serde_json::from_str(s)
             .map_err(|e| Error::Execution(format!("vector_mean: parse `{key}`: {e}"))),
         Some(other) => Ok(other.clone()),
-        None => Err(Error::Execution(format!("vector_mean: missing required `{key}`"))),
+        None => Err(Error::Execution(format!(
+            "vector_mean: missing required `{key}`"
+        ))),
     }
 }
 

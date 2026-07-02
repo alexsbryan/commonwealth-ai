@@ -704,9 +704,7 @@ impl AppState {
     /// `MemberRecord` every round.
     pub fn install_self_iroh_dialinfo(
         &self,
-        provider: std::sync::Arc<
-            dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync,
-        >,
+        provider: std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>,
     ) {
         *self
             .inner
@@ -1100,10 +1098,7 @@ impl AppState {
     /// Install the worker-side RPC shard warmer ([`RpcShardWarmer`]) — the
     /// `POST /internal/rpc-warm` backend. Same contract as `with_local_inference`:
     /// call before cloning AppState into the HTTP servers (uses `Arc::get_mut`).
-    pub fn with_rpc_shard_warmer(
-        mut self,
-        warmer: std::sync::Arc<dyn RpcShardWarmer>,
-    ) -> Self {
+    pub fn with_rpc_shard_warmer(mut self, warmer: std::sync::Arc<dyn RpcShardWarmer>) -> Self {
         match Arc::get_mut(&mut self.inner) {
             Some(inner) => {
                 inner.rpc_shard_warmer = Some(warmer);
@@ -1499,7 +1494,10 @@ impl AppState {
         match sched.try_grant(node, weight, cap) {
             TryGrant::Granted => {
                 drop(sched);
-                Ok(PeerInflightGuard::new(std::sync::Arc::clone(&self.inner), node))
+                Ok(PeerInflightGuard::new(
+                    std::sync::Arc::clone(&self.inner),
+                    node,
+                ))
             }
             // Both outcomes mean "at capacity now" on this shed-only gate.
             TryGrant::WouldQueue { .. } | TryGrant::Shed { .. } => Err(AdmissionRejection {

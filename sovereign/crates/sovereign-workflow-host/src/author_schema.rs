@@ -323,10 +323,7 @@ mod tests {
         let arms = s["properties"]["step"]["items"]["properties"]["uses"]["oneOf"]
             .as_array()
             .expect("uses.oneOf array");
-        let patterns: Vec<&str> = arms
-            .iter()
-            .filter_map(|a| a["pattern"].as_str())
-            .collect();
+        let patterns: Vec<&str> = arms.iter().filter_map(|a| a["pattern"].as_str()).collect();
         assert_eq!(
             patterns.len(),
             StepKind::WIRE_KINDS.len(),
@@ -349,7 +346,13 @@ mod tests {
         let req = required(step);
         assert_eq!(req, vec!["id", "uses"], "a step requires exactly id + uses");
         // The optional knobs are present so the grammar permits them.
-        for k in ["prompt", "params", "for_each", "on_error", "structured_output"] {
+        for k in [
+            "prompt",
+            "params",
+            "for_each",
+            "on_error",
+            "structured_output",
+        ] {
             assert!(
                 step["properties"].get(k).is_some(),
                 "step schema should declare optional `{k}`"

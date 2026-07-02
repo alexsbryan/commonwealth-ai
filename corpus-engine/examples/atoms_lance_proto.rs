@@ -170,7 +170,10 @@ fn project(atom: &AtomEnvelope) -> Row {
 fn synth_embedding(idx: usize, dims: usize) -> Vec<f32> {
     (0..dims)
         .map(|j| {
-            let h = (idx.wrapping_mul(2654435761).wrapping_add(j.wrapping_mul(40503))) % 9973;
+            let h = (idx
+                .wrapping_mul(2654435761)
+                .wrapping_add(j.wrapping_mul(40503)))
+                % 9973;
             (h as f32 / 9973.0) - 0.5
         })
         .collect()
@@ -213,7 +216,9 @@ fn batch(rows: &[Row], sch: &Arc<Schema>, embed_dims: Option<usize>, base: usize
     };
     let mut cols: Vec<arrow_array::ArrayRef> = vec![
         col_str(&|r| r.str_id.as_str()),
-        Arc::new(UInt8Array::from(rows.iter().map(|r| r.kind).collect::<Vec<_>>())),
+        Arc::new(UInt8Array::from(
+            rows.iter().map(|r| r.kind).collect::<Vec<_>>(),
+        )),
         col_str(&|r| r.name.as_str()),
         col_str(&|r| r.label.as_str()),
         col_str(&|r| r.content.as_str()),
@@ -242,28 +247,61 @@ fn batch(rows: &[Row], sch: &Arc<Schema>, embed_dims: Option<usize>, base: usize
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let first = args.next().expect("usage: [--read] <atlas_dir|out_dir> <out_dir>");
+    let first = args
+        .next()
+        .expect("usage: [--read] <atlas_dir|out_dir> <out_dir>");
 
     // Clean reader-only mode: open an already-built atoms.lance in a FRESH
     // process (no parse/write) so the RSS is purely the Lance reader footprint
     // — the inference co-residency number.
     if first == "--read" {
         let out_dir = std::path::PathBuf::from(args.next().expect("usage: --read <out_dir>"));
-        println!("READER-ONLY  threads(start)={} RSS(start)={} MB", thread_count(), rss_mb());
+        println!(
+            "READER-ONLY  threads(start)={} RSS(start)={} MB",
+            thread_count(),
+            rss_mb()
+        );
         let t = Instant::now();
-        let db = lancedb::connect(out_dir.to_str().unwrap()).execute().await?;
+        let db = lancedb::connect(out_dir.to_str().unwrap())
+            .execute()
+            .await?;
         let tbl = db.open_table("atoms").execute().await?;
-        println!("OPEN: {} ms | RSS {} MB | threads {}", t.elapsed().as_millis(), rss_mb(), thread_count());
+        println!(
+            "OPEN: {} ms | RSS {} MB | threads {}",
+            t.elapsed().as_millis(),
+            rss_mb(),
+            thread_count()
+        );
         let t2 = Instant::now();
-        let b: Vec<RecordBatch> = tbl.query().select(Select::Columns(vec!["kind".into()]))
-            .only_if("kind = 0").execute().await?.try_collect().await?;
+        let b: Vec<RecordBatch> = tbl
+            .query()
+            .select(Select::Columns(vec!["kind".into()]))
+            .only_if("kind = 0")
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
         let ents: usize = b.iter().map(|b| b.num_rows()).sum();
-        println!("TYPE-FILTER kind=Entity: {} ms | {ents} | RSS {} MB", t2.elapsed().as_millis(), rss_mb());
+        println!(
+            "TYPE-FILTER kind=Entity: {} ms | {ents} | RSS {} MB",
+            t2.elapsed().as_millis(),
+            rss_mb()
+        );
         let t3 = Instant::now();
-        let g: Vec<RecordBatch> = tbl.query().only_if("str_id = 'entity-0001'")
-            .execute().await?.try_collect().await?;
+        let g: Vec<RecordBatch> = tbl
+            .query()
+            .only_if("str_id = 'entity-0001'")
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
         let hit: usize = g.iter().map(|b| b.num_rows()).sum();
-        println!("POINT-LOOKUP: {} ms | {hit} row | RSS {} MB | threads {}", t3.elapsed().as_millis(), rss_mb(), thread_count());
+        println!(
+            "POINT-LOOKUP: {} ms | {hit} row | RSS {} MB | threads {}",
+            t3.elapsed().as_millis(),
+            rss_mb(),
+            thread_count()
+        );
         return Ok(());
     }
 
@@ -287,19 +325,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "threads(start)={} RSS(start)={} MB  embed_dims={:?} cap={:?}",
-        thread_count(), rss_mb(), embed_dims, cap
+        thread_count(),
+        rss_mb(),
+        embed_dims,
+        cap
     );
 
     // 1. Parse the real atoms.json (the v1 canonical source).
     let t0 = Instant::now();
     let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)?;
     let n = atoms.atoms.len();
-    println!("parse atoms.json: {} ms | {n} atoms | RSS {} MB", t0.elapsed().as_millis(), rss_mb());
+    println!(
+        "parse atoms.json: {} ms | {n} atoms | RSS {} MB",
+        t0.elapsed().as_millis(),
+        rss_mb()
+    );
 
     // 2. Write atoms.lance in batches (bounds peak memory).
     let sch = schema(embed_dims);
-    let db = lancedb::connect(out_dir.to_str().unwrap()).execute().await?;
-    let tbl = db.create_empty_table("atoms", sch.clone()).execute().await?;
+    let db = lancedb::connect(out_dir.to_str().unwrap())
+        .execute()
+        .await?;
+    let tbl = db
+        .create_empty_table("atoms", sch.clone())
+        .execute()
+        .await?;
     let t1 = Instant::now();
     const BATCH: usize = 200_000;
     let limit = cap.unwrap_or(usize::MAX);
@@ -308,19 +358,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for atom in atoms.atoms.iter().take(limit) {
         buf.push(project(atom));
         if buf.len() == BATCH {
-            tbl.add(vec![batch(&buf, &sch, embed_dims, written)]).execute().await?;
+            tbl.add(vec![batch(&buf, &sch, embed_dims, written)])
+                .execute()
+                .await?;
             written += buf.len();
             buf.clear();
         }
     }
     if !buf.is_empty() {
-        tbl.add(vec![batch(&buf, &sch, embed_dims, written)]).execute().await?;
+        tbl.add(vec![batch(&buf, &sch, embed_dims, written)])
+            .execute()
+            .await?;
         written += buf.len();
     }
     let write_ms = t1.elapsed().as_millis();
     let lance_path = out_dir.join("atoms.lance");
     let size_mb = dir_size_bytes(&lance_path) / (1 << 20);
-    println!("write atoms.lance: {write_ms} ms | {written} rows | SIZE {size_mb} MB | RSS {} MB", rss_mb());
+    println!(
+        "write atoms.lance: {write_ms} ms | {written} rows | SIZE {size_mb} MB | RSS {} MB",
+        rss_mb()
+    );
 
     // 2b. Embedding axis: raw column size (arithmetic) + IVF-PQ index + ANN.
     if let Some(d) = embed_dims {
@@ -361,7 +418,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ids: Vec<String> = hits
             .iter()
             .filter_map(|b| b.column(0).as_any().downcast_ref::<StringArray>())
-            .flat_map(|a| (0..a.len()).map(|i| a.value(i).to_string()).collect::<Vec<_>>())
+            .flat_map(|a| {
+                (0..a.len())
+                    .map(|i| a.value(i).to_string())
+                    .collect::<Vec<_>>()
+            })
             .collect();
         println!(
             "ANN seed (synthetic query): {} ms | returned atom ids directly: {:?}",
@@ -373,10 +434,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Fresh open (cold) — the inference co-residency numbers.
     let t2 = Instant::now();
-    let db2 = lancedb::connect(out_dir.to_str().unwrap()).execute().await?;
+    let db2 = lancedb::connect(out_dir.to_str().unwrap())
+        .execute()
+        .await?;
     let tbl2 = db2.open_table("atoms").execute().await?;
     let open_ms = t2.elapsed().as_millis();
-    println!("OPEN atoms.lance: {open_ms} ms | RSS {} MB | threads {}", rss_mb(), thread_count());
+    println!(
+        "OPEN atoms.lance: {open_ms} ms | RSS {} MB | threads {}",
+        rss_mb(),
+        thread_count()
+    );
 
     // 4. Columnar type-filter: count Entities (kind=0) reading only `kind`.
     let rss_before_scan = rss_mb();
@@ -408,7 +475,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .try_collect()
             .await?;
         b.first()
-            .and_then(|b| b.column(0).as_any().downcast_ref::<StringArray>().map(|a| a.value(0).to_string()))
+            .and_then(|b| {
+                b.column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .map(|a| a.value(0).to_string())
+            })
             .unwrap_or_default()
     };
     let t4 = Instant::now();

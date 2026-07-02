@@ -71,22 +71,22 @@ pub(super) async fn stop_daemon() -> i32 {
     #[cfg(unix)]
     if !stop_sandboxed() {
         if let Some(pid) = find_daemon_pid_by_port(9741) {
-        let rc = unsafe {
-            libc_kill(pid, 15 /* SIGTERM */)
-        };
-        if rc == 0 {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-            while std::time::Instant::now() < deadline {
-                if unsafe { libc_kill(pid, 0) } != 0 {
-                    let _ = std::fs::remove_file(daemon_pid_path());
-                    eprintln!("✓ stopped (pid {pid}, found by :9741 listener)");
-                    return 0;
+            let rc = unsafe {
+                libc_kill(pid, 15 /* SIGTERM */)
+            };
+            if rc == 0 {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                while std::time::Instant::now() < deadline {
+                    if unsafe { libc_kill(pid, 0) } != 0 {
+                        let _ = std::fs::remove_file(daemon_pid_path());
+                        eprintln!("✓ stopped (pid {pid}, found by :9741 listener)");
+                        return 0;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                eprintln!("⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone");
+                return 1;
             }
-            eprintln!("⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone");
-            return 1;
-        }
             // kill() failed (most likely EPERM on a daemon owned by another
             // user). Fall through to the service-manager path; it might be
             // the only thing with permission.
@@ -450,7 +450,11 @@ pub(super) async fn start_daemon() -> i32 {
 /// healthy cold boots report failure. Same respect-operator-override
 /// posture as the RUST_BACKTRACE/RUST_MIN_STACK handling above.
 fn ready_timeout() -> std::time::Duration {
-    parse_ready_timeout(std::env::var("SOVEREIGN_DAEMON_READY_TIMEOUT_SECS").ok().as_deref())
+    parse_ready_timeout(
+        std::env::var("SOVEREIGN_DAEMON_READY_TIMEOUT_SECS")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// Pure parse so the policy is unit-testable without touching

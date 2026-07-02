@@ -166,7 +166,10 @@ mod tests {
         let p = chaos_to_probe(&q);
         assert!(matches!(
             p.oracle,
-            Oracle::Absent { held_out_witness: None, kind: AbsentKind::OutOfDomain }
+            Oracle::Absent {
+                held_out_witness: None,
+                kind: AbsentKind::OutOfDomain
+            }
         ));
         assert_eq!(p.expected_action(), ExpectedAction::Abstain);
     }

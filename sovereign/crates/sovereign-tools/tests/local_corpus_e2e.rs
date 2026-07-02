@@ -462,8 +462,12 @@ async fn remove_awaits_inflight_ingest_before_wiping() -> SovResult<()> {
     });
 
     let engine = Arc::new(
-        CorpusEngine::new(data_dir.join("recipes"), data_dir.join("indexes"), slow_embed)
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(
+            data_dir.join("recipes"),
+            data_dir.join("indexes"),
+            slow_embed,
+        )
+        .with_embedding_model("test-mock"),
     );
     let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
@@ -491,8 +495,7 @@ async fn remove_awaits_inflight_ingest_before_wiping() -> SovResult<()> {
     // there — held here only so the test can await task exit.
     let mgr = manager.clone();
     let id_for_spawn = id.clone();
-    let ingest_task =
-        tokio::spawn(async move { mgr.ingest(&id_for_spawn, None, None).await });
+    let ingest_task = tokio::spawn(async move { mgr.ingest(&id_for_spawn, None, None).await });
 
     // Let the ingest get under way (staging + first slow embed).
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;

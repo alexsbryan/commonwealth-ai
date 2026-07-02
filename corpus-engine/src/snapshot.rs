@@ -453,7 +453,10 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
         })
         .cloned()
         .collect();
-    manifest.bundled_corpora = bundlable_siblings.iter().map(|(id, _)| id.clone()).collect();
+    manifest.bundled_corpora = bundlable_siblings
+        .iter()
+        .map(|(id, _)| id.clone())
+        .collect();
 
     // Anchor a transactional view of any LanceDB datasets under
     // index_dir BEFORE the (slow) tar pass. The view is just a list of
@@ -924,14 +927,18 @@ mod tests {
             .unwrap()
             .map(|e| e.unwrap().path().unwrap().to_string_lossy().into_owned())
             .collect();
-        assert!(names.iter().any(|n| n.ends_with("investigation/entities.json")));
+        assert!(names
+            .iter()
+            .any(|n| n.ends_with("investigation/entities.json")));
         assert!(names.iter().any(|n| n.ends_with("_corpus_meta.json")));
         assert!(
             !names.iter().any(|n| n.ends_with(".orig")),
             "recoalesce .orig backups must not ship: {names:?}"
         );
         assert!(
-            !names.iter().any(|n| n.ends_with("_phase1_checkpoint.jsonl")),
+            !names
+                .iter()
+                .any(|n| n.ends_with("_phase1_checkpoint.jsonl")),
             "resume checkpoint must not ship: {names:?}"
         );
     }
@@ -1494,7 +1501,10 @@ mod tests {
         )
         .unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("1024"), "error must name the archive dims: {msg}");
+        assert!(
+            msg.contains("1024"),
+            "error must name the archive dims: {msg}"
+        );
         assert!(msg.contains("768"), "error must name the local dims: {msg}");
         // Pre-extract gate — directory should not appear.
         assert!(!restore_tmp.path().join("indexes/wikitest").exists());

@@ -487,14 +487,7 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
         };
-        let out = format_scored_chunks_with_kinds(
-            &[corpus, web],
-            100_000,
-            None,
-            None,
-            None,
-            None,
-        );
+        let out = format_scored_chunks_with_kinds(&[corpus, web], 100_000, None, None, None, None);
         assert!(
             out.contains("[Source: incompatibilism-arguments]"),
             "corpus chunk WITH a URL must head [Source:], got:\n{out}"

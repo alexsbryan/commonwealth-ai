@@ -588,11 +588,36 @@ fn render_markdown(set: &FindingSet) -> String {
         set.spec,
     ));
     // Most-actionable first: real contradictions, then silences, then partials.
-    render_group(&mut s, "⚠ Drift — code does the OPPOSITE of the claim", FindingKind::Drift, set);
-    render_group(&mut s, "Gap — no code addresses the claim", FindingKind::Gap, set);
-    render_group(&mut s, "Todo — partially implemented", FindingKind::Todo, set);
-    render_group(&mut s, "Unverifiable — no confident candidate", FindingKind::Unverifiable, set);
-    render_group(&mut s, "✓ Corroborated — every condition implemented", FindingKind::Corroborated, set);
+    render_group(
+        &mut s,
+        "⚠ Drift — code does the OPPOSITE of the claim",
+        FindingKind::Drift,
+        set,
+    );
+    render_group(
+        &mut s,
+        "Gap — no code addresses the claim",
+        FindingKind::Gap,
+        set,
+    );
+    render_group(
+        &mut s,
+        "Todo — partially implemented",
+        FindingKind::Todo,
+        set,
+    );
+    render_group(
+        &mut s,
+        "Unverifiable — no confident candidate",
+        FindingKind::Unverifiable,
+        set,
+    );
+    render_group(
+        &mut s,
+        "✓ Corroborated — every condition implemented",
+        FindingKind::Corroborated,
+        set,
+    );
     s
 }
 
@@ -712,7 +737,10 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
         }
     };
     if claims.is_empty() {
-        eprintln!("error: no claims in {} — nothing to reconcile", claims_path.display());
+        eprintln!(
+            "error: no claims in {} — nothing to reconcile",
+            claims_path.display()
+        );
         return 1;
     }
 
@@ -847,19 +875,18 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
 
     let claims_ref = &claims;
     let fns_ref = &fns;
-    let verdicts: HashMap<usize, SpecVerdict> = stream::iter(adj_inputs.into_iter().map(
-        |(i, cand)| {
+    let verdicts: HashMap<usize, SpecVerdict> =
+        stream::iter(adj_inputs.into_iter().map(|(i, cand)| {
             let chat = chat.clone();
             async move {
                 let bundle = render_bundle(&cand, fns_ref);
                 let v = adjudicate(&chat, &claims_ref[i], &bundle).await;
                 (i, v)
             }
-        },
-    ))
-    .buffer_unordered(LLM_CONCURRENCY)
-    .collect()
-    .await;
+        }))
+        .buffer_unordered(LLM_CONCURRENCY)
+        .collect()
+        .await;
 
     // ── assemble findings in claim order (glassbox per-claim print) ──
     let mut findings: Vec<SpecFinding> = Vec::with_capacity(claims.len());
@@ -899,7 +926,11 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
                     }
                     // A verdict can only be missing if the stream dropped it — treat
                     // as a Gap so the claim still surfaces, with a visible reason.
-                    None => (FindingKind::Gap, "[missing-verdict]".to_string(), Vec::new()),
+                    None => (
+                        FindingKind::Gap,
+                        "[missing-verdict]".to_string(),
+                        Vec::new(),
+                    ),
                 };
                 let matched: Vec<String> = cand
                     .iter()
@@ -1065,7 +1096,8 @@ mod tests {
         assert_eq!(v.per_condition.len(), 1);
         assert!(v.per_condition[0].met);
 
-        let fenced = "```json\n{\"per_condition\":[],\"verdict\":\"unrelated\",\"note\":\"n\"}\n```";
+        let fenced =
+            "```json\n{\"per_condition\":[],\"verdict\":\"unrelated\",\"note\":\"n\"}\n```";
         let v = parse_verdict(fenced).expect("fenced");
         assert_eq!(v.verdict, "unrelated");
 

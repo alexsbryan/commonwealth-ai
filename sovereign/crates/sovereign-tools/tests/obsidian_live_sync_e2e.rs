@@ -327,8 +327,8 @@ async fn vault_adding_a_new_note_is_detected_as_added() {
 ///   - rollback restores the pre-tag bytes
 #[tokio::test]
 async fn vault_writeback_round_trip_via_worker() {
-    use std::collections::HashMap;
     use sovereign_tools::local_corpus::clusterer::{LabeledCluster, LabeledClusterResult};
+    use std::collections::HashMap;
 
     let fx = boot().await;
     let snapshots = fx._tmp.path().join("vault-snapshots");
@@ -369,7 +369,9 @@ async fn vault_writeback_round_trip_via_worker() {
     assert!(
         !alpha_ids.is_empty() && !beta_ids.is_empty(),
         "both notes must index under their root-relative doc ids; rows = {:?}",
-        rows.iter().map(|r| (r.id, r.source_doc_id.clone())).collect::<Vec<_>>()
+        rows.iter()
+            .map(|r| (r.id, r.source_doc_id.clone()))
+            .collect::<Vec<_>>()
     );
 
     // Hand-built single-cluster result over the real chunk ids.

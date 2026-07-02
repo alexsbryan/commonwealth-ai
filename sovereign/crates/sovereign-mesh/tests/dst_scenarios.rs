@@ -39,7 +39,10 @@ async fn dst_two_nodes_converge_mesh_store_key() {
 
     // The default invariant pack holds at quiescence.
     let violations = check_all(&dst.snapshot().await);
-    assert!(violations.is_empty(), "invariant violations: {violations:?}");
+    assert!(
+        violations.is_empty(),
+        "invariant violations: {violations:?}"
+    );
 }
 
 /// A crashed peer decays to offline on the survivors and is never shown as a
@@ -128,9 +131,15 @@ async fn partition_then_heal_reconverges() {
     // MaxRoundsExceeded (~1-in-15 overnight); the loop returns early once
     // agreement lands, so the larger budget only costs anything on the slow tail.
     let q = dst.gossip_until_quiescent_agreed(32).await;
-    assert!(matches!(q, Quiescence::Converged { .. }), "did not reconverge: {q:?}");
+    assert!(
+        matches!(q, Quiescence::Converged { .. }),
+        "did not reconverge: {q:?}"
+    );
     let violations = check_all(&dst.snapshot().await);
-    assert!(violations.is_empty(), "post-heal violations: {violations:?}");
+    assert!(
+        violations.is_empty(),
+        "post-heal violations: {violations:?}"
+    );
 }
 
 /// The agreed-quiescence variant must REJECT a stably-disagreeing mesh — the
@@ -165,7 +174,10 @@ async fn agreed_quiesce_rejects_stable_disagreement() {
     }
     // Stability still holds (views have stopped changing)…
     assert!(
-        matches!(dst.gossip_until_quiescent(8).await, Quiescence::Converged { .. }),
+        matches!(
+            dst.gossip_until_quiescent(8).await,
+            Quiescence::Converged { .. }
+        ),
         "an active partition should still reach a stable fixpoint"
     );
     // …but the two groups disagree on the live-set, so AGREEMENT must not be
@@ -205,7 +217,10 @@ async fn wire_faults_and_clock_jump_back_reconverge() {
         "did not reconverge: {q:?}"
     );
     let violations = check_all(&dst.snapshot().await);
-    assert!(violations.is_empty(), "post-heal violations: {violations:?}");
+    assert!(
+        violations.is_empty(),
+        "post-heal violations: {violations:?}"
+    );
 }
 
 // Host-failover (SingleHostUnderFailover) is covered without a dedicated DST
@@ -225,7 +240,10 @@ async fn seeded_chaos_soak() {
     // Env-tunable for an on-demand heavy fuzz; defaults keep CI fast.
     //   SOVEREIGN_DST_CHAOS_SEEDS=50 SOVEREIGN_DST_CHAOS_NODES=7 SOVEREIGN_DST_CHAOS_ROUNDS=30
     let envn = |k: &str, d: u64| -> u64 {
-        std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
+        std::env::var(k)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(d)
     };
     let n_seeds = envn("SOVEREIGN_DST_CHAOS_SEEDS", 3);
     let n_nodes = envn("SOVEREIGN_DST_CHAOS_NODES", 5) as usize;
@@ -252,6 +270,9 @@ async fn seeded_chaos_soak() {
             "seed={seed} did not reconverge: {q:?}"
         );
         let violations = check_all(&dst.snapshot().await);
-        assert!(violations.is_empty(), "seed={seed} violations: {violations:?}");
+        assert!(
+            violations.is_empty(),
+            "seed={seed} violations: {violations:?}"
+        );
     }
 }

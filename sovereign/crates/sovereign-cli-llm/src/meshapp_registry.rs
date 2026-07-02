@@ -81,9 +81,15 @@ fn resolve_bundle(app_id: &str, dir: Option<PathBuf>) -> Result<(PathBuf, PathBu
             bundle_dir.display()
         ));
     }
-    let sdk_dir = bundle_dir.parent().map(|p| p.join("_sdk")).unwrap_or_else(|| PathBuf::from("_sdk"));
+    let sdk_dir = bundle_dir
+        .parent()
+        .map(|p| p.join("_sdk"))
+        .unwrap_or_else(|| PathBuf::from("_sdk"));
     if !sdk_dir.join("meshapp.js").is_file() {
-        return Err(format!("no _sdk next to the bundle (looked in {})", sdk_dir.display()));
+        return Err(format!(
+            "no _sdk next to the bundle (looked in {})",
+            sdk_dir.display()
+        ));
     }
     Ok((bundle_dir, sdk_dir))
 }
@@ -97,10 +103,22 @@ pub fn publish(args: &[String]) -> i32 {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--dir" => { dir = args.get(i + 1).map(PathBuf::from); i += 2; }
-            "--out" => { out = args.get(i + 1).map(PathBuf::from); i += 2; }
-            o if app_id.is_none() && !o.starts_with("--") => { app_id = Some(o.to_string()); i += 1; }
-            o => { eprintln!("meshapp publish: unexpected argument `{o}`"); return 2; }
+            "--dir" => {
+                dir = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            "--out" => {
+                out = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            o if app_id.is_none() && !o.starts_with("--") => {
+                app_id = Some(o.to_string());
+                i += 1;
+            }
+            o => {
+                eprintln!("meshapp publish: unexpected argument `{o}`");
+                return 2;
+            }
         }
     }
     let Some(app_id) = app_id else {
@@ -109,11 +127,17 @@ pub fn publish(args: &[String]) -> i32 {
     };
     let (bundle_dir, sdk_dir) = match resolve_bundle(&app_id, dir) {
         Ok(x) => x,
-        Err(e) => { eprintln!("meshapp publish: {e}"); return 1; }
+        Err(e) => {
+            eprintln!("meshapp publish: {e}");
+            return 1;
+        }
     };
     let manifest = match read_manifest(&bundle_dir) {
         Ok(m) => m,
-        Err(e) => { eprintln!("meshapp publish: {e}"); return 1; }
+        Err(e) => {
+            eprintln!("meshapp publish: {e}");
+            return 1;
+        }
     };
 
     let out_dir = out.unwrap_or_else(|| sovereign_meshapps().join("artifacts"));
@@ -128,7 +152,10 @@ pub fn publish(args: &[String]) -> i32 {
     }
     let sha = match sha256_file(&artifact) {
         Ok(s) => s,
-        Err(e) => { eprintln!("meshapp publish: sha256: {e}"); return 1; }
+        Err(e) => {
+            eprintln!("meshapp publish: sha256: {e}");
+            return 1;
+        }
     };
 
     // Record it in the local registry so `meshapp install <id>` resolves it.
@@ -148,10 +175,18 @@ pub fn publish(args: &[String]) -> i32 {
     }
 
     let size = std::fs::metadata(&artifact).map(|m| m.len()).unwrap_or(0);
-    println!("published `{}` v{} → {}", manifest.id, manifest.version, artifact.display());
+    println!(
+        "published `{}` v{} → {}",
+        manifest.id,
+        manifest.version,
+        artifact.display()
+    );
     println!("  sha256 {sha}");
     println!("  size   {:.1} KB", size as f64 / 1024.0);
-    println!("\ninstall locally:  sovereign meshapp install {}", manifest.id);
+    println!(
+        "\ninstall locally:  sovereign meshapp install {}",
+        manifest.id
+    );
     println!("to publish to the CURATED registry (so others can install + one-click data):");
     println!("  1. upload the tar to a URL or HuggingFace");
     println!("  2. add an [[apps]] entry to {CURATED_REGISTRY} (PR for review) with:");
@@ -185,9 +220,18 @@ pub async fn install(args: &[String]) -> i32 {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--from" => { from = args.get(i + 1).cloned(); i += 2; }
-            o if app_id.is_none() && !o.starts_with("--") => { app_id = Some(o.to_string()); i += 1; }
-            o => { eprintln!("meshapp install: unexpected argument `{o}`"); return 2; }
+            "--from" => {
+                from = args.get(i + 1).cloned();
+                i += 2;
+            }
+            o if app_id.is_none() && !o.starts_with("--") => {
+                app_id = Some(o.to_string());
+                i += 1;
+            }
+            o => {
+                eprintln!("meshapp install: unexpected argument `{o}`");
+                return 2;
+            }
         }
     }
     let Some(app_id) = app_id else {
@@ -210,7 +254,11 @@ pub async fn install(args: &[String]) -> i32 {
                     eprintln!("meshapp install: registry entry for `{app_id}` has no path or url");
                     return 1;
                 };
-                (src, Some(entry.sha256.clone()), if curated { "curated" } else { "unsigned" })
+                (
+                    src,
+                    Some(entry.sha256.clone()),
+                    if curated { "curated" } else { "unsigned" },
+                )
             }
             None => {
                 eprintln!("meshapp install: `{app_id}` is not in the registry — pass --from <path|url> to sideload.");
@@ -222,14 +270,23 @@ pub async fn install(args: &[String]) -> i32 {
     // Fetch the artifact to a temp file.
     let tmp = match fetch(&source).await {
         Ok(t) => t,
-        Err(e) => { eprintln!("meshapp install: fetch: {e}"); return 1; }
+        Err(e) => {
+            eprintln!("meshapp install: fetch: {e}");
+            return 1;
+        }
     };
     // Verify integrity.
     if let Some(want) = &expected_sha {
         match sha256_file(tmp.path()) {
             Ok(got) if &got == want => {}
-            Ok(got) => { eprintln!("meshapp install: sha256 mismatch (want {want}, got {got}) — refusing"); return 1; }
-            Err(e) => { eprintln!("meshapp install: sha256: {e}"); return 1; }
+            Ok(got) => {
+                eprintln!("meshapp install: sha256 mismatch (want {want}, got {got}) — refusing");
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("meshapp install: sha256: {e}");
+                return 1;
+            }
         }
     }
     // Unpack into ~/.sovereign/meshapps/ (creates <id>/ and _sdk/).
@@ -238,7 +295,10 @@ pub async fn install(args: &[String]) -> i32 {
         eprintln!("meshapp install: unpack: {e}");
         return 1;
     }
-    println!("installed `{app_id}` ({trust}) → {}", dest.join(&app_id).display());
+    println!(
+        "installed `{app_id}` ({trust}) → {}",
+        dest.join(&app_id).display()
+    );
     println!("  run it:  sovereign meshapp dev {app_id}");
     println!("  or open it from the Mesh apps section in Sovereign Desktop.");
     0
@@ -298,14 +358,22 @@ pub fn list(_args: &[String]) -> i32 {
         println!("  (none — {CURATED_REGISTRY} is empty or not found from here)");
     }
     for a in &curated.apps {
-        let mark = if installed.contains(&a.id) { "✓ installed" } else { "" };
+        let mark = if installed.contains(&a.id) {
+            "✓ installed"
+        } else {
+            ""
+        };
         println!("  {:<18} v{:<8} [{}]  {}", a.id, a.version, a.trust, mark);
     }
     let local = load_registry_file(&local_registry_path());
     if !local.apps.is_empty() {
         println!("\nPublished locally:");
         for a in &local.apps {
-            let mark = if installed.contains(&a.id) { "✓ installed" } else { "" };
+            let mark = if installed.contains(&a.id) {
+                "✓ installed"
+            } else {
+                ""
+            };
             println!("  {:<18} v{:<8} [{}]  {}", a.id, a.version, a.trust, mark);
         }
     }
@@ -361,7 +429,11 @@ fn resolve_entry(app_id: &str) -> Option<(RegistryEntry, bool)> {
         return Some((e, false));
     }
     let curated = load_registry_file(&PathBuf::from(CURATED_REGISTRY));
-    curated.apps.into_iter().find(|a| a.id == app_id).map(|e| (e, true))
+    curated
+        .apps
+        .into_iter()
+        .find(|a| a.id == app_id)
+        .map(|e| (e, true))
 }
 
 fn upsert_local(entry: &RegistryEntry) -> Result<(), String> {

@@ -301,7 +301,10 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
             1
         }
         None => {
-            eprintln!("router-cache rebuild: could not read back {}", target.display());
+            eprintln!(
+                "router-cache rebuild: could not read back {}",
+                target.display()
+            );
             1
         }
     }

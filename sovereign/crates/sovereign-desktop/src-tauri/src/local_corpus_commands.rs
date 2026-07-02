@@ -610,7 +610,10 @@ async fn run_ingest_via_runner(
         .collect::<Vec<_>>()
         .join(",");
     let mut params = BTreeMap::new();
-    params.insert("folder".to_string(), cfg.root_path.to_string_lossy().into_owned());
+    params.insert(
+        "folder".to_string(),
+        cfg.root_path.to_string_lossy().into_owned(),
+    );
     params.insert("corpus".to_string(), corpus_id.clone());
     params.insert("glob".to_string(), glob);
 
@@ -968,7 +971,11 @@ mod tests {
         );
         assert!(matches!(
             start,
-            Some(LocalCorpusProgress::Ingesting { done: 0, total: 2, .. })
+            Some(LocalCorpusProgress::Ingesting {
+                done: 0,
+                total: 2,
+                ..
+            })
         ));
 
         let step = workflow_progress_to_local(

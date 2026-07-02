@@ -237,7 +237,7 @@ mod tests {
     fn per_node_cap_stops_one_node_from_hogging() {
         let s = fresh_state();
         s.set_contribution_max_peer_inflight(4); // rationing, 4 slots
-        // A neutral node's cap is 1 even with 3 slots free — anti-hog.
+                                                 // A neutral node's cap is 1 even with 3 slots free — anti-hog.
         let _g1 = s.admit_peer_request(nid(1)).unwrap();
         let err = s
             .admit_peer_request(nid(1))

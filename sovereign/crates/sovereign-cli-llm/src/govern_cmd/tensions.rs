@@ -53,7 +53,10 @@ pub fn cmd_tensions(args: &[String]) -> i32 {
             }
         }
     }
-    println!("=== govern tensions — {corpus_id} ({} open) ===", open.len());
+    println!(
+        "=== govern tensions — {corpus_id} ({} open) ===",
+        open.len()
+    );
     if open.is_empty() {
         if view.rules.is_empty() {
             println!("  no governed rules yet — run `svrn govern seed {corpus_id}` first.");

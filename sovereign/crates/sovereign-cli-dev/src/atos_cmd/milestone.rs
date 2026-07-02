@@ -491,10 +491,7 @@ pub(crate) async fn cmd_next(args: &[String]) -> i32 {
             "feature '{}' has no unfinished milestone — every ordinal has a passing run.",
             feature.id
         );
-        println!(
-            "Run `svrn atos teardown {}` to wrap it up.",
-            feature.id
-        );
+        println!("Run `svrn atos teardown {}` to wrap it up.", feature.id);
         return 0;
     };
 

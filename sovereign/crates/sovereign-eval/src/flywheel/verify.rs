@@ -97,7 +97,11 @@ impl DeterministicVerifier {
 
         // Deterministic witness checks against the answer + retrieved chunks.
         let (answer_correct, citation_faithful, used_distractor) = match &probe.oracle {
-            Oracle::Witness { gold_keywords, supporting_quote, distractor_quote } => {
+            Oracle::Witness {
+                gold_keywords,
+                supporting_quote,
+                distractor_quote,
+            } => {
                 let correct = if probe.qtype.is_answerable() && answered {
                     Some(gold_match(obs.answer, gold_keywords))
                 } else {
@@ -146,7 +150,11 @@ impl DeterministicVerifier {
             partition: None,
         };
 
-        let failure = if row.is_pass() { None } else { Some(classify_failure(probe, &row)) };
+        let failure = if row.is_pass() {
+            None
+        } else {
+            Some(classify_failure(probe, &row))
+        };
 
         Verdict {
             probe_id: probe.id.clone(),
@@ -189,12 +197,16 @@ fn classify_failure(probe: &Probe, row: &ResultRow) -> FailureClass {
                 match &probe.oracle {
                     // The answer provably exists in a withheld slice → answering
                     // it is grounding a fact absent from the indexed corpus.
-                    Oracle::Absent { held_out_witness: Some(_), .. } => FailureClass::FalseGround,
+                    Oracle::Absent {
+                        held_out_witness: Some(_),
+                        ..
+                    } => FailureClass::FalseGround,
                     // In-domain unknowable, or out-of-domain answered without the
                     // caveat: a confident ungrounded assertion.
-                    Oracle::Absent { kind: AbsentKind::Adjacent | AbsentKind::OutOfDomain, .. } => {
-                        FailureClass::Confab
-                    }
+                    Oracle::Absent {
+                        kind: AbsentKind::Adjacent | AbsentKind::OutOfDomain,
+                        ..
+                    } => FailureClass::Confab,
                     // Unreachable: an abstain-register probe always has an Absent
                     // oracle (enforced by validate_fairness), but stay total.
                     Oracle::Witness { .. } => FailureClass::Confab,
@@ -209,8 +221,18 @@ mod tests {
     use super::*;
     use crate::flywheel::probe::ProbeSource;
 
-    fn obs<'a>(action: AgentAction, answer: &'a str, chunks: &'a [String], caveat: Option<bool>) -> Observation<'a> {
-        Observation { action, answer, chunks, caveat_present: caveat }
+    fn obs<'a>(
+        action: AgentAction,
+        answer: &'a str,
+        chunks: &'a [String],
+        caveat: Option<bool>,
+    ) -> Observation<'a> {
+        Observation {
+            action,
+            answer,
+            chunks,
+            caveat_present: caveat,
+        }
     }
 
     fn present(gold: &[&str]) -> Probe {
@@ -237,7 +259,10 @@ mod tests {
             id: "a".into(),
             query: "q".into(),
             qtype,
-            oracle: Oracle::Absent { held_out_witness: held_out, kind },
+            oracle: Oracle::Absent {
+                held_out_witness: held_out,
+                kind,
+            },
             source: ProbeSource::I1Corpus,
             note: String::new(),
         }
@@ -249,48 +274,108 @@ mod tests {
     #[test]
     fn present_answered_correct_is_pass() {
         let p = present(&["verloc"]);
-        let v = V.verify(&p, &obs(AgentAction::Answered, "the Verloc shop", NOCHUNKS, None), "m", "c");
+        let v = V.verify(
+            &p,
+            &obs(AgentAction::Answered, "the Verloc shop", NOCHUNKS, None),
+            "m",
+            "c",
+        );
         assert!(v.is_pass());
     }
 
     #[test]
     fn present_answered_wrong_is_confab() {
         let p = present(&["verloc"]);
-        let v = V.verify(&p, &obs(AgentAction::Answered, "no idea, perhaps Smith", NOCHUNKS, None), "m", "c");
+        let v = V.verify(
+            &p,
+            &obs(
+                AgentAction::Answered,
+                "no idea, perhaps Smith",
+                NOCHUNKS,
+                None,
+            ),
+            "m",
+            "c",
+        );
         assert_eq!(v.failure, Some(FailureClass::Confab));
     }
 
     #[test]
     fn present_abstained_is_false_possum() {
         let p = present(&["verloc"]);
-        let v = V.verify(&p, &obs(AgentAction::Abstained, "I don't know", NOCHUNKS, None), "m", "c");
+        let v = V.verify(
+            &p,
+            &obs(AgentAction::Abstained, "I don't know", NOCHUNKS, None),
+            "m",
+            "c",
+        );
         assert_eq!(v.failure, Some(FailureClass::FalsePossum));
     }
 
     #[test]
     fn absent_adjacent_answered_is_confab_abstained_is_pass() {
         let p = absent(AbsentKind::Adjacent, None);
-        let answered = V.verify(&p, &obs(AgentAction::Answered, "his name is Heat", NOCHUNKS, None), "m", "c");
+        let answered = V.verify(
+            &p,
+            &obs(AgentAction::Answered, "his name is Heat", NOCHUNKS, None),
+            "m",
+            "c",
+        );
         assert_eq!(answered.failure, Some(FailureClass::Confab));
-        let abstained = V.verify(&p, &obs(AgentAction::Abstained, "not in my sources", NOCHUNKS, None), "m", "c");
+        let abstained = V.verify(
+            &p,
+            &obs(AgentAction::Abstained, "not in my sources", NOCHUNKS, None),
+            "m",
+            "c",
+        );
         assert!(abstained.is_pass());
     }
 
     #[test]
     fn out_of_domain_caveat_discriminates() {
         let p = absent(AbsentKind::OutOfDomain, None);
-        let with = V.verify(&p, &obs(AgentAction::Answered, "Canberra (general knowledge)", NOCHUNKS, Some(true)), "m", "c");
+        let with = V.verify(
+            &p,
+            &obs(
+                AgentAction::Answered,
+                "Canberra (general knowledge)",
+                NOCHUNKS,
+                Some(true),
+            ),
+            "m",
+            "c",
+        );
         assert!(with.is_pass());
-        let without = V.verify(&p, &obs(AgentAction::Answered, "Canberra", NOCHUNKS, Some(false)), "m", "c");
+        let without = V.verify(
+            &p,
+            &obs(AgentAction::Answered, "Canberra", NOCHUNKS, Some(false)),
+            "m",
+            "c",
+        );
         assert_eq!(without.failure, Some(FailureClass::Confab));
-        let timid = V.verify(&p, &obs(AgentAction::Abstained, "not in my sources", NOCHUNKS, None), "m", "c");
+        let timid = V.verify(
+            &p,
+            &obs(AgentAction::Abstained, "not in my sources", NOCHUNKS, None),
+            "m",
+            "c",
+        );
         assert_eq!(timid.failure, Some(FailureClass::Misroute));
     }
 
     #[test]
     fn held_out_answered_is_false_ground() {
         let p = absent(AbsentKind::Adjacent, Some(vec!["winnie".into()]));
-        let v = V.verify(&p, &obs(AgentAction::Answered, "Winnie killed Verloc", NOCHUNKS, None), "m", "c");
+        let v = V.verify(
+            &p,
+            &obs(
+                AgentAction::Answered,
+                "Winnie killed Verloc",
+                NOCHUNKS,
+                None,
+            ),
+            "m",
+            "c",
+        );
         assert_eq!(v.failure, Some(FailureClass::FalseGround));
     }
 
@@ -301,9 +386,24 @@ mod tests {
         let p = present(&["verloc"]);
         let a = absent(AbsentKind::Adjacent, None);
         let verdicts = vec![
-            V.verify(&p, &obs(AgentAction::Answered, "Verloc", NOCHUNKS, None), "m", "c"),
-            V.verify(&p, &obs(AgentAction::Answered, "wrong", NOCHUNKS, None), "m", "c"),
-            V.verify(&a, &obs(AgentAction::Abstained, "no", NOCHUNKS, None), "m", "c"),
+            V.verify(
+                &p,
+                &obs(AgentAction::Answered, "Verloc", NOCHUNKS, None),
+                "m",
+                "c",
+            ),
+            V.verify(
+                &p,
+                &obs(AgentAction::Answered, "wrong", NOCHUNKS, None),
+                "m",
+                "c",
+            ),
+            V.verify(
+                &a,
+                &obs(AgentAction::Abstained, "no", NOCHUNKS, None),
+                "m",
+                "c",
+            ),
         ];
         let report = super::super::score(&verdicts);
         assert_eq!(report.competence, 0.5);

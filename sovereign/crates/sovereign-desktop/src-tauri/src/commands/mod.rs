@@ -292,11 +292,11 @@ mod corpus;
 mod corpus_install;
 mod document_asset;
 mod hardware;
+mod mcp_servers;
+mod meshapp;
 mod models;
 mod reading;
 mod recipe_testing;
-mod meshapp;
-mod mcp_servers;
 
 pub use budget::*;
 pub use chat::*;
@@ -307,11 +307,11 @@ pub use corpus::*;
 pub use corpus_install::*;
 pub use document_asset::*;
 pub use hardware::*;
+pub use mcp_servers::*;
+pub use meshapp::*;
 pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
-pub use meshapp::*;
-pub use mcp_servers::*;
 
 // ─── Tests ───────────────────────────────────────────────────
 

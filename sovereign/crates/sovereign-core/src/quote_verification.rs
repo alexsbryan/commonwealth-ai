@@ -228,7 +228,8 @@ mod tests {
     fn fabricated_quote_against_evidence_is_demoted() {
         // SEP-shaped evidence: a real passage the model was shown. The
         // answer fabricates a verbatim-looking quote that never appears.
-        let evidence = "Compatibilism is the thesis that free will is compatible with determinism. \
+        let evidence =
+            "Compatibilism is the thesis that free will is compatible with determinism. \
              Classical compatibilists analyse the freedom to do otherwise as a hypothetical: \
              an agent could have done otherwise if she had chosen to.";
         let answer = r#"On this view, Frankfurt holds that "moral responsibility floats entirely free of any ability to do otherwise whatsoever.""#;
@@ -239,7 +240,8 @@ mod tests {
 
     #[test]
     fn verbatim_quote_against_evidence_passes() {
-        let evidence = "Compatibilism is the thesis that free will is compatible with determinism. \
+        let evidence =
+            "Compatibilism is the thesis that free will is compatible with determinism. \
              Classical compatibilists analyse the freedom to do otherwise as a hypothetical.";
         let answer = r#"The entry defines it directly: "free will is compatible with determinism" is the core claim."#;
         let r = verify_answer_against_evidence(answer, evidence);

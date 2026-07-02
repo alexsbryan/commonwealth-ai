@@ -40,8 +40,7 @@ pub(crate) async fn open_store(
     emit(BootstrapPhase::OpeningDatabase);
     let db_path = config.data_dir.join("sovereign.db");
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create data dir: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create data dir: {e}"))?;
     }
     tracing::info!("Database: {}", db_path.display());
     let sqlite_store =
@@ -93,7 +92,10 @@ mod tests {
         .expect("open_store should succeed over a temp dir");
 
         assert!(store_slot.read().await.is_some(), "store slot set");
-        assert!(sqlite_slot.read().await.is_some(), "concrete sqlite slot set");
+        assert!(
+            sqlite_slot.read().await.is_some(),
+            "concrete sqlite slot set"
+        );
         assert!(insight_slot.read().await.is_some(), "insight service set");
 
         // Idempotent reuse: a second call returns the already-open store.

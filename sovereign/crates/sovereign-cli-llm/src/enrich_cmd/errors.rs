@@ -350,9 +350,7 @@ fn group_by_phase_kind(
 /// and the printer omits the line.
 fn retry_command(phase: PipelinePhase, corpus_id: &str) -> Option<String> {
     match phase {
-        PipelinePhase::Questions => Some(format!(
-            "svrn enrich extract {corpus_id} --retry-failed"
-        )),
+        PipelinePhase::Questions => Some(format!("svrn enrich extract {corpus_id} --retry-failed")),
         PipelinePhase::Concerns => Some(format!("svrn enrich name-concerns {corpus_id}")),
         PipelinePhase::AtlasClusters => Some(format!("svrn enrich cluster-atlas {corpus_id}")),
         PipelinePhase::AtlasNamedClusters => {

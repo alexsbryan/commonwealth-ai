@@ -44,10 +44,7 @@ pub enum ServerEvent {
     },
     /// One streamed token delta for an assistant message. Emitted once
     /// per chunk as the host synthesizes the response.
-    Token {
-        message_id: String,
-        chunk: String,
-    },
+    Token { message_id: String, chunk: String },
     /// Terminal frame, sent after the stream is exhausted and the
     /// runtime has persisted the assistant message. Carries the
     /// projected provenance + corpus-grounded citations for the

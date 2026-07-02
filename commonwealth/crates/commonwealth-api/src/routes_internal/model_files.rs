@@ -297,14 +297,16 @@ pub async fn serve_model_file(
             )
         })?;
         use tokio::io::{AsyncReadExt, AsyncSeekExt};
-        file.seek(std::io::SeekFrom::Start(start)).await.map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: format!("seek: {e}"),
-                }),
-            )
-        })?;
+        file.seek(std::io::SeekFrom::Start(start))
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: format!("seek: {e}"),
+                    }),
+                )
+            })?;
         tracing::debug!(
             path = %path.display(),
             name = %name,
@@ -319,7 +321,10 @@ pub async fn serve_model_file(
             axum::http::header::CONTENT_TYPE,
             HeaderValue::from_static("application/octet-stream"),
         );
-        headers.insert(axum::http::header::CONTENT_LENGTH, HeaderValue::from(length));
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from(length),
+        );
         headers.insert(
             axum::http::header::ACCEPT_RANGES,
             HeaderValue::from_static("bytes"),
@@ -415,13 +420,25 @@ mod tests {
         let size = 1000;
         // Explicit START-END (inclusive) — the form the byte-range warmer sends.
         assert_eq!(parse_single_byte_range("bytes=0-99", size), Some((0, 99)));
-        assert_eq!(parse_single_byte_range("bytes=100-199", size), Some((100, 199)));
+        assert_eq!(
+            parse_single_byte_range("bytes=100-199", size),
+            Some((100, 199))
+        );
         // END past EOF clamps to the last byte.
-        assert_eq!(parse_single_byte_range("bytes=900-5000", size), Some((900, 999)));
+        assert_eq!(
+            parse_single_byte_range("bytes=900-5000", size),
+            Some((900, 999))
+        );
         // Open-ended START- → to EOF.
-        assert_eq!(parse_single_byte_range("bytes=500-", size), Some((500, 999)));
+        assert_eq!(
+            parse_single_byte_range("bytes=500-", size),
+            Some((500, 999))
+        );
         // Suffix -N → final N bytes.
-        assert_eq!(parse_single_byte_range("bytes=-200", size), Some((800, 999)));
+        assert_eq!(
+            parse_single_byte_range("bytes=-200", size),
+            Some((800, 999))
+        );
         // Whitespace tolerated.
         assert_eq!(parse_single_byte_range(" bytes=0-9 ", size), Some((0, 9)));
         // Unsatisfiable / unsupported → None (caller serves the whole file).

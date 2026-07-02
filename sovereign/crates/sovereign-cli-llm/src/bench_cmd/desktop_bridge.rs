@@ -37,18 +37,13 @@ impl BridgeClient {
     /// Fail fast with a actionable message when the bridge isn't up.
     pub async fn healthz(&self) -> Result<(), String> {
         let url = format!("{}/healthz", self.base);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                format!(
-                    "desktop bridge unreachable at {url}: {e}\n\
+        let resp = self.http.get(&url).send().await.map_err(|e| {
+            format!(
+                "desktop bridge unreachable at {url}: {e}\n\
                      Launch the desktop with SOVEREIGN_COMMAND_BRIDGE=1 \
                      (e.g. via the real-mode e2e global-setup) first."
-                )
-            })?;
+            )
+        })?;
         if !resp.status().is_success() {
             return Err(format!("bridge healthz returned {}", resp.status()));
         }

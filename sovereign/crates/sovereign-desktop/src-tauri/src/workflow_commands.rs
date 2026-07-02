@@ -275,7 +275,9 @@ pub async fn workflow_run(
     // The corpus this run will build, for the "chat with it" handoff: only when a
     // store step is present and a corpus name resolved.
     let builds_corpus = wf.steps.iter().any(|s| s.uses == "tool:corpus_store");
-    let corpus = builds_corpus.then(|| params.get("corpus").cloned()).flatten();
+    let corpus = builds_corpus
+        .then(|| params.get("corpus").cloned())
+        .flatten();
 
     // Reuse the desktop's own inference provider (attach: a SplitInferenceProvider
     // to the daemon; embedded: in-process) rather than re-discovering models.
@@ -367,7 +369,11 @@ params = { corpus = "{param.corpus}" }
         let entry = catalog_entry("notebook", "shipped:notebook".to_string(), toml).unwrap();
         assert_eq!(entry.name, "notebook");
         assert_eq!(entry.origin, "shipped:notebook");
-        assert!(entry.description.contains("cited notebook"), "{}", entry.description);
+        assert!(
+            entry.description.contains("cited notebook"),
+            "{}",
+            entry.description
+        );
         let kinds: std::collections::BTreeMap<_, _> = entry
             .params
             .iter()

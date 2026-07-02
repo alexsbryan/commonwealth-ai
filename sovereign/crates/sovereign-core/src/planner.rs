@@ -283,7 +283,11 @@ fn format_param_hint(t: &ToolDescriptor) -> Option<String> {
         .iter()
         .map(|(name, spec)| {
             let ty = spec.get("type").and_then(|v| v.as_str()).unwrap_or("any");
-            let star = if required.contains(name.as_str()) { "*" } else { "" };
+            let star = if required.contains(name.as_str()) {
+                "*"
+            } else {
+                ""
+            };
             format!("{name}{star} ({ty})")
         })
         .collect();
@@ -533,9 +537,10 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                             .collect()
                     })
                     .unwrap_or_default();
-                let return_schema = step_obj.get("return_schema").cloned().unwrap_or_else(|| {
-                    serde_json::json!({ "type": "object", "properties": {} })
-                });
+                let return_schema = step_obj
+                    .get("return_schema")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({ "type": "object", "properties": {} }));
                 let max_iter = step_obj
                     .get("max_iterations")
                     .and_then(|v| v.as_u64())

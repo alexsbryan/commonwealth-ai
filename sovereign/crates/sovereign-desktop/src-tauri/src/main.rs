@@ -277,10 +277,8 @@ fn main() -> ExitCode {
                         Ok(g) => g,
                         Err(p) => p.into_inner(),
                     };
-                    let (prev_at, prev_name) = std::mem::replace(
-                        &mut *guard,
-                        (now, format!("{phase:?}")),
-                    );
+                    let (prev_at, prev_name) =
+                        std::mem::replace(&mut *guard, (now, format!("{phase:?}")));
                     tracing::info!(
                         phase = ?phase,
                         total_ms = boot_start.elapsed().as_millis() as u64,

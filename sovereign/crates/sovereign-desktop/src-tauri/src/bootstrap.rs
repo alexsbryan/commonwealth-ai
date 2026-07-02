@@ -36,7 +36,10 @@ pub enum BootstrapMode {
     /// The desktop should proxy inference through `RemoteApiProvider`
     /// and mesh mutations through the daemon's `/v1/mesh/*` HTTP API
     /// (see the mesh_http module in sovereign-mesh, when landed).
-    Attach { client_port: u16, internal_port: u16 },
+    Attach {
+        client_port: u16,
+        internal_port: u16,
+    },
     /// Nothing is listening. The desktop should start its own
     /// `EmbeddedDaemon` and load models from `source`.
     Local { source: ConfigSource },

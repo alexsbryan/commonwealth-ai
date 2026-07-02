@@ -168,7 +168,8 @@ const FLAG_ATLAS_GROUNDING: EnvFlag = EnvFlag {
 const FLAG_QUERY_DECOMP: EnvFlag = EnvFlag {
     name: "SOVEREIGN_QUERY_DECOMP",
     default: "off",
-    purpose: "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass.",
+    purpose:
+        "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass.",
 };
 const FLAG_TITLE_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_TITLE_EXPAND",
@@ -245,8 +246,7 @@ pub type StepFuture<'a> =
     std::pin::Pin<Box<dyn std::future::Future<Output = StepOutcome> + Send + 'a>>;
 
 /// A step is a plain `fn` so step lists are cheap, `'static` data.
-pub type StepFn =
-    for<'a, 'ctx> fn(&'a Runtime, &'a mut PipelineState<'ctx>) -> StepFuture<'a>;
+pub type StepFn = for<'a, 'ctx> fn(&'a Runtime, &'a mut PipelineState<'ctx>) -> StepFuture<'a>;
 
 pub struct RetrievalStep {
     pub name: &'static str,
@@ -535,8 +535,11 @@ fn step_governance_active_set<'a, 'ctx>(
             return StepOutcome::default();
         }
         let before = st.chunks.len();
-        st.chunks
-            .retain(|c| c.chunk_id.map(|id| !dead_chunks.contains(&id)).unwrap_or(true));
+        st.chunks.retain(|c| {
+            c.chunk_id
+                .map(|id| !dead_chunks.contains(&id))
+                .unwrap_or(true)
+        });
         let dropped = before - st.chunks.len();
         if dropped > 0 {
             tracing::info!(
@@ -603,9 +606,7 @@ fn step_readiness_disclosure<'a, 'ctx>(
         // the question may have nothing to do with.
         let unready = engine.installed_indexes().await.ok().and_then(|idx| {
             idx.into_iter()
-                .filter(|info| {
-                    scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id))
-                })
+                .filter(|info| scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id)))
                 .find_map(|info| {
                     let issue = if !info.indexes_built {
                         ReadinessIssue::NotBuilt
@@ -638,8 +639,14 @@ fn step_readiness_disclosure<'a, 'ctx>(
                 0,
                 "hasn't finished building yet (a sync or import may have paused)",
             ),
-            ReadinessIssue::NoVectorIndex => ("vector_index_missing", 0, "isn't fully indexed for search yet"),
-            ReadinessIssue::DimMismatch { built } => ("dim_mismatch", built, "needs a quick rebuild first"),
+            ReadinessIssue::NoVectorIndex => (
+                "vector_index_missing",
+                0,
+                "isn't fully indexed for search yet",
+            ),
+            ReadinessIssue::DimMismatch { built } => {
+                ("dim_mismatch", built, "needs a quick rebuild first")
+            }
         };
         tracing::info!(
             target: "retrieval.pipeline",
@@ -690,10 +697,22 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         step("title_expand", Some(FLAG_TITLE_EXPAND), step_title_expand),
         step("noise_floor", None, step_noise_floor),
         step("atom_enum", Some(FLAG_ATOM_ENUM), step_atom_enum),
-        step("raptor_grounding_early", Some(FLAG_RAPTOR_GROUNDING), step_raptor_grounding_early),
-        step("atlas_grounding", Some(FLAG_ATLAS_GROUNDING), step_atlas_grounding),
+        step(
+            "raptor_grounding_early",
+            Some(FLAG_RAPTOR_GROUNDING),
+            step_raptor_grounding_early,
+        ),
+        step(
+            "atlas_grounding",
+            Some(FLAG_ATLAS_GROUNDING),
+            step_atlas_grounding,
+        ),
         step("reweight_and_sort", None, step_reweight_and_sort),
-        step("graph_neighbor_expand", Some(FLAG_GRAPH_NEIGHBOR_EXPAND), step_graph_neighbor_expand),
+        step(
+            "graph_neighbor_expand",
+            Some(FLAG_GRAPH_NEIGHBOR_EXPAND),
+            step_graph_neighbor_expand,
+        ),
         step("dedupe_merged", None, step_dedupe_merged),
         step("cap_and_reserve", None, step_cap_and_reserve),
         // FR-9: drop dead-law chunks for governance corpora; inert
@@ -759,15 +778,15 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
     steps.extend(core);
     steps.push(step("truncate_merged", None, deep_truncate_merged));
     steps.push(step("top_sources_expand", None, deep_top_sources_expand));
-    RetrievalPipeline { name: "deep_query", steps }
+    RetrievalPipeline {
+        name: "deep_query",
+        steps,
+    }
 }
 
 // ─── Shared steps (identical on both paths, modulo the label) ────
 
-fn step_bridge_boost<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_bridge_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Cross-corpus stereo view (Phase 6, gated SOVEREIGN_META_BRIDGE,
         // default off). For each question entity matching a bridge topic,
@@ -800,7 +819,12 @@ fn step_meta_atlas_boost<'a, 'ctx>(
         // corpora and inject them with a score lift that survives
         // merge truncation. `None` registry / empty matches = no-op.
         st.meta_atlas_hits = rt
-            .meta_atlas_boost(&mut st.chunks, &st.entities, st.enabled_corpora, st.corpus_ceiling)
+            .meta_atlas_boost(
+                &mut st.chunks,
+                &st.entities,
+                st.enabled_corpora,
+                st.corpus_ceiling,
+            )
             .await;
         if !st.meta_atlas_hits.is_empty() {
             let total_added: usize = st.meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
@@ -815,10 +839,7 @@ fn step_meta_atlas_boost<'a, 'ctx>(
     })
 }
 
-fn step_query_decomp<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_query_decomp<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Optional question decomposition (gated by env flag). Catches
         // concept axes that proper-noun extraction misses and gives
@@ -844,10 +865,7 @@ fn step_query_decomp<'a, 'ctx>(
     })
 }
 
-fn step_title_expand<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_title_expand<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Optional title expansion (gated by SOVEREIGN_TITLE_EXPAND=1).
         // Targets the abstract-question failure mode entity boost +
@@ -880,10 +898,7 @@ fn step_title_expand<'a, 'ctx>(
     })
 }
 
-fn step_noise_floor<'a, 'ctx>(
-    _rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_noise_floor<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Noise floor — drop chunks with zero query-token overlap in
         // title or content. Pure-RRF noise that fills prompt budget
@@ -937,10 +952,7 @@ fn step_noise_floor<'a, 'ctx>(
     })
 }
 
-fn step_atom_enum<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Entity-typed atom enumeration (opt-in SOVEREIGN_ATOM_ENUM=1).
         // Injected POST noise-floor on purpose: the chunks are metadata
@@ -1006,7 +1018,8 @@ fn step_atlas_grounding<'a, 'ctx>(
         // the push trace but diverge post-truncate, the drop is in
         // sort+cap+truncate. (ARCH §0.1)
         let per_corpus: std::collections::BTreeMap<String, usize> = {
-            let mut m: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
             for c in &st.chunks {
                 *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
             }
@@ -1050,7 +1063,12 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
         // is exactly the bridge-concept signal a comparative answer
         // needs.
         if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(&st.chunks, st.message, st.enabled_corpora, st.corpus_ceiling)
+            .expand_via_wikipedia_graph(
+                &st.chunks,
+                st.message,
+                st.enabled_corpora,
+                st.corpus_ceiling,
+            )
             .await
         {
             if !neighbors.is_empty() {
@@ -1161,10 +1179,7 @@ fn step_scope_personal_filter<'a, 'ctx>(
     })
 }
 
-fn step_entity_boost<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Entity boost — fetch articles named in the question via
         // focused per-entity searches (the embedded query lands on
@@ -1229,16 +1244,22 @@ fn step_cap_and_reserve<'a, 'ctx>(
         // `compare_einstein_newton_gravity` regression). No-op on the
         // deep path (`is_comparison` is always false there).
         if st.is_comparison {
-            st.chunks =
-                reserve_chunks_per_entity(take(&mut st.chunks), &st.entities, COMPARISON_PER_ENTITY_RESERVE);
+            st.chunks = reserve_chunks_per_entity(
+                take(&mut st.chunks),
+                &st.entities,
+                COMPARISON_PER_ENTITY_RESERVE,
+            );
         }
         // Title-expand reservation: the upstream step made an
         // intentional source selection the cross-corpus sort must not
         // silently demote (v21b audit: T0/T3/T8).
         if let Some(titles) = &st.title_expand_titles {
             if !titles.is_empty() {
-                st.chunks =
-                    reserve_chunks_per_entity(take(&mut st.chunks), titles, COMPARISON_PER_ENTITY_RESERVE);
+                st.chunks = reserve_chunks_per_entity(
+                    take(&mut st.chunks),
+                    titles,
+                    COMPARISON_PER_ENTITY_RESERVE,
+                );
             }
         }
         // Atlas-directed reservation: atom-enum chunks carry no query
@@ -1263,7 +1284,12 @@ fn kq_truncate_merged<'a, 'ctx>(
         let raptor_n = st
             .chunks
             .iter()
-            .filter(|c| c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false))
+            .filter(|c| {
+                c.metadata
+                    .get("source")
+                    .map(|s| s == "raptor")
+                    .unwrap_or(false)
+            })
             .count();
         st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
         audit_pipeline_stage(&st.chunks, "after_truncate", st.message);
@@ -1464,10 +1490,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
     })
 }
 
-fn step_store_search<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
+fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Also search StateStore for corpus-type documents (used by the
         // test harness and for corpora ingested directly into the
@@ -1541,7 +1564,12 @@ fn deep_truncate_merged<'a, 'ctx>(
         let raptor_n = st
             .chunks
             .iter()
-            .filter(|c| c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false))
+            .filter(|c| {
+                c.metadata
+                    .get("source")
+                    .map(|s| s == "raptor")
+                    .unwrap_or(false)
+            })
             .count();
         st.chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
         StepOutcome::default()
@@ -1585,9 +1613,7 @@ fn deep_top_sources_expand<'a, 'ctx>(
             "retrieval_audit: expansion_decision"
         );
         let (expanded, sources_expanded, _total_fetched) = match strategy {
-            ExpansionStrategy::TopSources => {
-                rt.expand_from_top_sources(take(&mut st.chunks)).await
-            }
+            ExpansionStrategy::TopSources => rt.expand_from_top_sources(take(&mut st.chunks)).await,
             // NoExpansion (< 2 source keys): the helper would return
             // the set unchanged — skip the call. DominantSource:
             // unreachable here, treated identically for totality.

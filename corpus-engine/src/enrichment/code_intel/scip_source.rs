@@ -59,7 +59,9 @@ pub fn enumerate_from_rows(
         // whose file path contains one of the substrings (e.g. a §4 subsystem
         // grade enriches just `streaming.rs,engine.rs,...`). Empty = whole corpus.
         if !file_filter.is_empty()
-            && !file_filter.iter().any(|f| row.file_path.contains(f.as_str()))
+            && !file_filter
+                .iter()
+                .any(|f| row.file_path.contains(f.as_str()))
         {
             continue;
         }
@@ -185,7 +187,11 @@ mod tests {
     #[test]
     fn dedups_double_listed_rows_and_skips_short_bodies() {
         let dir = scratch("dedup");
-        std::fs::write(dir.join("y.rs"), "fn f() {\n    do_a_real_thing_here();\n}\nfn tiny() {}\n").unwrap();
+        std::fs::write(
+            dir.join("y.rs"),
+            "fn f() {\n    do_a_real_thing_here();\n}\nfn tiny() {}\n",
+        )
+        .unwrap();
 
         let out = enumerate_from_rows(
             &[
@@ -197,7 +203,11 @@ mod tests {
             &[],
             &std::collections::HashSet::new(),
         );
-        assert_eq!(out.len(), 1, "duplicate collapses and the tiny body is skipped");
+        assert_eq!(
+            out.len(),
+            1,
+            "duplicate collapses and the tiny body is skipped"
+        );
         assert_eq!(out[0].meta.name, "f");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -228,7 +238,9 @@ mod tests {
         .await
         .expect("ingest");
 
-        let out = enumerate_symbol_sources(&scip, &dir, &[]).await.expect("enumerate");
+        let out = enumerate_symbol_sources(&scip, &dir, &[])
+            .await
+            .expect("enumerate");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].meta.name, "handle");
         assert!(out[0].body.contains("route_and_run_the_request"));

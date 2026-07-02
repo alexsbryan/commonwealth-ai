@@ -54,13 +54,25 @@ pub struct LaneMetric {
 
 impl LaneMetric {
     pub fn higher_is_better(value: f64, tolerance: f64) -> Self {
-        Self { value, direction: Direction::HigherIsBetter, tolerance }
+        Self {
+            value,
+            direction: Direction::HigherIsBetter,
+            tolerance,
+        }
     }
     pub fn lower_is_better(value: f64, tolerance: f64) -> Self {
-        Self { value, direction: Direction::LowerIsBetter, tolerance }
+        Self {
+            value,
+            direction: Direction::LowerIsBetter,
+            tolerance,
+        }
     }
     pub fn near_zero(value: f64, tolerance: f64) -> Self {
-        Self { value, direction: Direction::NearZero, tolerance }
+        Self {
+            value,
+            direction: Direction::NearZero,
+            tolerance,
+        }
     }
 }
 
@@ -132,10 +144,14 @@ pub struct LaneDiff {
 
 impl LaneDiff {
     pub fn regressions(&self) -> impl Iterator<Item = &MetricDelta> {
-        self.deltas.iter().filter(|d| d.movement == Movement::Regressed)
+        self.deltas
+            .iter()
+            .filter(|d| d.movement == Movement::Regressed)
     }
     pub fn improvements(&self) -> impl Iterator<Item = &MetricDelta> {
-        self.deltas.iter().filter(|d| d.movement == Movement::Improved)
+        self.deltas
+            .iter()
+            .filter(|d| d.movement == Movement::Improved)
     }
     pub fn n_regressed(&self) -> usize {
         self.regressions().count()
@@ -189,7 +205,11 @@ fn classify(prev: f64, cur: &LaneMetric) -> Movement {
 /// adapter's intent), so editing a tolerance takes effect immediately.
 pub fn diff(baseline: Option<&LaneBaseline>, current: &LaneBaseline) -> LaneDiff {
     let Some(prev) = baseline else {
-        return LaneDiff { first_run: true, deltas: Vec::new(), missing: Vec::new() };
+        return LaneDiff {
+            first_run: true,
+            deltas: Vec::new(),
+            missing: Vec::new(),
+        };
     };
     let mut deltas = Vec::new();
     for (name, cur) in &current.metrics {
@@ -216,7 +236,11 @@ pub fn diff(baseline: Option<&LaneBaseline>, current: &LaneBaseline) -> LaneDiff
         .filter(|k| !current.metrics.contains_key(*k))
         .cloned()
         .collect();
-    LaneDiff { first_run: false, deltas, missing }
+    LaneDiff {
+        first_run: false,
+        deltas,
+        missing,
+    }
 }
 
 fn dir_glyph(d: Direction) -> &'static str {
@@ -266,7 +290,10 @@ pub fn render_and_exit_code(diff: &LaneDiff, lane: &str) -> i32 {
         );
     }
     for m in &diff.missing {
-        eprintln!("  {m:<28} {:>10} (in baseline, absent now — schema drift?)", "—");
+        eprintln!(
+            "  {m:<28} {:>10} (in baseline, absent now — schema drift?)",
+            "—"
+        );
     }
     let n_reg = diff.n_regressed();
     let n_imp = diff.improvements().count();
@@ -293,7 +320,10 @@ mod tests {
         LaneBaseline::new("chaos", "2026-06-07")
             .with("competence", LaneMetric::higher_is_better(0.57, 0.10))
             .with("honesty", LaneMetric::higher_is_better(0.36, 0.10))
-            .with("hallucination_rate", LaneMetric::lower_is_better(0.64, 0.10))
+            .with(
+                "hallucination_rate",
+                LaneMetric::lower_is_better(0.64, 0.10),
+            )
             .with("control_delta", LaneMetric::near_zero(0.0, 0.05))
     }
 
@@ -331,19 +361,29 @@ mod tests {
         let prev = LaneBaseline::new("chaos", "old")
             .with("honesty", LaneMetric::higher_is_better(0.36, 0.10));
         let d = diff(Some(&prev), &cur);
-        assert_eq!(d.n_regressed(), 0, "single-item nondeterminism must not gate");
+        assert_eq!(
+            d.n_regressed(),
+            0,
+            "single-item nondeterminism must not gate"
+        );
     }
 
     #[test]
     fn lower_is_better_rise_regresses() {
-        let cur = LaneBaseline::new("chaos", "now")
-            .with("hallucination_rate", LaneMetric::lower_is_better(0.80, 0.10));
-        let prev = LaneBaseline::new("chaos", "old")
-            .with("hallucination_rate", LaneMetric::lower_is_better(0.64, 0.10));
+        let cur = LaneBaseline::new("chaos", "now").with(
+            "hallucination_rate",
+            LaneMetric::lower_is_better(0.80, 0.10),
+        );
+        let prev = LaneBaseline::new("chaos", "old").with(
+            "hallucination_rate",
+            LaneMetric::lower_is_better(0.64, 0.10),
+        );
         assert_eq!(diff(Some(&prev), &cur).n_regressed(), 1);
         // ...and a drop is an improvement, not a regression.
-        let better = LaneBaseline::new("chaos", "now")
-            .with("hallucination_rate", LaneMetric::lower_is_better(0.40, 0.10));
+        let better = LaneBaseline::new("chaos", "now").with(
+            "hallucination_rate",
+            LaneMetric::lower_is_better(0.40, 0.10),
+        );
         let d = diff(Some(&prev), &better);
         assert_eq!(d.n_regressed(), 0);
         assert_eq!(d.improvements().count(), 1);

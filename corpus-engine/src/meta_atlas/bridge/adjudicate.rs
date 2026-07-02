@@ -162,9 +162,11 @@ mod tests {
 
     #[test]
     fn parse_same() {
-        let v = parse_adjudication_response(r#"{"relation":"same","confidence":0.9,"rationale":"both content externalism"}"#)
-            .unwrap()
-            .unwrap();
+        let v = parse_adjudication_response(
+            r#"{"relation":"same","confidence":0.9,"rationale":"both content externalism"}"#,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(v.relation, BridgeRelation::Same);
         assert!((v.confidence - 0.9).abs() < 1e-6);
         assert_eq!(v.rationale.as_deref(), Some("both content externalism"));
@@ -182,14 +184,18 @@ mod tests {
 
     #[test]
     fn parse_different_is_no_edge() {
-        assert!(parse_adjudication_response(r#"{"relation":"different","confidence":0.8}"#)
-            .unwrap()
-            .is_none());
+        assert!(
+            parse_adjudication_response(r#"{"relation":"different","confidence":0.8}"#)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn parse_unknown_relation_errors() {
-        assert!(parse_adjudication_response(r#"{"relation":"identical","confidence":0.8}"#).is_err());
+        assert!(
+            parse_adjudication_response(r#"{"relation":"identical","confidence":0.8}"#).is_err()
+        );
     }
 
     #[test]

@@ -248,7 +248,10 @@ mod tests {
             .map(|(id, land, impr)| {
                 let mut m = Map::new();
                 m.insert("parcel_number".into(), Value::String(id.to_string()));
-                m.insert("assessed_land_value".into(), Value::String(land.to_string()));
+                m.insert(
+                    "assessed_land_value".into(),
+                    Value::String(land.to_string()),
+                );
                 m.insert(
                     "assessed_improvement_value".into(),
                     Value::String(impr.to_string()),
@@ -262,14 +265,22 @@ mod tests {
     #[test]
     fn aggregates_sum_land_base_and_derive_neutral_rate() {
         // p3 has zero land → excluded from the base.
-        let atoms = parcels(&[("p1", 1000.0, 500.0), ("p2", 2000.0, 100.0), ("p3", 0.0, 0.0)]);
+        let atoms = parcels(&[
+            ("p1", 1000.0, 500.0),
+            ("p2", 2000.0, 100.0),
+            ("p3", 0.0, 0.0),
+        ]);
         let agg = compute_aggregates(&atoms, "sf-assessor-roll", 300.0, 0.0118);
         assert_eq!(agg.parcel_count, 2);
         assert_eq!(agg.land_value_total, 3000.0);
         assert_eq!(agg.improvement_value_total, 600.0);
         // 300 / 3000 = 0.10 — neutral rate is on the LAND base, not the
         // total roll (which would be 300 / 3600 ≈ 0.083).
-        assert!((agg.neutral_rate - 0.10).abs() < 1e-9, "rate = {}", agg.neutral_rate);
+        assert!(
+            (agg.neutral_rate - 0.10).abs() < 1e-9,
+            "rate = {}",
+            agg.neutral_rate
+        );
         // Swap scenario: revenue = (3000 + 600) × 0.0118 = 42.48; swap rate =
         // 42.48 / 3000 = 0.01416 (on the LAND base).
         assert_eq!(agg.property_tax_rate, 0.0118);
@@ -295,8 +306,10 @@ mod tests {
         // p1: share 1000/1500 ≈ 0.67 (high), impr/land 0.5 (not underused).
         let atoms = parcels(&[("p1", 1000.0, 500.0), ("p2", 2000.0, 100.0)]);
         let fs = flags(&atoms);
-        let kinds: Vec<(&str, FlagKind)> =
-            fs.iter().map(|f| (f.parcel_number.as_str(), f.kind)).collect();
+        let kinds: Vec<(&str, FlagKind)> = fs
+            .iter()
+            .map(|f| (f.parcel_number.as_str(), f.kind))
+            .collect();
         assert!(kinds.contains(&("p1", FlagKind::HighLandShare)));
         assert!(kinds.contains(&("p2", FlagKind::HighLandShare)));
         assert!(kinds.contains(&("p2", FlagKind::Underused)));

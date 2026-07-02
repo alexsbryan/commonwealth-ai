@@ -367,7 +367,11 @@ fn cmd_status(config: &Option<DaemonConfig>) -> Result<()> {
 
     let process = &body["process"];
     let uptime = process["uptime_seconds"].as_u64().unwrap_or(0);
-    print!("  Process:   up {}h {}m", uptime / 3600, (uptime % 3600) / 60);
+    print!(
+        "  Process:   up {}h {}m",
+        uptime / 3600,
+        (uptime % 3600) / 60
+    );
     if let Some(rss) = process["rss_mb"].as_u64() {
         print!(", {rss} MB rss");
     }

@@ -361,13 +361,16 @@ pub fn build_view(
     // An adjudication of a tension no edge surfaces is drift.
     for tid in active.tensions.keys() {
         if !surfaced.contains(tid) {
-            issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced { tension: tid.clone() });
+            issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced {
+                tension: tid.clone(),
+            });
         }
     }
 
     // INV-2: every adjudication must be human-authored (report all).
     for op in ops {
-        if !matches!(op.kind, GovernanceOpKind::AssertRule { .. }) && !op.actor.starts_with("human:")
+        if !matches!(op.kind, GovernanceOpKind::AssertRule { .. })
+            && !op.actor.starts_with("human:")
         {
             issues.push(GovernanceIssue::UnattendedAct { op: op.id.clone() });
         }
@@ -506,7 +509,11 @@ mod tests {
         assert_eq!(active[0].text, "new rule");
         assert_eq!(active[0].deontic.as_deref(), Some("forbids"));
 
-        let old = view.rules.iter().find(|r| r.id == AtomId::claim(1)).unwrap();
+        let old = view
+            .rules
+            .iter()
+            .find(|r| r.id == AtomId::claim(1))
+            .unwrap();
         assert!(matches!(old.status, RuleStatus::Superseded { .. }));
         assert_eq!(old.text, "old rule");
         assert!(view.issues.is_empty());
@@ -548,9 +555,18 @@ mod tests {
             rule_at(3, "sec-c", "quiet hours begin at 10pm"),
         ];
         let dead = build_view(&rules, &[], &ops).dead_law_sections();
-        assert!(dead.contains("sec-a"), "the superseded rule's section is dead law");
-        assert!(!dead.contains("sec-b"), "the active successor's section is kept");
-        assert!(!dead.contains("sec-c"), "an untouched active section is kept");
+        assert!(
+            dead.contains("sec-a"),
+            "the superseded rule's section is dead law"
+        );
+        assert!(
+            !dead.contains("sec-b"),
+            "the active successor's section is kept"
+        );
+        assert!(
+            !dead.contains("sec-c"),
+            "an untouched active section is kept"
+        );
         assert_eq!(dead.len(), 1);
     }
 
@@ -580,7 +596,10 @@ mod tests {
             rule_at(3, "sec-b", "overnight guests are not permitted"),
         ];
         let dead = build_view(&rules, &[], &ops).dead_law_sections();
-        assert!(dead.contains("sec-a"), "a section with any superseded rule is dead-law wholesale");
+        assert!(
+            dead.contains("sec-a"),
+            "a section with any superseded rule is dead-law wholesale"
+        );
         assert!(!dead.contains("sec-b"), "the successor's section is kept");
     }
 
@@ -595,7 +614,11 @@ mod tests {
             tension(2, 1, 3, "weak overlap", 0.4),
             tension(1, 1, 2, "overnight vs curfew?", 0.9),
         ];
-        let ops = vec![assert_rule(1, 1000), assert_rule(2, 1001), assert_rule(3, 1002)];
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(2, 1001),
+            assert_rule(3, 1002),
+        ];
         let view = build_view(&rules, &tensions, &ops);
 
         let open: Vec<_> = view.open_tensions().collect();
@@ -672,9 +695,9 @@ mod tests {
     fn governed_rule_without_atom_is_an_issue() {
         let ops = vec![assert_rule(5, 1000)];
         let view = build_view(&[], &[], &ops);
-        assert!(view
-            .issues
-            .contains(&GovernanceIssue::RuleHasNoAtom { rule: AtomId::claim(5) }));
+        assert!(view.issues.contains(&GovernanceIssue::RuleHasNoAtom {
+            rule: AtomId::claim(5)
+        }));
         // Still listed (with empty text) so it's visible, not vanished.
         assert_eq!(view.rules.len(), 1);
         assert_eq!(view.rules[0].text, "");
@@ -686,10 +709,12 @@ mod tests {
         let tensions = vec![tension(1, 1, 7, "x", 0.5)];
         let ops = vec![assert_rule(1, 1000)];
         let view = build_view(&rules, &tensions, &ops);
-        assert!(view.issues.contains(&GovernanceIssue::TensionEndpointMissing {
-            tension: EdgeId::new(1),
-            endpoint: AtomId::claim(7),
-        }));
+        assert!(view
+            .issues
+            .contains(&GovernanceIssue::TensionEndpointMissing {
+                tension: EdgeId::new(1),
+                endpoint: AtomId::claim(7),
+            }));
         assert_eq!(view.tensions[0].text_b, "");
     }
 
@@ -706,7 +731,9 @@ mod tests {
         let view = build_view(&[], &[], &ops);
         assert!(view
             .issues
-            .contains(&GovernanceIssue::AdjudicatedTensionNotSurfaced { tension: EdgeId::new(9) }));
+            .contains(&GovernanceIssue::AdjudicatedTensionNotSurfaced {
+                tension: EdgeId::new(9)
+            }));
     }
 
     #[test]
@@ -721,9 +748,9 @@ mod tests {
             "ingest", // not human:
         );
         let view = build_view(&[], &[], &[forged.clone()]);
-        assert!(view
-            .issues
-            .contains(&GovernanceIssue::UnattendedAct { op: forged.id.clone() }));
+        assert!(view.issues.contains(&GovernanceIssue::UnattendedAct {
+            op: forged.id.clone()
+        }));
     }
 
     #[test]

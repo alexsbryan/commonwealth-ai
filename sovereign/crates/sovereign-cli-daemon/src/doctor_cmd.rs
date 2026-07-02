@@ -241,9 +241,7 @@ async fn check_scip_indexed() -> CheckResult {
                  scip_exporters finding.",
                 empty.len(),
             ),
-            repair: Repair::Executable(format!(
-                "svrn project refresh --name {example} --local"
-            )),
+            repair: Repair::Executable(format!("svrn project refresh --name {example} --local")),
         };
     }
     if !populated.is_empty() {
@@ -328,9 +326,7 @@ async fn check_code_indexed() -> CheckResult {
                  SCIP call graph is unaffected.",
                 broken.len()
             ),
-            repair: Repair::Executable(format!(
-                "svrn code index <path> --corpus-id {example}"
-            )),
+            repair: Repair::Executable(format!("svrn code index <path> --corpus-id {example}")),
         };
     }
     if healthy.is_empty() {
@@ -754,9 +750,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Warning,
                     message: "daemon running but no mesh formed yet".into(),
-                    repair: Repair::Manual(
-                        "Run `svrn mesh create` or accept a join link".into(),
-                    ),
+                    repair: Repair::Manual("Run `svrn mesh create` or accept a join link".into()),
                 }
             }
         }
@@ -804,7 +798,10 @@ async fn check_iroh_egress(client_url: &str) -> CheckResult {
             let msg = if paths.is_empty() {
                 format!("mesh on the IP path (iroh not carrying peer traffic){proxy_note}")
             } else {
-                format!("mesh carrying traffic over iroh — peer paths: {}{proxy_note}", paths.join(", "))
+                format!(
+                    "mesh carrying traffic over iroh — peer paths: {}{proxy_note}",
+                    paths.join(", ")
+                )
             };
             CheckResult {
                 name: "iroh_egress",
@@ -1758,8 +1755,7 @@ fn check_legacy_hooks() -> CheckResult {
             stale.join(", ")
         ),
         repair: Repair::Executable(
-            "svrn project install-hooks  (in the affected repo — removes the legacy hook)"
-                .into(),
+            "svrn project install-hooks  (in the affected repo — removes the legacy hook)".into(),
         ),
     }
 }

@@ -275,8 +275,7 @@ mod age_tests {
             // carries the capture date — age is reportable even though
             // the snapshot is gone (read_latest_at treats it as first
             // run; age is advisory either way).
-            std::os::unix::fs::symlink("2020-01-01.json", tmp.path().join("latest.json"))
-                .unwrap();
+            std::os::unix::fs::symlink("2020-01-01.json", tmp.path().join("latest.json")).unwrap();
             let (captured, age) = baseline_age(tmp.path()).unwrap();
             assert_eq!(captured, "2020-01-01");
             assert!(age > 365);

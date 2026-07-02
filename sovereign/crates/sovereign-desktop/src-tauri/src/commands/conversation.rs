@@ -1152,7 +1152,8 @@ fn render_answer_docx(doc: &AnswerDoc) -> Result<Vec<u8>, String> {
             .map_err(|e| e.to_string())?;
         zw.write_all(content_types.as_bytes())
             .map_err(|e| e.to_string())?;
-        zw.start_file("_rels/.rels", opts).map_err(|e| e.to_string())?;
+        zw.start_file("_rels/.rels", opts)
+            .map_err(|e| e.to_string())?;
         zw.write_all(rels.as_bytes()).map_err(|e| e.to_string())?;
         zw.start_file("word/document.xml", opts)
             .map_err(|e| e.to_string())?;
@@ -1181,17 +1182,18 @@ fn render_answer_pdf(doc: &AnswerDoc) -> Result<Vec<u8>, String> {
         size: f64,
         gap_before: f64,
     }
-    let push = |lines: &mut Vec<Line>, text: &str, bold: bool, size: f64, gap: f64, indent: &str| {
-        let max_chars = ((PAGE_W - 2.0 * MARGIN) / (size * 0.5)) as usize;
-        for (i, wl) in wrap_text(text, max_chars).into_iter().enumerate() {
-            lines.push(Line {
-                text: pdf_text(&format!("{}{}", if i == 0 { "" } else { indent }, wl)),
-                bold,
-                size,
-                gap_before: if i == 0 { gap } else { 0.0 },
-            });
-        }
-    };
+    let push =
+        |lines: &mut Vec<Line>, text: &str, bold: bool, size: f64, gap: f64, indent: &str| {
+            let max_chars = ((PAGE_W - 2.0 * MARGIN) / (size * 0.5)) as usize;
+            for (i, wl) in wrap_text(text, max_chars).into_iter().enumerate() {
+                lines.push(Line {
+                    text: pdf_text(&format!("{}{}", if i == 0 { "" } else { indent }, wl)),
+                    bold,
+                    size,
+                    gap_before: if i == 0 { gap } else { 0.0 },
+                });
+            }
+        };
 
     let mut lines: Vec<Line> = Vec::new();
     for block in doc_blocks(doc) {
@@ -1251,10 +1253,7 @@ fn render_answer_pdf(doc: &AnswerDoc) -> Result<Vec<u8>, String> {
             ops.push(Operation::new("BT", vec![]));
             ops.push(Operation::new(
                 "Tf",
-                vec![
-                    (if ln.bold { "F2" } else { "F1" }).into(),
-                    ln.size.into(),
-                ],
+                vec![(if ln.bold { "F2" } else { "F1" }).into(), ln.size.into()],
             ));
             ops.push(Operation::new("Td", vec![MARGIN.into(), (*line_y).into()]));
             ops.push(Operation::new(

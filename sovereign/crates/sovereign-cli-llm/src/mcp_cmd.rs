@@ -294,7 +294,9 @@ fn load_mcp_configs() -> Vec<McpServerConfig> {
     // migration, and this is the *same* typed list the chat surfaces load via
     // `sovereign_tools::mcp::load_from_setup_config` — no second parser to
     // drift out of sync.
-    SetupConfig::load().map(|c| c.mcp_servers).unwrap_or_default()
+    SetupConfig::load()
+        .map(|c| c.mcp_servers)
+        .unwrap_or_default()
 }
 
 async fn test_connection(config: &McpServerConfig) -> std::result::Result<usize, String> {

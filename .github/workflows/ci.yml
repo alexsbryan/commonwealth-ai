@@ -9,10 +9,10 @@
 #
 # Gate policy (contributor-facing — a commit to main only goes red for
 # genuine quality regressions):
-#   - check+test (one job, one compile) / mesh-dst are BLOCKING — the real
-#     quality gates.
-#   - fmt + clippy + arch-gate are ADVISORY (continue-on-error):
-#       fmt    → drop continue-on-error after one `cargo fmt --all`.
+#   - check+test (one job, one compile) / mesh-dst / fmt are BLOCKING — the
+#     real quality gates (fmt flipped 2026-07-02 after the workspace-wide
+#     `cargo fmt --all` sweep; it runs in seconds and cannot flake).
+#   - clippy + arch-gate are ADVISORY (continue-on-error):
 #       clippy → add `-- -D warnings` + drop continue-on-error after the
 #                unused-import / dead-code sweep (the per-handler import blocks
 #                in sovereign-core/runtime/handlers/ are the bulk).
@@ -141,20 +141,18 @@ jobs:
       - run: cargo run -p xtask -- arch-gate
 
   fmt:
-    name: Format (advisory)
+    name: Format
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      # 404 files of pre-existing format debt (measured 2026-07-02) make the
-      # default `--check` diff dump unreadable — list mismatched files only.
-      # Retire the debt with ONE `cargo fmt --all` sweep in its own commit
-      # (add that commit to .git-blame-ignore-revs so blame survives), then
-      # drop continue-on-error + this message-format and let it block.
-      - run: cargo fmt --all --check --message-format short
+      # BLOCKING since the 2026-07-02 `cargo fmt --all` sweep (404 files,
+      # listed in .git-blame-ignore-revs) zeroed the format debt. Runs in
+      # seconds (no compilation); a failure diff is now one contributor's
+      # change, small and actionable.
+      - run: cargo fmt --all --check
 
   clippy:
     name: Clippy (advisory)

@@ -112,7 +112,10 @@ mod tests {
         drop(f);
 
         let out = ReadCsvTool
-            .execute(&serde_json::json!({ "path": path.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": path.to_string_lossy() }),
+                &ctx(),
+            )
             .await
             .unwrap();
         let arr = match out {

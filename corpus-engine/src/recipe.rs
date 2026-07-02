@@ -2740,7 +2740,10 @@ type = "paragraph"
 
         let field: EnrichmentConfig =
             toml::from_str("enabled = true\ntype = \"field_model\"").unwrap();
-        assert_eq!(field.declared_artifact_rel_path(), Some("field_skeleton.json"));
+        assert_eq!(
+            field.declared_artifact_rel_path(),
+            Some("field_skeleton.json")
+        );
 
         // Artifact-less / unrecognised types assert no drift (conservative).
         let investigation: EnrichmentConfig =
@@ -4159,7 +4162,10 @@ type = "passthrough"
 enabled = true
 type = "atlas"
 "#;
-        assert!(Recipe::from_toml(none).expect("parse").custom_ontology().is_none());
+        assert!(Recipe::from_toml(none)
+            .expect("parse")
+            .custom_ontology()
+            .is_none());
     }
 
     /// Pagination strategies should round-trip for all four shapes.

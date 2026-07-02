@@ -107,7 +107,10 @@ pub fn advertised_alias_ids(role: &str) -> Vec<String> {
     if !policy.mesh_advertised {
         return Vec::new();
     }
-    vec![format!("commonwealth/{}", policy.role), policy.role.to_string()]
+    vec![
+        format!("commonwealth/{}", policy.role),
+        policy.role.to_string(),
+    ]
 }
 
 #[cfg(test)]

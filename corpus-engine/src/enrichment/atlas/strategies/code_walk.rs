@@ -976,8 +976,7 @@ async fn emit_edges(
             let Some(caller_q) = &item.qualified_name else {
                 continue; // not in SCIP, no callees to query
             };
-            let source_is_function =
-                key.symbol_kind == "function" || key.symbol_kind == "method";
+            let source_is_function = key.symbol_kind == "function" || key.symbol_kind == "method";
             let callees = match graph.find_callees_qualified(caller_q).await {
                 Ok(v) => v,
                 Err(_) => continue,
@@ -1762,7 +1761,9 @@ pub fn read_corpus_source_root(corpus_dir: &Path) -> Result<PathBuf> {
     v.get("source_path")
         .and_then(|s| s.as_str())
         .map(PathBuf::from)
-        .ok_or_else(|| Error::InvalidInput("corpus has no `source_path` in _corpus_meta.json".into()))
+        .ok_or_else(|| {
+            Error::InvalidInput("corpus has no `source_path` in _corpus_meta.json".into())
+        })
 }
 
 /// Build the set of external-crate placeholder names. The SCIP

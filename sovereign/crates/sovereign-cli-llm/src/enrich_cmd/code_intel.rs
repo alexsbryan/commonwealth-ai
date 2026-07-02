@@ -17,7 +17,8 @@ use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich code-intel",
-    summary: "Summarize every function in a CODE corpus and index the summaries as searchable chunks.",
+    summary:
+        "Summarize every function in a CODE corpus and index the summaries as searchable chunks.",
     sections: &[
         HelpSection::Usage("svrn enrich code-intel <corpus-id>"),
         HelpSection::Flags(&[

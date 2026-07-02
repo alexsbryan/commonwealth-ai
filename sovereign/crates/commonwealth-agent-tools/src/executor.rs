@@ -333,8 +333,13 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
     // the pre-build check walks the workdir. Together they form a
     // belt-and-suspenders gate against syntactically-invalid
     // workdir state.
-    let recovered =
-        syntax_gate_with_gutter_recovery(ctx, "write_file", args.path.as_str(), &args.content, &[])?;
+    let recovered = syntax_gate_with_gutter_recovery(
+        ctx,
+        "write_file",
+        args.path.as_str(),
+        &args.content,
+        &[],
+    )?;
 
     if let Some(parent) = abs.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
@@ -1293,7 +1298,10 @@ fn syntax_gate_with_gutter_recovery(
     }
     for (label, candidate) in [
         ("escaped-whitespace", repair_escaped_whitespace(content)),
-        ("line-number gutters", strip_echoed_line_number_gutters(content)),
+        (
+            "line-number gutters",
+            strip_echoed_line_number_gutters(content),
+        ),
     ] {
         if let Some(candidate) = candidate {
             if validator
@@ -1349,7 +1357,10 @@ mod tests {
     fn strip_gutter_removes_echoed_line_number() {
         // The failure shape observed 2026-06-03: a `25:` gutter copied
         // from the line-numbered file view into a write_file content.
-        assert_eq!(strip_one_line_gutter("   25: pub fn f() {}"), Some("pub fn f() {}"));
+        assert_eq!(
+            strip_one_line_gutter("   25: pub fn f() {}"),
+            Some("pub fn f() {}")
+        );
         assert_eq!(strip_one_line_gutter("1: x"), Some("x"));
         assert_eq!(strip_one_line_gutter("  10 | code"), Some("code"));
     }

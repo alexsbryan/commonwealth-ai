@@ -47,7 +47,9 @@ pub fn cmd_accept(args: &[String]) -> i32 {
         return 2;
     };
     if rationale.trim().is_empty() {
-        eprintln!("error: accept requires `--rationale <s>` — record *why* the tension is tolerated.");
+        eprintln!(
+            "error: accept requires `--rationale <s>` — record *why* the tension is tolerated."
+        );
         return 2;
     }
 

@@ -416,7 +416,10 @@ pub(super) fn apply_shared_model_role_to_env(
     if let Some(id) = cfg.model_id.as_deref() {
         if !id.is_empty() && std::env::var_os("SOVEREIGN_SHARED_MODEL_ID").is_none() {
             std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", id);
-            tracing::info!(model_id = id, "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID");
+            tracing::info!(
+                model_id = id,
+                "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID"
+            );
         }
     }
     let serve = matches!(cfg.role, SharedModelRole::Anchor | SharedModelRole::Host);
@@ -472,7 +475,10 @@ pub(super) fn apply_shared_model_role_to_env(
     // carries those knobs into the RPC env contract too (env wins if already set).
     if discover {
         if std::env::var_os("SOVEREIGN_RPC_QUORUM_ANCHORS").is_none() {
-            std::env::set_var("SOVEREIGN_RPC_QUORUM_ANCHORS", cfg.quorum_anchors.to_string());
+            std::env::set_var(
+                "SOVEREIGN_RPC_QUORUM_ANCHORS",
+                cfg.quorum_anchors.to_string(),
+            );
         }
         if let Some(gb) = cfg.min_pooled_gb {
             if std::env::var_os("SOVEREIGN_RPC_MIN_POOLED_GB").is_none() {
@@ -592,8 +598,10 @@ pub(super) fn spawn_rpc_worker_discovery(
                 // immediate assemble on the already-settled survivors.
                 if am_host && changed && (shrank || stable_since.elapsed() >= STABLE) {
                     if shrank {
-                        let lost: Vec<&String> =
-                            last_loaded.iter().filter(|w| !current.contains(*w)).collect();
+                        let lost: Vec<&String> = last_loaded
+                            .iter()
+                            .filter(|w| !current.contains(*w))
+                            .collect();
                         tracing::info!(
                             ?lost,
                             "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
@@ -1713,10 +1721,7 @@ pub(super) fn setup_watchers_and_work_atlas(
                 work_atlas_repo_root = Some(repo_root);
                 work_atlas_repo_id = Some(repo_id);
                 work_atlas_branch = branch;
-                eprintln!(
-                    "svrn daemon: work-atlas observer wired on {}",
-                    ws.display()
-                );
+                eprintln!("svrn daemon: work-atlas observer wired on {}", ws.display());
             }
             Err(e) => {
                 tracing::warn!(

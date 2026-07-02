@@ -165,13 +165,13 @@ pub use yield_hook::YieldHook;
 // crates to depend on different versions of the same logical type.
 
 #[cfg(feature = "stores")]
+pub use wikipedia_columnar::{open_wikipedia_graph, ColumnarWikipediaGraph};
+#[cfg(feature = "stores")]
 pub use wikipedia_graph::{
     ArticleRecord as WikipediaArticleRecord, IngestSummary as WikipediaGraphIngestSummary,
     Neighbor as WikipediaNeighbor, StalenessCaution as WikipediaStaleness, WikipediaGraph,
     WikipediaGraphApi,
 };
-#[cfg(feature = "stores")]
-pub use wikipedia_columnar::{open_wikipedia_graph, ColumnarWikipediaGraph};
 
 // `watcher_coordinator` re-exports — gated on `stores` since the
 // coordinator depends only on `notify` (and notify lives in

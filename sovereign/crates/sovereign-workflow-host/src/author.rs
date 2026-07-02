@@ -293,12 +293,9 @@ impl Tool for WorkflowWriteStructuredTool {
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let raw_path = params
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("workflow_write_structured requires `path`".into())
-            })?;
+        let raw_path = params.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::InvalidInput("workflow_write_structured requires `path`".into())
+        })?;
 
         // Accept either shape, mirroring recipe_write_structured's tolerance:
         //
@@ -340,9 +337,8 @@ impl Tool for WorkflowWriteStructuredTool {
         //    and converter, so a well-formed workflow survives instead of forcing a
         //    raw-workflow_write fallback; the validator below catches anything real.
         let sanitized = sanitize_for_toml(doc);
-        let toml_value = json_to_toml(&sanitized).map_err(|e| {
-            Error::InvalidInput(format!("workflow → TOML conversion failed: {e}"))
-        })?;
+        let toml_value = json_to_toml(&sanitized)
+            .map_err(|e| Error::InvalidInput(format!("workflow → TOML conversion failed: {e}")))?;
         let toml_text = toml_value_to_string(&toml_value)
             .map_err(|e| Error::InvalidInput(format!("TOML serialization failed: {e}")))?;
 
@@ -618,7 +614,11 @@ mod tests {
         assert!(body.contains("[[step]]"));
         assert!(body.contains("uses = \"model:thoughtful\""));
         // A model: step → validation passes (no unresolved-step warnings).
-        assert_eq!(v["validation"]["passed"], serde_json::json!(true), "report: {v}");
+        assert_eq!(
+            v["validation"]["passed"],
+            serde_json::json!(true),
+            "report: {v}"
+        );
         assert_eq!(
             v["validation"]["warnings"],
             serde_json::json!([]),
@@ -658,7 +658,11 @@ mod tests {
         let body = std::fs::read_to_string(&on_disk).unwrap();
         assert!(body.contains("name = \"flat-flow\""), "got:\n{body}");
         assert!(body.contains("[[step]]"));
-        assert_eq!(v["validation"]["passed"], serde_json::json!(true), "report: {v}");
+        assert_eq!(
+            v["validation"]["passed"],
+            serde_json::json!(true),
+            "report: {v}"
+        );
     }
 
     #[tokio::test]

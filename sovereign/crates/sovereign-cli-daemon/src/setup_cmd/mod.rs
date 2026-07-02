@@ -286,7 +286,6 @@ struct Opts {
     wizard_only: bool,
 }
 
-
 // ─── Model catalog + picker ───────────────────────────────────────
 //
 // Catalog construction (`build_primary_catalog`, `tier_rank`,
@@ -300,7 +299,6 @@ enum Pick {
     Abort,
 }
 
-
 // ─── BYOM branch ───────────────────────────────────────────────────
 
 struct ModelPaths {
@@ -311,8 +309,6 @@ struct ModelPaths {
     /// case — most users let the Main responder handle code work.
     code: Option<PathBuf>,
 }
-
-
 
 /// Scan the three models referenced by `SetupConfig`, validate
 /// each against the manifest-derived size floor + GGUF magic
@@ -397,10 +393,6 @@ async fn run_repair() -> i32 {
         0
     }
 }
-
-
-
-
 
 fn hardware_label(hw: &HardwareProfile) -> String {
     match &hw.gpu_name {

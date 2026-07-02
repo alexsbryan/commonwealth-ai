@@ -297,9 +297,7 @@ impl Source {
         };
         let resolve = |s: &str| crate::template::resolve_str(s, &pscope);
         match self {
-            Source::Inline { items } => {
-                Ok(items.iter().map(|v| make_item(&resolve(v))).collect())
-            }
+            Source::Inline { items } => Ok(items.iter().map(|v| make_item(&resolve(v))).collect()),
             Source::List { path } => {
                 let path = resolve(path);
                 let text = std::fs::read_to_string(&path)
@@ -354,7 +352,10 @@ impl Source {
                     // fingerprint already keys the cache, so an edit to the file
                     // still invalidates that item's cached steps.
                     const MAX_ITEM_TEXT: u64 = 1 << 20; // 1 MiB
-                    let small = p.metadata().map(|m| m.len() <= MAX_ITEM_TEXT).unwrap_or(false);
+                    let small = p
+                        .metadata()
+                        .map(|m| m.len() <= MAX_ITEM_TEXT)
+                        .unwrap_or(false);
                     if small {
                         if let Ok(text) = std::fs::read_to_string(&p) {
                             item.fields.insert("text".into(), text);

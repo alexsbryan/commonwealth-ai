@@ -243,7 +243,9 @@ mod tests {
     async fn list_returns_newest_first() {
         let (s, _d) = store().await;
         s.provision_recipe_project("a", "first", "c").await.unwrap();
-        s.provision_recipe_project("b", "second", "c").await.unwrap();
+        s.provision_recipe_project("b", "second", "c")
+            .await
+            .unwrap();
         let all = s.list(false).await.unwrap();
         assert_eq!(all.len(), 2);
         // Both share the same second-granularity timestamp in a fast test, so

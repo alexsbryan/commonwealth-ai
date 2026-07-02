@@ -216,11 +216,7 @@ async fn cmd_author(args: &[String]) -> i32 {
         .json::<serde_json::Value>()
         .await
         .ok()
-        .and_then(|v| {
-            v.get("content")
-                .and_then(|x| x.as_str())
-                .map(String::from)
-        })
+        .and_then(|v| v.get("content").and_then(|x| x.as_str()).map(String::from))
         .unwrap_or_default();
     println!("{}", content.trim());
     eprintln!("\n— authored workflows land in ~/.sovereign/workflows/ —");
@@ -641,7 +637,10 @@ mod artifact_tests {
         let reg = RecipeRegistry::from_bundled(None);
         let got = classify_artifact(
             "notebook",
-            Some(("[workflow]\nname = \"x\"\n".into(), "shipped:notebook".into())),
+            Some((
+                "[workflow]\nname = \"x\"\n".into(),
+                "shipped:notebook".into(),
+            )),
             &reg,
         )
         .expect("resolves");
@@ -794,8 +793,9 @@ input = "{read.output}"
         let memo = dir.path().join("note.md");
         std::fs::write(&memo, "aaa").unwrap();
         let url = spawn_demo().await;
-        let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
-            Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().join(".cache")));
+        let cache: Arc<dyn sovereign_workflow::ArtifactCache> = Arc::new(
+            sovereign_workflow::FileArtifactCache::new(dir.path().join(".cache")),
+        );
 
         let toml = r#"
 [workflow]
@@ -828,7 +828,11 @@ input = "{read.output}"
             .run(&wf, 1)
             .await
             .unwrap();
-        assert_eq!((r2.ran_total(), r2.cached_total()), (0, 2), "unchanged -> fully cached");
+        assert_eq!(
+            (r2.ran_total(), r2.cached_total()),
+            (0, 2),
+            "unchanged -> fully cached"
+        );
 
         // Edit the file (different size -> fingerprint changes regardless of
         // mtime granularity) -> the read re-runs, and the transform with it.
@@ -837,7 +841,11 @@ input = "{read.output}"
             .run(&wf, 1)
             .await
             .unwrap();
-        assert_eq!(r3.cached_total(), 0, "edited file -> re-runs, nothing cached");
+        assert_eq!(
+            r3.cached_total(),
+            0,
+            "edited file -> re-runs, nothing cached"
+        );
         assert!(r3.items[0].result.as_ref().unwrap().contains("BBBBBB"));
     }
 
@@ -884,7 +892,9 @@ input = "{read.output}"
                 .iter()
                 .map(|v| {
                     serde_json::Value::Array(
-                        v.iter().map(|f| serde_json::Value::from(*f as f64)).collect(),
+                        v.iter()
+                            .map(|f| serde_json::Value::from(*f as f64))
+                            .collect(),
                     )
                 })
                 .collect(),
@@ -1036,7 +1046,9 @@ params = { path = "__OUT__", json = "{atoms.output}" }
         let written =
             std::fs::read_to_string(&out).expect("write_json must persist the atoms to the path");
         let atoms: serde_json::Value = serde_json::from_str(&written).unwrap();
-        let arr = atoms.as_array().expect("the atoms collection is a JSON array");
+        let arr = atoms
+            .as_array()
+            .expect("the atoms collection is a JSON array");
         assert!(arr.len() >= 2, "several passages -> several atoms: {arr:?}");
         for a in arr {
             assert!(
@@ -1106,7 +1118,10 @@ structured_output = { type = "object", properties = { questions = { type = "arra
         let atoms: serde_json::Value =
             serde_json::from_str(report.items[0].result.as_ref().unwrap()).unwrap();
         let arr = atoms.as_array().expect("the collection is a JSON array");
-        assert!(arr.len() >= 2, "several chapters -> several stamped atoms: {arr:?}");
+        assert!(
+            arr.len() >= 2,
+            "several chapters -> several stamped atoms: {arr:?}"
+        );
         for (i, a) in arr.iter().enumerate() {
             assert_eq!(
                 a.get("chapter_id").and_then(|v| v.as_str()),
@@ -1191,7 +1206,10 @@ params = { path = "__OUT__", json = "{envelope.output}" }
         let v: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
         assert_eq!(v.get("schema_version").and_then(|x| x.as_i64()), Some(1));
-        assert_eq!(v.get("pipeline_id").and_then(|x| x.as_str()), Some("literary"));
+        assert_eq!(
+            v.get("pipeline_id").and_then(|x| x.as_str()),
+            Some("literary")
+        );
         let qbc = v
             .get("questions_by_chapter")
             .and_then(|x| x.as_array())
@@ -1264,7 +1282,10 @@ structured_output = { type = "object", properties = { questions = { type = "arra
                 Some(format!("sec_{:04}", i + 1)).as_deref(),
                 "atom {i} keyed by its chapter's section_id: {a}"
             );
-            assert!(a.get("questions").is_some(), "atom {i} carries questions: {a}");
+            assert!(
+                a.get("questions").is_some(),
+                "atom {i} carries questions: {a}"
+            );
         }
     }
 
@@ -1301,7 +1322,10 @@ structured_output = { type = "object", properties = { questions = { type = "arra
             params: &serde_json::Value,
             _ctx: &ToolContext,
         ) -> CoreResult<StepOutput> {
-            let path = params.get("path").and_then(|v| v.as_str()).unwrap_or_default();
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             let text = std::fs::read_to_string(path).map_err(|e| {
                 sovereign_core::error::Error::Execution(format!("chunk read {path}: {e}"))
             })?;
@@ -1393,4 +1417,3 @@ structured_output = { type = "object", properties = { questions = { type = "arra
         }
     }
 }
-

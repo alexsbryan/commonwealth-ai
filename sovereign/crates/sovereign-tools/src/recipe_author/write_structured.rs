@@ -485,7 +485,10 @@ mod tests {
         };
         let body = std::fs::read_to_string(root.join("nulldrop/recipe.toml")).unwrap();
         assert!(body.contains("[chunk]"));
-        assert!(!body.contains("max_chars"), "null max_chars dropped: {body}");
+        assert!(
+            !body.contains("max_chars"),
+            "null max_chars dropped: {body}"
+        );
     }
 
     #[tokio::test]
@@ -530,7 +533,13 @@ mod tests {
             panic!("expected json output");
         };
         let body = std::fs::read_to_string(root.join("artifact/recipe.toml")).unwrap();
-        assert!(body.contains("comparison = \"greater_than\""), "recovered key: {body}");
-        assert!(!body.contains("comparison\\\""), "no escaped-quote key remains: {body}");
+        assert!(
+            body.contains("comparison = \"greater_than\""),
+            "recovered key: {body}"
+        );
+        assert!(
+            !body.contains("comparison\\\""),
+            "no escaped-quote key remains: {body}"
+        );
     }
 }

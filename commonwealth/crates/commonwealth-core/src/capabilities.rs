@@ -432,7 +432,10 @@ mod tests {
         let caps: NodeCapabilities =
             serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
         let json = serde_json::to_string(&caps).unwrap();
-        assert!(!json.contains("\"anchor\""), "anchor: None must be skipped: {json}");
+        assert!(
+            !json.contains("\"anchor\""),
+            "anchor: None must be skipped: {json}"
+        );
     }
 
     #[test]

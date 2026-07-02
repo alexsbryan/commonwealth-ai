@@ -141,17 +141,22 @@ fn strip_tool_code_blocks(s: &str) -> String {
 fn strip_bare_tool_call_lines(s: &str) -> String {
     fn is_call_line(line: &str) -> bool {
         let t = line.trim();
-        let Some(open) = t.find('(') else { return false };
+        let Some(open) = t.find('(') else {
+            return false;
+        };
         if !t.ends_with(')') || open == 0 {
             return false;
         }
         let name = &t[..open];
-        name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+        name.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
             && name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
     }
     fn has_search_kwarg(line: &str) -> bool {
         let t = line.trim();
-        let Some(open) = t.find('(') else { return false };
+        let Some(open) = t.find('(') else {
+            return false;
+        };
         let args = t[open + 1..].trim_start();
         const CALL_KWARGS: &[&str] = &["query=", "query =", "search=", "q=", "input=", "prompt="];
         CALL_KWARGS.iter().any(|k| args.starts_with(k))
@@ -164,9 +169,16 @@ fn strip_bare_tool_call_lines(s: &str) -> String {
             return false;
         }
         let low = t.to_lowercase();
-        ["let me ", "i'll ", "i will ", "i need to ", "i'm going to ", "i am going to "]
-            .iter()
-            .any(|p| low.starts_with(p))
+        [
+            "let me ",
+            "i'll ",
+            "i will ",
+            "i need to ",
+            "i'm going to ",
+            "i am going to ",
+        ]
+        .iter()
+        .any(|p| low.starts_with(p))
     }
 
     // Pass 1: kwarg-shaped invocation lines, anywhere outside fences.

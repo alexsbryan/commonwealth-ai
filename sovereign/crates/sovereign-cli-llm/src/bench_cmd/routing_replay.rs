@@ -186,7 +186,11 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
             take,
             q.id,
             q.category,
-            if fired.is_empty() { "(no intent!)" } else { &fired },
+            if fired.is_empty() {
+                "(no intent!)"
+            } else {
+                &fired
+            },
             if pass { "PASS" } else { "FAIL" },
         );
         rows.push(serde_json::json!({
@@ -207,7 +211,11 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
     }
     eprintln!(
         "  overall: {passed}/{total} ({:.0}%)",
-        if total == 0 { 0.0 } else { 100.0 * passed as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            100.0 * passed as f64 / total as f64
+        }
     );
 
     if let Some(out) = out {

@@ -123,7 +123,10 @@ mod tests {
             .execute(&serde_json::json!({ "path": p.to_string_lossy() }), &ctx())
             .await
             .unwrap();
-        assert!(matches!(whole, StepOutput::Json(serde_json::Value::Object(_))));
+        assert!(matches!(
+            whole,
+            StepOutput::Json(serde_json::Value::Object(_))
+        ));
 
         // Missing field and missing file are loud errors.
         assert!(ReadJsonTool

@@ -340,10 +340,18 @@ fn atlas_dir_for(corpus_id: &str) -> PathBuf {
 /// cmd builds (reusing `summarise_atlas` verbatim). No divergence.
 pub(crate) fn build_atlas_summary(corpus_id: &str) -> Result<AtlasSummary, String> {
     let atlas_dir = atlas_dir_for(corpus_id);
-    let atoms_file = read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("reading {}/atoms.json: {e} — run atlas-resolve first", atlas_dir.display()))?;
-    let edges_file = read_atlas_edges(&atlas_dir)
-        .map_err(|e| format!("reading {}/edges.json: {e} — run atlas-resolve first", atlas_dir.display()))?;
+    let atoms_file = read_atlas_atoms(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/atoms.json: {e} — run atlas-resolve first",
+            atlas_dir.display()
+        )
+    })?;
+    let edges_file = read_atlas_edges(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/edges.json: {e} — run atlas-resolve first",
+            atlas_dir.display()
+        )
+    })?;
 
     let mut entities = Vec::new();
     let mut events = Vec::new();

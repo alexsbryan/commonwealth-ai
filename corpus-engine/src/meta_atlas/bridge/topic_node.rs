@@ -157,9 +157,7 @@ impl BridgeTopic {
                 (name, ct)
             }
             None => {
-                let name = best_any
-                    .map(|(_, n)| n)
-                    .unwrap_or_else(|| topic_id.clone());
+                let name = best_any.map(|(_, n)| n).unwrap_or_else(|| topic_id.clone());
                 (name.clone(), name)
             }
         };
@@ -194,11 +192,17 @@ impl BridgeTopic {
     /// + Position + Opposition + Question). The SEP side's signature.
     pub fn argument_atom_count(&self) -> u64 {
         use AtomType::*;
-        [Claim, ArgumentReconstruction, Position, Opposition, Question]
-            .iter()
-            .filter_map(|t| self.atom_profile.get(t))
-            .copied()
-            .sum()
+        [
+            Claim,
+            ArgumentReconstruction,
+            Position,
+            Opposition,
+            Question,
+        ]
+        .iter()
+        .filter_map(|t| self.atom_profile.get(t))
+        .copied()
+        .sum()
     }
 }
 
@@ -215,7 +219,11 @@ pub fn topic_from_atlas(
     if atoms.atoms.is_empty() {
         return Ok(None);
     }
-    Ok(Some(BridgeTopic::from_atoms(corpus_id, topic_id, &atoms.atoms)))
+    Ok(Some(BridgeTopic::from_atoms(
+        corpus_id,
+        topic_id,
+        &atoms.atoms,
+    )))
 }
 
 /// Build a topic directly from an ANN search hit against `corpus_id` —
@@ -228,10 +236,7 @@ pub fn topic_from_chunk(corpus_id: &str, hit: &ScoredChunk) -> Option<BridgeTopi
     if title.trim().is_empty() {
         return None;
     }
-    let topic_id = hit
-        .source_doc_id
-        .clone()
-        .unwrap_or_else(|| title.clone());
+    let topic_id = hit.source_doc_id.clone().unwrap_or_else(|| title.clone());
     let mut entity_keys = BTreeSet::new();
     let key = lookup_key(&title);
     if !key.is_empty() {
@@ -363,7 +368,12 @@ mod tests {
     fn sep_shaped_topic_is_argument_dominant_and_titled_by_concept() {
         // A philosophy article: one Concept entity + argument atoms.
         let atoms = vec![
-            entity("Abduction", EntityType::Concept, 0.9, Some("Abduction is IBE.")),
+            entity(
+                "Abduction",
+                EntityType::Concept,
+                0.9,
+                Some("Abduction is IBE."),
+            ),
             entity("Charles Peirce", EntityType::Person, 0.6, None),
             claim(DiscourseAct::Argue),
             claim(DiscourseAct::Assert),
@@ -385,10 +395,14 @@ mod tests {
     fn wp_shaped_topic_is_inventory_dominant() {
         // A structural-first wiki page: one Other("article") entity
         // whose gloss opens like a Wikipedia lead.
-        let mut e = entity("Abductive reasoning", EntityType::Other("article".into()), 0.5, None);
+        let mut e = entity(
+            "Abductive reasoning",
+            EntityType::Other("article".into()),
+            0.5,
+            None,
+        );
         if let AtomEnvelope::Entity(ent) = &mut e {
-            ent.description =
-                "'''Abductive reasoning''' is a form of logical inference.".into();
+            ent.description = "'''Abductive reasoning''' is a form of logical inference.".into();
         }
         let t = BridgeTopic::from_atoms("wikipedia", "12345", std::slice::from_ref(&e));
         assert_eq!(t.corpus_id, "wikipedia");
@@ -423,7 +437,10 @@ mod tests {
         assert_eq!(t.topic_id, "12345");
         assert_eq!(t.title, "Abductive reasoning");
         assert!(t.entity_keys.contains("abductive reasoning"));
-        assert_eq!(t.articulation.dominant(), crate::stream_axes::Articulation::Inventory);
+        assert_eq!(
+            t.articulation.dominant(),
+            crate::stream_axes::Articulation::Inventory
+        );
 
         // A titleless hit yields no topic.
         let mut bad = hit.clone();

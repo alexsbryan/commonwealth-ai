@@ -224,13 +224,13 @@ impl RecipeRegistry {
                 Ok(live) => {
                     if live.schema_version > self.snapshot.schema_version {
                         tracing::warn!(
-                                live_version = live.schema_version,
-                                snapshot_version = self.snapshot.schema_version,
-                                "Live registry schema is newer than bundled snapshot — \
+                            live_version = live.schema_version,
+                            snapshot_version = self.snapshot.schema_version,
+                            "Live registry schema is newer than bundled snapshot — \
                                  falling back to bundled. The snapshot is vendored from \
                                  `sovereign-recipes/registry.toml` at build time: update \
                                  that tree (git pull) and rebuild."
-                            );
+                        );
                     } else {
                         tracing::debug!(
                             entries = live.entries.len(),
@@ -589,10 +589,7 @@ mod resolution_policy_tests {
     fn verified_remote_overrides_bundled() {
         // A sha-verified remote is the deliberate hotfix path: it wins even
         // when a bundled recipe ships in the binary.
-        assert_eq!(
-            choose_recipe_source(true, true, true),
-            RecipeChoice::Remote
-        );
+        assert_eq!(choose_recipe_source(true, true, true), RecipeChoice::Remote);
         assert_eq!(
             choose_recipe_source(true, true, false),
             RecipeChoice::Remote

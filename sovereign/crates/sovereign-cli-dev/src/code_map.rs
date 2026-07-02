@@ -207,9 +207,14 @@ pub async fn cmd_map(args: &[String]) -> i32 {
     let has_scip = scip_path.exists();
     let has_chunks = chunks_path.exists();
     if has_scip && has_chunks {
-        println!("[{step}/{total}] Index present — skipping (chunks.lance + scip_graph.db both exist)");
+        println!(
+            "[{step}/{total}] Index present — skipping (chunks.lance + scip_graph.db both exist)"
+        );
     } else {
-        println!("[{step}/{total}] Indexing {} as corpus '{corpus}'…", abs_path.display());
+        println!(
+            "[{step}/{total}] Indexing {} as corpus '{corpus}'…",
+            abs_path.display()
+        );
         // chunks.lance — via `code index` (embeds through the daemon).
         if has_chunks {
             println!("    chunks.lance present — skipping chunk index");
@@ -256,9 +261,15 @@ pub async fn cmd_map(args: &[String]) -> i32 {
     }
 
     // ── Prep: auto-write the enrichment config (kills the gotcha) ──
-    let enrich_cfg_path = data_dir.join("enrichment").join(&corpus).join("config.json");
+    let enrich_cfg_path = data_dir
+        .join("enrichment")
+        .join(&corpus)
+        .join("config.json");
     if enrich_cfg_path.exists() {
-        println!("enrich config present — keeping {}", enrich_cfg_path.display());
+        println!(
+            "enrich config present — keeping {}",
+            enrich_cfg_path.display()
+        );
     } else {
         match write_enrich_config(
             &enrich_cfg_path,
@@ -344,7 +355,13 @@ pub async fn cmd_map(args: &[String]) -> i32 {
             total,
             "Extracting spec claims (spec-intel)…",
             &llm_bin,
-            &["enrich", "spec-intel", spec_abs.as_str(), "--corpus", corpus.as_str()],
+            &[
+                "enrich",
+                "spec-intel",
+                spec_abs.as_str(),
+                "--corpus",
+                corpus.as_str(),
+            ],
             &[],
         )
         .is_ok();
@@ -355,7 +372,13 @@ pub async fn cmd_map(args: &[String]) -> i32 {
                 total,
                 "Reconciling spec against code (spec-reconcile)…",
                 &llm_bin,
-                &["enrich", "spec-reconcile", corpus.as_str(), "--spec", spec_stem.as_str()],
+                &[
+                    "enrich",
+                    "spec-reconcile",
+                    corpus.as_str(),
+                    "--spec",
+                    spec_stem.as_str(),
+                ],
                 &[],
             )
             .is_err()
@@ -397,10 +420,7 @@ pub async fn cmd_map(args: &[String]) -> i32 {
 /// Directory base name → corpus id: lowercase, non-alphanumerics → `-`.
 /// e.g. `/home/me/My Repo` → `my-repo`.
 fn corpus_id_from_path(p: &Path) -> String {
-    let base = p
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("codebase");
+    let base = p.file_name().and_then(|s| s.to_str()).unwrap_or("codebase");
     base.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() {
@@ -500,7 +520,8 @@ async fn build_scip_graph(
         }
     };
 
-    let out_dir = std::env::temp_dir().join(format!("sovereign-code-map-{}-scip", std::process::id()));
+    let out_dir =
+        std::env::temp_dir().join(format!("sovereign-code-map-{}-scip", std::process::id()));
     let _ = std::fs::create_dir_all(&out_dir);
 
     let progress = |p: ScipProgress<'_>| match p {
@@ -588,7 +609,10 @@ fn tally_from_findings(md_path: &Path) -> Option<String> {
         .lines()
         .find(|l| l.contains("corroborated") && l.contains("drifted"))?;
     let after = line.split_once("— ").map(|(_, b)| b).unwrap_or(line);
-    let core = after.split_once(". Regenerate").map(|(a, _)| a).unwrap_or(after);
+    let core = after
+        .split_once(". Regenerate")
+        .map(|(a, _)| a)
+        .unwrap_or(after);
     Some(core.trim().trim_end_matches('.').trim().to_string())
 }
 

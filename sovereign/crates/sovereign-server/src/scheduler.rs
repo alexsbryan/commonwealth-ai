@@ -29,7 +29,9 @@ use std::time::Instant;
 
 use tokio::sync::Notify;
 
-use commonwealth_core::fair_sched::{AdmitOutcome, ClaimOrStatus, QueueStatus, SchedCore, TryGrant};
+use commonwealth_core::fair_sched::{
+    AdmitOutcome, ClaimOrStatus, QueueStatus, SchedCore, TryGrant,
+};
 
 /// Who a turn is attributed to, for fairness and reciprocity. `String`-keyed
 /// so the scheduler stays decoupled from `auth`/`mesh` types — the consult
@@ -201,7 +203,10 @@ impl FairScheduler {
     /// *would* have occupied, for the client's retry hint.
     pub fn try_grant(&self, key: UserKey, weight: f64) -> Result<TurnPermit, Shed> {
         let mut st = self.inner.lock();
-        match st.core.try_grant(key.clone(), weight, self.inner.max_per_user) {
+        match st
+            .core
+            .try_grant(key.clone(), weight, self.inner.max_per_user)
+        {
             TryGrant::Granted => Ok(self.permit(key)),
             TryGrant::WouldQueue { position } => Err(Shed {
                 would_be_position: position,
@@ -237,7 +242,9 @@ impl std::fmt::Debug for TurnPermit {
     // Manual (not derived): `Inner` holds a `Notify`/`SchedCore` that aren't
     // `Debug`. The key is the only field worth showing in a log anyway.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TurnPermit").field("key", &self.key).finish()
+        f.debug_struct("TurnPermit")
+            .field("key", &self.key)
+            .finish()
     }
 }
 
@@ -289,7 +296,9 @@ mod tests {
     #[tokio::test]
     async fn admit_grants_immediately_when_free() {
         let s = FairScheduler::new(2, 1, 32, 2);
-        let p = s.admit(tenant("a"), 1.0, |_| panic!("should not queue")).await;
+        let p = s
+            .admit(tenant("a"), 1.0, |_| panic!("should not queue"))
+            .await;
         assert!(p.is_ok());
         assert_eq!(s.available(), 1);
     }
@@ -346,7 +355,10 @@ mod tests {
         // The queue is empty again: a fresh REST attempt sees would-be pos 1,
         // not 2 (the cancelled waiter left no residue).
         let shed = s.try_grant(tenant("w2"), 1.0).expect_err("still busy");
-        assert_eq!(shed.would_be_position, 1, "cancelled waiter left no residue");
+        assert_eq!(
+            shed.would_be_position, 1,
+            "cancelled waiter left no residue"
+        );
         drop(held);
     }
 

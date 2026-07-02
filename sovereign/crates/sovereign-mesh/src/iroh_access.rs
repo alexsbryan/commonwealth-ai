@@ -203,18 +203,23 @@ impl MeshIrohAccess {
         let identity = commonwealth_transport::identity::load_or_generate_node_key(data_dir);
         let secret = commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
-        let endpoint =
-            match build_relayed_endpoint(secret, vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()], relay_cfg).await {
-                Ok(ep) => ep,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        "iroh(mesh): endpoint bind failed — dial-by-key mesh access \
-                         disabled (tailnet path unaffected)"
-                    );
-                    return None;
-                }
-            };
+        let endpoint = match build_relayed_endpoint(
+            secret,
+            vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()],
+            relay_cfg,
+        )
+        .await
+        {
+            Ok(ep) => ep,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "iroh(mesh): endpoint bind failed — dial-by-key mesh access \
+                     disabled (tailnet path unaffected)"
+                );
+                return None;
+            }
+        };
 
         let internal_addr: SocketAddr = ([127, 0, 0, 1], internal_port).into();
         let client_addr: SocketAddr = ([127, 0, 0, 1], client_port).into();
@@ -468,7 +473,9 @@ mod tests {
     #[test]
     fn explicit_routes_detection_keys_off_iroh_entries_only() {
         assert!(!has_explicit_iroh_routes(&TransportSection::default()));
-        assert!(!has_explicit_iroh_routes(&section(|t| t.gossip = Some("ip".into()))));
+        assert!(!has_explicit_iroh_routes(&section(
+            |t| t.gossip = Some("ip".into())
+        )));
         assert!(!has_explicit_iroh_routes(&section(
             |t| t.gossip = Some("carrier-pigeon".into())
         )));

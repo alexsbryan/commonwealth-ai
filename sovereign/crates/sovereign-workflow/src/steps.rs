@@ -108,12 +108,13 @@ impl Step for ModelStep {
         // A `system_file` loads the system prompt from disk — the bespoke `.md`
         // enrichment prompts referenced as data, not re-typed — overriding inline
         // `system`. A read failure is loud (the prompt is load-bearing).
-        let system_message = match &args.system_file {
-            Some(path) => Some(std::fs::read_to_string(path).map_err(|e| {
-                Error::Execution(format!("model: read system_file `{path}`: {e}"))
-            })?),
-            None => args.system.clone(),
-        };
+        let system_message =
+            match &args.system_file {
+                Some(path) => Some(std::fs::read_to_string(path).map_err(|e| {
+                    Error::Execution(format!("model: read system_file `{path}`: {e}"))
+                })?),
+                None => args.system.clone(),
+            };
         // Build a protocol-native request: the OICP envelope carries the
         // latency class — the standard signal the daemon's slot picker routes on
         // (`pick_slot_for_oicp`). `preferred_speed` is set coherently for any
@@ -325,7 +326,10 @@ impl Step for RecipeStep {
                     .collect()
             })
             .unwrap_or_default();
-        let outcome = self.installer.ensure_installed(&self.recipe_id, &params).await?;
+        let outcome = self
+            .installer
+            .ensure_installed(&self.recipe_id, &params)
+            .await?;
         Ok(Artifact::new(
             "corpus",
             StepOutput::Json(serde_json::json!({
@@ -403,9 +407,7 @@ impl StepRegistry {
                 tools: Arc::clone(&self.tools),
                 tool_id: format!("mcp_{server}_{tool}"),
             })),
-            StepKind::Transform { name } => Ok(Arc::new(TransformStep {
-                name: name.clone(),
-            })),
+            StepKind::Transform { name } => Ok(Arc::new(TransformStep { name: name.clone() })),
             StepKind::Recipe { id } => {
                 let installer = self.installer.as_ref().ok_or_else(|| {
                     Error::Execution(
@@ -444,7 +446,10 @@ mod tests {
             id: &str,
             params: &std::collections::BTreeMap<String, String>,
         ) -> Result<InstallOutcome> {
-            self.calls.lock().unwrap().push((id.to_string(), params.clone()));
+            self.calls
+                .lock()
+                .unwrap()
+                .push((id.to_string(), params.clone()));
             Ok(InstallOutcome {
                 corpus_id: id.to_string(),
                 status: "complete".into(),

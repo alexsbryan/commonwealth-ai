@@ -137,7 +137,10 @@ mod tests {
             .await
             .is_err());
         assert!(WriteFileTool
-            .execute(&serde_json::json!({ "path": out.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": out.to_string_lossy() }),
+                &ctx()
+            )
             .await
             .is_err());
     }

@@ -136,10 +136,19 @@ struct NarrationInput {
 /// `… <pkg> <ver> <descriptor>` → the bare method/field name (`find_callers`).
 pub fn method_name(qualified: &str) -> String {
     let t: Vec<&str> = qualified.split(' ').collect();
-    let desc = if t.len() >= 5 { t[4..].join(" ") } else { qualified.to_string() };
+    let desc = if t.len() >= 5 {
+        t[4..].join(" ")
+    } else {
+        qualified.to_string()
+    };
     let leaf = desc.rsplit('/').next().unwrap_or(&desc);
     let after = leaf.rsplit(|c| c == ']' || c == '#').next().unwrap_or(leaf);
-    after.split('(').next().unwrap_or(after).trim_end_matches('.').to_string()
+    after
+        .split('(')
+        .next()
+        .unwrap_or(after)
+        .trim_end_matches('.')
+        .to_string()
 }
 
 /// The concrete impl type from `impl#[TypeName]…`, if present.
@@ -203,16 +212,25 @@ fn parse_flag(args: &[String], key: &str) -> Option<String> {
 }
 
 pub fn load_caps(path: &Path) -> Result<Vec<Cap>, String> {
-    let s = fs::read_to_string(path)
-        .map_err(|_| format!("no capability map at {} — run `svrn code capability-map` first", path.display()))?;
-    let doc: CapMapDoc = serde_json::from_str(&s).map_err(|e| format!("parsing {}: {e}", path.display()))?;
+    let s = fs::read_to_string(path).map_err(|_| {
+        format!(
+            "no capability map at {} — run `svrn code capability-map` first",
+            path.display()
+        )
+    })?;
+    let doc: CapMapDoc =
+        serde_json::from_str(&s).map_err(|e| format!("parsing {}: {e}", path.display()))?;
     Ok(doc.capabilities)
 }
 
 fn load_cache_by_qn(path: &Path) -> HashMap<String, SymbolEnrichment> {
     match fs::read_to_string(path) {
         Ok(s) => serde_json::from_str::<Vec<SymbolEnrichment>>(&s)
-            .map(|v| v.into_iter().map(|e| (e.meta.qualified_name.clone(), e)).collect())
+            .map(|v| {
+                v.into_iter()
+                    .map(|e| (e.meta.qualified_name.clone(), e))
+                    .collect()
+            })
             .unwrap_or_default(),
         Err(_) => HashMap::new(),
     }
@@ -221,7 +239,12 @@ fn load_cache_by_qn(path: &Path) -> HashMap<String, SymbolEnrichment> {
 fn load_prior(path: &Path) -> HashMap<String, CapSection> {
     match fs::read_to_string(path) {
         Ok(s) => serde_json::from_str::<CapabilityDoc>(&s)
-            .map(|d| d.capabilities.into_iter().map(|c| (c.label.clone(), c)).collect())
+            .map(|d| {
+                d.capabilities
+                    .into_iter()
+                    .map(|c| (c.label.clone(), c))
+                    .collect()
+            })
             .unwrap_or_default(),
         Err(_) => HashMap::new(),
     }
@@ -260,7 +283,13 @@ fn build_prompt(inp: &NarrationInput) -> ChatPrompt {
         .iter()
         .map(|f| format!("- {}: {}", f.name, f.summary))
         .collect();
-    let deps: Vec<String> = inp.cap.deps.iter().take(8).map(|d| method_name(d)).collect();
+    let deps: Vec<String> = inp
+        .cap
+        .deps
+        .iter()
+        .take(8)
+        .map(|d| method_name(d))
+        .collect();
     let user = format!(
         "CAPABILITY: {}\nENTRY POINTS (verbs): {}\n\nCORE FUNCTIONS:\n{}\n\nSHARED SERVICES IT USES: {}\n\nWrite the section.",
         inp.cap.label,
@@ -319,7 +348,10 @@ async fn narrate_one(chat: &ChatCompletionFn, inp: NarrationInput) -> CapSection
 
 fn render_markdown(doc: &CapabilityDoc) -> String {
     let mut s = String::new();
-    s.push_str(&format!("# {} — Capability Architecture (derived)\n\n", doc.corpus_id));
+    s.push_str(&format!(
+        "# {} — Capability Architecture (derived)\n\n",
+        doc.corpus_id
+    ));
     s.push_str(&format!(
         "_Derived from the SCIP call graph + code-intel summaries — {} capabilities. Every spine \
          function cites `file:line`. Regenerate with `svrn enrich capability-doc {}`._\n\n",
@@ -327,7 +359,11 @@ fn render_markdown(doc: &CapabilityDoc) -> String {
         doc.corpus_id,
     ));
     for c in &doc.capabilities {
-        let suffix = if c.parent.is_some() { "  ·  sub-capability" } else { "" };
+        let suffix = if c.parent.is_some() {
+            "  ·  sub-capability"
+        } else {
+            ""
+        };
         s.push_str(&format!("## {}{}\n", c.label, suffix));
         s.push_str(&format!(
             "_{} entr{} · {} core fn{}_\n\n",
@@ -341,7 +377,10 @@ fn render_markdown(doc: &CapabilityDoc) -> String {
         if !c.spine.is_empty() {
             s.push_str("**Spine:**\n\n");
             for f in &c.spine {
-                s.push_str(&format!("- `{}` — {} ({}:{})\n", f.name, f.summary, f.file, f.line));
+                s.push_str(&format!(
+                    "- `{}` — {} ({}:{})\n",
+                    f.name, f.summary, f.file, f.line
+                ));
             }
             s.push('\n');
         }
@@ -407,7 +446,10 @@ pub async fn cmd_capability_doc(args: &[String]) -> i32 {
         }
     };
     if !probe_daemon(&cfg.base_url).await {
-        eprintln!("error: daemon is not responding at {} — start it first", cfg.base_url);
+        eprintln!(
+            "error: daemon is not responding at {} — start it first",
+            cfg.base_url
+        );
         return 2;
     }
     let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
@@ -469,7 +511,8 @@ pub async fn cmd_capability_doc(args: &[String]) -> i32 {
 
     // Top-level capabilities first, then by breadth (entries) and depth (core).
     sections.sort_by(|a, b| {
-        a.parent.is_some()
+        a.parent
+            .is_some()
             .cmp(&b.parent.is_some())
             .then(b.n_entries.cmp(&a.n_entries))
             .then(b.n_core.cmp(&a.n_core))
@@ -503,7 +546,11 @@ pub async fn cmd_capability_doc(args: &[String]) -> i32 {
         }
     }
 
-    let flagged = doc.capabilities.iter().filter(|c| !c.off_spine_mentions.is_empty()).count();
+    let flagged = doc
+        .capabilities
+        .iter()
+        .filter(|c| !c.off_spine_mentions.is_empty())
+        .count();
     println!(
         "capability-doc: wrote {} sections to {} ({flagged} flagged for off-spine mentions to review)",
         doc.capabilities.len(),

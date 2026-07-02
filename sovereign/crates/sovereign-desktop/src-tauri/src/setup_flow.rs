@@ -20,13 +20,13 @@ use std::time::Instant;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use sovereign_core::models_manifest::SlotConfig;
 use sovereign_inference::hardware::{self, HardwareProfile};
 use sovereign_inference::setup_planner::{
     build_primary_catalog, download_gguf, hf_download_url, recommended_primary, resolve_slot,
     SlotKind,
 };
 use sovereign_inference::GgufExpectation;
-use sovereign_core::models_manifest::SlotConfig;
 
 use crate::state::{self, AppState, BootstrapPhase};
 
@@ -239,19 +239,16 @@ pub async fn run(
     let cb: state::BootstrapProgressCb = Box::new(move |phase: BootstrapPhase| {
         let (sp, msg) = match phase {
             BootstrapPhase::SmokeTesting => (SetupPhase::SmokeTesting, "Testing the connection."),
-            BootstrapPhase::LoadingModel => {
-                (SetupPhase::LoadingModel, "Bringing a model online.")
-            }
-            BootstrapPhase::OpeningDatabase => {
-                (SetupPhase::OpeningDatabase, "Breaking ground on your library.")
-            }
+            BootstrapPhase::LoadingModel => (SetupPhase::LoadingModel, "Bringing a model online."),
+            BootstrapPhase::OpeningDatabase => (
+                SetupPhase::OpeningDatabase,
+                "Breaking ground on your library.",
+            ),
             // The post-database phases reuse the OpeningDatabase
             // setup chip — they're sub-second in the common case and
             // don't warrant their own frontend states; the message
             // still narrates honestly for slow outliers.
-            BootstrapPhase::AssemblingRouter => {
-                (SetupPhase::OpeningDatabase, "Tuning the router.")
-            }
+            BootstrapPhase::AssemblingRouter => (SetupPhase::OpeningDatabase, "Tuning the router."),
             BootstrapPhase::RebuildingRouterEmbeddings => (
                 SetupPhase::OpeningDatabase,
                 "Adapting to your embedding model — one-time, this can take a few minutes.",
@@ -259,9 +256,7 @@ pub async fn run(
             BootstrapPhase::WiringKnowledge => {
                 (SetupPhase::OpeningDatabase, "Connecting knowledge.")
             }
-            BootstrapPhase::BuildingRuntime => {
-                (SetupPhase::OpeningDatabase, "Almost there.")
-            }
+            BootstrapPhase::BuildingRuntime => (SetupPhase::OpeningDatabase, "Almost there."),
         };
         let _ = app_for_cb.emit(
             EVENT,

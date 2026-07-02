@@ -49,7 +49,10 @@ mod tests {
     fn gold_match_is_and_and_case_insensitive() {
         let kws = vec!["verloc".to_string(), "brett street".to_string()];
         assert!(gold_match("The Verloc shop on BRETT STREET", &kws));
-        assert!(!gold_match("The Verloc shop", &kws), "missing one keyword fails the AND");
+        assert!(
+            !gold_match("The Verloc shop", &kws),
+            "missing one keyword fails the AND"
+        );
     }
 
     #[test]
@@ -66,10 +69,19 @@ mod tests {
     #[test]
     fn or_group_accepts_any_alternate() {
         let kws = vec!["horse|steed|cab horse".to_string()];
-        assert!(gold_match("the steed bolted", &kws), "synonym 'steed' satisfies the group");
-        assert!(gold_match("a HORSE and cart", &kws), "case-insensitive primary form");
+        assert!(
+            gold_match("the steed bolted", &kws),
+            "synonym 'steed' satisfies the group"
+        );
+        assert!(
+            gold_match("a HORSE and cart", &kws),
+            "case-insensitive primary form"
+        );
         assert!(gold_match("the cab horse", &kws), "multi-word alternate");
-        assert!(!gold_match("the dog ran", &kws), "no alternate present → fail");
+        assert!(
+            !gold_match("the dog ran", &kws),
+            "no alternate present → fail"
+        );
     }
 
     #[test]
@@ -84,8 +96,14 @@ mod tests {
     fn or_groups_and_combine_across_entries() {
         // AND across entries, OR within each.
         let kws = vec!["verloc".to_string(), "horse|steed".to_string()];
-        assert!(gold_match("Verloc rode the steed", &kws), "both entries satisfied");
-        assert!(!gold_match("Verloc walked", &kws), "second entry unsatisfied → AND fails");
+        assert!(
+            gold_match("Verloc rode the steed", &kws),
+            "both entries satisfied"
+        );
+        assert!(
+            !gold_match("Verloc walked", &kws),
+            "second entry unsatisfied → AND fails"
+        );
     }
 
     #[test]

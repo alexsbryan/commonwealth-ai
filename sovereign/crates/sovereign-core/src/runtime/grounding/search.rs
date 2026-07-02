@@ -50,11 +50,7 @@ impl AttachedAssetSearcher {
             inference,
             chunks: chunks
                 .iter()
-                .filter_map(|c| {
-                    c.embedding
-                        .as_ref()
-                        .map(|e| (c.content.clone(), e.clone()))
-                })
+                .filter_map(|c| c.embedding.as_ref().map(|e| (c.content.clone(), e.clone())))
                 .collect(),
         }
     }

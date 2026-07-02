@@ -196,14 +196,21 @@ impl CallGraph {
             stats.kept_edges += 1;
         }
         stats.nodes = nodes.len();
-        CallGraph { adj, rev, nodes, stats }
+        CallGraph {
+            adj,
+            rev,
+            nodes,
+            stats,
+        }
     }
 
     /// All nodes that are functions (every node is a qualified id; entry-point
     /// providers filter to the callable ones).
     pub fn function_nodes(&self) -> impl Iterator<Item = &String> {
         self.nodes.iter().filter(|n| {
-            pkg_and_desc(n).map(|(_, d)| is_function(d)).unwrap_or(false)
+            pkg_and_desc(n)
+                .map(|(_, d)| is_function(d))
+                .unwrap_or(false)
         })
     }
 
@@ -304,7 +311,9 @@ pub struct FallbackProvider {
 
 impl Default for FallbackProvider {
     fn default() -> Self {
-        Self { dispatcher_fanout: 12 }
+        Self {
+            dispatcher_fanout: 12,
+        }
     }
 }
 
@@ -487,7 +496,10 @@ pub fn build(
         capabilities: capabilities.len(),
         multi_entry,
     };
-    CapabilityMap { capabilities, stats }
+    CapabilityMap {
+        capabilities,
+        stats,
+    }
 }
 
 /// Union-find on reach-set Jaccard. Entry points whose spines overlap by ≥
@@ -564,7 +576,9 @@ fn describe(
     let mut core: Vec<String> = Vec::new();
     let mut deps: Vec<(usize, String)> = Vec::new();
     for n in &spine {
-        let is_fn = pkg_and_desc(n).map(|(_, d)| is_function(d)).unwrap_or(false);
+        let is_fn = pkg_and_desc(n)
+            .map(|(_, d)| is_function(d))
+            .unwrap_or(false);
         if !is_fn {
             continue;
         }
@@ -580,7 +594,9 @@ fn describe(
 
     // Label: dominant (package, module) over the core; fall back to the entries
     // (a thin handler with no owned core still gets its own module label).
-    let label = dominant_label(&core).or_else(|| dominant_label(members)).unwrap_or_else(|| "?/?".to_string());
+    let label = dominant_label(&core)
+        .or_else(|| dominant_label(members))
+        .unwrap_or_else(|| "?/?".to_string());
 
     let mut reps: Vec<String> = members
         .iter()
@@ -665,7 +681,11 @@ pub fn render_markdown(corpus_id: &str, map: &CapabilityMap) -> String {
         let _ = writeln!(out, "## Decomposed sub-capabilities (single entry)\n");
         for c in subcaps {
             let p = c.parent.as_deref().unwrap_or("");
-            let _ = writeln!(out, "### {} — {} core fns  ·  part of {}", c.label, c.n_core, p);
+            let _ = writeln!(
+                out,
+                "### {} — {} core fns  ·  part of {}",
+                c.label, c.n_core, p
+            );
             write_capability_detail(&mut out, c);
         }
     }
@@ -726,7 +746,9 @@ fn dominant_label(syms: &[String]) -> Option<String> {
 // recurses, recomputing the shared spine at each level.
 
 fn is_function_node(n: &str) -> bool {
-    pkg_and_desc(n).map(|(_, d)| is_function(d)).unwrap_or(false)
+    pkg_and_desc(n)
+        .map(|(_, d)| is_function(d))
+        .unwrap_or(false)
 }
 
 struct SubCap {
@@ -800,7 +822,11 @@ fn subcluster(
         groups.entry(r).or_default().push(nz[i].clone());
     }
     let mut out: Vec<Vec<String>> = groups.into_values().collect();
-    let routing: Vec<String> = group.iter().filter(|e| dist[*e].is_empty()).cloned().collect();
+    let routing: Vec<String> = group
+        .iter()
+        .filter(|e| dist[*e].is_empty())
+        .cloned()
+        .collect();
     if !routing.is_empty() {
         out.push(routing);
     }
@@ -820,23 +846,36 @@ fn decompose(
     if core.len() <= opts.decompose_core_threshold || depth >= opts.subcap_max_depth {
         let mut c: Vec<String> = core.into_iter().collect();
         c.sort();
-        return vec![SubCap { members: group, core: c }];
+        return vec![SubCap {
+            members: group,
+            core: c,
+        }];
     }
     let subs = subcluster(&group, &dist, opts.subcap_jaccard);
     if subs.len() <= 1 {
         let mut c: Vec<String> = core.into_iter().collect();
         c.sort();
-        return vec![SubCap { members: group, core: c }];
+        return vec![SubCap {
+            members: group,
+            core: c,
+        }];
     }
     let mut out = Vec::new();
     for s in subs {
         if s.len() > 1 {
             out.extend(decompose(s, reach, opts, depth + 1));
         } else {
-            let mut c: Vec<String> =
-                dist.get(&s[0]).cloned().unwrap_or_default().into_iter().collect();
+            let mut c: Vec<String> = dist
+                .get(&s[0])
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
             c.sort();
-            out.push(SubCap { members: s, core: c });
+            out.push(SubCap {
+                members: s,
+                core: c,
+            });
         }
     }
     out
@@ -926,11 +965,36 @@ mod tests {
     #[test]
     fn scip_parser_is_language_generic() {
         let cases = [
-            ("rust-analyzer cargo sov 0.1 runtime/impl#[Runtime]handle_code_query().", "sov", true, "handle_code_query"),
-            ("scip-typescript npm @sg/scip 1.0 src/index/readFile().", "@sg/scip", true, "readFile"),
-            ("scip-python python requests 2.31 requests/sessions/Session#get().", "requests", true, "get"),
-            ("scip-java maven com.google.guava 31.0 com/google/common/Foo#bar().", "com.google.guava", true, "bar"),
-            ("scip-go gomod github.com/x/y v1.2.3 pkg/Server#Serve().", "github.com/x/y", true, "Serve"),
+            (
+                "rust-analyzer cargo sov 0.1 runtime/impl#[Runtime]handle_code_query().",
+                "sov",
+                true,
+                "handle_code_query",
+            ),
+            (
+                "scip-typescript npm @sg/scip 1.0 src/index/readFile().",
+                "@sg/scip",
+                true,
+                "readFile",
+            ),
+            (
+                "scip-python python requests 2.31 requests/sessions/Session#get().",
+                "requests",
+                true,
+                "get",
+            ),
+            (
+                "scip-java maven com.google.guava 31.0 com/google/common/Foo#bar().",
+                "com.google.guava",
+                true,
+                "bar",
+            ),
+            (
+                "scip-go gomod github.com/x/y v1.2.3 pkg/Server#Serve().",
+                "github.com/x/y",
+                true,
+                "Serve",
+            ),
             ("rust-analyzer cargo std 1.0 vec/Vec#", "std", false, "Vec"),
         ];
         for (raw, pkg, isfn, mname) in cases {
@@ -941,7 +1005,10 @@ mod tests {
                 assert_eq!(method_name(d), mname, "method for {raw}");
             }
         }
-        assert!(pkg_and_desc("local 42").is_none(), "locals are not global symbols");
+        assert!(
+            pkg_and_desc("local 42").is_none(),
+            "locals are not global symbols"
+        );
     }
 
     #[test]
@@ -949,11 +1016,20 @@ mod tests {
         let symbols = vec![sym("rust-analyzer cargo app 0.1 a/run().")];
         let refs = vec![
             // first-party call edge — kept
-            edge("rust-analyzer cargo app 0.1 a/run().", "rust-analyzer cargo app 0.1 a/help()."),
+            edge(
+                "rust-analyzer cargo app 0.1 a/run().",
+                "rust-analyzer cargo app 0.1 a/help().",
+            ),
             // external callee — dropped
-            edge("rust-analyzer cargo app 0.1 a/run().", "rust-analyzer cargo std 1.0 vec/Vec#push()."),
+            edge(
+                "rust-analyzer cargo app 0.1 a/run().",
+                "rust-analyzer cargo std 1.0 vec/Vec#push().",
+            ),
             // type ref (not a function) — dropped
-            edge("rust-analyzer cargo app 0.1 a/run().", "rust-analyzer cargo app 0.1 a/Config#"),
+            edge(
+                "rust-analyzer cargo app 0.1 a/run().",
+                "rust-analyzer cargo app 0.1 a/Config#",
+            ),
         ];
         let g = CallGraph::from_scip(&symbols, &refs);
         assert_eq!(g.stats.kept_edges, 1);
@@ -968,8 +1044,12 @@ mod tests {
         let p = "rust-analyzer cargo app 0.1 ";
         let mk = |s: &str| format!("{p}{s}");
         let symbols: Vec<ScipSymbolRecord> = [
-            "x_cmd/run_a().", "x_cmd/run_b().", "y_cmd/run_c().",
-            "x/shared().", "x/deep().", "y/lonely().",
+            "x_cmd/run_a().",
+            "x_cmd/run_b().",
+            "y_cmd/run_c().",
+            "x/shared().",
+            "x/deep().",
+            "y/lonely().",
         ]
         .iter()
         .map(|s| sym(&mk(s)))
@@ -982,10 +1062,17 @@ mod tests {
         ];
         let map = build(&symbols, &refs, &MapOptions::default());
         // run_a + run_b coalesce; run_c is its own capability.
-        let multi = map.capabilities.iter().find(|c| c.n_entries == 2).expect("a 2-entry capability");
+        let multi = map
+            .capabilities
+            .iter()
+            .find(|c| c.n_entries == 2)
+            .expect("a 2-entry capability");
         assert!(multi.reps.iter().any(|r| r == "run_a"));
         assert!(multi.reps.iter().any(|r| r == "run_b"));
-        assert!(map.capabilities.iter().any(|c| c.n_entries == 1 && c.reps.iter().any(|r| r == "run_c")));
+        assert!(map
+            .capabilities
+            .iter()
+            .any(|c| c.n_entries == 1 && c.reps.iter().any(|r| r == "run_c")));
     }
 
     #[test]
@@ -997,8 +1084,15 @@ mod tests {
         let p = "rust-analyzer cargo app 0.1 ";
         let mk = |s: &str| format!("{p}{s}");
         let symbols: Vec<ScipSymbolRecord> = [
-            "x_cmd/run_a().", "x_cmd/run_b().", "x_cmd/run_c().",
-            "s/s1().", "s/s2().", "s/s3().", "d/da().", "d/db().", "d/dc().",
+            "x_cmd/run_a().",
+            "x_cmd/run_b().",
+            "x_cmd/run_c().",
+            "s/s1().",
+            "s/s2().",
+            "s/s3().",
+            "d/da().",
+            "d/db().",
+            "d/dc().",
         ]
         .iter()
         .map(|s| sym(&mk(s)))
@@ -1013,15 +1107,27 @@ mod tests {
         refs.push(edge(&mk("x_cmd/run_b()."), &mk("d/db().")));
         refs.push(edge(&mk("x_cmd/run_c()."), &mk("d/dc().")));
 
-        let opts = MapOptions { decompose_core_threshold: 2, ..MapOptions::default() };
+        let opts = MapOptions {
+            decompose_core_threshold: 2,
+            ..MapOptions::default()
+        };
         let map = build(&symbols, &refs, &opts);
 
-        let subcaps: Vec<&Capability> =
-            map.capabilities.iter().filter(|c| c.parent.is_some()).collect();
-        assert!(subcaps.len() >= 2, "cluster decomposed into sub-capabilities");
+        let subcaps: Vec<&Capability> = map
+            .capabilities
+            .iter()
+            .filter(|c| c.parent.is_some())
+            .collect();
+        assert!(
+            subcaps.len() >= 2,
+            "cluster decomposed into sub-capabilities"
+        );
         let total: usize = map.capabilities.iter().map(|c| c.n_entries).sum();
         assert_eq!(total, 3, "every entry survives decomposition");
         let first = subcaps[0].parent.clone();
-        assert!(subcaps.iter().all(|c| c.parent == first), "sub-caps share one parent");
+        assert!(
+            subcaps.iter().all(|c| c.parent == first),
+            "sub-caps share one parent"
+        );
     }
 }

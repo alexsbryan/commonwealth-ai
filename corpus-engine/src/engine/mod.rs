@@ -2209,7 +2209,10 @@ impl CorpusEngine {
     /// The freshness sidecar for a corpus's RAPTOR summary index, if built.
     /// The query-time freshness probe compares its `source_version` against
     /// the live `max(created_at)` of `conv_raptor_nodes`.
-    pub fn raptor_index_meta(&self, corpus_id: &str) -> Option<crate::index::raptor::RaptorIndexMeta> {
+    pub fn raptor_index_meta(
+        &self,
+        corpus_id: &str,
+    ) -> Option<crate::index::raptor::RaptorIndexMeta> {
         crate::index::raptor::read_raptor_meta(&self.index_dir.join(corpus_id))
     }
 

@@ -194,7 +194,10 @@ pub async fn create_conversation(
     // (mirrors the desktop "new chat" create flow). Without this,
     // `resolve_active_mode` can't route the conversation into a
     // workspace agent loop.
-    if let Err(e) = tr.seed_conversation(&id, now, req.skill_id.as_deref()).await {
+    if let Err(e) = tr
+        .seed_conversation(&id, now, req.skill_id.as_deref())
+        .await
+    {
         return Err(api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("seed conversation: {e}"),
@@ -561,12 +564,15 @@ pub async fn read_chunk(
             "corpus engine not available",
         ));
     };
-    let index = engine.open_index_for_corpus(&corpus_id).await.map_err(|e| {
-        api_error(
-            StatusCode::NOT_FOUND,
-            &format!("open index '{corpus_id}': {e}"),
-        )
-    })?;
+    let index = engine
+        .open_index_for_corpus(&corpus_id)
+        .await
+        .map_err(|e| {
+            api_error(
+                StatusCode::NOT_FOUND,
+                &format!("open index '{corpus_id}': {e}"),
+            )
+        })?;
     let window = index
         .neighbors(chunk_id, radius)
         .await

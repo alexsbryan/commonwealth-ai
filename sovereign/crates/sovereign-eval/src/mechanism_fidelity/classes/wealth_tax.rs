@@ -22,7 +22,9 @@ impl WealthTaxRelocation {
     /// the anchoring here (not in the orchestrator) lets each class own its
     /// own choice set.
     fn anchor(prompt: String) -> String {
-        format!("{prompt}\n\nAnswer with exactly one letter — A = relocate, B = stay, C = indifferent.")
+        format!(
+            "{prompt}\n\nAnswer with exactly one letter — A = relocate, B = stay, C = indifferent."
+        )
     }
 
     /// Per-(case, variant) deterministic RNG seed for the identity swap,

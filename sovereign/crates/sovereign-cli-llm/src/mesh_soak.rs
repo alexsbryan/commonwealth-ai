@@ -105,8 +105,9 @@ pub fn evaluate_invariants(
         return violations;
     }
 
-    let member_set =
-        |v: &NodeStatusView| -> BTreeSet<String> { v.members.iter().map(|m| m.node_id.clone()).collect() };
+    let member_set = |v: &NodeStatusView| -> BTreeSet<String> {
+        v.members.iter().map(|m| m.node_id.clone()).collect()
+    };
 
     // Convergence: every reachable node reports the same member-id set.
     let (first_addr, first_view) = reachable[0];
@@ -148,14 +149,20 @@ pub fn evaluate_invariants(
     let mut self_claimants: BTreeMap<String, Vec<&String>> = BTreeMap::new();
     for (addr, view) in &reachable {
         if let Some(m) = view.members.iter().find(|m| m.is_self) {
-            self_claimants.entry(m.node_id.clone()).or_default().push(addr);
+            self_claimants
+                .entry(m.node_id.clone())
+                .or_default()
+                .push(addr);
         }
     }
     for (id, addrs) in &self_claimants {
         if addrs.len() > 1 {
             violations.push(Violation {
                 invariant: "unique_ids",
-                detail: format!("node_id {id} claimed as self by {} nodes: {addrs:?}", addrs.len()),
+                detail: format!(
+                    "node_id {id} claimed as self by {} nodes: {addrs:?}",
+                    addrs.len()
+                ),
             });
         }
     }
@@ -220,7 +227,12 @@ pub fn evaluate_invariants(
     // be seen as live by every other reachable node.
     let self_ids: BTreeSet<String> = reachable
         .iter()
-        .filter_map(|(_, v)| v.members.iter().find(|m| m.is_self).map(|m| m.node_id.clone()))
+        .filter_map(|(_, v)| {
+            v.members
+                .iter()
+                .find(|m| m.is_self)
+                .map(|m| m.node_id.clone())
+        })
         .collect();
     for (addr, view) in &reachable {
         for live_id in &self_ids {
@@ -277,11 +289,19 @@ pub fn soak_slis(lines: &[serde_json::Value]) -> BTreeMap<String, f64> {
     let mut m = BTreeMap::new();
     m.insert(
         "invariant_violation_rate".into(),
-        if checks == 0 { 0.0 } else { check_fail as f64 / checks as f64 },
+        if checks == 0 {
+            0.0
+        } else {
+            check_fail as f64 / checks as f64
+        },
     );
     m.insert(
         "load_success_rate".into(),
-        if loads == 0 { 1.0 } else { load_ok as f64 / loads as f64 },
+        if loads == 0 {
+            1.0
+        } else {
+            load_ok as f64 / loads as f64
+        },
     );
     m.insert("load_p50_ms".into(), pct(50.0));
     m.insert("load_p99_ms".into(), pct(99.0));
@@ -307,10 +327,26 @@ pub struct SliSpec {
 /// are starting points to tune once a real baseline exists.
 pub fn soak_slo_specs() -> &'static [SliSpec] {
     &[
-        SliSpec { name: "invariant_violation_rate", dir: SliDir::LowerIsBetter, tolerance: 0.02 },
-        SliSpec { name: "load_success_rate", dir: SliDir::HigherIsBetter, tolerance: 0.05 },
-        SliSpec { name: "load_p50_ms", dir: SliDir::LowerIsBetter, tolerance: 50.0 },
-        SliSpec { name: "load_p99_ms", dir: SliDir::LowerIsBetter, tolerance: 200.0 },
+        SliSpec {
+            name: "invariant_violation_rate",
+            dir: SliDir::LowerIsBetter,
+            tolerance: 0.02,
+        },
+        SliSpec {
+            name: "load_success_rate",
+            dir: SliDir::HigherIsBetter,
+            tolerance: 0.05,
+        },
+        SliSpec {
+            name: "load_p50_ms",
+            dir: SliDir::LowerIsBetter,
+            tolerance: 50.0,
+        },
+        SliSpec {
+            name: "load_p99_ms",
+            dir: SliDir::LowerIsBetter,
+            tolerance: 200.0,
+        },
     ]
 }
 
@@ -390,22 +426,40 @@ mod tests {
 
     #[test]
     fn converged_healthy_mesh_has_no_violations() {
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
-        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "online", false)], 2),
+        );
+        let b = snap(
+            "b",
+            view(&[("n1", "online", false), ("n2", "online", true)], 2),
+        );
         assert!(evaluate_invariants(&[a, b], None).is_empty());
     }
 
     #[test]
     fn duplicate_self_ids_flag_unique_ids() {
         // Distinct self-claims (a→n1, b→n2) are clean.
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
-        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "online", false)], 2),
+        );
+        let b = snap(
+            "b",
+            view(&[("n1", "online", false), ("n2", "online", true)], 2),
+        );
         assert!(!evaluate_invariants(&[a, b], None)
             .iter()
             .any(|v| v.invariant == "unique_ids"));
         // Two daemons both claiming n2 as self = an id collision (the 8h-soak bug).
-        let c = snap("c", view(&[("n1", "online", false), ("n2", "online", true)], 2));
-        let d = snap("d", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let c = snap(
+            "c",
+            view(&[("n1", "online", false), ("n2", "online", true)], 2),
+        );
+        let d = snap(
+            "d",
+            view(&[("n1", "online", false), ("n2", "online", true)], 2),
+        );
         let vs = evaluate_invariants(&[c, d], None);
         assert!(vs.iter().any(|v| v.invariant == "unique_ids"), "{vs:?}");
     }
@@ -416,7 +470,10 @@ mod tests {
         over.peer_inflight_current = 3;
         over.peer_inflight_ceiling = 2;
         let vs = evaluate_invariants(&[snap("a", over)], None);
-        assert!(vs.iter().any(|x| x.invariant == "admission_safety"), "{vs:?}");
+        assert!(
+            vs.iter().any(|x| x.invariant == "admission_safety"),
+            "{vs:?}"
+        );
         // At/under ceiling is clean.
         let mut ok = view(&[("n1", "online", true)], 1);
         ok.peer_inflight_current = 2;
@@ -432,7 +489,10 @@ mod tests {
         let mut over = view(&[("n1", "online", true)], 1);
         over.fanout_inflight_current = 65;
         let vs = evaluate_invariants(&[snap("a", over)], None);
-        assert!(vs.iter().any(|x| x.invariant == "bounded_fan_out"), "{vs:?}");
+        assert!(
+            vs.iter().any(|x| x.invariant == "bounded_fan_out"),
+            "{vs:?}"
+        );
         // At the ceiling (≤ 64) is clean; 0 is the inert common case.
         let mut ok = view(&[("n1", "online", true)], 1);
         ok.fanout_inflight_current = 64;
@@ -466,7 +526,10 @@ mod tests {
 
     #[test]
     fn divergent_member_sets_flag_convergence() {
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "online", false)], 2),
+        );
         let b = snap("b", view(&[("n2", "online", true)], 1)); // missing n1
         let vs = evaluate_invariants(&[a, b], None);
         assert!(vs.iter().any(|v| v.invariant == "convergence"), "{vs:?}");
@@ -475,25 +538,43 @@ mod tests {
     #[test]
     fn ghost_member_flagged_when_expected_down() {
         // n2 was crashed (not in expected_live) but `a` still shows it online.
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "online", false)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "online", false)], 2),
+        );
         let vs = evaluate_invariants(&[a], Some(&live_set(&["n1"])));
-        assert!(vs.iter().any(|v| v.invariant == "no_ghost_members"), "{vs:?}");
+        assert!(
+            vs.iter().any(|v| v.invariant == "no_ghost_members"),
+            "{vs:?}"
+        );
     }
 
     #[test]
     fn decayed_offline_member_is_not_a_ghost_or_liveness_failure() {
         // `a` sees n2 as offline (decayed) and we didn't poll n2. With no
         // expected set, that's neither a ghost nor a liveness violation.
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "offline", false)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "offline", false)], 2),
+        );
         let vs = evaluate_invariants(&[a], None);
-        assert!(vs.is_empty(), "offline-but-unexpected is not a violation: {vs:?}");
+        assert!(
+            vs.is_empty(),
+            "offline-but-unexpected is not a violation: {vs:?}"
+        );
     }
 
     #[test]
     fn liveness_flagged_when_a_reachable_node_is_seen_offline_by_a_peer() {
         // Both reachable, but `a` shows `b` (n2) offline — a real liveness gap.
-        let a = snap("a", view(&[("n1", "online", true), ("n2", "offline", false)], 2));
-        let b = snap("b", view(&[("n1", "online", false), ("n2", "online", true)], 2));
+        let a = snap(
+            "a",
+            view(&[("n1", "online", true), ("n2", "offline", false)], 2),
+        );
+        let b = snap(
+            "b",
+            view(&[("n1", "online", false), ("n2", "online", true)], 2),
+        );
         let vs = evaluate_invariants(&[a, b], None);
         assert!(vs.iter().any(|v| v.invariant == "liveness"), "{vs:?}");
     }
@@ -548,7 +629,10 @@ mod tests {
             .filter(|r| r.regressed)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(regressed.contains(&"invariant_violation_rate"), "{regressed:?}");
+        assert!(
+            regressed.contains(&"invariant_violation_rate"),
+            "{regressed:?}"
+        );
         assert!(regressed.contains(&"load_p99_ms"), "{regressed:?}");
         assert!(!regressed.contains(&"load_p50_ms"), "{regressed:?}");
     }

@@ -36,9 +36,7 @@ use bytes::Bytes;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::{partition, TestClock};
-use commonwealth_test_harness::fault::{
-    shared_policy, FaultProxy, FaultTransport, SharedPolicy,
-};
+use commonwealth_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use commonwealth_test_harness::simulated_mesh::SimulatedMesh;
 use commonwealth_test_harness::simulated_node::SimulatedNodeBuilder;
 
@@ -89,7 +87,10 @@ impl DstMesh {
     pub async fn start(n: usize) -> Self {
         let mut sim = SimulatedMesh::new("dst");
         for i in 0..n {
-            sim.add_node(SimulatedNodeBuilder::new((i as u128) + 1, &format!("node-{i}")));
+            sim.add_node(SimulatedNodeBuilder::new(
+                (i as u128) + 1,
+                &format!("node-{i}"),
+            ));
         }
         let addrs = sim.start_all().await;
         sim.sync_mesh_state().await;
@@ -273,7 +274,8 @@ impl DstMesh {
     pub async fn drive_gossip_round(&self, idx: usize) {
         // Individual peer failures are logged inside `run_one_round` and do not
         // propagate; a round only errs on a fundamental fault.
-        if let Err(e) = gossip::run_one_round(&self.sim.nodes[idx].state, DST_OFFLINE_THRESHOLD).await
+        if let Err(e) =
+            gossip::run_one_round(&self.sim.nodes[idx].state, DST_OFFLINE_THRESHOLD).await
         {
             tracing::debug!(node = idx, error = %e, "dst: gossip round error");
         }
@@ -301,7 +303,8 @@ impl DstMesh {
     /// converge to the SAME view before the invariant pack runs — use
     /// [`Self::gossip_until_quiescent_agreed`].
     pub async fn gossip_until_quiescent(&self, max_rounds: usize) -> Quiescence {
-        self.gossip_until_quiescent_internal(max_rounds, false).await
+        self.gossip_until_quiescent_internal(max_rounds, false)
+            .await
     }
 
     /// Like [`Self::gossip_until_quiescent`], but the fixpoint additionally
@@ -373,8 +376,11 @@ impl DstMesh {
     /// are in-process (no HTTP), taken at quiescence.
     pub async fn snapshot(&self) -> MeshSnapshot {
         let ids = self.sim.node_ids();
-        let online_truth: BTreeSet<NodeId> =
-            ids.iter().copied().filter(|id| !self.down.contains(id)).collect();
+        let online_truth: BTreeSet<NodeId> = ids
+            .iter()
+            .copied()
+            .filter(|id| !self.down.contains(id))
+            .collect();
         let mut views = Vec::new();
         for (idx, id) in ids.iter().enumerate() {
             if self.down.contains(id) {
@@ -403,7 +409,10 @@ impl DstMesh {
                 inflight_ceiling: node.state.contribution_max_peer_inflight(),
             });
         }
-        MeshSnapshot { views, online_truth }
+        MeshSnapshot {
+            views,
+            online_truth,
+        }
     }
 }
 
@@ -498,7 +507,10 @@ impl MeshInvariant for NoSplitBrain {
                 Some(prev) if prev != l => {
                     return Err(Violation {
                         invariant: "no_split_brain",
-                        detail: format!("leader disagreement: {prev:?} vs {l:?} (node {})", v.self_id),
+                        detail: format!(
+                            "leader disagreement: {prev:?} vs {l:?} (node {})",
+                            v.self_id
+                        ),
                     });
                 }
                 _ => {}
@@ -508,7 +520,10 @@ impl MeshInvariant for NoSplitBrain {
                 Some(prev) if prev != o => {
                     return Err(Violation {
                         invariant: "no_split_brain",
-                        detail: format!("owner disagreement: {prev:?} vs {o:?} (node {})", v.self_id),
+                        detail: format!(
+                            "owner disagreement: {prev:?} vs {o:?} (node {})",
+                            v.self_id
+                        ),
                     });
                 }
                 _ => {}
@@ -531,7 +546,10 @@ impl MeshInvariant for NoGhostMembers {
                 if m.live && !snap.online_truth.contains(id) {
                     return Err(Violation {
                         invariant: "no_ghost_members",
-                        detail: format!("node {} still sees {} as live (it is down)", v.self_id, id),
+                        detail: format!(
+                            "node {} still sees {} as live (it is down)",
+                            v.self_id, id
+                        ),
                     });
                 }
             }
@@ -586,7 +604,10 @@ impl MeshInvariant for Liveness {
                     _ => {
                         return Err(Violation {
                             invariant: "liveness",
-                            detail: format!("node {} does not see up node {} as live", v.self_id, truth),
+                            detail: format!(
+                                "node {} does not see up node {} as live",
+                                v.self_id, truth
+                            ),
                         });
                     }
                 }

@@ -505,7 +505,8 @@ async fn cmd_recoalesce(args: &[String]) -> i32 {
         "  Relationships:    {} → {}  (deduped/dropped {})",
         out.relationships_before,
         out.relationships_after,
-        out.relationships_before.saturating_sub(out.relationships_after),
+        out.relationships_before
+            .saturating_sub(out.relationships_after),
     );
     println!("  Pattern findings: {}", out.findings.len());
     println!();
@@ -520,7 +521,11 @@ async fn cmd_recoalesce(args: &[String]) -> i32 {
 /// them — but only if no `.orig` already exists, so the FIRST re-fold
 /// preserves the true original and later (idempotent) runs don't clobber it.
 fn backup_investigation_outputs(invest_dir: &Path) -> std::io::Result<()> {
-    for f in ["entities.json", "relationships.json", "pattern_findings.json"] {
+    for f in [
+        "entities.json",
+        "relationships.json",
+        "pattern_findings.json",
+    ] {
         let src = invest_dir.join(f);
         let dst = invest_dir.join(format!("{f}.orig"));
         if src.exists() && !dst.exists() {

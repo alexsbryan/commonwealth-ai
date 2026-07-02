@@ -291,7 +291,8 @@ pub async fn send_message_stream(
                                 (m.clone(), "oversize_guidance")
                             }
                             sovereign_core::Error::InvalidInput(m)
-                                if m.as_str() == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT =>
+                                if m.as_str()
+                                    == sovereign_core::runtime::DEGENERATE_MESSAGE_HINT =>
                             {
                                 (m.clone(), "clarification")
                             }

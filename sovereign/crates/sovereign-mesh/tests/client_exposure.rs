@@ -64,7 +64,10 @@ async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
         .await
         .expect("create_mesh");
 
-    let addr = daemon.api_address().await.expect("api_address after create");
+    let addr = daemon
+        .api_address()
+        .await
+        .expect("api_address after create");
     assert!(
         addr.ip().is_loopback(),
         "unexposed daemon must bind loopback, got {addr}"
@@ -93,7 +96,10 @@ async fn exposed_mesh_binds_wide_with_token_and_persists_marker() {
         .await
         .expect("create_mesh");
 
-    let addr = daemon.api_address().await.expect("api_address after create");
+    let addr = daemon
+        .api_address()
+        .await
+        .expect("api_address after create");
     assert!(
         addr.ip().is_unspecified(),
         "exposed daemon must bind 0.0.0.0, got {addr}"
@@ -107,7 +113,11 @@ async fn exposed_mesh_binds_wide_with_token_and_persists_marker() {
         result.client_token, token,
         "CreateMeshResult.client_token must match the installed token (invite-screen value)"
     );
-    assert_eq!(token.as_ref().map(|t| t.len()), Some(64), "256-bit hex token");
+    assert_eq!(
+        token.as_ref().map(|t| t.len()),
+        Some(64),
+        "256-bit hex token"
+    );
 
     // Marker persists → a future restart re-binds wide without re-creating.
     assert!(

@@ -27,8 +27,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::NoteStore;
+use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
 };
@@ -169,9 +169,7 @@ async fn run_list(_args: &[String]) -> i32 {
             return 2;
         }
     };
-    let rows: Vec<RecipeProjectRow> = all
-        .into_iter()
-        .collect();
+    let rows: Vec<RecipeProjectRow> = all.into_iter().collect();
     if rows.is_empty() {
         println!("(no recipe-author projects)");
         return 0;

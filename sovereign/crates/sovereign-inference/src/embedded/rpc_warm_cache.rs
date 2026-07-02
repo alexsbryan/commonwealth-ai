@@ -195,7 +195,10 @@ fn tensor_nbytes(t: &TensorInfo) -> u64 {
     }
     // SAFETY: ggml_row_size is a pure size calculation over the type enum.
     let row = unsafe {
-        crate::llama::sys::ggml_row_size(t.ggml_type as crate::llama::sys::ggml_type, t.dims[0] as i64)
+        crate::llama::sys::ggml_row_size(
+            t.ggml_type as crate::llama::sys::ggml_type,
+            t.dims[0] as i64,
+        )
     } as u64;
     let mut n = row;
     for d in &t.dims[1..] {
@@ -246,7 +249,11 @@ pub fn cache_file_name(hash: u64) -> String {
 /// aren't part of any single layer — llama.cpp places those on the first/last
 /// device, so the shard planner assigns them explicitly rather than by range.
 pub fn tensor_layer(name: &str) -> Option<u32> {
-    name.strip_prefix("blk.")?.split('.').next()?.parse::<u32>().ok()
+    name.strip_prefix("blk.")?
+        .split('.')
+        .next()?
+        .parse::<u32>()
+        .ok()
 }
 
 /// One tensor's placement facts for sharded distribution: where it lives in the
@@ -456,7 +463,11 @@ pub fn plan_shards(n_layer: u32, weights: &[f32]) -> Vec<NodeShard> {
         return Vec::new();
     }
     let total: f32 = weights.iter().sum();
-    let eff: Vec<f32> = if total > 0.0 { weights.to_vec() } else { vec![1.0; n] };
+    let eff: Vec<f32> = if total > 0.0 {
+        weights.to_vec()
+    } else {
+        vec![1.0; n]
+    };
     let sum: f32 = eff.iter().sum();
     // Largest-remainder apportionment of `n_layer` blocks.
     let ideal: Vec<f32> = eff.iter().map(|&w| w / sum * n_layer as f32).collect();
@@ -582,7 +593,11 @@ mod tests {
     #[test]
     fn plan_shards_apportions_contiguously_and_sums() {
         let p = plan_shards(12, &[0.5, 0.25, 0.25]);
-        let total: u32 = p.iter().filter_map(|s| s.blocks).map(|(a, b)| b - a + 1).sum();
+        let total: u32 = p
+            .iter()
+            .filter_map(|s| s.blocks)
+            .map(|(a, b)| b - a + 1)
+            .sum();
         assert_eq!(total, 12, "every block assigned exactly once");
         assert_eq!(p[0].blocks, Some((0, 5)));
         assert_eq!(p[1].blocks, Some((6, 8)));
@@ -617,8 +632,14 @@ mod tests {
     #[test]
     fn tensor_device_and_overrides_share_one_assignment() {
         let plan = plan_shards(4, &[0.5, 0.5]); // dev0:0-1, dev1:2-3 + output
-        assert_eq!(tensor_device("blk.0.attn_q.weight", Some(0), &plan), Some(0));
-        assert_eq!(tensor_device("blk.3.ffn_down.weight", Some(3), &plan), Some(1));
+        assert_eq!(
+            tensor_device("blk.0.attn_q.weight", Some(0), &plan),
+            Some(0)
+        );
+        assert_eq!(
+            tensor_device("blk.3.ffn_down.weight", Some(3), &plan),
+            Some(1)
+        );
         assert_eq!(tensor_device("output.weight", None, &plan), Some(1));
         assert_eq!(tensor_device("token_embd.weight", None, &plan), None);
         let pats = override_patterns(&plan);

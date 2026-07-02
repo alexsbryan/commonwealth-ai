@@ -316,12 +316,16 @@ pub fn derive_active(ops: &[GovernanceOp]) -> ActiveSet {
                     .insert(rule.clone(), RuleStatus::Retracted { by: op.id.clone() });
             }
             GovernanceOpKind::ResolveTension { tension, .. } => {
-                set.tensions
-                    .insert(tension.clone(), TensionStatus::Resolved { by: op.id.clone() });
+                set.tensions.insert(
+                    tension.clone(),
+                    TensionStatus::Resolved { by: op.id.clone() },
+                );
             }
             GovernanceOpKind::AcceptTension { tension, .. } => {
-                set.tensions
-                    .insert(tension.clone(), TensionStatus::Accepted { by: op.id.clone() });
+                set.tensions.insert(
+                    tension.clone(),
+                    TensionStatus::Accepted { by: op.id.clone() },
+                );
             }
             // Revert has no forward effect; its work was done in pass 1.
             GovernanceOpKind::Revert { .. } => {}
@@ -503,7 +507,10 @@ mod tests {
         ];
         let set = derive_active(&ops);
         assert!(!set.is_active(&r));
-        assert!(matches!(set.rules.get(&r), Some(RuleStatus::Retracted { .. })));
+        assert!(matches!(
+            set.rules.get(&r),
+            Some(RuleStatus::Retracted { .. })
+        ));
         assert!(set.active_rules().is_empty());
     }
 
@@ -520,7 +527,10 @@ mod tests {
             "human:alex",
         )];
         let set = derive_active(&ops);
-        assert!(matches!(set.tensions.get(&t), Some(TensionStatus::Accepted { .. })));
+        assert!(matches!(
+            set.tensions.get(&t),
+            Some(TensionStatus::Accepted { .. })
+        ));
         // The unadjudicated tension is still open; the accepted one is not.
         assert_eq!(set.open_tensions(&[t.clone(), other.clone()]), vec![&other]);
     }
@@ -561,8 +571,14 @@ mod tests {
             ),
         ];
         let set = derive_active(&ops);
-        assert!(matches!(set.tensions.get(&t), Some(TensionStatus::Resolved { .. })));
-        assert!(matches!(set.rules.get(&old), Some(RuleStatus::Superseded { .. })));
+        assert!(matches!(
+            set.tensions.get(&t),
+            Some(TensionStatus::Resolved { .. })
+        ));
+        assert!(matches!(
+            set.rules.get(&old),
+            Some(RuleStatus::Superseded { .. })
+        ));
         assert!(set.is_active(&new));
     }
 
@@ -612,7 +628,11 @@ mod tests {
         );
         let revert = op(
             GovernanceOpKind::Revert {
-                targets: vec![assert_new.id.clone(), supersede.id.clone(), resolve.id.clone()],
+                targets: vec![
+                    assert_new.id.clone(),
+                    supersede.id.clone(),
+                    resolve.id.clone(),
+                ],
                 rationale: "decision reversed at next meeting".into(),
             },
             1004,
@@ -625,7 +645,10 @@ mod tests {
         // Old rule is active again; the orphan new rule and the tension
         // adjudication are gone.
         assert!(set.is_active(&old));
-        assert!(!set.rules.contains_key(&new), "reverted draft rule should not exist");
+        assert!(
+            !set.rules.contains_key(&new),
+            "reverted draft rule should not exist"
+        );
         assert_eq!(set.active_rules(), vec![&old]);
         assert_eq!(set.open_tensions(&[t.clone()]), vec![&t]);
     }
@@ -670,11 +693,7 @@ mod tests {
         );
 
         // After revert1 alone: old active.
-        let after_one = derive_active(&[
-            assert_old.clone(),
-            supersede.clone(),
-            revert1.clone(),
-        ]);
+        let after_one = derive_active(&[assert_old.clone(), supersede.clone(), revert1.clone()]);
         assert!(after_one.is_active(&old));
 
         // After revert2 (revert of the revert): supersession restored.

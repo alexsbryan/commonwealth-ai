@@ -111,9 +111,7 @@ async fn run_synthesis_stream(
                         head.push_str(&chunk);
                         full_text.push_str(&chunk);
                         if head.chars().count() >= REFUSAL_HEAD_CHARS {
-                            if !retried
-                                && had_retrieved_chunks
-                                && looks_like_refusal_opener(&head)
+                            if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head)
                             {
                                 retried = true;
                                 tracing::info!(
@@ -124,19 +122,13 @@ async fn run_synthesis_stream(
                                 );
                                 full_text.clear();
                                 full_text.push_str(REFUSAL_RETRY_PREFIX);
-                                if tx
-                                    .send(Ok(REFUSAL_RETRY_PREFIX.to_string()))
-                                    .await
-                                    .is_err()
-                                {
+                                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
                                     return None;
                                 }
                                 head_flushed = true;
                                 let mut retry_req = request.clone();
-                                retry_req.assistant_prefix =
-                                    Some(REFUSAL_RETRY_PREFIX.to_string());
-                                retry_req.system_message =
-                                    Some(REFUSAL_RETRY_SYSTEM.to_string());
+                                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
+                                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
                                 match inference
                                     .complete_stream_with_id_and_finish(&retry_req)
                                     .await
@@ -153,11 +145,7 @@ async fn run_synthesis_stream(
                                         return None;
                                     }
                                 }
-                            } else if tx
-                                .send(Ok(std::mem::take(&mut head)))
-                                .await
-                                .is_err()
-                            {
+                            } else if tx.send(Ok(std::mem::take(&mut head))).await.is_err() {
                                 return None;
                             } else {
                                 head_flushed = true;
@@ -166,8 +154,7 @@ async fn run_synthesis_stream(
                     }
                 }
                 StreamFrame::Finish { reason, usage } => {
-                    observed_completion_tokens =
-                        usage.as_ref().map(|u| u.completion_tokens);
+                    observed_completion_tokens = usage.as_ref().map(|u| u.completion_tokens);
                     // FinishReason::Error means the slot bailed mid-stream
                     // (context overflow, decode failure, tokenizer
                     // rejection). Surface it so the post-stream path doesn't
@@ -216,7 +203,10 @@ async fn run_synthesis_stream(
                 let mut retry_req = request.clone();
                 retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
                 retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                match inference.complete_stream_with_id_and_finish(&retry_req).await {
+                match inference
+                    .complete_stream_with_id_and_finish(&retry_req)
+                    .await
+                {
                     Ok((s2, mid2)) => {
                         s = s2;
                         model_id = mid2;
@@ -720,9 +710,13 @@ impl Runtime {
             .corpus_principal
             .as_ref()
             .and_then(|r| r.principal_for(conversation_id));
-        let mut context =
-            build_context(self.store.as_ref(), conversation_id, message, principal.as_deref())
-                .await?;
+        let mut context = build_context(
+            self.store.as_ref(),
+            conversation_id,
+            message,
+            principal.as_deref(),
+        )
+        .await?;
 
         // Persist the user turn (same as the situated path).
         let user_msg = Message {
@@ -767,14 +761,13 @@ impl Runtime {
         let message_id_owned = message_id.clone();
 
         tokio::spawn(async move {
-            let (s, model_id) =
-                match inference.complete_stream_with_id_and_finish(&request).await {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return;
-                    }
-                };
+            let (s, model_id) = match inference.complete_stream_with_id_and_finish(&request).await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
             let mut full_text = String::new();
             let _ = run_synthesis_stream(
                 &inference,
@@ -1027,8 +1020,7 @@ impl Runtime {
         // Governance corpora take the FR-9 governance surface (its own
         // bank/override); everything else is the general KnowledgeQuery
         // gate. Both run the identical cite-or-abstain ladder.
-        let gate_surface =
-            self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
+        let gate_surface = self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
         let gate_on = gate_surface.enabled() && documents_found > 0;
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is
@@ -1050,10 +1042,9 @@ impl Runtime {
                 Vec::new()
             },
             searcher: if gate_on {
-                Some(std::sync::Arc::new(self.claim_searcher(
-                    context.conversation.enabled_corpora.as_deref(),
-                    &chunks,
-                )) as _)
+                Some(std::sync::Arc::new(
+                    self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks),
+                ) as _)
             } else {
                 None
             },
@@ -1137,14 +1128,13 @@ impl Runtime {
         tokio::spawn(async move {
             let started = std::time::Instant::now();
 
-            let (s, model_id) =
-                match inference.complete_stream_with_id_and_finish(&request).await {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return;
-                    }
-                };
+            let (s, model_id) = match inference.complete_stream_with_id_and_finish(&request).await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
 
             let mut full_text = String::new();
 
@@ -1261,8 +1251,7 @@ impl Runtime {
             // a terminal frame (older test stubs); the trait
             // `complete_stream_with_finish` default guarantees a
             // terminal frame on every provider that ships today.
-            let finish_reason_typed =
-                observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+            let finish_reason_typed = observed_finish.unwrap_or(crate::types::FinishReason::Stop);
             let max_budget = inference_config.max_tokens;
             // Provider-reported count when present; otherwise fall
             // back to a chars-per-token estimate so the UI's
@@ -1732,11 +1721,8 @@ impl Runtime {
         // degradation ladder; the note lands in message metadata.
         let budget_note = match self.inference.effective_context_size() {
             Some(ctx) => {
-                let (outcome, measured) = prompt_budget::enforce(
-                    &mut request,
-                    &|s| self.inference.count_tokens(s),
-                    ctx,
-                );
+                let (outcome, measured) =
+                    prompt_budget::enforce(&mut request, &|s| self.inference.count_tokens(s), ctx);
                 let budget_trimmed =
                     matches!(outcome, prompt_budget::BudgetOutcome::Trimmed { .. });
                 // Glassbox (truncation trace 2026-06-30): the EFFECTIVE response cap
@@ -1855,46 +1841,47 @@ impl Runtime {
         // usually long-form). Built pre-spawn; claim search sealed to
         // the conversation's corpora. entity_anchored=false — the
         // agentic loop (and its atlas gazetteer verdict) is KQ-only.
-        let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
-            chunks: if deep_gate_on {
-                crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
-            } else {
-                Vec::new()
-            },
-            chunk_labels: if deep_gate_on {
-                crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks)
-            } else {
-                Vec::new()
-            },
-            source_labels: if deep_gate_on {
-                crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks)
-            } else {
-                Vec::new()
-            },
-            searcher: if deep_gate_on {
-                Some(std::sync::Arc::new(self.claim_searcher(
-                    context.conversation.enabled_corpora.as_deref(),
-                    &kc.chunks,
-                )) as _)
-            } else {
-                None
-            },
-            entity_anchored: false,
-            // Best retrieval similarity over the draft's chunks → the env-gated
-            // retry-floor signal. The floor engages on the short single-claim
-            // path (a short deep answer can reach it); long-form deep answers
-            // take the per-claim audit path that ignores it.
-            top_similarity: if deep_gate_on {
-                let best = kc
-                    .chunks
-                    .iter()
-                    .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
-                    .fold(f32::NEG_INFINITY, f32::max);
-                best.is_finite().then_some(best)
-            } else {
-                None
-            },
-        };
+        let deep_gate_evidence =
+            crate::runtime::grounding::EvidenceContext {
+                chunks: if deep_gate_on {
+                    crate::runtime::grounding::gate_evidence_chunks(&kc.chunks)
+                } else {
+                    Vec::new()
+                },
+                chunk_labels: if deep_gate_on {
+                    crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks)
+                } else {
+                    Vec::new()
+                },
+                source_labels: if deep_gate_on {
+                    crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks)
+                } else {
+                    Vec::new()
+                },
+                searcher: if deep_gate_on {
+                    Some(std::sync::Arc::new(self.claim_searcher(
+                        context.conversation.enabled_corpora.as_deref(),
+                        &kc.chunks,
+                    )) as _)
+                } else {
+                    None
+                },
+                entity_anchored: false,
+                // Best retrieval similarity over the draft's chunks → the env-gated
+                // retry-floor signal. The floor engages on the short single-claim
+                // path (a short deep answer can reach it); long-form deep answers
+                // take the per-claim audit path that ignores it.
+                top_similarity: if deep_gate_on {
+                    let best = kc
+                        .chunks
+                        .iter()
+                        .filter_map(|c| c.vector_distance.map(|d| 1.0 - d))
+                        .fold(f32::NEG_INFINITY, f32::max);
+                    best.is_finite().then_some(best)
+                } else {
+                    None
+                },
+            };
         let deep_gate_profile = deep_gate_surface.profile();
         let deep_gate_question: String = message.to_string();
         if deep_gate_on {
@@ -1922,14 +1909,13 @@ impl Runtime {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
 
-            let (s, model_id) =
-                match inference.complete_stream_with_id_and_finish(&request).await {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return;
-                    }
-                };
+            let (s, model_id) = match inference.complete_stream_with_id_and_finish(&request).await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
 
             // Refusal-retry + token forwarding live in the shared
             // `run_synthesis_stream` (mirrored by the KnowledgeQuery spawn).
@@ -2026,8 +2012,7 @@ impl Runtime {
             // (collaboration.rs) re-verifies any gap-check rewrite.
             let full_text = {
                 let v = crate::quote_verification::verify_answer_against_evidence(
-                    &full_text,
-                    &evidence,
+                    &full_text, &evidence,
                 );
                 if v.demoted_count > 0 {
                     tracing::warn!(
@@ -2184,9 +2169,13 @@ impl Runtime {
             .corpus_principal
             .as_ref()
             .and_then(|r| r.principal_for(conversation_id));
-        let mut context =
-            build_context(self.store.as_ref(), conversation_id, message, principal.as_deref())
-                .await?;
+        let mut context = build_context(
+            self.store.as_ref(),
+            conversation_id,
+            message,
+            principal.as_deref(),
+        )
+        .await?;
         tracing::debug!(
             messages = context.conversation.messages.len(),
             memories = context.memories.len(),
@@ -2798,7 +2787,6 @@ impl Runtime {
         )
         .await
     }
-
 }
 
 #[cfg(test)]
@@ -2885,7 +2873,10 @@ mod continuation_tests {
             !crate::runtime::evidence::ends_mid_thought(&full),
             "answer landed on a boundary: {full:?}"
         );
-        assert!(full.ends_with("effects."), "continuation was stitched: {full:?}");
+        assert!(
+            full.ends_with("effects."),
+            "continuation was stitched: {full:?}"
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 1, "one continuation sufficed");
     }
 
@@ -2896,7 +2887,11 @@ mod continuation_tests {
         // Above the min-length guard, so the loop actually engages.
         let mut full = "This particular answer was unfortunately cut off right at the".to_string();
         run(&inf, &mut full).await;
-        assert_eq!(calls.load(Ordering::SeqCst), 3, "stops at the round cap, never loops");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            3,
+            "stops at the round cap, never loops"
+        );
     }
 
     #[tokio::test]
@@ -2904,7 +2899,11 @@ mod continuation_tests {
         let (inf, calls) = stub(" extra text");
         let mut done = "A complete sentence.".to_string();
         run(&inf, &mut done).await;
-        assert_eq!(calls.load(Ordering::SeqCst), 0, "a complete draft is left alone");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "a complete draft is left alone"
+        );
         // A sub-threshold degenerate stub (e.g. a stray "search") is not "continued".
         let mut stubby = "search".to_string();
         run(&inf, &mut stubby).await;

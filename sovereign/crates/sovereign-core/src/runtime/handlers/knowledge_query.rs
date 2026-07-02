@@ -359,7 +359,6 @@ impl Runtime {
             "handle_knowledge_query: corpus search done (per-corpus survivors)"
         );
 
-
         // 4a. Empty results path — answer from parametric knowledge.
         //
         // v29 attempted to gate this on (entities non-empty +
@@ -425,9 +424,7 @@ impl Runtime {
                 // slot; this was the holdout bank's whole honesty gap,
                 // 0.64 vs a 0.91 counterfactual). The KQ stream spawn
                 // emits the prefix as visible text.
-                assistant_prefix: Some(
-                    crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string(),
-                ),
+                assistant_prefix: Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -890,9 +887,8 @@ impl Runtime {
                 // Comparison-shape contrast — append the directive that
                 // pins the model to a bounded axes structure rather
                 // than the open-ended essay shape.
-                let budget_note = crate::runtime::build_response_length_directive(
-                    output_budget.soft_target,
-                );
+                let budget_note =
+                    crate::runtime::build_response_length_directive(output_budget.soft_target);
                 // Synthesizer role builds the prompt body (SSOT). FastFocused
                 // forces think_budget=0 → no THINKING_DIRECTIVE. The
                 // Comparison-shape directive pins the bounded-axes structure.
@@ -1002,8 +998,7 @@ impl Runtime {
         // holdout run = honesty 0.64 vs 0.91). The streaming layer
         // emits the same prefix as visible text.
         if agentic_still_insufficient && !agentic_corpus_anchored {
-            request.assistant_prefix =
-                Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string());
+            request.assistant_prefix = Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string());
             tracing::info!(
                 target: "agentic_kq",
                 "agentic_kq: foreign-topic insufficiency — GK caveat prefix committed"
@@ -1138,11 +1133,12 @@ impl Runtime {
         // Entity-anchoring is a property of the question + corpus, independent of
         // the loop's success; deictic questions close the exemption the same way.
         // Computed before the struct so the `&chunks` borrow ends before the move.
-        let gate_entity_anchored = crate::runtime::evidence_loop::compute_entity_anchored(
-            message,
-            context.conversation.enabled_corpora.as_deref(),
-            &chunks,
-        ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message);
+        let gate_entity_anchored =
+            crate::runtime::evidence_loop::compute_entity_anchored(
+                message,
+                context.conversation.enabled_corpora.as_deref(),
+                &chunks,
+            ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message);
         crate::runtime::grounding::dbg(&format!(
             "[KQDIAG] gate_entity_anchored(deterministic)={gate_entity_anchored} loop_value={agentic_entity_anchored}"
         ));
@@ -1224,8 +1220,7 @@ impl Runtime {
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
         // Domain-managed corpora (governance, proxy-voting) take their own
         // calibrated gate surface; else the general KnowledgeQuery gate.
-        let gate_surface =
-            self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
+        let gate_surface = self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
         let completion_text = if gate_surface.enabled() && !plan.chunks.is_empty() {
             // The turn's sealed evidence universe; claim search
             // sealed to the conversation's corpora.

@@ -49,8 +49,8 @@ pub(crate) fn open_store() -> Result<(MeshStore, NodeId), String> {
     if let Some(parent) = p.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let store = MeshStore::open(&p)
-        .map_err(|e| format!("open portfolio store {}: {e}", p.display()))?;
+    let store =
+        MeshStore::open(&p).map_err(|e| format!("open portfolio store {}: {e}", p.display()))?;
     let data_dir = dirs::home_dir()
         .map(|h| h.join(".sovereign"))
         .unwrap_or_else(|| std::path::PathBuf::from("."));
@@ -132,7 +132,10 @@ fn cmd_create(args: &[String]) -> i32 {
         eprintln!("error: {e}");
         return 1;
     }
-    println!("created portfolio `{name}` with {} corpus(es)", corpora.len());
+    println!(
+        "created portfolio `{name}` with {} corpus(es)",
+        corpora.len()
+    );
     for c in &corpora {
         println!("  · {c}");
     }
@@ -185,7 +188,9 @@ fn cmd_list() -> i32 {
         }
     };
     if entries.is_empty() {
-        println!("no portfolios yet — create one with `svrn portfolio create <name> <corpus-id ...>`");
+        println!(
+            "no portfolios yet — create one with `svrn portfolio create <name> <corpus-id ...>`"
+        );
         return 0;
     }
     println!("portfolios ({}):", entries.len());
@@ -193,7 +198,12 @@ fn cmd_list() -> i32 {
         let n = serde_json::from_slice::<Vec<String>>(e.value.as_ref())
             .map(|v| v.len())
             .unwrap_or(0);
-        println!("  · {} ({} corpus{})", e.key, n, if n == 1 { "" } else { "es" });
+        println!(
+            "  · {} ({} corpus{})",
+            e.key,
+            n,
+            if n == 1 { "" } else { "es" }
+        );
     }
     0
 }
@@ -233,7 +243,11 @@ mod tests {
     fn merge_unique_dedups_preserving_order() {
         let base = vec!["a".to_string(), "b".to_string()];
         let merged = merge_unique(&base, &["b".into(), "c".into(), "a".into(), "c".into()]);
-        assert_eq!(merged, vec!["a", "b", "c"], "dedup, first-seen order preserved");
+        assert_eq!(
+            merged,
+            vec!["a", "b", "c"],
+            "dedup, first-seen order preserved"
+        );
     }
 
     #[test]

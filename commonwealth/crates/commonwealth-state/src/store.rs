@@ -366,7 +366,10 @@ mod tests {
             !store.merge_entry(tie).unwrap(),
             "equal-timestamp write must not displace the incumbent"
         );
-        assert_eq!(store.get("a", "k").unwrap().unwrap().value.as_ref(), b"incumbent");
+        assert_eq!(
+            store.get("a", "k").unwrap().unwrap().value.as_ref(),
+            b"incumbent"
+        );
     }
 
     /// **Wire-layer privacy: private namespaces never leave the node.**
@@ -382,11 +385,26 @@ mod tests {
         use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID};
 
         let a = MeshStore::in_memory().unwrap();
-        a.set(crate::peer_preferences::PEER_PREFERENCES_APP_ID, "peer", Bytes::from("affinity"), node(1)).unwrap();
-        a.set(ACTIVITY_APP_ID, "usage", Bytes::from("tokens=42"), node(1)).unwrap();
-        a.set("work-atlas-private", "session", Bytes::from("scope"), node(1)).unwrap();
-        a.set("notes-private", "n1", Bytes::from("secret note"), node(1)).unwrap();
-        a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1)).unwrap();
+        a.set(
+            crate::peer_preferences::PEER_PREFERENCES_APP_ID,
+            "peer",
+            Bytes::from("affinity"),
+            node(1),
+        )
+        .unwrap();
+        a.set(ACTIVITY_APP_ID, "usage", Bytes::from("tokens=42"), node(1))
+            .unwrap();
+        a.set(
+            "work-atlas-private",
+            "session",
+            Bytes::from("scope"),
+            node(1),
+        )
+        .unwrap();
+        a.set("notes-private", "n1", Bytes::from("secret note"), node(1))
+            .unwrap();
+        a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1))
+            .unwrap();
 
         // The sender ships exactly this set.
         let gossiped = a.all_entries_for_gossip().unwrap();
@@ -397,7 +415,11 @@ mod tests {
                 e.app_id
             );
         }
-        assert_eq!(gossiped.len(), 1, "only the public contributions entry gossips");
+        assert_eq!(
+            gossiped.len(),
+            1,
+            "only the public contributions entry gossips"
+        );
         assert_eq!(gossiped[0].app_id, CONTRIBUTIONS_APP_ID);
 
         // Replicate into B as the sender→receiver path does.

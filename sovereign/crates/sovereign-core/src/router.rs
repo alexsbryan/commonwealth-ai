@@ -288,8 +288,7 @@ pub struct LlmRouter {
     /// today" no longer trips on the bare word "today". Falls back to
     /// the keyword heuristic when absent (tests / minimal configs).
     /// Installed via `with_current_info_classifier`.
-    current_info_classifier:
-        Option<Arc<crate::current_info_classifier::CurrentInfoClassifier>>,
+    current_info_classifier: Option<Arc<crate::current_info_classifier::CurrentInfoClassifier>>,
     /// Cache of L2-normalised embeddings of the registered tools'
     /// described purposes, keyed by the (order-independent) tool-id set.
     /// Powers the tool-relevance gate (see `query_best_tool_sim`).
@@ -432,7 +431,10 @@ impl LlmRouter {
         }
         let best = best_tool_cosine(q_normalized, &embedded);
         if let Ok(mut guard) = self.tool_embed_cache.write() {
-            *guard = Some(ToolEmbedCache { key, tools: embedded });
+            *guard = Some(ToolEmbedCache {
+                key,
+                tools: embedded,
+            });
         }
         best
     }
@@ -748,7 +750,10 @@ Reply with JSON only:
                 };
                 // char-safe truncation (byte slice panics mid-multibyte-char,
                 // dropping the responder — breaker, 2026-06-25).
-                format!("{role}: {}", crate::runtime::truncate_chars(&m.content, 150))
+                format!(
+                    "{role}: {}",
+                    crate::runtime::truncate_chars(&m.content, 150)
+                )
             })
             .collect();
 
@@ -1193,19 +1198,21 @@ Reply with JSON only:
         let prompt = Self::build_pass2_tool_selection_prompt(message, context, available_tools);
         let tool_ids: Vec<String> = available_tools.iter().map(|t| t.id.clone()).collect();
         let raw = self.classify_call_tool_json(prompt, &tool_ids).await?;
-        Ok(Self::parse_tool_selection(&raw, &tool_ids).unwrap_or_else(|| {
-            // Parse failure must not land on a high-impact tool by
-            // registry accident — `tools[0]` happened to be `shell`,
-            // which is the worst possible "didn't understand you"
-            // default (note a6193c42). Prefer the first non-shell
-            // tool; shell only when it is genuinely the only option.
-            available_tools
-                .iter()
-                .find(|t| t.id.as_str() != "shell")
-                .unwrap_or(&available_tools[0])
-                .id
-                .clone()
-        }))
+        Ok(
+            Self::parse_tool_selection(&raw, &tool_ids).unwrap_or_else(|| {
+                // Parse failure must not land on a high-impact tool by
+                // registry accident — `tools[0]` happened to be `shell`,
+                // which is the worst possible "didn't understand you"
+                // default (note a6193c42). Prefer the first non-shell
+                // tool; shell only when it is genuinely the only option.
+                available_tools
+                    .iter()
+                    .find(|t| t.id.as_str() != "shell")
+                    .unwrap_or(&available_tools[0])
+                    .id
+                    .clone()
+            }),
+        )
     }
 
     /// Called when Pass 1 returns SIMPLE. Runs a fast self-assessment to decide
@@ -1707,8 +1714,9 @@ impl Router for LlmRouter {
                         const TOOL_GATE_MIN_SIM: f32 = 0.65;
                         const TOOL_GATE_MARGIN: f32 = 0.05;
                         let tool_match = if intent_is_toolless(&verdict.intent) {
-                            let best =
-                                self.query_best_tool_sim(&query_embedding, available_tools).await;
+                            let best = self
+                                .query_best_tool_sim(&query_embedding, available_tools)
+                                .await;
                             // Glassbox: emit the gate decision (numbers + verdict)
                             // for EVERY evaluation — including near-misses that
                             // fall through — so "why didn't my tool fire?" is
@@ -1740,7 +1748,10 @@ impl Router for LlmRouter {
                         if let Some((tool_id, tool_sim)) = tool_match {
                             let latency_ms = start.elapsed().as_millis() as i64;
                             let hash = message_hash(message);
-                            let _ = self.store.log_routing(&hash, "ComplexTask", latency_ms).await;
+                            let _ = self
+                                .store
+                                .log_routing(&hash, "ComplexTask", latency_ms)
+                                .await;
                             let _ = self
                                 .store
                                 .log_routing_meta(&hash, "TOOL_RELEVANCE", None)
@@ -1911,15 +1922,13 @@ impl Router for LlmRouter {
         // "summarize this", "explain this passage", "compare these sections"
         // etc. which the Fast model sometimes misreads as ACTION because of
         // the imperative verb. Content processing never needs external reach.
-        let force_content_reasoning =
-            !force_action && Self::looks_like_content_processing(message);
+        let force_content_reasoning = !force_action && Self::looks_like_content_processing(message);
 
         // Pre-check 4: deep reasoning signal → force REASONING before the LLM sees it.
         // This catches philosophical, analytical, and compatibility questions that
         // small fast models frequently mis-classify as SimpleQuery.
-        let force_deep = !force_action
-            && !force_content_reasoning
-            && Self::needs_deep_reasoning(message);
+        let force_deep =
+            !force_action && !force_content_reasoning && Self::needs_deep_reasoning(message);
 
         // Iter6: pre-check chain done. Cap timer here — anything
         // after this is either zero-cost branch selection or the
@@ -2091,7 +2100,9 @@ mod tests {
         assert!(intent_is_toolless(&Intent::KnowledgeQuery));
         assert!(intent_is_toolless(&Intent::DeepQuery));
         assert!(!intent_is_toolless(&Intent::ComplexTask));
-        assert!(!intent_is_toolless(&Intent::SimpleAction { tool: "x".into() }));
+        assert!(!intent_is_toolless(&Intent::SimpleAction {
+            tool: "x".into()
+        }));
 
         // l2_normalize + best_tool_cosine: a normalised query matches an
         // identical tool vector at cosine ≈ 1.0 and picks it over an
@@ -2105,7 +2116,10 @@ mod tests {
         let tools = vec![("orth".to_string(), orth), ("same".to_string(), same)];
         let (id, sim) = best_tool_cosine(&q, &tools).expect("a best match exists");
         assert_eq!(id, "same");
-        assert!((sim - 1.0).abs() < 1e-6, "cosine with identical vector ≈ 1.0, got {sim}");
+        assert!(
+            (sim - 1.0).abs() < 1e-6,
+            "cosine with identical vector ≈ 1.0, got {sim}"
+        );
         // The matched tool's cosine exceeds the orthogonal alternative (0.0),
         // i.e. it would clear the relative `tool_sim > top_sim` rule.
         assert!(sim > 0.0);

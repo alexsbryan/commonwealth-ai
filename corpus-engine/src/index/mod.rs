@@ -1021,7 +1021,6 @@ pub fn backfill_display(index_dir: &Path, display: crate::recipe::DisplayMeta) -
 }
 
 impl CorpusIndex {
-
     /// Return the `mutable_merge` policy stamped on this index, if
     /// any. Used by `merge_shards` to decide which dedupe branch to
     /// run.

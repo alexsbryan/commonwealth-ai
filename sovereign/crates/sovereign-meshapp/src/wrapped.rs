@@ -48,9 +48,25 @@ const ENTITY_SCORE_FLOOR: f64 = 0.6;
 /// turn header). Everything else generic is dropped by corpus evidence
 /// (see [`generic_keys_by_case_profile`]), not by growing this list.
 const WRAPPED_ENTITY_STOPLIST: &[&str] = &[
-    "i", "me", "my", "you", "your", "we", "us", "our", "he", "she", "it",
-    "they", "them", "user", "users", "the user", "assistant",
-    "the assistant", "claude",
+    "i",
+    "me",
+    "my",
+    "you",
+    "your",
+    "we",
+    "us",
+    "our",
+    "he",
+    "she",
+    "it",
+    "they",
+    "them",
+    "user",
+    "users",
+    "the user",
+    "assistant",
+    "the assistant",
+    "claude",
 ];
 
 /// A surface form needs at least this many lowercase sightings in
@@ -342,8 +358,7 @@ pub async fn verify_wrapped_artifact(
         .get_chunks(&cited)
         .await
         .map_err(|e| format!("read cited chunks: {e}"))?;
-    let content: HashMap<u64, String> =
-        chunks.into_iter().map(|c| (c.id, c.content)).collect();
+    let content: HashMap<u64, String> = chunks.into_iter().map(|c| (c.id, c.content)).collect();
     verify_artifact_against_content(artifact, &content)
 }
 
@@ -416,7 +431,13 @@ fn verify_artifact_against_content(
                         }
                     }
                     if let Some(e) = &s.excerpt {
-                        check_span(content, &mut failures, e.chunk_id, &e.text, "rhythm.excerpt");
+                        check_span(
+                            content,
+                            &mut failures,
+                            e.chunk_id,
+                            &e.text,
+                            "rhythm.excerpt",
+                        );
                     }
                 }
             }
@@ -435,7 +456,13 @@ fn verify_artifact_against_content(
             }
             WrappedCard::Cast(c) => {
                 for n in &c.nodes {
-                    check_span(content, &mut failures, n.sample.chunk_id, &n.sample.text, "cast.sample");
+                    check_span(
+                        content,
+                        &mut failures,
+                        n.sample.chunk_id,
+                        &n.sample.text,
+                        "cast.sample",
+                    );
                 }
             }
             WrappedCard::Scale(_) | WrappedCard::Door(_) => {}
@@ -616,7 +643,8 @@ pub fn fold_scale(docs: &[ConvDoc]) -> Option<ScaleCard> {
         }
     }
     let fmt_date = |ts: Option<NaiveDateTime>| {
-        ts.map(|t| t.format("%Y-%m-%d").to_string()).unwrap_or_default()
+        ts.map(|t| t.format("%Y-%m-%d").to_string())
+            .unwrap_or_default()
     };
     let words_total = words_user + words_assistant;
     Some(ScaleCard {
@@ -804,7 +832,10 @@ fn at_sentence_start(orig: &[u8], pos: usize) -> bool {
     if i == 0 {
         return true;
     }
-    matches!(orig[i - 1], b'.' | b'!' | b'?' | b':' | b'\n' | b'#' | b'-' | b'*' | b'"' | b'\'' | b'(')
+    matches!(
+        orig[i - 1],
+        b'.' | b'!' | b'?' | b':' | b'\n' | b'#' | b'-' | b'*' | b'"' | b'\'' | b'('
+    )
 }
 
 /// Count case evidence for `key` (an ASCII-lowercased surface form)
@@ -997,12 +1028,7 @@ pub fn fold_cast(
         return None;
     }
     let mut ranked: Vec<(String, Acc)> = by_key.into_iter().collect();
-    ranked.sort_by(|(ka, a), (kb, b)| {
-        b.convs
-            .len()
-            .cmp(&a.convs.len())
-            .then_with(|| ka.cmp(kb))
-    });
+    ranked.sort_by(|(ka, a), (kb, b)| b.convs.len().cmp(&a.convs.len()).then_with(|| ka.cmp(kb)));
     ranked.truncate(MAX_NODES);
 
     let mut edges: Vec<CastEdge> = Vec::new();
@@ -1055,11 +1081,9 @@ pub fn read_chunk_entities(db: &Path, corpus_id: &str) -> Result<Vec<EntityRow>,
     if !db.exists() {
         return Ok(Vec::new());
     }
-    let conn = rusqlite::Connection::open_with_flags(
-        db,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| format!("open {}: {e}", db.display()))?;
+    let conn =
+        rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| format!("open {}: {e}", db.display()))?;
     let mut stmt = match conn.prepare(
         "SELECT chunk_id, text, label, char_start, char_end, score, conv_uuid \
          FROM chunk_entities WHERE corpus_id = ?1",

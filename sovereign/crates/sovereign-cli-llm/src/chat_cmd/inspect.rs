@@ -190,9 +190,7 @@ async fn run_inspect(
             "no corpora installed under {}",
             session_indexes_dir(session)
         );
-        eprintln!(
-            "install one via `svrn corpus install <id>` or the desktop folder-drop flow."
-        );
+        eprintln!("install one via `svrn corpus install <id>` or the desktop folder-drop flow.");
         return 0;
     }
 

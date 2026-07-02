@@ -500,9 +500,8 @@ impl Tool for AtlasResolveTool {
 
         // The description-cosine merge rule needs embeddings — build the same
         // daemon embed closure the bespoke resolver uses.
-        let client = DaemonInferenceClient::from_enrich_config(&cfg).map_err(|e| {
-            Error::Execution(format!("atlas_resolve: build daemon client: {e}"))
-        })?;
+        let client = DaemonInferenceClient::from_enrich_config(&cfg)
+            .map_err(|e| Error::Execution(format!("atlas_resolve: build daemon client: {e}")))?;
         let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
 
         let atlas_dir = atlas_dir_for(&cfg.corpus_id);
@@ -626,11 +625,17 @@ mod tests {
             .await
             .is_err());
         assert!(AtlasResolveTool
-            .execute(&serde_json::json!({ "corpus": "x", "phase": "bogus" }), &ctx)
+            .execute(
+                &serde_json::json!({ "corpus": "x", "phase": "bogus" }),
+                &ctx
+            )
             .await
             .is_err());
         assert!(AtlasResolveTool
-            .execute(&serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }), &ctx)
+            .execute(
+                &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
+                &ctx
+            )
             .await
             .is_err());
     }

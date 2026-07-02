@@ -243,8 +243,7 @@ mod tests {
         let t = IpTransport::new(9741);
         let contact = peer_contact(&fixture_member());
         let eps = t.endpoints(&contact, TrafficClass::Inference).await;
-        let with_path: Vec<String> =
-            eps.iter().map(|e| format!("{}/v1", e.base_url)).collect();
+        let with_path: Vec<String> = eps.iter().map(|e| format!("{}/v1", e.base_url)).collect();
         assert_eq!(
             with_path,
             vec![
@@ -302,7 +301,9 @@ mod tests {
             "[fd7a:115c:a1e0::a3a:241c]:9742".parse().unwrap(),
             "100.64.0.2:9742".parse().unwrap(),
         ];
-        let eps2 = t.endpoints(&peer_contact(&member), TrafficClass::Gossip).await;
+        let eps2 = t
+            .endpoints(&peer_contact(&member), TrafficClass::Gossip)
+            .await;
         assert_eq!(
             urls(&eps2),
             vec![
@@ -330,7 +331,9 @@ mod tests {
         let t = IpTransport::default();
         let mut member = fixture_member();
         member.addresses.clear();
-        let eps = t.endpoints(&peer_contact(&member), TrafficClass::Gossip).await;
+        let eps = t
+            .endpoints(&peer_contact(&member), TrafficClass::Gossip)
+            .await;
         assert!(eps.is_empty());
     }
 

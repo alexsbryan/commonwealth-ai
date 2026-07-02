@@ -756,9 +756,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
             0
         }
         Ok(None) => {
-            eprintln!(
-                "No mesh to rotate — run `svrn setup` or `svrn mesh create` first."
-            );
+            eprintln!("No mesh to rotate — run `svrn setup` or `svrn mesh create` first.");
             1
         }
         Err(e) => {
@@ -838,9 +836,7 @@ async fn cmd_status(args: &[String]) -> i32 {
         Ok(r) => r,
         Err(e) => {
             eprintln!("mesh status: daemon at {url} not reachable: {e}");
-            eprintln!(
-                "hint: `svrn daemon status` to check, `svrn daemon start` to launch."
-            );
+            eprintln!("hint: `svrn daemon status` to check, `svrn daemon start` to launch.");
             return 1;
         }
     };
@@ -972,7 +968,9 @@ async fn cmd_transport(args: &[String]) -> i32 {
         eprintln!("Usage: sovereign mesh transport [--json]");
         eprintln!();
         eprintln!("Show each peer's live iroh connection path (direct / relayed / mixed / idle).");
-        eprintln!("Empty output means iroh isn't carrying mesh traffic (the mesh is on the IP path).");
+        eprintln!(
+            "Empty output means iroh isn't carrying mesh traffic (the mesh is on the IP path)."
+        );
         return 0;
     }
     let json_out = args.iter().any(|a| a == "--json");
@@ -994,7 +992,10 @@ async fn cmd_transport(args: &[String]) -> i32 {
             }
         },
         Ok(r) => {
-            eprintln!("mesh transport: daemon returned HTTP {} from {url}", r.status());
+            eprintln!(
+                "mesh transport: daemon returned HTTP {} from {url}",
+                r.status()
+            );
             return 1;
         }
         Err(e) => {
@@ -1137,7 +1138,9 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
                 .unwrap_or_else(|| PathBuf::from(".")),
             Err(e) => {
                 eprintln!("error: could not load setup config to choose default --out dir: {e}");
-                eprintln!("hint: pass --out <dir> explicitly, or run `svrn daemon --setup-only` first.");
+                eprintln!(
+                    "hint: pass --out <dir> explicitly, or run `svrn daemon --setup-only` first."
+                );
                 return 1;
             }
         },

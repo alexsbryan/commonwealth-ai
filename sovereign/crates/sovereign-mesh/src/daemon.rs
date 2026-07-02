@@ -1095,11 +1095,7 @@ impl EmbeddedDaemon {
             commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
         let identity = Some((
             commonwealth_transport::identity::node_pubkey(&identity_key),
-            commonwealth_transport::identity::sign_join_proof(
-                &identity_key,
-                &stable_id,
-                node_name,
-            ),
+            commonwealth_transport::identity::sign_join_proof(&identity_key, &stable_id, node_name),
         ));
 
         // Relay/discovery posture (if configured) for the join's
@@ -1147,9 +1143,7 @@ impl EmbeddedDaemon {
                 // A plaintext invite's `dial=` connect code: dial the
                 // founder by key first (no shared IP route needed),
                 // fall back to the hint + mDNS below.
-                iroh_dial
-                    .as_deref()
-                    .map(|d| (d, identity_key.to_bytes())),
+                iroh_dial.as_deref().map(|d| (d, identity_key.to_bytes())),
                 &join_relay_cfg,
                 relay_hint.as_deref(),
                 mdns.as_deref(),
@@ -1459,8 +1453,7 @@ impl EmbeddedDaemon {
         let mut out = Vec::with_capacity(members.len());
         for m in members {
             let pubkey = m.node_pubkey.expect("filtered to Some above");
-            let path =
-                crate::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0).await;
+            let path = crate::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0).await;
             out.push(IrohPeerPath {
                 node_id: m.node_id,
                 name: m.name.clone(),
@@ -1517,9 +1510,10 @@ impl EmbeddedDaemon {
     pub async fn discovered_peers(&self) -> Vec<DiscoveredPeer> {
         let state = self.state.read().await;
         match &*state {
-            DaemonState::Running { mdns, .. } => {
-                mdns.as_ref().map(|m| m.discovered_peers()).unwrap_or_default()
-            }
+            DaemonState::Running { mdns, .. } => mdns
+                .as_ref()
+                .map(|m| m.discovered_peers())
+                .unwrap_or_default(),
             DaemonState::Stopped => Vec::new(),
         }
     }
@@ -1874,7 +1868,9 @@ impl EmbeddedDaemon {
             // serve chat can serve as an RPC worker. See `rpc_warm_http`.
             let warmer: Arc<dyn commonwealth_api::state::RpcShardWarmer> =
                 Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
-            app_state.with_local_inference(adapter).with_rpc_shard_warmer(warmer)
+            app_state
+                .with_local_inference(adapter)
+                .with_rpc_shard_warmer(warmer)
         } else {
             app_state
         };
@@ -2075,8 +2071,9 @@ impl EmbeddedDaemon {
                 }
             }
         }
-        let client_addr: SocketAddr =
-            format!("{client_bind}:{client_port}").parse().unwrap_or_else(|_| {
+        let client_addr: SocketAddr = format!("{client_bind}:{client_port}")
+            .parse()
+            .unwrap_or_else(|_| {
                 warn!("invalid client_bind '{client_bind}'; falling back to 127.0.0.1");
                 format!("127.0.0.1:{client_port}").parse().unwrap()
             });
@@ -2106,9 +2103,14 @@ impl EmbeddedDaemon {
         };
         let (mdns, browse_handle): (Option<Arc<MdnsDiscovery>>, Option<BrowseHandle>) =
             if mdns_enabled {
-                let mdns =
-                    MdnsDiscovery::new(node_id, &mesh_id_hex, &mesh_name, &node_name, internal_port)
-                        .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
+                let mdns = MdnsDiscovery::new(
+                    node_id,
+                    &mesh_id_hex,
+                    &mesh_name,
+                    &node_name,
+                    internal_port,
+                )
+                .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
                 let mdns = Arc::new(mdns);
                 // A 32-slot channel is plenty — the browse loop pushes on
                 // ServiceResolved and we don't actively consume. If the
@@ -2514,7 +2516,9 @@ impl EmbeddedDaemon {
         ) = if require_encryption {
             (
                 commonwealth_transport::TrafficClass::ALL.to_vec(),
-                commonwealth_transport::TrafficClass::ALL.into_iter().collect(),
+                commonwealth_transport::TrafficClass::ALL
+                    .into_iter()
+                    .collect(),
             )
         } else {
             (

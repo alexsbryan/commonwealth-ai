@@ -632,7 +632,9 @@ async fn degenerate_message_returns_clarification() {
         ));
     }
     // A real question in ANY script is NOT degenerate and passes the guard.
-    assert!(!sovereign_core::runtime::is_degenerate_message("What is X?"));
+    assert!(!sovereign_core::runtime::is_degenerate_message(
+        "What is X?"
+    ));
     assert!(!sovereign_core::runtime::is_degenerate_message("什么是 X?"));
     assert!(!sovereign_core::runtime::is_degenerate_message("42"));
     assert!(sovereign_core::runtime::is_degenerate_message("?!"));

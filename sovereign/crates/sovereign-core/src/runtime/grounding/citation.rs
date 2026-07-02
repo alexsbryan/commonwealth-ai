@@ -106,7 +106,9 @@ pub async fn citation_grounded_answer(
     let resp = match inference.complete(&req).await {
         Ok(r) => r.text,
         Err(e) => {
-            dbg(&format!("citation: extraction failed: {e} → inconclusive (fall through)"));
+            dbg(&format!(
+                "citation: extraction failed: {e} → inconclusive (fall through)"
+            ));
             return CitationOutcome::Inconclusive;
         }
     };
@@ -138,7 +140,14 @@ pub async fn citation_grounded_answer(
         Some(fixed) => {
             dbg(&format!(
                 "citation: quote stopped mid-token — completed from chunk (…{:?})",
-                fixed.chars().rev().take(24).collect::<String>().chars().rev().collect::<String>()
+                fixed
+                    .chars()
+                    .rev()
+                    .take(24)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>()
             ));
             fixed
         }
@@ -154,7 +163,9 @@ pub async fn citation_grounded_answer(
         .flatten()
     {
         Some(fixed) => {
-            dbg(&format!("citation: answer stopped mid-token — completed to {fixed:?}"));
+            dbg(&format!(
+                "citation: answer stopped mid-token — completed to {fixed:?}"
+            ));
             fixed
         }
         None => answer,
@@ -174,7 +185,11 @@ pub async fn citation_grounded_answer(
         answer.chars().take(50).collect::<String>(),
         quote_present,
         answer_in_quote,
-        if !none && quote_present && answer_in_quote { "GROUNDED" } else { "abstain (fall through to legacy)" }
+        if !none && quote_present && answer_in_quote {
+            "GROUNDED"
+        } else {
+            "abstain (fall through to legacy)"
+        }
     ));
     if none || !quote_present || !answer_in_quote {
         return CitationOutcome::Abstain;
@@ -363,7 +378,10 @@ fn whitespace_tolerant_match_at(h: &[char], start: usize, n: &[char]) -> Option<
 }
 
 fn normalize(s: &str) -> String {
-    s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+    s.to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Is `quote` a verbatim span of the passages? Full normalised substring, or a
@@ -395,8 +413,7 @@ mod tests {
              Heat of the Special Crimes Department changed his tone. His wife, examining \
              the sharp edge of the carving knife, placed it on the dish."
                 .to_string(),
-            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc."
-                .to_string(),
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
         ]
     }
 
@@ -510,7 +527,10 @@ mod tests {
                      `RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT` (compact — situated-handler default).";
         let fixed =
             extend_mid_token_copy("RELATIONAL_EXPRESSIVE_SYSTEM_PROM", std::iter::once(chunk));
-        assert_eq!(fixed.as_deref(), Some("RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT"));
+        assert_eq!(
+            fixed.as_deref(),
+            Some("RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT")
+        );
     }
 
     #[test]
@@ -532,7 +552,10 @@ mod tests {
     #[test]
     fn disagreeing_continuations_do_not_extend() {
         let chunk = "PREFIXalpha here, PREFIXbeta there.";
-        assert_eq!(extend_mid_token_copy("PREFIX", std::iter::once(chunk)), None);
+        assert_eq!(
+            extend_mid_token_copy("PREFIX", std::iter::once(chunk)),
+            None
+        );
     }
 
     #[test]
@@ -554,18 +577,27 @@ mod tests {
             "voice contract has two prompt forms in FOO",
             std::iter::once(chunk),
         );
-        assert_eq!(fixed.as_deref(), Some("voice contract has two prompt forms in FOOBA"));
+        assert_eq!(
+            fixed.as_deref(),
+            Some("voice contract has two prompt forms in FOOBA")
+        );
     }
 
     #[test]
     fn oversized_continuation_is_not_guessed() {
         let chunk = "hash watched959ee8a8f330aabbccddeeff00112233445566778899 end";
-        assert_eq!(extend_mid_token_copy("watched", std::iter::once(chunk)), None);
+        assert_eq!(
+            extend_mid_token_copy("watched", std::iter::once(chunk)),
+            None
+        );
     }
 
     #[test]
     fn absent_text_and_sentinels_are_untouched() {
-        assert_eq!(extend_mid_token_copy("missing", std::iter::once("no match here")), None);
+        assert_eq!(
+            extend_mid_token_copy("missing", std::iter::once("no match here")),
+            None
+        );
         assert_eq!(extend_mid_token_copy("", std::iter::once("anything")), None);
     }
 }

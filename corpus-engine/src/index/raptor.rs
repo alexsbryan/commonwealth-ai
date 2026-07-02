@@ -203,7 +203,8 @@ pub async fn build_raptor_index(
     let levels: Vec<i32> = kept.iter().map(|r| r.level as i32).collect();
     let summaries: Vec<&str> = kept.iter().map(|r| r.summary.as_str()).collect();
     let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-        kept.iter().map(|r| Some(r.embedding.iter().map(|&v| Some(v)))),
+        kept.iter()
+            .map(|r| Some(r.embedding.iter().map(|&v| Some(v)))),
         dim as i32,
     );
     let batch = RecordBatch::try_new(
@@ -377,9 +378,13 @@ pub async fn search_raptor_summaries(
 
         for i in 0..batch.num_rows() {
             let node_id = node_ids.map(|c| c.value(i).to_string()).unwrap_or_default();
-            let conv_uuid = conv_uuids.map(|c| c.value(i).to_string()).unwrap_or_default();
+            let conv_uuid = conv_uuids
+                .map(|c| c.value(i).to_string())
+                .unwrap_or_default();
             let level = levels.map(|c| c.value(i) as i64).unwrap_or(0);
-            let summary = summaries.map(|c| c.value(i).to_string()).unwrap_or_default();
+            let summary = summaries
+                .map(|c| c.value(i).to_string())
+                .unwrap_or_default();
             let score = emb_col
                 .map(|fl| cosine_from_list_row(fl, i, query_emb))
                 .unwrap_or(0.0);
@@ -507,7 +512,9 @@ mod tests {
             // Fetch a wide net (all rows) so LanceDB's approximate candidate
             // SELECTION never limits the exact re-rank; search sorts by exact
             // cosine, so the first TOP_K are the genuine nearest neighbours.
-            let hits = search_raptor_summaries(corpus, &q, data.len()).await.unwrap();
+            let hits = search_raptor_summaries(corpus, &q, data.len())
+                .await
+                .unwrap();
             let got: std::collections::HashSet<&str> = hits
                 .iter()
                 .take(TOP_K)

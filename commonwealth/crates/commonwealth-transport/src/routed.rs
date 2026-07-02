@@ -95,7 +95,12 @@ impl RoutedTransport {
     /// relay/addrs ⇒ iroh on but not yet reachable; transient otherwise.
     /// A later non-empty resolution clears the entry so a fresh outage
     /// re-warns.
-    fn note_required_resolution(&self, peer: &PeerContact, class: TrafficClass, unsatisfiable: bool) {
+    fn note_required_resolution(
+        &self,
+        peer: &PeerContact,
+        class: TrafficClass,
+        unsatisfiable: bool,
+    ) {
         let key = (peer.node_id, class);
         if !unsatisfiable {
             // Reachable again — re-arm the one-shot warning.

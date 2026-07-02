@@ -73,7 +73,9 @@ pub async fn run(args: &[String]) -> i32 {
                 match v.parse::<usize>() {
                     Ok(n) => min_chars_override = Some(n),
                     Err(_) => {
-                        eprintln!("atlas backfill-ann: --atlas-min-description-chars not a number: {v}");
+                        eprintln!(
+                            "atlas backfill-ann: --atlas-min-description-chars not a number: {v}"
+                        );
                         return 2;
                     }
                 }
@@ -107,10 +109,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
     // Positional corpus ids (comma- or space-separated).
-    let corpora: Vec<String> = positionals
-        .iter()
-        .flat_map(|a| csv(a))
-        .collect();
+    let corpora: Vec<String> = positionals.iter().flat_map(|a| csv(a)).collect();
     if corpora.is_empty() {
         eprintln!("usage: sovereign atlas backfill-ann <corpus-id>[,<corpus-id>...] \\");
         eprintln!("         [--atlas-depth <csv>] [--atlas-min-description-chars <n>] [--atlas-include <csv>]");
@@ -136,22 +135,30 @@ pub async fn run(args: &[String]) -> i32 {
     // seed path never sees (and key the embed cache the manager can't read).
     // Single source of truth, so the table can never drift from grounding.
     let prod = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
-    let (inc_claims, inc_tensions, inc_configs) = include_override
-        .unwrap_or((prod.include_claims, prod.include_tensions, prod.include_configurations));
+    let (inc_claims, inc_tensions, inc_configs) = include_override.unwrap_or((
+        prod.include_claims,
+        prod.include_tensions,
+        prod.include_configurations,
+    ));
     let filter = AtlasLoadFilter {
         min_description_chars: min_chars_override.unwrap_or(prod.min_description_chars),
-        depth_allowlist: depth_override.clone().unwrap_or_else(|| prod.depth_allowlist.clone()),
+        depth_allowlist: depth_override
+            .clone()
+            .unwrap_or_else(|| prod.depth_allowlist.clone()),
         max_entries: prod.max_entries,
         include_claims: inc_claims,
         include_tensions: inc_tensions,
         include_configurations: inc_configs,
     };
-    let overridden = depth_override.is_some()
-        || min_chars_override.is_some()
-        || include_override.is_some();
+    let overridden =
+        depth_override.is_some() || min_chars_override.is_some() || include_override.is_some();
     eprintln!(
         "atlas backfill-ann: {} filter — min_chars={} depth={:?} claims={} tensions={} configs={}",
-        if overridden { "overridden" } else { "production grounding" },
+        if overridden {
+            "overridden"
+        } else {
+            "production grounding"
+        },
         filter.min_description_chars,
         filter.depth_allowlist,
         filter.include_claims,

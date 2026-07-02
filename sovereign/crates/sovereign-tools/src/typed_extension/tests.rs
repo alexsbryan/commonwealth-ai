@@ -529,11 +529,11 @@ fn person_seeds_subsume_surnames_and_drop_noise() {
         row("Ostrom", "Person", 0.9, 12),
         row("Garrett Hardin", "Person", 0.9, 20),
         // Noise that must NOT seed:
-        row("user", "Person", 0.9, 30),          // single token, no host
-        row("Margaret", "Person", 0.9, 31),      // single token, no host
-        row("2024-01-15", "Person", 0.9, 32),    // the wikilink/date trap
-        row("FTC", "Organization", 0.9, 33),     // wrong label
-        row("Weak Name", "Person", 0.3, 34),     // below score floor
+        row("user", "Person", 0.9, 30),       // single token, no host
+        row("Margaret", "Person", 0.9, 31),   // single token, no host
+        row("2024-01-15", "Person", 0.9, 32), // the wikilink/date trap
+        row("FTC", "Organization", 0.9, 33),  // wrong label
+        row("Weak Name", "Person", 0.3, 34),  // below score floor
     ];
     let seeds = super::build_person_seed_entities(&rows);
     let names: Vec<&str> = seeds.iter().map(|e| e.canonical_name.as_str()).collect();

@@ -25,7 +25,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use sovereign_eval::disposition_bench::{load_fixture_cases, FixtureCase, GoldLabels, PeekBudget, Split};
+use sovereign_eval::disposition_bench::{
+    load_fixture_cases, FixtureCase, GoldLabels, PeekBudget, Split,
+};
 use sovereign_eval::disposition_score::{score_with_axis, DispositionReport, Labeling};
 use sovereign_eval::disposition_taxonomy::{era_mask, era_mask_union, year_of};
 
@@ -349,7 +351,12 @@ async fn classify_split(
     Ok((predicted, model_id, gold_labeling, axis))
 }
 
-fn build_prompt(case: &FixtureCase, allowed: &[String], policy: Policy, strip_tail: bool) -> ChatPrompt {
+fn build_prompt(
+    case: &FixtureCase,
+    allowed: &[String],
+    policy: Policy,
+    strip_tail: bool,
+) -> ChatPrompt {
     let narrative = if strip_tail {
         strip_disposition_sentence(&case.narrative)
     } else {
@@ -403,7 +410,10 @@ fn strip_disposition_sentence(narrative: &str) -> String {
 
 fn parse_category(content: &str) -> Option<String> {
     // Strip think/code fences defensively, then parse {"category": "..."}.
-    let cleaned = content.trim().trim_start_matches("```json").trim_start_matches("```");
+    let cleaned = content
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```");
     let cleaned = cleaned.split("```").next().unwrap_or(cleaned).trim();
     let v: serde_json::Value = serde_json::from_str(cleaned).ok()?;
     v.get("category")?.as_str().map(|s| s.to_string())
@@ -427,8 +437,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             .join("baselines")
             .join(BENCH_ID)
             .join("peek_budget.json");
-        let mut budget = PeekBudget::load(&budget_path)
-            .map_err(|e| format!("peek budget: {e}"))?;
+        let mut budget = PeekBudget::load(&budget_path).map_err(|e| format!("peek budget: {e}"))?;
         let n = budget.burn(
             "--unseal-holdout from `svrn bench uap run`",
             git_head_short(),
@@ -436,7 +445,10 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         budget
             .save(&budget_path)
             .map_err(|e| format!("peek budget save: {e}"))?;
-        eprintln!("⚠ holdout unsealed; peek #{n} recorded in {}", budget_path.display());
+        eprintln!(
+            "⚠ holdout unsealed; peek #{n} recorded in {}",
+            budget_path.display()
+        );
     }
 
     let (predicted, model_id, gold, axis) = classify_split(&parsed).await?;
@@ -458,11 +470,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             Policy::Baseline => "baseline.json",
             Policy::Tuned => "latest.json",
         };
-        parsed
-            .bench_dir
-            .join("baselines")
-            .join(BENCH_ID)
-            .join(name)
+        parsed.bench_dir.join("baselines").join(BENCH_ID).join(name)
     });
     let outcome = UapBenchOutcome {
         schema_version: 1,
@@ -507,7 +515,14 @@ fn print_summary(parsed: &Args, model_id: &str, report: &DispositionReport) {
     println!("svrn bench uap — {}", parsed.policy.as_str());
     println!("  corpus:    {}", parsed.corpus);
     println!("  split:     {}", parsed.split.as_str());
-    println!("  model:     {}", if model_id.is_empty() { "(none)" } else { model_id });
+    println!(
+        "  model:     {}",
+        if model_id.is_empty() {
+            "(none)"
+        } else {
+            model_id
+        }
+    );
     println!("  cases:     {} aligned", report.n_aligned);
     println!("  accuracy:  {:.3}", report.accuracy);
     println!("  macro-F1:  {:.3}", report.macro_f1);
@@ -515,7 +530,10 @@ fn print_summary(parsed: &Args, model_id: &str, report: &DispositionReport) {
         println!("  unmatched gold:      {}", report.unmatched_gold.len());
     }
     if !report.unmatched_predicted.is_empty() {
-        println!("  unmatched predicted: {}", report.unmatched_predicted.len());
+        println!(
+            "  unmatched predicted: {}",
+            report.unmatched_predicted.len()
+        );
     }
     println!("\n  per-category (P / R / F1 / support):");
     for pc in &report.per_category {
@@ -541,9 +559,21 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
     let report = score_with_axis(&predicted, &gold, &axis);
 
     println!("svrn bench uap diagnose — tuned");
-    let model_disp = if model_id.is_empty() { "(none)" } else { model_id.as_str() };
-    println!("  corpus: {}  split: {}  model: {}", parsed.corpus, parsed.split.as_str(), model_disp);
-    println!("  accuracy: {:.3}  macro-F1: {:.3}  ({} cases)\n", report.accuracy, report.macro_f1, report.n_aligned);
+    let model_disp = if model_id.is_empty() {
+        "(none)"
+    } else {
+        model_id.as_str()
+    };
+    println!(
+        "  corpus: {}  split: {}  model: {}",
+        parsed.corpus,
+        parsed.split.as_str(),
+        model_disp
+    );
+    println!(
+        "  accuracy: {:.3}  macro-F1: {:.3}  ({} cases)\n",
+        report.accuracy, report.macro_f1, report.n_aligned
+    );
 
     // Confusion matrix grid (gold rows × predicted cols), restricted to
     // categories that actually appear (support>0 or any prediction).
@@ -735,7 +765,10 @@ mod tests {
 
     #[test]
     fn parse_category_handles_fences() {
-        assert_eq!(parse_category(r#"{"category": "BALLOON"}"#).as_deref(), Some("BALLOON"));
+        assert_eq!(
+            parse_category(r#"{"category": "BALLOON"}"#).as_deref(),
+            Some("BALLOON")
+        );
         assert_eq!(
             parse_category("```json\n{\"category\": \"HOAX\"}\n```").as_deref(),
             Some("HOAX")

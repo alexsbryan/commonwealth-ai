@@ -184,8 +184,8 @@ impl Contract {
 
     /// Load and parse the manifest at `path`.
     pub fn load(path: &Path) -> Result<Contract, String> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         Self::parse(&text)
     }
 

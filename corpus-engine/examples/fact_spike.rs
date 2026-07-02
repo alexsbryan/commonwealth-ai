@@ -96,7 +96,13 @@ fn extract(file: &str, src: &str, lang: &tree_sitter::Language, f: &mut Facts) {
 
 fn verdict(claim: &str, key: &str, got: &str, receipt: &str) {
     let ok = got.eq_ignore_ascii_case(key);
-    println!("[{:12}] key={:12} {}  {}", got, key, if ok { "✓" } else { "✗" }, claim);
+    println!(
+        "[{:12}] key={:12} {}  {}",
+        got,
+        key,
+        if ok { "✓" } else { "✗" },
+        claim
+    );
     println!("       receipt: {receipt}");
 }
 
@@ -121,7 +127,9 @@ fn main() {
     let tools: Vec<_> = f
         .ctor_fields
         .iter()
-        .filter(|(s, fl, _, file, _)| s == "CompletionRequest" && fl == "tools" && file.contains("knowledge_query"))
+        .filter(|(s, fl, _, file, _)| {
+            s == "CompletionRequest" && fl == "tools" && file.contains("knowledge_query")
+        })
         .collect();
     let all_none = !tools.is_empty() && tools.iter().all(|(_, _, v, _, _)| v == "None");
     verdict(
@@ -137,12 +145,21 @@ fn main() {
     );
 
     // ── Claim 2 · CALL+LITERAL: chat summaries via POST /v1/chat/completions ──
-    let chat = f.str_lits.iter().find(|(s, _, _)| s.contains("/v1/chat/completions"));
+    let chat = f
+        .str_lits
+        .iter()
+        .find(|(s, _, _)| s.contains("/v1/chat/completions"));
     verdict(
         "chat summaries POST to /v1/chat/completions",
         "corroborated",
-        if chat.is_some() { "corroborated" } else { "unverified" },
-        &chat.map(|(_, fi, l)| format!("literal at {fi}:{l}")).unwrap_or_else(|| "not found".into()),
+        if chat.is_some() {
+            "corroborated"
+        } else {
+            "unverified"
+        },
+        &chat
+            .map(|(_, fi, l)| format!("literal at {fi}:{l}"))
+            .unwrap_or_else(|| "not found".into()),
     );
 
     // ── Claim 3 · LITERAL (summary-recall got this WRONG — false GAP): prompt uses SUMMARY:/ASKS: ──
@@ -151,8 +168,14 @@ fn main() {
     verdict(
         "enrich prompt requires SUMMARY: and ASKS: output",
         "corroborated",
-        if has_s.is_some() && has_a { "corroborated" } else { "unverified" },
-        &has_s.map(|(_, fi, l)| format!("SUMMARY: literal at {fi}:{l}; ASKS: present={has_a}")).unwrap_or_else(|| "not found".into()),
+        if has_s.is_some() && has_a {
+            "corroborated"
+        } else {
+            "unverified"
+        },
+        &has_s
+            .map(|(_, fi, l)| format!("SUMMARY: literal at {fi}:{l}; ASKS: present={has_a}"))
+            .unwrap_or_else(|| "not found".into()),
     );
 
     // ── Claim 4 · EXISTENCE: select_route is the routing entry ──
@@ -160,7 +183,12 @@ fn main() {
     verdict(
         "select_route is the local-vs-remote routing entry",
         "corroborated",
-        if sr.is_some() { "corroborated" } else { "unverified" },
-        &sr.map(|(_, fi, l)| format!("fn defined at {fi}:{l}")).unwrap_or_else(|| "not found".into()),
+        if sr.is_some() {
+            "corroborated"
+        } else {
+            "unverified"
+        },
+        &sr.map(|(_, fi, l)| format!("fn defined at {fi}:{l}"))
+            .unwrap_or_else(|| "not found".into()),
     );
 }

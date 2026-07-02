@@ -80,7 +80,8 @@ impl StepKind {
         WireKind {
             prefix: "model",
             uses_pattern: r"^model:(fast|normal|extended|thoughtful|slow)$",
-            summary: "a completion from your local model at a latency class (model:fast|normal|extended)",
+            summary:
+                "a completion from your local model at a latency class (model:fast|normal|extended)",
         },
         WireKind {
             prefix: "embed",
@@ -114,7 +115,9 @@ impl StepKind {
     /// Parse a `uses` string — the ONE place the wire form becomes typed.
     pub fn parse(uses: &str) -> Result<Self> {
         let (kind, rest) = uses.split_once(':').ok_or_else(|| {
-            Error::Execution(format!("step `uses` must be `<kind>:<name>` — got `{uses}`"))
+            Error::Execution(format!(
+                "step `uses` must be `<kind>:<name>` — got `{uses}`"
+            ))
         })?;
         Ok(match kind {
             "model" => StepKind::Model {
@@ -220,7 +223,10 @@ mod tests {
             .map(|u| {
                 let k = StepKind::parse(u).unwrap_or_else(|e| panic!("`{u}` must parse: {e}"));
                 let p = prefix_of(&k);
-                assert!(u.starts_with(&format!("{p}:")), "`{u}` parsed to prefix `{p}`");
+                assert!(
+                    u.starts_with(&format!("{p}:")),
+                    "`{u}` parsed to prefix `{p}`"
+                );
                 p
             })
             .collect();

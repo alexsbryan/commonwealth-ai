@@ -947,8 +947,11 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
         // these — referencing an entity_type instead is the #1 cause of a
         // pattern silently finding nothing (observed in the uap-blue-book
         // trial: `edge_type = "radar_track"` was an entity type → 0 findings).
-        let rel_names: std::collections::BTreeSet<&str> =
-            enr.relationship_types.iter().map(|r| r.name.as_str()).collect();
+        let rel_names: std::collections::BTreeSet<&str> = enr
+            .relationship_types
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect();
         let valid_edges = || {
             if rel_names.is_empty() {
                 "(no relationship_types declared)".to_string()
@@ -969,7 +972,9 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
                          runtime ships. Track this in SYSTEM_OVERVIEW.md §3.10."
                     ));
                 }
-                crate::recipe::PatternDecl::Threshold { name, edge_type, .. } => {
+                crate::recipe::PatternDecl::Threshold {
+                    name, edge_type, ..
+                } => {
                     if !rel_names.contains(edge_type.as_str()) {
                         errors.push(format!(
                             "pattern `{name}` (threshold) sets `edge_type = \"{edge_type}\"`, \

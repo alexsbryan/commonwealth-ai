@@ -246,9 +246,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
     print_summary(&conv_summary);
 
     println!();
-    println!(
-        "Run `svrn awareness entities` or `svrn awareness timeline <name>` to inspect."
-    );
+    println!("Run `svrn awareness entities` or `svrn awareness timeline <name>` to inspect.");
     0
 }
 

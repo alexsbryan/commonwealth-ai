@@ -1067,8 +1067,7 @@ embed = "/m/e.gguf"
         let cfg: SetupConfig = toml::from_str(base).unwrap();
         assert_eq!(cfg.iroh.enabled, None);
 
-        let on: SetupConfig =
-            toml::from_str(&format!("{base}\n[iroh]\nenabled = true\n")).unwrap();
+        let on: SetupConfig = toml::from_str(&format!("{base}\n[iroh]\nenabled = true\n")).unwrap();
         assert_eq!(on.iroh.enabled, Some(true));
 
         let off: SetupConfig =
@@ -1092,7 +1091,10 @@ embed = "/m/e.gguf"
         let cfg: SetupConfig = toml::from_str(base).unwrap();
         assert!(cfg.iroh.relay_urls.is_empty());
         let out = toml::to_string_pretty(&cfg).unwrap();
-        assert!(!out.contains("relay_urls"), "empty relay_urls must serialize as absent: {out}");
+        assert!(
+            !out.contains("relay_urls"),
+            "empty relay_urls must serialize as absent: {out}"
+        );
 
         // A configured self-hosted relay fleet round-trips, and the
         // sovereignty `discovery` knob parses.
@@ -1181,7 +1183,11 @@ embed = "/m/e.gguf"
         let path = tmp.path().join("config.toml");
         cfg.save_to(&path).unwrap();
         let loaded = SetupConfig::load_from(&path).unwrap();
-        assert_eq!(loaded.mcp_servers.len(), 1, "mcp_servers must survive save/load");
+        assert_eq!(
+            loaded.mcp_servers.len(),
+            1,
+            "mcp_servers must survive save/load"
+        );
         assert_eq!(loaded.mcp_servers[0].name, "vision");
         assert!(matches!(
             &loaded.mcp_servers[0].transport,

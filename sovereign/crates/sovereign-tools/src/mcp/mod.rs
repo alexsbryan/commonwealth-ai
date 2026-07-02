@@ -205,8 +205,17 @@ fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
         "check", "clear", "paste",
     ];
     const OBSERVE_VERBS: &[&str] = &[
-        "snapshot", "screenshot", "navigate", "console", "network", "wait", "hover", "view",
-        "capture", "scrape", "extract",
+        "snapshot",
+        "screenshot",
+        "navigate",
+        "console",
+        "network",
+        "wait",
+        "hover",
+        "view",
+        "capture",
+        "scrape",
+        "extract",
     ];
 
     let lower = name.to_lowercase();
@@ -266,7 +275,10 @@ fn synthesize_examples(tool_name: &str, input_schema: &serde_json::Value) -> Vec
     let keys: Vec<String> = if required.is_empty() {
         props.keys().take(4).cloned().collect()
     } else {
-        required.into_iter().filter(|k| props.contains_key(k)).collect()
+        required
+            .into_iter()
+            .filter(|k| props.contains_key(k))
+            .collect()
     };
 
     let mut call = serde_json::Map::new();
@@ -303,7 +315,11 @@ fn placeholder_for_schema(schema: &serde_json::Value) -> serde_json::Value {
     {
         return first.clone();
     }
-    match schema.get("type").and_then(|v| v.as_str()).unwrap_or("string") {
+    match schema
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("string")
+    {
         "integer" | "number" => Value::from(0),
         "boolean" => Value::Bool(false),
         "array" => Value::Array(vec![]),
@@ -482,9 +498,17 @@ mod tests {
         }
 
         // Ambiguous / arbitrary-code tools stay conservative (gated, ledgered).
-        for name in ["browser_evaluate", "browser_run_code_unsafe", "browser_tabs"] {
+        for name in [
+            "browser_evaluate",
+            "browser_run_code_unsafe",
+            "browser_tabs",
+        ] {
             let (e, i) = infer_behaviour(name, "");
-            assert_eq!(e, Effect::Write, "ambiguous stays conservative (name={name})");
+            assert_eq!(
+                e,
+                Effect::Write,
+                "ambiguous stays conservative (name={name})"
+            );
             assert_eq!(
                 i,
                 Idempotency::NonIdempotent,

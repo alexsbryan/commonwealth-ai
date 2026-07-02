@@ -144,9 +144,7 @@ pub fn parse_https_join(url: &str) -> Option<DeepLink> {
 /// Shared dial-param extraction: `iroh=` carries an encrypted-mesh
 /// dial (fail-closed join), `dial=` a plaintext-mesh dial (fail-soft).
 /// `iroh=` wins if both are present (never emitted; defensive).
-fn dial_from_params(
-    params: &std::collections::HashMap<String, String>,
-) -> (Option<String>, bool) {
+fn dial_from_params(params: &std::collections::HashMap<String, String>) -> (Option<String>, bool) {
     if let Some(d) = params.get("iroh") {
         (Some(d.clone()), true)
     } else {
@@ -554,10 +552,7 @@ mod tests {
         } = link;
         assert_eq!(join_key, "cwth-4d5f-6211-64d6");
         assert_eq!(relay_hint.as_deref(), Some("100.64.0.2:9742"));
-        assert_eq!(
-            mesh_name.as_deref(),
-            Some("example-host.local's Mesh")
-        );
+        assert_eq!(mesh_name.as_deref(), Some("example-host.local's Mesh"));
     }
 
     #[test]
@@ -654,8 +649,14 @@ mod tests {
     #[test]
     fn https_form_round_trips_iroh_and_ttl() {
         let dial = "aabbccddeeff00112233@10.0.0.5:9742";
-        let url =
-            build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), true, Some(42));
+        let url = build_https_join_link(
+            "cwth-1111-2222-3333",
+            None,
+            None,
+            Some(dial),
+            true,
+            Some(42),
+        );
         let DeepLink::Join {
             iroh_dial,
             encrypted,
@@ -701,8 +702,13 @@ mod tests {
         assert!(!confirm.encrypted);
 
         // Same through the https form.
-        let https = build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), false, None);
-        let DeepLink::Join { iroh_dial, encrypted, .. } = parse_https_join(&https).unwrap();
+        let https =
+            build_https_join_link("cwth-1111-2222-3333", None, None, Some(dial), false, None);
+        let DeepLink::Join {
+            iroh_dial,
+            encrypted,
+            ..
+        } = parse_https_join(&https).unwrap();
         assert_eq!(iroh_dial.as_deref(), Some(dial));
         assert!(!encrypted);
     }

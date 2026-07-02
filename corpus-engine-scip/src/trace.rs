@@ -179,7 +179,14 @@ mod tests {
         }
     }
 
-    fn edge(caller: &str, caller_q: &str, callee: &str, callee_q: &str, line: i32, kind: &str) -> ScipRefRecord {
+    fn edge(
+        caller: &str,
+        caller_q: &str,
+        callee: &str,
+        callee_q: &str,
+        line: i32,
+        kind: &str,
+    ) -> ScipRefRecord {
         ScipRefRecord {
             caller_symbol: caller.to_string(),
             callee_symbol: callee.to_string(),
@@ -196,7 +203,11 @@ mod tests {
         let scip = ScipGraph::open_in_memory("c").unwrap();
         // a -> b (direct);  b -> c (trait). Trace of b: caller a, callee c.
         scip.ingest_symbols_and_refs(
-            vec![sym("a", "crate::a"), sym("b", "crate::b"), sym("c", "crate::c")],
+            vec![
+                sym("a", "crate::a"),
+                sym("b", "crate::b"),
+                sym("c", "crate::c"),
+            ],
             vec![
                 edge("a", "crate::a", "b", "crate::b", 10, "direct"),
                 edge("b", "crate::b", "c", "crate::c", 20, "trait"),
@@ -207,12 +218,18 @@ mod tests {
 
         let t = build_symbol_trace(&scip, "b", "crate::b").await.unwrap();
         assert_eq!(
-            t.callers.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            t.callers
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
             vec!["a"],
             "b is called by a"
         );
         assert_eq!(
-            t.callees.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            t.callees
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
             vec!["c"],
             "b calls c"
         );
@@ -222,7 +239,10 @@ mod tests {
         assert!(rendered.contains("called by"));
         assert!(rendered.contains("`a`"));
         assert!(rendered.contains("`c`"));
-        assert!(rendered.contains("dyn-dispatch: trait"), "trait boundary flagged");
+        assert!(
+            rendered.contains("dyn-dispatch: trait"),
+            "trait boundary flagged"
+        );
     }
 
     #[tokio::test]

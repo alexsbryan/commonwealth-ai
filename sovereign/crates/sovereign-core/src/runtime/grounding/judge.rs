@@ -86,7 +86,11 @@ pub(crate) async fn verify_grounding(
     searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
 ) -> Option<GateVerdict> {
     if answer.trim().is_empty() || chunks.is_empty() {
-        return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
+        return Some(GateVerdict {
+            violation_prob: 0.0,
+            claim: None,
+            claim_evidence: Vec::new(),
+        });
     }
     if answer.chars().count() > 1_800 {
         tracing::info!(
@@ -94,7 +98,11 @@ pub(crate) async fn verify_grounding(
             chars = answer.chars().count(),
             "long-form answer — out of gate scope"
         );
-        return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
+        return Some(GateVerdict {
+            violation_prob: 0.0,
+            claim: None,
+            claim_evidence: Vec::new(),
+        });
     }
     // The GK-attribution exemption is sound for world-general
     // questions (a caveated "capital of Australia" answer is the
@@ -142,9 +150,16 @@ pub(crate) async fn verify_grounding(
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
                 tracing::info!(target: "grounding_gate", "claim=NO_CLAIM → vp=0");
                 dbg("claim=NO_CLAIM → vp=0");
-                return Some(GateVerdict { violation_prob: 0.0, claim: None, claim_evidence: Vec::new() });
+                return Some(GateVerdict {
+                    violation_prob: 0.0,
+                    claim: None,
+                    claim_evidence: Vec::new(),
+                });
             }
-            dbg(&format!("claim={:?}", t.chars().take(90).collect::<String>()));
+            dbg(&format!(
+                "claim={:?}",
+                t.chars().take(90).collect::<String>()
+            ));
             t
         }
         Err(e) => {
@@ -187,7 +202,11 @@ pub(crate) async fn verify_grounding(
                 dbg(&format!(
                     "value-presence: {value:?} present in corpus → vp=0.0 (release best-effort)"
                 ));
-                return Some(GateVerdict { violation_prob: 0.0, claim: Some(claim), claim_evidence: Vec::new() });
+                return Some(GateVerdict {
+                    violation_prob: 0.0,
+                    claim: Some(claim),
+                    claim_evidence: Vec::new(),
+                });
             }
             AssertedValue::Ungrounded(value) => {
                 tracing::info!(
@@ -199,7 +218,11 @@ pub(crate) async fn verify_grounding(
                 dbg(&format!(
                     "value-presence: {value:?} absent from corpus → vp=1.0 (blatant confab)"
                 ));
-                return Some(GateVerdict { violation_prob: 1.0, claim: Some(claim), claim_evidence: Vec::new() });
+                return Some(GateVerdict {
+                    violation_prob: 1.0,
+                    claim: Some(claim),
+                    claim_evidence: Vec::new(),
+                });
             }
             // No checkable value (a decline, or extraction unavailable) — fall
             // through to the confirmatory loop rather than fail the turn.
@@ -292,8 +315,14 @@ pub(crate) async fn verify_grounding(
         violation_prob = format!("{vp:.3}").as_str(),
         "grounding verdict"
     );
-    dbg(&format!("chunks_checked={checked} max_support={max_support:.3} vp={vp:.3}"));
-    Some(GateVerdict { violation_prob: vp, claim: Some(claim), claim_evidence: extra })
+    dbg(&format!(
+        "chunks_checked={checked} max_support={max_support:.3} vp={vp:.3}"
+    ));
+    Some(GateVerdict {
+        violation_prob: vp,
+        claim: Some(claim),
+        claim_evidence: extra,
+    })
 }
 
 /// Extract up to 4 specific, checkable factual claims from a
@@ -545,10 +574,14 @@ fn extract_quoted_spans(s: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = s;
     loop {
-        let Some(open) = rest.find(['"', '“']) else { break };
+        let Some(open) = rest.find(['"', '“']) else {
+            break;
+        };
         let open_len = rest[open..].chars().next().map_or(1, char::len_utf8);
         let after = &rest[open + open_len..];
-        let Some(close) = after.find(['"', '”']) else { break };
+        let Some(close) = after.find(['"', '”']) else {
+            break;
+        };
         out.push(&after[..close]);
         let close_len = after[close..].chars().next().map_or(1, char::len_utf8);
         rest = &after[close + close_len..];
@@ -558,7 +591,10 @@ fn extract_quoted_spans(s: &str) -> Vec<&str> {
 
 /// Lowercase + collapse whitespace runs, for tolerant containment checks.
 fn squash(s: &str) -> String {
-    s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+    s.to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub(super) async fn claim_violation_joint(
@@ -613,7 +649,10 @@ mod tests {
     #[test]
     fn dash_appended_commentary_is_cut() {
         let item = "a task she showed to be circular reasoning — not stated in the sources";
-        assert_eq!(normalize_scan_item(item, ANSWER), "a task she showed to be circular reasoning");
+        assert_eq!(
+            normalize_scan_item(item, ANSWER),
+            "a task she showed to be circular reasoning"
+        );
     }
 
     #[test]
@@ -626,7 +665,8 @@ mod tests {
 
     #[test]
     fn curly_quotes_are_handled() {
-        let item = "“The lighthouse also appears as a title of James Joyce's novel” — misattributed";
+        let item =
+            "“The lighthouse also appears as a title of James Joyce's novel” — misattributed";
         assert_eq!(
             normalize_scan_item(item, ANSWER),
             "The lighthouse also appears as a title of James Joyce's novel"
@@ -638,7 +678,10 @@ mod tests {
         // The whole item occurs in the answer -> no cut at its interior dash.
         let ans = "The rule — quiet hours after ten — is strict.";
         let item = "The rule — quiet hours after ten — is strict.";
-        assert_eq!(normalize_scan_item(item, ans), "The rule — quiet hours after ten — is strict.");
+        assert_eq!(
+            normalize_scan_item(item, ans),
+            "The rule — quiet hours after ten — is strict."
+        );
     }
 
     #[test]
@@ -668,6 +711,9 @@ mod tests {
         // content so the note never lists a double-wrapped self-indictment.
         let answer = "The gate held [unverified excerpt: ships cannot pay tolls at sea] today.";
         let item = "[unverified excerpt: ships cannot pay tolls at sea]";
-        assert_eq!(normalize_scan_item(item, answer), "ships cannot pay tolls at sea");
+        assert_eq!(
+            normalize_scan_item(item, answer),
+            "ships cannot pay tolls at sea"
+        );
     }
 }

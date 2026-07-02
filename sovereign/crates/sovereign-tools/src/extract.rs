@@ -90,7 +90,10 @@ mod tests {
         std::fs::write(&md, "# Title\n\nbody text").unwrap();
 
         let out = ExtractTool
-            .execute(&serde_json::json!({ "path": txt.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": txt.to_string_lossy() }),
+                &ctx(),
+            )
             .await
             .unwrap();
         match out {
@@ -106,12 +109,18 @@ mod tests {
         assert!(matches!(md_out, StepOutput::Text(t) if t.contains("body text")));
 
         // Missing path → loud error.
-        assert!(ExtractTool.execute(&serde_json::json!({}), &ctx()).await.is_err());
+        assert!(ExtractTool
+            .execute(&serde_json::json!({}), &ctx())
+            .await
+            .is_err());
         // Unsupported extension → loud error (not a panic).
         let bin = dir.path().join("c.bin");
         std::fs::write(&bin, "x").unwrap();
         assert!(ExtractTool
-            .execute(&serde_json::json!({ "path": bin.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": bin.to_string_lossy() }),
+                &ctx()
+            )
             .await
             .is_err());
     }

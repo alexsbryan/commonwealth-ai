@@ -49,9 +49,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "brief" => cmd_brief(&args[1..]).await,
         "reflect" => cmd_reflect(&args[1..]).await,
         "capability-map" => cmd_capability_map(&args[1..]).await,
-        "capability-graph" => {
-            crate::code_capability_graph::cmd_capability_graph(&args[1..]).await
-        }
+        "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,
         "check-spec" => cmd_check_spec(&args[1..]).await,
@@ -226,7 +224,11 @@ fn clip(s: &str, n: usize) -> String {
 /// Load capability-ENTRY vectors (name, embedding) for entry-restricted resolution.
 fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
     let mut entry_names: std::collections::HashSet<String> = std::collections::HashSet::new();
-    if let Ok(txt) = std::fs::read_to_string(home.join(".sovereign/capabilities").join(corpus).join("capability_map.json")) {
+    if let Ok(txt) = std::fs::read_to_string(
+        home.join(".sovereign/capabilities")
+            .join(corpus)
+            .join("capability_map.json"),
+    ) {
         if let Ok(cap) = serde_json::from_str::<serde_json::Value>(&txt) {
             if let Some(caps) = cap.get("capabilities").and_then(|c| c.as_array()) {
                 for c in caps {
@@ -240,7 +242,15 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
                     if let Some(es) = c.get("entries").and_then(|r| r.as_array()) {
                         for e in es {
                             if let Some(s) = e.as_str() {
-                                let short = s.rsplit('#').next().unwrap_or(s).rsplit(']').next().unwrap_or(s).trim_end_matches("().").trim();
+                                let short = s
+                                    .rsplit('#')
+                                    .next()
+                                    .unwrap_or(s)
+                                    .rsplit(']')
+                                    .next()
+                                    .unwrap_or(s)
+                                    .trim_end_matches("().")
+                                    .trim();
                                 if !short.is_empty() && !short.contains('(') {
                                     entry_names.insert(short.to_string());
                                 }
@@ -251,7 +261,10 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
             }
         }
     }
-    let side = match std::fs::read_to_string(home.join(".sovereign/specs/_fn_vecs").join(format!("{corpus}.json"))) {
+    let side = match std::fs::read_to_string(
+        home.join(".sovereign/specs/_fn_vecs")
+            .join(format!("{corpus}.json")),
+    ) {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
@@ -264,7 +277,10 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
         Some(f) => f,
         None => return Vec::new(),
     };
-    let bin = match std::fs::read(home.join(".sovereign/specs/_fn_vecs").join(format!("{corpus}.bin"))) {
+    let bin = match std::fs::read(
+        home.join(".sovereign/specs/_fn_vecs")
+            .join(format!("{corpus}.bin")),
+    ) {
         Ok(b) => b,
         Err(_) => return Vec::new(),
     };
@@ -292,22 +308,42 @@ fn load_entries(home: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
 /// Parse a spec-intel `claims.json` → (statement, conditions) list.
 fn load_claims(path: &str) -> Result<Vec<(String, Vec<String>)>, String> {
     let v: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    let claim_vals: Vec<serde_json::Value> = if let Some(secs) = v.get("sections").and_then(|s| s.as_array()) {
-        secs.iter().flat_map(|s| s.get("claims").and_then(|c| c.as_array()).cloned().unwrap_or_default()).collect()
-    } else {
-        v.get("claims").and_then(|c| c.as_array()).cloned().unwrap_or_default()
-    };
+        serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let claim_vals: Vec<serde_json::Value> =
+        if let Some(secs) = v.get("sections").and_then(|s| s.as_array()) {
+            secs.iter()
+                .flat_map(|s| {
+                    s.get("claims")
+                        .and_then(|c| c.as_array())
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .collect()
+        } else {
+            v.get("claims")
+                .and_then(|c| c.as_array())
+                .cloned()
+                .unwrap_or_default()
+        };
     let mut out = Vec::new();
     for c in claim_vals {
-        let stmt = c.get("statement").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        let stmt = c
+            .get("statement")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
         if stmt.is_empty() {
             continue;
         }
         let conds: Vec<String> = c
             .get("conditions")
             .and_then(|x| x.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         out.push((stmt, conds));
     }
@@ -322,7 +358,10 @@ fn load_fuzzy(path: &str) -> std::collections::HashMap<String, String> {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) {
             if let Some(fs) = v.get("findings").and_then(|f| f.as_array()) {
                 for f in fs {
-                    if let (Some(s), Some(k)) = (f.get("statement").and_then(|x| x.as_str()), f.get("kind").and_then(|x| x.as_str())) {
+                    if let (Some(s), Some(k)) = (
+                        f.get("statement").and_then(|x| x.as_str()),
+                        f.get("kind").and_then(|x| x.as_str()),
+                    ) {
                         m.insert(s.to_string(), k.to_string());
                     }
                 }
@@ -333,16 +372,33 @@ fn load_fuzzy(path: &str) -> std::collections::HashMap<String, String> {
 }
 
 /// Tag one claim via a daemon chat call → structured [`Tag`].
-async fn tag_claim(http: &reqwest::Client, port: u16, model: &str, stmt: &str, conds: &[String]) -> corpus_engine::facts_check::Tag {
+async fn tag_claim(
+    http: &reqwest::Client,
+    port: u16,
+    model: &str,
+    stmt: &str,
+    conds: &[String],
+) -> corpus_engine::facts_check::Tag {
     let user = format!("CLAIM: {stmt}\nCONDITIONS: {conds:?}");
     let body = serde_json::json!({
         "model": model, "temperature": 0.1, "max_tokens": 300,
         "messages": [{"role": "system", "content": TAG_SYS}, {"role": "user", "content": user}]
     });
     let attempt = async {
-        let resp = http.post(format!("http://localhost:{port}/v1/chat/completions")).json(&body).send().await.ok()?;
+        let resp = http
+            .post(format!("http://localhost:{port}/v1/chat/completions"))
+            .json(&body)
+            .send()
+            .await
+            .ok()?;
         let v: serde_json::Value = resp.json().await.ok()?;
-        let content = v.get("choices")?.as_array()?.first()?.get("message")?.get("content")?.as_str()?;
+        let content = v
+            .get("choices")?
+            .as_array()?
+            .first()?
+            .get("message")?
+            .get("content")?
+            .as_str()?;
         let start = content.find('{')?;
         let end = content.rfind('}')? + 1;
         serde_json::from_str::<corpus_engine::facts_check::Tag>(&content[start..end]).ok()
@@ -421,7 +477,8 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let graph = corpus_engine_scip::scip_graph::ScipGraph::open(&idx.join("scip_graph.db"), &corpus).ok();
+    let graph =
+        corpus_engine_scip::scip_graph::ScipGraph::open(&idx.join("scip_graph.db"), &corpus).ok();
     let adj = match &graph {
         Some(g) => Some(corpus_engine::facts_check::build_adjacency(g).await), // load edges once → fast in-memory BFS
         None => None,
@@ -445,7 +502,13 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
         }
     };
     let port = cfg.daemon.client_port;
-    let chat_model = cfg.models.primary.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+    let chat_model = cfg
+        .models
+        .primary
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
     let (embed, _) = match build_daemon_embed_fn().await {
         Ok(e) => e,
         Err(e) => {
@@ -466,7 +529,15 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     let (mut drift, mut corrob, mut unver, mut fuzzy_used) = (0u32, 0u32, 0u32, 0u32);
     for (stmt, conds) in &claims {
         let tag = tag_claim(&http, port, &chat_model, stmt, conds).await;
-        let v = corpus_engine::facts_check::check_claim(&facts, adj.as_ref(), &entries, Some(&embed), stmt, &tag).await;
+        let v = corpus_engine::facts_check::check_claim(
+            &facts,
+            adj.as_ref(),
+            &entries,
+            Some(&embed),
+            stmt,
+            &tag,
+        )
+        .await;
         // deterministic-first: a cited drift/corroborated wins; on abstention, fall back to the
         // fuzzy spec-reconcile verdict (labeled, lower-confidence) if one exists.
         let (verdict, source, receipt) = match v.kind {
@@ -478,10 +549,15 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
                 corrob += 1;
                 ("corrob".to_string(), "det", v.receipt)
             }
-            corpus_engine::facts_check::VerdictKind::Unverifiable => match fuzzy.get(stmt.as_str()) {
+            corpus_engine::facts_check::VerdictKind::Unverifiable => match fuzzy.get(stmt.as_str())
+            {
                 Some(fk) => {
                     fuzzy_used += 1;
-                    (fk.clone(), "fuzzy", format!("deterministic abstained; fuzzy spec-reconcile: {fk}"))
+                    (
+                        fk.clone(),
+                        "fuzzy",
+                        format!("deterministic abstained; fuzzy spec-reconcile: {fk}"),
+                    )
                 }
                 None => {
                     unver += 1;
@@ -489,7 +565,12 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
                 }
             },
         };
-        println!("[{:11}|{source:5}|{:9}] {}", clip(&verdict, 11), clip(&tag.relation, 9), clip(stmt, 48));
+        println!(
+            "[{:11}|{source:5}|{:9}] {}",
+            clip(&verdict, 11),
+            clip(&tag.relation, 9),
+            clip(stmt, 48)
+        );
         println!("     {}", clip(&receipt, 100));
     }
     println!(
@@ -1592,7 +1673,9 @@ async fn cmd_watch(args: &[String]) -> i32 {
     drop(index); // Watcher owns its own CorpusIndex handle via the engine.
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
+        Box::pin(async {
+            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+        })
     });
     let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
     let engine = Arc::new(corpus_engine::CorpusEngine::new(

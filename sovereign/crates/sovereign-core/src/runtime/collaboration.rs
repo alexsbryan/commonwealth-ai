@@ -400,7 +400,8 @@ pub(crate) async fn run_post_stream_refinement(
             // would be silently defeated on exactly the turns the gap
             // check fires. Empty evidence is a no-op.
             let refined = {
-                let v = crate::quote_verification::verify_answer_against_evidence(&refined, evidence);
+                let v =
+                    crate::quote_verification::verify_answer_against_evidence(&refined, evidence);
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,
@@ -417,8 +418,7 @@ pub(crate) async fn run_post_stream_refinement(
             // `message-refined` with the original content — the UI's
             // `refining` flag must clear either way.
             if let Some(guard) = &grounding_guard {
-                let profile =
-                    crate::runtime::grounding::GateSurface::Refinement.profile();
+                let profile = crate::runtime::grounding::GateSurface::Refinement.profile();
                 let outcome = crate::runtime::grounding::gate_answer(
                     &guard.inference,
                     question,

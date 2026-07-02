@@ -348,8 +348,8 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
-        baseline_captured: None,
-        baseline_age_days: None,
+                baseline_captured: None,
+                baseline_age_days: None,
                 note: Some(format!("rebuild failed: {e}")),
             };
         }
@@ -372,8 +372,8 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             enrichment: None,
             retrieval: None,
             levers: bench.levers.clone(),
-        baseline_captured: None,
-        baseline_age_days: None,
+            baseline_captured: None,
+            baseline_age_days: None,
             note: Some(stale_hint(bench)),
         };
     }
@@ -573,8 +573,8 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
-        baseline_captured: None,
-        baseline_age_days: None,
+                baseline_captured: None,
+                baseline_age_days: None,
                 note: Some(format!("score_corpus failed: {e}")),
             };
         }

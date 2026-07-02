@@ -555,10 +555,11 @@ impl Tool for AtlasClusterTool {
         ToolDescriptor {
             id: "atlas_cluster".to_string(),
             name: "atlas_cluster".to_string(),
-            description: "Literary-atlas Phase 2: cluster Phase-1 section sketches into typed \
+            description:
+                "Literary-atlas Phase 2: cluster Phase-1 section sketches into typed \
                           facet clusters (HDBSCAN per facet over sketch embeddings). Reads \
                           cache/questions.json, writes cache/atlas-clusters.json. Needs the daemon."
-                .to_string(),
+                    .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -644,7 +645,10 @@ mod tests {
             .await
             .is_err());
         assert!(AtlasClusterTool
-            .execute(&serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }), &ctx())
+            .execute(
+                &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
+                &ctx()
+            )
             .await
             .is_err());
     }

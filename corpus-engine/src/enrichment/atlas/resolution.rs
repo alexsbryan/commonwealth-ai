@@ -2613,20 +2613,23 @@ pub fn resolve_type_extensions(
                 let proponent_id = if proponent_needle.is_empty() {
                     None
                 } else {
-                    entity_name_to_id.get(&proponent_needle).cloned().or_else(|| {
-                        if proponent_needle.len() < 4 {
-                            return None;
-                        }
-                        let mut hits = existing_entities.iter().filter(|e| {
-                            let folded = fold(&e.canonical_name);
-                            folded.contains(&proponent_needle)
-                                || e.aliases.iter().any(|a| fold(a) == proponent_needle)
-                        });
-                        match (hits.next(), hits.next()) {
-                            (Some(only), None) => Some(only.id.clone()),
-                            _ => None,
-                        }
-                    })
+                    entity_name_to_id
+                        .get(&proponent_needle)
+                        .cloned()
+                        .or_else(|| {
+                            if proponent_needle.len() < 4 {
+                                return None;
+                            }
+                            let mut hits = existing_entities.iter().filter(|e| {
+                                let folded = fold(&e.canonical_name);
+                                folded.contains(&proponent_needle)
+                                    || e.aliases.iter().any(|a| fold(a) == proponent_needle)
+                            });
+                            match (hits.next(), hits.next()) {
+                                (Some(only), None) => Some(only.id.clone()),
+                                _ => None,
+                            }
+                        })
                 };
                 if !sk.proponent.trim().is_empty() && proponent_id.is_none() {
                     out.failures.push(PhaseFailure {

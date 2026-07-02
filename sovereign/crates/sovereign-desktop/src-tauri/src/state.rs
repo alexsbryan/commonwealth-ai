@@ -5,14 +5,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use corpus_engine::CorpusEngine;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::NoteStore;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use sovereign_core::health_monitor::HealthMonitor;
 use sovereign_core::insight::InsightService;
-use sovereign_core::model_family::{
-    EmbedModelInfo, NormalizationStrategy, PoolingStrategy,
-};
+use sovereign_core::model_family::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -28,9 +26,9 @@ use crate::supervisor::Supervisor;
 
 // Built-in skills live in a submodule (§3.3 state.rs decomposition).
 mod builtin_skills;
-use builtin_skills::register_builtin_skills;
 #[cfg(debug_assertions)]
 use builtin_skills::dev_workspace_skills_dir;
+use builtin_skills::register_builtin_skills;
 
 // Desktop config (DesktopConfig + defaults + load/save) lives in a
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
@@ -145,7 +143,9 @@ impl AppState {
         use crate::bootstrap::{BootstrapMode, ConfigSource};
         match &self.bootstrap_mode {
             BootstrapMode::Attach { client_port, .. } => *client_port,
-            BootstrapMode::Local { source: ConfigSource::CliSetup(c) } => c.daemon.client_port,
+            BootstrapMode::Local {
+                source: ConfigSource::CliSetup(c),
+            } => c.daemon.client_port,
             BootstrapMode::Local { .. } => 9741,
         }
     }
@@ -154,12 +154,18 @@ impl AppState {
         use crate::bootstrap::{BootstrapMode, ConfigSource};
         match &self.bootstrap_mode {
             BootstrapMode::Attach { internal_port, .. } => *internal_port,
-            BootstrapMode::Local { source: ConfigSource::CliSetup(c) } => c.daemon.internal_port,
+            BootstrapMode::Local {
+                source: ConfigSource::CliSetup(c),
+            } => c.daemon.internal_port,
             BootstrapMode::Local { .. } => 9742,
         }
     }
-    pub fn client_base_url(&self) -> String { format!("http://127.0.0.1:{}", self.client_port()) }
-    pub fn internal_base_url(&self) -> String { format!("http://127.0.0.1:{}", self.internal_port()) }
+    pub fn client_base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.client_port())
+    }
+    pub fn internal_base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.internal_port())
+    }
 
     /// Typed accessor for the chat `Runtime` (§2D-3 DesktopError). Returns
     /// `DesktopError::not_ready` while bootstrap is still loading it, so a
@@ -1169,12 +1175,11 @@ pub async fn bootstrap_with_progress(
     // the swap lands the code-intel tools return empty (IndexHealthChecker
     // reports "not ready") — graceful, and off the path to `backend-ready`.
     let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
-    let symbols_graph: sovereign_mesh::reindexer::ScipGraphHandle = Arc::new(
-        arc_swap::ArcSwap::from_pointee(
+    let symbols_graph: sovereign_mesh::reindexer::ScipGraphHandle =
+        Arc::new(arc_swap::ArcSwap::from_pointee(
             corpus_engine_scip::ScipGraph::open_in_memory("merged")
                 .map_err(|e| format!("in-memory ScipGraph for symbols lookup: {e}"))?,
-        ),
-    );
+        ));
     {
         let warm_dir = indexes_dir_for_scip.clone();
         let warm_handle = Arc::clone(&symbols_graph);
@@ -1396,8 +1401,9 @@ pub async fn bootstrap_with_progress(
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_atlas_context_provider(Arc::clone(&atlas_ctx_mgr)
-        as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+    .with_atlas_context_provider(
+        Arc::clone(&atlas_ctx_mgr) as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>
+    );
     // Discover + register each corpus's atlas dir (and warm any cached
     // contexts) so the atom-enum path's `graph()` can lazy-load a corpus's
     // atoms on first use — `graph()` only parses dirs this scan registered.

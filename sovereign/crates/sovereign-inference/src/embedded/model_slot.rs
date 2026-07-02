@@ -699,7 +699,9 @@ impl ModelSlot {
         // `resolve_placement` decides the strategy (and, for the auto-warm path,
         // seeds the workers' caches first); we then just apply it. The default in
         // every uncertain case is LocalOnly — the load NEVER wedges.
-        let model_bytes = std::fs::metadata(model_path).map(|m| m.len()).unwrap_or(u64::MAX);
+        let model_bytes = std::fs::metadata(model_path)
+            .map(|m| m.len())
+            .unwrap_or(u64::MAX);
         let placement = resolve_placement(model_path, model_bytes, distributable);
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);

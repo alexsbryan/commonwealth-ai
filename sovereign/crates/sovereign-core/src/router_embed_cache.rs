@@ -33,9 +33,9 @@
 //! file; `SOVEREIGN_ROUTER_EMBED_CACHE=0` disables caching entirely
 //! (every call passes through to the provider, nothing is written).
 
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use sha2::{Digest, Sha256};
 
 use crate::traits::InferenceProvider;
 use crate::Result;
@@ -64,8 +64,7 @@ const PROBE_MIN_COSINE: f32 = 0.98;
 /// committed placeholder (empty `entries`, `built_for: null`) degrades
 /// gracefully: the probe rejects it and the classifiers embed exactly as they
 /// did before this existed.
-pub const BAKED_ROUTER_EMBED_CACHE: &str =
-    include_str!("../../../router/router-embed-cache.json");
+pub const BAKED_ROUTER_EMBED_CACHE: &str = include_str!("../../../router/router-embed-cache.json");
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CacheFile {
@@ -312,7 +311,10 @@ impl BootEmbedCache {
                 std::fs::create_dir_all(dir)?;
             }
             let tmp = p.with_extension("json.tmp");
-            std::fs::write(&tmp, serde_json::to_vec(&file).map_err(std::io::Error::other)?)?;
+            std::fs::write(
+                &tmp,
+                serde_json::to_vec(&file).map_err(std::io::Error::other)?,
+            )?;
             std::fs::rename(&tmp, p)
         };
         match write() {
@@ -470,8 +472,7 @@ mod tests {
             dirty: true,
         };
         cache.flush();
-        let back: CacheFile =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let back: CacheFile = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(back.entries.len(), 1, "untouched entry must be pruned");
         assert!(back.entries.contains_key(&live));
     }

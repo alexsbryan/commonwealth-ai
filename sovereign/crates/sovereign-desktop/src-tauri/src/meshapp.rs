@@ -129,9 +129,7 @@ pub fn authorize(
     if needs.granted_by(&grant.granted) {
         Ok(app_id)
     } else {
-        Err(format!(
-            "denied: app `{app_id}` was not granted {needs:?}"
-        ))
+        Err(format!("denied: app `{app_id}` was not granted {needs:?}"))
     }
 }
 
@@ -172,7 +170,11 @@ mod tests {
         )];
         // Installed + granted → ok, returns the app id.
         assert_eq!(
-            authorize(&installs, "meshapp-com.sovereign.lvt", Permission::MeshStoreRead),
+            authorize(
+                &installs,
+                "meshapp-com.sovereign.lvt",
+                Permission::MeshStoreRead
+            ),
             Ok("com.sovereign.lvt".to_string())
         );
     }

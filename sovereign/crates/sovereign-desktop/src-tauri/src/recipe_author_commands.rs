@@ -25,20 +25,22 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use corpus_engine::Recipe;
-use sovereign_workflow::Workflow;
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
     ProjectSummary, RecipeProject,
 };
+use sovereign_workflow::Workflow;
 
 use crate::state::AppState;
 
 /// Pull `notes` + `features` handles off `AppState`. Returns a
 /// stringified error suitable for direct `.map_err(...)?` in the
 /// command bodies — the frontend renders these as toast text.
-async fn handles(state: &Arc<AppState>) -> Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), String> {
+async fn handles(
+    state: &Arc<AppState>,
+) -> Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), String> {
     let notes = state
         .notes
         .read()
@@ -194,7 +196,8 @@ pub async fn recipe_author_new_project(
         .await
         .map_err(|e| format!("recipe_author_new_project: get row: {e}"))?
         .ok_or_else(|| {
-            "recipe_author_new_project: project RecipeProjectRow vanished after creation".to_string()
+            "recipe_author_new_project: project RecipeProjectRow vanished after creation"
+                .to_string()
         })?;
     let summary = project
         .read_summary()
@@ -537,12 +540,19 @@ pub async fn recipe_author_save_edited_toml(
     })?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
-            format!("recipe_author_save_edited_toml: create {}: {e}", parent.display())
+            format!(
+                "recipe_author_save_edited_toml: create {}: {e}",
+                parent.display()
+            )
         })?;
     }
     let part = path.with_extension("toml.part");
-    std::fs::write(&part, edited_toml.as_bytes())
-        .map_err(|e| format!("recipe_author_save_edited_toml: write {}: {e}", part.display()))?;
+    std::fs::write(&part, edited_toml.as_bytes()).map_err(|e| {
+        format!(
+            "recipe_author_save_edited_toml: write {}: {e}",
+            part.display()
+        )
+    })?;
     std::fs::rename(&part, &path).map_err(|e| {
         format!(
             "recipe_author_save_edited_toml: rename {} → {}: {e}",

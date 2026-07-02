@@ -392,9 +392,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                     {
                         warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_failed");
                         eprintln!("✗ recovery from partial extract failed.");
-                        eprintln!(
-                            "  Remediation: `svrn enrich errors {nid}` for diagnostics."
-                        );
+                        eprintln!("  Remediation: `svrn enrich errors {nid}` for diagnostics.");
                         return 1;
                     }
                     info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_done");

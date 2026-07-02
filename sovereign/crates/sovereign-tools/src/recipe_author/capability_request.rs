@@ -52,11 +52,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use super::project::{maintainer_inbox_dir, RecipeProject};
 

@@ -67,7 +67,11 @@ pub fn score(predicted: &Labeling, gold: &Labeling) -> DispositionReport {
 /// confusion matrix is read against the era-masked label set. Categories
 /// present in the data but absent from `axis` are appended to the axis
 /// tail so they're never silently dropped.
-pub fn score_with_axis(predicted: &Labeling, gold: &Labeling, axis: &[String]) -> DispositionReport {
+pub fn score_with_axis(
+    predicted: &Labeling,
+    gold: &Labeling,
+    axis: &[String],
+) -> DispositionReport {
     // Build the full axis: the supplied order first, then any
     // out-of-axis categories observed in the data, appended.
     let mut categories: Vec<String> = axis.to_vec();
@@ -207,7 +211,11 @@ mod tests {
             .find(|p| p.category == "ASTRONOMICAL")
             .unwrap();
         assert_eq!(astro.recall, 0.0); // the one ASTRONOMICAL gold was missed
-        let air = r.per_category.iter().find(|p| p.category == "AIRCRAFT").unwrap();
+        let air = r
+            .per_category
+            .iter()
+            .find(|p| p.category == "AIRCRAFT")
+            .unwrap();
         assert!(air.precision < 1.0); // one of two AIRCRAFT predictions is wrong
     }
 
@@ -229,7 +237,12 @@ mod tests {
         ]);
         let r = score(&pred, &gold);
         assert_eq!(r.accuracy, 0.75);
-        assert!(r.macro_f1 < r.accuracy, "macro_f1={} acc={}", r.macro_f1, r.accuracy);
+        assert!(
+            r.macro_f1 < r.accuracy,
+            "macro_f1={} acc={}",
+            r.macro_f1,
+            r.accuracy
+        );
     }
 
     #[test]
@@ -260,7 +273,10 @@ mod tests {
         let axis = vec!["ASTRONOMICAL".to_string(), "AIRCRAFT".to_string()];
         let r = score_with_axis(&pred, &gold, &axis);
         assert_eq!(r.accuracy, 0.0);
-        assert!(r.confusion_matrix.categories.contains(&"SATELLITE".to_string()));
+        assert!(r
+            .confusion_matrix
+            .categories
+            .contains(&"SATELLITE".to_string()));
         // The supplied axis order is preserved at the head.
         assert_eq!(r.confusion_matrix.categories[0], "ASTRONOMICAL");
     }

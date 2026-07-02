@@ -1022,8 +1022,13 @@ impl EmbeddedLlamaCpp {
                 path = %path.display(),
                 "loading extras slot"
             );
-            match ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers, false)
-            {
+            match ModelSlot::load(
+                &self.primary_backend,
+                &path,
+                context_size,
+                self.gpu_layers,
+                false,
+            ) {
                 Ok(slot) => {
                     let model_id = slot.model_id.clone();
                     let arc = Arc::new(slot);
@@ -1168,8 +1173,13 @@ impl EmbeddedLlamaCpp {
             self.evict_extras_for_new_load(&slot_name, new_size, budget)?;
         }
 
-        let slot =
-            ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers, false)?;
+        let slot = ModelSlot::load(
+            &self.primary_backend,
+            &path,
+            context_size,
+            self.gpu_layers,
+            false,
+        )?;
         let model_id = slot.model_id.clone();
         let arc = Arc::new(slot);
 
@@ -2042,7 +2052,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                             );
                         }
                         *primary = None;
-                        let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
+                        let s = ModelSlot::load(
+                            &backend,
+                            &target_path,
+                            ctx_size,
+                            gpu_layers,
+                            distributable,
+                        )?;
                         *primary = Some(s);
                         *loaded = Some(target_path.clone());
                     }
@@ -2353,7 +2369,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                     *primary = None;
                     *loaded = None;
-                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable) {
+                    match ModelSlot::load(
+                        &backend,
+                        &target_path,
+                        ctx_size,
+                        gpu_layers,
+                        distributable,
+                    ) {
                         Ok(slot) => {
                             *primary = Some(slot);
                             *loaded = Some(target_path.clone());
@@ -2578,7 +2600,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                     *primary = None;
                     *loaded = None;
-                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable) {
+                    match ModelSlot::load(
+                        &backend,
+                        &target_path,
+                        ctx_size,
+                        gpu_layers,
+                        distributable,
+                    ) {
                         Ok(slot) => {
                             *primary = Some(slot);
                             *loaded = Some(target_path.clone());

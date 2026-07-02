@@ -152,8 +152,11 @@ fn forward_every_manifest_command_is_documented() {
 fn reverse_every_documented_verb_has_a_manifest_row() {
     let secs = sections(&read("docs/CLI_REFERENCE.md"));
     let c = contract();
-    let manifest_verbs: BTreeSet<String> =
-        c.commands.iter().map(|cmd| verb_of(&cmd.path).to_string()).collect();
+    let manifest_verbs: BTreeSet<String> = c
+        .commands
+        .iter()
+        .map(|cmd| verb_of(&cmd.path).to_string())
+        .collect();
     let mut fails = Vec::new();
     for verb in secs.keys() {
         if !manifest_verbs.contains(verb) {
@@ -177,13 +180,19 @@ fn readme_names_every_public_verb() {
     let c = contract();
     let mut fails = Vec::new();
     let mut seen = BTreeSet::new();
-    for cmd in c.commands.iter().filter(|c| c.visibility == Visibility::Public) {
+    for cmd in c
+        .commands
+        .iter()
+        .filter(|c| c.visibility == Visibility::Public)
+    {
         let verb = verb_of(&cmd.path);
         if !seen.insert(verb.to_string()) {
             continue;
         }
         if !readme.contains(verb) {
-            fails.push(format!("public verb `{verb}` is not mentioned in README.md"));
+            fails.push(format!(
+                "public verb `{verb}` is not mentioned in README.md"
+            ));
         }
     }
     assert!(

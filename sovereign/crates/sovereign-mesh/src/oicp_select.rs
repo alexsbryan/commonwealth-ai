@@ -308,7 +308,10 @@ mod tests {
         // Equivalence: the wrapper's candidate score IS the SSOT
         // breakdown's final score, forever.
         assert_eq!(adjusted.score.to_bits(), breakdown.final_score.to_bits());
-        assert!((breakdown.availability - 1.0).abs() < 1e-6, "None ⇒ neutral");
+        assert!(
+            (breakdown.availability - 1.0).abs() < 1e-6,
+            "None ⇒ neutral"
+        );
         // Tie-break inputs must survive adjustment untouched.
         assert_eq!(adjusted.model_id, "golden");
         assert_eq!(adjusted.size_gb, Some(8.0));

@@ -542,7 +542,10 @@ mod tests {
         // is the contract that lets the shared chunker consume ChatGPT
         // output without any source-specific code.
         let re = Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap();
-        let senders: Vec<&str> = re.captures_iter(body).map(|c| c.get(2).unwrap().as_str()).collect();
+        let senders: Vec<&str> = re
+            .captures_iter(body)
+            .map(|c| c.get(2).unwrap().as_str())
+            .collect();
         assert_eq!(
             senders,
             vec!["assistant", "user", "assistant"],
@@ -551,7 +554,11 @@ mod tests {
         // The captured timestamp is the YYYY-MM-DD HH:MM shape.
         let ts_re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$").unwrap();
         for cap in re.captures_iter(body) {
-            assert!(ts_re.is_match(&cap[1]), "bad timestamp shape: {:?}", &cap[1]);
+            assert!(
+                ts_re.is_match(&cap[1]),
+                "bad timestamp shape: {:?}",
+                &cap[1]
+            );
         }
     }
 
@@ -567,8 +574,14 @@ mod tests {
     fn entity_marker_renders_display_name() {
         let (_dir, path) = write_fixture();
         let body = &extract(&path)[0].content;
-        assert!(body.contains("Most associated with George Soros."), "{body}");
-        assert!(!body.contains("investor and philosopher"), "desc leaked: {body}");
+        assert!(
+            body.contains("Most associated with George Soros."),
+            "{body}"
+        );
+        assert!(
+            !body.contains("investor and philosopher"),
+            "desc leaked: {body}"
+        );
     }
 
     #[test]
@@ -637,7 +650,10 @@ mod tests {
         std::fs::write(&path, raw).unwrap();
         let body = &extract(&path)[0].content;
         assert!(body.contains("describe this image"), "{body}");
-        assert!(!body.contains("image_asset_pointer"), "dict part leaked: {body}");
+        assert!(
+            !body.contains("image_asset_pointer"),
+            "dict part leaked: {body}"
+        );
     }
 
     #[test]
@@ -665,8 +681,14 @@ mod tests {
         }]"#;
         std::fs::write(&path, raw).unwrap();
         let body = &extract(&path)[0].content;
-        assert!(body.contains("visible question") && body.contains("visible answer"), "{body}");
-        assert!(!body.contains("secret chain of thought"), "reasoning leaked: {body}");
+        assert!(
+            body.contains("visible question") && body.contains("visible answer"),
+            "{body}"
+        );
+        assert!(
+            !body.contains("secret chain of thought"),
+            "reasoning leaked: {body}"
+        );
     }
 
     #[test]
@@ -690,7 +712,10 @@ mod tests {
         }]"#;
         std::fs::write(&path, raw).unwrap();
         let body = &extract(&path)[0].content;
-        assert!(body.find("first").unwrap() < body.find("second").unwrap(), "{body}");
+        assert!(
+            body.find("first").unwrap() < body.find("second").unwrap(),
+            "{body}"
+        );
     }
 
     #[test]

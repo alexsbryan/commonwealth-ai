@@ -237,10 +237,20 @@ struct Agg {
 
 impl Agg {
     fn missing() -> Self {
-        Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
+        Agg {
+            p_freq: f64::NAN,
+            p_verbal: f64::NAN,
+            eff_k: 0,
+            latency_ms: 0,
+        }
     }
     fn from_p(p: f64, latency_ms: u64) -> Self {
-        Agg { p_freq: p, p_verbal: p, eff_k: 1, latency_ms }
+        Agg {
+            p_freq: p,
+            p_verbal: p,
+            eff_k: 1,
+            latency_ms,
+        }
     }
 }
 
@@ -341,7 +351,10 @@ async fn run(args: Args) -> i32 {
             sp.cfg.alpha, sp.cfg.checkpoints, sp.mag, sp.flat, sp.inv, sp.ctrl
         );
     } else {
-        eprintln!("[stopping] off (sacred test pool runs fixed n={})", args.n_cases);
+        eprintln!(
+            "[stopping] off (sacred test pool runs fixed n={})",
+            args.n_cases
+        );
     }
 
     // ── Providers (one per model, all pointed at --base-url/v1) ──
@@ -354,8 +367,12 @@ async fn run(args: Args) -> i32 {
         .models
         .iter()
         .map(|m| {
-            Arc::new(RemoteApiProvider::new(&v1, api_key.clone(), m, PROVIDER_CTX))
-                as Arc<dyn InferenceProvider>
+            Arc::new(RemoteApiProvider::new(
+                &v1,
+                api_key.clone(),
+                m,
+                PROVIDER_CTX,
+            )) as Arc<dyn InferenceProvider>
         })
         .collect();
 
@@ -375,7 +392,14 @@ async fn run(args: Args) -> i32 {
     let spans = case_spans(&probes);
 
     // ── Preflight: one parseable draw per model before spending the run ──
-    if let Err(e) = preflight(&providers, &args.models, &probes[0], &candidates, system_prompt).await
+    if let Err(e) = preflight(
+        &providers,
+        &args.models,
+        &probes[0],
+        &candidates,
+        system_prompt,
+    )
+    .await
     {
         eprintln!("preflight failed: {e}");
         eprintln!("  (check the daemon is up at {v1} and the --models stems appear on /v1/models)");
@@ -411,14 +435,20 @@ async fn run(args: Args) -> i32 {
     // (cheap, pure) from the full aggregate set — re-running with a
     // different --manifest re-scores without re-eliciting.
     let out_path = args.out.clone().unwrap_or_else(|| {
-        PathBuf::from(format!("target/mechanism-fidelity/{}.jsonl", args.pool.as_str()))
+        PathBuf::from(format!(
+            "target/mechanism-fidelity/{}.jsonl",
+            args.pool.as_str()
+        ))
     });
     let ckpt_path = checkpoint_path(&out_path);
     let sig = run_signature(&args, class.id());
     let mut aggs: HashMap<String, Agg> = match load_checkpoint(&ckpt_path, &sig) {
         Ok(loaded) => {
             if !loaded.is_empty() {
-                eprintln!("[resume] loaded {} completed probes from {ckpt_path:?}", loaded.len());
+                eprintln!(
+                    "[resume] loaded {} completed probes from {ckpt_path:?}",
+                    loaded.len()
+                );
             }
             loaded
         }
@@ -508,7 +538,14 @@ async fn run(args: Args) -> i32 {
                 let at_cp = sp.cfg.checkpoints.contains(&cases_done);
                 let at_max = cases_done >= sp.cfg.n_max();
                 let vm = decide_at(&stop.mag, &sp.cfg, sp.mag, Side::AtLeast, at_cp, at_max);
-                let vp2 = decide_at(&stop.flat_p2, &sp.cfg, sp.flat, Side::AtLeast, at_cp, at_max);
+                let vp2 = decide_at(
+                    &stop.flat_p2,
+                    &sp.cfg,
+                    sp.flat,
+                    Side::AtLeast,
+                    at_cp,
+                    at_max,
+                );
                 let vi = decide_at(&stop.inv, &sp.cfg, sp.inv, Side::AtLeast, at_cp, at_max);
                 let vc = decide_at(&stop.ctrl, &sp.cfg, sp.ctrl, Side::AtMost, at_cp, at_max);
 
@@ -669,8 +706,7 @@ async fn elicit_logprob(
             Ok(resp) => match parse_forced_choice_dist(&resp.text, candidates) {
                 Some(dist) => return (Some(dist), start.elapsed().as_millis() as u64),
                 None => {
-                    last_err =
-                        format!("parse failed: {:?}", &resp.text[..resp.text.len().min(80)]);
+                    last_err = format!("parse failed: {:?}", &resp.text[..resp.text.len().min(80)]);
                 }
             },
             Err(e) => last_err = format!("inference error: {e}"),
@@ -782,9 +818,16 @@ fn case_contrib(
         }
     }
 
-    let mut out = CaseContrib { mag: None, flat_p2: None, inv: None, ctrl: None };
+    let mut out = CaseContrib {
+        mag: None,
+        flat_p2: None,
+        inv: None,
+        ctrl: None,
+    };
     for rp in group {
-        let Some(a) = aggs.get(&agg_key(model_idx, rp)) else { continue };
+        let Some(a) = aggs.get(&agg_key(model_idx, rp)) else {
+            continue;
+        };
         let ctx = (rp.render.clone(), rp.paraphrase);
         let bp = base_p.get(&ctx).copied().unwrap_or(f64::NAN);
         let bsp = base_sp.get(&ctx).copied().unwrap_or(f64::NAN);
@@ -856,7 +899,9 @@ fn build_rows(
     for model_idx in 0..n_models {
         let st = &model_stops[model_idx];
         for rp in probes {
-            let Some(agg) = aggs.get(&agg_key(model_idx, rp)) else { continue };
+            let Some(agg) = aggs.get(&agg_key(model_idx, rp)) else {
+                continue;
+            };
             let bp = base_p
                 .get(&base_key(model_idx, &rp.case_id, &rp.render, rp.paraphrase))
                 .copied()
@@ -991,7 +1036,10 @@ fn open_checkpoint(path: &Path, sig: &str) -> std::io::Result<std::fs::File> {
         std::fs::create_dir_all(parent)?;
     }
     let fresh = !path.exists();
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     if fresh {
         writeln!(f, "{}", serde_json::json!({ "_sig": sig }))?;
         f.flush()?;
@@ -1089,7 +1137,11 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
             eprintln!(
                 "      cases drawn: {}{}{}",
                 r.n_drawn,
-                if r.stopped_early { " (stopped early)" } else { "" },
+                if r.stopped_early {
+                    " (stopped early)"
+                } else {
+                    ""
+                },
                 cs
             );
         }
@@ -1186,7 +1238,10 @@ fn load_stopping(path: &Path) -> StopParams {
         p.inv = g("inv_pass_fraction", p.inv);
     }
     if let Some(nc) = val.get("negative_control").and_then(|b| b.as_table()) {
-        if let Some(v) = nc.get("max_directional_accuracy").and_then(|v| v.as_float()) {
+        if let Some(v) = nc
+            .get("max_directional_accuracy")
+            .and_then(|v| v.as_float())
+        {
             p.ctrl = v;
         }
     }
@@ -1238,10 +1293,16 @@ mod tests {
     fn parse_forced_choice_dist_reads_distribution() {
         let cands = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let d = parse_forced_choice_dist("{\"A\":0.6,\"B\":0.3,\"C\":0.1}", &cands).unwrap();
-        assert_eq!(d, vec![("A".into(), 0.6), ("B".into(), 0.3), ("C".into(), 0.1)]);
+        assert_eq!(
+            d,
+            vec![("A".into(), 0.6), ("B".into(), 0.3), ("C".into(), 0.1)]
+        );
         // Missing keys default to 0.
         let d = parse_forced_choice_dist("{\"A\":1.0}", &cands).unwrap();
-        assert_eq!(d, vec![("A".into(), 1.0), ("B".into(), 0.0), ("C".into(), 0.0)]);
+        assert_eq!(
+            d,
+            vec![("A".into(), 1.0), ("B".into(), 0.0), ("C".into(), 0.0)]
+        );
         assert!(parse_forced_choice_dist("garbage", &cands).is_none());
     }
 

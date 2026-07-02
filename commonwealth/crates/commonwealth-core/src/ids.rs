@@ -137,7 +137,11 @@ mod tests {
     fn hex_round_trips_full_16_bytes() {
         let id = NodeId::generate();
         let hex = id.to_hex();
-        assert_eq!(hex.len(), 32, "full 16-byte hex, not the short Display form");
+        assert_eq!(
+            hex.len(),
+            32,
+            "full 16-byte hex, not the short Display form"
+        );
         assert_eq!(NodeId::from_hex(&hex), Some(id));
         // Tolerates surrounding whitespace (config values often have it).
         assert_eq!(NodeId::from_hex(&format!("  {hex}\n")), Some(id));

@@ -182,9 +182,13 @@ impl Runtime {
             .corpus_principal
             .as_ref()
             .and_then(|r| r.principal_for(conversation_id));
-        let mut context =
-            build_context(self.store.as_ref(), conversation_id, message, principal.as_deref())
-                .await?;
+        let mut context = build_context(
+            self.store.as_ref(),
+            conversation_id,
+            message,
+            principal.as_deref(),
+        )
+        .await?;
         tracing::debug!(
             messages = context.conversation.messages.len(),
             memories = context.memories.len(),

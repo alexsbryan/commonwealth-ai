@@ -46,9 +46,7 @@ async fn bind_empty_endpoint(seed: u8) -> commonwealth_transport::iroh::Endpoint
 
 /// The endpoint's dialable localhost sockets (iroh binds the wildcard,
 /// which isn't dialable as-is — rewrite to loopback).
-fn dialable_sockets(
-    endpoint: &commonwealth_transport::iroh::Endpoint,
-) -> Vec<SocketAddr> {
+fn dialable_sockets(endpoint: &commonwealth_transport::iroh::Endpoint) -> Vec<SocketAddr> {
     endpoint
         .bound_sockets()
         .into_iter()

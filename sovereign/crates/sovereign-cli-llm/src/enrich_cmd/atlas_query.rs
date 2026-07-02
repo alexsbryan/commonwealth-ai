@@ -27,10 +27,10 @@ use sovereign_core::atlas_context::{
     CallDirection,
 };
 
+use super::paths;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::eval_cmd::runner::{load_atlas_context, AtlasLoadFilter};
-use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Per-node fanout cap on the CallChain BFS — a hot symbol referencing dozens of
@@ -129,7 +129,9 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let edges_file = read_atlas_edges(&atlas_dir).map(|f| f.edges).unwrap_or_default();
+    let edges_file = read_atlas_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
 
     let mut entities = Vec::new();
     let mut events = Vec::new();
@@ -223,7 +225,14 @@ async fn run_call_chain(
     let (seed_id, how): (Option<String>, &str) = if !prefer_conceptual && named.is_some() {
         (named, "named")
     } else {
-        match conceptual_seed(globals, &parsed.corpus_id, atlas_dir, &parsed.query, &mut graph).await
+        match conceptual_seed(
+            globals,
+            &parsed.corpus_id,
+            atlas_dir,
+            &parsed.query,
+            &mut graph,
+        )
+        .await
         {
             Some((id, score)) => {
                 eprintln!("atlas-query: conceptual seed `{id}` (cosine {score:.3})");
@@ -490,8 +499,7 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_zero_depth() {
-        let err =
-            parse_args(&["bk".into(), "q".into(), "--depth".into(), "0".into()]).unwrap_err();
+        let err = parse_args(&["bk".into(), "q".into(), "--depth".into(), "0".into()]).unwrap_err();
         assert!(err.contains("> 0"));
     }
 

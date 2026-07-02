@@ -100,7 +100,9 @@ pub fn workflows_dir() -> std::path::PathBuf {
 /// Resolve a workflow reference to `(toml, origin)`: an existing file path, else a
 /// user workflow (`~/.sovereign/workflows/<name>.toml`), else a shipped starter.
 /// User shadows shipped (same name → the user's edit wins).
-pub fn resolve_workflow_source(name_or_path: &str) -> std::result::Result<(String, String), String> {
+pub fn resolve_workflow_source(
+    name_or_path: &str,
+) -> std::result::Result<(String, String), String> {
     let p = std::path::Path::new(name_or_path);
     if p.is_file() {
         return std::fs::read_to_string(p)
@@ -222,14 +224,14 @@ pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry 
     use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
     use sovereign_tools::corpus_search::CorpusSearchTool;
     use sovereign_tools::corpus_store::CorpusStoreTool;
-    use sovereign_tools::read_csv::ReadCsvTool;
-    use sovereign_tools::vector_mean::VectorMeanTool;
     use sovereign_tools::extract::ExtractTool;
     use sovereign_tools::rag::chunk::ChunkTool;
     use sovereign_tools::rag::section::SectionTool;
+    use sovereign_tools::read_csv::ReadCsvTool;
     use sovereign_tools::read_file::ReadFileTool;
     use sovereign_tools::read_json::ReadJsonTool;
     use sovereign_tools::shell::ShellTool;
+    use sovereign_tools::vector_mean::VectorMeanTool;
     use sovereign_tools::web::WebFetchTool;
     use sovereign_tools::write_file::WriteFileTool;
     use sovereign_tools::write_json::WriteJsonTool;
@@ -297,7 +299,9 @@ pub async fn run_workflow_in_process(
         let chat = models.chat.clone().unwrap_or_default();
         let embed = models.embed.clone().unwrap_or_default();
         tracing::info!(daemon, chat = %chat, embed = %embed, "workflow-host: daemon inference");
-        Some(Arc::new(SplitInferenceProvider::new(&v1, chat, embed, 8192)))
+        Some(Arc::new(SplitInferenceProvider::new(
+            &v1, chat, embed, 8192,
+        )))
     } else {
         None
     };
@@ -433,7 +437,11 @@ pub fn workflow_capabilities(wf: &Workflow, registry: &ToolRegistry) -> Capabili
     let mut needs_inference = false;
     let mut unresolved: Vec<String> = Vec::new();
 
-    let add_tool = |id: &str, uses: &str, effects: &mut Vec<Effect>, permissions: &mut Vec<Permission>, unresolved: &mut Vec<String>| {
+    let add_tool = |id: &str,
+                    uses: &str,
+                    effects: &mut Vec<Effect>,
+                    permissions: &mut Vec<Permission>,
+                    unresolved: &mut Vec<String>| {
         match registry.get(id) {
             Ok(t) => {
                 let e = t.descriptor().effect;
@@ -464,13 +472,23 @@ pub fn workflow_capabilities(wf: &Workflow, registry: &ToolRegistry) -> Capabili
                     permissions.push(Permission::CorpusIngest);
                 }
             }
-            Ok(StepKind::Tool { id }) => {
-                add_tool(&id, &step.uses, &mut effects, &mut permissions, &mut unresolved)
-            }
+            Ok(StepKind::Tool { id }) => add_tool(
+                &id,
+                &step.uses,
+                &mut effects,
+                &mut permissions,
+                &mut unresolved,
+            ),
             Ok(StepKind::Mcp { server, tool }) => {
                 let mcp_id = format!("mcp_{server}_{tool}");
                 if registry.get(&mcp_id).is_ok() {
-                    add_tool(&mcp_id, &step.uses, &mut effects, &mut permissions, &mut unresolved);
+                    add_tool(
+                        &mcp_id,
+                        &step.uses,
+                        &mut effects,
+                        &mut permissions,
+                        &mut unresolved,
+                    );
                 } else {
                     // An MCP tool we can't see right now is still a network action.
                     // Record that AND flag it so consent isn't blind.

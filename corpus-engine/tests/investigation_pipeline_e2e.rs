@@ -367,11 +367,31 @@ async fn uap_coalesces_variants_populates_attrs_and_fires_hotspot() {
     // forms) + one near Edwards. The four WP forms must merge so the
     // hotspot (>3) fires; Edwards (count 1) must not.
     let chunks = vec![
-        ChunkInput { chunk_id: "wp1", source_title: None, content: "near Wright-Patterson AFB" },
-        ChunkInput { chunk_id: "wp2", source_title: None, content: "near Wright-Patterson Air Force Base" },
-        ChunkInput { chunk_id: "wp3", source_title: None, content: "near Wright-Patterson" },
-        ChunkInput { chunk_id: "wp4", source_title: None, content: "near Wright Patterson AFB" },
-        ChunkInput { chunk_id: "ed1", source_title: None, content: "near Edwards AFB" },
+        ChunkInput {
+            chunk_id: "wp1",
+            source_title: None,
+            content: "near Wright-Patterson AFB",
+        },
+        ChunkInput {
+            chunk_id: "wp2",
+            source_title: None,
+            content: "near Wright-Patterson Air Force Base",
+        },
+        ChunkInput {
+            chunk_id: "wp3",
+            source_title: None,
+            content: "near Wright-Patterson",
+        },
+        ChunkInput {
+            chunk_id: "wp4",
+            source_title: None,
+            content: "near Wright Patterson AFB",
+        },
+        ChunkInput {
+            chunk_id: "ed1",
+            source_title: None,
+            content: "near Edwards AFB",
+        },
     ];
 
     let responses: &[&str] = &[
@@ -454,9 +474,15 @@ async fn uap_coalesces_variants_populates_attrs_and_fires_hotspot() {
         .iter()
         .find(|e| e.entity_type == "observed_object")
         .expect("observed object extracted");
-    assert_eq!(obj.attributes.get("shape"), Some(&serde_json::json!("DISC")));
+    assert_eq!(
+        obj.attributes.get("shape"),
+        Some(&serde_json::json!("DISC"))
+    );
     // Installation attributes merged across mentions too.
-    assert_eq!(wp.attributes.get("branch"), Some(&serde_json::json!("USAF")));
+    assert_eq!(
+        wp.attributes.get("branch"),
+        Some(&serde_json::json!("USAF"))
+    );
 
     // (A3) The hotspot threshold fires on the merged base (4 sightings > 3)
     // and NOT on Edwards (1 sighting).
@@ -465,8 +491,15 @@ async fn uap_coalesces_variants_populates_attrs_and_fires_hotspot() {
         .iter()
         .filter(|f| f.pattern_name == "sighting_hotspots")
         .collect();
-    assert_eq!(hotspots.len(), 1, "only WP clears the threshold; got: {hotspots:?}");
-    assert_eq!(hotspots[0].entity_ids, vec!["e-installation-wright-patterson"]);
+    assert_eq!(
+        hotspots.len(),
+        1,
+        "only WP clears the threshold; got: {hotspots:?}"
+    );
+    assert_eq!(
+        hotspots[0].entity_ids,
+        vec!["e-installation-wright-patterson"]
+    );
     // The stamped count is on the entity.
     assert_eq!(
         wp.attributes.get("sighting_count"),

@@ -126,7 +126,10 @@ mod tests {
 
         // String form + default keys + length-mismatch (pairs to the shorter).
         let out2 = ZipTool
-            .execute(&serde_json::json!({ "a": "[1,2,3]", "b": "[\"x\",\"y\"]" }), &ctx())
+            .execute(
+                &serde_json::json!({ "a": "[1,2,3]", "b": "[\"x\",\"y\"]" }),
+                &ctx(),
+            )
             .await
             .unwrap();
         match out2 {

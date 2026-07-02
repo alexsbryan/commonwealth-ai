@@ -74,8 +74,7 @@ impl IrohAccess {
             }
         }
         let identity = commonwealth_transport::identity::load_or_generate_node_key(&key_dir);
-        let secret =
-            commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
+        let secret = commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
         // Shared constructor. `[iroh] relay_urls` + `discovery` map to
         // a `RelayConfig`: n0 by default, self-hosted relays and/or a
@@ -85,12 +84,8 @@ impl IrohAccess {
             config.iroh.relay_urls.clone(),
             config.iroh.discovery.as_deref(),
         );
-        let endpoint = match build_relayed_endpoint(
-            secret,
-            vec![CLIENT_ALPN.to_vec()],
-            &relay_cfg,
-        )
-        .await
+        let endpoint = match build_relayed_endpoint(secret, vec![CLIENT_ALPN.to_vec()], &relay_cfg)
+            .await
         {
             Ok(ep) => ep,
             Err(e) => {

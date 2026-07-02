@@ -108,7 +108,10 @@ impl AttributeOmissionDetector {
         chunks: &[String],
         atlas: &dyn AtlasLookup,
     ) -> H1Trace {
-        let mut t = H1Trace { is_attribute_request: is_attribute_request(&probe.query), ..Default::default() };
+        let mut t = H1Trace {
+            is_attribute_request: is_attribute_request(&probe.query),
+            ..Default::default()
+        };
         if !t.is_attribute_request {
             return t; // not the class H1 targets → keep
         }
@@ -281,7 +284,9 @@ fn candidate_value_tokens(answer: &str, query: &str) -> Vec<String> {
             if w.len() < 3 {
                 continue;
             }
-            let Some(first) = w.chars().next() else { continue };
+            let Some(first) = w.chars().next() else {
+                continue;
+            };
             if !first.is_uppercase() {
                 continue; // value tokens are proper nouns
             }
@@ -341,12 +346,61 @@ fn atoms_for_query_entities(query: &str, atlas: &dyn AtlasLookup) -> Vec<String>
 
 /// Capitalized tokens that are filler, not asserted values. General English only.
 const STOP_CAPS: &[&str] = &[
-    "the", "his", "her", "its", "their", "there", "this", "that", "these", "those", "however",
-    "but", "while", "when", "where", "which", "who", "what", "according", "based", "unfortunately",
-    "sorry", "unknown", "general", "knowledge", "note", "source", "sources", "text", "novel",
-    "chapter", "story", "answer", "question", "mr", "mrs", "miss", "sir", "and", "for", "with",
-    "from", "into", "about", "not", "your", "provided", "explicitly", "stated", "mentioned",
-    "named", "called", "referred", "passages", "retrieved",
+    "the",
+    "his",
+    "her",
+    "its",
+    "their",
+    "there",
+    "this",
+    "that",
+    "these",
+    "those",
+    "however",
+    "but",
+    "while",
+    "when",
+    "where",
+    "which",
+    "who",
+    "what",
+    "according",
+    "based",
+    "unfortunately",
+    "sorry",
+    "unknown",
+    "general",
+    "knowledge",
+    "note",
+    "source",
+    "sources",
+    "text",
+    "novel",
+    "chapter",
+    "story",
+    "answer",
+    "question",
+    "mr",
+    "mrs",
+    "miss",
+    "sir",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "about",
+    "not",
+    "your",
+    "provided",
+    "explicitly",
+    "stated",
+    "mentioned",
+    "named",
+    "called",
+    "referred",
+    "passages",
+    "retrieved",
 ];
 
 #[cfg(test)]
@@ -398,7 +452,10 @@ mod tests {
             id: id.into(),
             query: query.into(),
             qtype: QuestionType::AbsentAdjacent,
-            oracle: Oracle::Absent { held_out_witness: None, kind: AbsentKind::Adjacent },
+            oracle: Oracle::Absent {
+                held_out_witness: None,
+                kind: AbsentKind::Adjacent,
+            },
             source: ProbeSource::I5Human,
             note: String::new(),
         }
@@ -410,12 +467,8 @@ mod tests {
     fn h1_keeps_grounded_attribute_answer() {
         let p = present("p", "What is Mr Verloc's first name?", &["Adolf"]);
         let chunks = vec!["she said quietly “Adolf!” Mr Verloc had not changed".to_string()];
-        let out = AttributeOmissionDetector.apply(
-            &p,
-            "His first name is Adolf.",
-            &chunks,
-            &atlas(&[]),
-        );
+        let out =
+            AttributeOmissionDetector.apply(&p, "His first name is Adolf.", &chunks, &atlas(&[]));
         assert_eq!(out, "His first name is Adolf.", "grounded value → kept");
     }
 
@@ -428,15 +481,23 @@ mod tests {
             &[],
             &atlas(&[("Yundt", &["The old terrorist Karl Yundt giggled grimly."])]),
         );
-        assert_eq!(out, "His first name is Karl.", "value grounded in atlas → kept");
+        assert_eq!(
+            out, "His first name is Karl.",
+            "value grounded in atlas → kept"
+        );
     }
 
     #[test]
     fn h1_abstains_on_ungrounded_attribute_fabrication() {
         let p = absent("a", "What is Chief Inspector Heat's first name?");
-        let chunks = vec!["Chief Inspector Heat frowned at the Assistant Commissioner.".to_string()];
-        let out = AttributeOmissionDetector.apply(&p, "His first name is Edward.", &chunks, &atlas(&[]));
-        assert_eq!(out, ABSTENTION, "fabricated value absent from evidence → abstain");
+        let chunks =
+            vec!["Chief Inspector Heat frowned at the Assistant Commissioner.".to_string()];
+        let out =
+            AttributeOmissionDetector.apply(&p, "His first name is Edward.", &chunks, &atlas(&[]));
+        assert_eq!(
+            out, ABSTENTION,
+            "fabricated value absent from evidence → abstain"
+        );
     }
 
     #[test]
@@ -444,7 +505,10 @@ mod tests {
         let p = absent("a", "What is Mr Vladimir's first name?");
         let honest = "The novel never gives his first name.";
         let out = AttributeOmissionDetector.apply(&p, honest, &[], &atlas(&[]));
-        assert_eq!(out, honest, "no asserted proper-noun value → keep (don't double-abstain)");
+        assert_eq!(
+            out, honest,
+            "no asserted proper-noun value → keep (don't double-abstain)"
+        );
     }
 
     #[test]
@@ -460,15 +524,36 @@ mod tests {
         let pa = present("p", "What is Mr Verloc's first name?", &["Adolf"]);
         let chunks = vec!["“Adolf!”".to_string()];
         // C1 abstains on everything, including an answerable present question.
-        assert_eq!(BlanketAbstain.apply(&pa, "Adolf.", &chunks, &atlas(&[])), ABSTENTION);
+        assert_eq!(
+            BlanketAbstain.apply(&pa, "Adolf.", &chunks, &atlas(&[])),
+            ABSTENTION
+        );
         // C2 truncates attribute answers below 24 chars.
-        let trunc = ConditionalTruncation.apply(&pa, "His first name is Adolf, clearly stated.", &chunks, &atlas(&[]));
-        assert!(trunc.chars().count() < 24, "truncated under the fallback: {trunc:?}");
+        let trunc = ConditionalTruncation.apply(
+            &pa,
+            "His first name is Adolf, clearly stated.",
+            &chunks,
+            &atlas(&[]),
+        );
+        assert!(
+            trunc.chars().count() < 24,
+            "truncated under the fallback: {trunc:?}"
+        );
         // C3 abstains only on its known queries; identity elsewhere.
-        let c3 = OverfitCanary { known_abstain_queries: vec!["what is chief inspector heat's first name?".into()] };
-        assert_eq!(c3.apply(&pa, "Adolf.", &chunks, &atlas(&[])), "Adolf.", "unknown query → identity");
+        let c3 = OverfitCanary {
+            known_abstain_queries: vec!["what is chief inspector heat's first name?".into()],
+        };
+        assert_eq!(
+            c3.apply(&pa, "Adolf.", &chunks, &atlas(&[])),
+            "Adolf.",
+            "unknown query → identity"
+        );
         let known = absent("a", "What is Chief Inspector Heat's first name?");
-        assert_eq!(c3.apply(&known, "Edward.", &[], &atlas(&[])), ABSTENTION, "known query → abstain");
+        assert_eq!(
+            c3.apply(&known, "Edward.", &[], &atlas(&[])),
+            ABSTENTION,
+            "known query → abstain"
+        );
     }
 
     // ── gate-signal discrimination (scorer level) ─────────────────────────────
@@ -487,9 +572,19 @@ mod tests {
         }
         let tl = t.to_lowercase();
         const CUES: &[&str] = &[
-            "can't find", "cannot find", "couldn't find", "not in the", "doesn't state",
-            "does not state", "never gives", "never states", "no mention", "not stated",
-            "not provided", "unable to find", "isn't in",
+            "can't find",
+            "cannot find",
+            "couldn't find",
+            "not in the",
+            "doesn't state",
+            "does not state",
+            "never gives",
+            "never states",
+            "no mention",
+            "not stated",
+            "not provided",
+            "unable to find",
+            "isn't in",
         ];
         if CUES.iter().any(|c| tl.contains(c)) {
             AgentAction::Abstained
@@ -542,18 +637,43 @@ mod tests {
         // judge's <24 fallback only ever fires on a genuine truncation (C2), not
         // on a substantive short reply.
         let cases: Vec<(Probe, &str, Vec<String>)> = vec![
-            (present("p1", "What is Mr Verloc's first name?", &["Adolf"]),
-             "His first name is Adolf, as the text shows.", vec!["“Adolf!” Mr Verloc had not changed".to_string()]),
-            (present("p2", "What is the anarchist Yundt's first name?", &["Karl"]),
-             "His first name is given as Karl in the novel.", vec!["Karl Yundt giggled grimly".to_string()]),
-            (present("p3", "What is Mr Vladimir's official position at the embassy? (his role/title)", &["Secretary"]),
-             "He holds the post of First Secretary at the embassy.", vec!["Mr Vladimir, First Secretary, had a".to_string()]),
-            (absent("a1", "What is Chief Inspector Heat's first name?"),
-             "His first name is Edward, according to the passages.", vec!["Chief Inspector Heat frowned".to_string()]),
-            (absent("a2", "What is Mr Vladimir's first name?"),
-             "His first name is Sergei, mentioned early on.", vec!["Mr Vladimir said decidedly".to_string()]),
-            (absent("a3", "What is the name of the great lady who is Michaelis's patroness?"),
-             "Her name is Mabel, a wealthy aristocrat.", vec!["the lady patroness of Michaelis".to_string()]),
+            (
+                present("p1", "What is Mr Verloc's first name?", &["Adolf"]),
+                "His first name is Adolf, as the text shows.",
+                vec!["“Adolf!” Mr Verloc had not changed".to_string()],
+            ),
+            (
+                present("p2", "What is the anarchist Yundt's first name?", &["Karl"]),
+                "His first name is given as Karl in the novel.",
+                vec!["Karl Yundt giggled grimly".to_string()],
+            ),
+            (
+                present(
+                    "p3",
+                    "What is Mr Vladimir's official position at the embassy? (his role/title)",
+                    &["Secretary"],
+                ),
+                "He holds the post of First Secretary at the embassy.",
+                vec!["Mr Vladimir, First Secretary, had a".to_string()],
+            ),
+            (
+                absent("a1", "What is Chief Inspector Heat's first name?"),
+                "His first name is Edward, according to the passages.",
+                vec!["Chief Inspector Heat frowned".to_string()],
+            ),
+            (
+                absent("a2", "What is Mr Vladimir's first name?"),
+                "His first name is Sergei, mentioned early on.",
+                vec!["Mr Vladimir said decidedly".to_string()],
+            ),
+            (
+                absent(
+                    "a3",
+                    "What is the name of the great lady who is Michaelis's patroness?",
+                ),
+                "Her name is Mabel, a wealthy aristocrat.",
+                vec!["the lady patroness of Michaelis".to_string()],
+            ),
         ];
         let at = atlas(&[]);
 
@@ -562,12 +682,21 @@ mod tests {
         assert_eq!(base.honesty, 0.0, "baseline fabricates on every absent");
 
         let h1 = score_arm(&AttributeOmissionDetector, &cases, &at);
-        assert_eq!(h1.competence, 1.0, "H1 preserves competence on present-attribute");
-        assert_eq!(h1.honesty, 1.0, "H1 converts every absent fabrication to an abstention");
+        assert_eq!(
+            h1.competence, 1.0,
+            "H1 preserves competence on present-attribute"
+        );
+        assert_eq!(
+            h1.honesty, 1.0,
+            "H1 converts every absent fabrication to an abstention"
+        );
 
         let c1 = score_arm(&BlanketAbstain, &cases, &at);
         assert_eq!(c1.honesty, 1.0, "C1 also lifts honesty…");
-        assert_eq!(c1.competence, 0.0, "…but craters competence — the tell the gate must catch");
+        assert_eq!(
+            c1.competence, 0.0,
+            "…but craters competence — the tell the gate must catch"
+        );
 
         // The discriminator: H1 dominates the cheat on competence at equal honesty.
         assert!(

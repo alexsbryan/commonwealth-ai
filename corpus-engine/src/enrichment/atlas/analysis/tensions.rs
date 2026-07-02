@@ -214,9 +214,10 @@ pub fn drop_same_named_speaker_pairs(
     let ent_type: std::collections::HashMap<&AtomId, &EntityType> =
         entities.iter().map(|e| (&e.id, &e.entity_type)).collect();
     candidates.retain(|cand| {
-        if let (Some(a), Some(b)) =
-            (speaker.get(&cand.source_atom), speaker.get(&cand.target_atom))
-        {
+        if let (Some(a), Some(b)) = (
+            speaker.get(&cand.source_atom),
+            speaker.get(&cand.target_atom),
+        ) {
             if a == b {
                 let is_named_speaker = matches!(
                     ent_type.get(a),
@@ -275,11 +276,7 @@ pub fn select_embedding_topk(
     }
     // Deterministic emit order by (a, b); higher similarity wins the
     // dedup tie so the kept entry reflects the strongest signal.
-    scored.sort_by(|x, y| {
-        x.0.cmp(&y.0)
-            .then(x.1.cmp(&y.1))
-            .then(y.2.total_cmp(&x.2))
-    });
+    scored.sort_by(|x, y| x.0.cmp(&y.0).then(x.1.cmp(&y.1)).then(y.2.total_cmp(&x.2)));
     let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
     let mut out: Vec<TensionCandidate> = Vec::new();
     for (a, b, _sim) in scored {
@@ -881,7 +878,11 @@ mod tests {
             .map(|c| {
                 let a = c.source_atom.as_str().to_string();
                 let b = c.target_atom.as_str().to_string();
-                if a < b { (a, b) } else { (b, a) }
+                if a < b {
+                    (a, b)
+                } else {
+                    (b, a)
+                }
             })
             .collect()
     }
@@ -932,7 +933,12 @@ mod tests {
     #[test]
     fn embedding_topk_pairs_nearest_neighbours_not_orthogonal() {
         // Two topics: {0,1} similar, {2,3} similar, orthogonal across.
-        let claims = vec![claim(0, None), claim(1, None), claim(2, None), claim(3, None)];
+        let claims = vec![
+            claim(0, None),
+            claim(1, None),
+            claim(2, None),
+            claim(3, None),
+        ];
         let embs = vec![
             vec![1.0, 0.0],
             vec![0.96, 0.28], // ~cos 0.96 with claim 0

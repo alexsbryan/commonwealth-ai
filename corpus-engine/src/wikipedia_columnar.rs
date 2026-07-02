@@ -174,7 +174,9 @@ impl ColumnarWikipediaGraph {
             .collect::<Vec<_>>()
             .join(", ");
         let terms = lower_terms(axis_terms);
-        let mut rows = self.edge_rows(format!("source_title IN ({in_clause})")).await;
+        let mut rows = self
+            .edge_rows(format!("source_title IN ({in_clause})"))
+            .await;
         if !terms.is_empty() {
             rows.retain(|e| edge_matches_axis(e, &terms));
         }
@@ -186,12 +188,14 @@ impl ColumnarWikipediaGraph {
         }
         let mut by_target: HashMap<String, Acc> = HashMap::new();
         for e in rows {
-            let a = by_target.entry(e.target_title.clone()).or_insert_with(|| Acc {
-                rel: e.relationship_type.clone(),
-                occ: 0,
-                in_scope: false,
-                sources: HashSet::new(),
-            });
+            let a = by_target
+                .entry(e.target_title.clone())
+                .or_insert_with(|| Acc {
+                    rel: e.relationship_type.clone(),
+                    occ: 0,
+                    in_scope: false,
+                    sources: HashSet::new(),
+                });
             a.occ += e.occurrence_count;
             a.in_scope |= e.target_in_scope;
             if e.relationship_type < a.rel {
@@ -213,10 +217,10 @@ impl ColumnarWikipediaGraph {
             })
             .collect();
         out.sort_by(|x, y| {
-        y.occurrence_count
-            .cmp(&x.occurrence_count)
-            .then_with(|| x.title.cmp(&y.title))
-    });
+            y.occurrence_count
+                .cmp(&x.occurrence_count)
+                .then_with(|| x.title.cmp(&y.title))
+        });
         out.truncate(limit);
         out
     }
@@ -242,10 +246,10 @@ impl ColumnarWikipediaGraph {
             })
             .collect();
         out.sort_by(|x, y| {
-        y.occurrence_count
-            .cmp(&x.occurrence_count)
-            .then_with(|| x.title.cmp(&y.title))
-    });
+            y.occurrence_count
+                .cmp(&x.occurrence_count)
+                .then_with(|| x.title.cmp(&y.title))
+        });
         out.truncate(limit);
         out
     }
@@ -271,7 +275,11 @@ impl ColumnarWikipediaGraph {
             return false;
         };
         b.column_by_name("is_contested")
-            .and_then(|c| c.as_any().downcast_ref::<BooleanArray>().map(|a| a.value(0)))
+            .and_then(|c| {
+                c.as_any()
+                    .downcast_ref::<BooleanArray>()
+                    .map(|a| a.value(0))
+            })
             .unwrap_or(false)
     }
 
@@ -280,16 +288,22 @@ impl ColumnarWikipediaGraph {
     pub async fn record(&self, title: &str) -> Option<ArticleRecord> {
         let b = self.article_row(title).await?;
         let s = |n: &str| {
-            b.column_by_name(n)
-                .and_then(|c| c.as_any().downcast_ref::<StringArray>().map(|a| a.value(0).to_string()))
+            b.column_by_name(n).and_then(|c| {
+                c.as_any()
+                    .downcast_ref::<StringArray>()
+                    .map(|a| a.value(0).to_string())
+            })
         };
         let i = |n: &str| {
             b.column_by_name(n)
                 .and_then(|c| c.as_any().downcast_ref::<Int64Array>().map(|a| a.value(0)))
         };
         let bo = |n: &str| {
-            b.column_by_name(n)
-                .and_then(|c| c.as_any().downcast_ref::<BooleanArray>().map(|a| a.value(0)))
+            b.column_by_name(n).and_then(|c| {
+                c.as_any()
+                    .downcast_ref::<BooleanArray>()
+                    .map(|a| a.value(0))
+            })
         };
         Some(ArticleRecord {
             title: s("title")?,
@@ -368,9 +382,9 @@ fn edge_matches_axis(e: &EdgeLite, terms: &[String]) -> bool {
     let t = e.target_title.to_lowercase();
     let l = e.link_text.to_lowercase();
     let s = e.source_section_path.to_lowercase();
-    terms
-        .iter()
-        .any(|term| t.contains(term.as_str()) || l.contains(term.as_str()) || s.contains(term.as_str()))
+    terms.iter().any(|term| {
+        t.contains(term.as_str()) || l.contains(term.as_str()) || s.contains(term.as_str())
+    })
 }
 
 /// Group edges by (target_title, relationship_type), SUM occurrence, OR
@@ -483,7 +497,12 @@ mod tests {
         // A,B,D in scope; C contested + in scope. Links:
         //   A→B (topical/Intro), A→C (contested/Criticism), A→D (topical/See also)
         //   B→C (topical/Body)  — so C is co-cited by A and B.
-        let articles = vec![art("A", false), art("B", false), art("C", true), art("D", false)];
+        let articles = vec![
+            art("A", false),
+            art("B", false),
+            art("C", true),
+            art("D", false),
+        ];
         let edges = vec![
             edge("A", "B", "topical", "Intro", 2),
             edge("A", "C", "contested", "Criticism", 1),

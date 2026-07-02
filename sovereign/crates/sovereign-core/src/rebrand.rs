@@ -299,8 +299,14 @@ mod tests {
     fn append_suffix_builds_sqlite_sidecars() {
         let db = PathBuf::from("/x/svrnmesh.db");
         assert_eq!(append_suffix(&db, ""), PathBuf::from("/x/svrnmesh.db"));
-        assert_eq!(append_suffix(&db, "-wal"), PathBuf::from("/x/svrnmesh.db-wal"));
-        assert_eq!(append_suffix(&db, "-shm"), PathBuf::from("/x/svrnmesh.db-shm"));
+        assert_eq!(
+            append_suffix(&db, "-wal"),
+            PathBuf::from("/x/svrnmesh.db-wal")
+        );
+        assert_eq!(
+            append_suffix(&db, "-shm"),
+            PathBuf::from("/x/svrnmesh.db-shm")
+        );
     }
 
     #[test]

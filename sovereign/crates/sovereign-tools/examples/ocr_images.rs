@@ -26,8 +26,8 @@ fn main() {
         eprintln!("usage: ocr_images <image.jpg> [<image.jpg> ...]");
         std::process::exit(2);
     }
-    let model_id =
-        std::env::var("SOVEREIGN_PADDLE_OCR_MODEL").unwrap_or_else(|_| DEFAULT_MODEL_ID.to_string());
+    let model_id = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL")
+        .unwrap_or_else(|_| DEFAULT_MODEL_ID.to_string());
     let engine = match PaddleEngine::with_config(&model_id, PaddleConfig::default()) {
         Ok(e) => e,
         Err(e) => {
@@ -35,7 +35,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    eprintln!("paddle engine loaded ({model_id}); OCR'ing {} image(s)", paths.len());
+    eprintln!(
+        "paddle engine loaded ({model_id}); OCR'ing {} image(s)",
+        paths.len()
+    );
     for p in &paths {
         let img = match image::open(p) {
             Ok(i) => i,

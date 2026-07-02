@@ -40,7 +40,6 @@ mod drift_cmd;
 mod git_archaeology_cmd;
 mod init;
 mod llm_bin;
-mod sibling;
 mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;
@@ -50,6 +49,7 @@ mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
 mod rough_edges_cmd;
 mod serve_cmd;
+mod sibling;
 mod status_cmd;
 mod stop_cmd;
 mod util;
@@ -259,9 +259,7 @@ const HELP: Help = Help {
             ("--help, -h", "Show this message"),
             ("--version, -V", "Print the version and exit"),
         ]),
-        HelpSection::Notes(
-            "Run `svrn <subcommand> --help` for detail on any specific subcommand.",
-        ),
+        HelpSection::Notes("Run `svrn <subcommand> --help` for detail on any specific subcommand."),
     ],
 };
 
@@ -274,10 +272,29 @@ const HELP: Help = Help {
 /// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
 /// by the `public_help_advertises_no_dev_verb` test.
 const DEV_VERBS: &[&str] = &[
-    "code", "project", "atos", "tools", "status", "charter", "design", "plan",
-    "amend", "refresh", "milestone", "drift", "audit", "serve", "init", "notes",
-    "reflect", "rough-edges", "git-archaeology", "archaeology-eval", "agent-bench",
-    "claim", "nudge",
+    "code",
+    "project",
+    "atos",
+    "tools",
+    "status",
+    "charter",
+    "design",
+    "plan",
+    "amend",
+    "refresh",
+    "milestone",
+    "drift",
+    "audit",
+    "serve",
+    "init",
+    "notes",
+    "reflect",
+    "rough-edges",
+    "git-archaeology",
+    "archaeology-eval",
+    "agent-bench",
+    "claim",
+    "nudge",
 ];
 
 /// Every top-level verb the dispatcher routes — the complete surface
@@ -349,10 +366,22 @@ const ALL_VERBS: &[&str] = &[
 /// only under `--features dev-tools`. Help text is data (ARCH_PRINCIPLES §6).
 #[cfg(feature = "dev-tools")]
 const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
-    ("project", "Per-project code intelligence (init / serve / status / refresh)"),
-    ("code", "Code intelligence tooling (index / watch / mcp-status)"),
-    ("tools", "Invoke code-intelligence tools (list / describe / call)"),
-    ("atos", "Agent task orchestration (charter → plan → milestones)"),
+    (
+        "project",
+        "Per-project code intelligence (init / serve / status / refresh)",
+    ),
+    (
+        "code",
+        "Code intelligence tooling (index / watch / mcp-status)",
+    ),
+    (
+        "tools",
+        "Invoke code-intelligence tools (list / describe / call)",
+    ),
+    (
+        "atos",
+        "Agent task orchestration (charter → plan → milestones)",
+    ),
     ("status", "Project / ATOS status report"),
     ("charter", "Create or amend a project charter"),
     ("design", "Capture a design session"),
@@ -368,7 +397,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("reflect", "Review session reflections; retire fixed ones"),
     ("rough-edges", "Surface rough edges from git history"),
     ("git-archaeology", "Mine commit history for provenance"),
-    ("archaeology-eval", "Evaluate atom provenance vs git history"),
+    (
+        "archaeology-eval",
+        "Evaluate atom provenance vs git history",
+    ),
     ("agent-bench", "Eight-problem agent-coding battery"),
     ("claim", "Work-atlas scope claims (mesh coordination)"),
     ("nudge", "Dismiss audit nudges"),
@@ -963,6 +995,10 @@ mod tests {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted.len(), ALL_VERBS.len(), "ALL_VERBS has duplicates");
-        assert_eq!(sorted.as_slice(), ALL_VERBS, "ALL_VERBS must be kept sorted");
+        assert_eq!(
+            sorted.as_slice(),
+            ALL_VERBS,
+            "ALL_VERBS must be kept sorted"
+        );
     }
 }

@@ -120,7 +120,11 @@ async fn fetch_weights(
 /// Spawn the background refresh loop. No-op forever if `commonwealth_url` is
 /// `None` (mesh integration disabled) — the table stays empty and every
 /// origin is neutral, which is the correct degraded behaviour.
-pub fn spawn_refresh(commonwealth_url: Option<String>, reciprocity_k: f64, table: Arc<ReciprocityTable>) {
+pub fn spawn_refresh(
+    commonwealth_url: Option<String>,
+    reciprocity_k: f64,
+    table: Arc<ReciprocityTable>,
+) {
     let Some(base) = commonwealth_url else {
         tracing::info!("reciprocity: no commonwealth url — weights stay neutral");
         return;
@@ -179,7 +183,10 @@ mod tests {
     #[test]
     fn k_zero_disables_reciprocity() {
         let views = vec![view("aa", 100.0)];
-        assert!(compute_weights(&views, 0.0).is_empty(), "k=0 → everyone neutral");
+        assert!(
+            compute_weights(&views, 0.0).is_empty(),
+            "k=0 → everyone neutral"
+        );
     }
 
     #[test]
@@ -187,8 +194,16 @@ mod tests {
         let table = ReciprocityTable::new();
         table.install(HashMap::from([("aa".to_string(), 1.4)]));
         assert_eq!(table.weight_for(&UserKey::Node("aa".into())), 1.4);
-        assert_eq!(table.weight_for(&UserKey::Node("zz".into())), 1.0, "unknown node neutral");
-        assert_eq!(table.weight_for(&UserKey::Tenant("t".into())), 1.0, "tenant neutral");
+        assert_eq!(
+            table.weight_for(&UserKey::Node("zz".into())),
+            1.0,
+            "unknown node neutral"
+        );
+        assert_eq!(
+            table.weight_for(&UserKey::Tenant("t".into())),
+            1.0,
+            "tenant neutral"
+        );
     }
 
     #[test]

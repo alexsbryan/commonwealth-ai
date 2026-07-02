@@ -280,7 +280,8 @@ mod tests {
         assert!(!g.observe(260, 200, t0 + Duration::from_secs(60))); // above, within floor
         assert!(g.observe(260, 200, t0 + REWARN_EVERY)); // floor elapsed → re-warn
         assert!(!g.observe(150, 200, t0 + REWARN_EVERY)); // dropped below → reset
-        assert!(g.observe(300, 200, t0 + REWARN_EVERY + Duration::from_secs(1))); // re-cross → warn immediately
+        assert!(g.observe(300, 200, t0 + REWARN_EVERY + Duration::from_secs(1)));
+        // re-cross → warn immediately
     }
 
     #[test]

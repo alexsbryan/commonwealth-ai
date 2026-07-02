@@ -332,7 +332,10 @@ mod delete_tests {
         let roots = vec![root.path().to_path_buf()];
         let err = delete_model_blocking(&file, &[], &roots).unwrap_err();
         assert!(err.contains("outside"));
-        assert!(file.exists(), "a file outside the known roots must never be deleted");
+        assert!(
+            file.exists(),
+            "a file outside the known roots must never be deleted"
+        );
     }
 
     #[test]
@@ -431,10 +434,7 @@ fn model_scan_roots() -> Vec<PathBuf> {
 /// confirm. Returns a human-readable error (surfaced to the user) on any
 /// guard failure.
 #[tauri::command]
-pub async fn delete_model(
-    state: State<'_, Arc<AppState>>,
-    path: String,
-) -> Result<(), String> {
+pub async fn delete_model(state: State<'_, Arc<AppState>>, path: String) -> Result<(), String> {
     let target = PathBuf::from(path.trim());
     // Snapshot the assigned slot paths for the in-use guard (cheap clone).
     let assigned: Vec<PathBuf> = {

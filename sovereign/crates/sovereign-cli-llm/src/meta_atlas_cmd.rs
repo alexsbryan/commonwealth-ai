@@ -189,9 +189,11 @@ async fn cmd_align(args: &[String]) -> i32 {
     }
 
     // Detect a link graph for the right corpus (generic — not wiki-specific).
-    let right_has_link_graph =
-        corpus_engine::wikipedia_graph::WikipediaGraph::default_db_path(&indexes_dir, &right_corpus)
-            .exists();
+    let right_has_link_graph = corpus_engine::wikipedia_graph::WikipediaGraph::default_db_path(
+        &indexes_dir,
+        &right_corpus,
+    )
+    .exists();
 
     eprintln!(
         "bridge align: {} driver topics ({} slugs without an atlas) · right={} (link_graph={}) · k={} · model={} · {}",
@@ -211,8 +213,11 @@ async fn cmd_align(args: &[String]) -> i32 {
     );
 
     // EmbedFn — one client consumed into closures.
-    let embed = match DaemonInferenceClient::new(base.clone(), model.clone(), "qwen3-embedding-0.6b")
-    {
+    let embed = match DaemonInferenceClient::new(
+        base.clone(),
+        model.clone(),
+        "qwen3-embedding-0.6b",
+    ) {
         Ok(c) => {
             let (embed, _chat) = c.into_closures();
             embed
@@ -224,14 +229,14 @@ async fn cmd_align(args: &[String]) -> i32 {
     };
 
     // AdjudicateFn — a second client kept for grammar-constrained complete().
-    let adj_client = match DaemonInferenceClient::new(base.clone(), model.clone(), "qwen3-embedding-0.6b")
-    {
-        Ok(c) => Arc::new(c.with_max_output_tokens(256)),
-        Err(e) => {
-            eprintln!("error: daemon client (adjudicate): {e}");
-            return 1;
-        }
-    };
+    let adj_client =
+        match DaemonInferenceClient::new(base.clone(), model.clone(), "qwen3-embedding-0.6b") {
+            Ok(c) => Arc::new(c.with_max_output_tokens(256)),
+            Err(e) => {
+                eprintln!("error: daemon client (adjudicate): {e}");
+                return 1;
+            }
+        };
     let adjudicate: bridge::AdjudicateFn =
         Arc::new(move |req| adjudicate_call(adj_client.clone(), req));
 

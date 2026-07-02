@@ -50,13 +50,22 @@ pub struct Verdict {
 
 impl Verdict {
     fn corrob(r: impl Into<String>) -> Self {
-        Verdict { kind: VerdictKind::Corroborated, receipt: r.into() }
+        Verdict {
+            kind: VerdictKind::Corroborated,
+            receipt: r.into(),
+        }
     }
     fn drift(r: impl Into<String>) -> Self {
-        Verdict { kind: VerdictKind::Drift, receipt: r.into() }
+        Verdict {
+            kind: VerdictKind::Drift,
+            receipt: r.into(),
+        }
     }
     fn unver(r: impl Into<String>) -> Self {
-        Verdict { kind: VerdictKind::Unverifiable, receipt: r.into() }
+        Verdict {
+            kind: VerdictKind::Unverifiable,
+            receipt: r.into(),
+        }
     }
 }
 
@@ -98,7 +107,10 @@ pub fn check_exists(facts: &Facts, target: &str, present: bool) -> Verdict {
         if present {
             Verdict::corrob(format!("{target} defined at {}:{}", d.file, d.line))
         } else {
-            Verdict::drift(format!("{target} exists at {}:{}, claim asserts absence", d.file, d.line))
+            Verdict::drift(format!(
+                "{target} exists at {}:{}, claim asserts absence",
+                d.file, d.line
+            ))
         }
     } else {
         Verdict::unver(format!("{target} not defined"))
@@ -114,7 +126,10 @@ pub fn check_literal(facts: &Facts, literal: &str, present: bool) -> Verdict {
         if present {
             Verdict::corrob(format!("literal \"{literal}\" at {}:{}", s.file, s.line))
         } else {
-            Verdict::drift(format!("literal \"{literal}\" present at {}:{}, claim asserts absence", s.file, s.line))
+            Verdict::drift(format!(
+                "literal \"{literal}\" present at {}:{}, claim asserts absence",
+                s.file, s.line
+            ))
         }
     } else {
         Verdict::unver(format!("literal \"{literal}\" not found"))
@@ -168,7 +183,12 @@ pub fn neighborhood_stems(adj: &Adjacency, entries: &[String], depth: usize) -> 
 }
 
 // ── CONFIG ─ the data-flow drift check; all/none/mixed with the safety invariant ──
-pub fn check_config(facts: &Facts, scope_stems: &HashSet<String>, field: &str, present: bool) -> Verdict {
+pub fn check_config(
+    facts: &Facts,
+    scope_stems: &HashSet<String>,
+    field: &str,
+    present: bool,
+) -> Verdict {
     let hits: Vec<_> = facts
         .ctor_fields
         .iter()
@@ -193,7 +213,12 @@ pub fn check_config(facts: &Facts, scope_stems: &HashSet<String>, field: &str, p
             Verdict::corrob(format!("{field} set present at {}:{}", c.file, c.line))
         } else if has_none && !has_some {
             // cited contradiction: claim asserts present, all scoped sites set it absent
-            Verdict::drift(format!("{field}=None at all {} scoped site(s), e.g. {}:{}", hits.len(), c.file, c.line))
+            Verdict::drift(format!(
+                "{field}=None at all {} scoped site(s), e.g. {}:{}",
+                hits.len(),
+                c.file,
+                c.line
+            ))
         } else {
             Verdict::unver(format!("{field} mixed in scope — impure, abstain"))
         }
@@ -227,7 +252,11 @@ pub fn reaches(adj: &Adjacency, entries: &[String], target: &str, depth: usize) 
 
 /// Restrict subject resolution to capability ENTRIES (name, vector) — the front-doors, not all
 /// 31k — so the claim's predicate can't drift to leaf tool definitions. Returns the top entry.
-pub async fn resolve_entry(entries: &[(String, Vec<f32>)], embed: &EmbedFn, text: &str) -> Option<String> {
+pub async fn resolve_entry(
+    entries: &[(String, Vec<f32>)],
+    embed: &EmbedFn,
+    text: &str,
+) -> Option<String> {
     let q = embed(text).await.ok()?;
     entries
         .iter()
@@ -270,7 +299,9 @@ pub async fn check_claim(
                 (Some(a), Some(e)) => (a, e),
                 _ => return Verdict::unver("CALLS needs the call graph + embedder"),
             };
-            let entry = resolve_entry(entries, embed, claim).await.unwrap_or_default();
+            let entry = resolve_entry(entries, embed, claim)
+                .await
+                .unwrap_or_default();
             if !entry.is_empty() && reaches(adj, &[entry], &tag.target, 2) {
                 Verdict::corrob(format!("scope reaches {}", tag.target))
             } else {

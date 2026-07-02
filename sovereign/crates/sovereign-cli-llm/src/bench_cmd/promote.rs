@@ -36,7 +36,9 @@ use super::baselines::{baseline_dir, write_dated_and_update_latest_at};
 use super::gate::chaos_lane_baseline;
 use super::lane_baseline::{render_and_exit_code, LaneBaseline};
 use super::live_runner::{classify_abstain, classify_caveat, run_live};
-use super::scaffolding_param::{decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam};
+use super::scaffolding_param::{
+    decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam,
+};
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -104,7 +106,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     macro_rules! val {
         ($l:expr) => {{
             i += 1;
-            rest.get(i).cloned().ok_or_else(|| format!("{} requires a value", $l))?
+            rest.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{} requires a value", $l))?
         }};
     }
     while i < rest.len() {
@@ -117,7 +121,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--n" => n = val!("--n").parse().map_err(|_| "--n must be a usize")?,
             "--seed" => seed = val!("--seed").parse().map_err(|_| "--seed must be a u64")?,
             "--bench-root" => bench_root = PathBuf::from(val!("--bench-root")),
-            "--candidate-config" => candidate_config = Some(PathBuf::from(val!("--candidate-config"))),
+            "--candidate-config" => {
+                candidate_config = Some(PathBuf::from(val!("--candidate-config")))
+            }
             "--judge-model" => judge_model = val!("--judge-model"),
             "--base-url" => base_url = val!("--base-url"),
             "--apply" => apply = true,
@@ -168,7 +174,9 @@ async fn run(args_in: &[String]) -> i32 {
     };
 
     let candidate_config = args.candidate_config.clone().unwrap_or_else(|| {
-        args.bench_root.join("flywheel/candidate").join(format!("{}-rerank.toml", args.corpus))
+        args.bench_root
+            .join("flywheel/candidate")
+            .join(format!("{}-rerank.toml", args.corpus))
     });
     let current = match RerankSettings::load(&candidate_config) {
         Ok(s) => s,
@@ -226,9 +234,16 @@ async fn run(args_in: &[String]) -> i32 {
 
     // ── Live session + judge ──
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &args.judge_model, PROVIDER_CTX));
-    let model_id = globals.chat_model.clone().unwrap_or_else(|| "primary".to_string());
+    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &args.judge_model,
+        PROVIDER_CTX,
+    ));
+    let model_id = globals
+        .chat_model
+        .clone()
+        .unwrap_or_else(|| "primary".to_string());
 
     // ── Seed-only mode: capture the current-settings Dev baseline + exit ──
     if args.update_baseline {
@@ -239,7 +254,11 @@ async fn run(args_in: &[String]) -> i32 {
         let dir = baseline_dir(&args.bench_root, "flywheel", &args.corpus);
         match write_dated_and_update_latest_at(&dir, &arm) {
             Ok(p) => {
-                eprintln!("[promote] captured Dev baseline ({} metrics) → {}", arm.metrics.len(), p.display());
+                eprintln!(
+                    "[promote] captured Dev baseline ({} metrics) → {}",
+                    arm.metrics.len(),
+                    p.display()
+                );
                 return 0;
             }
             Err(e) => {
@@ -267,11 +286,15 @@ async fn run(args_in: &[String]) -> i32 {
 
     match decision {
         PromoteDecision::Reject => {
-            eprintln!("[promote] REJECTED — a red line regressed past tolerance. Settings unchanged.");
+            eprintln!(
+                "[promote] REJECTED — a red line regressed past tolerance. Settings unchanged."
+            );
             return 1;
         }
         PromoteDecision::NoChange => {
-            eprintln!("[promote] NO CHANGE — movement within tolerance (noise). Settings unchanged.");
+            eprintln!(
+                "[promote] NO CHANGE — movement within tolerance (noise). Settings unchanged."
+            );
             return 0;
         }
         PromoteDecision::Accept => {}
@@ -283,8 +306,12 @@ async fn run(args_in: &[String]) -> i32 {
         if test.is_empty() {
             eprintln!("[promote] WARNING: Test split empty — cannot confirm; treating as Dev-only accept.");
         } else {
-            let reason = args.reason.clone().unwrap_or_else(|| "(no reason given)".to_string());
-            let peek_path = baseline_dir(&args.bench_root, "flywheel", &args.corpus).join("peek_budget.json");
+            let reason = args
+                .reason
+                .clone()
+                .unwrap_or_else(|| "(no reason given)".to_string());
+            let peek_path =
+                baseline_dir(&args.bench_root, "flywheel", &args.corpus).join("peek_budget.json");
             let mut budget = match PeekBudget::load(&peek_path) {
                 Ok(b) => b,
                 Err(e) => {
@@ -299,14 +326,16 @@ async fn run(args_in: &[String]) -> i32 {
             }
             eprintln!("[promote] [unseal] burned Test peek #{n} → {peek_path:?}");
 
-            let base_test = match run_arm(&globals, &current, &args, &judge, &model_id, &test).await {
+            let base_test = match run_arm(&globals, &current, &args, &judge, &model_id, &test).await
+            {
                 Ok(b) => b,
                 Err(code) => return code,
             };
-            let cand_test = match run_arm(&globals, &candidate, &args, &judge, &model_id, &test).await {
-                Ok(b) => b,
-                Err(code) => return code,
-            };
+            let cand_test =
+                match run_arm(&globals, &candidate, &args, &judge, &model_id, &test).await {
+                    Ok(b) => b,
+                    Err(code) => return code,
+                };
             let (test_decision, td) = decide(&base_test, &cand_test);
             render_and_exit_code(&td, &format!("flywheel:promote:test:{}", args.param.id()));
             if test_decision == PromoteDecision::Reject {
@@ -368,7 +397,16 @@ async fn run_arm(
     let verifier = DeterministicVerifier;
     let mut rows = Vec::with_capacity(probes.len());
     for probe in probes {
-        let v = run_and_verify(&session, judge.as_ref(), &args.judge_model, &args.corpus, model_id, &verifier, probe).await;
+        let v = run_and_verify(
+            &session,
+            judge.as_ref(),
+            &args.judge_model,
+            &args.corpus,
+            model_id,
+            &verifier,
+            probe,
+        )
+        .await;
         rows.push(v.row);
     }
     let report: CalibrationReport = score(&rows);
@@ -406,12 +444,22 @@ async fn run_and_verify(
             }
         }
     };
-    let caveat_present = if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
-        Some(classify_caveat(judge, judge_model, &visible).await.unwrap_or(false))
-    } else {
-        None
+    let caveat_present =
+        if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
+            Some(
+                classify_caveat(judge, judge_model, &visible)
+                    .await
+                    .unwrap_or(false),
+            )
+        } else {
+            None
+        };
+    let obs = Observation {
+        action,
+        answer: &visible,
+        chunks: &chunks,
+        caveat_present,
     };
-    let obs = Observation { action, answer: &visible, chunks: &chunks, caveat_present };
     verifier.verify(probe, &obs, model_id, corpus)
 }
 
@@ -484,11 +532,22 @@ mod tests {
         Probe {
             id: id.into(),
             query: "q".into(),
-            qtype: if answerable { QuestionType::Present } else { QuestionType::AbsentAdjacent },
-            oracle: if answerable {
-                Oracle::Witness { gold_keywords: vec!["x".into()], supporting_quote: None, distractor_quote: None }
+            qtype: if answerable {
+                QuestionType::Present
             } else {
-                Oracle::Absent { held_out_witness: None, kind: AbsentKind::Adjacent }
+                QuestionType::AbsentAdjacent
+            },
+            oracle: if answerable {
+                Oracle::Witness {
+                    gold_keywords: vec!["x".into()],
+                    supporting_quote: None,
+                    distractor_quote: None,
+                }
+            } else {
+                Oracle::Absent {
+                    held_out_witness: None,
+                    kind: AbsentKind::Adjacent,
+                }
             },
             source: ProbeSource::I1Corpus,
             note: String::new(),
@@ -498,8 +557,14 @@ mod tests {
     #[test]
     fn dev_underpowered_guards_small_splits() {
         assert!(dev_underpowered(7, 6).is_none(), "well-powered Dev passes");
-        assert!(dev_underpowered(3, 6).is_some(), "too few answerable → refuse (1/3 clears competence tol)");
-        assert!(dev_underpowered(7, 3).is_some(), "too few absent → refuse (1/3 clears honesty tol)");
+        assert!(
+            dev_underpowered(3, 6).is_some(),
+            "too few answerable → refuse (1/3 clears competence tol)"
+        );
+        assert!(
+            dev_underpowered(7, 3).is_some(),
+            "too few absent → refuse (1/3 clears honesty tol)"
+        );
         // Both axes empty: the per-axis guard doesn't trip (caller handles
         // dev.is_empty(); an empty axis surfaces as NaN-as-regression downstream).
         assert!(dev_underpowered(0, 0).is_none());
@@ -507,7 +572,9 @@ mod tests {
 
     #[test]
     fn pool_split_is_deterministic_and_disjoint() {
-        let probes: Vec<Probe> = (0..6).map(|i| probe(&format!("p{i}"), i % 2 == 0)).collect();
+        let probes: Vec<Probe> = (0..6)
+            .map(|i| probe(&format!("p{i}"), i % 2 == 0))
+            .collect();
         let dev = pool_split(&probes, false);
         let test = pool_split(&probes, true);
         assert_eq!(dev.len() + test.len(), probes.len());

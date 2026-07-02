@@ -120,16 +120,16 @@ pub fn cmd_gate(args: &[String]) -> i32 {
 
     // Build the current run's headline metrics from the lane's own artifact.
     let built = match lane {
-        "chaos-monkey" | "chaos" => chaos_summary(&report).map(|b| ("chaos_monkey", "secret_agent", b)),
+        "chaos-monkey" | "chaos" => {
+            chaos_summary(&report).map(|b| ("chaos_monkey", "secret_agent", b))
+        }
         "mechanism-fidelity" | "mechanism" | "mf" => {
             mechanism_summary(&report).map(|b| ("mechanism_fidelity", "dev", b))
         }
         "multiturn" | "threads" | "multi-turn" => {
             multiturn_summary(&report).map(|b| ("wikipedia_learn", "threads", b))
         }
-        "search-gym" | "search" => {
-            search_gym_summary(&report).map(|b| ("search-gym", "ci", b))
-        }
+        "search-gym" | "search" => search_gym_summary(&report).map(|b| ("search-gym", "ci", b)),
         "knowledge-gym" | "knowledge" => {
             knowledge_gym_summary(&report).map(|b| ("knowledge-gym", "ci", b))
         }
@@ -177,7 +177,10 @@ pub fn cmd_gate(args: &[String]) -> i32 {
                     path.display()
                 );
                 for (k, m) in &current.metrics {
-                    eprintln!("       {k} = {:.4} ({:?}, tol {:.4})", m.value, m.direction, m.tolerance);
+                    eprintln!(
+                        "       {k} = {:.4} ({:?}, tol {:.4})",
+                        m.value, m.direction, m.tolerance
+                    );
                 }
                 0
             }
@@ -221,7 +224,9 @@ pub fn cmd_gate(args: &[String]) -> i32 {
         let d = diff(prev.as_ref(), &current);
         let code = render_and_exit_code(&d, lane);
         if code == 0 && strict_stale {
-            eprintln!("[gate] FAIL: baseline over age threshold and SOVEREIGN_BASELINE_AGE_STRICT=1");
+            eprintln!(
+                "[gate] FAIL: baseline over age threshold and SOVEREIGN_BASELINE_AGE_STRICT=1"
+            );
             return 1;
         }
         code
@@ -231,15 +236,16 @@ pub fn cmd_gate(args: &[String]) -> i32 {
 // ── Artifact readers ────────────────────────────────────────────────────────
 
 fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut rows = Vec::new();
     for (n, line) in text.lines().enumerate() {
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
-        let row: T = serde_json::from_str(line)
-            .map_err(|e| format!("{}:{}: {e}", path.display(), n + 1))?;
+        let row: T =
+            serde_json::from_str(line).map_err(|e| format!("{}:{}: {e}", path.display(), n + 1))?;
         rows.push(row);
     }
     if rows.is_empty() {
@@ -294,8 +300,7 @@ fn chaos_summary(report: &Path) -> Result<LaneBaseline, String> {
 /// generous (≈ one planted/decoy item of slack over the ~10-tension, ~7-decoy
 /// test fixture) — the gate fires on a genuine collapse, not noise.
 fn governance_summary(report: &Path) -> Result<LaneBaseline, String> {
-    let bytes =
-        std::fs::read(report).map_err(|e| format!("reading {}: {e}", report.display()))?;
+    let bytes = std::fs::read(report).map_err(|e| format!("reading {}: {e}", report.display()))?;
     let rep: sovereign_eval::governance_bench::DetectorReport =
         serde_json::from_slice(&bytes).map_err(|e| format!("parsing {}: {e}", report.display()))?;
     Ok(governance_lane_baseline(&rep, None, None, now_rfc3339()))
@@ -320,9 +325,15 @@ pub(crate) fn governance_lane_baseline(
         rep.planted_missed.len(),
         rep.n_detected_pairs,
     ));
-    b.with("precision", LaneMetric::higher_is_better(rep.overall.precision, 0.15))
-        .with("recall", LaneMetric::higher_is_better(rep.overall.recall, 0.15))
-        .with("f1", LaneMetric::higher_is_better(rep.overall.f1, 0.12))
+    b.with(
+        "precision",
+        LaneMetric::higher_is_better(rep.overall.precision, 0.15),
+    )
+    .with(
+        "recall",
+        LaneMetric::higher_is_better(rep.overall.recall, 0.15),
+    )
+    .with("f1", LaneMetric::higher_is_better(rep.overall.f1, 0.12))
 }
 
 /// governance (FR-9 Lane B): re-score the QA chaos JSONL with the same
@@ -391,9 +402,15 @@ pub(crate) fn chaos_lane_baseline(
         rep.counts.absent_hallucinated,
     ));
     let mut b = b
-        .with("competence", LaneMetric::higher_is_better(rep.competence, 0.15))
+        .with(
+            "competence",
+            LaneMetric::higher_is_better(rep.competence, 0.15),
+        )
         .with("honesty", LaneMetric::higher_is_better(rep.honesty, 0.18))
-        .with("hallucination_rate", LaneMetric::lower_is_better(rep.hallucination_rate, 0.18));
+        .with(
+            "hallucination_rate",
+            LaneMetric::lower_is_better(rep.hallucination_rate, 0.18),
+        );
     // chaos v2 — only present once the bank ships distractor / provenance_trap
     // questions (otherwise the scorer returns NaN for an empty population). The
     // `.is_finite()` guard keeps this additive: zero effect on the flywheel's
@@ -489,11 +506,17 @@ fn mechanism_summary(report: &Path) -> Result<LaneBaseline, String> {
     Ok(b
         // The witness: must stay near zero. Tight tolerance — this is
         // deterministic (one forced-choice forward pass), not a sampled mean.
-        .with("control_p1_delta", LaneMetric::near_zero(mean(&control_p1), 0.05))
+        .with(
+            "control_p1_delta",
+            LaneMetric::near_zero(mean(&control_p1), 0.05),
+        )
         // Informational: a faithful model's P1 collapse is strongly negative;
         // a *rise* toward zero means worse fidelity. Generous tolerance so the
         // non-gating signal doesn't flake the build.
-        .with("p1_collapse_delta", LaneMetric::lower_is_better(mean(&p1_collapse), 0.15)))
+        .with(
+            "p1_collapse_delta",
+            LaneMetric::lower_is_better(mean(&p1_collapse), 0.15),
+        ))
 }
 
 /// multiturn degradation: aggregate the per-thread degradation curve. The worst
@@ -517,7 +540,11 @@ fn multiturn_summary(report: &Path) -> Result<LaneBaseline, String> {
         .iter()
         .map(|t| t.degradation.first_failure_turn.unwrap_or(t.turns.len()) as f64)
         .fold(f64::INFINITY, f64::min);
-    let slopes: Vec<f64> = run.threads.iter().map(|t| t.degradation.fact_recall_slope).collect();
+    let slopes: Vec<f64> = run
+        .threads
+        .iter()
+        .map(|t| t.degradation.fact_recall_slope)
+        .collect();
     let coverages: Vec<f64> = run
         .threads
         .iter()
@@ -535,10 +562,19 @@ fn multiturn_summary(report: &Path) -> Result<LaneBaseline, String> {
         run.threads.len(),
     ));
     b = b
-        .with("min_first_failure_turn", LaneMetric::higher_is_better(min_fft, 0.5))
-        .with("mean_fact_recall_slope", LaneMetric::higher_is_better(mean(&slopes), 0.05));
+        .with(
+            "min_first_failure_turn",
+            LaneMetric::higher_is_better(min_fft, 0.5),
+        )
+        .with(
+            "mean_fact_recall_slope",
+            LaneMetric::higher_is_better(mean(&slopes), 0.05),
+        );
     if !coverages.is_empty() {
-        b = b.with("mean_judge_coverage", LaneMetric::higher_is_better(mean(&coverages), 0.10));
+        b = b.with(
+            "mean_judge_coverage",
+            LaneMetric::higher_is_better(mean(&coverages), 0.10),
+        );
     }
     Ok(b)
 }
@@ -551,13 +587,17 @@ fn multiturn_summary(report: &Path) -> Result<LaneBaseline, String> {
 // schema churn. Rates are normalised to 0..1 (some gyms emit a 0..100 percent).
 
 fn read_json_value(report: &Path) -> Result<serde_json::Value, String> {
-    let text = std::fs::read_to_string(report).map_err(|e| format!("read {}: {e}", report.display()))?;
+    let text =
+        std::fs::read_to_string(report).map_err(|e| format!("read {}: {e}", report.display()))?;
     // The gyms print their JSON to stdout, possibly after a human-readable
     // preamble and/or with a trailing summary line. Skip to the first `{`/`[`
     // and read exactly one JSON value (StreamDeserializer ignores trailing
     // bytes), so a `… > out.json` capture that isn't pristine JSON still parses.
-    let start = text.find(['{', '[']).ok_or_else(|| format!("{}: no JSON found", report.display()))?;
-    let mut stream = serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
+    let start = text
+        .find(['{', '['])
+        .ok_or_else(|| format!("{}: no JSON found", report.display()))?;
+    let mut stream =
+        serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
     match stream.next() {
         Some(Ok(v)) => Ok(v),
         Some(Err(e)) => Err(format!("parse {}: {e}", report.display())),
@@ -602,9 +642,12 @@ fn search_gym_summary(report: &Path) -> Result<LaneBaseline, String> {
 /// ~0.11/flip), so a small-n flip stays under the gate; a regression needs ≥2.
 fn knowledge_gym_summary(report: &Path) -> Result<LaneBaseline, String> {
     let v = read_json_value(report)?;
-    let rate = get_f64(&v, "pass_rate")
-        .map(norm_rate)
-        .ok_or_else(|| format!("{}: no `pass_rate` in knowledge-gym report", report.display()))?;
+    let rate = get_f64(&v, "pass_rate").map(norm_rate).ok_or_else(|| {
+        format!(
+            "{}: no `pass_rate` in knowledge-gym report",
+            report.display()
+        )
+    })?;
     let mut b = LaneBaseline::new("knowledge-gym", now_rfc3339());
     if let (Some(p), Some(r)) = (get_f64(&v, "total_passes"), get_f64(&v, "total_replays")) {
         b.note = Some(format!("{p:.0}/{r:.0} replays passed"));
@@ -619,8 +662,12 @@ fn knowledge_gym_summary(report: &Path) -> Result<LaneBaseline, String> {
 /// (e.g. a problem that used to complete now hitting a token/loop exit).
 fn agent_coding_summary(report: &Path) -> Result<LaneBaseline, String> {
     let v = read_json_value(report)?;
-    let grand = get_f64(&v, "grand_total")
-        .ok_or_else(|| format!("{}: no `grand_total` in agent-bench report", report.display()))?;
+    let grand = get_f64(&v, "grand_total").ok_or_else(|| {
+        format!(
+            "{}: no `grand_total` in agent-bench report",
+            report.display()
+        )
+    })?;
     let max = get_f64(&v, "max_total").filter(|m| *m > 0.0).unwrap_or(1.0);
     let frac = grand / max;
     let mut b = LaneBaseline::new("agent-coding", now_rfc3339());

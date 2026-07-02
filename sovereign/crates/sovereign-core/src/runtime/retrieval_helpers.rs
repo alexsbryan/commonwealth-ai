@@ -752,10 +752,19 @@ mod query_relevance_tests {
         let query = vec![0.0_f32, 1.0, 0.0];
         let blended = blend_query_aware(&anchor, &query, 0.5);
         let norm = blended.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-5, "result must be unit length; got {norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-5,
+            "result must be unit length; got {norm}"
+        );
         // Equal weight → symmetric mix that carries BOTH directions.
-        assert!((blended[0] - blended[1]).abs() < 1e-5, "0.5 blend must be symmetric");
-        assert!(blended[0] > 0.0 && blended[1] > 0.0, "must carry anchor AND query");
+        assert!(
+            (blended[0] - blended[1]).abs() < 1e-5,
+            "0.5 blend must be symmetric"
+        );
+        assert!(
+            blended[0] > 0.0 && blended[1] > 0.0,
+            "must carry anchor AND query"
+        );
     }
 
     #[test]

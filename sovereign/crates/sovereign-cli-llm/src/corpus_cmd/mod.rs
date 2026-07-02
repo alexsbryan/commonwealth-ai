@@ -84,7 +84,6 @@ pub async fn run_corpus(args: &[String]) -> i32 {
     }
 }
 
-
 const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn corpus",
     summary: "Manage knowledge corpora shared across the mesh (install / remove / inspect).",

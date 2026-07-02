@@ -36,7 +36,9 @@ use commonwealth_core::knowledge::CorpusShardInfo;
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN};
-use commonwealth_transport::{IpTransport, PeerContact, PeerTransport, RoutedTransport, TrafficClass};
+use commonwealth_transport::{
+    IpTransport, PeerContact, PeerTransport, RoutedTransport, TrafficClass,
+};
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 
@@ -61,9 +63,7 @@ async fn bind_empty_endpoint(seed: u8) -> commonwealth_transport::iroh::Endpoint
         .expect("iroh endpoint bind")
 }
 
-fn dialable_sockets(
-    endpoint: &commonwealth_transport::iroh::Endpoint,
-) -> Vec<SocketAddr> {
+fn dialable_sockets(endpoint: &commonwealth_transport::iroh::Endpoint) -> Vec<SocketAddr> {
     endpoint
         .bound_sockets()
         .into_iter()
@@ -319,16 +319,19 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
          over iroh. body: {body}"
     );
     assert!(
-        results.iter().all(|r| r["corpus_id"].as_str() == Some("sep")),
+        results
+            .iter()
+            .all(|r| r["corpus_id"].as_str() == Some("sep")),
         "every result must come from 'sep': {body}"
     );
 
     // The founder actually served it (real round-trip, not an echo):
     // its live state is unchanged but the chunk content came back.
     assert!(
-        results
-            .iter()
-            .any(|r| r["content"].as_str().unwrap_or_default().contains("Compatibilism")),
+        results.iter().any(|r| r["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Compatibilism")),
         "A's chunk content must survive the tunnel round-trip: {body}"
     );
     let _ = &state_a; // keep A alive to end of test
@@ -404,9 +407,7 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
         relay_url: None,
         iroh_direct_addrs: a_sockets,
     };
-    let endpoints = iroh_t
-        .endpoints(&contact, TrafficClass::ControlPlane)
-        .await;
+    let endpoints = iroh_t.endpoints(&contact, TrafficClass::ControlPlane).await;
     assert_eq!(
         endpoints.len(),
         1,
@@ -418,14 +419,9 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
     let tmp_b = tempfile::tempdir().unwrap();
     let dest = tmp_b.path().join("indexes");
     std::fs::create_dir_all(&dest).unwrap();
-    let report = pull_canonical_from_peer(
-        &[base],
-        corpus_id,
-        &dest,
-        Some(fingerprint.as_str()),
-    )
-    .await
-    .expect("canonical pull over iroh must succeed");
+    let report = pull_canonical_from_peer(&[base], corpus_id, &dest, Some(fingerprint.as_str()))
+        .await
+        .expect("canonical pull over iroh must succeed");
 
     assert_eq!(report.corpus_id, corpus_id);
     assert!(

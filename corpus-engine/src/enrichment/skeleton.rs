@@ -398,15 +398,27 @@ mod tests {
         let skeleton = test_skeleton();
         let out = skeleton.render_landscape("Field guide — sep", 400);
         // Caller-supplied heading.
-        assert!(out.starts_with("Field guide — sep:"), "missing heading in:\n{out}");
+        assert!(
+            out.starts_with("Field guide — sep:"),
+            "missing heading in:\n{out}"
+        );
         // Settled concerns (the free-will question has a `majority` position).
-        assert!(out.contains("Settled concerns:"), "missing settled section:\n{out}");
+        assert!(
+            out.contains("Settled concerns:"),
+            "missing settled section:\n{out}"
+        );
         assert!(out.contains("Is free will compatible with determinism?"));
         // Live tensions (the fault-line crux).
-        assert!(out.contains("Live tensions:"), "missing tensions section:\n{out}");
+        assert!(
+            out.contains("Live tensions:"),
+            "missing tensions section:\n{out}"
+        );
         assert!(out.contains("Whether alternative possibilities are required"));
         // Open questions.
-        assert!(out.contains("Open questions:"), "missing open section:\n{out}");
+        assert!(
+            out.contains("Open questions:"),
+            "missing open section:\n{out}"
+        );
         assert!(out.contains("What explains manipulation arguments?"));
     }
 
@@ -415,7 +427,10 @@ mod tests {
         let skeleton = test_skeleton();
         // A tiny budget keeps the heading but truncates the bullet body.
         let tight = skeleton.render_landscape("Field guide — sep", 8);
-        assert!(estimate_digest_tokens(&tight) <= 8, "overshot budget:\n{tight}");
+        assert!(
+            estimate_digest_tokens(&tight) <= 8,
+            "overshot budget:\n{tight}"
+        );
     }
 
     #[test]

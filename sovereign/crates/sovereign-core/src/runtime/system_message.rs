@@ -175,9 +175,7 @@ impl Runtime {
         // common case; under sustained overshoot the render shrinks
         // proportionally (floor 120 chars/message) so assembly fits
         // by construction instead of leaning on the trim ladder.
-        let history_scale = self
-            .allocation_for(&context.conversation.id)
-            .history_scale;
+        let history_scale = self.allocation_for(&context.conversation.id).history_scale;
         if let Some(history) = format_conversation_history(
             &context.conversation.messages,
             CONV_HISTORY_TURNS,

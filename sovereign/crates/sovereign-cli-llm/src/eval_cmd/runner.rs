@@ -566,9 +566,9 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
 // ATLAS_STORAGE_V2 Phase B — the sync `atlas_navigate` was deleted; the
 // production ANN-seeding navigate is now the only path. Both `--atlas-seed`
 // modes drive this exact daemon code.
+use super::atlas_ann::SeedMode;
 pub use sovereign_core::atlas_context::atlas_navigate_ann;
 pub use sovereign_core::atlas_context::AtlasGraph;
-use super::atlas_ann::SeedMode;
 
 /// Filters applied during atlas-context loading. Used to keep the
 /// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
@@ -680,8 +680,7 @@ pub async fn load_atlas_context(
                 // the rest. (Was `description.is_empty() && salience == 0.0`,
                 // which discarded named-but-unscored entities — exactly the
                 // baked-in signal the v2 migration must not lose.)
-                let is_placeholder =
-                    e.canonical_name.trim().is_empty() && e.description.is_empty();
+                let is_placeholder = e.canonical_name.trim().is_empty() && e.description.is_empty();
                 if is_placeholder {
                     drop_placeholder += 1;
                     continue;
@@ -1946,10 +1945,7 @@ async fn run_question_synth(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
-            source: c
-                .get("source")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
+            source: c.get("source").and_then(|v| v.as_str()).map(str::to_string),
         })
         .collect();
 

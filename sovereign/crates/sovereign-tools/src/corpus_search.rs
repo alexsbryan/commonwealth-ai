@@ -85,7 +85,10 @@ impl Tool for CorpusSearchTool {
         // `single` → return the top hit as an object (resolution under for_each).
         let single = params
             .get("single")
-            .map(|v| v.as_bool().unwrap_or(matches!(v.as_str(), Some("true") | Some("1"))))
+            .map(|v| {
+                v.as_bool()
+                    .unwrap_or(matches!(v.as_str(), Some("true") | Some("1")))
+            })
             .unwrap_or(false);
         let exclude = parse_exclude(params);
         let embedding = parse_embedding(params)?;
@@ -210,7 +213,11 @@ fn parse_embedding(params: &serde_json::Value) -> Result<Vec<f32>> {
         Some(serde_json::Value::String(s)) => serde_json::from_str(s)
             .map_err(|e| Error::Execution(format!("corpus_search: parse `embedding`: {e}")))?,
         Some(other) => other.clone(),
-        None => return Err(Error::Execution("corpus_search: missing required `embedding`".into())),
+        None => {
+            return Err(Error::Execution(
+                "corpus_search: missing required `embedding`".into(),
+            ))
+        }
     };
     if let Ok(flat) = serde_json::from_value::<Vec<f64>>(raw.clone()) {
         if !flat.is_empty() {
@@ -284,7 +291,10 @@ mod tests {
             "index_dir": index_dir.to_string_lossy(),
             "build_indexes": false
         });
-        CorpusStoreTool.execute(&store_params, &ctx()).await.unwrap();
+        CorpusStoreTool
+            .execute(&store_params, &ctx())
+            .await
+            .unwrap();
 
         // Search by the "Stevie" vector — it must come back ranked first.
         let search_params = serde_json::json!({
@@ -305,7 +315,10 @@ mod tests {
         assert!(!arr.is_empty(), "search returned no hits");
         let top = &arr[0];
         assert!(
-            top.get("text").and_then(|v| v.as_str()).unwrap_or("").contains("Stevie"),
+            top.get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .contains("Stevie"),
             "the exact-match vector must rank first; got {arr:?}"
         );
         let score = top.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -336,7 +349,10 @@ mod tests {
         let err = CorpusSearchTool.execute(&params, &ctx()).await.unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("not found"), "{msg}");
-        assert!(msg.contains("notebook"), "should point at the build step: {msg}");
+        assert!(
+            msg.contains("notebook"),
+            "should point at the build step: {msg}"
+        );
     }
 
     /// `single` returns one object (for resolution under for_each); `exclude`
@@ -349,8 +365,16 @@ mod tests {
         // Three movies, each its own source_doc_id + a distinct 4-dim vector.
         // bravo sits close to alpha so it survives as the runner-up after exclude.
         let movies = [
-            ("alpha", "Alpha: a quiet space drama", [1.0f32, 0.0, 0.0, 0.0]),
-            ("bravo", "Bravo: another quiet space drama", [0.9, 0.1, 0.0, 0.0]),
+            (
+                "alpha",
+                "Alpha: a quiet space drama",
+                [1.0f32, 0.0, 0.0, 0.0],
+            ),
+            (
+                "bravo",
+                "Bravo: another quiet space drama",
+                [0.9, 0.1, 0.0, 0.0],
+            ),
             ("charlie", "Charlie: a loud heist", [0.0, 0.0, 1.0, 0.0]),
         ];
         for (id, text, vec) in movies.iter() {
@@ -411,7 +435,13 @@ mod tests {
             .iter()
             .filter_map(|h| h.get("source_doc_id").and_then(|v| v.as_str()))
             .collect();
-        assert!(!ids.contains(&"alpha"), "excluded doc must not appear: {ids:?}");
-        assert!(ids.contains(&"bravo"), "runner-up must survive the exclude: {ids:?}");
+        assert!(
+            !ids.contains(&"alpha"),
+            "excluded doc must not appear: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"bravo"),
+            "runner-up must survive the exclude: {ids:?}"
+        );
     }
 }

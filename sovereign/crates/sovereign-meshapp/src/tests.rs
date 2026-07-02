@@ -83,7 +83,10 @@ fn atlas_entities_map_with_type_aliases_and_reconciliation() {
     let el_paso = entities.iter().find(|e| e.id == "entity-aaa").unwrap();
     assert_eq!(el_paso.entity_type, "institution");
     assert_eq!(el_paso.aliases, vec!["El Paso Corp.", "PGET"]);
-    assert_eq!(el_paso.attributes.get("description").unwrap().as_str(), Some("Energy company."));
+    assert_eq!(
+        el_paso.attributes.get("description").unwrap().as_str(),
+        Some("Energy company.")
+    );
     let recon = el_paso.attributes.get("reconciliation").unwrap();
     assert_eq!(recon["surface_forms"].as_array().unwrap().len(), 2);
     assert_eq!(recon["signals_fired"][0], "name_similarity");
@@ -100,16 +103,29 @@ fn atlas_edges_resolve_sec_to_chunk_and_drop_dangling_participants() {
     let (_entities, rels, _findings) = load_atlas_as_investigation(tmp.path()).unwrap();
 
     assert_eq!(rels.len(), 2);
-    let rel = rels.iter().find(|r| r.relationship_type == "counterparty_of").unwrap();
-    let pair: HashSet<&str> = [rel.from_entity_id.as_str(), rel.to_entity_id.as_str()].into_iter().collect();
+    let rel = rels
+        .iter()
+        .find(|r| r.relationship_type == "counterparty_of")
+        .unwrap();
+    let pair: HashSet<&str> = [rel.from_entity_id.as_str(), rel.to_entity_id.as_str()]
+        .into_iter()
+        .collect();
     assert_eq!(pair, HashSet::from(["entity-aaa", "entity-bbb"]));
     assert_eq!(rel.evidence.chunk_id, "200"); // sec_00002 → first chunk id 200
     assert_eq!(rel.evidence.excerpt, "El Paso and Lay discussed terms");
 
-    let ev = rels.iter().find(|r| r.relationship_type == "unspecified").unwrap();
-    assert_eq!(ev.attributes.get("description").unwrap().as_str(), Some("Lay emailed El Paso"));
+    let ev = rels
+        .iter()
+        .find(|r| r.relationship_type == "unspecified")
+        .unwrap();
+    assert_eq!(
+        ev.attributes.get("description").unwrap().as_str(),
+        Some("Lay emailed El Paso")
+    );
     assert_eq!(ev.evidence.chunk_id, "100"); // sec_00001 → 100
-    let ev_pair: HashSet<&str> = [ev.from_entity_id.as_str(), ev.to_entity_id.as_str()].into_iter().collect();
+    let ev_pair: HashSet<&str> = [ev.from_entity_id.as_str(), ev.to_entity_id.as_str()]
+        .into_iter()
+        .collect();
     assert_eq!(ev_pair, HashSet::from(["entity-aaa", "entity-bbb"]));
 }
 
@@ -153,8 +169,13 @@ fn missing_sidecars_degrade_gracefully() {
 
     let (entities, rels, _f) = load_atlas_as_investigation(tmp.path()).unwrap();
     assert_eq!(entities.len(), 2);
-    assert!(entities.iter().all(|e| e.attributes.get("reconciliation").is_none()));
-    let rel = rels.iter().find(|r| r.relationship_type == "counterparty_of").unwrap();
+    assert!(entities
+        .iter()
+        .all(|e| e.attributes.get("reconciliation").is_none()));
+    let rel = rels
+        .iter()
+        .find(|r| r.relationship_type == "counterparty_of")
+        .unwrap();
     assert_eq!(rel.evidence.chunk_id, "sec_00002"); // falls back to the raw section id
     assert!(reconciliation(tmp.path()).is_empty());
 }
@@ -188,13 +209,25 @@ fn subgraph_keeps_top_nodes_and_induced_deduped_edges() {
         to_entity_id: to.into(),
         relationship_type: "rel".into(),
         attributes: serde_json::Map::new(),
-        evidence: InvEvidence { chunk_id: "1".into(), excerpt: String::new() },
+        evidence: InvEvidence {
+            chunk_id: "1".into(),
+            excerpt: String::new(),
+        },
         confidence: 1.0,
     };
     // A: A-B,A-C,A-B(dup)=3 · B: A-B,B-C,A-B=3 · C: A-C,B-C=2
     let g = Graph {
-        entities: vec![ent("A", "institution"), ent("B", "institution"), ent("C", "person")],
-        rels: vec![edge("A", "B"), edge("A", "C"), edge("B", "C"), edge("A", "B")],
+        entities: vec![
+            ent("A", "institution"),
+            ent("B", "institution"),
+            ent("C", "person"),
+        ],
+        rels: vec![
+            edge("A", "B"),
+            edge("A", "C"),
+            edge("B", "C"),
+            edge("A", "B"),
+        ],
         findings: Vec::new(),
     };
 
@@ -216,9 +249,18 @@ fn email_date_parsing_handles_rfc5322_and_us_long_form() {
     assert_eq!(month_num("November"), Some(11));
     assert_eq!(month_num("Thu"), None);
 
-    assert_eq!(year_month_from_rfc5322("Thu, 26 Jul 2001 09:34:00 -0700").as_deref(), Some("2001-07"));
-    assert_eq!(year_month_from_rfc5322(" Friday, November 09, 2001").as_deref(), Some("2001-11"));
-    assert_eq!(year_month_from_rfc5322("Mon, 30 Apr 2001").as_deref(), Some("2001-04"));
+    assert_eq!(
+        year_month_from_rfc5322("Thu, 26 Jul 2001 09:34:00 -0700").as_deref(),
+        Some("2001-07")
+    );
+    assert_eq!(
+        year_month_from_rfc5322(" Friday, November 09, 2001").as_deref(),
+        Some("2001-11")
+    );
+    assert_eq!(
+        year_month_from_rfc5322("Mon, 30 Apr 2001").as_deref(),
+        Some("2001-04")
+    );
     assert_eq!(year_month_from_rfc5322("no date here"), None);
 
     let email = "From: a@x.com\nTo: b@y.com\nDate: Thu, 26 Jul 2001 09:34:00 -0700\n\

@@ -85,7 +85,10 @@ mod tests {
         let p = structural_p_relocate(&c);
         assert!(close(p, 0.008), "P1 p={p} expected ≈0.008");
         let d = p - structural_p_relocate(&Case::base_example());
-        assert!(d < -0.9, "P1 structural delta {d} should be a large collapse");
+        assert!(
+            d < -0.9,
+            "P1 structural delta {d} should be a large collapse"
+        );
     }
 
     #[test]
@@ -96,7 +99,10 @@ mod tests {
         c.best_dest_rate += 0.02;
         let p = structural_p_relocate(&c);
         let base = structural_p_relocate(&Case::base_example());
-        assert!(close(p, base), "P2 p={p} should equal base {base} (saturation)");
+        assert!(
+            close(p, base),
+            "P2 p={p} should equal base {base} (saturation)"
+        );
     }
 
     #[test]

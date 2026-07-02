@@ -436,7 +436,10 @@ mod tests {
         // Valid escapes (\n, \", \\) survive the repair untouched.
         let repaired = repair_json_escapes(r#"{"a":"line\nbreak \"q\" end"}"#);
         let v: serde_json::Value = serde_json::from_str(&repaired).unwrap();
-        assert_eq!(v.get("a").unwrap().as_str().unwrap(), "line\nbreak \"q\" end");
+        assert_eq!(
+            v.get("a").unwrap().as_str().unwrap(),
+            "line\nbreak \"q\" end"
+        );
     }
 
     #[test]

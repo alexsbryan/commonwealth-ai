@@ -249,8 +249,8 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use sovereign_store::recipe_project_store::RecipeProjectStore;
     use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
 

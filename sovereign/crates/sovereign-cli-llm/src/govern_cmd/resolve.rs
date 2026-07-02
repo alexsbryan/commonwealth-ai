@@ -86,7 +86,10 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     }
     let Some(keep) = parsed.keep else {
         eprintln!("error: resolve needs `--keep <rule-id>` (which tensioned rule wins).");
-        eprintln!("  run `svrn govern tensions {}` to see the rule ids.", parsed.corpus_id);
+        eprintln!(
+            "  run `svrn govern tensions {}` to see the rule ids.",
+            parsed.corpus_id
+        );
         return 2;
     };
 
@@ -97,7 +100,11 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let Some(tension) = view.tensions.iter().find(|t| t.id.as_str() == parsed.tension_id) else {
+    let Some(tension) = view
+        .tensions
+        .iter()
+        .find(|t| t.id.as_str() == parsed.tension_id)
+    else {
         eprintln!(
             "error: no tension `{}` in `{}` — run `svrn govern tensions {}` to list them.",
             parsed.tension_id, parsed.corpus_id, parsed.corpus_id
@@ -108,9 +115,19 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     // `--keep` must name one of the two tensioned rules; the other is
     // the one we supersede.
     let (keep_id, old_id, keep_text, old_text) = if keep == tension.rule_a.as_str() {
-        (&tension.rule_a, &tension.rule_b, &tension.text_a, &tension.text_b)
+        (
+            &tension.rule_a,
+            &tension.rule_b,
+            &tension.text_a,
+            &tension.text_b,
+        )
     } else if keep == tension.rule_b.as_str() {
-        (&tension.rule_b, &tension.rule_a, &tension.text_b, &tension.text_a)
+        (
+            &tension.rule_b,
+            &tension.rule_a,
+            &tension.text_b,
+            &tension.text_a,
+        )
     } else {
         eprintln!(
             "error: --keep `{keep}` is not a rule in tension `{}` (its rules are {} and {}).",
@@ -153,7 +170,10 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
         return 1;
     }
 
-    println!("✓ resolved tension {} in {}:", parsed.tension_id, parsed.corpus_id);
+    println!(
+        "✓ resolved tension {} in {}:",
+        parsed.tension_id, parsed.corpus_id
+    );
     println!("  KEEP [{}]: {}", keep_id.as_str(), keep_text);
     println!(
         "  DROP [{}]: {} (superseded — now out of current law)",
@@ -163,6 +183,9 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
     if !parsed.rationale.is_empty() {
         println!("  rationale: {}", parsed.rationale);
     }
-    println!("  (re-run `svrn govern tensions {}` to confirm it cleared.)", parsed.corpus_id);
+    println!(
+        "  (re-run `svrn govern tensions {}` to confirm it cleared.)",
+        parsed.corpus_id
+    );
     0
 }

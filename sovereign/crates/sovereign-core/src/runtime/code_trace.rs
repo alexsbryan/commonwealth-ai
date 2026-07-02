@@ -186,7 +186,9 @@ pub async fn build_code_trace_block(chunks: &[ScoredChunk]) -> String {
             }
             // 2) Fallback: today's 1-hop caller/callee trace over scip_graph.db.
             let graph = scip.get_or_insert_with(|| open_scip_graph(&corpus_id));
-            let Some(graph) = graph.as_ref() else { continue };
+            let Some(graph) = graph.as_ref() else {
+                continue;
+            };
             match build_symbol_trace(graph, &hit.symbol, &hit.qualified_name).await {
                 Ok(trace) => {
                     blocks.push(render_trace(&trace));
@@ -357,8 +359,22 @@ mod tests {
         // Same symbol twice (two chunks for one symbol) collapses to one hit;
         // four distinct symbols cap at MAX_TRACED_SYMBOLS.
         let mut chunks = vec![
-            chunk("c", &[("source", "code_intel_summary"), ("symbol", "a"), ("qualified_name", "crate::a")]),
-            chunk("c", &[("source", "code_intel_summary"), ("symbol", "a"), ("qualified_name", "crate::a")]),
+            chunk(
+                "c",
+                &[
+                    ("source", "code_intel_summary"),
+                    ("symbol", "a"),
+                    ("qualified_name", "crate::a"),
+                ],
+            ),
+            chunk(
+                "c",
+                &[
+                    ("source", "code_intel_summary"),
+                    ("symbol", "a"),
+                    ("qualified_name", "crate::a"),
+                ],
+            ),
         ];
         for name in ["b", "d", "e", "f"] {
             chunks.push(chunk(
@@ -444,15 +460,28 @@ mod tests {
         // narration and `→` arrows (which only depth>0 nodes get).
         let result = chain(vec![
             node("semver::matches", 0, None, false),
-            node("semver::eval::matches_req", 1, Some("entity-semver::matches"), false),
-            node("semver::is_empty", 2, Some("entity-semver::eval::matches_req"), true),
+            node(
+                "semver::eval::matches_req",
+                1,
+                Some("entity-semver::matches"),
+                false,
+            ),
+            node(
+                "semver::is_empty",
+                2,
+                Some("entity-semver::eval::matches_req"),
+                true,
+            ),
         ]);
         let block = format_chain_block("matches", &result).expect("multi-hop chain → block");
         assert!(
             block.starts_with("Call-graph trace for `matches`:\n"),
             "must keep the handle the synthesis directive consumes, got:\n{block}"
         );
-        assert!(block.contains("Call chain —"), "carries the multi-hop brief header");
+        assert!(
+            block.contains("Call chain —"),
+            "carries the multi-hop brief header"
+        );
         assert!(block.contains('→'), "depth>0 arrow proves it is multi-hop");
         assert!(block.contains("semver::eval::matches_req"));
         assert!(block.contains("[dyn-dispatch]"), "trait boundary flagged");
@@ -465,7 +494,10 @@ mod tests {
         // caller falls back. This is the "no call edges → 1-hop" gate.
         let result = chain(vec![node("leaf", 0, None, false)]);
         assert!(format_chain_block("leaf", &result).is_none());
-        assert!(format_chain_block("leaf", &chain(vec![])).is_none(), "miss → None too");
+        assert!(
+            format_chain_block("leaf", &chain(vec![])).is_none(),
+            "miss → None too"
+        );
     }
 
     #[tokio::test]
@@ -505,7 +537,10 @@ mod tests {
             ],
         )];
         let block = build_code_trace_block(&chunks).await;
-        assert!(!block.is_empty(), "expected a code-trace block for {corpus}");
+        assert!(
+            !block.is_empty(),
+            "expected a code-trace block for {corpus}"
+        );
         assert!(
             block.contains("Call-graph trace for `matches`"),
             "expected the canonical handle, got:\n{block}"

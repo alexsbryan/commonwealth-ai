@@ -214,7 +214,11 @@ async fn prefix_cache_partial_keep_control_on_attention_model() {
             "{prefix}\nQuestion two: what animal sleeps?"
         )))
         .await;
-    assert!(first.is_ok(), "control first call failed: {:?}", first.err());
+    assert!(
+        first.is_ok(),
+        "control first call failed: {:?}",
+        first.err()
+    );
     assert!(
         second.is_ok(),
         "CONTROL BROKEN: partial keep failed on a pure-attention model — \
@@ -262,8 +266,9 @@ async fn fast_short_recurrent_batched_decode_hazard_still_reproduces() {
     // (n_rs_seq), so a single batched call may succeed while a full
     // n_seq_max=8 batch crashes. The incident workloads (Phase 1b
     // pipelines) were exactly such bursts.
-    let engine =
-        std::sync::Arc::new(EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?"));
+    let engine = std::sync::Arc::new(
+        EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?"),
+    );
     let mut joins = Vec::new();
     for i in 0..8 {
         let engine = std::sync::Arc::clone(&engine);
@@ -321,8 +326,9 @@ async fn fast_short_cleared_model_burst_canary() {
     };
     // NO force flag — the point is that the narrowed gate clears this
     // model on its own.
-    let engine =
-        std::sync::Arc::new(EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?"));
+    let engine = std::sync::Arc::new(
+        EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?"),
+    );
     let mut joins = Vec::new();
     for i in 0..8 {
         let engine = std::sync::Arc::clone(&engine);

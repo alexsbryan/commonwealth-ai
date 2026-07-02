@@ -173,12 +173,18 @@ impl Tool for ParcelAnalyticsTool {
 
         let agg = compute_aggregates(&parcels, &corpus_id, business_tax_target, property_tax_rate);
         let fs = flags(&parcels);
-        let high_land = fs.iter().filter(|f| f.kind == FlagKind::HighLandShare).count();
+        let high_land = fs
+            .iter()
+            .filter(|f| f.kind == FlagKind::HighLandShare)
+            .count();
         let underused = fs.iter().filter(|f| f.kind == FlagKind::Underused).count();
 
         // Representative atom id for the citation handle.
         let rep = agg.atom_ids.first().cloned().unwrap_or_default();
-        let cite = format!("[{corpus_id}: {} parcels; e.g. atom {rep}]", fmt_int(agg.parcel_count as f64));
+        let cite = format!(
+            "[{corpus_id}: {} parcels; e.g. atom {rep}]",
+            fmt_int(agg.parcel_count as f64)
+        );
 
         let cited_figures = vec![
             format!("land_value_total = {} {cite}", fmt_usd(agg.land_value_total)),

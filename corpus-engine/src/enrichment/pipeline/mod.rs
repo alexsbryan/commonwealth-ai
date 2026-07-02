@@ -46,19 +46,19 @@ pub mod types;
 pub mod validation;
 pub mod vector_clustering;
 
+pub use assemble::assemble_phase_output;
 pub use atlas::{
     ClaimScope, ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityStateSketch,
     EntityType, EpistemicStatus, EventSketch, EventType, QuestionSketch, QuestionType,
     RelationSketch, RelationStateSketch, RelationType, SectionExtraction, SeedEntities, SeedEntity,
     SeedOrigin, SeedStrategy, StateType,
 };
-pub use assemble::assemble_phase_output;
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
-pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};
+pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{

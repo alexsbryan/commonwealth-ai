@@ -37,7 +37,14 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 ///   app-side pooling + the mesh advertisement's embed-model info.
 pub(crate) fn load_provider(
     config: &SetupConfig,
-) -> Result<(Arc<dyn InferenceProvider>, Arc<EmbeddedLlamaCpp>, ModelFamily), ()> {
+) -> Result<
+    (
+        Arc<dyn InferenceProvider>,
+        Arc<EmbeddedLlamaCpp>,
+        ModelFamily,
+    ),
+    (),
+> {
     let resolved_embed_family = config
         .models
         .embed

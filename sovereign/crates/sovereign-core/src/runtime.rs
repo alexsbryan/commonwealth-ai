@@ -2,7 +2,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use crate::context::{build_context, format_history_as_prompt};
 use crate::error::Result;
 use crate::executor::{Executor, TaskContext};
@@ -105,12 +104,13 @@ pub(crate) use self::question_analysis::{
     cap_chunks_per_article, comparison_axis, extract_commitment_phrase,
     extract_comparison_entities, extract_question_entities, parse_metalingual_locator,
     project_retrieved_chunks, raptor_late_inject_enabled, reserve_atom_enum_chunks,
-    reserve_raptor_chunks, reserve_chunks_per_entity, MetalingualLocator,
+    reserve_chunks_per_entity, reserve_raptor_chunks, MetalingualLocator,
 };
 pub(crate) use self::retrieval_helpers::{
     apply_cross_corpus_discipline, atlas_grounding_enabled, blend_query_aware,
-    build_per_corpus_k_overrides, build_retrieval_query, collect_hot_corpora, cross_corpus_sort_cmp,
-    drop_no_overlap_chunks, inject_meta_atlas_hits, reweight_by_query_relevance,
+    build_per_corpus_k_overrides, build_retrieval_query, collect_hot_corpora,
+    cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
+    reweight_by_query_relevance,
 };
 pub use self::types::{
     ContradictionProv, HistoryEntryProv, HistorySummaryProv, MetaAtlasHitRecord,
@@ -536,10 +536,7 @@ impl Runtime {
     /// (the field is interior-mutable for exactly this). Idempotent;
     /// overwrites any prior index. A poisoned lock is recovered rather
     /// than panicking — a failed warm must never wedge retrieval.
-    pub fn install_meta_atlas(
-        &self,
-        index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
-    ) {
+    pub fn install_meta_atlas(&self, index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>) {
         match self.meta_atlas.write() {
             Ok(mut g) => *g = Some(index),
             Err(poisoned) => *poisoned.into_inner() = Some(index),
@@ -549,10 +546,7 @@ impl Runtime {
     /// Install the cross-corpus bridge index (typed topic-to-topic edges
     /// from `sovereign meta-atlas align`). Optional — `None` short-
     /// circuits [`Self::bridge_boost`] and retrieval is unchanged.
-    pub fn with_bridge(
-        mut self,
-        index: Arc<corpus_engine::meta_atlas::BridgeIndex>,
-    ) -> Self {
+    pub fn with_bridge(mut self, index: Arc<corpus_engine::meta_atlas::BridgeIndex>) -> Self {
         self.bridge = Some(index);
         self
     }
@@ -573,7 +567,10 @@ impl Runtime {
     /// when a graph DB is found alongside a corpus's LanceDB table;
     /// callers that don't wire one (e.g. tests, code-corpus chat)
     /// leave it `None` and retrieval behaves exactly as before.
-    pub fn with_wikipedia_graph(mut self, graph: Arc<dyn corpus_engine::WikipediaGraphApi>) -> Self {
+    pub fn with_wikipedia_graph(
+        mut self,
+        graph: Arc<dyn corpus_engine::WikipediaGraphApi>,
+    ) -> Self {
         self.wikipedia_graph = Some(graph);
         self
     }
@@ -798,7 +795,6 @@ impl Runtime {
         Ok(())
     }
 
-
     // Turn dispatch lives in sibling files (decomposed 2026-06-10,
     // same impl-Runtime-across-files pattern as handlers/):
     //   streaming.rs — handle_message_stream + resume/redirect entry points
@@ -912,8 +908,14 @@ mod enrichment_seam_invariant {
     fn read_enrichment_seams(rt: &Runtime) -> Vec<(&'static str, bool)> {
         vec![
             ("gliner", rt.gliner.is_some()),
-            ("meta_atlas", rt.meta_atlas.read().map(|g| g.is_some()).unwrap_or(false)),
-            ("atlas_context_provider", rt.atlas_context_provider.is_some()),
+            (
+                "meta_atlas",
+                rt.meta_atlas.read().map(|g| g.is_some()).unwrap_or(false),
+            ),
+            (
+                "atlas_context_provider",
+                rt.atlas_context_provider.is_some(),
+            ),
             ("wikipedia_graph", rt.wikipedia_graph.is_some()),
             ("conv_tiered_reader", rt.conv_tiered_reader.is_some()),
             ("landscape_digests", rt.landscape_digests.is_some()),

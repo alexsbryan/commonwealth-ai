@@ -357,8 +357,7 @@ pub(crate) async fn gate_answer(
     // Inconclusive (extraction error/unparseable) falls through to the legacy
     // ladder — fail-open, never a refusal from a hiccup. Does not consume the
     // draft, so the fall-through path is unchanged.
-    if config::citation_grounding_enabled()
-        && (entity_anchored || config::citation_broad_enabled())
+    if config::citation_grounding_enabled() && (entity_anchored || config::citation_broad_enabled())
     {
         if let citation::CitationOutcome::Grounded { answer, quote } =
             citation::citation_grounded_answer(&**inference, question, chunks).await
@@ -461,7 +460,9 @@ pub(crate) async fn gate_answer(
             dbg(&format!(
                 "  verify: vp={:.3} tau={tau} claim={:?}",
                 v.violation_prob,
-                v.claim.as_deref().map(|c| c.chars().take(70).collect::<String>())
+                v.claim
+                    .as_deref()
+                    .map(|c| c.chars().take(70).collect::<String>())
             ));
             if v.violation_prob >= tau {
                 if let Some(claim) = v.claim.clone() {
@@ -603,7 +604,9 @@ pub(crate) async fn gate_answer(
             action = "judge_failed_open";
         }
     }
-    dbg(&format!("verdict action={action} retried={retried} vp={final_vp:?} tau={tau}"));
+    dbg(&format!(
+        "verdict action={action} retried={retried} vp={final_vp:?} tau={tau}"
+    ));
     tracing::info!(
         target: "grounding_gate",
         action,
@@ -800,7 +803,9 @@ fn specifics_scan_enabled() -> bool {
 /// independently switchable.
 fn short_specifics_scan_enabled() -> bool {
     matches!(
-        std::env::var("SOVEREIGN_SHORT_SPECIFICS_SCAN").ok().as_deref(),
+        std::env::var("SOVEREIGN_SHORT_SPECIFICS_SCAN")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("on")
     )
 }
@@ -898,7 +903,10 @@ async fn short_specifics_guard(
     ));
     let mut retry_req = base_request.clone();
     let base_sys = retry_req.system_message.clone().unwrap_or_default();
-    retry_req.system_message = Some(format!("{base_sys}{}", retry_system_note(&joined, &corrective)));
+    retry_req.system_message = Some(format!(
+        "{base_sys}{}",
+        retry_system_note(&joined, &corrective)
+    ));
     retry_req.assistant_prefix = None;
     let second = match inference.complete(&retry_req).await {
         Ok(r) => r.text,
@@ -1115,7 +1123,10 @@ async fn gate_longform(
             }),
         };
     }
-    dbg(&format!("longform rewrite: {} failed of {n_claims}", failed.len()));
+    dbg(&format!(
+        "longform rewrite: {} failed of {n_claims}",
+        failed.len()
+    ));
     let mut rewrite_req = base_request.clone();
     let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
@@ -1160,8 +1171,7 @@ async fn gate_longform(
                     }),
                 },
                 Some((text2, n2, failed2)) => {
-                    let failed_claims: Vec<String> =
-                        failed2.into_iter().map(|f| f.claim).collect();
+                    let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
                     let note = verification_note(&failed_claims);
                     GateOutcome {
                         text: format!("{text2}{note}"),
@@ -1207,8 +1217,8 @@ mod tests {
     use super::*;
 
     use crate::error::{Error, Result};
-    use crate::types::{Depth, ProviderCapabilities};
     use crate::types::CompletionResponse;
+    use crate::types::{Depth, ProviderCapabilities};
     use futures::Stream;
     use std::pin::Pin;
 
@@ -1293,10 +1303,18 @@ mod tests {
         assert_eq!(claim_budget(2_399, 4), 4, "under 4*600 stays at floor");
         // The empirical fabrication distribution now scales meaningfully — at
         // the old 900/claim these got budget 4-9 (3630 got NO lift).
-        assert_eq!(claim_budget(3_630, 4), 6, "3630-char fabrication -> 6, not 4");
+        assert_eq!(
+            claim_budget(3_630, 4),
+            6,
+            "3630-char fabrication -> 6, not 4"
+        );
         assert_eq!(claim_budget(4_550, 4), 7, "4550-char fabrication -> 7");
         // Very long answers are capped so per-claim judge latency stays bounded.
-        assert_eq!(claim_budget(8_571, 4), 10, "8571-char essay -> capped at 10");
+        assert_eq!(
+            claim_budget(8_571, 4),
+            10,
+            "8571-char essay -> capped at 10"
+        );
         assert_eq!(claim_budget(usize::MAX, 4), 10);
         // The floor is the surface's min, not a hardcoded 4.
         assert_eq!(claim_budget(500, 1), 1);

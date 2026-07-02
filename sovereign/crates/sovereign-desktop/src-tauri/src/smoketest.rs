@@ -289,7 +289,10 @@ pub fn record_ok(model_path: &std::path::Path, n_gpu_layers: u32, n_ctx: u32) {
             std::fs::create_dir_all(dir)?;
         }
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(&file).map_err(std::io::Error::other)?)?;
+        std::fs::write(
+            &tmp,
+            serde_json::to_vec(&file).map_err(std::io::Error::other)?,
+        )?;
         std::fs::rename(&tmp, &path)
     };
     if let Err(e) = write() {

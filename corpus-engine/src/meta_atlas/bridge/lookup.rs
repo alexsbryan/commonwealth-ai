@@ -160,14 +160,18 @@ impl BridgeIndex {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::edges::{BridgeRelation, BridgeSignal, EdgeSource, TopicRef};
+    use super::*;
 
     fn file() -> BridgeEdgesFile {
         BridgeEdgesFile::new(
             vec![
                 BridgeEdge {
-                    left: TopicRef::new("sep-practical-wisdom", "practical-wisdom", "practical wisdom"),
+                    left: TopicRef::new(
+                        "sep-practical-wisdom",
+                        "practical-wisdom",
+                        "practical wisdom",
+                    ),
                     right: TopicRef::new("wikipedia", "1", "Nicomachean Ethics"),
                     relation: BridgeRelation::Related,
                     confidence: 0.85,
@@ -177,7 +181,11 @@ mod tests {
                     left_entity_keys: vec!["aristotle".into()],
                 },
                 BridgeEdge {
-                    left: TopicRef::new("sep-externalism", "externalism", "Externalism About the Mind"),
+                    left: TopicRef::new(
+                        "sep-externalism",
+                        "externalism",
+                        "Externalism About the Mind",
+                    ),
                     right: TopicRef::new("wikipedia", "2", "Semantic externalism"),
                     relation: BridgeRelation::Same,
                     confidence: 0.92,
@@ -199,7 +207,10 @@ mod tests {
         assert_eq!(idx.lookup("practical wisdom").len(), 1);
         // right-side title, case-insensitive
         assert_eq!(idx.lookup("nicomachean ethics").len(), 1);
-        assert_eq!(idx.lookup("Semantic Externalism")[0].relation, BridgeRelation::Same);
+        assert_eq!(
+            idx.lookup("Semantic Externalism")[0].relation,
+            BridgeRelation::Same
+        );
         assert!(idx.lookup("nonexistent").is_empty());
     }
 
@@ -237,12 +248,25 @@ mod tests {
         // had, where the extractor shredded the phrases).
         let file = BridgeEdgesFile::new(
             vec![
-                mk("18 U.S.C. § 1030", "Van Buren v. United States",
-                   vec!["section 1030", "computer fraud and abuse act", "exceeds authorized access"]),
-                mk("47 U.S.C. § 230", "Zeran v. America Online, Inc.",
-                   vec!["section 230", "communications decency act"]),
-                mk("17 U.S.C. § 107", "Campbell v. Acuff-Rose Music, Inc.",
-                   vec!["section 107", "fair use"]),
+                mk(
+                    "18 U.S.C. § 1030",
+                    "Van Buren v. United States",
+                    vec![
+                        "section 1030",
+                        "computer fraud and abuse act",
+                        "exceeds authorized access",
+                    ],
+                ),
+                mk(
+                    "47 U.S.C. § 230",
+                    "Zeran v. America Online, Inc.",
+                    vec!["section 230", "communications decency act"],
+                ),
+                mk(
+                    "17 U.S.C. § 107",
+                    "Campbell v. Acuff-Rose Music, Inc.",
+                    vec!["section 107", "fair use"],
+                ),
             ],
             vec![],
         );
@@ -257,7 +281,10 @@ mod tests {
         // other_side picks the candidate (right) for a left-side fragment.
         let dec = idx.lookup("decency");
         assert_eq!(dec.len(), 1);
-        assert_eq!(dec[0].other_side("decency").title, "Zeran v. America Online, Inc.");
+        assert_eq!(
+            dec[0].other_side("decency").title,
+            "Zeran v. America Online, Inc."
+        );
     }
 
     #[test]

@@ -1054,10 +1054,7 @@ pub trait StepExecutionStore: Send + Sync {
     /// key is content-derived (`task:tool:hash(params)`) so it matches
     /// across a replan that re-issues the same action under a new `step_id`,
     /// not merely a same-plan resume.
-    async fn find_execution(
-        &self,
-        _idempotency_key: &str,
-    ) -> Result<Option<StepExecution>> {
+    async fn find_execution(&self, _idempotency_key: &str) -> Result<Option<StepExecution>> {
         Ok(None)
     }
 }

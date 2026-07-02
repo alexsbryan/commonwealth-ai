@@ -293,8 +293,16 @@ mod tests {
         // "Wright-Patterson Air Force Base" (folds to "wright patterson") and
         // "Wright-Patterson AFB, Ohio" (now also folds, via state strip).
         let entities = vec![
-            inst("e-installation-wright-patterson", "Wright-Patterson Air Force Base", Some(2)),
-            inst("e-installation-wright-patterson-afb-ohio", "Wright-Patterson AFB, Ohio", Some(2)),
+            inst(
+                "e-installation-wright-patterson",
+                "Wright-Patterson Air Force Base",
+                Some(2),
+            ),
+            inst(
+                "e-installation-wright-patterson-afb-ohio",
+                "Wright-Patterson AFB, Ohio",
+                Some(2),
+            ),
             sighting("e-sighting-s1"),
             sighting("e-sighting-s2"),
             sighting("e-sighting-s3"),
@@ -302,19 +310,29 @@ mod tests {
         let rels = vec![
             near("r-0", "e-sighting-s1", "e-installation-wright-patterson"),
             near("r-1", "e-sighting-s2", "e-installation-wright-patterson"),
-            near("r-2", "e-sighting-s3", "e-installation-wright-patterson-afb-ohio"),
+            near(
+                "r-2",
+                "e-sighting-s3",
+                "e-installation-wright-patterson-afb-ohio",
+            ),
         ];
 
         let out = recoalesce_graph(&norm(), entities, rels, &threshold());
 
         // The two WP nodes merged into one (plus the 3 sightings = 4 total).
-        let installs: Vec<&Entity> =
-            out.entities.iter().filter(|e| e.entity_type == "installation").collect();
+        let installs: Vec<&Entity> = out
+            .entities
+            .iter()
+            .filter(|e| e.entity_type == "installation")
+            .collect();
         assert_eq!(installs.len(), 1, "WP variants must merge to one node");
         let wp = installs[0];
         assert_eq!(wp.id, "e-installation-wright-patterson");
         // Re-counted across the merged neighbourhood: 3 distinct sightings.
-        assert_eq!(wp.attributes.get("sighting_count").unwrap(), &serde_json::json!(3));
+        assert_eq!(
+            wp.attributes.get("sighting_count").unwrap(),
+            &serde_json::json!(3)
+        );
         // The other surface form is preserved as an alias.
         assert!(wp.aliases.iter().any(|a| a.contains("Ohio")));
         // One hotspot finding now fires at the merged count.
@@ -337,13 +355,24 @@ mod tests {
             }
         };
         let entities = vec![
-            mk("e-adjudication-1-may-1952", "1 MAY 1952", "Possibly Balloon"),
-            mk("e-adjudication-adjudication-1313", "Adjudication_1313", "Possibly Balloon"),
+            mk(
+                "e-adjudication-1-may-1952",
+                "1 MAY 1952",
+                "Possibly Balloon",
+            ),
+            mk(
+                "e-adjudication-adjudication-1313",
+                "Adjudication_1313",
+                "Possibly Balloon",
+            ),
             mk("e-adjudication-other", "7 JUNE 1955", "Aircraft"),
         ];
         let out = recoalesce_graph(&norm(), entities, vec![], &[]);
-        let adj: Vec<&Entity> =
-            out.entities.iter().filter(|e| e.entity_type == "adjudication").collect();
+        let adj: Vec<&Entity> = out
+            .entities
+            .iter()
+            .filter(|e| e.entity_type == "adjudication")
+            .collect();
         // Two distinct categories → two nodes (the two "Possibly Balloon" merged).
         assert_eq!(adj.len(), 2);
         let balloon = adj.iter().find(|e| e.id.contains("balloon")).unwrap();
@@ -355,16 +384,32 @@ mod tests {
     #[test]
     fn is_idempotent() {
         let entities = vec![
-            inst("e-installation-wright-patterson", "Wright-Patterson Air Force Base", Some(1)),
-            inst("e-installation-wright-patterson-afb-ohio", "Wright-Patterson AFB, Ohio", Some(1)),
+            inst(
+                "e-installation-wright-patterson",
+                "Wright-Patterson Air Force Base",
+                Some(1),
+            ),
+            inst(
+                "e-installation-wright-patterson-afb-ohio",
+                "Wright-Patterson AFB, Ohio",
+                Some(1),
+            ),
             sighting("e-sighting-s1"),
         ];
-        let rels = vec![near("r-0", "e-sighting-s1", "e-installation-wright-patterson-afb-ohio")];
+        let rels = vec![near(
+            "r-0",
+            "e-sighting-s1",
+            "e-installation-wright-patterson-afb-ohio",
+        )];
         let first = recoalesce_graph(&norm(), entities, rels, &threshold());
         let n1 = first.entities.len();
         let r1 = first.relationships.len();
         let second = recoalesce_graph(&norm(), first.entities, first.relationships, &threshold());
-        assert_eq!(second.entities.len(), n1, "re-fold must be a no-op the 2nd time");
+        assert_eq!(
+            second.entities.len(),
+            n1,
+            "re-fold must be a no-op the 2nd time"
+        );
         assert_eq!(second.relationships.len(), r1);
         assert_eq!(second.entities_before, second.entities_after);
     }
@@ -374,8 +419,16 @@ mod tests {
         // Two nodes that merge, with an edge between them → becomes a self-loop
         // and must be dropped.
         let entities = vec![
-            inst("e-installation-wright-patterson", "Wright-Patterson Air Force Base", None),
-            inst("e-installation-wright-patterson-afb-ohio", "Wright-Patterson AFB, Ohio", None),
+            inst(
+                "e-installation-wright-patterson",
+                "Wright-Patterson Air Force Base",
+                None,
+            ),
+            inst(
+                "e-installation-wright-patterson-afb-ohio",
+                "Wright-Patterson AFB, Ohio",
+                None,
+            ),
         ];
         let rels = vec![near(
             "r-0",
@@ -384,6 +437,10 @@ mod tests {
         )];
         let out = recoalesce_graph(&norm(), entities, rels, &[]);
         assert_eq!(out.entities.len(), 1);
-        assert_eq!(out.relationships.len(), 0, "merge-artifact self-loop dropped");
+        assert_eq!(
+            out.relationships.len(),
+            0,
+            "merge-artifact self-loop dropped"
+        );
     }
 }

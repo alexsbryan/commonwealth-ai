@@ -189,11 +189,9 @@ fn with_anomalies_channel(schema: &serde_json::Value) -> serde_json::Value {
             });
         }
     };
-    obj.entry("type").or_insert_with(|| serde_json::json!("object"));
-    match obj
-        .get_mut("properties")
-        .and_then(|p| p.as_object_mut())
-    {
+    obj.entry("type")
+        .or_insert_with(|| serde_json::json!("object"));
+    match obj.get_mut("properties").and_then(|p| p.as_object_mut()) {
         Some(props) => {
             props.entry("anomalies").or_insert_with(|| {
                 serde_json::json!({
@@ -612,8 +610,8 @@ impl Executor {
         synth_req.structured_output = Some(contract_schema);
         synth_req.max_tokens = Some(1024);
         let synth = self.inference.complete(&synth_req).await?;
-        let contract: serde_json::Value = serde_json::from_str(synth.text.trim())
-            .unwrap_or_else(|_| {
+        let contract: serde_json::Value =
+            serde_json::from_str(synth.text.trim()).unwrap_or_else(|_| {
                 serde_json::json!({
                     "anomalies": format!("worker output did not parse: {}", synth.text.trim())
                 })
@@ -1112,14 +1110,8 @@ impl Executor {
                 max_iterations,
             } => {
                 let resolved_goal = resolve_inputs(goal, &step.inputs, completed)?;
-                self.execute_delegate(
-                    &resolved_goal,
-                    tools,
-                    return_schema,
-                    *max_iterations,
-                    task,
-                )
-                .await
+                self.execute_delegate(&resolved_goal, tools, return_schema, *max_iterations, task)
+                    .await
             }
         }
     }

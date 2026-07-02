@@ -580,8 +580,10 @@ impl Runtime {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
         // in desktop + bench). Set SOVEREIGN_ATOM_ENUM_OVERVIEW=0 to disable.
-        let overview_on =
-            std::env::var("SOVEREIGN_ATOM_ENUM_OVERVIEW").ok().as_deref() != Some("0");
+        let overview_on = std::env::var("SOVEREIGN_ATOM_ENUM_OVERVIEW")
+            .ok()
+            .as_deref()
+            != Some("0");
         if !atom_enum_on && !overview_on {
             return None;
         }
@@ -2312,8 +2314,15 @@ impl Runtime {
                 c.score,
             ));
         }
-        tracing::info!(label, added, top_m, min_level, via_index, via_scan,
-            "raptor-grounding: collapsed-tree summaries injected");
+        tracing::info!(
+            label,
+            added,
+            top_m,
+            min_level,
+            via_index,
+            via_scan,
+            "raptor-grounding: collapsed-tree summaries injected"
+        );
     }
     /// Search every installed knowledge/catalog corpus with optional
     /// per-corpus K overrides (hot-corpora affinity pre-merge bias).
@@ -2678,8 +2687,10 @@ impl Runtime {
                 }
             });
         }
-        let per_corpus: Vec<Vec<corpus_engine::ScoredChunk>> =
-            futures::stream::iter(tasks).buffer_unordered(concurrency).collect().await;
+        let per_corpus: Vec<Vec<corpus_engine::ScoredChunk>> = futures::stream::iter(tasks)
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
         for scored in per_corpus {
             chunks.extend(scored);
         }
@@ -3015,7 +3026,12 @@ impl Runtime {
         const ANCHOR_WEIGHT: f32 = 0.5;
         let on = std::env::var("SOVEREIGN_META_BRIDGE")
             .ok()
-            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
+            .map(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "on" | "true" | "yes"
+                )
+            })
             .unwrap_or(false);
         if !on {
             return 0;
@@ -4837,7 +4853,10 @@ mod allow_list_tests {
         opted.dedup_by_source = true;
         let cfg = rerank_config_for_corpus(&base, &opted);
         assert!(cfg.enabled, "opted-in corpus enables the dedup path");
-        assert!(cfg.per_article, "opted-in corpus requests per-article dedup");
+        assert!(
+            cfg.per_article,
+            "opted-in corpus requests per-article dedup"
+        );
         assert!(
             cfg.dedup_corpus_filter.is_none(),
             "single-corpus search clears any operator filter so this corpus is eligible"
@@ -4928,7 +4947,13 @@ mod allow_list_tests {
             raptor_scored_chunk("c2".into(), "sep".into(), 0, "b".into(), 0.8),
             // `atlas:sep` is a virtual chunk over the `sep` corpus.
             raptor_scored_chunk("c3".into(), "atlas:sep".into(), 0, "c".into(), 0.7),
-            raptor_scored_chunk("c4".into(), "conversation-history".into(), 0, "d".into(), 0.6),
+            raptor_scored_chunk(
+                "c4".into(),
+                "conversation-history".into(),
+                0,
+                "d".into(),
+                0.6,
+            ),
         ];
         // No seal → nothing flagged.
         assert!(corpora_outside_seal(&chunks, None).is_empty());
@@ -4974,7 +4999,10 @@ mod allow_list_tests {
             "What is the value of FILES_COLUMN_WIDTH?",
             "Who led the negotiation?",
         ] {
-            assert!(!Runtime::looks_like_overview(q), "expected NOT overview: {q:?}");
+            assert!(
+                !Runtime::looks_like_overview(q),
+                "expected NOT overview: {q:?}"
+            );
         }
     }
 }

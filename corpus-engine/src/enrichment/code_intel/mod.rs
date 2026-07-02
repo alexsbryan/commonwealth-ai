@@ -254,9 +254,7 @@ fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
     if n.is_empty() || h.len() < n.len() {
         return None;
     }
-    (0..=h.len() - n.len()).find(|&i| {
-        (0..n.len()).all(|j| h[i + j].eq_ignore_ascii_case(&n[j]))
-    })
+    (0..=h.len() - n.len()).find(|&i| (0..n.len()).all(|j| h[i + j].eq_ignore_ascii_case(&n[j])))
 }
 
 /// Parse the model's `SUMMARY:` / `ASKS:` response into `(summary, asks)`.
@@ -286,7 +284,10 @@ fn clean(s: &str) -> String {
 
 /// Strip a leading list marker (`-`, `*`, bullet, `1.`, `2)`) and quotes.
 fn strip_marker(s: &str) -> &str {
-    let s = s.trim().trim_start_matches(['-', '*', '\u{2022}', '\u{00b7}']).trim();
+    let s = s
+        .trim()
+        .trim_start_matches(['-', '*', '\u{2022}', '\u{00b7}'])
+        .trim();
     let s = s
         .trim_start_matches(|c: char| c.is_ascii_digit())
         .trim_start_matches(['.', ')'])
@@ -386,8 +387,8 @@ pub async fn enrich_symbols_incremental(
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|&n| n >= 1)
         .unwrap_or(8);
-    let results: Vec<(usize, Option<SymbolEnrichment>)> = futures::stream::iter(
-        to_enrich.into_iter().map(|(i, src)| {
+    let results: Vec<(usize, Option<SymbolEnrichment>)> =
+        futures::stream::iter(to_enrich.into_iter().map(|(i, src)| {
             let chat = chat.clone();
             async move {
                 match enrich_symbol(&chat, src.meta.clone(), &src.body).await {
@@ -404,11 +405,10 @@ pub async fn enrich_symbols_incremental(
                     }
                 }
             }
-        }),
-    )
-    .buffer_unordered(conc)
-    .collect()
-    .await;
+        }))
+        .buffer_unordered(conc)
+        .collect()
+        .await;
 
     let mut regenerated = 0;
     let mut failed = 0;
@@ -585,8 +585,14 @@ mod tests {
         // whole reason this is a deny-list rather than an allow-list.
         assert!(is_enrichable_kind("function"));
         assert!(is_enrichable_kind("method"));
-        assert!(is_enrichable_kind("unknown"), "RA labels most Rust fns 'unknown'");
-        assert!(is_enrichable_kind("trait"), "RA labels some methods 'trait'");
+        assert!(
+            is_enrichable_kind("unknown"),
+            "RA labels most Rust fns 'unknown'"
+        );
+        assert!(
+            is_enrichable_kind("trait"),
+            "RA labels some methods 'trait'"
+        );
         // Reliably-labelled non-callables stay excluded.
         assert!(!is_enrichable_kind("struct"));
         assert!(!is_enrichable_kind("module"));
@@ -659,15 +665,18 @@ mod tests {
     #[tokio::test]
     async fn incremental_skips_unchanged_bodies() {
         let calls = Arc::new(AtomicUsize::new(0));
-        let chat = fake_chat(
-            "SUMMARY: does a thing.\nASKS: a? b?",
-            calls.clone(),
-        );
+        let chat = fake_chat("SUMMARY: does a thing.\nASKS: a? b?", calls.clone());
 
         // First pass: empty prior -> everything regenerates.
         let syms = vec![
-            SymbolSource { meta: meta("f"), body: "fn f() { 1 }".to_string() },
-            SymbolSource { meta: meta("g"), body: "fn g() { 2 }".to_string() },
+            SymbolSource {
+                meta: meta("f"),
+                body: "fn f() { 1 }".to_string(),
+            },
+            SymbolSource {
+                meta: meta("g"),
+                body: "fn g() { 2 }".to_string(),
+            },
         ];
         let prior = HashMap::new();
         let (set, rep) = enrich_symbols_incremental(&chat, syms.clone(), &prior).await;
@@ -682,13 +691,23 @@ mod tests {
         // Second pass: f unchanged (reused, no call), g body edited (one call).
         calls.store(0, Ordering::SeqCst);
         let syms2 = vec![
-            SymbolSource { meta: meta("f"), body: "fn f() { 1 }".to_string() },
-            SymbolSource { meta: meta("g"), body: "fn g() { 2 + 2 }".to_string() },
+            SymbolSource {
+                meta: meta("f"),
+                body: "fn f() { 1 }".to_string(),
+            },
+            SymbolSource {
+                meta: meta("g"),
+                body: "fn g() { 2 + 2 }".to_string(),
+            },
         ];
         let (_set2, rep2) = enrich_symbols_incremental(&chat, syms2, &cache).await;
         assert_eq!(rep2.reused, 1, "f reused");
         assert_eq!(rep2.regenerated, 1, "g re-summarized");
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "only the changed body cost a call");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "only the changed body cost a call"
+        );
     }
 
     #[tokio::test]
@@ -698,7 +717,10 @@ mod tests {
         let body = "fn original() { work() }";
         let (set, _) = enrich_symbols_incremental(
             &chat,
-            vec![SymbolSource { meta: meta("original"), body: body.to_string() }],
+            vec![SymbolSource {
+                meta: meta("original"),
+                body: body.to_string(),
+            }],
             &HashMap::new(),
         )
         .await;
@@ -709,13 +731,23 @@ mod tests {
         calls.store(0, Ordering::SeqCst);
         let (set2, rep) = enrich_symbols_incremental(
             &chat,
-            vec![SymbolSource { meta: meta("renamed"), body: body.to_string() }],
+            vec![SymbolSource {
+                meta: meta("renamed"),
+                body: body.to_string(),
+            }],
             &cache,
         )
         .await;
         assert_eq!(rep.reused, 1);
-        assert_eq!(calls.load(Ordering::SeqCst), 0, "rename with same body is free");
-        assert_eq!(set2[0].meta.name, "renamed", "meta refreshed to the new name");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "rename with same body is free"
+        );
+        assert_eq!(
+            set2[0].meta.name, "renamed",
+            "meta refreshed to the new name"
+        );
         assert_eq!(set2[0].summary, "a job.", "summary carried over");
     }
 
@@ -737,11 +769,25 @@ mod tests {
         let cs = diff_code_intel_caches(&prior, &refreshed);
         // f unchanged → absent; g body changed + h new → changed; x vanished → removed.
         // doc-anchor for meta(name) is the qualified_name `crate::<name>`.
-        assert!(cs.changed.contains("crate::g"), "g body changed: {:?}", cs.changed);
-        assert!(cs.changed.contains("crate::h"), "h is new: {:?}", cs.changed);
-        assert!(!cs.changed.contains("crate::f"), "f unchanged must not appear");
+        assert!(
+            cs.changed.contains("crate::g"),
+            "g body changed: {:?}",
+            cs.changed
+        );
+        assert!(
+            cs.changed.contains("crate::h"),
+            "h is new: {:?}",
+            cs.changed
+        );
+        assert!(
+            !cs.changed.contains("crate::f"),
+            "f unchanged must not appear"
+        );
         assert_eq!(cs.changed.len(), 2);
-        assert_eq!(cs.removed.iter().cloned().collect::<Vec<_>>(), vec!["crate::x"]);
+        assert_eq!(
+            cs.removed.iter().cloned().collect::<Vec<_>>(),
+            vec!["crate::x"]
+        );
     }
 
     #[test]

@@ -243,7 +243,9 @@ pub(super) async fn build_tool_registry(
 /// single in-memory graph. Same idea as `project_cmd::load_merged_graph`
 /// but without the operator-facing stdout printing, since the daemon
 /// runs under launchd/systemd.
-pub(super) async fn build_merged_scip_graph(indexes_dir: &std::path::Path) -> corpus_engine_scip::ScipGraph {
+pub(super) async fn build_merged_scip_graph(
+    indexes_dir: &std::path::Path,
+) -> corpus_engine_scip::ScipGraph {
     let merged =
         corpus_engine_scip::ScipGraph::open_in_memory("merged").expect("in-memory ScipGraph");
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {

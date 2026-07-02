@@ -24,9 +24,9 @@ use sovereign_tools::local_corpus::config::{
     LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig,
 };
 use sovereign_tools::local_corpus::manager::LocalCorpusManager;
+use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::events::noop_sink;
 use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
-use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;

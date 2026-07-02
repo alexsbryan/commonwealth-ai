@@ -214,7 +214,10 @@ async fn delegate_worker_drives_real_browser_and_firewalls_the_dom() {
         StepOutput::Json(v) => v.clone(),
         other => panic!("expected a JSON contract, got {other:?}"),
     };
-    assert_eq!(json["heading"], serde_json::json!("Sovereign Actuator Fixture"));
+    assert_eq!(
+        json["heading"],
+        serde_json::json!("Sovereign Actuator Fixture")
+    );
     assert!(json.get("anomalies").is_some());
 
     // ...and the raw accessibility snapshot never reached it. `[ref=` is a

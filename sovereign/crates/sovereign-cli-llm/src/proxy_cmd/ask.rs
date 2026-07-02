@@ -133,7 +133,11 @@ async fn render_sources(session: &crate::chat_cmd::bootstrap::ChatSession, conv_
         .await
         .ok()
         .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()))
-        .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
+        .and_then(|m| {
+            m.get("retrieved_chunks")
+                .and_then(|v| v.as_array())
+                .cloned()
+        })
         .unwrap_or_default();
     if chunk_refs.is_empty() {
         return;

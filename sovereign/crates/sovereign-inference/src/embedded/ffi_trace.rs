@@ -103,7 +103,10 @@ pub fn record(call: FfiCall) {
     if !ENABLED.load(Ordering::Relaxed) {
         return;
     }
-    TRANSCRIPT.lock().unwrap_or_else(|e| e.into_inner()).push(call);
+    TRANSCRIPT
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(call);
 }
 
 /// Start recording (model-smoke tier only).
@@ -235,7 +238,12 @@ mod tests {
 
     #[test]
     fn embed_pairing_accepts_disciplined_sequence() {
-        let t = [C::SetEmbeddings, C::EmbedDecode, C::SetEmbeddings, C::EmbedDecode];
+        let t = [
+            C::SetEmbeddings,
+            C::EmbedDecode,
+            C::SetEmbeddings,
+            C::EmbedDecode,
+        ];
         assert!(verify_embed_pairing(&t).is_ok());
     }
 

@@ -303,8 +303,12 @@ fn print_register_help() {
     eprintln!("  --manual                 Manual sync mode — only sweeps on `watch-sync-now` (default: continuous)");
     eprintln!("  --sensitive              Mark folder sensitive — excluded from ambient situated-context assembly");
     eprintln!("  --on-change <WORKFLOW>   Run a workflow (a `svrn workflow` name or .toml path)");
-    eprintln!("                           automatically on every change — the living trigger. Shows what");
-    eprintln!("                           the workflow can do and asks for consent (it runs unattended).");
+    eprintln!(
+        "                           automatically on every change — the living trigger. Shows what"
+    );
+    eprintln!(
+        "                           the workflow can do and asks for consent (it runs unattended)."
+    );
     eprintln!("  --allow                  Skip the --on-change consent prompt (for scripting)");
 }
 

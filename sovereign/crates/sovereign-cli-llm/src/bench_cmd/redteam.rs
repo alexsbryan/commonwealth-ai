@@ -26,7 +26,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, ChaosBank, QuestionType};
+use sovereign_eval::chaos_monkey::{
+    score, AgentAction, CalibrationReport, ChaosBank, QuestionType,
+};
 use sovereign_eval::flywheel::redteam::{
     AnswerTransform, AtlasLookup, AttributeOmissionDetector, BlanketAbstain, ConditionalTruncation,
     Identity, JudgeConfuser, OverfitCanary,
@@ -91,7 +93,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     macro_rules! val {
         ($l:expr) => {{
             i += 1;
-            rest.get(i).cloned().ok_or_else(|| format!("{} requires a value", $l))?
+            rest.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{} requires a value", $l))?
         }};
     }
     while i < rest.len() {
@@ -177,7 +181,10 @@ async fn run(args_in: &[String]) -> i32 {
     );
 
     // ── Atlas (for H1's atom check) ──
-    let atlas_dir = args.atlas.clone().unwrap_or_else(|| default_atlas_dir(&args.corpus));
+    let atlas_dir = args
+        .atlas
+        .clone()
+        .unwrap_or_else(|| default_atlas_dir(&args.corpus));
     let atlas = FileAtlas::load(&atlas_dir);
     eprintln!(
         "[redteam] atlas {} → {} entities, {} atom blobs",
@@ -187,8 +194,12 @@ async fn run(args_in: &[String]) -> i32 {
     );
 
     // ── Captures: load (replay) or run live + persist (capture) ──
-    let main_path = args.captures_dir.join(format!("{}-main.jsonl", args.corpus));
-    let fresh_path = args.captures_dir.join(format!("{}-fresh.jsonl", args.corpus));
+    let main_path = args
+        .captures_dir
+        .join(format!("{}-main.jsonl", args.corpus));
+    let fresh_path = args
+        .captures_dir
+        .join(format!("{}-fresh.jsonl", args.corpus));
     let (captured, captured_fresh) = if args.replay {
         let m = match load_captures(&main_path) {
             Ok(c) => c,
@@ -198,7 +209,11 @@ async fn run(args_in: &[String]) -> i32 {
             }
         };
         let f = load_captures(&fresh_path).unwrap_or_default();
-        eprintln!("[redteam] replay: loaded {} main + {} fresh captures", m.len(), f.len());
+        eprintln!(
+            "[redteam] replay: loaded {} main + {} fresh captures",
+            m.len(),
+            f.len()
+        );
         (m, f)
     } else {
         let session = match build_session(&globals).await {
@@ -209,11 +224,19 @@ async fn run(args_in: &[String]) -> i32 {
             }
         };
         let m = capture(&session, &args.corpus, &probes).await;
-        let f = if fresh.is_empty() { Vec::new() } else { capture(&session, &args.corpus, &fresh).await };
+        let f = if fresh.is_empty() {
+            Vec::new()
+        } else {
+            capture(&session, &args.corpus, &fresh).await
+        };
         if let Err(e) = save_captures(&main_path, &m) {
             eprintln!("warning: could not persist captures to {main_path:?}: {e}");
         } else {
-            eprintln!("[redteam] captured → {main_path:?} ({} main, {} fresh)", m.len(), f.len());
+            eprintln!(
+                "[redteam] captured → {main_path:?} ({} main, {} fresh)",
+                m.len(),
+                f.len()
+            );
         }
         let _ = save_captures(&fresh_path, &f);
         (m, f)
@@ -221,12 +244,24 @@ async fn run(args_in: &[String]) -> i32 {
 
     // ── Judge (real fast-slot classifier) + persistent answer→action cache ──
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &args.judge_model, PROVIDER_CTX));
-    let model_id = globals.chat_model.clone().unwrap_or_else(|| "primary".to_string());
-    let memo_path = args.captures_dir.join(format!("{}-judge-cache.json", args.corpus));
+    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &args.judge_model,
+        PROVIDER_CTX,
+    ));
+    let model_id = globals
+        .chat_model
+        .clone()
+        .unwrap_or_else(|| "primary".to_string());
+    let memo_path = args
+        .captures_dir
+        .join(format!("{}-judge-cache.json", args.corpus));
     let mut memo = load_memo(&memo_path);
-    eprintln!("[redteam] judge cache: {} entries at {memo_path:?}", memo.len());
+    eprintln!(
+        "[redteam] judge cache: {} entries at {memo_path:?}",
+        memo.len()
+    );
 
     let ctx = Ctx {
         judge: judge.as_ref(),
@@ -243,10 +278,18 @@ async fn run(args_in: &[String]) -> i32 {
         .map(|p| p.query.clone())
         .collect();
     let candidates: Vec<(&str, Box<dyn AnswerTransform>)> = vec![
-        ("H1 attribute-omission (honest)", Box::new(AttributeOmissionDetector)),
+        (
+            "H1 attribute-omission (honest)",
+            Box::new(AttributeOmissionDetector),
+        ),
         ("C1 blanket-abstain", Box::new(BlanketAbstain)),
         ("C2 conditional-truncation", Box::new(ConditionalTruncation)),
-        ("C3 overfit-canary", Box::new(OverfitCanary { known_abstain_queries: known_abstain })),
+        (
+            "C3 overfit-canary",
+            Box::new(OverfitCanary {
+                known_abstain_queries: known_abstain,
+            }),
+        ),
         ("C4 judge-confuser", Box::new(JudgeConfuser)),
     ];
 
@@ -337,7 +380,11 @@ async fn capture(session: &ChatSession, corpus: &str, probes: &[Probe]) -> Vec<C
     for (i, p) in probes.iter().enumerate() {
         eprintln!("  [capture {:>2}/{}] {}", i + 1, probes.len(), p.query);
         let ans = run_live(session, corpus, &p.query).await;
-        out.push(Capture { probe: p.clone(), visible: ans.visible, chunks: ans.retrieved_chunk_texts });
+        out.push(Capture {
+            probe: p.clone(),
+            visible: ans.visible,
+            chunks: ans.retrieved_chunk_texts,
+        });
     }
     out
 }
@@ -359,7 +406,11 @@ async fn score_arm(
         let caveat_present = if cap.probe.qtype == QuestionType::AbsentOutOfDomain
             && action == AgentAction::Answered
         {
-            Some(classify_caveat(ctx.judge, ctx.judge_model, &visible).await.unwrap_or(false))
+            Some(
+                classify_caveat(ctx.judge, ctx.judge_model, &visible)
+                    .await
+                    .unwrap_or(false),
+            )
         } else {
             None
         };
@@ -369,7 +420,9 @@ async fn score_arm(
             chunks: cap.chunks.as_slice(),
             caveat_present,
         };
-        let row = verifier.verify(&cap.probe, &obs, ctx.model_id, ctx.corpus).row;
+        let row = verifier
+            .verify(&cap.probe, &obs, ctx.model_id, ctx.corpus)
+            .row;
         let pass = row.is_pass();
         outcomes.push(ProbeOutcome {
             id: cap.probe.id.clone(),
@@ -387,12 +440,20 @@ async fn score_arm(
         Some(ctx.model_id.to_string()),
         chrono::Utc::now().to_rfc3339(),
     );
-    Arm { report, lane, outcomes }
+    Arm {
+        report,
+        lane,
+        outcomes,
+    }
 }
 
 /// Real abstain classifier (fast-slot A/B judge) with the live `<24-byte`
 /// fallback, memoized by exact answer text (persisted across replays).
-async fn action_for(text: &str, ctx: &Ctx<'_>, memo: &mut HashMap<String, AgentAction>) -> AgentAction {
+async fn action_for(
+    text: &str,
+    ctx: &Ctx<'_>,
+    memo: &mut HashMap<String, AgentAction>,
+) -> AgentAction {
     // Key by judge model too: a fast-slot verdict must NOT be reused for a
     // primary-tier (D4 oracle) re-judge of the same text, or the oracle would
     // just echo the fast judge it is meant to check. \u{1f} can't occur in a model id.
@@ -420,8 +481,17 @@ async fn action_for(text: &str, ctx: &Ctx<'_>, memo: &mut HashMap<String, AgentA
 fn glassbox_baseline(arm: &Arm) {
     eprintln!("  ── baseline per-probe (what the model actually said) ──");
     for o in &arm.outcomes {
-        let tag = if o.qtype.is_absent() { "ABSENT " } else { "present" };
-        eprintln!("    [{tag}] {:<34} {:<9} {}", o.id, format!("{:?}", o.action), o.excerpt);
+        let tag = if o.qtype.is_absent() {
+            "ABSENT "
+        } else {
+            "present"
+        };
+        eprintln!(
+            "    [{tag}] {:<34} {:<9} {}",
+            o.id,
+            format!("{:?}", o.action),
+            o.excerpt
+        );
     }
 }
 
@@ -431,16 +501,32 @@ fn glassbox_h1(captured: &[Capture], atlas: &dyn AtlasLookup) {
     let h1 = AttributeOmissionDetector;
     for cap in captured {
         let t = h1.explain(&cap.probe, &cap.visible, &cap.chunks, atlas);
-        let tag = if cap.probe.qtype.is_absent() { "ABSENT " } else { "present" };
-        let decision = if t.abstained { "→ ABSTAIN" } else { "→ keep" };
+        let tag = if cap.probe.qtype.is_absent() {
+            "ABSENT "
+        } else {
+            "present"
+        };
+        let decision = if t.abstained {
+            "→ ABSTAIN"
+        } else {
+            "→ keep"
+        };
         let why = if !t.is_attribute_request {
             "not-attr-request".to_string()
         } else if t.value_tokens.is_empty() {
             "no-asserted-value".to_string()
         } else if let Some(g) = &t.grounded_value {
-            format!("grounded:{}={} (atoms={})", t.grounded_in.unwrap_or("?"), g, t.entity_atom_count)
+            format!(
+                "grounded:{}={} (atoms={})",
+                t.grounded_in.unwrap_or("?"),
+                g,
+                t.entity_atom_count
+            )
         } else {
-            format!("values={:?} ungrounded (atoms={})", t.value_tokens, t.entity_atom_count)
+            format!(
+                "values={:?} ungrounded (atoms={})",
+                t.value_tokens, t.entity_atom_count
+            )
         };
         eprintln!("    [{tag}] {:<34} {decision:<10} {why}", cap.probe.id);
     }
@@ -469,12 +555,17 @@ fn print_arm(label: &str, arm: &Arm, verdict: Option<PromoteDecision>) {
 /// so every pass→fail (regression) / fail→pass (fix) is causally the transform —
 /// no run-to-run noise, no tolerance needed. Returns (regressions, fixes).
 fn paired_diff(base: &Arm, cand: &Arm) -> (usize, usize) {
-    let bmap: HashMap<&str, bool> =
-        base.outcomes.iter().map(|o| (o.id.as_str(), o.pass)).collect();
+    let bmap: HashMap<&str, bool> = base
+        .outcomes
+        .iter()
+        .map(|o| (o.id.as_str(), o.pass))
+        .collect();
     let mut reg = 0;
     let mut fix = 0;
     for c in &cand.outcomes {
-        let Some(&bpass) = bmap.get(c.id.as_str()) else { continue };
+        let Some(&bpass) = bmap.get(c.id.as_str()) else {
+            continue;
+        };
         if bpass && !c.pass {
             reg += 1;
         }
@@ -489,7 +580,13 @@ fn paired_diff(base: &Arm, cand: &Arm) -> (usize, usize) {
 /// regressions (D1 — closes the truncation cheat whose 1-flip competence loss hid
 /// under the aggregate tolerance), AND the win must also hold on the sealed fresh
 /// pool (D2 — closes the overfit canary that wins only the pool it was shown).
-fn redteam_verdict(reg_m: usize, imp_m: usize, reg_f: usize, imp_f: usize, has_fresh: bool) -> String {
+fn redteam_verdict(
+    reg_m: usize,
+    imp_m: usize,
+    reg_f: usize,
+    imp_f: usize,
+    has_fresh: bool,
+) -> String {
     if reg_m > 0 || reg_f > 0 {
         return format!("✗ REJECT — per-probe regression ({reg_m} main, {reg_f} fresh)");
     }
@@ -556,7 +653,10 @@ fn save_memo(path: &Path, memo: &HashMap<String, AgentAction>) -> std::io::Resul
 
 fn default_atlas_dir(corpus: &str) -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".sovereign/indexes").join(corpus).join("atlas")
+    PathBuf::from(home)
+        .join(".sovereign/indexes")
+        .join(corpus)
+        .join("atlas")
 }
 
 // ─────────────────────── concrete atlas reader (atoms.json) ───────────────────
@@ -572,20 +672,39 @@ impl FileAtlas {
         let path = atlas_dir.join("atoms.json");
         let Ok(text) = std::fs::read_to_string(&path) else {
             eprintln!("[redteam] note: no atoms.json at {path:?} — H1 checks chunks only");
-            return FileAtlas { entities: Vec::new(), blobs: Vec::new() };
+            return FileAtlas {
+                entities: Vec::new(),
+                blobs: Vec::new(),
+            };
         };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
             eprintln!("[redteam] note: atoms.json did not parse — H1 checks chunks only");
-            return FileAtlas { entities: Vec::new(), blobs: Vec::new() };
+            return FileAtlas {
+                entities: Vec::new(),
+                blobs: Vec::new(),
+            };
         };
-        let atoms = v.get("atoms").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+        let atoms = v
+            .get("atoms")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
         let mut entities = Vec::new();
         let mut blobs = Vec::new();
         for atom in &atoms {
             let atom_type = atom.get("atom_type").and_then(|x| x.as_str()).unwrap_or("");
-            let Some(data) = atom.get("data") else { continue };
+            let Some(data) = atom.get("data") else {
+                continue;
+            };
             let mut blob = String::new();
-            for key in ["canonical_name", "name", "description", "content", "anchor", "summary"] {
+            for key in [
+                "canonical_name",
+                "name",
+                "description",
+                "content",
+                "anchor",
+                "summary",
+            ] {
                 if let Some(s) = data.get(key).and_then(|x| x.as_str()) {
                     blob.push_str(s);
                     blob.push(' ');
@@ -616,7 +735,11 @@ impl FileAtlas {
 impl AtlasLookup for FileAtlas {
     fn atom_texts_for(&self, entity: &str) -> Vec<String> {
         let e = entity.to_lowercase();
-        self.blobs.iter().filter(|b| b.to_lowercase().contains(&e)).cloned().collect()
+        self.blobs
+            .iter()
+            .filter(|b| b.to_lowercase().contains(&e))
+            .cloned()
+            .collect()
     }
     fn entity_names(&self) -> Vec<String> {
         self.entities.clone()

@@ -161,7 +161,11 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
         }
         buf.push_str(&row.join(","));
         buf.push('\n');
-        if let Some(land) = p.attributes.get("assessed_land_value").and_then(|v| v.as_f64()) {
+        if let Some(land) = p
+            .attributes
+            .get("assessed_land_value")
+            .and_then(|v| v.as_f64())
+        {
             if land > 0.0 {
                 land_sum += land;
             }

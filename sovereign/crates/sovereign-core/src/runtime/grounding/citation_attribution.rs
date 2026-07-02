@@ -206,7 +206,12 @@ pub fn attribute_citations(
         out.push(chars[i]);
         i += 1;
     }
-    CitationAttribution { cleaned: out, citations_total, stripped_titles, snapped_titles }
+    CitationAttribution {
+        cleaned: out,
+        citations_total,
+        stripped_titles,
+        snapped_titles,
+    }
 }
 
 /// Process one `[…]` whose inner text begins with `Source:`. Splits on `;` into
@@ -302,8 +307,10 @@ pub(crate) fn align_citation_values(
     const SEGMENT_CHARS: usize = 400;
     let n = chunks.len().min(chunk_labels.len());
     let norm_chunks: Vec<String> = chunks[..n].iter().map(|c| normalize(c)).collect();
-    let norm_labels: Vec<Vec<String>> =
-        chunk_labels[..n].iter().map(|ls| ls.iter().map(|l| normalize(l)).collect()).collect();
+    let norm_labels: Vec<Vec<String>> = chunk_labels[..n]
+        .iter()
+        .map(|ls| ls.iter().map(|l| normalize(l)).collect())
+        .collect();
     let chars: Vec<char> = answer.chars().collect();
     let mut out = String::with_capacity(answer.len());
     let mut realigned = Vec::new();
@@ -319,22 +326,30 @@ pub(crate) fn align_citation_values(
                     && rel <= MAX_BRACKET_CHARS
                     && !inner.contains('\n')
                 {
-                    let title = inner.trim_start().trim_start_matches("Source:").trim_start_matches("source:").trim();
+                    let title = inner
+                        .trim_start()
+                        .trim_start_matches("Source:")
+                        .trim_start_matches("source:")
+                        .trim();
                     let nt = normalize(title);
                     // Chunks this label names. Skip when it names none (not
                     // ours to judge) or all (corpus-id — vacuous).
                     let cited: Vec<usize> = (0..n)
                         .filter(|&k| norm_labels[k].iter().any(|l| *l == nt))
                         .collect();
-                    let seg: String =
-                        chars[seg_start.max(i.saturating_sub(SEGMENT_CHARS))..i].iter().collect();
+                    let seg: String = chars[seg_start.max(i.saturating_sub(SEGMENT_CHARS))..i]
+                        .iter()
+                        .collect();
                     let verdict = if cited.is_empty() || cited.len() == n {
                         None
                     } else {
                         alignment_verdict(&seg, &cited, &norm_chunks, &norm_labels, chunk_labels)
                     };
                     match verdict {
-                        Some(AlignVerdict::Realign { value, holder_label }) => {
+                        Some(AlignVerdict::Realign {
+                            value,
+                            holder_label,
+                        }) => {
                             out.push_str("[Source: ");
                             out.push_str(&holder_label);
                             out.push(']');
@@ -361,7 +376,11 @@ pub(crate) fn align_citation_values(
         out.push(chars[i]);
         i += 1;
     }
-    CitationAlignment { cleaned: out, realigned, stripped }
+    CitationAlignment {
+        cleaned: out,
+        realigned,
+        stripped,
+    }
 }
 
 enum AlignVerdict {
@@ -380,15 +399,20 @@ fn alignment_verdict(
     orig_labels: &[Vec<String>],
 ) -> Option<AlignVerdict> {
     let nseg = normalize(segment);
-    let mut values: Vec<String> =
-        significant_words(segment).into_iter().filter(|w| id_shaped(w)).collect();
+    let mut values: Vec<String> = significant_words(segment)
+        .into_iter()
+        .filter(|w| id_shaped(w))
+        .collect();
     values.extend(hyphen_digit_runs(&nseg));
     values.dedup();
     if values.is_empty() {
         return None;
     }
-    let in_cited =
-        |v: &str| cited.iter().any(|&k| hay_contains_bounded(&norm_chunks[k], v));
+    let in_cited = |v: &str| {
+        cited
+            .iter()
+            .any(|&k| hay_contains_bounded(&norm_chunks[k], v))
+    };
     let misplaced: Vec<&String> = values.iter().filter(|v| !in_cited(v)).collect();
     if misplaced.is_empty() {
         return None; // every value is in the cited chunk — aligned
@@ -397,7 +421,11 @@ fn alignment_verdict(
     // business; only values that live in a DIFFERENT chunk indicate mispairing.
     let holders: Vec<usize> = (0..norm_chunks.len())
         .filter(|k| !cited.contains(k))
-        .filter(|&k| misplaced.iter().all(|v| hay_contains_bounded(&norm_chunks[k], v)))
+        .filter(|&k| {
+            misplaced
+                .iter()
+                .all(|v| hay_contains_bounded(&norm_chunks[k], v))
+        })
         .collect();
     let anywhere = misplaced
         .iter()
@@ -411,7 +439,11 @@ fn alignment_verdict(
     let full_holders: Vec<usize> = holders
         .iter()
         .copied()
-        .filter(|&k| values.iter().all(|v| hay_contains_bounded(&norm_chunks[k], v)))
+        .filter(|&k| {
+            values
+                .iter()
+                .all(|v| hay_contains_bounded(&norm_chunks[k], v))
+        })
         .collect();
     if full_holders.len() == 1 {
         let k = full_holders[0];
@@ -421,12 +453,19 @@ fn alignment_verdict(
             .iter()
             .zip(norm_labels[k].iter())
             .find(|(_, nl)| {
-                norm_labels.iter().filter(|ls| ls.iter().any(|l| l == *nl)).count() <= 2
+                norm_labels
+                    .iter()
+                    .filter(|ls| ls.iter().any(|l| l == *nl))
+                    .count()
+                    <= 2
             })
             .map(|(o, _)| o.clone())
             .or_else(|| orig_labels[k].first().cloned());
         if let Some(label) = label {
-            return Some(AlignVerdict::Realign { value, holder_label: label });
+            return Some(AlignVerdict::Realign {
+                value,
+                holder_label: label,
+            });
         }
     }
     Some(AlignVerdict::Strip { value })
@@ -475,10 +514,16 @@ fn judge_title(title: &str, hay: &str, labels: &[(String, String)]) -> TitleVerd
     //    garbled date splits into fragments too short for the word-level rule
     //    ("2026","10") that all pass the floor individually.
     let sig = significant_words(title);
-    if sig.iter().any(|w| id_shaped(w) && !hay_contains_bounded(hay, w)) {
+    if sig
+        .iter()
+        .any(|w| id_shaped(w) && !hay_contains_bounded(hay, w))
+    {
         return TitleVerdict::Strip;
     }
-    if hyphen_digit_runs(&nt).iter().any(|run| !hay_contains_bounded(hay, run)) {
+    if hyphen_digit_runs(&nt)
+        .iter()
+        .any(|run| !hay_contains_bounded(hay, run))
+    {
         return TitleVerdict::Strip;
     }
     // 5. Word floor.
@@ -530,7 +575,9 @@ fn char_similarity(a: &str, b: &str) -> f32 {
         dp[0] = i + 1;
         for (j, cb) in b.iter().enumerate() {
             let cur = dp[j + 1];
-            dp[j + 1] = (dp[j + 1] + 1).min(dp[j] + 1).min(prev + usize::from(ca != cb));
+            dp[j + 1] = (dp[j + 1] + 1)
+                .min(dp[j] + 1)
+                .min(prev + usize::from(ca != cb));
             prev = cur;
         }
     }
@@ -574,8 +621,14 @@ fn hay_contains_bounded(hay: &str, needle: &str) -> bool {
         return true;
     }
     for (i, m) in hay.match_indices(needle) {
-        let left_ok = hay[..i].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
-        let right_ok = hay[i + m.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+        let left_ok = hay[..i]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let right_ok = hay[i + m.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
         if left_ok && right_ok {
             return true;
         }
@@ -587,9 +640,36 @@ fn hay_contains_bounded(hay: &str, needle: &str) -> bool {
 /// word, not email-reply noise (`re`, `fwd`) or the literal `source`. Lowercased.
 fn significant_words(title: &str) -> Vec<String> {
     const STOP: &[&str] = &[
-        "mr", "mrs", "miss", "ms", "the", "of", "a", "an", "and", "sir", "dr",
-        "comrade", "chief", "inspector", "lady", "lord", "saint", "st", "re",
-        "fwd", "fw", "source", "for", "to", "in", "on", "at", "by", "is", "was",
+        "mr",
+        "mrs",
+        "miss",
+        "ms",
+        "the",
+        "of",
+        "a",
+        "an",
+        "and",
+        "sir",
+        "dr",
+        "comrade",
+        "chief",
+        "inspector",
+        "lady",
+        "lord",
+        "saint",
+        "st",
+        "re",
+        "fwd",
+        "fw",
+        "source",
+        "for",
+        "to",
+        "in",
+        "on",
+        "at",
+        "by",
+        "is",
+        "was",
     ];
     title
         .split(|c: char| !c.is_alphanumeric())
@@ -601,7 +681,10 @@ fn significant_words(title: &str) -> Vec<String> {
 /// Lowercase and collapse runs of whitespace — the same normalisation the other
 /// presence checks use so a title's words match regardless of spacing.
 fn normalize(s: &str) -> String {
-    s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+    s.to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]
@@ -642,7 +725,8 @@ mod tests {
     #[test]
     fn keeps_the_real_enron_citations() {
         // Cornell and Enron OnLine ARE in the evidence — must not be touched.
-        let answer = "Cornell engagements [Source: Re: Cornell] and wedding photos [Source: Enron OnLine].";
+        let answer =
+            "Cornell engagements [Source: Re: Cornell] and wedding photos [Source: Enron OnLine].";
         let r = attribute_citations(answer, &enron(), &[]);
         assert_eq!(r.citations_total, 2);
         assert_eq!(r.citations_stripped(), 0);
@@ -658,7 +742,8 @@ mod tests {
              narrative-vs-code drift against ARCH_PRINCIPLES.md."
                 .to_string(),
         ];
-        let answer = "It orchestrates eight primitives [Source: 4.16 Architectural correctness tooling].";
+        let answer =
+            "It orchestrates eight primitives [Source: 4.16 Architectural correctness tooling].";
         let r = attribute_citations(answer, &chunks, &[]);
         assert_eq!(r.citations_stripped(), 0);
         assert_eq!(r.cleaned, answer);
@@ -705,7 +790,8 @@ mod tests {
     fn reformatted_real_title_is_kept() {
         // A real header cited with extra/reordered words: most words still present
         // => above the floor => released (no over-strip on legitimate rewording).
-        let chunks = vec!["Federalist No. 51, by James Madison, on checks and balances.".to_string()];
+        let chunks =
+            vec!["Federalist No. 51, by James Madison, on checks and balances.".to_string()];
         let answer = "the structure [Source: Federalist 51 (Madison)].";
         let r = attribute_citations(answer, &chunks, &[]);
         assert_eq!(r.citations_stripped(), 0);
@@ -738,7 +824,11 @@ mod tests {
         let labels = vec!["institutional-notes".to_string()];
         let answer = "It defers the stopgap loop [Source: institutional-notes].";
         let r = attribute_citations(answer, &body, &labels);
-        assert_eq!(r.citations_stripped(), 0, "corpus-name citation must survive");
+        assert_eq!(
+            r.citations_stripped(),
+            0,
+            "corpus-name citation must survive"
+        );
         assert_eq!(r.cleaned, answer);
     }
 
@@ -755,7 +845,11 @@ mod tests {
         let answer = "Guests park in the two marked spaces \
                       [Source: Decision — 2026-03-28 — Guest Parking].";
         let r = attribute_citations(answer, &body, &labels);
-        assert_eq!(r.citations_stripped(), 0, "section-title citation must survive");
+        assert_eq!(
+            r.citations_stripped(),
+            0,
+            "section-title citation must survive"
+        );
     }
 
     #[test]
@@ -796,7 +890,10 @@ mod tests {
         assert_eq!(r.citations_stripped(), 0);
         assert_eq!(
             r.snapped_titles,
-            vec![("watched-959ee8a67210".to_string(), "watched-959ee8a8f330".to_string())]
+            vec![(
+                "watched-959ee8a67210".to_string(),
+                "watched-959ee8a8f330".to_string()
+            )]
         );
         assert!(r.cleaned.contains("[Source: watched-959ee8a8f330]"));
         assert!(!r.cleaned.contains("959ee8a67210"));
@@ -817,7 +914,10 @@ mod tests {
             let answer = format!("claim [Source: {garble}].");
             let r = attribute_citations(&answer, &watched_body(), &watched_labels());
             assert_eq!(r.citations_snapped(), 1, "{garble} must snap");
-            assert!(r.cleaned.contains("[Source: watched-959ee8a8f330]"), "{garble}");
+            assert!(
+                r.cleaned.contains("[Source: watched-959ee8a8f330]"),
+                "{garble}"
+            );
         }
     }
 
@@ -844,7 +944,10 @@ mod tests {
     fn ambiguous_near_twin_labels_strip_rather_than_missnap() {
         // Two real labels one edit apart from the cited garble: snapping would
         // be a coin flip, so the veto strips instead.
-        let labels = vec!["watched-959ee8a8f330".to_string(), "watched-959ee8a8f332".to_string()];
+        let labels = vec![
+            "watched-959ee8a8f330".to_string(),
+            "watched-959ee8a8f332".to_string(),
+        ];
         let answer = "claim [Source: watched-959ee8a8f331].";
         let r = attribute_citations(answer, &watched_body(), &labels);
         assert_eq!(r.citations_snapped(), 0);
@@ -894,7 +997,10 @@ mod tests {
         let answer = "The Charter's rules [Source: Maple House Charter, Articles II–XI].";
         let r = attribute_citations(answer, &[], &labels);
         assert_eq!(r.citations_snapped(), 0, "must not snap an aggregate range");
-        assert!(r.cleaned.contains("Articles II–XI"), "aggregate citation kept verbatim");
+        assert!(
+            r.cleaned.contains("Articles II–XI"),
+            "aggregate citation kept verbatim"
+        );
     }
 
     #[test]
@@ -905,7 +1011,11 @@ mod tests {
         // The whole hyphen-digit run must complete-match or the citation strips.
         let labels = vec!["Decision — 2026-06-10 — Porch Smoking".to_string()];
         let body = vec!["To settle the porch dispute, smoking moved off the porch.".to_string()];
-        let r = attribute_citations("rule [Source: Decision — 2026-10-10 — Porch].", &body, &labels);
+        let r = attribute_citations(
+            "rule [Source: Decision — 2026-10-10 — Porch].",
+            &body,
+            &labels,
+        );
         assert_eq!(r.citations_snapped(), 0);
         assert_eq!(r.citations_stripped(), 1, "garbled date must strip");
         // The correctly-cited label is untouched (exact match wins first).
@@ -934,7 +1044,10 @@ mod tests {
                 "Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()".to_string(),
                 "uap-blue-book-index".to_string(),
             ],
-            vec!["FALLS CHURCH, VA. (1952-01-01)".to_string(), "uap-blue-book-index".to_string()],
+            vec![
+                "FALLS CHURCH, VA. (1952-01-01)".to_string(),
+                "uap-blue-book-index".to_string(),
+            ],
         ];
         (chunks, labels)
     }
@@ -948,7 +1061,9 @@ mod tests {
                       **28940827**.\n\n[Source: Project BLUE BOOK (USAF SAT, 3 Feb. 1966) ()]";
         let r = align_citation_values(answer, &chunks, &labels);
         assert_eq!(r.realigned.len(), 1, "must re-point: {:?}", r);
-        assert!(r.cleaned.contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
+        assert!(r
+            .cleaned
+            .contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
         assert!(!r.cleaned.contains("USAF SAT"));
     }
 

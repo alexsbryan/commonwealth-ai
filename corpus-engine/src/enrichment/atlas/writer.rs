@@ -183,7 +183,11 @@ pub fn write_atlas_full(
 /// `migrate-all` rebuild source, so a failed store is always recoverable. The
 /// store's `corpus_id` is self-description (derived from the atlas dir's
 /// parent), keeping `write_atlas_full`'s signature stable for every caller.
-fn write_atlas_v2_store(atlas_dir: &Path, atoms: &[AtomEnvelope], edges: &[Edge]) -> io::Result<()> {
+fn write_atlas_v2_store(
+    atlas_dir: &Path,
+    atoms: &[AtomEnvelope],
+    edges: &[Edge],
+) -> io::Result<()> {
     let corpus_id = atlas_dir
         .parent()
         .and_then(|p| p.file_name())

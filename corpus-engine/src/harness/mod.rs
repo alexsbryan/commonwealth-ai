@@ -39,7 +39,10 @@ use crate::recipe::Recipe;
 /// Lower-hex SHA-256 of `bytes` — the harness's content-addressing primitive
 /// (the same hash the `asset_store` uses for blob identity).
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// Stable content id for a frozen sample: SHA-256 over the **sorted** set of

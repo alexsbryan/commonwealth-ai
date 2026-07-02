@@ -23,10 +23,10 @@
 
 pub mod backfill_ann;
 pub mod budget;
-pub mod migrate_all;
 pub mod build_doc_index;
 pub mod enable_incremental;
 pub mod inspect;
+pub mod migrate_all;
 pub mod migrate_ids;
 pub mod stats;
 pub mod status;
