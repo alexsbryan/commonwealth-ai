@@ -39,9 +39,9 @@ const SYSTEM = `You are a real end user deciding whether to TRUST this knowledge
 
 Pick the category — first that matches, stop there:
 1. honest_limitation — it honestly declines: the sources don't cover it, the knowledge base is unavailable / still building / needs rebuild (real UI steps like "Settings → Rebuild" are honest), or the input is empty or too long.
-2. confabulation — it BREAKS TRUST by making something up: it states a FALSE specific as fact (contradicts the evidence or what you know), OR it invents a quote / source / citation that does not exist (a quote not in the EVIDENCE, a fabricated "[Source: …]", or claims the sources "explicitly" state something they plainly do not). Correct information carrying only a loose or missing citation is NOT confabulation — that is good with well_cited:false.
+2. confabulation — it BREAKS TRUST by making something up: it states a FALSE specific as fact (contradicts the evidence or what you know), OR it invents a quote / source / citation that does not exist (a quote not in the EVIDENCE, a "[Source: …]" matching NO listed SOURCE LABEL, or claims the sources "explicitly" state something they plainly do not). A "[Source: …]" naming a listed SOURCE LABEL is real even when those words are absent from the evidence body. Correct information carrying only a loose or missing citation is NOT confabulation — that is good with well_cited:false.
 3. incoherent — cut off mid-answer, leaks the model's own reasoning, pads with filler, or answers a different question.
-4. good — a helpful, trustworthy answer. Correct general knowledge the model adds to help is GOOD (ideally caveated). An honest "[unverified excerpt: X]" label is honest — judge X's content, never the wrapper.
+4. good — a helpful, trustworthy answer. Correct general knowledge the model adds to help is GOOD (ideally caveated). An honest "[unverified excerpt: X]" label or a closing "Verification note" listing statements as unverified is honest labeling — judge the content, never the wrapper or the note.
 
 Then rate two quality signals — they do NOT change the category:
 - well_cited: true if the answer's claims are backed by the sources or real citations; false if uncited or loosely cited.
@@ -59,14 +59,17 @@ function firstJson(text) {
   }
 }
 
-async function judge(question, evidence, answer) {
+async function judge(question, evidence, answer, labels) {
   // Evidence window must fit ALL retrieved chunks: the app's gate grounds on the
   // whole retrieved set, so a supporting quote can sit past rank 12 (~20k chars
   // in). A 12k window truncated exactly those chunks and made the judge call a
   // correctly-grounded answer a fabrication. 60k covers the largest observed
   // retrieval; it is EVIDENCE payload (not the decision rubric), so it does not
   // violate the succinct-instruction rule.
-  const user = `QUESTION:\n${String(question).slice(0, 1000)}\n\nEVIDENCE the app retrieved (${evidence.length} chars):\n"""\n${String(evidence).slice(0, 60000)}\n"""\n\nThe app's ANSWER:\n"""\n${String(answer).slice(0, 12000)}\n"""\n\nJudge it (length-blind).`;
+  const labelBlock = (labels ?? []).length
+    ? `\n\nSOURCE LABELS (titles + corpus ids of the retrieved chunks — legitimate [Source: …] targets):\n${labels.join(" | ").slice(0, 4000)}`
+    : "";
+  const user = `QUESTION:\n${String(question).slice(0, 1000)}\n\nEVIDENCE the app retrieved (${evidence.length} chars):\n"""\n${String(evidence).slice(0, 60000)}\n"""${labelBlock}\n\nThe app's ANSWER:\n"""\n${String(answer).slice(0, 12000)}\n"""\n\nJudge it (length-blind).`;
   const res = await fetch(`${DAEMON}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -151,9 +154,10 @@ async function main() {
     i += 1;
     if (done.has(c.step)) continue;
     const ev = c.evidence?.text ?? "";
+    const labels = c.evidence?.labels ?? [];
     let v = null;
     try {
-      v = await judge(qof(c), ev, c.answer);
+      v = await judge(qof(c), ev, c.answer, labels);
     } catch (e) {
       console.log(`  step ${c.step}: judge error ${e.message}`);
     }

@@ -389,12 +389,30 @@ async function answerInEvidence(question, chunkTexts) {
 // saw. The 48 cap is a runaway bound above the largest observed retrieval (39).
 async function resolveChunkTexts(chunks) {
   const texts = [];
+  // Legitimate SOURCE LABELS (chunk titles + corpus ids) — what the app's
+  // synthesis presents as [Source: …] headers (gate_evidence_source_labels).
+  // The re-judge needs these: a citation naming a corpus id or chunk title is
+  // REAL even though those words never appear in the evidence BODY; without
+  // the label list the judge scores legitimate label citations as fabricated
+  // (observed: "[Source: institutional-notes]" — the corpus name — flagged).
+  const labels = [];
+  const seen = new Set();
+  const addLabel = (v) => {
+    const t = String(v ?? "").trim();
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      labels.push(t);
+    }
+  };
   for (const c of (chunks ?? []).slice(0, 48)) {
     const corpusId = c?.corpus_id ?? c?.corpusId;
     const chunkId = c?.chunk_id ?? c?.chunkId;
+    addLabel(corpusId);
+    addLabel(c?.title);
     if (corpusId != null && chunkId != null) {
       try {
         const rec = await invoke("read_get_chunk", { corpusId, chunkId }, 15_000);
+        addLabel(rec?.title);
         const content = rec?.content ?? rec?.text;
         if (content) {
           texts.push(String(content));
@@ -406,7 +424,7 @@ async function resolveChunkTexts(chunks) {
     }
     if (c?.snippet) texts.push(String(c.snippet));
   }
-  return texts;
+  return { texts, labels };
 }
 
 // Score one (question, answer, chunks) with the bench's grounding primitive.
@@ -561,6 +579,18 @@ async function attachQuestion() {
     const entry = REPLAY_BANK[replayIdx % REPLAY_BANK.length];
     replayIdx += 1;
     state.scopedCorpus = entry.corpus;
+    // Replay isolation: a FRESH conversation per bank question. Banks mix
+    // corpora; one shared thread let earlier answers contaminate later
+    // retrieval/synthesis (observed 2026-07-01: a watched-corpus "most
+    // important thing" answer arrived flavored by the earlier Joan Robinson
+    // turn), destroying per-question determinism. Fall back to the current
+    // thread if creation fails.
+    try {
+      state.convo = (await invoke("create_conversation", {})).id;
+      if (Array.isArray(state.convos)) state.convos.push(state.convo);
+    } catch {
+      /* keep the current thread */
+    }
     if (state.convo && !process.env.SOVEREIGN_CHAOS_NO_SCOPE) {
       await invoke(
         "set_conversation_enabled_corpora",
@@ -1077,7 +1107,7 @@ async function chaosStep(memorySummary) {
     if (got && got.answer && got.answer.length > 0) {
       answer = got.answer;
       const question = chosen.args.message ?? chosen.args.question;
-      const chunkTexts = await resolveChunkTexts(got.chunks);
+      const { texts: chunkTexts, labels: sourceLabels } = await resolveChunkTexts(got.chunks);
       evidence = {
         retrieved: got.chunks.length,
         resolved: chunkTexts.length,
@@ -1096,6 +1126,7 @@ async function chaosStep(memorySummary) {
         // 48, not the old top-12) — the grounding chunk can rank 13th+, so the
         // total cap must not silently drop the tail the way the 12-chunk slice did.
         ids: got.chunks.map((c) => c.chunk_id ?? c.id ?? null),
+        labels: sourceLabels.slice(0, 96),
         text: chunkTexts.map((t) => t.slice(0, 12000)).join("\n---\n").slice(0, 300000),
       };
       aligned = await scoreAnswerAligned(question, answer, chunkTexts);
