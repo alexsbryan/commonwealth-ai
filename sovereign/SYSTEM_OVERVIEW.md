@@ -1719,6 +1719,11 @@ check cannot. If the runner sections are commented out in
 ```sh
 # One workspace — build / check / test everything from the repo root:
 cargo build --release --workspace          # bundled assets copied via build.rs
+# For LOCAL deployed-daemon iteration use scripts/dev-release.sh instead of
+# plain --release: same opt-level, but LTO/CGU=1 overridden via env — a
+# one-line change costs seconds instead of ~7.5 minutes. (A custom cargo
+# profile can't do this: llama-cpp-sys-4's build script panics under any
+# custom profile — see the script header.)
 cargo check  --workspace --all-targets      # what CI's `check` job runs
 # The user-facing CLI spans 4 binaries (dispatcher + 3 siblings) — rebuild
 # all of them (editing one + rebuilding only the dispatcher is a silent no-op):
