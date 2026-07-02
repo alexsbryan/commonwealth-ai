@@ -597,6 +597,53 @@ fn squash(s: &str) -> String {
         .join(" ")
 }
 
+/// In-world attribution veto — the deterministic pre-check the yes-biased
+/// joint judge needs. Measured (padghost replay 2026-07-02): "Betty Alexander
+/// sent an email to Jeff Skilling on July 7, 2000" scored vp=0.010 — every
+/// element of the claim is corpus-true EXCEPT the invented person (the real
+/// sender is Rosalee; "Betty Alexander" appears nowhere in the evidence), and
+/// a forced-choice judge shown a nearly-true claim answers "supports". The
+/// same ghost shipped in three separate runs.
+///
+/// The veto is scoped to IN-WORLD attributions so correct general knowledge is
+/// never shackled (the trust bar): it fires only when the claim is about a
+/// corpus ARTIFACT (email/letter/document/passage/sent/wrote/…) AND carries a
+/// person-name-shaped bigram (Capitalized-lowercase pair — acronyms like "HR"
+/// don't match) absent from the ENTIRE evidence + labels. A name attributed to
+/// a corpus artifact must exist in the corpus; a GK claim ("Noam Cohen wrote
+/// in Wired…", no artifact noun) passes through to the judge untouched.
+/// Returns the offending name for the glassbox.
+pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<String> {
+    const ARTIFACT: &[&str] = &[
+        "email", "e-mail", "letter", "memo", "message", "document", "passage",
+        "chapter", "section", "thread", "forwarded", "sent", "wrote", "authored",
+        "signed", "replied",
+    ];
+    let low = claim.to_lowercase();
+    if !ARTIFACT.iter().any(|a| low.contains(a)) {
+        return None;
+    }
+    fn cap_name(w: &str) -> Option<&str> {
+        let t = w.trim_matches(|c: char| !c.is_alphanumeric());
+        let mut chars = t.chars();
+        let first = chars.next()?;
+        (first.is_uppercase()
+            && t.chars().count() >= 2
+            && chars.all(|c| c.is_lowercase() && c.is_alphabetic()))
+        .then_some(t)
+    }
+    let words: Vec<&str> = claim.split_whitespace().collect();
+    for pair in words.windows(2) {
+        if let (Some(a), Some(b)) = (cap_name(pair[0]), cap_name(pair[1])) {
+            let full = format!("{a} {b}").to_lowercase();
+            if !hay_lower.contains(&full) {
+                return Some(format!("{a} {b}"));
+            }
+        }
+    }
+    None
+}
+
 pub(super) async fn claim_violation_joint(
     inference: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -703,6 +750,40 @@ mod tests {
         assert_eq!(unwrap_unverified_excerpts(broken), broken);
         // No wrapper → untouched.
         assert_eq!(unwrap_unverified_excerpts("plain"), "plain");
+    }
+
+    #[test]
+    fn in_world_attribution_with_absent_name_is_vetoed() {
+        let hay = "ok, jeff, you requested that we be candid about enron. rosalee \
+                   fleming forwarded this to kenneth lay."
+            .to_string();
+        // The measured ghost: cleared at vp=0.010 by the joint judge.
+        assert_eq!(
+            absent_name_attribution(
+                "Betty Alexander sent an email to Jeff Skilling on July 7, 2000.",
+                &hay
+            ),
+            Some("Betty Alexander".to_string())
+        );
+        // A present name passes to the judge.
+        assert_eq!(
+            absent_name_attribution("Rosalee Fleming forwarded the email to Kenneth Lay.", &hay),
+            None
+        );
+        // No artifact noun → general-knowledge territory → never vetoed
+        // (do not shackle the model).
+        assert_eq!(
+            absent_name_attribution(
+                "Noam Cohen called Wikipedia the last best place on the Internet.",
+                &hay
+            ),
+            None
+        );
+        // Acronyms/date fragments are not name bigrams.
+        assert_eq!(
+            absent_name_attribution("The email was escalated to HR VP leadership in July.", &hay),
+            None
+        );
     }
 
     #[test]
