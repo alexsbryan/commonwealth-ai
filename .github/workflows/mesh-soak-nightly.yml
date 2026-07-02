@@ -28,7 +28,7 @@ jobs:
     continue-on-error: true # advisory until reliably green
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -67,7 +67,7 @@ jobs:
             --baseline .github/mesh-slo-baseline.json || true
       - name: Upload findings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mesh-soak-findings
           path: mesh-soak-findings.jsonl
