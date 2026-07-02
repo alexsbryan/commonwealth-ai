@@ -73,11 +73,15 @@ const MIN_TITLE_WORDS: usize = 2;
 const SNAP_FLOOR: f32 = 0.75;
 
 /// A snap must be UNAMBIGUOUS: the best label must beat the runner-up by this
-/// margin (or the runner-up must be below `SNAP_FLOOR`). Near-twin labels
-/// ("Decision — 2026-03-28 — Guest Parking" vs "… — 2026-04-02 — Porch Smoking")
-/// separate by ≈0.3, so 0.10 is conservative. An ambiguous near-miss falls
-/// through — the ID-token veto strips it rather than risk snapping to the wrong
-/// source.
+/// margin, UNCONDITIONALLY. Near-twin labels ("Decision — 2026-03-28 — Guest
+/// Parking" vs "… — 2026-04-02 — Porch Smoking") separate by ≈0.3, so 0.10 is
+/// conservative. An ambiguous near-miss falls through — the veto/floor decide,
+/// rather than risk snapping to the wrong source. (An earlier "runner-up below
+/// the floor" escape hatch let a barely-over-floor best snap out of a crowded
+/// label FAMILY: "Maple House Charter, Articles II–XI" — an aggregate range
+/// citation — measured 0.763 vs "Article VI — Pets" with the runner-up article
+/// at 0.738, and was wrongly rewritten to the Pets article. The shared family
+/// prefix inflates full-string similarity; only the margin catches it.)
 const SNAP_MARGIN: f32 = 0.10;
 
 /// A significant word this long that carries a digit is ID-shaped (hash ids,
@@ -163,13 +167,21 @@ pub fn attribute_citations(
     let mut citations_total = 0usize;
     let mut stripped_titles: Vec<String> = Vec::new();
     let mut snapped_titles: Vec<(String, String)> = Vec::new();
+    // An UNCLOSED `[Source:` (the model truncates brackets) must not swallow
+    // everything up to some ']' hundreds of chars later in unrelated text —
+    // title.rs's scanner caps its marker for the same reason. A real citation
+    // bracket is short and single-line; past either bound the '[' is literal.
+    const MAX_BRACKET_CHARS: usize = 300;
     let mut i = 0usize;
     while i < chars.len() {
         if chars[i] == '[' {
             if let Some(rel) = chars[i + 1..].iter().position(|&c| c == ']') {
                 let end = i + 1 + rel; // absolute index of ']'
                 let inner: String = chars[i + 1..end].iter().collect();
-                if inner.trim_start().to_lowercase().starts_with("source:") {
+                if inner.trim_start().to_lowercase().starts_with("source:")
+                    && rel <= MAX_BRACKET_CHARS
+                    && !inner.contains('\n')
+                {
                     let (rebuilt, total, stripped, snapped) =
                         process_bracket(&inner, &hay, &label_set);
                     citations_total += total;
@@ -257,6 +269,18 @@ fn judge_title(title: &str, hay: &str, labels: &[(String, String)]) -> TitleVerd
     if labels.iter().any(|(_, ln)| *ln == nt) {
         return TitleVerdict::Keep;
     }
+    // 1b. A trailing parenthetical QUALIFIER minted onto a real label —
+    //     "[Source: Wikipedia (contested)]" over the label "wikipedia"
+    //     (observed twice) — is the label plus editorializing. Snap to the
+    //     exact base label; the qualifier is not part of any source's name.
+    if let Some((base, _)) = nt.rsplit_once('(') {
+        let base = base.trim();
+        if !base.is_empty() {
+            if let Some((orig, _)) = labels.iter().find(|(_, ln)| ln == base) {
+                return TitleVerdict::Snap(orig.clone());
+            }
+        }
+    }
     // 2. A multi-word title present VERBATIM as a contiguous phrase is grounded
     //    by definition — it is literally a header in the evidence. Bounded, not
     //    substring: "Record 2894942" must not match inside "Record 28949423".
@@ -269,8 +293,14 @@ fn judge_title(title: &str, hay: &str, labels: &[(String, String)]) -> TitleVerd
     }
     // 4. An ID-shaped token that matches no complete evidence token is a
     //    corrupted or invented identifier — the word floor must not see it.
+    //    Composite hyphen-digit runs ("2026-10-10") are checked WHOLE: a
+    //    garbled date splits into fragments too short for the word-level rule
+    //    ("2026","10") that all pass the floor individually.
     let sig = significant_words(title);
     if sig.iter().any(|w| id_shaped(w) && !hay_contains_bounded(hay, w)) {
+        return TitleVerdict::Strip;
+    }
+    if hyphen_digit_runs(&nt).iter().any(|run| !hay_contains_bounded(hay, run)) {
         return TitleVerdict::Strip;
     }
     // 5. Word floor.
@@ -305,8 +335,7 @@ fn snap_to_label(nt: &str, labels: &[(String, String)]) -> Option<String> {
         }
     }
     let (bs, orig) = best?;
-    (bs >= SNAP_FLOOR && (second < SNAP_FLOOR || bs - second >= SNAP_MARGIN))
-        .then(|| orig.to_string())
+    (bs >= SNAP_FLOOR && bs - second >= SNAP_MARGIN).then(|| orig.to_string())
 }
 
 /// Normalized Levenshtein similarity over chars: 1.0 = identical, 0.0 = disjoint.
@@ -333,6 +362,29 @@ fn char_similarity(a: &str, b: &str) -> f32 {
 /// ID-shaped: long enough to be an identifier and carrying at least one digit.
 fn id_shaped(w: &str) -> bool {
     w.chars().count() >= ID_TOKEN_MIN_LEN && w.chars().any(|c| c.is_ascii_digit())
+}
+
+/// Maximal `digits(-digits)+` runs of ≥8 chars with ≥6 digits — dates
+/// ("2026-10-10") and hyphenated numeric ids. These are identifiers even though
+/// each hyphen-separated fragment is too short for `id_shaped`.
+fn hyphen_digit_runs(nt: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for c in nt.chars().chain(std::iter::once(' ')) {
+        if c.is_ascii_digit() || c == '-' {
+            cur.push(c);
+        } else {
+            let run = cur.trim_matches('-');
+            if run.len() >= 8
+                && run.contains('-')
+                && run.chars().filter(|c| c.is_ascii_digit()).count() >= 6
+            {
+                out.push(run.to_string());
+            }
+            cur.clear();
+        }
+    }
+    out
 }
 
 /// Whether `needle` occurs in `hay` bounded by non-alphanumerics — the complete-run
@@ -640,6 +692,73 @@ mod tests {
         assert_eq!(r.citations_stripped(), 1, "truncated number must strip");
         let r = attribute_citations("see [Source: Record 28949423].", &body, &[]);
         assert_eq!(r.citations_stripped(), 0, "complete number must survive");
+    }
+
+    #[test]
+    fn aggregate_range_citation_is_not_missnapped_out_of_a_label_family() {
+        // Live false snap (padfix replay 2026-07-01): the maple labels share a
+        // long family prefix, inflating full-string similarity; the cited
+        // aggregate RANGE measured 0.763 vs "Article VI — Pets" (runner-up
+        // 0.738) and was wrongly rewritten to the Pets article. The margin
+        // rule must refuse; the aggregate citation stays as the model wrote it.
+        let labels: Vec<String> = [
+            "Maple House Charter, Article II — Quiet Hours",
+            "Maple House Charter, Article III — Kitchen Cleanup",
+            "Maple House Charter, Article IV — Common Spaces",
+            "Maple House Charter, Article VI — Pets",
+            "Maple House Charter, Article VII — Smoking",
+            "Maple House Charter, Article X — House Decisions",
+            "maple-house",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let answer = "The Charter's rules [Source: Maple House Charter, Articles II–XI].";
+        let r = attribute_citations(answer, &[], &labels);
+        assert_eq!(r.citations_snapped(), 0, "must not snap an aggregate range");
+        assert!(r.cleaned.contains("Articles II–XI"), "aggregate citation kept verbatim");
+    }
+
+    #[test]
+    fn date_garbled_label_is_stripped_by_the_composite_veto() {
+        // Live sub-floor garble (padfix replay): "2026-10-10" for the real
+        // "2026-06-10" scores 0.73 — under the snap floor — and its date
+        // fragments ("2026","10") are too short for the word-level ID rule.
+        // The whole hyphen-digit run must complete-match or the citation strips.
+        let labels = vec!["Decision — 2026-06-10 — Porch Smoking".to_string()];
+        let body = vec!["To settle the porch dispute, smoking moved off the porch.".to_string()];
+        let r = attribute_citations("rule [Source: Decision — 2026-10-10 — Porch].", &body, &labels);
+        assert_eq!(r.citations_snapped(), 0);
+        assert_eq!(r.citations_stripped(), 1, "garbled date must strip");
+        // The correctly-cited label is untouched (exact match wins first).
+        let ok = "rule [Source: Decision — 2026-06-10 — Porch Smoking].";
+        let r = attribute_citations(ok, &body, &labels);
+        assert!(!r.changed());
+    }
+
+    #[test]
+    fn unclosed_bracket_never_swallows_following_text() {
+        // The model truncates a bracket; the next ']' lives inside LATER text
+        // (here a verification-note item). The scanner must leave the whole
+        // span untouched rather than parse ~100 chars as one "citation".
+        let answer = "grounded [Source: public-goods\n\n---\n*Verification note:*\n\
+                      - “supported by [unverified excerpt: Mill argued tolls]”";
+        let r = attribute_citations(answer, &[], &["public-goods".to_string()]);
+        assert_eq!(r.cleaned, answer);
+        assert!(!r.changed());
+    }
+
+    #[test]
+    fn parenthetical_qualifier_snaps_to_the_exact_base_label() {
+        // "[Source: Wikipedia (contested)]" over the real label "wikipedia":
+        // the qualifier is editorializing, not a source name. Body containing
+        // the qualifier word must not rescue it via the floor.
+        let labels = vec!["wikipedia".to_string()];
+        let body = vec!["The reliability of Wikipedia is contested by some critics.".to_string()];
+        let r = attribute_citations("claim [Source: Wikipedia (contested)].", &body, &labels);
+        assert_eq!(r.citations_snapped(), 1);
+        assert!(r.cleaned.contains("[Source: wikipedia]"));
+        assert!(!r.cleaned.contains("contested)"));
     }
 
     #[test]
