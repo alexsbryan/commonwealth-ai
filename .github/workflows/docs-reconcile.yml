@@ -29,5 +29,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # No protoc/cmake needed — xtask only reads files.
+      # No protoc/cmake needed — xtask only reads files. mold + clang ARE
+      # needed: compiling xtask itself links through the pinned ld.mold
+      # (workspace .cargo/config.toml).
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y mold clang
       - run: cargo run -p xtask -- docs-gate

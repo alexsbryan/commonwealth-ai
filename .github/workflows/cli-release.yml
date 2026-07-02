@@ -113,8 +113,22 @@ jobs:
 
       - name: Linux build deps
         if: runner.os == 'Linux'
-        # protoc: LanceDB (lance-table). cmake: llama.cpp (sovereign-inference).
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+        # protoc + libprotobuf: lance-encoding prost-build. cmake: llama.cpp.
+        # mold + clang: pinned as the Linux linker by .cargo/config.toml.
+        # LunarG Vulkan SDK: Linux hardcodes llama-cpp-4's `vulkan` feature,
+        # so ggml builds with GGML_VULKAN=ON and needs glslc/spirv/libvulkan.
+        # (Mirrors desktop-release.yml — keep in sync. No gtk: CLI bins only.)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler libprotobuf-dev cmake mold clang \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
 
       - name: macOS build deps
         if: runner.os == 'macOS'

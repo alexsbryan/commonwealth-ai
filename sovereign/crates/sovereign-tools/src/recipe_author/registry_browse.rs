@@ -126,7 +126,10 @@ mod tests {
 
     #[tokio::test]
     async fn lists_bundled_recipes() {
-        // Use a fresh HOME so no local registry leaks in.
+        // Use a fresh HOME so no local registry leaks in. HOME is
+        // process-global — hold the crate-wide lock for the test's
+        // lifetime (see `recipe_author::home_test_lock`).
+        let _guard = crate::recipe_author::home_test_lock();
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
         let out = RegistryBrowseTool
@@ -149,6 +152,7 @@ mod tests {
 
     #[tokio::test]
     async fn filter_narrows_to_substring() {
+        let _guard = crate::recipe_author::home_test_lock();
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
         let out = RegistryBrowseTool

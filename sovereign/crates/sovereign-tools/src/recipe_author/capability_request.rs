@@ -405,18 +405,12 @@ fn ce_err(e: corpus_engine_notes::Error) -> Error {
 mod tests {
     use super::*;
 
-    /// Process-wide HOME lock. `RecipeProject::new` captures
-    /// `~/.sovereign/recipe-projects/...` at construction time and
-    /// every method that touches the project's filesystem layout
-    /// reads it back via `dirs::home_dir()`. Without serialising
-    /// HOME, two parallel async tests both call `fresh()`, the
-    /// second stomps the first's `HOME`, and the first's later
-    /// `submits_when_confirmed_writes_both_paths` looks for its
-    /// project_path under the *second* tempdir — file missing,
-    /// test fails. Pinned 2026-05-10 after a repo-wide
-    /// `sovereign-test.sh` run surfaced the flake.
-    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    // HOME is process-global: hold the CRATE-WIDE lock
+    // (`recipe_author::home_test_lock`) — a module-local mutex
+    // (the previous `HOME_LOCK` here, pinned 2026-05-10) cannot
+    // exclude the sibling test modules that also set HOME, which
+    // resurfaced the same land-in-the-wrong-tempdir flake in
+    // checkpoint.rs on 2026-07-02.
     async fn fresh() -> (
         Arc<NoteStore>,
         Arc<RecipeProjectStore>,
@@ -424,7 +418,7 @@ mod tests {
         tempfile::TempDir,
         std::sync::MutexGuard<'static, ()>,
     ) {
-        let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let guard = crate::recipe_author::home_test_lock();
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());

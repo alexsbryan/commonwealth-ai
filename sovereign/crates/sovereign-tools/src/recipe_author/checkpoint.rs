@@ -473,19 +473,10 @@ mod tests {
     use super::super::ArtifactKind;
     use sovereign_store::recipe_project_store::RecipeProjectStore;
 
-    /// Per-test-module HOME mutex. `HOME` is process-global, so two
-    /// `fresh_project` callers running in parallel under `cargo test`
-    /// can flip the env var between each other's `RecipeProject::new`
-    /// and subsequent reads, causing the snapshot to land in the
-    /// "wrong" tempdir (which is then dropped, so the read fails
-    /// with NotFound). Acquire this lock for the lifetime of every
-    /// test that calls `fresh_project`.
-    pub(super) fn home_test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-    }
+    // The crate-wide HOME mutex lives in `recipe_author::home_test_lock`
+    // — one lock for every test module that sets `HOME` (a module-local
+    // mutex cannot exclude siblings). See its doc comment.
+    pub(super) use crate::recipe_author::home_test_lock;
 
     async fn fresh_project(
         recipes_dir: &Path,
