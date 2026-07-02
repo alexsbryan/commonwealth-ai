@@ -78,7 +78,10 @@ use std::sync::Arc;
 use crate::traits::InferenceProvider;
 use crate::types::CompletionRequest;
 
-use judge::{claim_violation_joint, extract_claim_list, scan_unsupported_specifics};
+use judge::{
+    claim_violation_joint, extract_claim_list, scan_unsupported_specifics,
+    unwrap_unverified_excerpts,
+};
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
@@ -648,12 +651,59 @@ fn rewrite_system_note(failed: &[FailedClaim]) -> String {
          verify against the sources:\n{list}\n\
          Rewrite the answer: keep everything the sources support. For each failed \
          assertion that has corrective passages above, REPLACE it with what those \
-         passages actually state, citing them — do not merely delete it. Structure \
+         passages actually state, citing them — do not merely delete it. Never add \
+         a NEW statement about what the sources say, cite, name, or omit unless a \
+         passage above shows it. Structure \
          the rewrite as an ANSWER, not a disclaimer: open directly with the \
          supported account, organized to address the question. Do not open with \
          what the sources lack, and do not enumerate the removed assertions in the \
          body. If material gaps remain, note them briefly in a single short \
          paragraph at the end."
+    )
+}
+
+/// The user-visible verification note. Items are answer spans / short claims
+/// (`normalize_scan_item` reduces scan output toward answer wording); render
+/// each one deduped and length-capped, in plain language — judge vocabulary
+/// must never reach the user (observed 2026-07-01: raw scan chatter footnoted
+/// a released answer with "… is a fabricated specific").
+///
+/// Items are deliberately UNQUOTED: the post-synthesis quote guardrail
+/// (`quote_verification::verify_answer_against_evidence`, streaming.rs) treats
+/// any curly-quoted span as a quotation claim and demotes what it can't
+/// verbatim-confirm — a quoted note item (a paraphrased claim, by nature not
+/// verbatim) was rewritten to "[unverified excerpt: …]", turning the app's own
+/// footer into a self-contradiction (probed 2026-07-01: the note trace showed
+/// clean items; the released text showed them wrapped).
+fn verification_note(failed_claims: &[String]) -> String {
+    const NOTE_ITEM_CHARS: usize = 160;
+    let mut seen = std::collections::HashSet::new();
+    let items: Vec<String> = failed_claims
+        .iter()
+        .map(|c| {
+            let c = unwrap_unverified_excerpts(c);
+            let c = c.trim().trim_matches(['"', '“', '”']).trim();
+            let mut item: String = c.chars().take(NOTE_ITEM_CHARS).collect();
+            if c.chars().count() > NOTE_ITEM_CHARS {
+                item.push('…');
+            }
+            item
+        })
+        .filter(|c| !c.is_empty() && seen.insert(c.to_lowercase()))
+        .map(|c| format!("- {c}"))
+        .collect();
+    tracing::info!(
+        target: "grounding_gate",
+        n_claims = failed_claims.len(),
+        n_items = items.len(),
+        first_claim_head = %failed_claims.first().map(|c| c.chars().take(80).collect::<String>()).unwrap_or_default(),
+        first_item_head = %items.first().map(|c| c.chars().take(80).collect::<String>()).unwrap_or_default(),
+        "verification note rendered"
+    );
+    format!(
+        "\n\n---\n*Verification note: these statements could not be confirmed \
+         against your sources — treat them as unverified:*\n{}",
+        items.join("\n")
     )
 }
 
@@ -948,6 +998,14 @@ async fn gate_longform(
                     scan_unsupported_specifics(&inference, question, &text, chunks, budget).await
                 {
                     for spec in specifics {
+                        // Citations are validated by the deterministic snap pass
+                        // BEFORE this audit — a scan finding about a `[Source:]`
+                        // marker is out of its jurisdiction (observed 2026-07-01:
+                        // the scan flagged REAL label citations, which then read
+                        // as self-indictment in the verification note).
+                        if spec.to_lowercase().contains("[source:") {
+                            continue;
+                        }
                         // Skip specifics already surfaced by the per-claim audit.
                         if failed
                             .iter()
@@ -1005,15 +1063,7 @@ async fn gate_longform(
         // an annotated draft is acceptable (Refinement keeps the
         // prior verified answer instead).
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
-        let note = format!(
-            "\n\n---\n*Verification note: the following could not be \
-             confirmed against your sources — treat as unverified:*\n{}",
-            failed_claims
-                .iter()
-                .map(|c| format!("- {c}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
+        let note = verification_note(&failed_claims);
         return GateOutcome {
             text: format!("{text}{note}"),
             meta: serde_json::json!({
@@ -1071,15 +1121,7 @@ async fn gate_longform(
                 Some((text2, n2, failed2)) => {
                     let failed_claims: Vec<String> =
                         failed2.into_iter().map(|f| f.claim).collect();
-                    let note = format!(
-                        "\n\n---\n*Verification note: the following could not be \
-                         confirmed against your sources — treat as unverified:*\n{}",
-                        failed_claims
-                            .iter()
-                            .map(|c| format!("- {c}"))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    );
+                    let note = verification_note(&failed_claims);
                     GateOutcome {
                         text: format!("{text2}{note}"),
                         meta: serde_json::json!({
@@ -1105,15 +1147,7 @@ async fn gate_longform(
             // claims; never destroy an essay over judge availability).
             tracing::warn!(target: "grounding_gate", error = %e, "longform rewrite failed — annotating draft");
             let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
-            let note = format!(
-                "\n\n---\n*Verification note: the following could not be \
-                 confirmed against your sources — treat as unverified:*\n{}",
-                failed_claims
-                    .iter()
-                    .map(|c| format!("- {c}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
+            let note = verification_note(&failed_claims);
             GateOutcome {
                 text: format!("{text}{note}"),
                 meta: serde_json::json!({
@@ -1347,5 +1381,36 @@ mod tests {
     fn rewrite_note_commits_answer_shape_rules() {
         let note = rewrite_system_note(&[fc("c", &[])]);
         assert!(note.contains("Do not open with what the sources lack"));
+        // The rewrite must not mint new claims about the sources (observed
+        // 2026-07-01: a rewrite replaced one misattribution with "the text
+        // cites Woolf's work" — a fresh unsupported claim ABOUT the text).
+        assert!(note.contains("Never add a NEW statement about what the sources say"));
+    }
+
+    #[test]
+    fn verification_note_dedupes_caps_and_stays_unquoted() {
+        let long = "x".repeat(200);
+        let claims = vec![
+            "Paul Samuelson admitted defeat around 1963".to_string(),
+            "\"Paul Samuelson admitted defeat around 1963\"".to_string(), // dup modulo quotes
+            "[unverified excerpt: ships cannot pay tolls at sea]".to_string(),
+            long.clone(),
+            String::new(),
+        ];
+        let note = verification_note(&claims);
+        // Deduped: the claim appears once, as a plain list item.
+        assert_eq!(note.matches("Samuelson").count(), 1);
+        assert!(note.contains("- Paul Samuelson admitted defeat around 1963"));
+        // The app's own wrapper is unwrapped to its content.
+        assert!(note.contains("- ships cannot pay tolls at sea"));
+        assert!(!note.contains("unverified excerpt:"));
+        // UNQUOTED by design: a curly-quoted item reads as a quotation claim to
+        // the post-synthesis quote guardrail, which demotes non-verbatim spans
+        // to "[unverified excerpt: …]" — mangling the note (probed 2026-07-01).
+        assert!(!note.contains('“') && !note.contains('”'));
+        // Long item capped with an ellipsis; empty item dropped.
+        assert!(note.contains(&format!("{}…", "x".repeat(160))));
+        // Plain language — never judge vocabulary.
+        assert!(!note.to_lowercase().contains("fabricated"));
     }
 }

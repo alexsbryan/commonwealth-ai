@@ -381,6 +381,29 @@ async fn gate_held_answer(
     profile: &crate::runtime::grounding::GroundingProfile,
 ) -> Option<serde_json::Value> {
     if gate_on && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled)) {
+        // Pre-gate citation pass (2026-07-01): snap/strip the DRAFT's `[Source:]`
+        // garbles before the audit sees them — otherwise the specifics scan flags
+        // each garbled label as a fabricated specific and burns a rewrite cycle on
+        // what the deterministic snap fixes for free. The post-gate pass below
+        // stays: the longform rewrite can re-garble labels.
+        let pre = crate::runtime::grounding::attribute_citations(
+            full_text,
+            &evidence.chunks,
+            &evidence.source_labels,
+        );
+        if pre.changed() {
+            tracing::info!(
+                target: "synth.citation",
+                stage = "pre_gate",
+                citations_total = pre.citations_total,
+                citations_stripped = pre.citations_stripped(),
+                citations_snapped = pre.citations_snapped(),
+                stripped = ?pre.stripped_titles,
+                snapped = ?pre.snapped_titles,
+                "corrected draft [Source:] citations before the gate"
+            );
+            *full_text = pre.cleaned;
+        }
         // Truncation trace (2026-06-30): capture the draft BEFORE the gate takes it
         // so we can localize a mid-`[Source:` cut to the draft vs the gate.
         let draft_len = full_text.chars().count();
@@ -422,6 +445,7 @@ async fn gate_held_answer(
         if cites.changed() {
             tracing::info!(
                 target: "synth.citation",
+                stage = "post_gate",
                 citations_total = cites.citations_total,
                 citations_stripped = cites.citations_stripped(),
                 citations_snapped = cites.citations_snapped(),
