@@ -184,7 +184,9 @@ const PEER_BASE_CAP: u32 = 1;
 /// Rationing → a pure consumer holds [`PEER_BASE_CAP`]; a top contributor
 /// (`weight → 1 + k`) may hold up to the whole ceiling.
 fn effective_peer_cap(ceiling: usize, weight: f64) -> u32 {
-    if ceiling >= usize::MAX {
+    // `usize::MAX` is the "not rationing" sentinel (no comparison can
+    // exceed it — `==` is the whole check).
+    if ceiling == usize::MAX {
         return u32::MAX;
     }
     let ceiling = ceiling.min(u32::MAX as usize) as u32;
