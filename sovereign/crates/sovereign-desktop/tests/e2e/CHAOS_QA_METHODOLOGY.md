@@ -275,7 +275,36 @@ turns — the representative launcher runs trace-light, so audit the journal, no
 the app log). Throughput 67 answered turns vs 41 at rebaseline (fewer wasted
 rewrite cycles).
 
-**Residual broke (unique ≈7), the honest gap to 85%:**
+### Post-gen75 lever (landed in `6d6d25ee`): residual №1 + №2 FIXED
+
+1. **Value-misattribution root cause = MISLABELED EVIDENCE, not the model.**
+   Probed four layers down: the gate's alignment input showed 3 distinct
+   titles across 14 chunks vs ~10 real row titles. The dominant-source
+   cohesion expansion (`retrieval.rs`) built neighbour rows by cloning the
+   anchor hit — every positional neighbour INHERITED THE ANCHOR'S TITLE.
+   Sound for one-title books; false for row-per-document corpora (the UAP
+   index: one source_doc, many case files). The synthesis prompt therefore
+   showed the Stevens Point row under the SAT header — the model cited what
+   it was SHOWN. Fix: neighbours keep their own title/url. Probe: distinct
+   titles 3→13; the same temp-0 question now releases the coherent pair
+   "302569447 [Source: Stevens Point, Wisconsin ()]". Defense in depth:
+   `align_citation_values` (citation_attribution.rs, wired post-gate) is the
+   deterministic backstop — ID-shaped values in a citing segment must live in
+   the cited chunk; unique-holder mismatches re-point the citation, ambiguous
+   ones strip it. `EvidenceContext.chunk_labels` (per-chunk, raptor-aligned)
+   carries the mapping; `stage="align"`/`align_input` traces in
+   `synth.citation`.
+2. **Tool-call leak: structural stripping, no name lists** (`presenter.rs`
+   `strip_bare_tool_call_lines`): (a) anywhere — whole unfenced line of
+   `identifier(query=/search=/…)` kwarg-call syntax; (b) terminal — last
+   content line is `identifier(…)` (ANY name) announced by a FIRST-PERSON
+   intent line ("Let me …:"): the model handed off to a tool that doesn't
+   exist and stopped. Imperative instructional endings ("Call it like
+   this:\n\nfoo(42)") survive. Both observed reflex shapes validated leak-free
+   on replay; tool-calling paths unaffected (envelope parsing reads raw
+   completions; RecipeAuthor exempt; structured calls never travel as prose).
+
+**Residual broke (unique ≈7 at gen75; ~4 after this lever), the honest gap to 85%:**
 1. **Value-misattribution to a real source** (NARA ×3-reask + maple ×2): the
    answer cites a REAL retrieved label but the value/claim belongs to a
    DIFFERENT retrieved file ("28940827" from another Blue Book file; a window
