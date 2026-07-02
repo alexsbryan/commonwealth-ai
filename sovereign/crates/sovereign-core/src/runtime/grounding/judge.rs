@@ -401,6 +401,10 @@ pub(super) async fn scan_unsupported_specifics(
     if evidence.trim().is_empty() {
         return Some(Vec::new());
     }
+    // Audit the CONTENT of honestly-labeled spans, not the label: the wrapper
+    // words bias the judge against supported content (see
+    // `unwrap_unverified_excerpts`).
+    let answer = &unwrap_unverified_excerpts(answer);
     let prompt = format!(
         "A user asked: {q}\n\n\
          EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n\
@@ -416,7 +420,9 @@ pub(super) async fn scan_unsupported_specifics(
          (3) A false claim ABOUT the evidence — e.g. the answer says the sources do \
          NOT contain something that they DO contain, or vice-versa.\n\
          A detail the evidence states, even paraphrased, is SUPPORTED — do not list \
-         it. When genuinely unsure, leave it out, but DO flag a clear contradiction. \
+         it. Ignore [Source: …] citation markers entirely — they are validated by a \
+         separate pass; never list one as unsupported. \
+         When genuinely unsure, leave it out, but DO flag a clear contradiction. \
          Quote the answer's exact wording. One item per line. Reply with exactly \
          NONE only if every statement in the answer is supported by the evidence.",
         q = question.chars().take(400).collect::<String>(),
@@ -453,6 +459,7 @@ pub(super) async fn scan_unsupported_specifics(
                             .to_string()
                     })
                     .filter(|l| l.len() > 8)
+                    .map(|l| normalize_scan_item(&l, answer))
                     .take(max_items)
                     .collect(),
             )
@@ -462,6 +469,96 @@ pub(super) async fn scan_unsupported_specifics(
             None
         }
     }
+}
+
+/// Strip the app's own honest `[unverified excerpt: X]` wrappers down to X.
+/// The wrapper is presentation metadata from quote_verification.rs; fed back
+/// into a judge it reads as an admission and biases the verdict against
+/// SUPPORTED content (observed 2026-07-01: "As Samuelson (1954) noted…" —
+/// verbatim in the evidence at offset 2410 — was flagged unsupported only when
+/// wrapped, and the verification note then listed it as unverified while the
+/// body cited it: a self-contradiction the re-judge scored confabulation).
+/// Same principle as the offline rubric's clause: judge X's content, never the
+/// wrapper.
+pub(super) fn unwrap_unverified_excerpts(s: &str) -> String {
+    const OPEN: &str = "[unverified excerpt:";
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find(OPEN) {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + OPEN.len()..];
+        match after.find(']') {
+            Some(j) => {
+                out.push_str(after[..j].trim());
+                rest = &after[j + 1..];
+            }
+            None => {
+                out.push_str(&rest[i..]);
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Reduce a scan line toward the ANSWER SPAN it flags. The prompt demands the
+/// answer's exact wording, but the 35B routinely appends judgment chatter
+/// ("… — The evidence does not mention this") or frames the item as commentary
+/// ("The answer cites \"[Source: X]\" for …"). These lines flow into the
+/// rewrite instructions AND the user-visible verification note — where the
+/// chatter reads as the assistant indicting itself (observed live 2026-07-01:
+/// a released answer footnoted "… is a fabricated specific not found in the
+/// evidence"). Deterministic reduction, ordered:
+/// 1. the longest QUOTED span that actually occurs in the answer → the span;
+/// 2. a prefix cut at " — " that occurs in the answer (dash-appended
+///    commentary) → the prefix;
+/// 3. otherwise unchanged — an abstractive finding still guides the
+///    corrective search, and the note renderer quotes it as-is.
+fn normalize_scan_item(item: &str, answer: &str) -> String {
+    let item = &unwrap_unverified_excerpts(item);
+    let ans = squash(answer);
+    let quoted: Vec<&str> = extract_quoted_spans(item);
+    if let Some(best) = quoted
+        .iter()
+        .filter(|s| s.chars().count() >= 12 && ans.contains(&squash(s)))
+        .max_by_key(|s| s.chars().count())
+    {
+        return best.trim().to_string();
+    }
+    if !ans.contains(&squash(item)) {
+        for dash in [" — ", " – ", " -- "] {
+            if let Some((head, _)) = item.split_once(dash) {
+                let head = head.trim().trim_matches(['"', '“', '”']).trim();
+                if head.chars().count() >= 12 && ans.contains(&squash(head)) {
+                    return head.to_string();
+                }
+            }
+        }
+    }
+    item.trim().trim_matches(['"', '“', '”']).trim().to_string()
+}
+
+/// Spans inside straight or curly double quotes, in order of appearance.
+fn extract_quoted_spans(s: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = s;
+    loop {
+        let Some(open) = rest.find(['"', '“']) else { break };
+        let open_len = rest[open..].chars().next().map_or(1, char::len_utf8);
+        let after = &rest[open + open_len..];
+        let Some(close) = after.find(['"', '”']) else { break };
+        out.push(&after[..close]);
+        let close_len = after[close..].chars().next().map_or(1, char::len_utf8);
+        rest = &after[close + close_len..];
+    }
+    out
+}
+
+/// Lowercase + collapse whitespace runs, for tolerant containment checks.
+fn squash(s: &str) -> String {
+    s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 pub(super) async fn claim_violation_joint(
@@ -490,4 +587,87 @@ pub(super) async fn claim_violation_joint(
     let denom = a + b;
     let support = if denom > 0.0 { a / denom } else { 0.0 };
     Some(1.0 - support)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ANSWER: &str = "Robinson attacked aggregate production functions and \
+        neoclassical production theory more broadly, a task she showed to be \
+        circular reasoning [Source: Joan Robinson]. The lighthouse also appears \
+        as a title of James Joyce's novel.";
+
+    #[test]
+    fn quoted_answer_span_is_extracted() {
+        // The observed live shape: the model wraps the span in quotes and
+        // appends judgment chatter after an em-dash.
+        let item = "\"and neoclassical production theory more broadly\" — The \
+                    evidence does not mention this";
+        assert_eq!(
+            normalize_scan_item(item, ANSWER),
+            "and neoclassical production theory more broadly"
+        );
+    }
+
+    #[test]
+    fn dash_appended_commentary_is_cut() {
+        let item = "a task she showed to be circular reasoning — not stated in the sources";
+        assert_eq!(normalize_scan_item(item, ANSWER), "a task she showed to be circular reasoning");
+    }
+
+    #[test]
+    fn abstractive_finding_passes_through() {
+        // Commentary with no answer span stays intact (it still guides the
+        // corrective search); only wrapping quotes are trimmed.
+        let item = "The answer claims there is no single item explicitly labeled";
+        assert_eq!(normalize_scan_item(item, ANSWER), item);
+    }
+
+    #[test]
+    fn curly_quotes_are_handled() {
+        let item = "“The lighthouse also appears as a title of James Joyce's novel” — misattributed";
+        assert_eq!(
+            normalize_scan_item(item, ANSWER),
+            "The lighthouse also appears as a title of James Joyce's novel"
+        );
+    }
+
+    #[test]
+    fn legitimate_em_dash_inside_a_present_item_is_kept() {
+        // The whole item occurs in the answer -> no cut at its interior dash.
+        let ans = "The rule — quiet hours after ten — is strict.";
+        let item = "The rule — quiet hours after ten — is strict.";
+        assert_eq!(normalize_scan_item(item, ans), "The rule — quiet hours after ten — is strict.");
+    }
+
+    #[test]
+    fn quoted_spans_extraction_walks_pairs() {
+        let spans = extract_quoted_spans(r#"cites "[Source: x]" for "the atomic idea" here"#);
+        assert_eq!(spans, vec!["[Source: x]", "the atomic idea"]);
+    }
+
+    #[test]
+    fn unverified_excerpt_wrappers_unwrap_to_content() {
+        let s = "It holds [unverified excerpt: As Samuelson (1954) noted, free-riding \
+                 justifies provision] and more.";
+        assert_eq!(
+            unwrap_unverified_excerpts(s),
+            "It holds As Samuelson (1954) noted, free-riding justifies provision and more."
+        );
+        // Unclosed wrapper survives verbatim (never destroy text).
+        let broken = "tail [unverified excerpt: cut off";
+        assert_eq!(unwrap_unverified_excerpts(broken), broken);
+        // No wrapper → untouched.
+        assert_eq!(unwrap_unverified_excerpts("plain"), "plain");
+    }
+
+    #[test]
+    fn wrapped_scan_item_is_judged_on_content() {
+        // A scan item echoing the app's own wrapper must reduce to the span
+        // content so the note never lists a double-wrapped self-indictment.
+        let answer = "The gate held [unverified excerpt: ships cannot pay tolls at sea] today.";
+        let item = "[unverified excerpt: ships cannot pay tolls at sea]";
+        assert_eq!(normalize_scan_item(item, answer), "ships cannot pay tolls at sea");
+    }
 }
