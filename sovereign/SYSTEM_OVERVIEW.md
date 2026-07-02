@@ -28,7 +28,9 @@ commonwealth-ai/
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
+├── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
+└── …                          # Supporting: vendor/ (pinned llama-cpp-4), scripts/ (CI bench + corpus setup),
+                               # docs/, landing/, gym/, baselines/; corpus-engine/xtask = the docs/arch CI gates
 ```
 
 | Project              | Role                                          | Depends on                                            |
@@ -106,19 +108,14 @@ Major modules under `corpus-engine/src/`:
   bank). See `ENRICHMENT_V2.md`. Plus `enrichment/reconciliation/`
   — the multi-origin merge primitive (Phase 4 of the architecture-
   over-Enron push) with reversible oplog + pluggable merge signals.
-  Signals are identity-grade only (exact name fold, nickname /
-  initial-surname, exact shared email or email-alias, org+role); the
-  fuzzy email↔name and bare-name-alias paths were removed after they
-  chained 2,013 polluted atoms — Lay + Skilling + Fastow + every org —
-  into one cluster (train B³ precision 0.26 → 1.00 once removed).
-  `candidate_pairs` blocking keeps the O(n²) scan sub-second on the
-  18.8k-atom multi-wide corpus (~650× fewer pairs, behaviour-identical).
-  Corporate-suffix normalization (`strip_org_suffixes`, Institution-only)
-  collapses "El Paso" / "El Paso Corp." / "El Paso Corporation" while
-  keeping distinct bases apart, lifting train B³ recall 0.66 → 0.75
-  (F1 0.86, precision held at 1.0). `sovereign bench enron diagnose`
-  is the glass-box: per-gold coverage + cluster spread + over-merge
-  bridges for the tuned policy.
+  Signals are **identity-grade only** (exact name fold, nickname /
+  initial-surname, exact shared email or email-alias, org+role) —
+  the fuzzy email↔name and bare-name-alias paths were removed after
+  they chained thousands of atoms into one polluted cluster.
+  `candidate_pairs` blocking keeps the O(n²) scan sub-second;
+  corporate-suffix normalization (`strip_org_suffixes`,
+  Institution-only) folds "El Paso Corp."-style variants.
+  `sovereign bench enron diagnose` is the glass-box.
 - `atlas_traversal/` — query layer over atlas graphs
 - `update/` — code/file watchers, delta updates, lint/test watchers
 - `meta_atlas/` — cross-corpus articulation classifier + index
@@ -153,7 +150,9 @@ crates/
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
 ├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
 ├── sovereign-eval           # Eval surfaces
-├── sovereign-agent-bench    # Eight-problem agent-coding battery
+├── sovereign-authoring-harness # Recipe-authoring verdict ladder — Pass/Fail policy + render over corpus-engine harness StageOutputs
+├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib shared by the desktop bridge + `meshapp dev` (§5)
+├── sovereign-agent-bench    # Eleven-problem agent-coding battery
 ├── commonwealth-agent-tools # Canonical agent-tool primitives (cross-runner contract)
 └── commonwealth-tdd         # Unified TDD solver loop (HTTP + MCP transports)
 ```
@@ -190,119 +189,83 @@ reference is `SCHEMA.md` (generated from `corpus-engine/src/recipe.rs` and gated
 by the `recipe_schema` test); `GETTING_STARTED.md` + `_templates/` onboard
 contributors.
 
-Current set: `wikipedia`, `wikipedia-simple`, `wikipedia-newsworthy`,
-`wikipedia-article`, `wikipedia-catalog`, `sep`, `stackexchange`,
-`stackexchange-knowledge`, `openalex`, `gutenberg`, `gutenberg-work`,
-`crs_reports`, `alignment`, `codebase`, `conversations-anthropic`,
-`conversations-chatgpt`,
-`scotus-opinions`, `olc-opinions`, `federal-register-presidential`,
-`us-code`, `arch-principles`, `system-overview`. Underscore directories like
-`_templates` carry scaffolding.
+The catalog (`registry.toml`) lists 26 recipes: `wikipedia`,
+`wikipedia-simple`, `wikipedia-newsworthy`, `wikipedia-article`,
+`wikipedia-catalog`, `sep`, `stackexchange`, `stackexchange-knowledge`,
+`openalex`, `gutenberg`, `gutenberg-work`, `crs_reports`, `us-code`,
+`olc-opinions`, `scotus-opinions`, `federal-register-presidential`,
+`conversations-anthropic`, `conversations-chatgpt`, the five
+`enron-sample*` recipes, and the three `uap-blue-book*` recipes.
+Further recipe dirs ship outside the catalog (installed by path or by a
+setup script): `codebase`, `arch-principles`, `system-overview`,
+`chaos-secret-agent`, `chaos-saltgrass`, `maple-house`, `proxy-company`,
+`search-gym`, `sf-assessor-roll`. Underscore directories like
+`_templates` carry scaffolding; `meshapp-registry.toml` is the curated
+mesh-app registry (§5).
 
-Bench/eval harnesses (`knowledge-gym`, `search-gym`, `routing`, `book-report`,
-per-corpus question banks) live under `sovereign/bench/`, not here — the gym
-*commands* (`sovereign search-gym`, `knowledge-gym`) still exist; only their
-fixtures moved.
+### Bench harnesses
 
-The **Reasoning-Fidelity Validation Harness** (`sovereign bench
-mechanism-fidelity`) is a different shape of bench: a *metamorphic* audit of
-whether a frozen model reasons from a causal **mechanism** or from a memorized
-label. It is organized as a **registry of reasoning classes** behind one
-generic orchestrator. Pure logic lives in `sovereign-eval/src/mechanism_fidelity/`:
-the `ReasoningClass` trait (`class.rs`) + `registry.rs` resolve `--class <id>`,
-and each class emits a flat list of finished `RenderedProbe`s (a base case + its
-perturbations × full / stripped-control render, each carrying the structural
-prior's probability). Three classes ship today — `wealth_tax_relocation`
-(synthetic logistic prior; DIR-P1 anti-gestalt collapse / DIR-P2 saturation /
-INV-I1 identity invariance), `attribution_support` (corpus-grounded: mines
-`Claim` atoms + their evidence from a corpus's `atlas/atoms.json`, exact 0/1
-oracle, blindfold negative control via withheld passage), and
-`aggregation_threshold` (synthetic counting-under-a-threshold). The
-class-agnostic `score.rs` scorer + three-pool discipline are shared.
+Bench/eval fixtures (`knowledge-gym`, `search-gym`, `routing`,
+`book-report`, per-corpus question banks) live under `sovereign/bench/`;
+orchestrators in `sovereign-cli-llm/src/bench_cmd/`; pure scorers in
+`sovereign-eval/`. The gym *commands* (`sovereign search-gym`,
+`knowledge-gym`) still exist; only their fixtures moved. Four harnesses
+deserve a map entry:
 
-The inference-coupled orchestrator (`bench_cmd/mechanism_fidelity.rs`) elicits a
-forced-choice **logprob** distribution in ONE forward pass per probe (the
-candidate set rides inside `structured_output` as a sentinel the daemon's
-embedded path reads off the masked next-token logits — `model_slot.rs`), maps it
-to a scalar via `class.target_prob`, and scores each perturbation's `d_agent`
-against the structural `d_struct`. Elicitation is **sequential** so byte-identical
-control prompts stay deterministic — the negative control's "provably blind"
-guarantee (its `d_agent` must be exactly 0). Train/Dev run **anytime-valid
-early-stopping** (empirical-Bernstein confidence intervals read at a pre-
-registered checkpoint schedule, `stopping.rs`): a model is resolved and its
-remaining cases skipped the instant the overall verdict is decided (any required
-band fails → NO-GO; all pass → GO). Each run distils a per-`(model, class)`
-**fidelity card** (`card.rs` → `~/.sovereign/model-fidelity-cards/<model>.json`,
-stamped with the manifest fingerprint so stale bands invalidate it) — the
-"characterize once, read free per query" artifact. It reuses
-`entity_resolution_bench::PeekBudget` for the sacred test pool and emits
-`ResultRow` JSONL read by the Python verdict sidecar. See
+**Reasoning-fidelity** (`sovereign bench mechanism-fidelity`) — a
+*metamorphic* audit of whether a frozen model reasons from a causal
+mechanism or a memorized label. A registry of `ReasoningClass`es
+(`sovereign-eval/src/mechanism_fidelity/`; three ship:
+`wealth_tax_relocation`, `attribution_support`, `aggregation_threshold`)
+behind one orchestrator that elicits a forced-choice **logprob**
+distribution in one forward pass per probe, keeps a provably-blind
+negative control, and runs anytime-valid early-stopping (`stopping.rs`)
+to a GO/NO-GO verdict. Each run distils a per-`(model, class)`
+**fidelity card** (`~/.sovereign/model-fidelity-cards/<model>.json`,
+fingerprint-stamped so stale bands invalidate) — characterize once, read
+free per query. Full mechanics:
 `sovereign/bench/mechanism_fidelity/README.md`.
 
-The **Chaos-Monkey** bench (`sovereign bench chaos-monkey`) is the
-calibration counterpart: where every other bench measures competence *when the
-corpus can answer*, this one measures the situated-agent property of answering
-capably + cited **when the facts are in persistence** and abstaining honestly
-**when they aren't** — without being fooled by distractors. Pure logic
-(`sovereign-eval/src/chaos_monkey/`: a question schema whose *fairness contract*
-is enforced at load — answerable items must ship a witness, absent items must
-not — plus a **two-red-line scorer** that never blends competence-when-present
-and honesty-when-absent into one number, so neither a hallucinator nor a
-blanket-abstainer can game it). The orchestrator
-(`bench_cmd/chaos_monkey.rs`) drives the live `handle_message_stream` path
-sealed to one corpus via `enabled_corpora`, classifying answer-vs-abstain with a
-forced-choice judge and checking everything else deterministically against the
-bank's witnesses. Its sealed corpus installs under a **machine-stable**
-corpus_id via a committed recipe (`sovereign-recipes/chaos-secret-agent/`,
-installed by `scripts/setup-chaos-corpus.sh`) rather than a path-hashed
-`corpus watch`, so the gate is reproducible across boxes. See
+**Chaos-Monkey** (`sovereign bench chaos-monkey`) — the calibration
+counterpart: answer capably + cited **when the facts are in the sealed
+corpus**, abstain honestly **when they aren't**, unfooled by
+distractors. The bank enforces a fairness contract at load (answerable
+items must ship a witness; absent items must not), and a **two-red-line
+scorer** never blends competence-when-present with honesty-when-absent,
+so neither a hallucinator nor a blanket-abstainer can game it. Drives
+the live `handle_message_stream` path sealed to one corpus; the corpus
+installs machine-stable from the committed recipe
+`sovereign-recipes/chaos-secret-agent/` (`scripts/setup-chaos-corpus.sh`)
+so the gate reproduces across boxes. See
 `sovereign/bench/chaos_monkey/README.md`.
 
-The **Governance** bench (`sovereign bench governance`, FR-9) gates the
-event-sourced common-law tool — the `govern` verbs (`seed`/`tensions`/`resolve`/
-`accept`/`ask`) over a corpus's `GovernanceView` + `GovernanceOplog`. Two lanes
-share the chaos tracked-run + gate pattern. **Lane A** (`run`/`diagnose`) is a
-precision/recall *detector* bench: it maps each `EdgeType::Tension` edge in the
-enriched atlas to a pair of source sections and scores against an exhaustive
-`truth.json` (pure scorer `sovereign-eval/src/governance_bench.rs`). **Lane B**
-(`qa`) reuses the chaos two-red-line scorer over the governance corpus: because
-the sealed corpus carries a `governance_oplog.jsonl`, the live turns become
-*governance turns* — the gated active-set step in `shared_core_steps()`
-(`runtime/retrieval_pipeline.rs`) drops the retrieved chunks of any *amended
-section* (`GovernanceView::dead_law_sections`, bridged to chunk row ids via
-`chunk_to_section_map` over `chapters.json`, since atoms cite section ids) and
-the cite-or-abstain gate runs as `GateSurface::Governance` — so the bank's
-`SupersededTrap` rows add a **third red line, RL-3 (no dead law)** alongside
-RL-1 (no confabulated rule = `hallucination_rate`) and RL-2 (honest abstention
-= `honesty`). Lane B drives the *same hardened turn* `govern ask` ships — intent
-pinned to a factual lookup + the governance answering discipline — via the
-general bench knobs `--pin-intent` / `--custom-instructions`, so the metric
-tracks the shipped tool, not a bare chat path. Dropping is section-level (a chunk holds a whole section's
-rules), so an amended section's co-located un-amended provisions go with it;
-sub-chunk filtering is the precise future refinement. The "Maple
-House" fixture installs under the machine-stable `maple-house` id via a
-committed recipe (`sovereign-recipes/maple-house/`), set up + seeded + resolved
-by `scripts/setup-governance-corpus.sh`; both lanes gate against committed
-baselines via `bench gate governance` / `governance-qa`.
+**Governance** (`sovereign bench governance`, FR-9) — gates the
+event-sourced common-law tool (the `govern` verbs over a corpus's
+`GovernanceView` + `GovernanceOplog`). **Lane A** is a precision/recall
+detector over `EdgeType::Tension` edges vs an exhaustive `truth.json`
+(scorer: `sovereign-eval/src/governance_bench.rs`). **Lane B** reuses
+the chaos two-red-line scorer and adds **RL-3 (no dead law)**: the gated
+active-set step in `runtime/retrieval_pipeline.rs` drops retrieved
+chunks of amended sections (`GovernanceView::dead_law_sections`) and the
+cite-or-abstain gate runs as `GateSurface::Governance`, driving the same
+hardened turn `govern ask` ships. The "Maple House" fixture installs
+machine-stable from `sovereign-recipes/maple-house/`
+(`scripts/setup-governance-corpus.sh`); both lanes gate via
+`bench gate governance` / `governance-qa`.
 
-Finally, **`scripts/sovereign-ci-bench.sh`** is the single ≤2h core-regression
-gate a developer runs for confidence that chat + inference hasn't regressed. It
-*composes* the existing benches (each a visible, re-runnable command) rather
-than reinventing them, with a clear gate policy: deterministic baseline-diffed
-lanes (retrieval recall, enrichment atom-F1, intent routing) are **hard**
-(build-breaking via `bench all`'s exit code); the synthesis answer-equiv judge
-lane is **soft** (judge variance shouldn't flake the build); chaos-monkey,
-mechanism-fidelity, the multi-turn degradation thread, and the FR-9 governance
-lanes (detector + Q&A) run as **tracked**
-(advisory) lanes whose *absolute* verdict — a true finding for the current
-system, not a regression (chaos is built to break the present agent; mechanism
-returns NO-GO for any non-faithful model) — never gates, each paired with a
-**hard `*-gate` lane** (`sovereign bench gate <lane>`) that re-scores the same
-artifact and fails *only on regression vs a committed baseline*
-(`sovereign/bench/<group>/baselines/<id>/`; first-run passes). The gate logic
-is one shared, self-describing metric/direction/tolerance primitive
-(`bench_cmd/lane_baseline.rs` + `gate.rs`). Overall exit 0 iff every hard lane
-stays within baseline and the run fits the budget.
+**CI composition** (`scripts/sovereign-ci-bench.sh`) — the single ≤2h
+core-regression gate; it *composes* the benches above rather than
+reinventing them. Deterministic baseline-diffed lanes (retrieval recall,
+enrichment atom-F1, intent routing) are **hard** (build-breaking); the
+synthesis answer-equiv judge lane is **soft** (judge variance shouldn't
+flake the build); chaos, mechanism, the multi-turn degradation thread,
+and the governance lanes run as **tracked** (advisory — their absolute
+verdict is a finding about the current system, not a regression), each
+paired with a **hard `sovereign bench gate <lane>`** that re-scores the
+same artifact and fails only on regression vs a committed baseline
+(`sovereign/bench/<group>/baselines/<id>/`; first run passes). Gate
+logic is one shared metric/direction/tolerance primitive
+(`bench_cmd/lane_baseline.rs` + `gate.rs`).
 
 ---
 
@@ -323,44 +286,35 @@ pipeline. Built-ins per stage:
 
 | Stage      | Built-ins                                                          |
 |------------|--------------------------------------------------------------------|
-| Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`   |
-| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `described_asset` (content-addressed binary dispatcher), `column_aware` (typed Entity atoms from parquet parsed-form caches), `tabular_atoms` (deterministic typed Entity atoms per row from tabular JSON, e.g. the SF assessor parcel roll) |
-| Filter     | `pageview_rank`, `title_list`, `boilerplate` (email signature / quoted-reply / disclaimer stripping), composed via `[[filter]]` (`Any` / `All`) |
+| Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `custom` (runtime-registered seam) |
+| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `json`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `wikipedia_catalog`, `wikipedia_api_article`, `gutenberg_catalog`, `html`, `html_sections`, `xml_sections`, `markdown`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `described_asset` (content-addressed binary dispatcher), `tabular_atoms` (deterministic typed Entity atoms per row from tabular JSON), `anthropic_export`, `chatgpt_export`, `alignment_workspace`, `custom` |
+| Filter     | `pageview_rank`, `title_list`, `knowledge_density`, `boilerplate` (email signature / quoted-reply / disclaimer stripping), composed via `[[filter]]` (`Any` / `All`) |
 | Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
 | Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS                  |
 
-The `tabular_atoms` extractor (deterministic, no inference) types each row
-of a structured public dataset into a `parcel`-style `Entity` atom whose
-numeric/string columns land in `Entity::attributes` (atoms.json schema
-2.3). The SF land-value-tax demo folds those atoms into revenue-neutral
-land-rate aggregates via the `parcel_analytics` lib (`enrichment/atlas/
-analysis/`) + the read-only `parcel_analytics` tool, which emits both
-compact cited figures and a full-precision `derivation` trace. The "no
-confabulated numbers" guarantee — *the model never originates a number* —
-is enforced in three coordinated places: **(1)** the model is shown only
-the COMPACT figures (the step summary prefers a tool's `summary` over raw
-JSON) and narrates with those, never retyping long precise values (which a
-mid-size model corrupts into digit-salad); **(2)** the ComplexTask
-synthesizer appends the tool's `derivation` VERBATIM — rendered by the
-system, not the model — so the reader sees the exact formula, inputs, and
-result; **(3)** a deterministic audit (`runtime::numeric_audit`)
-value-matches every $/% figure in the model's prose against the union of
-the tool's formatted figures and raw numeric outputs (with a fraction↔%
-bridge), flagging only model-originated numbers — a *computed* value is
-provenanced by its computation, not a source chunk. `sovereign corpus
-export-parcels` writes the exact input set to CSV for independent
-re-summing. Routing reaches this agentic path via the router's
-tool-relevance gate (a closely-matching registered tool overrides a
-toolless intent) and the planner's per-tool input-param hints + example
-calls (so a relevant tool is reliably planned as a `tool` step, not a
-`reason` step). See `sovereign-recipes/sf-assessor-roll/`.
+The `tabular_atoms` extractor (deterministic, no inference) types each
+row of a structured public dataset into an `Entity` atom whose columns
+land in `Entity::attributes`. The SF land-value-tax demo folds those
+atoms into aggregates via the `parcel_analytics` lib
+(`enrichment/atlas/analysis/`) + the read-only `parcel_analytics` tool.
+Its "no confabulated numbers" guarantee — *the model never originates a
+number* — is enforced three ways: the model narrates only the tool's
+COMPACT figures; the ComplexTask synthesizer appends the tool's
+`derivation` VERBATIM (rendered by the system, not the model); and a
+deterministic audit (`runtime::numeric_audit`) value-matches every $/%
+figure in the prose against the tool's outputs. `sovereign corpus
+export-parcels` writes the input set to CSV for independent re-summing.
+See `sovereign-recipes/sf-assessor-roll/`.
 
 The `email` + `described_asset` extractors and the `column_aware`
-extractor land together as the substrate of the architecture-over-Enron
-push. Each future binary-bearing vertical (Firm Inbox, sales
-intelligence, project memory, calendar / transactions / sensor ingest)
-inherits the same dispatcher + asset-store pair unchanged. See
-`bench/HISTORY.md`'s `enron-entity-resolution` section.
+reconciliation extractor (configured via
+`[enrichment.reconciliation.column_aware]`, not an `[extractor] type`;
+reads parquet parsed-form caches into typed Entity atoms) land together
+as the substrate of the architecture-over-Enron push. Each future
+binary-bearing vertical (Firm Inbox, sales intelligence, calendar /
+transactions / sensor ingest) inherits the same dispatcher + asset-store
+pair unchanged. See `bench/HISTORY.md`'s `enron-entity-resolution`
+section.
 
 ### Storage
 
@@ -385,7 +339,7 @@ identical schema for a full index or a shard.
         ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
         │                                # query-path reader (hot scalar columns + a
         │                                # lossless payload). Replaced atoms.rkyv; the
-        │                                # sole atom backend. See ATLAS_STORAGE_V2.md
+        │                                # sole atom backend. See docs/specs/ATLAS_STORAGE_V2.md
         ├── edges.csr                    # mmap'd CSR adjacency — sync, paged BFS
         ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding), built at
         │                                # enrich/backfill; seeds atlas grounding (only
@@ -453,7 +407,7 @@ distribution.
 ### Enrichment
 
 **Three coexisting systems**, selected per-corpus by `[enrichment] type`
-(dispatch at `engine/ingest.rs:1581`). See
+(the labeled `'enrichment:` dispatch block in `engine/ingest.rs`). See
 [`corpus-engine/ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) — the
 canonical umbrella that reconciles all three — before assuming "enrichment"
 means one thing.
@@ -514,8 +468,8 @@ for status table, landing-by-landing scope, and validation targets.
 
 ### Recipe registry
 
-Six-plus recipes shipped in `sovereign-recipes`, consumed via
-`RecipeRegistry`:
+Twenty-six catalog recipes ship in `sovereign-recipes` (§2), consumed
+via `RecipeRegistry`:
 
 - **Bundled snapshot** — `build.rs` vendors `sovereign-recipes/registry.toml`
   into `OUT_DIR` and `registry.rs` `include_str!`s it from there, so the engine
@@ -527,7 +481,6 @@ Six-plus recipes shipped in `sovereign-recipes`, consumed via
   from GitHub.
 - **Resolution order** — local override on disk → remote → bundled.
   SHA-256 verified when the entry's `sha256` is non-empty.
-- `cargo xtask update-registry-snapshot` refreshes the snapshot.
 
 ### Recipe-authoring platform
 
@@ -625,12 +578,13 @@ unless the user opts in to web search or a Commonwealth mesh.
 | `SensitiveCorpusOracle` / `FolderMetadataOracle` | Watched-folder privacy + UI surface |
 | `InsightStore` / `InsightSink` | Long-term insight extraction + persistence                  |
 
-`StateStore` is decomposed per ISP into focused sub-traits aggregated
-by a single blanket impl: `ConversationStore`, `TaskStore`,
+`StateStore` is decomposed per ISP into 12 focused sub-traits
+aggregated by a single blanket impl: `ConversationStore`, `TaskStore`,
 `MemoryStore`, `RoutingStore`, `DocumentStore`, `CorpusStateStore`,
 `BudgetStore`, `PermissionStore`, `StepExecutionStore`, `HealthStore`,
-`DocumentSessionStore`, `DocumentAssetStore`, `InsightStore`.
-Callers narrow bounds to what they need. `StepExecutionStore` is the
+`DocumentSessionStore`, `DocumentAssetStore`. (`InsightStore` is a
+standalone trait — impl'd by `SqliteInsightStore`, not part of the
+aggregate.) Callers narrow bounds to what they need. `StepExecutionStore` is the
 durable per-attempt ledger behind executor replay-safety (below);
 its methods default to no-ops so non-durable mocks are unaffected.
 
@@ -776,7 +730,8 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 (claim extraction, forced-choice support, joint long-form judge), `search.rs`
 (`SealedEvidenceSearch` trait — claim-conditioned widening that can never
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
-`EvidenceContext`). Gated surfaces today (all env-gated;
+`EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
+`value_presence.rs` (citation forcing + numeric-presence checks). Gated surfaces today (all env-gated;
 `SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
 override): streaming/non-streaming KnowledgeQuery + streaming DeepQuery
 (dual-bank validated), attached-doc (dual-bank validated: Conrad dev bank +
@@ -801,10 +756,10 @@ step with `chunks_before/after/delta`). The governing principle: **the
 intent decides HOW to answer (model tier, expansion, synthesis shape) — never
 WHERE knowledge lives.** Both pipelines are composed as **the SHARED 3-step
 evidence-gathering head (local corpora ∥ mesh fan-out → personal-scope filter
-→ StateStore corpus docs) + the SHARED 12-step core + a per-intent tail**:
-`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 16 steps; tail = audited
+→ StateStore corpus docs) + the SHARED 15-step core + a per-intent tail**:
+`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 19 steps; tail = audited
 truncate, then route-aware expansion post-pipeline) and `deep_pipeline()`
-(DeepQuery / SimpleQuery, 17 steps; tail = plain truncate + strategy-driven
+(DeepQuery / SimpleQuery, 20 steps; tail = plain truncate + strategy-driven
 top-sources expansion; attached-doc turns drop the head and the two grounding
 steps). Golden tests pin the step lists and the head+core identity, so
 reordering is an explicit, reviewed act. Per-intent differences
@@ -833,7 +788,7 @@ follow-up: KQ provenance doesn't yet surface mesh peer attribution
 (`search_method` labels live on the deep handler).
 
 Per-intent handlers live in
-`sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`
+`sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query,code_query,generative,recipe_author}.rs`
 as `impl Runtime` across files (no vtable hop on dispatch).
 
 ### Inference
@@ -944,8 +899,9 @@ once-planned next phase (symmetric `spec-intel` → a spec↔code bipartite
 diff) shipped as the spec↔code fact pipeline — `sovereign code facts` /
 `enrich spec-intel` / `code check-spec`; see
 [`../docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md).
-The deterministic floor of this stack runs in public CI: `cargo xtask
-docs-gate` (workflow `docs-reconcile.yml`, badged on the README)
+The deterministic floor of this stack runs in public CI:
+`cargo run -p xtask -- docs-gate` (workflow `docs-reconcile.yml`,
+badged on the README)
 resolves every repo path THIS document and ARCH_PRINCIPLES cite —
 machine-local citations and paths that no longer exist fail the build.
 The LLM-bound layers above it (drift, capability-reconcile, check-spec)
@@ -983,25 +939,27 @@ stay mesh-side.
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `ServerEvent::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `ServerEvent::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore; the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); scaffold pending a Tauri-mobile-toolchain build. See `docs/specs/MOBILE.md`. |
 
 Verbs by sibling binary:
 
 - `sovereign-cli` (dispatcher + light delegators, no LLM dep) —
-  `notes`, `status`, `drift`, `audit`, `claim`, `charter`, `amend`,
+  `notes`, `status`, `drift`, `audit`, `charter`, `amend`,
   `design`, `plan`, `init`, `milestone`, `refresh`, `reflect`,
   `rough-edges`, `archaeology-eval`, `git-archaeology`,
-  `agent-bench`, `nudge`, `serve`, `stop`.
+  `agent-bench`, `nudge`, `serve`, `stop`, `memory`,
+  `awareness` (feature-gated).
 - `sovereign-cli-daemon` — `daemon` (owns :9741), `setup`,
   `install-service`, `doctor`.
 - `sovereign-cli-dev` — `atos`, `project`, `code`, `tools`.
 - `sovereign-cli-llm` — `chat`, `bench`, `eval`, `voice`,
   `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`,
   `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`,
-  `mesh`, `corpus`, `newsworthy`, `knowledge-gym`, `search-gym`,
-  `awareness`.
+  `mesh`, `meshapp`, `mobile`, `corpus`, `newsworthy`,
+  `knowledge-gym`, `search-gym`, `govern`, `router-cache`,
+  `proxy`, `portfolio`, `workflow`, `claim`.
 
 There is no interactive REPL. Bare `sovereign` prints usage and
 exits; use `sovereign chat` for the interactive shell, which
@@ -1011,7 +969,7 @@ skip) and writes `.opencode/config.json` + `AGENTS.md` and installs
 the ATOS opencode plugin.
 
 The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its
-own logs at startup via `util::log_rotation` — copy-truncate, 10
+own logs at startup via its `log_rotation.rs` — copy-truncate, 10
 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for
 launchd-held FDs.
 
@@ -1042,7 +1000,7 @@ traversal). The desktop app registers as the system handler.
 | Cloud peer deploy | [`docs/CLOUD_PEER_DEPLOY.md`](./docs/CLOUD_PEER_DEPLOY.md) |
 | Mesh load awareness | [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md) |
 | Voice contract harness | `sovereign/bench/voice/README.md` |
-| Production search integration | [`docs/PRODUCTION_SEARCH_INTEGRATION.md`](./docs/PRODUCTION_SEARCH_INTEGRATION.md) |
+| Production search integration | [`docs/specs/PRODUCTION_SEARCH_INTEGRATION.md`](./docs/specs/PRODUCTION_SEARCH_INTEGRATION.md) |
 | Features overview | [`docs/FEATURES.md`](./docs/FEATURES.md) |
 | FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
 | **On-call runbook** (incident decision tree, supervision, memory budget, glassbox map, bench noise bands, sibling-rebuild map) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
@@ -1070,18 +1028,21 @@ toggles. Code reviewers should call out attempts to bend them.
 
 ### Agent-coding battery + canonical tools + TDD
 
-`sovereign/crates/sovereign-agent-bench/` — eight-problem graded
+`sovereign/crates/sovereign-agent-bench/` — eleven-problem graded
 battery measuring end-to-end coding agents (pi / opencode / codex /
-aider, model-agnostic). Problem mix: three algorithmic, three
-system-design, two code tests; languages span Rust × 3, Go × 2,
-TypeScript × 2, Python × 1. Scored `0..=3` on correctness /
-approach / efficiency, `72` max. CLI: `sovereign agent-bench
-<run|list|show>`. Dispatch via `AgentRunnerRegistry`.
+aider, model-agnostic): six problems in Rust / Go / TypeScript plus
+five Python variants (fixtures under
+`sovereign/bench/agent-coding/problems/`). Judged `0..=3` against
+anchor rubrics on three dimensions per problem (9/problem, 99 max). CLI:
+`sovereign agent-bench <run|list|show>`. Dispatch via
+`AgentRunnerRegistry`.
 
 `sovereign/crates/commonwealth-agent-tools/` — canonical tool
-surface. Five primitives (`inspect_workdir` polymorphic over
-file/dir/find/grep, `write_file`, `cargo_build`, `cargo_smoke`,
-`agent_done`); every runner translates to/from this set. Plus a
+surface. Ten primitives (`inspect_workdir` polymorphic over
+file/dir/find/grep, `write_file`, `patch_file`, `replace_function`,
+`build`, `smoke`, `agent_done`, `agent_plan`,
+`handoff_to_evaluator`, `handoff_to_implementer`); every runner
+translates to/from this set. Plus a
 role layer (Planner / Implementer / Evaluator) operating on the
 same model weights via different prompts + tool subsets + forced
 first tools.
@@ -1109,7 +1070,7 @@ the plan healthy as nodes come and go.
 
 - **Join keys** — `cwth-XXXX-XXXX-XXXX`.
   `membership::generate_join_key` stores BLAKE3 hash, discards
-  plaintext. `verify_join_key` is constant-time. First node calls
+  plaintext. `verify_join_key` compares BLAKE3 hashes. First node calls
   `init_mesh`; subsequent nodes call `accept_join`.
 - **Node identity keys** — every node persists an Ed25519 keypair at
   `<data_dir>/node_key` (sibling of `node_id`;
@@ -1168,8 +1129,9 @@ instance hangs off commonwealth-api's `AppState`
 (`peer_transport()` / `install_peer_transport`).
 
 - **`IpTransport`** (production): today's tailnet/LAN overlay. Owns
-  the Tailscale CGNAT/ULA address ranking (`peer_addr::rank` — no
-  other production caller) and the last-working-address promotion
+  the Tailscale CGNAT/ULA address ranking
+  (`commonwealth_core::peer_addr::rank` — no other production caller)
+  and the last-working-address promotion
   that used to live as duplicate caches in gossip and knowledge
   fan-out. Port policy per class: Gossip/ControlPlane/
   KnowledgeSearch/ModelTransfer use the gossiped address verbatim;
@@ -1207,8 +1169,8 @@ instance hangs off commonwealth-api's `AppState`
   the daemon self-stamps its live dial info each gossip round via a
   pull-provider on `AppState`; `IrohTransport` dials peers purely from
   the gossiped contact (**membership = dialability**).
-- **The no-VPN mesh (2026-07, uncommitted on `saas`; unit + e2e +
-  soak-axis verified).** When iroh is enabled, `RoutedTransport`
+- **The no-VPN mesh (2026-07, merged via the `Saas` PR #13; unit +
+  e2e + soak-axis verified).** When iroh is enabled, `RoutedTransport`
   routes **every** `TrafficClass` iroh-first with automatic per-dial
   IP fallback — `[iroh.transport] <class> = "ip"` is now an opt-OUT,
   not an opt-in flip. Enablement is `[iroh] enabled: Option<bool>`:
@@ -1317,18 +1279,23 @@ investigation in OICP_RATIONALIZATION.md):
 
 Two listeners, two trust domains.
 
-**Client API — :9741, no mTLS, binds 0.0.0.0** (federated inference
-needs peer reachability)
+**Client API — :9741, binds 0.0.0.0** (federated inference needs peer
+reachability). Loopback callers pass free; non-loopback callers go
+through a bearer-token layer (`client_auth`, `[daemon] client_token`,
+with exempt paths for federation/health) — added with the SaaS
+hardening, 2026-07.
 
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|
 | `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
 | `POST /v1/responses`          | OpenAI Responses-API adapter (codex 0.130+). Wire-format translator over chat-completions. See [`docs/inference.md`](./docs/inference.md). |
 | `GET  /v1/models`             | Loaded models w/ capabilities + performance estimates  |
+| `POST /v1/embeddings`         | Embedding endpoint (what `embed_http::http_embed_fn` peers call) |
 | `POST /v1/knowledge/search`   | Determines target corpora, fans out, merges, reranks   |
+| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy (`commonwealth-app`) |
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
-| `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + same no-auth posture as `/v1/*` (documented in-module); incremental streaming + per-request auth are tracked follow-ups. |
+| `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
 **Internal API — :9742, plaintext (perimeter-trust)**
@@ -1353,6 +1320,13 @@ historical per-session-cert/`TrustStore` mTLS scaffolding was removed
 | `POST /internal/knowledge/search`   | Inter-node shard query (fan-out target) |
 | `GET  /internal/latency/probe`      | Latency probe response           |
 
+The table shows the core mesh-protocol routes. `server.rs`'s
+`internal_router` registers ~30 more operational routes (corpus
+lifecycle `/internal/corpus/*`, model load/unload/inventory, app state
++ registry, budget / quiesce / foreground-state controls, and the
+contribution/activity family listed under §5 "Desktop
+production-readiness").
+
 The loopback guard is defended in three layers: router-level
 `from_fn(loopback_only)` middleware, per-handler `ConnectInfo`
 extraction, and a pinned listener-shape test
@@ -1372,7 +1346,7 @@ absent and the guards fail closed for *every* caller.
   `format_knowledge_context`.
 - **Dimensional contribution ledger**
   (`commonwealth-core::contributions`) — append-only event log
-  (`LedgerEvent` variants `InferenceServed`, `InferenceReceived`,
+  (`LedgerEventKind` variants `InferenceServed`, `InferenceReceived`,
   `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`)
   with pure aggregation into per-node `NodeContributions`. No
   `balance`, no exchange rate, no ranking — units are
@@ -1550,37 +1524,29 @@ CLI server share one source of truth; the Tauri commands are thin wrappers
 **backend-agnostic**: `load_graph` dispatches on what the index
 carries — a deterministic `investigation/` graph (UAP) or an `atlas/`
 enrichment (Enron), projecting both into one DTO contract
-(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter maps Entity atoms → nodes and
-Relation/Event atoms → cited edges, resolving each `sec_NNNNN` evidence id
-to a numeric `chunks.lance` row via `chapters.json` so `read_chunk`
-dereferences the source document unchanged; `reconciliation` surfaces the
-cross-origin merge log (canonical + folded surface forms + the signal that
-fired) as the identity glassbox. Four first-party apps ship on this
-surface: SF-LVT (`public/meshapp/lvt/`, deterministic parcel compute), UAP
-Blue Book (`public/meshapp/uap/`, investigation graph), Enron
-(`public/meshapp/enron/`, a story-first atlas experience: scale banner +
-description-led on-ramp + CSP-safe force-graph + collapse timeline +
-reconciliation reveal + cited drill-down), and **Wrapped**
-(`public/meshapp/wrapped/`, a Spotify-Wrapped-form story-card show over the
-user's own `conversations-anthropic` corpus). Wrapped's op is different in
-kind: `wrapped_artifact` serves a **precomputed artifact**, never live
-inference — `sovereign-meshapp/src/wrapped.rs` folds every figure
-deterministically (full chunk scan via `all_chunks_full` + the chunker's own
-`parse_turns` header grammar for per-turn timestamps; GLiNER `chunk_entities`
-rows from `~/.sovereign/sovereign.db` for the entity cards, filtered by a
-**case-profile generics pass**: a surface form the assistant's own prose
-frequently writes lowercase is a common noun, not a name — corpus evidence
-instead of an enumerated stoplist, with one glassbox line per build naming
-what was dropped and why), runs a
-**verbatim-citation audit** (`verify_wrapped_artifact`: every cited chunk id
-must resolve, every embedded quote must be a verbatim substring of its chunk
-— a failing artifact is never served), and caches
-`<index>/wrapped/all-time.json` keyed on `_corpus_meta.json`'s
-`last_updated`/fingerprint (desktop-native build trigger: opening the app
-rebuilds a stale artifact on demand). Cards are typed (`scale` / `rhythm` /
-`obsessions` / `cast` / `door`); absent data ⇒ absent card, and the bundle
-SKIPS unknown card types — the forward-compat seam future enriched cards
-(unresolved questions, reversals) ship through. Bundles compose the
+(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter maps
+Entity atoms → nodes and Relation/Event atoms → cited edges, resolving
+each `sec_NNNNN` evidence id to a `chunks.lance` row via `chapters.json`
+so `read_chunk` dereferences the source document unchanged;
+`reconciliation` surfaces the cross-origin merge log as the identity
+glassbox. Six first-party apps ship on this surface: SF-LVT
+(`public/meshapp/lvt/`, deterministic parcel compute), UAP Blue Book
+(`public/meshapp/uap/`, investigation graph), Enron
+(`public/meshapp/enron/`, story-first atlas experience), **Wrapped**
+(`public/meshapp/wrapped/`, a story-card show over the user's own
+`conversations-anthropic` corpus), Federalist
+(`public/meshapp/federalist/`, the copyable complete example), and Atlas
+Explorer (`public/meshapp/explorer/`, a generic corpus-bound atlas
+explorer). Wrapped's op is different in kind: `wrapped_artifact` serves
+a **precomputed artifact**, never live inference —
+`sovereign-meshapp/src/wrapped.rs` folds every figure deterministically,
+runs a **verbatim-citation audit** (`verify_wrapped_artifact`: every
+cited chunk id must resolve, every embedded quote must be a verbatim
+substring of its chunk — a failing artifact is never served), and caches
+`<index>/wrapped/all-time.json` keyed on the corpus fingerprint (opening
+the app rebuilds a stale artifact on demand). Cards are typed; absent
+data ⇒ absent card; unknown card types are SKIPPED — the forward-compat
+seam future enriched cards ship through. Bundles compose the
 **MeshApp SDK**
 (`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
 corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable
@@ -1697,6 +1663,7 @@ place. Smoke test at `sovereign/scripts/smoke-attach-mode.sh`.
 |-----------------------------------------|--------------------------------------------|
 | `models.primary` / `.fast` / `.embed`   | Rebuild via `ProviderFactory`, atomic swap |
 | `daemon.client_port` / `.internal_port` | `restart_required: true`                   |
+| `daemon.client_bind` / `.client_token`  | `restart_required: true`                   |
 | `data.dir`                              | `restart_required: true`                   |
 
 When `restart_required: true`, `save_config` falls back to
@@ -1720,7 +1687,7 @@ or `systemctl --user restart sovereign` (Linux).
 
 ### Build / test
 
-The repo is **one unified Cargo workspace** — 35 members under the root
+The repo is **one unified Cargo workspace** — 40 members under the root
 `Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its carve-outs
 are directories of member crates, **not** separate workspaces). Use the
 **sovereign watcher** (`lint_status` / `test_status` MCP tools) for
@@ -1749,8 +1716,8 @@ check cannot. If the runner sections are commented out in
 # One workspace — build / check / test everything from the repo root:
 cargo build --release --workspace          # bundled assets copied via build.rs
 cargo check  --workspace --all-targets      # what CI's `check` job runs
-# The user-facing CLI execs into 4 sibling binaries — rebuild all of them
-# (editing one + rebuilding only the dispatcher is a silent no-op):
+# The user-facing CLI spans 4 binaries (dispatcher + 3 siblings) — rebuild
+# all of them (editing one + rebuilding only the dispatcher is a silent no-op):
 cargo build --release -p sovereign-cli -p sovereign-cli-daemon \
             -p sovereign-cli-dev -p sovereign-cli-llm
 ```
@@ -1830,8 +1797,8 @@ Default ports:
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
 | Understand KnowledgeView digest assembly         | `sovereign-tools/src/knowledge_view/` and [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
-| See where KnowledgeView is injected              | `sovereign-core/src/runtime.rs::splice_landscape_digests` + `traits.rs::LandscapeDigestProvider` |
-| Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `charter.rs`, `approval.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
+| See where KnowledgeView is injected              | `traits.rs::LandscapeDigestProvider::splice_landscape_digests`; call sites in `runtime/streaming.rs` + `runtime/turn.rs` |
+| Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `sovereign-atos/src/{charter,approval}.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
 | See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
 | Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
@@ -1942,31 +1909,31 @@ now) and the row is dropped — or trimmed to the still-open residual.
 |------|----------|--------------|
 | `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** `sovereign-cli-dev` is feature-gated out of the default/public build — the dispatcher gates its verbs behind `--features dev-tools` — so this developer-toolchain file is not part of the end-user product. Subcommand-per-file remains the eventual split shape; still gated on post-found project-lifecycle settling. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
-| `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~1,950 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
-| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, was 2347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
+| `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
+| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. The `store()`/`corpus_engine()` accessors + `require_runtime!` retirement land with the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
 | `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** in the feature-gated `sovereign-cli-dev` developer toolchain (see `project_cmd.rs` row), not part of the public build. ATOS runner loop — subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, run-record persistence cohere as one state machine today. One-file-per-stage split when boundaries stabilise. |
-| `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. |
+| `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~3,100 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
-| `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3678 lines) | `StateStore` trait-impl hotel — 14 sub-trait impls, one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines. |
+| `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3,900 lines) | `StateStore` trait-impl hotel — 12 sub-trait impls (+ the `StateStore` aggregate), one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines (it is ~90 lines away). |
 | `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
-| `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~3385 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |
+| `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~5,000 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `sovereign project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |
 | Imports tab — Gemini extractor | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-gemini/` | Settings → Imports ships **Anthropic + ChatGPT** (2026-06). Gemini (Google Takeout) remains: the plumbing is source-agnostic — a new `<source>_export` extractor + recipe + `ImportSource` arm + `<ConversationImportCard>` is all it takes. ChatGPT pattern (mapping-tree walk-up, PUA marker cleaning, source-aware `import_commands.rs`) is the template. |
-| Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime.rs` `KnowledgeQueryPlan` | DeepQuery path threads `display_categories`; streaming KQ + metalingual locator pass `None`. Sub-page UX polish. |
+| Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime/types.rs` `KnowledgeQueryPlan` | DeepQuery path threads `display_categories`; streaming KQ + metalingual locator pass `None`. Sub-page UX polish. |
 
 ### 10.1b corpus-engine deferrals
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `recipe.rs` split | `corpus-engine/src/recipe.rs` (~3500 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite. |
+| `recipe.rs` split | `corpus-engine/src/recipe.rs` (~4,200 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite. |
 | `notes.rs` split | `corpus-engine-notes/src/notes.rs` (~5634 lines) | NoteStore façade + persistence migrations + lifecycle + decision-log tools. **Carved out of `corpus-engine` into its own crate** (blast-radius control) — that isolation was the higher-priority move; the in-file split is still wanted. SQL schemas + migrations couple tightly. |
 | `entity_extraction.rs` split | `corpus-engine/src/enrichment/entity_extraction.rs` (~2930 lines) | Phase-1b entity extraction for personal + conversational domains. Active surface (recent enrichment work); split along the per-domain extractor boundary once it settles. |
-| `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~4500 lines) | Atlas URI resolution + scoring. Hottest-iteration file; splitting churn-heavy code obscures git history while the algorithm is still settling. |
+| `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~5,200 lines) | Atlas URI resolution + scoring. Hottest-iteration file; splitting churn-heavy code obscures git history while the algorithm is still settling. |
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
 | `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
@@ -1980,8 +1947,8 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. `all_entries_for_gossip` is defined but unused; sender half + `POST /internal/app/state` receiver missing. Workaround: explicit peer push at queue-handoff time. |
-| Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; attach mode silently returns empty for `mesh_get_contributions` / `mesh_set_peer_preference` because the daemon doesn't expose these over HTTP yet. |
+| mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. The `POST /internal/app/state` receiver exists (`routes_app_internal::recv_app_state`) and explicit peer push at queue-handoff time uses it; the periodic gossip *sender* is still missing (`all_entries_for_gossip` remains test-only). |
+| Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
 
 ### 10.3 Doc posture

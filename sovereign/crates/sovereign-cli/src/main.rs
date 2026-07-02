@@ -338,6 +338,7 @@ const ALL_VERBS: &[&str] = &[
     "stop",
     "tools",
     "voice",
+    "workflow",
 ];
 
 /// The developer-toolchain verbs as a help table, appended to `--help`
@@ -835,14 +836,14 @@ async fn async_main() {
             // ── LLM cluster (continued) → sovereign-cli-llm ──
             "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
             | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
-            | "portfolio" => {
+            | "portfolio" | "workflow" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "agent-bench" => {
-                // Eight-problem coding battery; subprocess-driven
-                // pi / opencode / codex runners. See SYSTEM_OVERVIEW §11
+                // Eleven-problem coding battery; subprocess-driven
+                // pi / opencode / codex runners. See SYSTEM_OVERVIEW §4
                 // and `sovereign/crates/sovereign-agent-bench/`.
                 let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
                 std::process::exit(code as i32);

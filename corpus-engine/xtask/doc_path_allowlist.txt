@@ -14,3 +14,8 @@ config/
 # §10 ledger forward-reference: the Gemini import recipe does not exist
 # yet — the row names where the work will land when someone builds it.
 sovereign-recipes/conversations-gemini/
+
+# §5 accessibility tooling: `npm run a11y` writes its report to the
+# desktop crate's test-artifacts/a11y/ — a generated, gitignored output
+# dir that exists only after a run, never in the repo.
+test-artifacts/a11y/
