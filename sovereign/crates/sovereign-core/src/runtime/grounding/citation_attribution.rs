@@ -181,6 +181,31 @@ pub fn attribute_citations(
             let bounded = close.is_some_and(|rel| {
                 rel <= MAX_BRACKET_CHARS && !chars[i + 1..i + 1 + rel].contains(&'\n')
             });
+            // Phantom internal-handle citations: `[ev-T2-0048]` (the
+            // knowledge_lookup evidence-handle format) and `[passage N]` are
+            // affordances of OTHER surfaces — in a chat answer they are always
+            // reflexed noise (observed gen75c step 126: an invented
+            // `[ev-T2-0048]`), and unlike `[Source:]` titles there is nothing
+            // to validate them against. Strip the marker, keep the prose.
+            if bounded {
+                let rel = close.unwrap();
+                let inner: String = chars[i + 1..i + 1 + rel].iter().collect();
+                let t = inner.trim();
+                let is_handle = (t.len() >= 4
+                    && t.to_lowercase().starts_with("ev-")
+                    && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                    || (t.to_lowercase().starts_with("passage ")
+                        && t["passage ".len()..].trim().chars().all(|c| c.is_ascii_digit()));
+                if is_handle {
+                    if out.ends_with(' ') {
+                        out.pop();
+                    }
+                    stripped_titles.push(t.to_string());
+                    citations_total += 1;
+                    i = i + 1 + rel + 1;
+                    continue;
+                }
+            }
             let looks_source = chars[i + 1..]
                 .iter()
                 .take(12)
@@ -1265,6 +1290,20 @@ mod tests {
         assert!(!r.cleaned.contains("2026-12-28"));
         assert!(r.cleaned.contains("However, it is critical"));
         assert!(!r.cleaned.contains("[Source:"));
+    }
+
+    #[test]
+    fn phantom_evidence_handles_are_stripped() {
+        // gen75c step 126: an invented `[ev-T2-0048]` — an internal
+        // evidence-handle format from another surface — reflexed into a chat
+        // answer. `[passage N]` is the same family. Prose survives; markers go.
+        let answer = "Winnie's reserve is described [ev-T2-0048] and again [passage 3].";
+        let r = attribute_citations(answer, &[], &[]);
+        assert_eq!(r.citations_stripped(), 2);
+        assert_eq!(r.cleaned, "Winnie's reserve is described and again.");
+        // Real bracketed prose is untouched.
+        let keep = "The label [BLANK] appears in redacted scans.";
+        assert_eq!(attribute_citations(keep, &[], &[]).cleaned, keep);
     }
 
     #[test]
