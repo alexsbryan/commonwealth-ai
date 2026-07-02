@@ -412,6 +412,62 @@ fn normalize_span(span: &str) -> String {
     s.split('#').next().unwrap_or(s).to_string()
 }
 
+/// Enumeration-sync half of the gate: registries whose members the
+/// overview must at least mention. Direction is code→doc only — a name
+/// in code missing from the doc is rot ("we add without amending");
+/// doc-side extras stay a human judgment. The 2026-07-02 audit found 10
+/// undocumented extractors, 7 undocumented CLI verbs, and a whole
+/// unmentioned crate this way; this check keeps that class extinct.
+fn enumeration_failures(root: &Path, doc: &str, allow: &BTreeSet<String>) -> Vec<String> {
+    let mut fails = Vec::new();
+
+    // 1. Recipe extractors — every `ExtractorConfig` serde rename.
+    if let Ok(recipe) = std::fs::read_to_string(root.join("corpus-engine/src/recipe.rs")) {
+        if let Some(start) = recipe.find("pub enum ExtractorConfig") {
+            let body = &recipe[start..];
+            let body = &body[..body.find("\n}").unwrap_or(body.len())];
+            for cap in body.split("rename = \"").skip(1) {
+                let name = cap.split('"').next().unwrap_or("");
+                if !name.is_empty() && !doc.contains(name) && !allow.contains(name) {
+                    fails.push(format!(
+                        "extractor `{name}` (ExtractorConfig, recipe.rs) is not \
+                         mentioned in SYSTEM_OVERVIEW — update the §3 Extractor row"
+                    ));
+                }
+            }
+        }
+    }
+
+    // 2. Workspace crates — every member's dir-name appears somewhere.
+    if let Ok(manifest) = std::fs::read_to_string(root.join("Cargo.toml")) {
+        if let Some(start) = manifest.find("members = [") {
+            let body = &manifest[start..];
+            let body = &body[..body.find(']').unwrap_or(body.len())];
+            let mut names: Vec<String> = Vec::new();
+            for m in body.split('"').skip(1).step_by(2) {
+                if let Some(parent) = m.strip_suffix("/*") {
+                    if let Ok(rd) = std::fs::read_dir(root.join(parent)) {
+                        names.extend(rd.flatten().filter(|e| e.path().is_dir()).map(|e| {
+                            e.file_name().to_string_lossy().to_string()
+                        }));
+                    }
+                } else {
+                    names.push(m.rsplit('/').next().unwrap_or(m).to_string());
+                }
+            }
+            for name in names {
+                if !doc.contains(&name) && !allow.contains(&name) {
+                    fails.push(format!(
+                        "workspace crate `{name}` is not mentioned anywhere in \
+                         SYSTEM_OVERVIEW — the map has a hole"
+                    ));
+                }
+            }
+        }
+    }
+    fails
+}
+
 fn cmd_docs_gate() -> i32 {
     let root = repo_root();
     let mut index: Vec<Vec<String>> = Vec::new();
@@ -465,8 +521,15 @@ fn cmd_docs_gate() -> i32 {
         }
     }
 
+    let overview = std::fs::read_to_string(root.join("sovereign/SYSTEM_OVERVIEW.md"))
+        .unwrap_or_default();
+    let enum_fails = enumeration_failures(&root, &overview, &allow);
+    let n_enum = enum_fails.len();
+    fails.extend(enum_fails);
+
     eprintln!(
-        "docs-gate: {checked} cited paths checked across {} docs ({} allowlisted spans)",
+        "docs-gate: {checked} cited paths + enumeration sync (extractors, workspace \
+         crates; {n_enum} failing) across {} docs ({} allowlisted spans)",
         DOCS_GATE_DOCS.len(),
         allow.len()
     );
