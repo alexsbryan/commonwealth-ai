@@ -263,6 +263,32 @@ broke = the truncation pair (since fixed — `truncfix-replay-2026-07-01` shows
 both release complete answers) + in-prose padding + two known intermittent
 classes (leak-loop repetition; SEP-lighthouse rewrite misattribution).
 
+### GEN75 GENERALIZATION RESULT (`gen75-2026-07-02`, representative 75-min, ALL fixes)
+
+**Raw 81% (65 judged, 12 broke: 8 confab + 4 incoherent) / unique 83% (54
+unique, 9 broke). well_cited 71%, caveated 11%.** Up from 65%/75% at the
+rebaseline; landed inside the pre-registered prediction (raw 78–84). The fixed
+classes held at generalization on fresh temp-0.7 questions: **96% of released
+citations exact-match a real source label; 0 invented/garbled sources; 0
+truncations; 0 note self-contradictions** (offline audit of all 67 answered
+turns — the representative launcher runs trace-light, so audit the journal, not
+the app log). Throughput 67 answered turns vs 41 at rebaseline (fewer wasted
+rewrite cycles).
+
+**Residual broke (unique ≈7), the honest gap to 85%:**
+1. **Value-misattribution to a real source** (NARA ×3-reask + maple ×2): the
+   answer cites a REAL retrieved label but the value/claim belongs to a
+   DIFFERENT retrieved file ("28940827" from another Blue Book file; a window
+   rule cited to the guest-policy decision). The known gate blind spot, now the
+   TOP lever: claim↔source alignment, not source existence.
+2. **Tool-call leak on an unindexed folder corpus** (×3 same Q):
+   `knowledge_lookup(query=…)` syntax released as the answer.
+3. **Formula case-fidelity** (`¬HN` for `¬Hn`): the substring check is
+   case-insensitive by design; a case-strict rule for math/code tokens is the
+   candidate fix.
+4. One over-abstention (declined with the value present); one `[BLANK]`
+   redaction-artifact citation (marginal).
+
 ---
 
 ## 7. Open threads / next steps (ranked by trust impact × fixability)
