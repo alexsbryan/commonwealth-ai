@@ -1137,6 +1137,37 @@ async fn gate_longform(
                     }
                 }
             }
+            // Sentence-level identifier sweep: the vetoes above only see
+            // EXTRACTED claims, and ghost identifiers ride non-load-bearing
+            // sentences the extractor never surfaces (gen75d s2: `cmd_init` /
+            // `found.rs`, receipt-absent from the corpus, released inside a
+            // rewrite despite the claim-level veto). Sweep every sentence of
+            // the text with the same scoped checks; hits become synthetic
+            // failed claims and ride the existing rewrite/annotate ladder.
+            for sentence in text.split(['.', '\n']) {
+                let sentence = sentence.trim();
+                if sentence.chars().count() < 20 {
+                    continue;
+                }
+                let hit = judge::absent_identifier_attribution(sentence, &hay_lower)
+                    .or_else(|| judge::absent_name_attribution(sentence, &hay_lower));
+                if let Some(ident) = hit {
+                    if failed.iter().any(|f| f.claim.contains(&ident)) {
+                        continue;
+                    }
+                    dbg(&format!(
+                        "longform sentence sweep VETOED {ident:?} (absent from evidence)"
+                    ));
+                    let synthetic = format!(
+                        "The answer references \"{ident}\", which does not appear in the sources."
+                    );
+                    let extra = match &searcher {
+                        Some(s) => s.search(&synthetic).await,
+                        None => Vec::new(),
+                    };
+                    failed.push(FailedClaim { claim: synthetic, evidence: extra });
+                }
+            }
             Some((text, claims.len(), failed))
         }
     };
