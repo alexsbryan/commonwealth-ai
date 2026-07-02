@@ -616,6 +616,32 @@ pub(crate) async fn gate_answer(
         top_similarity = ?evidence.top_similarity,
         "grounding gate verdict"
     );
+    // Fragment guard (gen75c: the answer to a three-variable code question was
+    // the single word "Start", released via NO_CLAIM — a fragment extracts no
+    // claim, so the verify ladder waves it through). A released answer this
+    // short, with no grounding suffix and no decline shape, answers nothing:
+    // convert it to the honest abstention instead of shipping noise. Terse
+    // GROUNDED answers are unaffected — the citation path formats them with
+    // their supporting quote, well past this floor.
+    if action == "released"
+        && text.trim().chars().count() < 15
+        && !text.contains("Grounded in the source")
+        && question.trim().chars().count() > 40
+    {
+        dbg(&format!("fragment guard: released text {:?} answers nothing — abstaining", text.trim()));
+        return GateOutcome {
+            text: grounded_abstention(question, chunks.len().min(12)),
+            meta: serde_json::json!({
+                "surface": profile.surface.id(),
+                "action": "abstained_fragment",
+                "retried": retried,
+                "violation_prob": final_vp,
+                "threshold": tau,
+                "mode": "single_claim",
+                "draft": draft_for_meta,
+            }),
+        };
+    }
     // Second-opinion fabrication guard on a RELEASED single-claim answer — the
     // per-claim verify grounds the load-bearing value but is blind to fabricated
     // SUPPORTING specifics (a cited flag/number/entity absent from the
@@ -1006,9 +1032,15 @@ async fn gate_longform(
                 // not ask the yes-biased joint judge (measured: "Betty
                 // Alexander sent an email…" cleared at vp=0.010 despite the
                 // name existing nowhere in the corpus; it shipped in 3 runs).
-                if let Some(name) = judge::absent_name_attribution(claim, &hay_lower) {
+                let vetoed = judge::absent_name_attribution(claim, &hay_lower)
+                    .map(|n| ("person", n))
+                    .or_else(|| {
+                        judge::absent_identifier_attribution(claim, &hay_lower)
+                            .map(|i| ("identifier", i))
+                    });
+                if let Some((kind, name)) = vetoed {
                     dbg(&format!(
-                        "longform claim VETOED — in-world attribution names {name:?}, absent from evidence: {claim:?}"
+                        "longform claim VETOED — in-world attribution names {kind} {name:?}, absent from evidence: {claim:?}"
                     ));
                     let extra = match &searcher {
                         Some(s) => s.search(claim).await,

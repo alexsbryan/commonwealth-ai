@@ -644,6 +644,70 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
     None
 }
 
+/// Identifier sibling of `absent_name_attribution`: a claim about the corpus's
+/// CODE/STRUCTURE artifacts (file/module/function/enum/values/defined/…)
+/// naming a code-shaped identifier absent from the entire evidence is
+/// fabricated. Observed (gen75c): "the material centers on `cmd_init` and
+/// `design_signals.rs`" — neither exists in the corpus; "the StepKind values
+/// are …, ReasonWithTools" — an invented variant. Identifier shapes are
+/// distinctive (snake_case, dotted filenames, CamelCase humps), so absence is
+/// decisive; general-knowledge identifiers in claims WITHOUT artifact context
+/// pass through untouched.
+pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Option<String> {
+    const ARTIFACT: &[&str] = &[
+        "file", "module", "function", "struct", "enum", "variant", "field",
+        "defined", "definition", "values", "type", "method", "class",
+        "constant", "config", "material", "corpus", "notes", "document",
+        "codebase", "snippet",
+    ];
+    let low = claim.to_lowercase();
+    if !ARTIFACT.iter().any(|a| low.contains(a)) {
+        return None;
+    }
+    fn identifier_shaped(t: &str) -> bool {
+        let snake = t.contains('_')
+            && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && t.chars().any(|c| c.is_ascii_alphabetic());
+        let file = t
+            .rsplit_once('.')
+            .is_some_and(|(stem, ext)| {
+                !stem.is_empty()
+                    && ["rs", "py", "js", "ts", "toml", "md", "json", "yaml", "yml", "txt", "mjs"]
+                        .contains(&ext)
+            });
+        let camel_humps = {
+            let mut humps = 0;
+            let mut prev_lower = false;
+            for c in t.chars() {
+                if c.is_ascii_uppercase() && prev_lower {
+                    humps += 1;
+                }
+                prev_lower = c.is_ascii_lowercase();
+            }
+            humps >= 1 && t.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && t.len() >= 8
+        };
+        (snake || file || camel_humps) && t.len() >= 6
+    }
+    for raw in claim.split(|c: char| c.is_whitespace() || "()[]{}<>,;:\"'`*".contains(c)) {
+        let mut t = raw.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'));
+        // A sentence-final period is not part of the identifier; real file
+        // extensions keep their interior dot ("design_signals.rs").
+        while let Some(stripped) = t.strip_suffix('.') {
+            t = stripped;
+        }
+        if t.len() >= 6 && identifier_shaped(t) {
+            let tl = t.to_lowercase();
+            // Prose may space a CamelCase identifier ("step kind" for
+            // StepKind) — accept a space-squashed match too.
+            let squashed: String = hay_lower.split_whitespace().collect();
+            if !hay_lower.contains(&tl) && !squashed.contains(&tl) {
+                return Some(t.to_string());
+            }
+        }
+    }
+    None
+}
+
 pub(super) async fn claim_violation_joint(
     inference: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -782,6 +846,42 @@ mod tests {
         // Acronyms/date fragments are not name bigrams.
         assert_eq!(
             absent_name_attribution("The email was escalated to HR VP leadership in July.", &hay),
+            None
+        );
+    }
+
+    #[test]
+    fn absent_identifier_attribution_is_vetoed() {
+        let hay = "the step kind enum defines reason, tool, user, plan, act, and                    awaituserinfo. see planner.rs and cmd_design."
+            .to_string();
+        // gen75c ghosts: invented snake_case fn + invented file + invented variant.
+        assert_eq!(
+            absent_identifier_attribution("The material centers on the cmd_init function.", &hay),
+            Some("cmd_init".to_string())
+        );
+        assert_eq!(
+            absent_identifier_attribution("The file design_signals.rs defines the gaps.", &hay),
+            Some("design_signals.rs".to_string())
+        );
+        assert_eq!(
+            absent_identifier_attribution(
+                "The StepKind enum values include ReasonWithTools.",
+                &hay
+            ),
+            Some("ReasonWithTools".to_string())
+        );
+        // Present identifiers pass (case-insensitive), including real variants.
+        assert_eq!(
+            absent_identifier_attribution("The enum defines AwaitUserInfo as a variant.", &hay),
+            None
+        );
+        assert_eq!(
+            absent_identifier_attribution("The file planner.rs holds the logic.", &hay),
+            None
+        );
+        // No artifact context → GK territory → untouched.
+        assert_eq!(
+            absent_identifier_attribution("React's useStateHook pattern is popular.", &hay),
             None
         );
     }
