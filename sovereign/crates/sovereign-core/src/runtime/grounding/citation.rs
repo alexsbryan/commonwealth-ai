@@ -170,6 +170,22 @@ pub async fn citation_grounded_answer(
         }
         None => answer,
     };
+    // Case fidelity (gen75 step 115: released "¬HN" for the source's "¬Hn"):
+    // the copy channel garbles case the way it garbles digits, and the
+    // verification below is case-insensitive by design (titles/prose must
+    // match regardless of case) — so a case-garbled copy verifies and ships.
+    // The quote is verbatim corpus text: when the answer is a case-insensitive
+    // copy of a quote span, the quote's casing is ground truth — restore it.
+    let answer = match (!sentinel)
+        .then(|| snap_answer_case_to_quote(&answer, &quote))
+        .flatten()
+    {
+        Some(fixed) => {
+            dbg(&format!("citation: answer case-snapped to the quote's casing → {fixed:?}"));
+            fixed
+        }
+        None => answer,
+    };
     // Anti-confabulation: the quote must (a) be verbatim in the passages and
     // (b) actually SUPPORT the answer — the model can copy a real-but-
     // insufficient sentence and still confabulate the value (measured: quoted an
@@ -324,6 +340,54 @@ fn extend_mid_token_copy<'a>(
         return None; // ambiguous continuations in the provenance source
     }
     None
+}
+
+/// The QUOTE-cased span the answer is a case-garbled copy of, if any: the
+/// answer occurs in the quote under case-insensitive (and whitespace-tolerant)
+/// matching, and the quote's exact-case span differs. Returns `None` when the
+/// answer isn't a quote span or is already exact. Restoring the quote's casing
+/// can only make the answer MORE faithful to the verified source text — it
+/// also repairs de-capitalized proper nouns, not just formula variables.
+fn snap_answer_case_to_quote(answer: &str, quote: &str) -> Option<String> {
+    let q: Vec<char> = quote.chars().collect();
+    let n: Vec<char> = answer.trim().chars().collect();
+    if n.is_empty() {
+        return None;
+    }
+    for start in 0..q.len() {
+        if let Some(end) = ci_ws_match_at(&q, start, &n) {
+            let span: String = q[start..end].iter().collect();
+            return (span != answer.trim()).then_some(span);
+        }
+    }
+    None
+}
+
+/// `whitespace_tolerant_match_at`, case-insensitively.
+fn ci_ws_match_at(h: &[char], start: usize, n: &[char]) -> Option<usize> {
+    let mut i = start;
+    let mut j = 0usize;
+    let eq = |a: char, b: char| a == b || a.to_lowercase().eq(b.to_lowercase());
+    while j < n.len() {
+        if n[j].is_whitespace() {
+            if i >= h.len() || !h[i].is_whitespace() {
+                return None;
+            }
+            while i < h.len() && h[i].is_whitespace() {
+                i += 1;
+            }
+            while j < n.len() && n[j].is_whitespace() {
+                j += 1;
+            }
+        } else {
+            if i >= h.len() || !eq(h[i], n[j]) {
+                return None;
+            }
+            i += 1;
+            j += 1;
+        }
+    }
+    Some(i)
 }
 
 /// The alphanumeric run immediately following each whitespace-tolerant
@@ -599,5 +663,41 @@ mod tests {
             None
         );
         assert_eq!(extend_mid_token_copy("", std::iter::once("anything")), None);
+    }
+
+    // ── case fidelity (gen75 step 115: "¬HN" released for the source's "¬Hn") ──
+
+    #[test]
+    fn case_garbled_formula_snaps_to_quote_casing() {
+        let quote = "Then simply define Hn+1 := ¬H1 ∧ … ∧ ¬Hn and add this new hypothesis.";
+        let fixed = snap_answer_case_to_quote("Hn+1 := ¬H1 ∧ … ∧ ¬HN", quote);
+        assert_eq!(fixed.as_deref(), Some("Hn+1 := ¬H1 ∧ … ∧ ¬Hn"));
+    }
+
+    #[test]
+    fn decapitalized_proper_noun_is_restored() {
+        let quote = "Chief Inspector Heat of the Special Crimes Department changed his tone.";
+        assert_eq!(
+            snap_answer_case_to_quote("chief inspector heat", quote).as_deref(),
+            Some("Chief Inspector Heat")
+        );
+    }
+
+    #[test]
+    fn exact_case_and_non_span_answers_are_untouched() {
+        let quote = "Then simply define Hn+1 := ¬H1 ∧ … ∧ ¬Hn here.";
+        assert_eq!(snap_answer_case_to_quote("Hn+1 := ¬H1 ∧ … ∧ ¬Hn", quote), None);
+        assert_eq!(snap_answer_case_to_quote("something else entirely", quote), None);
+    }
+
+    #[test]
+    fn whitespace_differences_still_case_snap() {
+        // The answer collapses the quote's line break; casing still restores.
+        let quote = "the RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT\n(compact) form";
+        assert_eq!(
+            snap_answer_case_to_quote("the relational_expressive_system_prompt (compact) form", quote)
+                .as_deref(),
+            Some("the RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT\n(compact) form")
+        );
     }
 }
