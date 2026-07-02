@@ -121,6 +121,24 @@ jobs:
           key: cli-release-${{ matrix.platform.target }}
           # Seed even when a release attempt fails mid-build.
           cache-on-failure: true
+      # See ci.yml's test job for the full story: rust-cache's cleanup
+      # deletes target/llama-cmake-cache while keeping the sys crate's
+      # fingerprint (poisoned cache → link failure). Cache the tree
+      # separately; the C++ is CMAKE_BUILD_TYPE=Release regardless of cargo
+      # profile, so this key is SHARED with CI — a release restores the
+      # C++ built by main's CI runs. (Windows uses a LOCALAPPDATA path
+      # instead of this dir; the steps are harmless no-ops there.)
+      - name: Cache llama.cpp CMake tree
+        uses: actions/cache@v4
+        with:
+          path: target/llama-cmake-cache
+          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Guard llama fingerprint vs missing CMake tree
+        shell: bash
+        run: |
+          if [ ! -d target/llama-cmake-cache ]; then
+            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
+          fi
 
       - name: Linux build deps
         if: runner.os == 'Linux'

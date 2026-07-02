@@ -27,14 +27,39 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true # advisory until reliably green
     timeout-minutes: 30
+    env:
+      # Match ci.yml: no debuginfo (disk headroom + cache size).
+      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
+      # Same disk headroom problem as ci.yml's test job — see its comment.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           # Read the CI test job's dependency cache; nightly never writes it.
           shared-key: workspace
           save-if: false
+      # See ci.yml's test job: the CMake tree is cached separately from
+      # rust-cache (whose cleanup would delete it); the guard forces a
+      # rebuild instead of a link failure if the tree is missing.
+      - name: Cache llama.cpp CMake tree
+        uses: actions/cache@v4
+        with:
+          path: target/llama-cmake-cache
+          key: llama-cmake-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Guard llama fingerprint vs missing CMake tree
+        shell: bash
+        run: |
+          if [ ! -d target/llama-cmake-cache ]; then
+            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
+          fi
       # Full Linux native stack (mirrors ci.yml's check+test job — keep in sync):
       # mold/clang are the pinned linker, the LunarG Vulkan SDK is a build
       # dep of ggml (Linux hardcodes llama-cpp-4/vulkan), and `--bins`
