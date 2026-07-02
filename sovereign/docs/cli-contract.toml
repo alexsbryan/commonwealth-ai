@@ -842,6 +842,13 @@ path = "meshapp"
 binary = "llm"
 hidden = true
 [[command]]
+# Step·Artifact·Runner workflows (run / list / copy / new). The dispatcher
+# arm was missing until 2026-07-02 while the llm sibling implemented the
+# verb; hidden until CLI_REFERENCE.md documents the surface (Phase 2 bar).
+path = "workflow"
+binary = "llm"
+hidden = true
+[[command]]
 path = "meta-atlas"
 binary = "llm"
 hidden = true

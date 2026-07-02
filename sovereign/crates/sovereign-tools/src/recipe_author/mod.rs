@@ -43,6 +43,25 @@ pub mod validate;
 pub mod write;
 pub mod write_structured;
 
+/// Serialize every test that mutates the process-global `HOME` env var.
+///
+/// `RecipeProject::new` and the registry-browse tools resolve paths from
+/// `HOME` at call time; tests point each project at a tempdir HOME via
+/// `std::env::set_var`. Env vars are process-global while `cargo test`
+/// runs tests concurrently — an unlocked test flipping `HOME` between a
+/// peer's `set_var` and its HOME-derived read makes the peer's files land
+/// in a tempdir that is then dropped (observed: checkpoint's
+/// `decision_frontier.json` write dying with ENOENT under full-suite
+/// load). EVERY test that sets `HOME` must hold this ONE lock for its
+/// whole lifetime — a module-local mutex cannot exclude sibling modules.
+#[cfg(test)]
+pub(crate) fn home_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+}
+
 pub use capability_request::CapabilityRequestTool;
 pub use checkpoint::CheckpointTool;
 pub use decision_log::DecisionLogTool;

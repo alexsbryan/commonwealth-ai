@@ -254,7 +254,15 @@ mod tests {
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
 
-    async fn fresh() -> (RecipeProject, Arc<NoteStore>, tempfile::TempDir) {
+    async fn fresh() -> (
+        RecipeProject,
+        Arc<NoteStore>,
+        tempfile::TempDir,
+        std::sync::MutexGuard<'static, ()>,
+    ) {
+        // HOME is process-global — hold the crate-wide lock for the
+        // test's lifetime (see `recipe_author::home_test_lock`).
+        let guard = crate::recipe_author::home_test_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
@@ -268,12 +276,12 @@ mod tests {
         )
         .await
         .unwrap();
-        (project, notes, dir)
+        (project, notes, dir, guard)
     }
 
     #[tokio::test]
     async fn renders_with_charter_only_when_log_is_empty() {
-        let (project, _notes, _dir) = fresh().await;
+        let (project, _notes, _dir, _guard) = fresh().await;
         let block = render(&project).await.unwrap();
         assert!(block.contains("Federal case law"));
         assert!(block.contains("Charter:"));
@@ -283,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn renders_recent_decisions_with_attribution_and_kind() {
-        let (project, notes, _dir) = fresh().await;
+        let (project, notes, _dir, _guard) = fresh().await;
         // Write three decisions through the same code path the tool
         // uses, so the payload schema is exercised end-to-end.
         for (i, kind) in [
@@ -333,7 +341,7 @@ mod tests {
 
     #[tokio::test]
     async fn truncates_at_budget() {
-        let (project, notes, _dir) = fresh().await;
+        let (project, notes, _dir, _guard) = fresh().await;
         let bulk = "x".repeat(8000);
         let payload = DecisionPayload {
             decision_kind: DecisionKind::ExtractionChoice,

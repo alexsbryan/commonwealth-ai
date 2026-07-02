@@ -148,7 +148,7 @@ hold together?" Watch the size and the concern count — **both** matter.
 | < 400 lines | Fine.                                            |
 | 400–800   | OK if it has one clear concern. Name the concern in the module doc. |
 | 800–1200  | Has to justify itself. Either split or write a comment at the top arguing why the seams aren't natural. |
-| > 1200    | Split. No exceptions that aren't already documented in §12 of SYSTEM_OVERVIEW.md. |
+| > 1200    | Split. No exceptions that aren't already documented in §10 of SYSTEM_OVERVIEW.md. |
 
 These aren't LOC fetishism — they're a proxy for concern count. An 1100-line
 file doing one tight job (the SQL schema, the protobuf translator) is fine;
@@ -685,7 +685,7 @@ reasons.
 
 If your PR leaves known cleanup for later (e.g. the recent pass deferred
 `atos_cmd.rs` and `local.rs` splits), update
-`SYSTEM_OVERVIEW.md` §12 Architecture Roadmap in the same PR. The next
+`SYSTEM_OVERVIEW.md` §10 Architecture Roadmap in the same PR. The next
 engineer inherits a todo list, not a surprise.
 
 ### 14.4 ATOS artifacts are the audit trail
