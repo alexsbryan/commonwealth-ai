@@ -289,7 +289,10 @@ impl RecipeId {
                 ))
             }
             Self::UapBlueBook => {
-                include_str!(concat!(env!("OUT_DIR"), "/recipes/uap-blue-book/recipe.toml"))
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/uap-blue-book/recipe.toml"
+                ))
             }
             Self::UapBlueBookScans => {
                 include_str!(concat!(

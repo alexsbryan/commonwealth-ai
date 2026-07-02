@@ -739,7 +739,10 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
                 .join(", "),
         ));
     } else {
-        eprintln!("      uploading {} via upload_document_asset", source.local_path.display());
+        eprintln!(
+            "      uploading {} via upload_document_asset",
+            source.local_path.display()
+        );
         let uploaded: serde_json::Value = bridge
             .invoke(
                 "upload_document_asset",
@@ -757,7 +760,11 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         let deadline = Instant::now() + std::time::Duration::from_secs(45 * 60);
         loop {
             let asset: serde_json::Value = bridge
-                .invoke("get_document_asset", serde_json::json!({ "assetId": id }), SPEC)
+                .invoke(
+                    "get_document_asset",
+                    serde_json::json!({ "assetId": id }),
+                    SPEC,
+                )
                 .await?;
             let state = serde_json::to_string(&asset["state"])
                 .unwrap_or_default()
@@ -773,7 +780,10 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
             }
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
-        eprintln!("      ingest Ready in {}s", attach_start.elapsed().as_secs());
+        eprintln!(
+            "      ingest Ready in {}s",
+            attach_start.elapsed().as_secs()
+        );
         (id, "ready".to_string())
     };
     let attach_ms = attach_start.elapsed().as_millis() as u64;
@@ -789,7 +799,11 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
     // ── Questions through ask_document, scored identically ──
     let bench_cfg: BenchConfig =
         toml::from_str(BENCH_TOML).map_err(|e| format!("parse embedded bench.toml: {e}"))?;
-    let filtered = filter_questions(&bench_cfg.questions, opts.tier, opts.question_ids.as_deref());
+    let filtered = filter_questions(
+        &bench_cfg.questions,
+        opts.tier,
+        opts.question_ids.as_deref(),
+    );
     eprintln!(
         "[4/4] questions — {} of {} match filters (transport=desktop-bridge)",
         filtered.len(),
@@ -835,8 +849,7 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         let (judge_score, judge_rationale) = if q.tier >= 2 && !response.is_empty() {
             match &judge_session {
                 Some(session) => {
-                    let resolved =
-                        resolve_reference_passages(&q.reference_passages, &source_text);
+                    let resolved = resolve_reference_passages(&q.reference_passages, &source_text);
                     match run_llm_judge(
                         session.inference.as_ref(),
                         q,
@@ -1012,7 +1025,10 @@ fn print_delta(report: &BookReportRun, baseline_path: &Path) -> Result<(), Strin
     }
     if !mech_deltas.is_empty() {
         let mean: f64 = mech_deltas.iter().sum::<i32>() as f64 / mech_deltas.len() as f64;
-        println!("   mean mechanical delta: {mean:+.1} pts across {} questions", mech_deltas.len());
+        println!(
+            "   mean mechanical delta: {mean:+.1} pts across {} questions",
+            mech_deltas.len()
+        );
     }
     Ok(())
 }

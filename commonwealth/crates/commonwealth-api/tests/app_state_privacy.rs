@@ -173,6 +173,16 @@ async fn receiver_accepts_ordinary_namespaces() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    assert!(state.inner.mesh_store.get("inference", "plan1").unwrap().is_some());
-    assert!(state.inner.mesh_store.get("knowledge", "k1").unwrap().is_some());
+    assert!(state
+        .inner
+        .mesh_store
+        .get("inference", "plan1")
+        .unwrap()
+        .is_some());
+    assert!(state
+        .inner
+        .mesh_store
+        .get("knowledge", "k1")
+        .unwrap()
+        .is_some());
 }

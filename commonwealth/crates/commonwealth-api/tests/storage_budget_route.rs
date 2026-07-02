@@ -179,9 +179,7 @@ fn embed() -> EmbedModelInfo {
 }
 
 fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
-    use commonwealth_core::capabilities::{
-        AvailableResources, HardwareProfile, NodeCapabilities,
-    };
+    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
     use commonwealth_core::mesh::NodeStatus;
     MemberRecord {
         removed_at: None,
@@ -249,10 +247,7 @@ fn planner_skips_node_whose_free_storage_was_clamped_to_zero() {
     )
     .expect("plan with one healthy node must succeed");
     assert!(
-        handoff
-            .partitions
-            .iter()
-            .all(|p| p.node_id != bob.node_id),
+        handoff.partitions.iter().all(|p| p.node_id != bob.node_id),
         "planner assigned work to a budget-clamped node: {:?}",
         handoff.partitions
     );
@@ -288,7 +283,10 @@ fn planner_skips_only_clamped_nodes_when_others_have_room() {
         );
     }
     assert!(
-        handoff.partitions.iter().any(|p| p.node_id == carol.node_id),
+        handoff
+            .partitions
+            .iter()
+            .any(|p| p.node_id == carol.node_id),
         "healthy peer should participate: {:?}",
         handoff.partitions
     );

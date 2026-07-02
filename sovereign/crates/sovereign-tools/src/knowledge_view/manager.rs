@@ -47,13 +47,13 @@ use super::view_kind::ViewKind;
 
 #[cfg(feature = "treesitter")]
 use super::relational::{format_relational, RelationalNote};
+#[cfg(all(feature = "treesitter", feature = "atos"))]
+use super::splice_extension::AtosSnapshot;
 #[cfg(feature = "treesitter")]
 use super::splice_extension::{
     load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
     ConversationCorpus,
 };
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-use super::splice_extension::AtosSnapshot;
 #[cfg(feature = "treesitter")]
 use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]

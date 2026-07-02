@@ -60,23 +60,42 @@ fn run_new(args: &[String]) -> i32 {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--corpus" => { corpus = args.get(i + 1).cloned(); i += 2; }
-            "--name" => { name = args.get(i + 1).cloned(); i += 2; }
-            "--dir" => { base = args.get(i + 1).map(PathBuf::from); i += 2; }
-            other if app_id.is_none() && !other.starts_with("--") => { app_id = Some(other.to_string()); i += 1; }
-            other => { eprintln!("meshapp new: unexpected argument `{other}`"); return 2; }
+            "--corpus" => {
+                corpus = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--name" => {
+                name = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--dir" => {
+                base = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            other if app_id.is_none() && !other.starts_with("--") => {
+                app_id = Some(other.to_string());
+                i += 1;
+            }
+            other => {
+                eprintln!("meshapp new: unexpected argument `{other}`");
+                return 2;
+            }
         }
     }
     let (Some(app_id), Some(corpus)) = (app_id, corpus) else {
         eprintln!("meshapp new: need <app-id> and --corpus <corpus-id>");
         return 2;
     };
-    if !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !app_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         eprintln!("meshapp new: app-id must be a slug (a-z 0-9 - _)");
         return 2;
     }
     let name = name.unwrap_or_else(|| title_case(&app_id));
-    let base = base.unwrap_or_else(|| PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp"));
+    let base =
+        base.unwrap_or_else(|| PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp"));
     let dir = base.join(&app_id);
     if dir.exists() {
         eprintln!("meshapp new: {} already exists", dir.display());
@@ -86,7 +105,11 @@ fn run_new(args: &[String]) -> i32 {
         eprintln!("meshapp new: create {}: {e}", dir.display());
         return 1;
     }
-    let render = |t: &str| t.replace("{{ID}}", &app_id).replace("{{NAME}}", &name).replace("{{CORPUS}}", &corpus);
+    let render = |t: &str| {
+        t.replace("{{ID}}", &app_id)
+            .replace("{{NAME}}", &name)
+            .replace("{{CORPUS}}", &corpus)
+    };
     for (file, tmpl) in [
         ("index.html", STARTER_INDEX_HTML),
         ("app.js", STARTER_APP_JS),
@@ -99,7 +122,9 @@ fn run_new(args: &[String]) -> i32 {
     }
     println!("scaffolded mesh app `{app_id}` → {}", dir.display());
     println!("  next:");
-    println!("    sovereign meshapp dev {app_id}      # serve it against your local `{corpus}` corpus");
+    println!(
+        "    sovereign meshapp dev {app_id}      # serve it against your local `{corpus}` corpus"
+    );
     println!("  then, to ship it so others can one-click the data:");
     println!("    1. publish your corpus snapshot:  sovereign corpus snapshot publish {corpus}");
     println!("    2. copy your recipe into the bundle as recipe.toml (it carries the [prebuilt] HF block)");
@@ -112,7 +137,9 @@ fn title_case(slug: &str) -> String {
         .filter(|w| !w.is_empty())
         .map(|w| {
             let mut c = w.chars();
-            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            c.next()
+                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                .unwrap_or_default()
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -159,7 +186,8 @@ async fn run_dev(args: &[String]) -> i32 {
     let bundle_dir = match dir {
         Some(d) => d,
         None => {
-            let in_repo = PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp").join(&app_id);
+            let in_repo =
+                PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp").join(&app_id);
             if in_repo.join("index.html").is_file() {
                 in_repo
             } else {
@@ -237,7 +265,8 @@ fn read_manifest_corpus(bundle_dir: &Path) -> Result<String, String> {
     struct Manifest {
         corpus: String,
     }
-    let m: Manifest = serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", p.display()))?;
+    let m: Manifest =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", p.display()))?;
     Ok(m.corpus)
 }
 
@@ -265,21 +294,43 @@ async fn op_handler(
 ) -> Response {
     let idx = ctx.index_path.as_path();
     let result: Result<serde_json::Value, String> = match op.as_str() {
-        "graph" => sovereign_meshapp::load_graph(idx)
-            .map(|g| to_val(sovereign_meshapp::graph_nodes(&g, a.node_type.as_deref(), a.limit.unwrap_or(50).min(500)))),
-        "subgraph" => sovereign_meshapp::load_graph(idx)
-            .map(|g| to_val(sovereign_meshapp::subgraph(&g, a.node_type.as_deref(), a.limit.unwrap_or(30).min(80)))),
-        "node" => sovereign_meshapp::load_graph(idx)
-            .and_then(|g| sovereign_meshapp::node_detail(&g, a.id.as_deref().unwrap_or_default()).map(to_val)),
+        "graph" => sovereign_meshapp::load_graph(idx).map(|g| {
+            to_val(sovereign_meshapp::graph_nodes(
+                &g,
+                a.node_type.as_deref(),
+                a.limit.unwrap_or(50).min(500),
+            ))
+        }),
+        "subgraph" => sovereign_meshapp::load_graph(idx).map(|g| {
+            to_val(sovereign_meshapp::subgraph(
+                &g,
+                a.node_type.as_deref(),
+                a.limit.unwrap_or(30).min(80),
+            ))
+        }),
+        "node" => sovereign_meshapp::load_graph(idx).and_then(|g| {
+            sovereign_meshapp::node_detail(&g, a.id.as_deref().unwrap_or_default()).map(to_val)
+        }),
         "findings" => sovereign_meshapp::load_graph(idx)
             .map(|g| to_val(sovereign_meshapp::findings(&g, a.pattern.as_deref()))),
         "search" => sovereign_meshapp::load_graph(idx).map(|g| {
-            to_val(sovereign_meshapp::search_entities(&g, a.query.as_deref().unwrap_or_default(), a.node_type.as_deref(), a.limit.unwrap_or(25).min(100)))
+            to_val(sovereign_meshapp::search_entities(
+                &g,
+                a.query.as_deref().unwrap_or_default(),
+                a.node_type.as_deref(),
+                a.limit.unwrap_or(25).min(100),
+            ))
         }),
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
         "corpus_stats" => Ok(to_val(sovereign_meshapp::corpus_stats(idx))),
         "timeline" => sovereign_meshapp::timeline(idx).await.map(to_val),
-        "read_chunk" => match a.chunk_id.as_deref().unwrap_or_default().trim().parse::<u64>() {
+        "read_chunk" => match a
+            .chunk_id
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .parse::<u64>()
+        {
             Ok(id) => sovereign_meshapp::read_chunk(idx, id).await.map(to_val),
             Err(_) => Err(format!("chunk id is not numeric: {:?}", a.chunk_id)),
         },
@@ -293,7 +344,9 @@ async fn op_handler(
         }
         // Host navigation has no dev-server analogue — the bundle catches
         // this and renders its fallback copy.
-        "open_outer_work" => Err("Outer Work lives in the desktop app — the dev server has no chat to open".to_string()),
+        "open_outer_work" => Err(
+            "Outer Work lives in the desktop app — the dev server has no chat to open".to_string(),
+        ),
         other => Err(format!("unknown op `{other}`")),
     };
     match result {
@@ -325,7 +378,13 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
 fn serve_file(file: &Path, inject_shim: bool) -> Response {
     let bytes = match std::fs::read(file) {
         Ok(b) => b,
-        Err(_) => return (StatusCode::NOT_FOUND, format!("not found: {}", file.display())).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                format!("not found: {}", file.display()),
+            )
+                .into_response()
+        }
     };
     let ct = content_type(file);
     if inject_shim {

@@ -114,9 +114,9 @@ pub mod drift_findings;
 // drift_posture / drift_findings, over the `enrich capability-reconcile`
 // artifact (corroborated / undocumented / drifted, derived vs the docs).
 #[cfg(feature = "treesitter")]
-pub mod capability_posture;
-#[cfg(feature = "treesitter")]
 pub mod capability_findings;
+#[cfg(feature = "treesitter")]
+pub mod capability_posture;
 
 // Working notes tools.
 #[cfg(feature = "treesitter")]
@@ -195,6 +195,10 @@ pub use test_status::TestStatusTool;
 
 #[cfg(feature = "treesitter")]
 pub use build::BuildTool;
+#[cfg(feature = "treesitter")]
+pub use capability_findings::CapabilityFindingsTool;
+#[cfg(feature = "treesitter")]
+pub use capability_posture::CapabilityPostureTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use drift::DriftTool;
 #[cfg(feature = "treesitter")]
@@ -202,10 +206,6 @@ pub use drift_posture::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
-#[cfg(feature = "treesitter")]
-pub use capability_findings::CapabilityFindingsTool;
-#[cfg(feature = "treesitter")]
-pub use capability_posture::CapabilityPostureTool;
 #[cfg(feature = "treesitter")]
 pub use get_lint_output::GetLintOutputTool;
 #[cfg(feature = "treesitter")]

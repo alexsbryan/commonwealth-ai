@@ -227,7 +227,10 @@ mod tests {
         // content) and the non-Claim atom are excluded.
         assert!(ids.contains(&"claim-aaaa"));
         assert!(ids.contains(&"claim-bbbb"));
-        assert!(!ids.contains(&"claim-cheat"), "self-verifiable claim must be excluded");
+        assert!(
+            !ids.contains(&"claim-cheat"),
+            "self-verifiable claim must be excluded"
+        );
         assert_eq!(claims.len(), 2);
     }
 

@@ -391,7 +391,10 @@ async fn fanout_one_peer(
     // fan-out and gossip now feed the same reachability hint instead
     // of converging two duplicate caches.
     let endpoints = transport
-        .endpoints(&contact, commonwealth_transport::TrafficClass::KnowledgeSearch)
+        .endpoints(
+            &contact,
+            commonwealth_transport::TrafficClass::KnowledgeSearch,
+        )
         .await;
     for ep in &endpoints {
         let url = format!("{}/internal/knowledge/search", ep.base_url);

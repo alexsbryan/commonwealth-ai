@@ -81,8 +81,9 @@ impl<'a> HarnessRunner<'a> {
         )?;
         let active = pipeline.is_active();
         let descriptions = pipeline.descriptions();
-        let (kept, dropped): (Vec<_>, Vec<_>) =
-            docs.into_iter().partition(|d| !active || pipeline.accept(d));
+        let (kept, dropped): (Vec<_>, Vec<_>) = docs
+            .into_iter()
+            .partition(|d| !active || pipeline.accept(d));
         let filter = FilterOutput {
             active,
             kept,

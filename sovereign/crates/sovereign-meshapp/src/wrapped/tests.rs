@@ -29,13 +29,14 @@ fn doc(uuid: &str, turns: Vec<Turn>) -> ConvDoc {
 #[test]
 fn scale_counts_words_months_and_dates() {
     let docs = vec![
-        doc("a", vec![
-            turn("2025-01-10 09:00", true, 10, 1, "q"),
-            turn("2025-01-10 09:01", false, 40, 1, "a"),
-        ]),
-        doc("b", vec![
-            turn("2025-03-02 22:00", true, 5, 2, "q"),
-        ]),
+        doc(
+            "a",
+            vec![
+                turn("2025-01-10 09:00", true, 10, 1, "q"),
+                turn("2025-01-10 09:01", false, 40, 1, "a"),
+            ],
+        ),
+        doc("b", vec![turn("2025-03-02 22:00", true, 5, 2, "q")]),
     ];
     let c = fold_scale(&docs).unwrap();
     assert_eq!(c.conversations, 2);
@@ -58,11 +59,14 @@ fn scale_absent_for_empty_corpus() {
 #[test]
 fn rhythm_heatmap_buckets_by_utc_weekday_and_hour() {
     // 2025-01-06 is a Monday.
-    let docs = vec![doc("a", vec![
-        turn("2025-01-06 02:10", true, 1, 1, "x"),
-        turn("2025-01-06 02:30", false, 1, 1, "y"),
-        turn("2025-01-12 23:59", true, 1, 2, "z"), // Sunday
-    ])];
+    let docs = vec![doc(
+        "a",
+        vec![
+            turn("2025-01-06 02:10", true, 1, 1, "x"),
+            turn("2025-01-06 02:30", false, 1, 1, "y"),
+            turn("2025-01-12 23:59", true, 1, 2, "z"), // Sunday
+        ],
+    )];
     let c = fold_rhythm(&docs).unwrap();
     assert_eq!(c.heatmap[0][2], 2); // Monday 02:xx
     assert_eq!(c.heatmap[6][23], 1); // Sunday 23:xx
@@ -71,13 +75,16 @@ fn rhythm_heatmap_buckets_by_utc_weekday_and_hour() {
 
 #[test]
 fn rhythm_absent_when_no_turn_is_timestamped() {
-    let docs = vec![doc("a", vec![Turn {
-        ts: None,
-        is_user: true,
-        words: 3,
-        chunk_id: 1,
-        first_line: "hello".into(),
-    }])];
+    let docs = vec![doc(
+        "a",
+        vec![Turn {
+            ts: None,
+            is_user: true,
+            words: 3,
+            chunk_id: 1,
+            first_line: "hello".into(),
+        }],
+    )];
     assert!(fold_rhythm(&docs).is_none());
 }
 
@@ -86,18 +93,24 @@ fn longest_session_splits_on_gap_and_prefers_duration() {
     let docs = vec![
         // One conversation, two sessions: a 20-minute run, then (after a
         // 5h gap) a 61-minute run that should win.
-        doc("rabbit", vec![
-            turn("2025-03-09 10:00", true, 1, 10, "short run start"),
-            turn("2025-03-09 10:20", false, 1, 10, "short run end"),
-            turn("2025-03-09 15:00", true, 1, 11, "long run start"),
-            turn("2025-03-09 15:25", false, 1, 11, "mid"),
-            turn("2025-03-09 15:50", true, 1, 12, "mid 2"),
-            turn("2025-03-09 16:01", false, 1, 12, "long run end"),
-        ]),
-        doc("other", vec![
-            turn("2025-04-01 08:00", true, 1, 20, "elsewhere"),
-            turn("2025-04-01 08:30", false, 1, 20, "elsewhere end"),
-        ]),
+        doc(
+            "rabbit",
+            vec![
+                turn("2025-03-09 10:00", true, 1, 10, "short run start"),
+                turn("2025-03-09 10:20", false, 1, 10, "short run end"),
+                turn("2025-03-09 15:00", true, 1, 11, "long run start"),
+                turn("2025-03-09 15:25", false, 1, 11, "mid"),
+                turn("2025-03-09 15:50", true, 1, 12, "mid 2"),
+                turn("2025-03-09 16:01", false, 1, 12, "long run end"),
+            ],
+        ),
+        doc(
+            "other",
+            vec![
+                turn("2025-04-01 08:00", true, 1, 20, "elsewhere"),
+                turn("2025-04-01 08:30", false, 1, 20, "elsewhere end"),
+            ],
+        ),
     ];
     let s = fold_rhythm(&docs).unwrap().longest_session.unwrap();
     assert_eq!(s.conv_uuid, "rabbit");
@@ -113,15 +126,21 @@ fn longest_session_splits_on_gap_and_prefers_duration() {
 #[test]
 fn longest_session_tie_breaks_on_turn_count() {
     let docs = vec![
-        doc("two-turns", vec![
-            turn("2025-05-01 10:00", true, 1, 1, "a"),
-            turn("2025-05-01 10:30", false, 1, 1, "b"),
-        ]),
-        doc("three-turns", vec![
-            turn("2025-05-02 10:00", true, 1, 2, "a"),
-            turn("2025-05-02 10:15", false, 1, 2, "b"),
-            turn("2025-05-02 10:30", true, 1, 2, "c"),
-        ]),
+        doc(
+            "two-turns",
+            vec![
+                turn("2025-05-01 10:00", true, 1, 1, "a"),
+                turn("2025-05-01 10:30", false, 1, 1, "b"),
+            ],
+        ),
+        doc(
+            "three-turns",
+            vec![
+                turn("2025-05-02 10:00", true, 1, 2, "a"),
+                turn("2025-05-02 10:15", false, 1, 2, "b"),
+                turn("2025-05-02 10:30", true, 1, 2, "c"),
+            ],
+        ),
     ];
     let s = fold_rhythm(&docs).unwrap().longest_session.unwrap();
     assert_eq!(s.conv_uuid, "three-turns");
@@ -169,8 +188,12 @@ fn obsessions_groups_by_quarter_and_ranks_by_conversations() {
         erow(6, "Berlin", "Location", 0.7, "c6"),
     ];
     let quarters: HashMap<u64, String> = [
-        (1, "2025-Q1"), (2, "2025-Q1"), (3, "2025-Q1"),
-        (4, "2025-Q2"), (5, "2025-Q2"), (6, "2025-Q2"),
+        (1, "2025-Q1"),
+        (2, "2025-Q1"),
+        (3, "2025-Q1"),
+        (4, "2025-Q2"),
+        (5, "2025-Q2"),
+        (6, "2025-Q2"),
     ]
     .into_iter()
     .map(|(k, v)| (k, v.to_string()))
@@ -200,10 +223,10 @@ fn obsessions_groups_by_quarter_and_ranks_by_conversations() {
 #[test]
 fn obsessions_drops_stoplist_low_score_and_non_verbatim_rows() {
     let rows = vec![
-        erow(1, "you", "Person", 0.99, "c1"),       // stoplist floor
-        erow(1, "Rust", "Work", 0.3, "c1"),         // below score floor
-        erow(1, "Phantom", "Work", 0.9, "c1"),      // not verbatim in chunk
-        erow(1, "ok", "Work", 0.9, "c1"),           // too short
+        erow(1, "you", "Person", 0.99, "c1"),  // stoplist floor
+        erow(1, "Rust", "Work", 0.3, "c1"),    // below score floor
+        erow(1, "Phantom", "Work", 0.9, "c1"), // not verbatim in chunk
+        erow(1, "ok", "Work", 0.9, "c1"),      // too short
     ];
     let quarters: HashMap<u64, String> = [(1u64, "2025-Q1".to_string())].into_iter().collect();
     let content = content_map(&[(1, "talking about Rust with you, ok")]);
@@ -222,7 +245,11 @@ fn obsessions_drops_case_profile_generics() {
         .into_iter()
         .map(|(k, v)| (k, v.to_string()))
         .collect();
-    let content = content_map(&[(1, "Workers unite"), (2, "Workers again"), (3, "Workers third")]);
+    let content = content_map(&[
+        (1, "Workers unite"),
+        (2, "Workers again"),
+        (3, "Workers third"),
+    ]);
     let generic: HashSet<String> = ["workers".to_string()].into_iter().collect();
     assert!(fold_obsessions(&rows, &quarters, &content, &generic).is_none());
 }
@@ -242,7 +269,11 @@ fn cast_builds_cooccurrence_graph_with_degree() {
     assert_eq!(c.nodes.len(), 3); // Alice, Acme, Bob — no Location
     assert_eq!(c.edges.len(), 1);
     assert_eq!(c.edges[0].co_conversations, 2);
-    let alice = c.nodes.iter().find(|n| n.canonical_name == "Alice").unwrap();
+    let alice = c
+        .nodes
+        .iter()
+        .find(|n| n.canonical_name == "Alice")
+        .unwrap();
     assert_eq!(alice.conversations, 2);
     assert_eq!(alice.degree, 1);
     let bob = c.nodes.iter().find(|n| n.canonical_name == "Bob").unwrap();
@@ -268,7 +299,13 @@ fn case_profile_counts_lowercase_and_mid_sentence_capitals() {
     ]);
     let p = case_profile("workers", &t);
     // 3 lowercase; "Workers" follows ". " (sentence start) → neither side.
-    assert_eq!(p, CaseProfile { lowercase: 3, capitalized_mid: 0 });
+    assert_eq!(
+        p,
+        CaseProfile {
+            lowercase: 3,
+            capitalized_mid: 0
+        }
+    );
     assert!(p.is_generic());
 }
 
@@ -300,8 +337,9 @@ fn generic_keys_verdict_set() {
     let t = texts(&[
         "the banks failed and more banks failed; banks everywhere. Apple shipped; we like Apple and Apple again.",
     ]);
-    let candidates: HashSet<String> =
-        ["banks".to_string(), "apple".to_string()].into_iter().collect();
+    let candidates: HashSet<String> = ["banks".to_string(), "apple".to_string()]
+        .into_iter()
+        .collect();
     let generic = generic_keys_by_case_profile(&candidates, &t);
     assert!(generic.contains("banks"));
     assert!(!generic.contains("apple"));
@@ -353,11 +391,7 @@ fn write_entities_fixture(db: &Path, corpus_id: &str, rows: &[(u64, &str, &str, 
 fn chunk_entities_reads_only_the_requested_corpus() {
     let tmp = tempfile::tempdir().unwrap();
     let db = tmp.path().join("state.db");
-    write_entities_fixture(
-        &db,
-        "mine",
-        &[(7, "Rust", "Work", 0.9, "c1")],
-    );
+    write_entities_fixture(&db, "mine", &[(7, "Rust", "Work", 0.9, "c1")]);
     write_entities_fixture(&db, "other", &[(8, "Go", "Work", 0.9, "c9")]);
     let rows = read_chunk_entities(&db, "mine").unwrap();
     assert_eq!(rows.len(), 1);
@@ -368,7 +402,12 @@ fn chunk_entities_reads_only_the_requested_corpus() {
 
 // ─── build_conv_docs ─────────────────────────────────────────────────
 
-fn chunk_row(id: u64, source_doc_id: &str, content: &str, summary: Option<&str>) -> EnrichmentChunkRow {
+fn chunk_row(
+    id: u64,
+    source_doc_id: &str,
+    content: &str,
+    summary: Option<&str>,
+) -> EnrichmentChunkRow {
     EnrichmentChunkRow {
         id,
         content: content.to_string(),
@@ -423,9 +462,17 @@ fn insert_chunk(content: &str, source_doc_id: &str, summary: &str) -> InsertChun
 }
 
 async fn build_fixture_index(path: &Path, corpus_id: &str) -> Vec<u64> {
-    let index = CorpusIndex::create(path, corpus_id, "Wrapped Test", "test-model", EMBED_DIM, false, "MIT")
-        .await
-        .expect("create index");
+    let index = CorpusIndex::create(
+        path,
+        corpus_id,
+        "Wrapped Test",
+        "test-model",
+        EMBED_DIM,
+        false,
+        "MIT",
+    )
+    .await
+    .expect("create index");
     let payload: Vec<_> = [
         (CONV_A, "conv-a", "Lifetimes deep dive"),
         (
@@ -523,7 +570,10 @@ async fn build_audit_cache_and_staleness_round_trip() {
     for card in &mut tampered.cards {
         if let WrappedCard::Rhythm(r) = card {
             if let Some(s) = &mut r.longest_session {
-                s.excerpt = Some(Excerpt { chunk_id: ids[0], text: "never said this".into() });
+                s.excerpt = Some(Excerpt {
+                    chunk_id: ids[0],
+                    text: "never said this".into(),
+                });
             }
         }
     }

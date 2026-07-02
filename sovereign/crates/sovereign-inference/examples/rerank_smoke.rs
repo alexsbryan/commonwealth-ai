@@ -18,8 +18,7 @@ use std::env;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let path = args.get(1).cloned().unwrap_or_else(|| {
-        "/home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf"
-            .to_string()
+        "/home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf".to_string()
     });
     eprintln!("loading reranker: {path}");
     let reranker =

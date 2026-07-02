@@ -288,7 +288,8 @@ fn register_rpc_workers() {
 /// needed (no dead RPC device) so the caller keeps the proven NULL-`devices`
 /// auto-enumeration path. Device order matches llama.cpp's NULL path — RPC first,
 /// then local GPU — so `SOVEREIGN_RPC_TENSOR_SPLIT` semantics are unchanged.
-pub(crate) fn live_device_list_if_pruning_needed() -> Option<Vec<crate::llama::sys::ggml_backend_dev_t>> {
+pub(crate) fn live_device_list_if_pruning_needed(
+) -> Option<Vec<crate::llama::sys::ggml_backend_dev_t>> {
     // Live endpoints = env ∪ provider — the same source register_rpc_workers uses.
     let live: std::collections::HashSet<String> = gather_rpc_endpoints().into_iter().collect();
 
@@ -410,7 +411,10 @@ pub(crate) fn local_gpu_device_list() -> Vec<crate::llama::sys::ggml_backend_dev
 /// weight a `SET_TENSOR_HASH` cache hit (no bulk send, no deadlock).
 pub(crate) struct DistributionPlan {
     pub(crate) devs: Vec<crate::llama::sys::ggml_backend_dev_t>,
-    pub(crate) overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)>,
+    pub(crate) overrides: Vec<(
+        std::ffi::CString,
+        crate::llama::sys::ggml_backend_buffer_type_t,
+    )>,
     pub(crate) plan: Vec<NodeShard>,
     pub(crate) assignments: Vec<RpcWarmAssignment>,
     /// Eligible RPC worker peers (anchors lending memory) this plan
@@ -579,15 +583,17 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         }
     };
 
-    let overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)> =
-        override_patterns(&plan)
-            .into_iter()
-            .filter_map(|(pattern, di)| {
-                let c = std::ffi::CString::new(pattern).ok()?;
-                let buft = unsafe { crate::llama::sys::ggml_backend_dev_buffer_type(devs[di]) };
-                Some((c, buft))
-            })
-            .collect();
+    let overrides: Vec<(
+        std::ffi::CString,
+        crate::llama::sys::ggml_backend_buffer_type_t,
+    )> = override_patterns(&plan)
+        .into_iter()
+        .filter_map(|(pattern, di)| {
+            let c = std::ffi::CString::new(pattern).ok()?;
+            let buft = unsafe { crate::llama::sys::ggml_backend_dev_buffer_type(devs[di]) };
+            Some((c, buft))
+        })
+        .collect();
 
     Some(DistributionPlan {
         devs,
@@ -630,7 +636,9 @@ enum PlacementDecision {
     StreamSplit,
     /// Distribute via owned `-ot` overrides. `auto_warm` = seed the workers'
     /// caches first (false means the operator asserted they're already warm).
-    OwnedOverrides { auto_warm: bool },
+    OwnedOverrides {
+        auto_warm: bool,
+    },
 }
 
 /// Minimum eligible anchor workers before the host distributes a shared model —
@@ -695,7 +703,11 @@ fn classify_placement(
 /// the plan can enumerate their devices), and for the auto-warm path it DRIVES
 /// the orchestrator to seed every worker's shard before returning the override
 /// plan. Glassbox: every branch logs the decision and its reason.
-pub(crate) fn resolve_placement(model_path: &Path, model_bytes: u64, distributable: bool) -> LoadPlacement {
+pub(crate) fn resolve_placement(
+    model_path: &Path,
+    model_bytes: u64,
+    distributable: bool,
+) -> LoadPlacement {
     let decision = classify_placement(
         distributable,
         rpc_workers_present(),
@@ -846,7 +858,10 @@ pub(crate) fn serve_rpc_worker_if_configured() {
         let c_bind = match std::ffi::CString::new(bind.clone()) {
             Ok(c) => c,
             Err(_) => {
-                tracing::warn!(bind, "RPC bind contains an interior NUL — worker not started");
+                tracing::warn!(
+                    bind,
+                    "RPC bind contains an interior NUL — worker not started"
+                );
                 return;
             }
         };
@@ -996,7 +1011,6 @@ fn rpc_cache_dir() -> Option<std::path::PathBuf> {
     Some(dir)
 }
 
-
 #[cfg(test)]
 mod rpc_prune_tests {
     use super::*;
@@ -1009,7 +1023,11 @@ mod rpc_prune_tests {
         // At the threshold: safe (<=).
         assert!(rpc_distribution_safe_decision(512 * mb, 512 * mb, false));
         // Large + cold cache: NOT safe → caller loads local-only, never wedges.
-        assert!(!rpc_distribution_safe_decision(30_000 * mb, 512 * mb, false));
+        assert!(!rpc_distribution_safe_decision(
+            30_000 * mb,
+            512 * mb,
+            false
+        ));
         // Large + asserted-warm: safe (host skips the bulk send via cache hits).
         assert!(rpc_distribution_safe_decision(30_000 * mb, 512 * mb, true));
     }
@@ -1035,7 +1053,10 @@ mod rpc_prune_tests {
         assert_eq!(forced_choice_candidates(&plain), None);
 
         // No structured_output at all → None.
-        assert_eq!(forced_choice_candidates(&CompletionRequest::default()), None);
+        assert_eq!(
+            forced_choice_candidates(&CompletionRequest::default()),
+            None
+        );
     }
 
     #[test]
@@ -1105,7 +1126,10 @@ mod rpc_prune_tests {
         for n in 0..=20 {
             let b = rpc_worker_restart_backoff(n);
             assert!(b >= last, "backoff must be non-decreasing (n={n})");
-            assert!(b <= Duration::from_secs(5), "backoff must be capped at 5s (n={n})");
+            assert!(
+                b <= Duration::from_secs(5),
+                "backoff must be capped at 5s (n={n})"
+            );
             last = b;
         }
         // Saturates at the cap rather than growing unboundedly.
@@ -1114,7 +1138,10 @@ mod rpc_prune_tests {
     }
 
     /// Move raw ggml device pointers + the bind CString into the worker thread.
-    struct SendArgs(std::ffi::CString, Vec<crate::llama::sys::ggml_backend_dev_t>);
+    struct SendArgs(
+        std::ffi::CString,
+        Vec<crate::llama::sys::ggml_backend_dev_t>,
+    );
     // SAFETY: the wrapped device pointer is a process-static ggml CPU device.
     unsafe impl Send for SendArgs {}
 
@@ -1232,4 +1259,3 @@ mod rpc_prune_tests {
         );
     }
 }
-

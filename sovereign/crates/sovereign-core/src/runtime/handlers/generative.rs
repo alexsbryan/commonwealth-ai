@@ -94,7 +94,9 @@ impl Runtime {
                         full_text.push_str(&chunk);
                         if tx.send(Ok(chunk)).is_err() {
                             // Consumer dropped — abandon persistence.
-                            tracing::debug!("generative_stream: consumer dropped, skipping persist");
+                            tracing::debug!(
+                                "generative_stream: consumer dropped, skipping persist"
+                            );
                             return;
                         }
                     }

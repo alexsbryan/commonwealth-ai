@@ -68,7 +68,10 @@ async fn traffic_flows_over_tcp_only_relay_with_direct_disabled() {
         let conn = incoming.await.expect("handshake completes over the relay");
         let (mut send, mut recv) = conn.accept_bi().await.expect("accept bi-stream");
         // iroh's RecvStream::read_to_end(size_limit) RETURNS the bytes.
-        let got = recv.read_to_end(64 * 1024).await.expect("read client bytes");
+        let got = recv
+            .read_to_end(64 * 1024)
+            .await
+            .expect("read client bytes");
         assert_eq!(&got, b"ping-over-tcp-relay");
         send.write_all(b"pong-over-tcp-relay").await.expect("echo");
         let _ = send.finish();

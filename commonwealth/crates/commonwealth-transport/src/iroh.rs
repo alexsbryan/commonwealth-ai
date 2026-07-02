@@ -355,11 +355,11 @@ impl HttpBridge {
 /// surface displays and a client stores as its opaque transport
 /// address.
 pub fn parse_dial_string(s: &str) -> Result<EndpointAddr, String> {
-    let (id_hex, targets) = s
-        .split_once('@')
-        .ok_or_else(|| format!("dial string '{s}' missing '@' — expected <endpoint-id>@<relay-or-addr>[,...]"))?;
-    let id_bytes = hex::decode(id_hex.trim())
-        .map_err(|e| format!("endpoint id is not hex: {e}"))?;
+    let (id_hex, targets) = s.split_once('@').ok_or_else(|| {
+        format!("dial string '{s}' missing '@' — expected <endpoint-id>@<relay-or-addr>[,...]")
+    })?;
+    let id_bytes =
+        hex::decode(id_hex.trim()).map_err(|e| format!("endpoint id is not hex: {e}"))?;
     let id_arr: [u8; 32] = id_bytes
         .as_slice()
         .try_into()
@@ -377,9 +377,9 @@ pub fn parse_dial_string(s: &str) -> Result<EndpointAddr, String> {
         if let Ok(sock) = t.parse::<SocketAddr>() {
             ea = ea.with_ip_addr(sock);
         } else {
-            let relay: RelayUrl = t
-                .parse()
-                .map_err(|e| format!("target '{t}' is neither a socket address nor a relay URL: {e}"))?;
+            let relay: RelayUrl = t.parse().map_err(|e| {
+                format!("target '{t}' is neither a socket address nor a relay URL: {e}")
+            })?;
             ea = ea.with_relay_url(relay);
         }
     }
@@ -399,7 +399,11 @@ pub fn format_dial_string(addr: &EndpointAddr) -> Option<String> {
     if targets.is_empty() {
         return None;
     }
-    Some(format!("{}@{}", hex::encode(addr.id.as_bytes()), targets.join(",")))
+    Some(format!(
+        "{}@{}",
+        hex::encode(addr.id.as_bytes()),
+        targets.join(",")
+    ))
 }
 
 /// Client half: resolves a peer's `node_pubkey` to a localhost base
@@ -453,7 +457,11 @@ impl IrohTransport {
     /// `None` when there's no usable path (no relay AND no address) — a
     /// bare key isn't dialable without one, so such a peer falls
     /// through to the IP transport in a routed composition.
-    fn endpoint_addr_for(&self, pubkey: &NodePubkey, peer: &PeerContact) -> Option<iroh::EndpointAddr> {
+    fn endpoint_addr_for(
+        &self,
+        pubkey: &NodePubkey,
+        peer: &PeerContact,
+    ) -> Option<iroh::EndpointAddr> {
         let id = iroh::PublicKey::from_bytes(pubkey.as_bytes()).ok()?;
         let mut ea = iroh::EndpointAddr::new(id);
         let mut has_path = false;
@@ -858,10 +866,7 @@ mod tests {
         // Dialing the unrouted (but offered) client ALPN: the acceptor
         // closes the connection, so we read zero bytes — never INTERNAL.
         let got = read_marker_over(24, &target, CLIENT_ALPN).await;
-        assert!(
-            got.is_empty(),
-            "unrouted ALPN must be dropped, got {got:?}"
-        );
+        assert!(got.is_empty(), "unrouted ALPN must be dropped, got {got:?}");
     }
 
     #[test]
@@ -917,7 +922,10 @@ mod tests {
         )
         .await
         .expect("custom-relay endpoint must bind");
-        assert!(!ep.bound_sockets().is_empty(), "endpoint must bind a socket");
+        assert!(
+            !ep.bound_sockets().is_empty(),
+            "endpoint must bind a socket"
+        );
     }
 
     #[tokio::test]
@@ -936,6 +944,9 @@ mod tests {
         )
         .await
         .expect("sovereign (no-n0) endpoint must bind");
-        assert!(!ep.bound_sockets().is_empty(), "endpoint must bind a socket");
+        assert!(
+            !ep.bound_sockets().is_empty(),
+            "endpoint must bind a socket"
+        );
     }
 }

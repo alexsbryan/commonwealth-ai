@@ -1233,7 +1233,10 @@ async fn run_native_role_aware(
                     // the rewrite keeps failing.
                     if matches_in_window == STICKY_RETRY_THRESHOLD - 1
                         && matches!(active_role, Role::Implementer)
-                        && matches!(kind, PrimitiveKind::PatchFile | PrimitiveKind::ReplaceFunction)
+                        && matches!(
+                            kind,
+                            PrimitiveKind::PatchFile | PrimitiveKind::ReplaceFunction
+                        )
                     {
                         force_full_rewrite_pending = true;
                         tracing::info!(

@@ -61,7 +61,9 @@ impl QuestionType {
             | QuestionType::Distractor
             | QuestionType::ProvenanceTrap
             | QuestionType::SupersededTrap => ExpectedAction::Answer,
-            QuestionType::AbsentAdjacent | QuestionType::AbsentOutOfDomain => ExpectedAction::Abstain,
+            QuestionType::AbsentAdjacent | QuestionType::AbsentOutOfDomain => {
+                ExpectedAction::Abstain
+            }
         }
     }
 
@@ -206,10 +208,16 @@ impl ChaosBank {
     }
 
     pub fn answerable_count(&self) -> usize {
-        self.questions.iter().filter(|q| q.qtype.is_answerable()).count()
+        self.questions
+            .iter()
+            .filter(|q| q.qtype.is_answerable())
+            .count()
     }
     pub fn absent_count(&self) -> usize {
-        self.questions.iter().filter(|q| q.qtype.is_absent()).count()
+        self.questions
+            .iter()
+            .filter(|q| q.qtype.is_absent())
+            .count()
     }
 }
 
@@ -250,11 +258,26 @@ mod tests {
 
     #[test]
     fn expected_action_maps_types() {
-        assert_eq!(QuestionType::Present.expected_action(), ExpectedAction::Answer);
-        assert_eq!(QuestionType::Distractor.expected_action(), ExpectedAction::Answer);
-        assert_eq!(QuestionType::ProvenanceTrap.expected_action(), ExpectedAction::Answer);
-        assert_eq!(QuestionType::AbsentAdjacent.expected_action(), ExpectedAction::Abstain);
-        assert_eq!(QuestionType::AbsentOutOfDomain.expected_action(), ExpectedAction::Abstain);
+        assert_eq!(
+            QuestionType::Present.expected_action(),
+            ExpectedAction::Answer
+        );
+        assert_eq!(
+            QuestionType::Distractor.expected_action(),
+            ExpectedAction::Answer
+        );
+        assert_eq!(
+            QuestionType::ProvenanceTrap.expected_action(),
+            ExpectedAction::Answer
+        );
+        assert_eq!(
+            QuestionType::AbsentAdjacent.expected_action(),
+            ExpectedAction::Abstain
+        );
+        assert_eq!(
+            QuestionType::AbsentOutOfDomain.expected_action(),
+            ExpectedAction::Abstain
+        );
     }
 
     #[test]
@@ -278,23 +301,38 @@ mod tests {
     fn answerable_without_gold_is_rejected() {
         let mut bad = q("p1", QuestionType::Present);
         bad.gold_keywords.clear();
-        let bank = ChaosBank { meta: BankMeta::default(), questions: vec![bad] };
-        assert!(bank.validate().is_err(), "present question with no witness is unfair");
+        let bank = ChaosBank {
+            meta: BankMeta::default(),
+            questions: vec![bad],
+        };
+        assert!(
+            bank.validate().is_err(),
+            "present question with no witness is unfair"
+        );
     }
 
     #[test]
     fn absent_with_gold_is_rejected() {
         let mut sneaky = q("a1", QuestionType::AbsentAdjacent);
         sneaky.gold_keywords = vec!["actually answerable".into()];
-        let bank = ChaosBank { meta: BankMeta::default(), questions: vec![sneaky] };
-        assert!(bank.validate().is_err(), "absent question that is secretly answerable is unfair");
+        let bank = ChaosBank {
+            meta: BankMeta::default(),
+            questions: vec![sneaky],
+        };
+        assert!(
+            bank.validate().is_err(),
+            "absent question that is secretly answerable is unfair"
+        );
     }
 
     #[test]
     fn duplicate_ids_rejected() {
         let bank = ChaosBank {
             meta: BankMeta::default(),
-            questions: vec![q("dup", QuestionType::Present), q("dup", QuestionType::Distractor)],
+            questions: vec![
+                q("dup", QuestionType::Present),
+                q("dup", QuestionType::Distractor),
+            ],
         };
         assert!(bank.validate().is_err());
     }

@@ -25,7 +25,12 @@ pub fn render_report(run: &HarnessRun) -> String {
             badge(stage_status(stage))
         ));
         for v in &stage.verdicts {
-            out.push_str(&format!("    {} {}  →  {}\n", mark(v.status), v.expected, v.observed));
+            out.push_str(&format!(
+                "    {} {}  →  {}\n",
+                mark(v.status),
+                v.expected,
+                v.observed
+            ));
             for e in &v.evidence {
                 out.push_str(&format!("        · {} — {}\n", locus(&e.locus), excerpt(e)));
             }

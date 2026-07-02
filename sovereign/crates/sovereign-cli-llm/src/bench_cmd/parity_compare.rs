@@ -122,7 +122,10 @@ fn extract_signals(meta: &serde_json::Value) -> BTreeSet<String> {
     // field_model / knowledge_view landscape digests — not chunks. The shared
     // runtime persists the spliced view ids here (Phase 3 ambient field_model +
     // the existing 3-view digests) so this channel is visible across the bridge.
-    if let Some(digs) = meta.get("knowledge_view_digests").and_then(|v| v.as_array()) {
+    if let Some(digs) = meta
+        .get("knowledge_view_digests")
+        .and_then(|v| v.as_array())
+    {
         for d in digs {
             if let Some(view) = d.as_str() {
                 sig.insert(format!("digest:{view}"));
@@ -160,7 +163,9 @@ fn parse_parity_args(rest: &[String]) -> Result<ParityArgs, String> {
     macro_rules! val {
         ($l:expr) => {{
             i += 1;
-            rest.get(i).cloned().ok_or_else(|| format!("{} requires a value", $l))?
+            rest.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{} requires a value", $l))?
         }};
     }
     while i < rest.len() {
@@ -169,7 +174,13 @@ fn parse_parity_args(rest: &[String]) -> Result<ParityArgs, String> {
             "--corpus" => corpus = Some(val!("--corpus")),
             "--bridge-url" => bridge_url = val!("--bridge-url"),
             "--spec" => spec = val!("--spec"),
-            "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
+            "--limit" => {
+                limit = Some(
+                    val!("--limit")
+                        .parse()
+                        .map_err(|_| "--limit must be a usize")?,
+                )
+            }
             "--no-warm-atlas" => warm_atlas = false,
             "--out" => out = Some(PathBuf::from(val!("--out"))),
             other => return Err(format!("unknown flag `{other}`")),
@@ -188,7 +199,10 @@ fn parse_parity_args(rest: &[String]) -> Result<ParityArgs, String> {
 }
 
 pub async fn cmd_parity_compare(args: &[String]) -> i32 {
-    if args.iter().any(|a| a == "--help" || a == "-h" || a == "help") {
+    if args
+        .iter()
+        .any(|a| a == "--help" || a == "-h" || a == "help")
+    {
         help::print(&HELP);
         return 0;
     }
@@ -236,7 +250,10 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     let session = match build_session(&globals).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: could not build bench chat session (is the daemon up at {}?): {e}", globals.daemon_base);
+            eprintln!(
+                "error: could not build bench chat session (is the daemon up at {}?): {e}",
+                globals.daemon_base
+            );
             return 1;
         }
     };
@@ -310,7 +327,12 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
             match run_bridge_live(&client, Some(&corpus), &q.question, &pargs.spec).await {
                 Ok(turn) => {
                     let s = extract_signals(&turn.answer.metadata);
-                    (s, answered(&turn.answer.visible), turn.answer.gate_action.clone(), None)
+                    (
+                        s,
+                        answered(&turn.answer.visible),
+                        turn.answer.gate_action.clone(),
+                        None,
+                    )
                 }
                 Err(e) => {
                     bridge_errors += 1;
@@ -345,7 +367,10 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
                 deficient.join(", ")
             );
         } else if !surplus.is_empty() {
-            eprintln!("         -> PARITY OK (desktop surplus {{{}}})", surplus.join(", "));
+            eprintln!(
+                "         -> PARITY OK (desktop surplus {{{}}})",
+                surplus.join(", ")
+            );
         } else {
             eprintln!("         -> PARITY OK");
         }
@@ -366,7 +391,11 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
         }));
     }
 
-    let result = if deficient_questions == 0 { "pass" } else { "fail" };
+    let result = if deficient_questions == 0 {
+        "pass"
+    } else {
+        "fail"
+    };
     eprintln!(
         "[parity] SUMMARY: {} questions, {deficient_questions} desktop-deficient, {bridge_errors} bridge-error",
         rows.len(),
@@ -478,10 +507,18 @@ mod tests {
     fn parity_gate_is_subset_not_equality() {
         // desktop ⊇ bench passes even with surplus; desktop ⊊ bench fails.
         let bench: BTreeSet<String> = ["atom_enum"].into_iter().map(String::from).collect();
-        let desk_ok: BTreeSet<String> =
-            ["atom_enum", "raptor"].into_iter().map(String::from).collect();
+        let desk_ok: BTreeSet<String> = ["atom_enum", "raptor"]
+            .into_iter()
+            .map(String::from)
+            .collect();
         let desk_bad: BTreeSet<String> = ["raptor"].into_iter().map(String::from).collect();
-        assert!(bench.difference(&desk_ok).next().is_none(), "superset should pass");
-        assert!(bench.difference(&desk_bad).next().is_some(), "deficient should fail");
+        assert!(
+            bench.difference(&desk_ok).next().is_none(),
+            "superset should pass"
+        );
+        assert!(
+            bench.difference(&desk_bad).next().is_some(),
+            "deficient should fail"
+        );
     }
 }

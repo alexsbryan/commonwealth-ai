@@ -148,8 +148,7 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
                 temperature: Some(0.0),
                 ..Default::default()
             },
-            verify_predicate:
-                "Routes each turn to the tier the intent + evidence shape warrant; \
+            verify_predicate: "Routes each turn to the tier the intent + evidence shape warrant; \
                  abstains (falls through to the LLM cascade) when the embed margin is low.",
             separate_forward_pass: false,
         },
@@ -287,7 +286,9 @@ mod tests {
         // handle that puts verify_grounding on the 35B (the keystone's
         // "Critic(35B)"), instead of the bench's default fast judge.
         assert_eq!(
-            default_profile_for(Role::Critic).preferred_tier.model_stem(),
+            default_profile_for(Role::Critic)
+                .preferred_tier
+                .model_stem(),
             "primary"
         );
     }

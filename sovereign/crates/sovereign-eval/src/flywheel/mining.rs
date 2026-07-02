@@ -70,7 +70,11 @@ pub fn mine_claims(corpus: &Path, preview_fallback: bool) -> Vec<MinedClaim> {
         if !has_evidence {
             continue;
         }
-        let id = d.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let id = d
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let content = d
             .get("content")
             .and_then(|v| v.as_str())
@@ -105,7 +109,11 @@ pub fn mine_claims(corpus: &Path, preview_fallback: bool) -> Vec<MinedClaim> {
         if cheatable(&content, &excerpt) {
             continue;
         }
-        out.push(MinedClaim { id, content, excerpt });
+        out.push(MinedClaim {
+            id,
+            content,
+            excerpt,
+        });
     }
     out
 }
@@ -138,7 +146,8 @@ mod tests {
             ]
         });
         let mut f = std::fs::File::create(atlas.join("atoms.json")).unwrap();
-        f.write_all(serde_json::to_string_pretty(&atoms).unwrap().as_bytes()).unwrap();
+        f.write_all(serde_json::to_string_pretty(&atoms).unwrap().as_bytes())
+            .unwrap();
         root
     }
 
@@ -148,7 +157,10 @@ mod tests {
         let claims = mine_claims(&corpus, false);
         let ids: Vec<&str> = claims.iter().map(|c| c.id.as_str()).collect();
         assert!(ids.contains(&"claim-aaaa"));
-        assert!(!ids.contains(&"claim-cheat"), "self-verifiable claim must be excluded");
+        assert!(
+            !ids.contains(&"claim-cheat"),
+            "self-verifiable claim must be excluded"
+        );
         assert_eq!(claims.len(), 1);
     }
 
@@ -177,7 +189,10 @@ mod tests {
             .write_all(serde_json::to_string(&atoms).unwrap().as_bytes())
             .unwrap();
         // Strict: nothing to mine (no quotable_excerpt).
-        assert!(mine_claims(&root, false).is_empty(), "strict skips a claim with no quotable_excerpt");
+        assert!(
+            mine_claims(&root, false).is_empty(),
+            "strict skips a claim with no quotable_excerpt"
+        );
         // Fallback: the passage_preview becomes the excerpt.
         let mined = mine_claims(&root, true);
         assert_eq!(mined.len(), 1);

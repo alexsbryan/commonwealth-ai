@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::{IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit};
+use commonwealth_core::knowledge::{
+    IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit,
+};
 use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
 use corpus_engine::SourceFileRecord;
@@ -763,5 +765,4 @@ mod tests {
         assert_eq!(local_range.1, peer_range.0);
         assert_eq!(peer_range.1, 1000);
     }
-
 }

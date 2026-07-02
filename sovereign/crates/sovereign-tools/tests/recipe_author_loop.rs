@@ -239,8 +239,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use std::sync::Arc;
 
-    use sovereign_store::recipe_project_store::RecipeProjectStore;
     use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+    use sovereign_store::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
         checkpoint::{do_create as checkpoint_create, restore_checkpoint},

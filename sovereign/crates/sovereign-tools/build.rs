@@ -59,7 +59,8 @@ fn main() {
 }
 
 fn parse(path: &std::path::Path) -> syn::File {
-    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let src =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     syn::parse_file(&src).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
 }
 

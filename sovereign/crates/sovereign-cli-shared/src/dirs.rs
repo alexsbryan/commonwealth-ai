@@ -94,9 +94,7 @@ mod tests {
     fn sovereign_root_uses_brand_dir() {
         let p = sovereign_root();
         assert!(
-            p.ends_with(".svrnmesh")
-                || p.ends_with(".sovereign")
-                || p == std::path::Path::new("."),
+            p.ends_with(".svrnmesh") || p.ends_with(".sovereign") || p == std::path::Path::new("."),
             "unexpected root: {}",
             p.display()
         );

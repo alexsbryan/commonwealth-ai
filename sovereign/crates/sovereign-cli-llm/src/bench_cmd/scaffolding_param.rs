@@ -39,7 +39,10 @@ pub struct RerankSettings {
 impl Default for RerankSettings {
     fn default() -> Self {
         // Matches the live default: reranking off; pool size 50 when on.
-        Self { enabled: false, candidates_k: 50 }
+        Self {
+            enabled: false,
+            candidates_k: 50,
+        }
     }
 }
 
@@ -72,8 +75,14 @@ impl RerankSettings {
     /// concurrent readers of these env vars between `set_env` and the
     /// subsequent `build_session`.
     pub fn set_env(&self, corpus: &str) {
-        set_var("SOVEREIGN_RERANK_DEDUP_ONLY", if self.enabled { "1" } else { "0" });
-        set_var("SOVEREIGN_RERANK_CANDIDATES_K", &self.candidates_k.to_string());
+        set_var(
+            "SOVEREIGN_RERANK_DEDUP_ONLY",
+            if self.enabled { "1" } else { "0" },
+        );
+        set_var(
+            "SOVEREIGN_RERANK_CANDIDATES_K",
+            &self.candidates_k.to_string(),
+        );
         // Apply dedup to the corpus under test (default allowlist is SEP-only,
         // which would make the knob a no-op on any other corpus).
         set_var("SOVEREIGN_RERANK_DEDUP_CORPORA", corpus);
@@ -184,7 +193,10 @@ pub enum PromoteDecision {
 ///   - else any improvement past tolerance → Accept (a ≥2–3-item real move),
 ///   - else NoChange (sub-tolerance = noise; the ≥3-item-collapse discipline
 ///     that stops the loop thrashing on run-to-run nondeterminism).
-pub fn decide(baseline_arm: &LaneBaseline, candidate_arm: &LaneBaseline) -> (PromoteDecision, LaneDiff) {
+pub fn decide(
+    baseline_arm: &LaneBaseline,
+    candidate_arm: &LaneBaseline,
+) -> (PromoteDecision, LaneDiff) {
     let d = diff(Some(baseline_arm), candidate_arm);
     let decision = if d.n_regressed() > 0 {
         PromoteDecision::Reject
@@ -214,7 +226,10 @@ mod tests {
         let p = ScaffoldingParam::parse("rerank.candidates_k=80").unwrap();
         assert_eq!(p.apply(base).candidates_k, 80);
 
-        assert!(ScaffoldingParam::parse("rerank.enabled").is_err(), "missing =value");
+        assert!(
+            ScaffoldingParam::parse("rerank.enabled").is_err(),
+            "missing =value"
+        );
         assert!(ScaffoldingParam::parse("bogus=1").is_err(), "unknown key");
         assert!(ScaffoldingParam::parse("rerank.candidates_k=nope").is_err());
     }
@@ -223,7 +238,10 @@ mod tests {
         LaneBaseline::new("flywheel", "t")
             .with("competence", LaneMetric::higher_is_better(competence, 0.15))
             .with("honesty", LaneMetric::higher_is_better(honesty, 0.18))
-            .with("hallucination_rate", LaneMetric::lower_is_better(hallu, 0.18))
+            .with(
+                "hallucination_rate",
+                LaneMetric::lower_is_better(hallu, 0.18),
+            )
     }
 
     #[test]
@@ -248,7 +266,10 @@ mod tests {
         let dir = std::env::temp_dir().join("flywheel_rerank_settings_unit");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("rerank.toml");
-        let s = RerankSettings { enabled: true, candidates_k: 64 };
+        let s = RerankSettings {
+            enabled: true,
+            candidates_k: 64,
+        };
         s.save(&path).unwrap();
         assert_eq!(RerankSettings::load(&path).unwrap(), s);
         // Missing file → default.

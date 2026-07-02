@@ -89,7 +89,10 @@ fn convert(v: &serde_json::Value, path: &str) -> Result<toml::Value, ConvertErro
                 // a plain identifier; a quote / backslash / control char means
                 // the JSON key itself is broken. Reject loudly so
                 // recipe_write_structured surfaces it and the agent re-emits.
-                if let Some(ch) = k.chars().find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '\t')) {
+                if let Some(ch) = k
+                    .chars()
+                    .find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '\t'))
+                {
                     return Err(ConvertError {
                         path: child_path,
                         message: format!(

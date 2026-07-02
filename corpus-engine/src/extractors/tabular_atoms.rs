@@ -60,7 +60,9 @@ impl Extractor for TabularAtomsExtractor {
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let rows = parse_rows(source_path, &self.config.document_path)?;
         let cfg = self.config.clone();
-        Ok(Box::new(rows.into_iter().map(move |row| Ok(row_to_doc(&row, &cfg)))))
+        Ok(Box::new(
+            rows.into_iter().map(move |row| Ok(row_to_doc(&row, &cfg))),
+        ))
     }
 }
 
@@ -78,9 +80,8 @@ pub fn parse_rows(source_path: &Path, document_path: &str) -> Result<Vec<Map<Str
     for path in collect_json_files(source_path)? {
         let bytes = std::fs::read(&path)
             .map_err(|e| Error::Extraction(format!("read {}: {e}", path.display())))?;
-        let body: Value = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::Extraction(format!("{} is not valid JSON: {e}", path.display()))
-        })?;
+        let body: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| Error::Extraction(format!("{} is not valid JSON: {e}", path.display())))?;
         let matches = match jpath.find(&body) {
             Value::Array(arr) => arr,
             other => vec![other],
@@ -121,7 +122,11 @@ fn row_id(row: &Map<String, Value>, cfg: &TabularAtomsConfig) -> String {
 /// citations surface.
 fn render_content(row: &Map<String, Value>, cfg: &TabularAtomsConfig, id: &str) -> String {
     let mut parts = Vec::new();
-    for col in cfg.string_attributes.iter().chain(cfg.numeric_attributes.iter()) {
+    for col in cfg
+        .string_attributes
+        .iter()
+        .chain(cfg.numeric_attributes.iter())
+    {
         if let Some(s) = value_to_string(row.get(col)) {
             if !s.is_empty() {
                 parts.push(format!("{col}: {s}"));
@@ -248,13 +253,23 @@ mod tests {
         assert_eq!(a.canonical_name, "0001001");
         assert_eq!(a.entity_type, EntityType::Other("parcel".to_string()));
         // Numeric columns parsed from strings into JSON numbers.
-        assert_eq!(a.attributes.get("assessed_land_value").and_then(|v| v.as_f64()), Some(1000.0));
         assert_eq!(
-            a.attributes.get("assessed_improvement_value").and_then(|v| v.as_f64()),
+            a.attributes
+                .get("assessed_land_value")
+                .and_then(|v| v.as_f64()),
+            Some(1000.0)
+        );
+        assert_eq!(
+            a.attributes
+                .get("assessed_improvement_value")
+                .and_then(|v| v.as_f64()),
             Some(500.0)
         );
         // String columns kept verbatim.
-        assert_eq!(a.attributes.get("use_code").and_then(|v| v.as_str()), Some("COMM"));
+        assert_eq!(
+            a.attributes.get("use_code").and_then(|v| v.as_str()),
+            Some("COMM")
+        );
         // Deterministic provenance — no inference signal.
         assert_eq!(a.provenance.extractor_id, "tabular_atoms");
         assert_eq!(a.provenance.signal_kind, SignalKind::ColumnHeader);
@@ -266,7 +281,10 @@ mod tests {
     fn build_atoms_id_is_stable_across_calls() {
         let a1 = build_atoms(&rows(), &cfg(), "sf-assessor-roll");
         let a2 = build_atoms(&rows(), &cfg(), "sf-assessor-roll");
-        assert_eq!(a1[0].id, a2[0].id, "content-hash id must reproduce across re-ingest");
+        assert_eq!(
+            a1[0].id, a2[0].id,
+            "content-hash id must reproduce across re-ingest"
+        );
         assert_ne!(a1[0].id, a1[1].id, "distinct parcels get distinct ids");
     }
 }

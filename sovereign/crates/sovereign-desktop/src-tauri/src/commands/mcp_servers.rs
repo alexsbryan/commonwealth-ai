@@ -64,7 +64,9 @@ fn is_bearer(t: &McpTransportConfig) -> bool {
 pub async fn mcp_list_servers(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<McpServerView>, String> {
-    let servers = SetupConfig::load().map(|c| c.mcp_servers).unwrap_or_default();
+    let servers = SetupConfig::load()
+        .map(|c| c.mcp_servers)
+        .unwrap_or_default();
     let statuses = match state.mcp_servers.read().await.as_ref() {
         Some(mgr) => mgr.server_statuses().await,
         None => Vec::new(),

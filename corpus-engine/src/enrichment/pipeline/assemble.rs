@@ -30,11 +30,15 @@ fn now_rfc3339() -> String {
 /// phase's cache path — byte-faithful to the bespoke output for the all-success
 /// case (per-element failures are surfaced in the workflow run trace rather than
 /// the struct's optional `failures` field).
-pub fn assemble_phase_output(pipeline_id: &str, phase: PipelinePhase, atoms: Value) -> Result<Value> {
+pub fn assemble_phase_output(
+    pipeline_id: &str,
+    phase: PipelinePhase,
+    atoms: Value,
+) -> Result<Value> {
     match phase {
         PipelinePhase::Questions => {
-            let questions_by_chapter: Vec<ExtractedQuestion> =
-                serde_json::from_value(atoms).map_err(|e| {
+            let questions_by_chapter: Vec<ExtractedQuestion> = serde_json::from_value(atoms)
+                .map_err(|e| {
                     Error::Serialization(format!(
                         "assemble questions: atoms are not [ExtractedQuestion]: {e}"
                     ))
@@ -106,7 +110,10 @@ mod tests {
         assert_eq!(out["schema_version"], 1);
         assert_eq!(out["pipeline_id"], "literary_atlas");
         assert_eq!(out["questions_by_chapter"].as_array().unwrap().len(), 0);
-        assert!(!out["written_at"].as_str().unwrap().is_empty(), "written_at stamped");
+        assert!(
+            !out["written_at"].as_str().unwrap().is_empty(),
+            "written_at stamped"
+        );
         let _typed: Phase1Output = serde_json::from_value(out).unwrap();
     }
 
@@ -119,8 +126,8 @@ mod tests {
             { "cluster_id": "cl_0001", "facet": "question", "label": "First", "metadata": {} },
             { "cluster_id": "cl_0002", "facet": "claim", "label": "Second", "metadata": {} }
         ]);
-        let out =
-            assemble_phase_output("literary_atlas", PipelinePhase::AtlasNamedClusters, atoms).unwrap();
+        let out = assemble_phase_output("literary_atlas", PipelinePhase::AtlasNamedClusters, atoms)
+            .unwrap();
         let nc = out["named_clusters"].as_array().unwrap();
         assert_eq!(nc.len(), 2);
         assert_eq!(nc[0]["id"], "ncl_0001");
@@ -132,7 +139,11 @@ mod tests {
     /// An unsupported phase is a loud error, not a silent empty struct.
     #[test]
     fn rejects_unsupported_phase() {
-        assert!(assemble_phase_output("literary_atlas", PipelinePhase::Gaps, serde_json::json!([]))
-            .is_err());
+        assert!(assemble_phase_output(
+            "literary_atlas",
+            PipelinePhase::Gaps,
+            serde_json::json!([])
+        )
+        .is_err());
     }
 }

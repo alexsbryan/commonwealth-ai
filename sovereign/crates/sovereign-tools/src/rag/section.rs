@@ -138,7 +138,14 @@ impl Tool for SectionTool {
                 // title). Detector offsets are regex-match boundaries, so they're
                 // char-aligned; `get` is defensive against any edge case.
                 let body = text.get(s.start_byte..s.end_byte).unwrap_or("").trim();
-                emit_section(&mut out, &mut index, &s.id, &s.title, body, paragraph_chunks);
+                emit_section(
+                    &mut out,
+                    &mut index,
+                    &s.id,
+                    &s.title,
+                    body,
+                    paragraph_chunks,
+                );
             }
         }
 
@@ -206,7 +213,12 @@ mod tests {
         let book = "Front matter preamble.\n\n\
                     Chapter 1\n\nThe shop stood in shabby Soho. Verloc kept it.\n\n\
                     Chapter 2\n\nThe Assistant Commissioner left Scotland Yard at dusk.";
-        let arr = as_array(SectionTool.execute(&serde_json::json!({ "text": book }), &ctx()).await.unwrap());
+        let arr = as_array(
+            SectionTool
+                .execute(&serde_json::json!({ "text": book }), &ctx())
+                .await
+                .unwrap(),
+        );
         assert_eq!(arr.len(), 2, "two chapters: {arr:?}");
         assert!(arr[0]["title"].as_str().unwrap().contains("Chapter 1"));
         assert!(arr[0]["text"].as_str().unwrap().contains("Soho"));
@@ -222,7 +234,10 @@ mod tests {
         let md = "# Intro\n\nHello world lives here.\n\n# Details\n\nMore content follows after.";
         let arr2 = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": md, "boundary": r"(?m)^#\s+.*$" }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": md, "boundary": r"(?m)^#\s+.*$" }),
+                    &ctx(),
+                )
                 .await
                 .unwrap(),
         );
@@ -236,7 +251,12 @@ mod tests {
     #[tokio::test]
     async fn no_boundary_match_falls_back_to_whole_document() {
         let note = "Just a flat note with no headings at all. It has two sentences.";
-        let arr = as_array(SectionTool.execute(&serde_json::json!({ "text": note }), &ctx()).await.unwrap());
+        let arr = as_array(
+            SectionTool
+                .execute(&serde_json::json!({ "text": note }), &ctx())
+                .await
+                .unwrap(),
+        );
         assert_eq!(arr.len(), 1);
         assert!(arr[0]["text"].as_str().unwrap().contains("flat note"));
         assert_eq!(arr[0]["index"], serde_json::json!(0));
@@ -250,15 +270,26 @@ mod tests {
         let book = format!("Chapter 1\n\n{big}");
         let arr = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": book, "paragraph_chunks": true }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": book, "paragraph_chunks": true }),
+                    &ctx(),
+                )
                 .await
                 .unwrap(),
         );
-        assert!(arr.len() > 1, "an oversized section subdivides, got {}", arr.len());
+        assert!(
+            arr.len() > 1,
+            "an oversized section subdivides, got {}",
+            arr.len()
+        );
         for (i, c) in arr.iter().enumerate() {
             assert!(c["title"].as_str().unwrap().contains("Chapter 1"));
             assert_eq!(c["section_id"], serde_json::json!("sec_0001"));
-            assert_eq!(c["index"], serde_json::json!(i), "indices are global + sequential");
+            assert_eq!(
+                c["index"],
+                serde_json::json!(i),
+                "indices are global + sequential"
+            );
         }
     }
 

@@ -41,10 +41,18 @@ pub struct FieldDecl {
 
 impl FieldDecl {
     fn required(label: String, probe: FieldProbe) -> Self {
-        Self { label, probe, required: true }
+        Self {
+            label,
+            probe,
+            required: true,
+        }
     }
     fn optional(label: String, probe: FieldProbe) -> Self {
-        Self { label, probe, required: false }
+        Self {
+            label,
+            probe,
+            required: false,
+        }
     }
 
     /// True when this declared field is present on `doc`. Boolean presence
@@ -95,7 +103,10 @@ pub fn declared_fields(config: &ExtractorConfig) -> Vec<FieldDecl> {
                 FieldProbe::Content,
             )];
             if title_attr.is_some() {
-                v.push(FieldDecl::optional("title (title_attr)".into(), FieldProbe::Title));
+                v.push(FieldDecl::optional(
+                    "title (title_attr)".into(),
+                    FieldProbe::Title,
+                ));
             }
             v
         }
@@ -125,9 +136,15 @@ pub fn declared_fields(config: &ExtractorConfig) -> Vec<FieldDecl> {
             url_field,
             ..
         } => {
-            let mut v = vec![FieldDecl::required("field: content".into(), FieldProbe::Content)];
+            let mut v = vec![FieldDecl::required(
+                "field: content".into(),
+                FieldProbe::Content,
+            )];
             if title_field.is_some() {
-                v.push(FieldDecl::optional("field: title".into(), FieldProbe::Title));
+                v.push(FieldDecl::optional(
+                    "field: title".into(),
+                    FieldProbe::Title,
+                ));
             }
             if url_field.is_some() {
                 v.push(FieldDecl::optional("field: url".into(), FieldProbe::Url));
@@ -135,21 +152,36 @@ pub fn declared_fields(config: &ExtractorConfig) -> Vec<FieldDecl> {
             v
         }
         Jsonl { title_field, .. } => {
-            let mut v = vec![FieldDecl::required("field: content".into(), FieldProbe::Content)];
+            let mut v = vec![FieldDecl::required(
+                "field: content".into(),
+                FieldProbe::Content,
+            )];
             if title_field.is_some() {
-                v.push(FieldDecl::optional("field: title".into(), FieldProbe::Title));
+                v.push(FieldDecl::optional(
+                    "field: title".into(),
+                    FieldProbe::Title,
+                ));
             }
             v
         }
         Csv { title_column, .. } => {
-            let mut v = vec![FieldDecl::required("column: content".into(), FieldProbe::Content)];
+            let mut v = vec![FieldDecl::required(
+                "column: content".into(),
+                FieldProbe::Content,
+            )];
             if title_column.is_some() {
-                v.push(FieldDecl::optional("column: title".into(), FieldProbe::Title));
+                v.push(FieldDecl::optional(
+                    "column: title".into(),
+                    FieldProbe::Title,
+                ));
             }
             v
         }
         Parquet { url_column, .. } => {
-            let mut v = vec![FieldDecl::required("column: content".into(), FieldProbe::Content)];
+            let mut v = vec![FieldDecl::required(
+                "column: content".into(),
+                FieldProbe::Content,
+            )];
             if url_column.is_some() {
                 v.push(FieldDecl::optional("column: url".into(), FieldProbe::Url));
             }
@@ -283,7 +315,8 @@ type = "paragraph"
 
     #[test]
     fn jsonl_declares_content_and_optional_title() {
-        let r = parse("[extract]\ntype = \"jsonl\"\ncontent_field = \"text\"\ntitle_field = \"title\"");
+        let r =
+            parse("[extract]\ntype = \"jsonl\"\ncontent_field = \"text\"\ntitle_field = \"title\"");
         let fields = declared_fields(&r.extract);
         assert!(fields
             .iter()

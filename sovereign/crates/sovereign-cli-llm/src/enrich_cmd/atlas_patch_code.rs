@@ -48,8 +48,8 @@ use corpus_engine::enrichment::code_intel::pass::run_code_intel_for_corpus;
 use corpus_engine::enrichment::code_intel::{diff_code_intel_caches, SymbolEnrichment};
 use corpus_engine::{CorpusEngine, EmbedFn};
 
-use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::config::EnrichConfig;
+use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -146,7 +146,10 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
         }
     };
     if !atoms_file.atoms.is_empty()
-        && !atoms_file.atoms.iter().all(|env| env.id().is_content_hash())
+        && !atoms_file
+            .atoms
+            .iter()
+            .all(|env| env.id().is_content_hash())
     {
         eprintln!(
             "error: atlas `{atlas_id}` has sequential-id atoms; merging a content-hash delta \
@@ -234,7 +237,9 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
     );
     if change.is_empty() {
         println!();
-        println!("  ✓ no symbol bodies changed since the last summary — atlas already current (no-op).");
+        println!(
+            "  ✓ no symbol bodies changed since the last summary — atlas already current (no-op)."
+        );
         return 0;
     }
 
@@ -250,13 +255,8 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
         include_functions,
         include_private,
     };
-    let delta = match extract_atoms_for_symbols(
-        engine,
-        &walk_cfg,
-        &change.changed,
-        &change.removed,
-    )
-    .await
+    let delta = match extract_atoms_for_symbols(engine, &walk_cfg, &change.changed, &change.removed)
+        .await
     {
         Ok(d) => d,
         Err(e) => {
@@ -275,7 +275,10 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
     // ── Step 6: back up → sidecar → apply ──────────────────────
     let backup_dir = atlas_dir.join(".patch-backup");
     if let Err(e) = backup_atlas_files(&atlas_dir, &backup_dir) {
-        eprintln!("error: backing up atlas files to {}: {e}", backup_dir.display());
+        eprintln!(
+            "error: backing up atlas files to {}: {e}",
+            backup_dir.display()
+        );
         return 1;
     }
     println!("  ✓ backed up atlas json → {}", backup_dir.display());
@@ -516,7 +519,10 @@ mod tests {
     #[test]
     fn source_convention_strips_self_atlas() {
         // Convention fallback strips -self-atlas before -atlas.
-        assert_eq!("semver-self-atlas".strip_suffix("-self-atlas"), Some("semver"));
+        assert_eq!(
+            "semver-self-atlas".strip_suffix("-self-atlas"),
+            Some("semver")
+        );
         assert_eq!(
             "commonwealth-ai-atlas"
                 .strip_suffix("-self-atlas")

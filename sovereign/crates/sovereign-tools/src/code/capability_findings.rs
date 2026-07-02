@@ -93,8 +93,7 @@ impl Tool for CapabilityFindingsTool {
         ToolDescriptor {
             id: "capability_findings".to_string(),
             name: "Capability Findings".to_string(),
-            description:
-                "Query the capability-reconciliation findings without re-running the \
+            description: "Query the capability-reconciliation findings without re-running the \
                  pipeline. Sibling to `capability_posture` (freshness gate) and \
                  `drift_findings`. Filter by `kind` (`drifted` — docs contradict the \
                  code; `undocumented` — code does it, no doc describes it; \
@@ -104,7 +103,7 @@ impl Tool for CapabilityFindingsTool {
                  `~/.sovereign/capabilities/<corpus>/capability_findings.json`; returns \
                  `never_run` if no artifact exists — check `capability_posture` for \
                  freshness before acting on results."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {

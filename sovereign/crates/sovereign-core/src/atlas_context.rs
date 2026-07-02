@@ -19,8 +19,8 @@ use std::sync::Arc;
 use corpus_engine::enrichment::atlas::projection::{ArchChunkRef, AtomRecord};
 // Re-exported so retrieval consumers (`runtime/retrieval.rs`) can name the
 // atom-kind discriminant the typed-enumeration filter selects on.
-pub use corpus_engine::enrichment::atlas::projection::AtomKindTag;
 use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
+pub use corpus_engine::enrichment::atlas::projection::AtomKindTag;
 use corpus_engine::enrichment::atlas::store::LancePreload;
 use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeProvenance, EdgeType};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
@@ -278,7 +278,9 @@ impl AtlasGraph {
         let Some(seed_view) = self.atom(seed_atom_id) else {
             return result;
         };
-        result.nodes.push(self.call_node(&seed_view, 0, None, false));
+        result
+            .nodes
+            .push(self.call_node(&seed_view, 0, None, false));
 
         let mut visited: HashSet<String> = HashSet::new();
         visited.insert(seed_atom_id.to_string());
@@ -308,9 +310,12 @@ impl AtlasGraph {
                     };
                     let dyn_dispatch = self.is_reciprocal_scip(current, &neighbor_id, direction);
                     visited.insert(neighbor_id.clone());
-                    result
-                        .nodes
-                        .push(self.call_node(&view, depth, Some(current.clone()), dyn_dispatch));
+                    result.nodes.push(self.call_node(
+                        &view,
+                        depth,
+                        Some(current.clone()),
+                        dyn_dispatch,
+                    ));
                     next.push(neighbor_id);
                 }
             }
@@ -451,13 +456,15 @@ fn lance_edge_views<'a>(
     raw: Vec<(&'a str, &'a str, EdgeType, f32, EdgeProvenance)>,
 ) -> Vec<EdgeView<'a>> {
     raw.into_iter()
-        .map(|(source, target, edge_type, confidence, provenance)| EdgeView {
-            source,
-            target,
-            edge_type,
-            confidence,
-            provenance,
-        })
+        .map(
+            |(source, target, edge_type, confidence, provenance)| EdgeView {
+                source,
+                target,
+                edge_type,
+                confidence,
+                provenance,
+            },
+        )
         .collect()
 }
 
@@ -1025,8 +1032,10 @@ pub async fn atlas_navigate_ann(
     }
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(max_seeds);
-    let primary_seeds: Vec<(String, String, f32)> =
-        scored.into_iter().map(|(s, cid, aid)| (cid, aid, s)).collect();
+    let primary_seeds: Vec<(String, String, f32)> = scored
+        .into_iter()
+        .map(|(s, cid, aid)| (cid, aid, s))
+        .collect();
 
     // 1b. Name-match seeds — `atom_id` read straight off the bag entry (no
     // resolve). Force-seeds every atom literally named in the question, so a
@@ -1917,7 +1926,10 @@ mod store_io_tests {
         // beta is a one-way call → not flagged.
         let delta = chain.nodes.iter().find(|n| n.name == "m::delta").unwrap();
         let beta = chain.nodes.iter().find(|n| n.name == "m::beta").unwrap();
-        assert!(delta.via_dyn_dispatch, "alpha↔delta reciprocal = dyn-dispatch");
+        assert!(
+            delta.via_dyn_dispatch,
+            "alpha↔delta reciprocal = dyn-dispatch"
+        );
         assert!(!beta.via_dyn_dispatch);
 
         // CALLERS of gamma, 1 hop: only beta (scip). The containment parent `m`
@@ -1934,12 +1946,16 @@ mod store_io_tests {
 
         // Named seed resolution from natural language.
         assert_eq!(
-            graph.resolve_symbol_seed("what does the beta function call").as_deref(),
+            graph
+                .resolve_symbol_seed("what does the beta function call")
+                .as_deref(),
             Some(AtomId::entity(3).as_str()),
             "last-segment token `beta` resolves to m::beta",
         );
         assert_eq!(
-            graph.resolve_symbol_seed("trace m::alpha please").as_deref(),
+            graph
+                .resolve_symbol_seed("trace m::alpha please")
+                .as_deref(),
             Some(alpha.as_str()),
             "whole qualified-name mention resolves",
         );

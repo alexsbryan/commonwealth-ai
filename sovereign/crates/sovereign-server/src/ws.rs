@@ -14,9 +14,9 @@ use sovereign_core::types::TurnNarration;
 
 use crate::approval::{ServerApprovalChannel, ServerEvent};
 use crate::auth::TenantId;
+use crate::projection::project_message_metadata;
 use crate::reciprocity::{user_key, ReciprocityTable};
 use crate::scheduler::{FairScheduler, UserKey};
-use crate::projection::project_message_metadata;
 use crate::tenant::TenantRuntime;
 
 /// Client → Server WebSocket messages.
@@ -218,9 +218,9 @@ fn forward_narration(
             });
             true
         }
-        Ok(_) => true,                      // another tenant's turn
-        Err(RecvError::Lagged(_)) => true,  // dropped a frame; tokens unaffected
-        Err(RecvError::Closed) => false,    // sink gone — stop selecting
+        Ok(_) => true,                     // another tenant's turn
+        Err(RecvError::Lagged(_)) => true, // dropped a frame; tokens unaffected
+        Err(RecvError::Closed) => false,   // sink gone — stop selecting
     }
 }
 

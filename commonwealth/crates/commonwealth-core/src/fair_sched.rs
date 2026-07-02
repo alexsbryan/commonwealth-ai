@@ -104,8 +104,12 @@ pub enum AdmitOutcome {
 pub enum TryGrant {
     Granted,
     /// Couldn't grant now; this is where it *would* sit if it queued.
-    WouldQueue { position: u32 },
-    Shed { would_be_position: u32 },
+    WouldQueue {
+        position: u32,
+    },
+    Shed {
+        would_be_position: u32,
+    },
 }
 
 /// Result of a woken waiter re-checking its state.
@@ -493,13 +497,16 @@ mod tests {
         assert_eq!(c.position_of(0), 3, "lowest weight last");
 
         // Drain: release the holder, claim whoever's promoted, repeat.
-        let keys: HashMap<u64, &'static str> =
-            [(0, "low"), (1, "high1"), (2, "high2")].into_iter().collect();
+        let keys: HashMap<u64, &'static str> = [(0, "low"), (1, "high1"), (2, "high2")]
+            .into_iter()
+            .collect();
         let mut served = Vec::new();
         let mut holder = "holder";
         loop {
             let woken = c.release(&holder);
-            let Some(seq) = woken.first().copied() else { break };
+            let Some(seq) = woken.first().copied() else {
+                break;
+            };
             assert_eq!(c.claim_or_status(seq), ClaimOrStatus::Claimed);
             served.push(seq);
             holder = keys[&seq];
@@ -514,11 +521,19 @@ mod tests {
     fn sheds_at_depth_cap() {
         let mut c = core(1, 2); // 1 slot, depth 2
         assert_eq!(c.admit("h", 1.0, 4), AdmitOutcome::Granted);
-        assert!(matches!(c.admit("w1", 1.0, 4), AdmitOutcome::Enqueued { .. }));
-        assert!(matches!(c.admit("w2", 1.0, 4), AdmitOutcome::Enqueued { .. }));
+        assert!(matches!(
+            c.admit("w1", 1.0, 4),
+            AdmitOutcome::Enqueued { .. }
+        ));
+        assert!(matches!(
+            c.admit("w2", 1.0, 4),
+            AdmitOutcome::Enqueued { .. }
+        ));
         assert_eq!(
             c.admit("w3", 1.0, 4),
-            AdmitOutcome::Shed { would_be_position: 3 },
+            AdmitOutcome::Shed {
+                would_be_position: 3
+            },
             "queue full at depth 2 → shed"
         );
     }
@@ -546,7 +561,11 @@ mod tests {
         let woken = c.release(&"h");
         assert_eq!(woken, vec![0], "FIFO: seq0 promoted first");
         assert_eq!(c.claim_or_status(0), ClaimOrStatus::Claimed);
-        assert_eq!(c.position_of(2), 2, "position only decreases as line drains");
+        assert_eq!(
+            c.position_of(2),
+            2,
+            "position only decreases as line drains"
+        );
     }
 
     #[test]
@@ -590,7 +609,11 @@ mod tests {
     fn eta_accounts_for_parallel_slots() {
         let mut c = core(4, 32);
         c.avg_turn_ms = 1000;
-        assert_eq!(c.status(4).estimated_wait_ms, 1000, "4 in 4 slots = 1 batch");
+        assert_eq!(
+            c.status(4).estimated_wait_ms,
+            1000,
+            "4 in 4 slots = 1 batch"
+        );
         assert_eq!(c.status(5).estimated_wait_ms, 2000, "5 needs a 2nd batch");
     }
 
@@ -612,11 +635,27 @@ mod tests {
 
     #[test]
     fn reciprocity_weight_normalizes_against_max() {
-        assert_eq!(reciprocity_weight(100.0, 100.0, 0.5), 1.5, "top contributor → 1+k");
+        assert_eq!(
+            reciprocity_weight(100.0, 100.0, 0.5),
+            1.5,
+            "top contributor → 1+k"
+        );
         assert_eq!(reciprocity_weight(50.0, 100.0, 0.5), 1.25, "half → 1+k·0.5");
-        assert_eq!(reciprocity_weight(0.0, 100.0, 0.5), 1.0, "no contribution → neutral");
-        assert_eq!(reciprocity_weight(100.0, 0.0, 0.5), 1.0, "no fleet signal → neutral");
-        assert_eq!(reciprocity_weight(100.0, 100.0, 0.0), 1.0, "k=0 → reciprocity off");
+        assert_eq!(
+            reciprocity_weight(0.0, 100.0, 0.5),
+            1.0,
+            "no contribution → neutral"
+        );
+        assert_eq!(
+            reciprocity_weight(100.0, 0.0, 0.5),
+            1.0,
+            "no fleet signal → neutral"
+        );
+        assert_eq!(
+            reciprocity_weight(100.0, 100.0, 0.0),
+            1.0,
+            "k=0 → reciprocity off"
+        );
     }
 
     #[test]

@@ -30,9 +30,10 @@ pub fn validate_fairness(probe: &Probe) -> Result<(), String> {
             }
             Ok(())
         }
-        (ExpectedAction::Answer, _) => {
-            Err(format!("answerable probe `{}` must have a Witness oracle", probe.id))
-        }
+        (ExpectedAction::Answer, _) => Err(format!(
+            "answerable probe `{}` must have a Witness oracle",
+            probe.id
+        )),
         (ExpectedAction::Abstain, Oracle::Absent { .. }) => Ok(()),
         (ExpectedAction::Abstain, _) => Err(format!(
             "absent probe `{}` must have an Absent oracle (no in-corpus witness)",
@@ -138,7 +139,11 @@ mod tests {
             id: "p1".into(),
             query: "who runs the shop?".into(),
             qtype: QuestionType::Present,
-            oracle: Oracle::Witness { gold_keywords: gold, supporting_quote: None, distractor_quote: None },
+            oracle: Oracle::Witness {
+                gold_keywords: gold,
+                supporting_quote: None,
+                distractor_quote: None,
+            },
             source: ProbeSource::I1Corpus,
             note: String::new(),
         }
@@ -149,7 +154,10 @@ mod tests {
             id: "a1".into(),
             query: "capital of Australia?".into(),
             qtype: QuestionType::AbsentAdjacent,
-            oracle: Oracle::Absent { held_out_witness: None, kind: AbsentKind::Adjacent },
+            oracle: Oracle::Absent {
+                held_out_witness: None,
+                kind: AbsentKind::Adjacent,
+            },
             source: ProbeSource::I1Corpus,
             note: String::new(),
         }
@@ -169,8 +177,14 @@ mod tests {
     #[test]
     fn fairness_rejects_answerable_with_absent_oracle() {
         let mut p = present_probe(vec!["x".into()]);
-        p.oracle = Oracle::Absent { held_out_witness: None, kind: AbsentKind::Adjacent };
-        assert!(validate_fairness(&p).is_err(), "an answerable probe with no Witness oracle is unfair");
+        p.oracle = Oracle::Absent {
+            held_out_witness: None,
+            kind: AbsentKind::Adjacent,
+        };
+        assert!(
+            validate_fairness(&p).is_err(),
+            "an answerable probe with no Witness oracle is unfair"
+        );
     }
 
     #[test]
@@ -192,12 +206,21 @@ mod tests {
             source_run: "unit".into(),
         };
 
-        assert!(RegressionBank::capture(&path, &case).unwrap(), "first capture appends");
-        assert!(!RegressionBank::capture(&path, &case).unwrap(), "duplicate is skipped");
+        assert!(
+            RegressionBank::capture(&path, &case).unwrap(),
+            "first capture appends"
+        );
+        assert!(
+            !RegressionBank::capture(&path, &case).unwrap(),
+            "duplicate is skipped"
+        );
 
         let bank = RegressionBank::load(&path).unwrap();
         assert_eq!(bank.cases.len(), 1);
-        assert_eq!(bank.cases[0].probe.query, "who runs the shop?", "probe replays verbatim");
+        assert_eq!(
+            bank.cases[0].probe.query, "who runs the shop?",
+            "probe replays verbatim"
+        );
 
         // An unfair case is refused at capture.
         let mut unfair = case.clone();

@@ -144,8 +144,24 @@ async fn extract_answer_value(
 /// present and released as best effort.
 pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
     const STOP: &[&str] = &[
-        "mr", "mrs", "miss", "ms", "the", "of", "a", "an", "and", "sir", "dr",
-        "comrade", "chief", "inspector", "lady", "lord", "saint", "st",
+        "mr",
+        "mrs",
+        "miss",
+        "ms",
+        "the",
+        "of",
+        "a",
+        "an",
+        "and",
+        "sir",
+        "dr",
+        "comrade",
+        "chief",
+        "inspector",
+        "lady",
+        "lord",
+        "saint",
+        "st",
     ];
     let hay: String = chunks
         .join(" ")
@@ -160,7 +176,11 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
     // which the significant-word path below would otherwise drop to an empty set
     // (every word a stop-word) and mis-flag as a confabulation. Gated on ≥2
     // words so a bare honorific ("Mr") cannot self-ground.
-    let nval: String = value.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ");
+    let nval: String = value
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     if nval.split(' ').filter(|w| !w.is_empty()).count() >= 2 && hay.contains(&nval) {
         return true;
     }

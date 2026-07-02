@@ -135,8 +135,7 @@ impl EventHub {
                 let hub = Arc::clone(self);
                 let name = event.to_string();
                 app.listen_any(event.to_string(), move |raw| {
-                    let payload: Value =
-                        serde_json::from_str(raw.payload()).unwrap_or(Value::Null);
+                    let payload: Value = serde_json::from_str(raw.payload()).unwrap_or(Value::Null);
                     hub.publish(&name, payload);
                 });
             }
@@ -367,7 +366,12 @@ async fn invoke(
         }
         InvokeResponse::Err(e) => (false, json!({ "ok": false, "error": e.0 })),
     };
-    ledger::record(&payload.cmd, ok, started.elapsed().as_millis() as u64, &spec);
+    ledger::record(
+        &payload.cmd,
+        ok,
+        started.elapsed().as_millis() as u64,
+        &spec,
+    );
     (StatusCode::OK, Json(body))
 }
 

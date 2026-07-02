@@ -122,7 +122,8 @@ impl Tool for RecipeValidateTool {
 /// touches embeddings, but the engine constructor requires an
 /// EmbedFn.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
+    let stub_embed: EmbedFn =
+        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
     let tmp = std::env::temp_dir().join("sovereign-recipe-author-validate");
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }

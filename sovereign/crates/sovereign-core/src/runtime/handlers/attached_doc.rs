@@ -294,8 +294,7 @@ impl Runtime {
                                     for seg in t.split("[Source") {
                                         let seg = seg.trim();
                                         if seg.len() > 80 {
-                                            retrieved_tool_results
-                                                .push(format!("[Source{seg}"));
+                                            retrieved_tool_results.push(format!("[Source{seg}"));
                                         }
                                     }
                                 }
@@ -637,24 +636,22 @@ impl Runtime {
                 .get_document_session_by_conversation(conversation_id)
                 .await
             {
-                Ok(Some(session)) => {
-                    match self.store.get_document_asset(&session.source).await {
-                        Ok(Some(asset)) => {
-                            let chunks = self
-                                .store
-                                .get_chunks_by_source(&asset.source_key())
-                                .await
-                                .unwrap_or_default();
-                            Some(std::sync::Arc::new(
-                                crate::runtime::grounding::AttachedAssetSearcher::new(
-                                    std::sync::Arc::clone(&self.inference),
-                                    &chunks,
-                                ),
-                            ) as _)
-                        }
-                        _ => None,
+                Ok(Some(session)) => match self.store.get_document_asset(&session.source).await {
+                    Ok(Some(asset)) => {
+                        let chunks = self
+                            .store
+                            .get_chunks_by_source(&asset.source_key())
+                            .await
+                            .unwrap_or_default();
+                        Some(std::sync::Arc::new(
+                            crate::runtime::grounding::AttachedAssetSearcher::new(
+                                std::sync::Arc::clone(&self.inference),
+                                &chunks,
+                            ),
+                        ) as _)
                     }
-                }
+                    _ => None,
+                },
                 _ => None,
             };
         let evidence = crate::runtime::grounding::EvidenceContext {

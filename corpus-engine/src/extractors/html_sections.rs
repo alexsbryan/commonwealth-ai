@@ -246,7 +246,11 @@ fn find_sections(stripped: &str, rule: &CompiledRule) -> Vec<String> {
         // Look for an end anchor strictly after this start, but never
         // past the next start match (which always terminates the item).
         let window = &stripped[start_end..next_start];
-        let end_rel = rule.end.find(window).map(|m| m.start()).unwrap_or(window.len());
+        let end_rel = rule
+            .end
+            .find(window)
+            .map(|m| m.start())
+            .unwrap_or(window.len());
         let to = start_end + end_rel;
         let segment = stripped[from..to].trim();
         if !segment.is_empty() {
@@ -425,8 +429,7 @@ mod tests {
         // The last item terminates on the end anchor, not EOF.
         assert!(!docs[2].content.contains("ADDITIONAL INFORMATION"));
         // Distinct, index-suffixed source ids.
-        let ids: std::collections::HashSet<_> =
-            docs.iter().map(|d| d.source_id.clone()).collect();
+        let ids: std::collections::HashSet<_> = docs.iter().map(|d| d.source_id.clone()).collect();
         assert_eq!(ids.len(), 3, "source ids must be unique per occurrence");
     }
 

@@ -76,12 +76,16 @@ impl Tool for WriteJsonTool {
         // param). Parsing is the validation: a write_json leaf must not silently
         // persist a value that isn't JSON.
         let value: serde_json::Value = match raw {
-            serde_json::Value::String(s) => serde_json::from_str(s)
-                .map_err(|e| Error::Execution(format!("write_json: `json` is not valid JSON: {e}")))?,
+            serde_json::Value::String(s) => serde_json::from_str(s).map_err(|e| {
+                Error::Execution(format!("write_json: `json` is not valid JSON: {e}"))
+            })?,
             other => other.clone(),
         };
 
-        let pretty = params.get("pretty").and_then(|v| v.as_bool()).unwrap_or(true);
+        let pretty = params
+            .get("pretty")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let body = if pretty {
             serde_json::to_string_pretty(&value)
         } else {
@@ -155,7 +159,10 @@ mod tests {
         // missing parent dir was created).
         let written = std::fs::read_to_string(&out).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&written).unwrap();
-        assert_eq!(parsed, atoms, "written JSON must round-trip the atoms collection");
+        assert_eq!(
+            parsed, atoms,
+            "written JSON must round-trip the atoms collection"
+        );
         // Pretty by default → multi-line.
         assert!(written.contains('\n'), "default output is pretty-printed");
 
@@ -173,7 +180,10 @@ mod tests {
             .await
             .unwrap();
         let flat_text = std::fs::read_to_string(&flat).unwrap();
-        assert!(!flat_text.trim_end().contains('\n'), "pretty=false is compact: {flat_text}");
+        assert!(
+            !flat_text.trim_end().contains('\n'),
+            "pretty=false is compact: {flat_text}"
+        );
 
         // An already-structured (non-string) `json` value works too — an inline
         // literal, not a templated string.
@@ -207,7 +217,10 @@ mod tests {
             .await
             .is_err());
         assert!(WriteJsonTool
-            .execute(&serde_json::json!({ "path": out.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": out.to_string_lossy() }),
+                &ctx()
+            )
             .await
             .is_err());
     }

@@ -213,8 +213,7 @@ async fn http_bridge_reaches_acceptor_via_pairing_string() {
         .bind()
         .await
         .expect("host endpoint");
-    let _acceptor =
-        commonwealth_transport::iroh::IrohAcceptor::spawn(host_ep.clone(), http_addr);
+    let _acceptor = commonwealth_transport::iroh::IrohAcceptor::spawn(host_ep.clone(), http_addr);
 
     // Pairing string, exactly as the host's /status would render it
     // (hermetic test: direct UDP sockets instead of a relay URL).
@@ -429,7 +428,11 @@ async fn routed_transport_prefers_iroh_then_falls_back_to_ip() {
         iroh_direct_addrs: vec![],
     };
     let eps2 = routed.endpoints(&ip_only, TrafficClass::Gossip).await;
-    assert_eq!(eps2.len(), 1, "no iroh path → IP fallback only, got {eps2:?}");
+    assert_eq!(
+        eps2.len(),
+        1,
+        "no iroh path → IP fallback only, got {eps2:?}"
+    );
     assert!(
         eps2[0].label.starts_with("ip:"),
         "fallback candidate must be the IP one, got {}",

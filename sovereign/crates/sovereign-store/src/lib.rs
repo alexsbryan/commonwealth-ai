@@ -2,9 +2,9 @@
 pub mod insight_store;
 pub mod memory;
 pub mod migrations;
-pub mod recipe_project_store;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+pub mod recipe_project_store;
 pub mod sqlite;
 pub mod state_store_checker;
 

@@ -115,9 +115,7 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
                 return 1;
             }
             eprintln!("wrote scaffold to {}", path.display());
-            eprintln!(
-                "review + prune + add forbidden_* blocks before running `svrn bench all`",
-            );
+            eprintln!("review + prune + add forbidden_* blocks before running `svrn bench all`",);
             0
         }
         None => {

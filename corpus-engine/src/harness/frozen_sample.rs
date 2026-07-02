@@ -85,7 +85,9 @@ pub async fn capture(
     let download_dir = std::env::temp_dir().join(format!("harness-capture-{}", recipe.corpus.id));
     let _ = std::fs::remove_dir_all(&download_dir);
     std::fs::create_dir_all(&download_dir)?;
-    let source_path = engine.acquire_source(&acq_recipe, &download_dir, &None).await?;
+    let source_path = engine
+        .acquire_source(&acq_recipe, &download_dir, &None)
+        .await?;
 
     // Freeze the acquired source file(s), content-addressed.
     let source_is_dir = source_path.is_dir();

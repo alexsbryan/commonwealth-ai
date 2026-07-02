@@ -21,9 +21,18 @@ const HELP: Help = Help {
             "svrn enrich validate <corpus-id> --questions <path> [--threshold <f>] [--pass <f>]",
         ),
         HelpSection::Flags(&[
-            ("--questions <path>", "JSON file (bare array of strings, or `{\"questions\":[…]}`)."),
-            ("--threshold <f>", "Cosine threshold for LOCATE inclusion (default 0.5)."),
-            ("--pass <f>", "Pass threshold for the top-match score (default 0.7). Rows below count as misses."),
+            (
+                "--questions <path>",
+                "JSON file (bare array of strings, or `{\"questions\":[…]}`).",
+            ),
+            (
+                "--threshold <f>",
+                "Cosine threshold for LOCATE inclusion (default 0.5).",
+            ),
+            (
+                "--pass <f>",
+                "Pass threshold for the top-match score (default 0.7). Rows below count as misses.",
+            ),
         ]),
     ],
 };

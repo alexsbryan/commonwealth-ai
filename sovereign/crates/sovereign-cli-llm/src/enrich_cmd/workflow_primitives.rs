@@ -263,14 +263,23 @@ impl Tool for AtlasClusterExcerptsTool {
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let cluster: AtlasCluster = serde_json::from_value(
-            params.get("cluster").cloned().unwrap_or(serde_json::Value::Null),
+            params
+                .get("cluster")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
         )
-        .map_err(|e| Error::Execution(format!("atlas_cluster_excerpts: `cluster` is not an AtlasCluster: {e}")))?;
+        .map_err(|e| {
+            Error::Execution(format!(
+                "atlas_cluster_excerpts: `cluster` is not an AtlasCluster: {e}"
+            ))
+        })?;
 
         let cache = PhaseCache::new(paths::cache_dir(&corpus));
         let phase1: Phase1Output = cache
             .read(PipelinePhase::Questions)
-            .map_err(|e| Error::Execution(format!("atlas_cluster_excerpts: read questions cache: {e}")))?
+            .map_err(|e| {
+                Error::Execution(format!("atlas_cluster_excerpts: read questions cache: {e}"))
+            })?
             .ok_or_else(|| {
                 Error::Execution(format!(
                     "atlas_cluster_excerpts: no questions cache for `{corpus}` — run extract first"
@@ -349,7 +358,10 @@ impl Tool for PipelineAssembleTool {
                 )))
             }
         };
-        let atoms = params.get("atoms").cloned().unwrap_or(serde_json::Value::Null);
+        let atoms = params
+            .get("atoms")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
         let out = assemble_phase_output(&pipeline_id, phase, atoms)
             .map_err(|e| Error::Execution(format!("pipeline_assemble: {e}")))?;
         Ok(StepOutput::Json(out))
@@ -441,14 +453,21 @@ impl Tool for AtlasWriteConfigurationsTool {
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let items: Vec<Phase8ParseItem> = serde_json::from_value(
-            params.get("items").cloned().unwrap_or(serde_json::Value::Null),
+            params
+                .get("items")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
         )
         .map_err(|e| {
-            Error::Execution(format!("atlas_write_configurations: `items` is not [Phase8ParseItem]: {e}"))
+            Error::Execution(format!(
+                "atlas_write_configurations: `items` is not [Phase8ParseItem]: {e}"
+            ))
         })?;
         let count = finalize_configurations(&corpus, items)
             .map_err(|e| Error::Execution(format!("atlas_write_configurations: {e}")))?;
-        Ok(StepOutput::Json(serde_json::json!({ "configurations": count })))
+        Ok(StepOutput::Json(
+            serde_json::json!({ "configurations": count }),
+        ))
     }
 }
 
@@ -597,9 +616,11 @@ impl Tool for PipelineParseTool {
         let pipeline_id = str_param(params, "pipeline")?;
         let phase = str_param(params, "phase")?;
         let response = str_param(params, "response")?;
-        let pipeline = PipelineRegistry::builtin().get(&pipeline_id).ok_or_else(|| {
-            Error::Execution(format!("pipeline_parse: unknown pipeline `{pipeline_id}`"))
-        })?;
+        let pipeline = PipelineRegistry::builtin()
+            .get(&pipeline_id)
+            .ok_or_else(|| {
+                Error::Execution(format!("pipeline_parse: unknown pipeline `{pipeline_id}`"))
+            })?;
 
         let to_value = |v: std::result::Result<serde_json::Value, serde_json::Error>| {
             v.map_err(|e| Error::Execution(format!("pipeline_parse: serialize: {e}")))
@@ -610,13 +631,19 @@ impl Tool for PipelineParseTool {
 
         let parsed = match phase.as_str() {
             "seed" => to_value(serde_json::to_value(
-                pipeline.parse_seed_response(&response).map_err(|e| err("seed", e))?,
+                pipeline
+                    .parse_seed_response(&response)
+                    .map_err(|e| err("seed", e))?,
             ))?,
             "questions" | "extract" => to_value(serde_json::to_value(
-                pipeline.parse_phase1(&response).map_err(|e| err("questions", e))?,
+                pipeline
+                    .parse_phase1(&response)
+                    .map_err(|e| err("questions", e))?,
             ))?,
             "tensions" | "classify" => to_value(serde_json::to_value(
-                pipeline.parse_phase6(&response).map_err(|e| err("tensions", e))?,
+                pipeline
+                    .parse_phase6(&response)
+                    .map_err(|e| err("tensions", e))?,
             ))?,
             "configure" => to_value(serde_json::to_value(
                 pipeline
@@ -689,9 +716,13 @@ impl Tool for PipelineComposeTool {
         let input = params
             .get("input")
             .ok_or_else(|| Error::Execution("pipeline_compose: missing required `input`".into()))?;
-        let pipeline = PipelineRegistry::builtin().get(&pipeline_id).ok_or_else(|| {
-            Error::Execution(format!("pipeline_compose: unknown pipeline `{pipeline_id}`"))
-        })?;
+        let pipeline = PipelineRegistry::builtin()
+            .get(&pipeline_id)
+            .ok_or_else(|| {
+                Error::Execution(format!(
+                    "pipeline_compose: unknown pipeline `{pipeline_id}`"
+                ))
+            })?;
 
         let prompt: ChatPrompt = match phase.as_str() {
             "seed" => {
@@ -704,7 +735,9 @@ impl Tool for PipelineComposeTool {
             }
             "configure" => {
                 let summary: AtlasSummary = serde_json::from_value(input.clone()).map_err(|e| {
-                    Error::Execution(format!("pipeline_compose: configure `input` (a summary): {e}"))
+                    Error::Execution(format!(
+                        "pipeline_compose: configure `input` (a summary): {e}"
+                    ))
                 })?;
                 pipeline
                     .compose_phase8_configuration(&summary, &[])
@@ -870,7 +903,10 @@ mod tests {
             .await
             .is_err());
         assert!(AtlasChaptersTool
-            .execute(&serde_json::json!({ "corpus": "definitely-not-real-zzz" }), &ctx())
+            .execute(
+                &serde_json::json!({ "corpus": "definitely-not-real-zzz" }),
+                &ctx()
+            )
             .await
             .is_err());
     }
@@ -892,14 +928,20 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(matches!(out, StepOutput::Json(serde_json::Value::Null)), "{out:?}");
+        assert!(
+            matches!(out, StepOutput::Json(serde_json::Value::Null)),
+            "{out:?}"
+        );
     }
 
     /// Validates params before any IO (the happy path needs the daemon + a bank).
     #[tokio::test]
     async fn exemplar_select_validates_params() {
         assert!(ExemplarSelectTool
-            .execute(&serde_json::json!({ "phase": "questions", "query": "x" }), &ctx())
+            .execute(
+                &serde_json::json!({ "phase": "questions", "query": "x" }),
+                &ctx()
+            )
             .await
             .is_err()); // missing corpus
         assert!(ExemplarSelectTool

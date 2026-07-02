@@ -121,8 +121,7 @@ pub fn build_subgraph(nodes: &[NodeIn], edges: &[EdgeIn], max_nodes: usize) -> A
                 AtomType::ArgumentReconstruction | AtomType::Question
             );
         let boost = if on_spine { 1e9 } else { 0.0 };
-        boost + n.salience.unwrap_or(0.0) as f64 * 1000.0
-            + *degree.get(&n.id).unwrap_or(&0) as f64
+        boost + n.salience.unwrap_or(0.0) as f64 * 1000.0 + *degree.get(&n.id).unwrap_or(&0) as f64
     };
     let mut ranked: Vec<&NodeIn> = nodes.iter().collect();
     ranked.sort_by(|a, b| {
@@ -281,9 +280,7 @@ impl FileAtlasReader {
                         }
                     }
                 }
-                serde_json::Value::Array(a) => {
-                    a.iter().for_each(|x| collect_chunk_ids(x, out))
-                }
+                serde_json::Value::Array(a) => a.iter().for_each(|x| collect_chunk_ids(x, out)),
                 _ => {}
             }
         }
@@ -306,9 +303,7 @@ impl FileAtlasReader {
                     AtomEnvelope::Question(q) => {
                         let mut auth: Vec<AtomId> = q.addressed_by.clone();
                         match &q.resolution_status {
-                            ResolutionStatus::Resolved { claim_id } => {
-                                auth.push(claim_id.clone())
-                            }
+                            ResolutionStatus::Resolved { claim_id } => auth.push(claim_id.clone()),
                             ResolutionStatus::Contested { claim_ids } => {
                                 auth.extend(claim_ids.iter().cloned())
                             }
@@ -526,7 +521,14 @@ mod tests {
         // sharing its chunk. Claims must outrank the (higher-salience) entity
         // on type, and only COOCCUR_K survive the cap.
         let atoms = vec![
-            spine(0, AtomType::Question, 0.5, &["c1"], &[], SpineRole::Question),
+            spine(
+                0,
+                AtomType::Question,
+                0.5,
+                &["c1"],
+                &[],
+                SpineRole::Question,
+            ),
             spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other),
             spine(2, AtomType::Claim, 0.8, &["c1"], &[], SpineRole::Other),
             spine(3, AtomType::Claim, 0.7, &["c1"], &[], SpineRole::Other),
@@ -537,13 +539,21 @@ mod tests {
         let edges = synthesize_spine_edges(&atoms);
         assert_eq!(edges.len(), COOCCUR_K, "capped at COOCCUR_K");
         assert!(edges.iter().all(|e| e.source == AtomId::entity(0)));
-        assert!(edges.iter().all(|e| matches!(e.edge_type, EdgeType::Involves)));
+        assert!(edges
+            .iter()
+            .all(|e| matches!(e.edge_type, EdgeType::Involves)));
         let targets: HashSet<AtomId> = edges.iter().map(|e| e.target.clone()).collect();
         // Top-4 claims by salience win; the salience-1.0 entity loses on type.
         assert!(targets.contains(&AtomId::entity(1)));
         assert!(targets.contains(&AtomId::entity(4)));
-        assert!(!targets.contains(&AtomId::entity(5)), "5th claim dropped by cap");
-        assert!(!targets.contains(&AtomId::entity(6)), "entity excluded by type rank");
+        assert!(
+            !targets.contains(&AtomId::entity(5)),
+            "5th claim dropped by cap"
+        );
+        assert!(
+            !targets.contains(&AtomId::entity(6)),
+            "entity excluded by type rank"
+        );
     }
 
     #[test]
@@ -551,7 +561,14 @@ mod tests {
         // A resolved question links to its answering claim (not even chunk-
         // shared) via Grounds, and emits NO co-occurrence edges.
         let atoms = vec![
-            spine(0, AtomType::Question, 0.5, &["c1"], &[9], SpineRole::Question),
+            spine(
+                0,
+                AtomType::Question,
+                0.5,
+                &["c1"],
+                &[9],
+                SpineRole::Question,
+            ),
             spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other), // shares chunk; ignored
             spine(9, AtomType::Claim, 0.1, &["c2"], &[], SpineRole::Other), // the authoritative answer
         ];
@@ -566,7 +583,14 @@ mod tests {
     fn spine_argument_uses_proponent_then_cooccurrence() {
         // Named proponent → single Involves edge to it.
         let with_prop = vec![
-            spine(0, AtomType::ArgumentReconstruction, 0.5, &["c1"], &[7], SpineRole::Argument),
+            spine(
+                0,
+                AtomType::ArgumentReconstruction,
+                0.5,
+                &["c1"],
+                &[7],
+                SpineRole::Argument,
+            ),
             spine(7, AtomType::Entity, 0.9, &["c2"], &[], SpineRole::Other),
         ];
         let e = synthesize_spine_edges(&with_prop);
@@ -576,7 +600,14 @@ mod tests {
 
         // Anonymous argument → co-occurrence fallback (also Involves).
         let anon = vec![
-            spine(0, AtomType::ArgumentReconstruction, 0.5, &["c1"], &[], SpineRole::Argument),
+            spine(
+                0,
+                AtomType::ArgumentReconstruction,
+                0.5,
+                &["c1"],
+                &[],
+                SpineRole::Argument,
+            ),
             spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other),
         ];
         let e2 = synthesize_spine_edges(&anon);
@@ -600,7 +631,14 @@ mod tests {
     fn spine_authoritative_targets_are_deduped() {
         // addressed_by ∪ resolution_status can name the same claim repeatedly.
         let atoms = vec![
-            spine(0, AtomType::Question, 0.5, &[], &[9, 9, 9], SpineRole::Question),
+            spine(
+                0,
+                AtomType::Question,
+                0.5,
+                &[],
+                &[9, 9, 9],
+                SpineRole::Question,
+            ),
             spine(9, AtomType::Claim, 0.1, &[], &[], SpineRole::Other),
         ];
         let edges = synthesize_spine_edges(&atoms);

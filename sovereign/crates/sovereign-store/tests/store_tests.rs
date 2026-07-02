@@ -77,7 +77,9 @@ async fn build_context_scopes_corpora_by_principal() {
         .await
         .unwrap();
     assert!(alice.installed_corpora.contains(&"shared".to_string()));
-    assert!(alice.installed_corpora.contains(&"alice-secret".to_string()));
+    assert!(alice
+        .installed_corpora
+        .contains(&"alice-secret".to_string()));
     // A3b: the PURE principal ceiling (independent of selection) is what
     // Filter 5 enforces at every corpus-chunk search. Alice owns the private
     // corpus → both are in her ceiling.

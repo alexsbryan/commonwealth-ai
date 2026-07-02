@@ -86,7 +86,10 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
         println!("No results in `{id}` for: {query}");
         return 0;
     }
-    println!("\n{} result(s) in `{id}` for \u{201c}{query}\u{201d}:\n", hits.len());
+    println!(
+        "\n{} result(s) in `{id}` for \u{201c}{query}\u{201d}:\n",
+        hits.len()
+    );
     for (n, h) in hits.iter().enumerate() {
         let title = h.title.as_deref().unwrap_or("(untitled)");
         let preview: String = h.content.chars().take(180).collect();

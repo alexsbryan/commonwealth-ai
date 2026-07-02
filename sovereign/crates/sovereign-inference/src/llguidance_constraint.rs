@@ -767,7 +767,10 @@ mod tests {
             )
         });
         assert!(
-            parsed.get("a").map(|v| v.is_i64() || v.is_u64()).unwrap_or(false),
+            parsed
+                .get("a")
+                .map(|v| v.is_i64() || v.is_u64())
+                .unwrap_or(false),
             "completion missing required integer field `a`: {text:?}"
         );
         assert_eq!(

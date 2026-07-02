@@ -40,7 +40,11 @@ fn main() {
         .or_else(default_cache_dir)
         .expect("no cache dir (set --cache-dir or HOME)");
 
-    eprintln!("warming RPC cache for {} → {}", model.display(), cache_dir.display());
+    eprintln!(
+        "warming RPC cache for {} → {}",
+        model.display(),
+        cache_dir.display()
+    );
     let t0 = std::time::Instant::now();
     match warm_cache_from_gguf(&model, &cache_dir) {
         Ok(s) => {

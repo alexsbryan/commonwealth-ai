@@ -473,7 +473,11 @@ pub fn detect_threshold(
 }
 
 /// Build the standard finding-attribute bag for a threshold match.
-fn threshold_attrs(value: f64, attribute: &str, threshold: f64) -> serde_json::Map<String, serde_json::Value> {
+fn threshold_attrs(
+    value: f64,
+    attribute: &str,
+    threshold: f64,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut attributes = serde_json::Map::new();
     attributes.insert(
         "value".into(),

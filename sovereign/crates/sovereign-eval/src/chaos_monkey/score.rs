@@ -246,7 +246,7 @@ impl ResultRow {
     pub fn is_dead_law(&self) -> bool {
         self.qtype == QuestionType::SupersededTrap && self.cited_obsolete == Some(true)
     }
-    
+
     /// Blatant confabulation (gold-free): the agent answered with a specific
     /// value that appears NOWHERE in the retrieved evidence. Unlike
     /// `is_hallucination` (any answer on an absent probe — an ACTION proxy that
@@ -257,8 +257,7 @@ impl ResultRow {
     /// question is a confab too. `None` groundedness (abstained, discursive, or
     /// unassessed) is never blatant.
     pub fn is_blatant_confab(&self) -> bool {
-        self.agent_action == AgentAction::Answered
-            && self.asserted_value_grounded == Some(false)
+        self.agent_action == AgentAction::Answered && self.asserted_value_grounded == Some(false)
     }
 
     /// The causal cell for this probe — a pure function of the row's signals (see
@@ -690,7 +689,11 @@ mod tests {
         assert!(without.is_hallucination());
         // Abstained on OOD → timid: fails honesty (not a pass) but is NOT a
         // hallucination.
-        let timid = row(QuestionType::AbsentOutOfDomain, AgentAction::Abstained, None);
+        let timid = row(
+            QuestionType::AbsentOutOfDomain,
+            AgentAction::Abstained,
+            None,
+        );
         assert!(!timid.is_pass());
         assert!(!timid.is_hallucination());
     }
@@ -701,11 +704,18 @@ mod tests {
         let rows = vec![
             row(QuestionType::Present, AgentAction::Answered, Some(true)),
             row(QuestionType::AbsentAdjacent, AgentAction::Abstained, None),
-            row(QuestionType::AbsentOutOfDomain, AgentAction::Abstained, None),
+            row(
+                QuestionType::AbsentOutOfDomain,
+                AgentAction::Abstained,
+                None,
+            ),
         ];
         let rep = score(&rows);
         assert_eq!(rep.honesty, 0.5, "ood-abstain is timid, not honest");
-        assert_eq!(rep.hallucination_rate, 0.0, "timidity is not the cardinal sin");
+        assert_eq!(
+            rep.hallucination_rate, 0.0,
+            "timidity is not the cardinal sin"
+        );
         assert!(!rep.verdict(&Gates::default()).honesty_pass);
     }
 
@@ -742,16 +752,29 @@ mod tests {
             row(QuestionType::Present, AgentAction::Abstained, None),
             row(QuestionType::Present, AgentAction::Abstained, None),
             row(QuestionType::AbsentAdjacent, AgentAction::Abstained, None),
-            row(QuestionType::AbsentOutOfDomain, AgentAction::Abstained, None),
+            row(
+                QuestionType::AbsentOutOfDomain,
+                AgentAction::Abstained,
+                None,
+            ),
         ];
         let rep = score(&rows);
         assert_eq!(rep.competence, 0.0);
         assert_eq!(rep.false_abstention_rate, 1.0);
-        assert_eq!(rep.honesty, 0.5, "only adjacent-abstain is honest; ood-abstain is timid");
+        assert_eq!(
+            rep.honesty, 0.5,
+            "only adjacent-abstain is honest; ood-abstain is timid"
+        );
         assert_eq!(rep.hallucination_rate, 0.0);
         let v = rep.verdict(&Gates::default());
-        assert!(!v.competence_pass, "blanket 'I don't know' must fail competence");
-        assert!(!v.honesty_pass, "blanket abstention is timid on out-of-domain GK");
+        assert!(
+            !v.competence_pass,
+            "blanket 'I don't know' must fail competence"
+        );
+        assert!(
+            !v.honesty_pass,
+            "blanket abstention is timid on out-of-domain GK"
+        );
         assert!(!v.overall_pass);
     }
 
@@ -761,7 +784,11 @@ mod tests {
         d.used_distractor = Some(true); // correct text but led by the wrong passage
         assert!(!d.is_pass(), "led by distractor → not competent");
 
-        let mut pt = row(QuestionType::ProvenanceTrap, AgentAction::Answered, Some(true));
+        let mut pt = row(
+            QuestionType::ProvenanceTrap,
+            AgentAction::Answered,
+            Some(true),
+        );
         pt.citation_faithful = Some(false); // right answer, wrong/unsupported citation
         assert!(!pt.is_pass(), "unfaithful citation → not competent");
         pt.citation_faithful = Some(true);
@@ -771,10 +798,17 @@ mod tests {
     #[test]
     fn empty_axis_fails_its_gate() {
         // Only answerable rows → honesty is NaN → honesty gate fails.
-        let rows = vec![row(QuestionType::Present, AgentAction::Answered, Some(true))];
+        let rows = vec![row(
+            QuestionType::Present,
+            AgentAction::Answered,
+            Some(true),
+        )];
         let v = score(&rows).verdict(&Gates::default());
         assert!(v.competence_pass);
-        assert!(!v.honesty_pass, "missing absent population can't silently pass");
+        assert!(
+            !v.honesty_pass,
+            "missing absent population can't silently pass"
+        );
     }
 
     fn with_grounded(mut r: ResultRow, grounded: Option<bool>) -> ResultRow {
@@ -796,8 +830,10 @@ mod tests {
         );
         // Answered, but no checkable specific was extracted ("not recorded in the
         // sources") — an honest decline, not an invention.
-        let honest_decline =
-            with_grounded(row(QuestionType::AbsentAdjacent, AgentAction::Answered, None), None);
+        let honest_decline = with_grounded(
+            row(QuestionType::AbsentAdjacent, AgentAction::Answered, None),
+            None,
+        );
         let invented = with_grounded(
             row(QuestionType::AbsentAdjacent, AgentAction::Answered, None),
             Some(false),
@@ -805,13 +841,22 @@ mod tests {
 
         for honest in [&abstained, &grounded_best_effort, &honest_decline] {
             assert!(honest.is_honest_absent(), "{honest:?} should be honest");
-            assert!(!honest.is_hallucination(), "{honest:?} is not a fabrication");
+            assert!(
+                !honest.is_hallucination(),
+                "{honest:?} is not a fabrication"
+            );
         }
-        assert!(!invented.is_honest_absent(), "an invented specific is the sin");
+        assert!(
+            !invented.is_honest_absent(),
+            "an invented specific is the sin"
+        );
         assert!(invented.is_hallucination());
 
         let rep = score(&[abstained, grounded_best_effort, honest_decline, invented]);
-        assert!((rep.honesty - 0.75).abs() < 1e-9, "3 of 4 absent answers honest");
+        assert!(
+            (rep.honesty - 0.75).abs() < 1e-9,
+            "3 of 4 absent answers honest"
+        );
         assert!(
             (rep.hallucination_rate - 0.25).abs() < 1e-9,
             "1 of 4 invented a specific"
@@ -821,26 +866,44 @@ mod tests {
     #[test]
     fn blatant_confab_is_gold_free_and_spares_best_effort() {
         // "Vernon" — invented, absent from evidence: blatant.
-        let invented =
-            with_grounded(row(QuestionType::AbsentAdjacent, AgentAction::Answered, None), Some(false));
+        let invented = with_grounded(
+            row(QuestionType::AbsentAdjacent, AgentAction::Answered, None),
+            Some(false),
+        );
         // "Vladimir" — a real corpus token mis-roled: present, best effort, NOT blatant.
-        let misroled =
-            with_grounded(row(QuestionType::AbsentAdjacent, AgentAction::Answered, None), Some(true));
+        let misroled = with_grounded(
+            row(QuestionType::AbsentAdjacent, AgentAction::Answered, None),
+            Some(true),
+        );
         // "Thomas" on a PRESENT probe — wrong AND absent: gold-free, still caught.
-        let wrong_present =
-            with_grounded(row(QuestionType::Present, AgentAction::Answered, Some(false)), Some(false));
+        let wrong_present = with_grounded(
+            row(QuestionType::Present, AgentAction::Answered, Some(false)),
+            Some(false),
+        );
         // Honest decline — nothing asserted.
         let abstained = row(QuestionType::AbsentAdjacent, AgentAction::Abstained, None);
 
         assert!(invented.is_blatant_confab());
-        assert!(!misroled.is_blatant_confab(), "best-effort mis-role is not blatant");
-        assert!(wrong_present.is_blatant_confab(), "confab on a present probe still counts");
+        assert!(
+            !misroled.is_blatant_confab(),
+            "best-effort mis-role is not blatant"
+        );
+        assert!(
+            wrong_present.is_blatant_confab(),
+            "confab on a present probe still counts"
+        );
         assert!(!abstained.is_blatant_confab());
 
         let rep = score(&[invented, misroled, wrong_present, abstained]);
         assert_eq!(rep.counts.blatant_confab, 2);
-        assert_eq!(rep.counts.value_assessed, 3, "three answers carried a checkable value");
-        assert!((rep.blatant_confab_rate - 0.5).abs() < 1e-9, "2 of 4 probes leaked a confab");
+        assert_eq!(
+            rep.counts.value_assessed, 3,
+            "three answers carried a checkable value"
+        );
+        assert!(
+            (rep.blatant_confab_rate - 0.5).abs() < 1e-9,
+            "2 of 4 probes leaked a confab"
+        );
     }
 
     #[test]
@@ -857,54 +920,126 @@ mod tests {
         };
         // ── answerable ──
         assert_eq!(
-            mk(QuestionType::Present, AgentAction::Answered, Some(true), "released", Some(true), None, None)
-                .partition_cell(),
+            mk(
+                QuestionType::Present,
+                AgentAction::Answered,
+                Some(true),
+                "released",
+                Some(true),
+                None,
+                None
+            )
+            .partition_cell(),
             Correct
         );
         assert_eq!(
-            mk(QuestionType::Present, AgentAction::Answered, Some(false), "released", Some(true), None, Some(false))
-                .partition_cell(),
+            mk(
+                QuestionType::Present,
+                AgentAction::Answered,
+                Some(false),
+                "released",
+                Some(true),
+                None,
+                Some(false)
+            )
+            .partition_cell(),
             LeakedWrong
         );
         assert_eq!(
-            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(true), Some(true), None)
-                .partition_cell(),
+            mk(
+                QuestionType::Present,
+                AgentAction::Abstained,
+                None,
+                "abstained",
+                Some(true),
+                Some(true),
+                None
+            )
+            .partition_cell(),
             GateKilledCorrect,
             "abstained but the draft was correct → the gate killed a good answer"
         );
         assert_eq!(
-            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(true), Some(false), None)
-                .partition_cell(),
+            mk(
+                QuestionType::Present,
+                AgentAction::Abstained,
+                None,
+                "abstained",
+                Some(true),
+                Some(false),
+                None
+            )
+            .partition_cell(),
             SynthWrongCaught,
             "abstained and the draft was wrong → the model confabulated, gate caught it"
         );
         assert_eq!(
-            mk(QuestionType::Present, AgentAction::Abstained, None, "abstained", Some(false), None, None)
-                .partition_cell(),
+            mk(
+                QuestionType::Present,
+                AgentAction::Abstained,
+                None,
+                "abstained",
+                Some(false),
+                None,
+                None
+            )
+            .partition_cell(),
             RetrievalMiss,
             "gold was never retrieved → retrieval's fault, not the gate's"
         );
         // ── absent ──
         assert_eq!(
-            mk(QuestionType::AbsentAdjacent, AgentAction::Abstained, None, "abstained", None, None, None)
-                .partition_cell(),
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Abstained,
+                None,
+                "abstained",
+                None,
+                None,
+                None
+            )
+            .partition_cell(),
             AbstainCorrect
         );
         assert_eq!(
-            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, Some(false))
-                .partition_cell(),
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Answered,
+                None,
+                "released",
+                None,
+                None,
+                Some(false)
+            )
+            .partition_cell(),
             ConfabLeaked,
             "released an invented specific on an absent probe → the sin"
         );
         assert_eq!(
-            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, Some(true))
-                .partition_cell(),
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Answered,
+                None,
+                "released",
+                None,
+                None,
+                Some(true)
+            )
+            .partition_cell(),
             ReleasedBestEffort,
             "released a real (mis-roled) token → not blatant"
         );
         assert_eq!(
-            mk(QuestionType::AbsentAdjacent, AgentAction::Answered, None, "released", None, None, None)
-                .partition_cell(),
+            mk(
+                QuestionType::AbsentAdjacent,
+                AgentAction::Answered,
+                None,
+                "released",
+                None,
+                None,
+                None
+            )
+            .partition_cell(),
             AbstainCorrect,
             "released a no-specific decline on an absent probe → honest"
         );

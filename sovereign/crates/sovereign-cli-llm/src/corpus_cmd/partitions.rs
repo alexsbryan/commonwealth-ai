@@ -652,7 +652,9 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     let Some(corpus_id) = corpus_id else {
         eprintln!("Missing corpus ID");
-        eprintln!("Usage: svrn corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]");
+        eprintln!(
+            "Usage: svrn corpus reconstruct-manifest <corpus_id> [--source-dir <path>] [--yes]"
+        );
         return 1;
     };
 
@@ -941,7 +943,10 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
 /// finished writing to" — peer-pulled partitions for OTHER nodes
 /// have `indexes_built: false` until coordinate_merge promotes
 /// them, so we don't accidentally read a peer's partial download.
-pub(super) fn find_self_partition(index_dir: &std::path::Path, corpus_id: &str) -> Option<(PathBuf, String)> {
+pub(super) fn find_self_partition(
+    index_dir: &std::path::Path,
+    corpus_id: &str,
+) -> Option<(PathBuf, String)> {
     let prefix = format!("{corpus_id}-partition-");
     let mut best: Option<(PathBuf, String, bool)> = None;
     let entries = std::fs::read_dir(index_dir).ok()?;
@@ -1048,4 +1053,3 @@ pub(super) fn processed_shards_summary(
         ))
     }
 }
-

@@ -320,8 +320,7 @@ pub async fn run_catalog_ingest(
     // Respect a content recipe's explicit retrieval-only opt-out
     // (`[enrichment] enabled = false`): skip the structural-atlas hook below.
     // Computed before `content_recipe` is moved into the CorpusSpec.
-    let catalog_content_opts_out_of_auto_enrichment =
-        content_recipe.opts_out_of_auto_enrichment();
+    let catalog_content_opts_out_of_auto_enrichment = content_recipe.opts_out_of_auto_enrichment();
     let mut ingest_result = engine
         .ingest(
             &CorpusSpec::Inline(Box::new(content_recipe)),

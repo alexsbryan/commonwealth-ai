@@ -396,7 +396,13 @@ pub fn group_extracted_entities(
         );
     }
     for (_chunk_id, rel) in relationships {
-        upsert_entity(normalizer, &mut by_key, &rel.from_type, &rel.from_entity, None);
+        upsert_entity(
+            normalizer,
+            &mut by_key,
+            &rel.from_type,
+            &rel.from_entity,
+            None,
+        );
         upsert_entity(normalizer, &mut by_key, &rel.to_type, &rel.to_entity, None);
     }
     by_key
@@ -437,7 +443,10 @@ fn upsert_entity(
             if v.is_null() {
                 continue;
             }
-            entry.attributes.entry(k.clone()).or_insert_with(|| v.clone());
+            entry
+                .attributes
+                .entry(k.clone())
+                .or_insert_with(|| v.clone());
         }
     }
 }
@@ -602,9 +611,15 @@ mod tests {
     #[test]
     fn group_extracted_entities_dedupes_by_type_and_name() {
         let rels = vec![
-            ("c1".to_string(), rel("NVIDIA", "company", "Microsoft", "company", "revenue")),
+            (
+                "c1".to_string(),
+                rel("NVIDIA", "company", "Microsoft", "company", "revenue"),
+            ),
             // different case, same entity
-            ("c2".to_string(), rel("Nvidia", "company", "Google", "company", "revenue")),
+            (
+                "c2".to_string(),
+                rel("Nvidia", "company", "Google", "company", "revenue"),
+            ),
         ];
         let grouped = group_extracted_entities(&Normalizer::default(), &[], &rels);
         // 3 unique entities: NVIDIA (canonical), Microsoft, Google
@@ -668,8 +683,13 @@ mod tests {
         assert_eq!(inst.canonical_name, "Wright-Patterson Air Force Base");
         assert!(inst.aliases.contains(&"Wright-Patterson".to_string()));
         // Attributes from both mentions merge.
-        assert_eq!(inst.attributes.get("branch"), Some(&serde_json::json!("USAF")));
-        assert_eq!(inst.attributes.get("type"), Some(&serde_json::json!("AIRBASE")));
+        assert_eq!(
+            inst.attributes.get("branch"),
+            Some(&serde_json::json!("USAF"))
+        );
+        assert_eq!(
+            inst.attributes.get("type"),
+            Some(&serde_json::json!("AIRBASE"))
+        );
     }
-
 }

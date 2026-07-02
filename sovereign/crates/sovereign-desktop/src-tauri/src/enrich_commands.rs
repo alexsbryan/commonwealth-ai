@@ -544,8 +544,7 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
     const STARTER_HF_FILENAME: &str = "federalist-starter.tar.zst";
     // sha256 of federalist-starter.tar.zst (gates restore against a corrupt or
     // tampered download — same value verified on the HF artifact).
-    const STARTER_SHA256: &str =
-        "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
+    const STARTER_SHA256: &str = "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
 
     // Idempotent: a resolved atoms.json ⇒ already restored + enriched.
     if index_root_for(STARTER_ID)
@@ -584,7 +583,10 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
             // Conventional download cache, mirroring CorpusEngine::try_restore_prebuilt.
             let download_dir = sovereign_root().join("indexes").join("_downloads");
             std::fs::create_dir_all(&download_dir).map_err(|e| {
-                format!("create starter download dir {}: {e}", download_dir.display())
+                format!(
+                    "create starter download dir {}: {e}",
+                    download_dir.display()
+                )
             })?;
             tracing::info!(url = %url, "starter corpus: downloading snapshot from HuggingFace");
             corpus_engine::acquirers::bulk_download::BulkDownloader::new(&url, true)
@@ -643,8 +645,7 @@ fn staging_jsonl_path_for(corpus_id: &str) -> PathBuf {
 /// questions-only flow), but the onboarding + Settings surfaces only
 /// drive atlas-producing pipelines — matches the validation
 /// `build.rs` already does at phase time (`pipeline_id.ends_with("_atlas")`).
-const ALLOWED_ATLAS_PIPELINES: &[&str] =
-    &["literary_atlas", "philosophy_atlas", "custom_atlas"];
+const ALLOWED_ATLAS_PIPELINES: &[&str] = &["literary_atlas", "philosophy_atlas", "custom_atlas"];
 
 /// Summary of the sampled documents, so the UI can say "ready to ask
 /// about X, Y, Z" after the sample atlas build finishes. Populated by
@@ -859,7 +860,10 @@ pub async fn recipe_enrich_init_from_corpus(corpus_id: String) -> Result<String,
     // the configurable `custom_atlas` pipeline (domain ontology authored in the
     // recipe). Otherwise an explicit, desktop-allowed `pipeline` pin; otherwise
     // infer a prebuilt genre pipeline from `domain`.
-    let pipeline: String = if recipe.as_ref().is_some_and(|r| r.custom_ontology().is_some()) {
+    let pipeline: String = if recipe
+        .as_ref()
+        .is_some_and(|r| r.custom_ontology().is_some())
+    {
         corpus_engine::enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID.to_string()
     } else {
         let enrichment = recipe.and_then(|r| r.enrichment);
@@ -1601,17 +1605,29 @@ mod tests {
     #[test]
     fn atlas_pipeline_for_domain_maps_philosophy_and_defaults_literary() {
         // philosophy-ish domains → the claim/argument pipeline.
-        assert_eq!(atlas_pipeline_for_domain(Some("philosophy")), "philosophy_atlas");
-        assert_eq!(atlas_pipeline_for_domain(Some("Philosophy")), "philosophy_atlas");
+        assert_eq!(
+            atlas_pipeline_for_domain(Some("philosophy")),
+            "philosophy_atlas"
+        );
+        assert_eq!(
+            atlas_pipeline_for_domain(Some("Philosophy")),
+            "philosophy_atlas"
+        );
         assert_eq!(
             atlas_pipeline_for_domain(Some("moral philosophy")),
             "philosophy_atlas"
         );
         // everything else (incl. field-model domain names and unset) → the
         // general narrative pipeline, the safe catch-all.
-        assert_eq!(atlas_pipeline_for_domain(Some("literary")), "literary_atlas");
+        assert_eq!(
+            atlas_pipeline_for_domain(Some("literary")),
+            "literary_atlas"
+        );
         assert_eq!(atlas_pipeline_for_domain(Some("science")), "literary_atlas");
-        assert_eq!(atlas_pipeline_for_domain(Some("engineering")), "literary_atlas");
+        assert_eq!(
+            atlas_pipeline_for_domain(Some("engineering")),
+            "literary_atlas"
+        );
         assert_eq!(atlas_pipeline_for_domain(None), "literary_atlas");
         // Whatever it returns is always a desktop-allowed atlas pipeline.
         for d in [Some("philosophy"), Some("literary"), Some("anything"), None] {

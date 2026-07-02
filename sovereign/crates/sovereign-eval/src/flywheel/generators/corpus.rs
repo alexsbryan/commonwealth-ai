@@ -48,7 +48,9 @@ pub struct CorpusGenerator {
 
 impl Default for CorpusGenerator {
     fn default() -> Self {
-        Self { absent: AbsentSource::None }
+        Self {
+            absent: AbsentSource::None,
+        }
     }
 }
 
@@ -239,7 +241,8 @@ mod tests {
             ]
         });
         let mut f = std::fs::File::create(atlas.join("atoms.json")).unwrap();
-        f.write_all(serde_json::to_string_pretty(&atoms).unwrap().as_bytes()).unwrap();
+        f.write_all(serde_json::to_string_pretty(&atoms).unwrap().as_bytes())
+            .unwrap();
         root
     }
 
@@ -270,15 +273,27 @@ mod tests {
     fn held_out_slice_emits_witnessed_absent_probes() {
         let withheld = fixture_corpus("flywheel_corpus_gen_withheld");
         let indexed = fixture_corpus("flywheel_corpus_gen_indexed");
-        let g = CorpusGenerator { absent: AbsentSource::HeldOutSlice { withheld } };
+        let g = CorpusGenerator {
+            absent: AbsentSource::HeldOutSlice { withheld },
+        };
         let probes = g.generate(10, 1, Some(&indexed));
         let absent: Vec<_> = probes.iter().filter(|p| p.qtype.is_absent()).collect();
         assert_eq!(absent.len(), 2, "two withheld claims become absent probes");
         // Absent-only: with no mine-path, the corpus-independent absent set must
         // still be produced (an honesty-axis run passes no --mine-path).
-        assert_eq!(g.generate(10, 1, None).len(), 2, "absent probes survive a missing mine-path");
+        assert_eq!(
+            g.generate(10, 1, None).len(),
+            2,
+            "absent probes survive a missing mine-path"
+        );
         for p in absent {
-            assert!(matches!(p.oracle, Oracle::Absent { held_out_witness: Some(_), .. }));
+            assert!(matches!(
+                p.oracle,
+                Oracle::Absent {
+                    held_out_witness: Some(_),
+                    ..
+                }
+            ));
             crate::flywheel::case::validate_fairness(p).unwrap();
         }
     }

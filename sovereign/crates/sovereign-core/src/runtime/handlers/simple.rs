@@ -192,13 +192,13 @@ impl Runtime {
                 chunks: crate::runtime::grounding::gate_evidence_chunks(&kc.chunks),
                 source_labels: crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks),
                 chunk_labels: crate::runtime::grounding::gate_evidence_chunk_labels(&kc.chunks),
-                searcher: Some(std::sync::Arc::new(self.claim_searcher(
-                    context.conversation.enabled_corpora.as_deref(),
-                    &kc.chunks,
-                )) as _),
-                entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(
-                    message,
-                ),
+                searcher: Some(std::sync::Arc::new(
+                    self.claim_searcher(
+                        context.conversation.enabled_corpora.as_deref(),
+                        &kc.chunks,
+                    ),
+                ) as _),
+                entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(message),
                 top_similarity: None,
             };
             let outcome = crate::runtime::grounding::gate_answer(

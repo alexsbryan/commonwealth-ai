@@ -131,8 +131,15 @@ async fn cmd_serve(args: &[String]) -> i32 {
     // The no-VPN code is runtime state — the host hasn't bound yet at
     // this point, so the card says how to fetch it once it's up.
     print_pairing(&mh, resolve_tailnet_addr(&mh.bind), None);
-    eprintln!("Starting mobile host: {} --config {}", binary.display(), config_path.display());
-    eprintln!("(inference delegated to daemon :{} — no models loaded here)\n", setup.daemon.client_port);
+    eprintln!(
+        "Starting mobile host: {} --config {}",
+        binary.display(),
+        config_path.display()
+    );
+    eprintln!(
+        "(inference delegated to daemon :{} — no models loaded here)\n",
+        setup.daemon.client_port
+    );
 
     let mut cmd = std::process::Command::new(&binary);
     cmd.arg("--config").arg(&config_path);
@@ -165,12 +172,26 @@ async fn cmd_status() -> i32 {
     println!("Mobile access");
     match &mh {
         Some(m) => {
-            println!("  settings:   {}", MobileHostConfig::default_path().display());
+            println!(
+                "  settings:   {}",
+                MobileHostConfig::default_path().display()
+            );
             println!("  bind:       {}", m.bind);
             println!("  tenant:     {}", m.tenant);
             println!("  token:      {}", redact(&m.token));
-            let listening = mh.as_ref().and_then(|m| port_of(&m.bind)).map(host_listening).unwrap_or(false);
-            println!("  host:       {}", if listening { "listening ✓" } else { "not running" });
+            let listening = mh
+                .as_ref()
+                .and_then(|m| port_of(&m.bind))
+                .map(host_listening)
+                .unwrap_or(false);
+            println!(
+                "  host:       {}",
+                if listening {
+                    "listening ✓"
+                } else {
+                    "not running"
+                }
+            );
         }
         None => println!("  settings:   (none yet — run `svrn mobile pair` or `serve`)"),
     }
@@ -179,7 +200,11 @@ async fn cmd_status() -> i32 {
             let up = daemon_reachable(s.daemon.client_port);
             println!(
                 "  daemon:     {} (127.0.0.1:{})",
-                if up { "up ✓ — inference will ride on it" } else { "DOWN — host can't serve chat/retrieval" },
+                if up {
+                    "up ✓ — inference will ride on it"
+                } else {
+                    "DOWN — host can't serve chat/retrieval"
+                },
                 s.daemon.client_port
             );
         }
@@ -217,7 +242,9 @@ fn print_pairing(mh: &MobileHostConfig, address: String, iroh_dial: Option<Strin
     match &iroh_dial {
         Some(dial) => println!("  │  No-VPN code       : {dial}"),
         None if mh.iroh_enabled => {
-            println!("  │  No-VPN code       : (host not up yet — re-run `svrn mobile pair` once it is)")
+            println!(
+                "  │  No-VPN code       : (host not up yet — re-run `svrn mobile pair` once it is)"
+            )
         }
         None => {}
     }

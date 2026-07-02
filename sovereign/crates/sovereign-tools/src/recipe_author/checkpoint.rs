@@ -28,11 +28,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use sovereign_store::recipe_project_store::RecipeProjectStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore, ScopeFilter};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use sovereign_store::recipe_project_store::RecipeProjectStore;
 
 use super::project::{CheckpointMeta, DecisionFrontier, RecipeProject};
 
@@ -164,7 +164,9 @@ impl Tool for CheckpointTool {
             Error::InvalidInput("CheckpointTool was constructed without a NoteStore".into())
         })?;
         let features = self.features.as_ref().ok_or_else(|| {
-            Error::InvalidInput("CheckpointTool was constructed without a RecipeProjectStore".into())
+            Error::InvalidInput(
+                "CheckpointTool was constructed without a RecipeProjectStore".into(),
+            )
         })?;
         let feature_id = params
             .get("feature_id")
@@ -469,8 +471,8 @@ pub async fn restore_checkpoint(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ArtifactKind;
+    use super::*;
     use sovereign_store::recipe_project_store::RecipeProjectStore;
 
     // The crate-wide HOME mutex lives in `recipe_author::home_test_lock`

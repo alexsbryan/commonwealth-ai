@@ -118,7 +118,8 @@ fn extract_figures(s: &str) -> Vec<String> {
         if c == '$' {
             let start = i;
             i += 1;
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == ',' || chars[i] == '.')
+            while i < chars.len()
+                && (chars[i].is_ascii_digit() || chars[i] == ',' || chars[i] == '.')
             {
                 i += 1;
             }
@@ -129,7 +130,8 @@ fn extract_figures(s: &str) -> Vec<String> {
             }
         } else if c.is_ascii_digit() {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == ',' || chars[i] == '.')
+            while i < chars.len()
+                && (chars[i].is_ascii_digit() || chars[i] == ',' || chars[i] == '.')
             {
                 i += 1;
             }
@@ -152,7 +154,10 @@ fn consume_magnitude(chars: &[char], i: usize) -> usize {
     // Single-letter suffix (e.g. `$1.48B`), but only if it's not the start
     // of a longer alphabetic word (so we don't eat the `B` of "Bay").
     if i < chars.len() && matches!(chars[i], 'B' | 'M' | 'K' | 'T' | 'b' | 'm' | 'k' | 't') {
-        let next_is_alpha = chars.get(i + 1).map(|c| c.is_ascii_alphabetic()).unwrap_or(false);
+        let next_is_alpha = chars
+            .get(i + 1)
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false);
         if !next_is_alpha {
             return i + 1;
         }
@@ -166,8 +171,14 @@ fn consume_magnitude(chars: &[char], i: usize) -> usize {
     while j < chars.len() && chars[j].is_ascii_alphabetic() {
         j += 1;
     }
-    let word: String = chars[word_start..j].iter().collect::<String>().to_lowercase();
-    if matches!(word.as_str(), "billion" | "million" | "thousand" | "trillion" | "bn") {
+    let word: String = chars[word_start..j]
+        .iter()
+        .collect::<String>()
+        .to_lowercase();
+    if matches!(
+        word.as_str(),
+        "billion" | "million" | "thousand" | "trillion" | "bn"
+    ) {
         return j;
     }
     i
@@ -226,7 +237,8 @@ mod tests {
 
     #[test]
     fn clean_when_every_figure_is_cited() {
-        let answer = "A flat land levy of 0.81% on the $172.62B base replaces the $1.40B business tax.";
+        let answer =
+            "A flat land levy of 0.81% on the $172.62B base replaces the $1.40B business tax.";
         assert!(uncited_numerics(answer, &cited(), &[]).is_empty());
     }
 

@@ -192,8 +192,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // source_doc_ids so the build loop fetches + concatenates them.
     let mut article_sections: Option<std::collections::HashMap<String, Vec<String>>> = None;
     let mut docs: Vec<(String, usize)> = if parsed.group_by_article {
-        let mut counts: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
+        let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut sections: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
         for (sdi, chunk_ids) in &groups {
@@ -259,9 +258,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let mut bucket_hist: std::collections::BTreeMap<&'static str, usize> =
         std::collections::BTreeMap::new();
     for (_, n) in &docs {
-        *bucket_hist
-            .entry(classify_bucket(*n).label())
-            .or_default() += 1;
+        *bucket_hist.entry(classify_bucket(*n).label()).or_default() += 1;
     }
 
     println!("RAPTOR retrofit plan for corpus '{}':", parsed.corpus_id);
@@ -298,7 +295,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // clean (furniture only, no philosophy) before any build. No
     // inference, no writes.
     if parsed.inspect_furniture {
-        println!("\nFurniture inspection (no inference, no writes) — what --strip-furniture would drop:");
+        println!(
+            "\nFurniture inspection (no inference, no writes) — what --strip-furniture would drop:"
+        );
         let mut total = 0usize;
         let mut dropped = 0usize;
         let mut samples: Vec<String> = Vec::new();
@@ -410,7 +409,10 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 }
             }
             if let Some(e) = fetch_err {
-                eprintln!("  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}", idx + 1);
+                eprintln!(
+                    "  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}",
+                    idx + 1
+                );
                 failed += 1;
                 continue;
             }
@@ -419,14 +421,20 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             match index.chunks_for_source_doc_with_embeddings(&doc_id).await {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!("  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}", idx + 1);
+                    eprintln!(
+                        "  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}",
+                        idx + 1
+                    );
                     failed += 1;
                     continue;
                 }
             }
         };
         if rows.is_empty() {
-            eprintln!("  [{}/{total_docs}] {doc_id}: no embedded chunks; skipping", idx + 1);
+            eprintln!(
+                "  [{}/{total_docs}] {doc_id}: no embedded chunks; skipping",
+                idx + 1
+            );
             failed += 1;
             continue;
         }
@@ -527,7 +535,10 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     );
     println!("  elapsed:          {:.1}s", elapsed.as_secs_f64());
     if built > 0 {
-        println!("  avg per document: {:.1}s", elapsed.as_secs_f64() / built as f64);
+        println!(
+            "  avg per document: {:.1}s",
+            elapsed.as_secs_f64() / built as f64
+        );
     }
     if !per_file_units {
         println!(
@@ -727,7 +738,9 @@ fn print_usage() {
     eprintln!();
     eprintln!("FLAGS:");
     eprintln!("  --doc-type <tag>    Summary cue: argument|narrative|evidence|chronicle|technical|unknown");
-    eprintln!("                      (default: unknown). SEP philosophy essays → argument (claim-level).");
+    eprintln!(
+        "                      (default: unknown). SEP philosophy essays → argument (claim-level)."
+    );
     eprintln!("  --limit N           Build only the N smallest documents (by chunk count). Use for a spike.");
     eprintln!("  --strip-furniture   Drop SEP page-template chunks (copyright/contact/nav) before clustering.");
     eprintln!("  --inspect-furniture Show which chunks --strip-furniture would drop, then exit. Implies --strip-furniture.");
@@ -738,7 +751,9 @@ fn print_usage() {
     eprintln!("  --embed-model <id>  Embedding model id/alias for summary nodes (default: embed).");
     eprintln!();
     eprintln!("Additive: does NOT modify the corpus's atom-graph atlas (atlas/atoms.json).");
-    eprintln!("Resumable: each document checkpoints under its index dir; re-runs skip completed trees.");
+    eprintln!(
+        "Resumable: each document checkpoints under its index dir; re-runs skip completed trees."
+    );
 }
 
 #[cfg(test)]
@@ -789,9 +804,18 @@ mod tests {
 
     #[test]
     fn doc_type_is_case_insensitive() {
-        assert_eq!(parse_doc_type("Argument").unwrap(), DocumentTypeTag::Argument);
-        assert_eq!(parse_doc_type("NARRATIVE").unwrap(), DocumentTypeTag::Narrative);
-        assert_eq!(parse_doc_type("document").unwrap(), DocumentTypeTag::Unknown);
+        assert_eq!(
+            parse_doc_type("Argument").unwrap(),
+            DocumentTypeTag::Argument
+        );
+        assert_eq!(
+            parse_doc_type("NARRATIVE").unwrap(),
+            DocumentTypeTag::Narrative
+        );
+        assert_eq!(
+            parse_doc_type("document").unwrap(),
+            DocumentTypeTag::Unknown
+        );
     }
 
     #[test]

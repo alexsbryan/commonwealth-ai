@@ -121,7 +121,7 @@ mod tests {
 
     fn stub_inference_fn() -> corpus_engine::InferenceFn {
         sovereign_tools::corpus::inference_to_inference_fn(
-            Arc::new(StubInference) as Arc<dyn InferenceProvider>,
+            Arc::new(StubInference) as Arc<dyn InferenceProvider>
         )
     }
 

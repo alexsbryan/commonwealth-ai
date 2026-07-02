@@ -116,9 +116,7 @@ async fn handle(Json(req): Json<Value>) -> Json<Value> {
                 TOOL_NAME => {
                     let agent = args.get("agent").and_then(|v| v.as_str()).unwrap_or("");
                     match clearance_for(agent) {
-                        Some(code) => {
-                            (format!("Agent {agent}'s clearance code is {code}."), false)
-                        }
+                        Some(code) => (format!("Agent {agent}'s clearance code is {code}."), false),
                         None => (
                             format!("No agent named '{agent}' is on the classified roster."),
                             true,
@@ -231,8 +229,7 @@ mod tests {
             global: true,
         };
         let mut registry = ToolRegistry::new();
-        let mgr =
-            McpServerManager::from_config(std::slice::from_ref(&cfg), &mut registry).await;
+        let mgr = McpServerManager::from_config(std::slice::from_ref(&cfg), &mut registry).await;
         let statuses = mgr.server_statuses().await;
         assert!(
             statuses[0].connected,
@@ -300,15 +297,17 @@ mod tests {
             global: true,
         };
         let mut registry = ToolRegistry::new();
-        let _mgr =
-            McpServerManager::from_config(std::slice::from_ref(&cfg), &mut registry).await;
+        let _mgr = McpServerManager::from_config(std::slice::from_ref(&cfg), &mut registry).await;
 
         let tool = registry
             .get("mcp_demo_read_memo")
             .expect("read_memo tool registered");
         // Descriptor enrichment: a synthesized {path: …} example so the planner
         // fills the path argument.
-        assert_eq!(tool.descriptor().examples[0].call, json!({ "path": "example" }));
+        assert_eq!(
+            tool.descriptor().examples[0].call,
+            json!({ "path": "example" })
+        );
 
         let ctx = sovereign_core::types::ToolContext {
             conversation_id: Default::default(),

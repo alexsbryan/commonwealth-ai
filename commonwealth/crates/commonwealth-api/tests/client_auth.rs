@@ -109,11 +109,7 @@ async fn get_status(
         let addr: SocketAddr = p.parse().unwrap();
         req.extensions_mut().insert(ConnectInfo(addr));
     }
-    client_router(state)
-        .oneshot(req)
-        .await
-        .unwrap()
-        .status()
+    client_router(state).oneshot(req).await.unwrap().status()
 }
 
 fn is_auth_rejection(s: StatusCode) -> bool {
@@ -232,6 +228,15 @@ async fn gated_path_still_blocks_when_exempt_path_is_open() {
     .await;
     assert_eq!(blocked, StatusCode::UNAUTHORIZED);
 
-    let open = get_status(state_with_token(Some(TOKEN)), "/status", Some(LAN_PEER), None).await;
-    assert!(!is_auth_rejection(open), "/status must stay open (got {open})");
+    let open = get_status(
+        state_with_token(Some(TOKEN)),
+        "/status",
+        Some(LAN_PEER),
+        None,
+    )
+    .await;
+    assert!(
+        !is_auth_rejection(open),
+        "/status must stay open (got {open})"
+    );
 }

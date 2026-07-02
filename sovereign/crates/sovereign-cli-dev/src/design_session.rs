@@ -581,9 +581,7 @@ fn run_stopgap(_req: &SessionRequest, session: &BootstrappedSession) -> i32 {
     eprintln!("      {}", session.dir.display());
     eprintln!();
     eprintln!("    Until the stopgap ships, your options are:");
-    eprintln!(
-        "      \u{00b7} Install opencode, then re-run `svrn project design` (blessed path)."
-    );
+    eprintln!("      \u{00b7} Install opencode, then re-run `svrn project design` (blessed path).");
     eprintln!("      \u{00b7} Run `svrn project design --solo` for structural-parser-driven");
     eprintln!("        CLI prompts against your DESIGN.md (no agent, but real gaps get captured).");
     eprintln!();

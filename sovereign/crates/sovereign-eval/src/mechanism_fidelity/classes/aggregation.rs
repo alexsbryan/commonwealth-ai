@@ -39,9 +39,26 @@ const FIRST: &[&str] = &[
     "Ingrid", "Camille", "Anders", "Yara", "Dmitri", "Selene", "Bastian", "Noor", "Theo", "Jordan",
 ];
 const LAST: &[&str] = &[
-    "Vale", "Okonkwo", "Hargrove", "Lindqvist", "Marchetti", "Devereux", "Halloran", "Beaumont",
-    "Castellan", "Voss", "Aaltonen", "Rhodes", "Norrington", "Falk", "Greaves", "Underwood",
-    "Calloway", "Brandt", "Pelletier", "Saint-Clair",
+    "Vale",
+    "Okonkwo",
+    "Hargrove",
+    "Lindqvist",
+    "Marchetti",
+    "Devereux",
+    "Halloran",
+    "Beaumont",
+    "Castellan",
+    "Voss",
+    "Aaltonen",
+    "Rhodes",
+    "Norrington",
+    "Falk",
+    "Greaves",
+    "Underwood",
+    "Calloway",
+    "Brandt",
+    "Pelletier",
+    "Saint-Clair",
 ];
 const GROUPS: &[&str] = &[
     "the steering committee",
@@ -54,7 +71,11 @@ const GROUPS: &[&str] = &[
 
 impl AggregationThreshold {
     fn name(rng: &mut StdRng) -> String {
-        format!("{} {}", FIRST[rng.random_range(0..FIRST.len())], LAST[rng.random_range(0..LAST.len())])
+        format!(
+            "{} {}",
+            FIRST[rng.random_range(0..FIRST.len())],
+            LAST[rng.random_range(0..LAST.len())]
+        )
     }
 
     fn names(rng: &mut StdRng, n: usize) -> Vec<String> {
@@ -78,7 +99,9 @@ impl AggregationThreshold {
                 "{group} exists, but its roster has been withheld.\n\nDoes {group} have MORE THAN {threshold} members?"
             ),
         };
-        format!("{body}\n\nAnswer with exactly one letter — A = yes (more than {threshold}), B = no.")
+        format!(
+            "{body}\n\nAnswer with exactly one letter — A = yes (more than {threshold}), B = no."
+        )
     }
 }
 
@@ -105,7 +128,9 @@ impl ReasoningClass for AggregationThreshold {
         for ci in 0..n {
             // Deterministic per-case RNG.
             let mut rng = StdRng::seed_from_u64(
-                seed.wrapping_mul(1_000_003).wrapping_add(ci as u64).wrapping_add(7),
+                seed.wrapping_mul(1_000_003)
+                    .wrapping_add(ci as u64)
+                    .wrapping_add(7),
             );
             let group = GROUPS[rng.random_range(0..GROUPS.len())];
             let threshold = rng.random_range(3..8usize);
@@ -192,8 +217,14 @@ mod tests {
         let probes = AggregationThreshold.build_probes(2, 0, None);
         // 2 cases × (full×4 + control×3) = 14.
         assert_eq!(probes.len(), 14);
-        let base = probes.iter().find(|p| p.is_base() && p.render == "full").unwrap();
-        let p1 = probes.iter().find(|p| p.variant == "dir_p1" && p.render == "full").unwrap();
+        let base = probes
+            .iter()
+            .find(|p| p.is_base() && p.render == "full")
+            .unwrap();
+        let p1 = probes
+            .iter()
+            .find(|p| p.variant == "dir_p1" && p.render == "full")
+            .unwrap();
         assert_eq!(base.structural_p, 1.0);
         assert_eq!(p1.structural_p, 0.0, "removing below threshold flips to no");
         assert_eq!(p1.expected_sign, -1);
@@ -208,8 +239,14 @@ mod tests {
         for ci in 0..25 {
             let probes = AggregationThreshold.build_probes(ci + 1, ci as u64, None);
             // Inspect the first case of each battery.
-            let base = probes.iter().find(|p| p.is_base() && p.render == "full").unwrap();
-            let p1 = probes.iter().find(|p| p.variant == "dir_p1" && p.render == "full").unwrap();
+            let base = probes
+                .iter()
+                .find(|p| p.is_base() && p.render == "full")
+                .unwrap();
+            let p1 = probes
+                .iter()
+                .find(|p| p.variant == "dir_p1" && p.render == "full")
+                .unwrap();
             let base_count = base.prompt.matches("\n- ").count();
             let p1_count = p1.prompt.matches("\n- ").count();
             assert!(p1_count < base_count, "dir_p1 must remove members");
@@ -229,7 +266,10 @@ mod tests {
             .iter()
             .find(|p| &p.case_id == case && p.variant == "dir_p1" && p.is_control())
             .unwrap();
-        assert_eq!(sbase.prompt, sp1.prompt, "control must be blind to the count change");
+        assert_eq!(
+            sbase.prompt, sp1.prompt,
+            "control must be blind to the count change"
+        );
         assert!(sbase.prompt.contains("withheld"));
         assert!(!sbase.prompt.contains("\n- "), "control shows no roster");
     }

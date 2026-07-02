@@ -1,0 +1,11 @@
+# Commits `git blame` should skip — bulk mechanical changes that carry no
+# authorship signal. Activate locally with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub's blame view picks this file up automatically by its name.)
+#
+# APPEND the full 40-char hash of each mechanical sweep below, with a
+# one-line description.
+
+# 2026-07-02: workspace-wide `cargo fmt --all` sweep (404 files) — retired
+# the pre-existing format debt so the CI fmt gate could flip to blocking.
+# <replace this line with that commit's full hash once committed>

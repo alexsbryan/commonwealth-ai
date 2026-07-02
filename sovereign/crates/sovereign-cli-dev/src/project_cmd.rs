@@ -662,7 +662,9 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         // structural over stateful.
         if design_exists {
             println!();
-            println!("    \u{2026} Pre-code project — indexing deferred. Re-run `svrn project init`");
+            println!(
+                "    \u{2026} Pre-code project — indexing deferred. Re-run `svrn project init`"
+            );
             println!("      once source lands, or start with `svrn project design` now.");
         } else if !no_scip {
             // True empty directory: observation report already flagged
@@ -768,7 +770,9 @@ vector = false
     }
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
+        Box::pin(async {
+            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+        })
     });
     let recipes_dir = tempdir.clone();
     let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
@@ -1274,9 +1278,7 @@ vector = false
     // already founded (no point suggesting `project design` to
     // someone who's already past that stage).
     if !design_exists && !project_toml.lifecycle.founded {
-        println!(
-            "  Next: `svrn project design` — I'll work with the agent on your DESIGN.md."
-        );
+        println!("  Next: `svrn project design` — I'll work with the agent on your DESIGN.md.");
         println!("        Bring a path to an existing doc with `--import <path>`, or start blank.");
         println!();
     }
@@ -2119,9 +2121,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             Ok(_) => {
                 if !quiet {
                     println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
-                    println!(
-                        "    Check progress with `svrn project watch status {corpus_id}`."
-                    );
+                    println!("    Check progress with `svrn project watch status {corpus_id}`.");
                 }
                 // SCIP is nudged; now gate the LanceDB corpus
                 // rebuild on either the explicit `--rebuild-index`
@@ -2648,7 +2648,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // ── Build CorpusEngine (zero-vector, no model) ──────────────
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM]) })
+        Box::pin(async {
+            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+        })
     });
     let recipes_dir = data_dir.clone();
     let engine = Arc::new(
@@ -6064,7 +6066,9 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
         .collect();
     if filtered.is_empty() {
         if let Some(id) = target {
-            eprintln!("\"{id}\" is not registered. run `svrn project list` to see registered projects.");
+            eprintln!(
+                "\"{id}\" is not registered. run `svrn project list` to see registered projects."
+            );
         } else {
             println!("  no projects registered yet.");
         }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod atlas_context_manager;
-pub mod atlas_phase;
 pub mod atlas_peer_advice;
+pub mod atlas_phase;
 pub mod atlas_postinstall;
 pub mod atlas_status;
 pub mod atlas_view;
@@ -15,8 +15,6 @@ pub mod conv_tiered_provider;
 pub mod corpus;
 pub mod corpus_search;
 pub mod corpus_store;
-pub mod read_csv;
-pub mod vector_mean;
 pub mod document;
 pub mod document_asset;
 pub mod document_operation;
@@ -37,6 +35,8 @@ pub mod local_corpus;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
+pub mod read_csv;
+pub mod vector_mean;
 pub mod wikipedia_fetch;
 // `manifest` module retired 2026-05-22 — commonwealth-api now
 // injects tool descriptors at construction time rather than pulling
@@ -69,37 +69,38 @@ pub use code::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
 pub use code::BuildTool;
 #[cfg(feature = "treesitter")]
+pub use code::CapabilityMapTool;
+#[cfg(feature = "treesitter")]
 pub use code::CheckDocPathsTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::DesignSignalsExtractTool;
+#[cfg(all(feature = "treesitter", feature = "atos"))]
+pub use code::DriftTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::ProjectContextTool;
 #[cfg(feature = "treesitter")]
 pub use code::SessionReflectionTool;
 #[cfg(feature = "treesitter")]
-pub use code::CapabilityMapTool;
+pub use code::SpecTool;
 #[cfg(feature = "treesitter")]
 pub use code::SymbolLookupTool;
-#[cfg(feature = "treesitter")]
-pub use code::{CapabilityFindingsTool, CapabilityPostureTool};
 #[cfg(feature = "treesitter")]
 pub use code::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
-#[cfg(feature = "treesitter")]
-pub use code::{
-    AtosPlanEmitTool, PromoteNoteTool, ReadNoteByIdTool, ReadNoteDigestTool, WriteRedteamFindingTool,
-};
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::{ArchiveFeatureTool, ProvisionFeatureTool, RecordAtosEventTool};
+#[cfg(feature = "treesitter")]
+pub use code::{
+    AtosPlanEmitTool, PromoteNoteTool, ReadNoteByIdTool, ReadNoteDigestTool,
+    WriteRedteamFindingTool,
+};
+#[cfg(feature = "treesitter")]
+pub use code::{CapabilityFindingsTool, CapabilityPostureTool};
 pub use code::{CodeSearchTool, RecentChangesTool};
 #[cfg(feature = "treesitter")]
 pub use code::{DeleteNoteTool, ReadNotesTool, WriteNoteTool};
-#[cfg(feature = "treesitter")]
-pub use code::SpecTool;
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-pub use code::DriftTool;
 #[cfg(feature = "treesitter")]
 pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]

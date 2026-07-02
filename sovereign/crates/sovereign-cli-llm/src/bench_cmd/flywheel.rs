@@ -101,7 +101,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     macro_rules! val {
         ($l:expr) => {{
             i += 1;
-            rest.get(i).cloned().ok_or_else(|| format!("{} requires a value", $l))?
+            rest.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{} requires a value", $l))?
         }};
     }
     while i < rest.len() {
@@ -221,15 +223,31 @@ async fn run(rest: &[String]) -> i32 {
         }
     };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &args.judge_model, PROVIDER_CTX));
-    let model_id = globals.chat_model.clone().unwrap_or_else(|| "primary".to_string());
+    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &args.judge_model,
+        PROVIDER_CTX,
+    ));
+    let model_id = globals
+        .chat_model
+        .clone()
+        .unwrap_or_else(|| "primary".to_string());
 
     // ── Run + verify each probe ──
     let verifier = DeterministicVerifier;
     let mut verdicts: Vec<Verdict> = Vec::with_capacity(probes.len());
     for (pi, probe) in probes.iter().enumerate() {
-        let verdict = run_and_verify(&session, judge.as_ref(), &args.judge_model, &args.corpus, &model_id, &verifier, probe).await;
+        let verdict = run_and_verify(
+            &session,
+            judge.as_ref(),
+            &args.judge_model,
+            &args.corpus,
+            &model_id,
+            &verifier,
+            probe,
+        )
+        .await;
         eprintln!(
             "  [{:>2}/{}] {:<20} act={:<9} {}",
             pi + 1,
@@ -258,7 +276,10 @@ async fn run(rest: &[String]) -> i32 {
     // ── Capture failures as regression cases ──
     if args.capture {
         let path = args.regressions.clone().unwrap_or_else(|| {
-            PathBuf::from(format!("sovereign/bench/flywheel/regressions/{}.jsonl", args.corpus))
+            PathBuf::from(format!(
+                "sovereign/bench/flywheel/regressions/{}.jsonl",
+                args.corpus
+            ))
         });
         let captured_at = chrono::Utc::now().to_rfc3339();
         let source_run = format!("flywheel:{}:seed{}", args.corpus, args.seed);
@@ -321,15 +342,23 @@ async fn run_and_verify(
     };
 
     // Provenance caveat — only for out-of-domain answers (mirrors chaos).
-    let caveat_present = if probe.qtype == QuestionType::AbsentOutOfDomain
-        && action == AgentAction::Answered
-    {
-        Some(classify_caveat(judge, judge_model, &visible).await.unwrap_or(false))
-    } else {
-        None
-    };
+    let caveat_present =
+        if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
+            Some(
+                classify_caveat(judge, judge_model, &visible)
+                    .await
+                    .unwrap_or(false),
+            )
+        } else {
+            None
+        };
 
-    let obs = Observation { action, answer: &visible, chunks: &chunks, caveat_present };
+    let obs = Observation {
+        action,
+        answer: &visible,
+        chunks: &chunks,
+        caveat_present,
+    };
     verifier.verify(probe, &obs, model_id, corpus)
 }
 

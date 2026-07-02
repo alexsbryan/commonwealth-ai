@@ -506,11 +506,19 @@ pub(crate) fn gpu_backend_label() -> &'static str {
     {
         "gpu+cuda"
     }
-    #[cfg(all(target_os = "windows", feature = "windows-vulkan", not(feature = "windows-cuda")))]
+    #[cfg(all(
+        target_os = "windows",
+        feature = "windows-vulkan",
+        not(feature = "windows-cuda")
+    ))]
     {
         "gpu+vulkan"
     }
-    #[cfg(all(target_os = "windows", not(feature = "windows-vulkan"), not(feature = "windows-cuda")))]
+    #[cfg(all(
+        target_os = "windows",
+        not(feature = "windows-vulkan"),
+        not(feature = "windows-cuda")
+    ))]
     {
         "cpu"
     }

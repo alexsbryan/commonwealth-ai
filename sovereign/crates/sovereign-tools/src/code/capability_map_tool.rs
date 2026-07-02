@@ -226,8 +226,12 @@ mod tests {
     #[test]
     fn corpus_id_validation_rejects_path_traversal() {
         let tool = CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent"));
-        assert!(tool.validate(&serde_json::json!({"corpus_id": "../etc"})).is_err());
-        assert!(tool.validate(&serde_json::json!({"corpus_id": "commonwealth-ai"})).is_ok());
+        assert!(tool
+            .validate(&serde_json::json!({"corpus_id": "../etc"}))
+            .is_err());
+        assert!(tool
+            .validate(&serde_json::json!({"corpus_id": "commonwealth-ai"}))
+            .is_ok());
         assert!(tool.validate(&serde_json::json!({})).is_ok());
     }
 }

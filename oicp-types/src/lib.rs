@@ -1358,8 +1358,7 @@ pub fn score_with_adjustments(
     let cold = cold_start_weight(obs.samples);
     let throughput = throughput_factor(obs, candidate_size_gb, baseline_benchmark);
     let avail = availability.map(|a| a.clamp(0.2, 1.0)).unwrap_or(1.0);
-    let final_score =
-        claim_score * observation_mult * load * loc * cold * throughput * avail;
+    let final_score = claim_score * observation_mult * load * loc * cold * throughput * avail;
     ScoreBreakdown {
         claim_score,
         observation_mult,
@@ -2366,7 +2365,10 @@ mod tests {
     fn availability_clamps_floor_and_ceiling() {
         let obs = quiet_obs();
         let floor = score_with_adjustments(0.8, 0.9, &obs, NodeLocality::Far, 8.0, None, Some(0.0));
-        assert!((floor.availability - 0.2).abs() < 1e-6, "floor 0.2 keeps a busy peer routable");
+        assert!(
+            (floor.availability - 0.2).abs() < 1e-6,
+            "floor 0.2 keeps a busy peer routable"
+        );
         let ceil = score_with_adjustments(0.8, 0.9, &obs, NodeLocality::Far, 8.0, None, Some(2.0));
         assert!((ceil.availability - 1.0).abs() < 1e-6);
     }
@@ -2409,13 +2411,18 @@ mod tests {
     fn failing_node_loses_to_reliable_peer() {
         let mut flaky = quiet_obs();
         flaky.recent_failure_rate = 0.5; // past ramp ⇒ halves affinity
-        assert!(score(&quiet_obs(), NodeLocality::Far, None) > score(&flaky, NodeLocality::Far, None));
+        assert!(
+            score(&quiet_obs(), NodeLocality::Far, None) > score(&flaky, NodeLocality::Far, None)
+        );
     }
 
     #[test]
     fn cold_start_deprioritizes_new_peer_vs_proven_peer() {
         let newcomer = NodeObservations::default(); // samples 0 ⇒ 0.7×
-        assert!(score(&quiet_obs(), NodeLocality::Far, None) > score(&newcomer, NodeLocality::Far, None));
+        assert!(
+            score(&quiet_obs(), NodeLocality::Far, None)
+                > score(&newcomer, NodeLocality::Far, None)
+        );
     }
 
     #[test]
@@ -2430,8 +2437,17 @@ mod tests {
     fn local_node_wins_over_remote_with_higher_affinity() {
         // Locality 1.15 vs 1.0 outweighs a modest claim-score edge:
         // 0.78·1.15 > 0.8·1.0.
-        let local = score_with_adjustments(0.78, 0.9, &quiet_obs(), NodeLocality::Local, 8.0, None, None);
-        let remote = score_with_adjustments(0.8, 0.95, &quiet_obs(), NodeLocality::Far, 8.0, None, None);
+        let local = score_with_adjustments(
+            0.78,
+            0.9,
+            &quiet_obs(),
+            NodeLocality::Local,
+            8.0,
+            None,
+            None,
+        );
+        let remote =
+            score_with_adjustments(0.8, 0.95, &quiet_obs(), NodeLocality::Far, 8.0, None, None);
         assert!(local.final_score > remote.final_score);
     }
 
@@ -2465,12 +2481,27 @@ mod tests {
 
     #[test]
     fn pick_better_smaller_size_wins_score_tie() {
-        let big = ScoredClaim { score: 0.8, size_gb: Some(16.0), model_id: "big".into(), claim_affinity: 0.8 };
-        let small = ScoredClaim { score: 0.8, size_gb: Some(5.0), model_id: "small".into(), claim_affinity: 0.8 };
+        let big = ScoredClaim {
+            score: 0.8,
+            size_gb: Some(16.0),
+            model_id: "big".into(),
+            claim_affinity: 0.8,
+        };
+        let small = ScoredClaim {
+            score: 0.8,
+            size_gb: Some(5.0),
+            model_id: "small".into(),
+            claim_affinity: 0.8,
+        };
         assert_eq!(pick_better(big, small).model_id, "small");
     }
 
-    fn manifest_model(id: &str, size_gb: f32, hint: CapabilityHint, affinity: f32) -> ProviderModel {
+    fn manifest_model(
+        id: &str,
+        size_gb: f32,
+        hint: CapabilityHint,
+        affinity: f32,
+    ) -> ProviderModel {
         ProviderModel {
             id: id.into(),
             base_model: None,
@@ -2484,7 +2515,13 @@ mod tests {
                 estimated_load_time_sec: None,
             },
             size_gb: Some(size_gb),
-            claims: vec![CapabilityClaim::new(hint, LatencyClass::Normal, 32_768, 4_000, affinity)],
+            claims: vec![CapabilityClaim::new(
+                hint,
+                LatencyClass::Normal,
+                32_768,
+                4_000,
+                affinity,
+            )],
         }
     }
 

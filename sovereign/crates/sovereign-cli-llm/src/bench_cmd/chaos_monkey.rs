@@ -158,12 +158,11 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut judge_model = "fast".to_string();
     // Critic role's model comes from its RoleProfile (preferred_tier → primary),
     // making `role.rs` load-bearing here. Override with `--critic-model`.
-    let mut critic_model = sovereign_core::role::default_profile_for(
-        sovereign_core::role::Role::Critic,
-    )
-    .preferred_tier
-    .model_stem()
-    .to_string();
+    let mut critic_model =
+        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
+            .preferred_tier
+            .model_stem()
+            .to_string();
     let mut base_url = "http://localhost:9741".to_string();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
@@ -184,7 +183,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     macro_rules! val {
         ($l:expr) => {{
             i += 1;
-            rest.get(i).cloned().ok_or_else(|| format!("{} requires a value", $l))?
+            rest.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{} requires a value", $l))?
         }};
     }
     while i < rest.len() {
@@ -197,7 +198,13 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
             "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
-            "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
+            "--limit" => {
+                limit = Some(
+                    val!("--limit")
+                        .parse()
+                        .map_err(|_| "--limit must be a usize")?,
+                )
+            }
             "--naked" => naked = true,
             "--warm-atlas" => warm_atlas = true,
             "--grounding-verify" => grounding_verify = true,
@@ -234,7 +241,10 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         i += 1;
     }
     let transcripts = transcripts.unwrap_or_else(|| {
-        let stem = out.file_stem().and_then(|s| s.to_str()).unwrap_or("results");
+        let stem = out
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("results");
         out.with_file_name(format!("{stem}.transcripts.jsonl"))
     });
     if grounding_verify && gv_shadow {
@@ -309,9 +319,12 @@ async fn run(rest: &[String]) -> i32 {
             return 1;
         }
     };
-    let corpus = match args.corpus.clone().filter(|c| !c.is_empty()).or_else(|| {
-        Some(bank.meta.corpus.clone()).filter(|c| !c.is_empty())
-    }) {
+    let corpus = match args
+        .corpus
+        .clone()
+        .filter(|c| !c.is_empty())
+        .or_else(|| Some(bank.meta.corpus.clone()).filter(|c| !c.is_empty()))
+    {
         Some(c) => c,
         None => {
             eprintln!("error: no corpus — set --corpus or [meta].corpus in the bank");
@@ -397,49 +410,48 @@ async fn run(rest: &[String]) -> i32 {
     let attached_setup: Option<(
         sovereign_core::types::DocumentAsset,
         Vec<sovereign_core::types::DocumentChunk>,
-    )> =
-        if args.attached.is_some() || args.attached_asset.is_some() {
-            let session = session
-                .as_ref()
-                .expect("attached lane is direct-transport only (validated in parse_args)");
-            let asset = if let Some(id) = &args.attached_asset {
-                match session.store.get_document_asset(id).await {
-                    Ok(Some(a)) => a,
-                    _ => {
-                        eprintln!("error: --attached-asset {id}: asset not found");
-                        return 1;
-                    }
+    )> = if args.attached.is_some() || args.attached_asset.is_some() {
+        let session = session
+            .as_ref()
+            .expect("attached lane is direct-transport only (validated in parse_args)");
+        let asset = if let Some(id) = &args.attached_asset {
+            match session.store.get_document_asset(id).await {
+                Ok(Some(a)) => a,
+                _ => {
+                    eprintln!("error: --attached-asset {id}: asset not found");
+                    return 1;
                 }
-            } else {
-                let path = args.attached.as_ref().unwrap();
-                let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
-                    std::sync::Arc::clone(&session.inference),
-                    std::sync::Arc::clone(&session.store),
-                );
-                match manager.ingest(path.as_path(), |_| {}).await {
-                    Ok(a) => a,
-                    Err(e) => {
-                        eprintln!("error: attached ingest failed: {e}");
-                        return 1;
-                    }
+            }
+        } else {
+            let path = args.attached.as_ref().unwrap();
+            let manager = sovereign_tools::document_asset::DocumentAssetManager::new(
+                std::sync::Arc::clone(&session.inference),
+                std::sync::Arc::clone(&session.store),
+            );
+            match manager.ingest(path.as_path(), |_| {}).await {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("error: attached ingest failed: {e}");
+                    return 1;
                 }
-            };
-            let doc_chunks = session
-                .store
-                .get_chunks_by_source(&asset.source_key())
-                .await
-                .unwrap_or_default();
-            eprintln!(
+            }
+        };
+        let doc_chunks = session
+            .store
+            .get_chunks_by_source(&asset.source_key())
+            .await
+            .unwrap_or_default();
+        eprintln!(
                 "[chaos] transport=attached-doc asset=\"{}\" id={} ({} chunks) — reuse with --attached-asset {}",
                 asset.title,
                 asset.id,
                 doc_chunks.len(),
                 asset.id
             );
-            Some((asset, doc_chunks))
-        } else {
-            None
-        };
+        Some((asset, doc_chunks))
+    } else {
+        None
+    };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
     let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
         &v1,
@@ -455,7 +467,12 @@ async fn run(rest: &[String]) -> i32 {
     let critic: std::sync::Arc<dyn InferenceProvider> = if args.critic_model == args.judge_model {
         std::sync::Arc::clone(&judge)
     } else {
-        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &args.critic_model, PROVIDER_CTX))
+        std::sync::Arc::new(RemoteApiProvider::new(
+            &v1,
+            None,
+            &args.critic_model,
+            PROVIDER_CTX,
+        ))
     };
     if args.grounding_verify {
         eprintln!(
@@ -468,9 +485,17 @@ async fn run(rest: &[String]) -> i32 {
     // directly with no system prompt and no retrieval (set up only in --naked
     // mode). score_question routes through `run_naked` when this is Some.
     let naked_provider: Option<std::sync::Arc<dyn InferenceProvider>> = if args.naked {
-        let chat_stem = globals.chat_model.clone().unwrap_or_else(|| "primary".to_string());
+        let chat_stem = globals
+            .chat_model
+            .clone()
+            .unwrap_or_else(|| "primary".to_string());
         eprintln!("[chaos] NAKED BASELINE — bypassing the Runtime (no system prompt, no retrieval, no router/synthesis); bare model={chat_stem}, temp=0. citation/distractor are N/A (no sources).");
-        Some(std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &chat_stem, PROVIDER_CTX)))
+        Some(std::sync::Arc::new(RemoteApiProvider::new(
+            &v1,
+            None,
+            &chat_stem,
+            PROVIDER_CTX,
+        )))
     } else {
         None
     };
@@ -486,7 +511,10 @@ async fn run(rest: &[String]) -> i32 {
         match std::fs::File::create(&args.transcripts) {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("[chaos] WARN: cannot write transcripts {:?}: {e}", args.transcripts);
+                eprintln!(
+                    "[chaos] WARN: cannot write transcripts {:?}: {e}",
+                    args.transcripts
+                );
                 None
             }
         }
@@ -501,39 +529,38 @@ async fn run(rest: &[String]) -> i32 {
             .unwrap_or_else(|| "primary".to_string());
         // Answer source per transport; everything downstream (judges,
         // critic gate, deterministic checks, scorer) is shared verbatim.
-        let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session)
-        {
+        let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session) {
             crate::bench_cmd::live_runner::run_attached(session, asset, &q.question, doc_chunks)
                 .await
         } else {
             match (naked_provider.as_deref(), &bridge_client, &session) {
-            (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
-            (None, Some(client), _) => {
-                match super::desktop_bridge::run_bridge_live(
-                    client,
-                    Some(&corpus),
-                    &q.question,
-                    "bench:chaos-monkey",
-                )
-                .await
-                {
-                    Ok(l) => l.answer,
-                    Err(e) => {
-                        eprintln!("  [{:>2}/{}] bridge turn failed: {e}", qi + 1, take);
-                        crate::bench_cmd::live_runner::LiveAnswer {
-                            visible: String::new(),
-                            retrieved_chunk_texts: Vec::new(),
-                            gate_action: None,
-                            draft: None,
-                            metadata: serde_json::Value::Null,
+                (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
+                (None, Some(client), _) => {
+                    match super::desktop_bridge::run_bridge_live(
+                        client,
+                        Some(&corpus),
+                        &q.question,
+                        "bench:chaos-monkey",
+                    )
+                    .await
+                    {
+                        Ok(l) => l.answer,
+                        Err(e) => {
+                            eprintln!("  [{:>2}/{}] bridge turn failed: {e}", qi + 1, take);
+                            crate::bench_cmd::live_runner::LiveAnswer {
+                                visible: String::new(),
+                                retrieved_chunk_texts: Vec::new(),
+                                gate_action: None,
+                                draft: None,
+                                metadata: serde_json::Value::Null,
+                            }
                         }
                     }
                 }
-            }
-            (None, None, Some(session)) => {
-                run_live_pinned(session, &corpus, &q.question, args.pin_intent.clone()).await
-            }
-            (None, None, None) => unreachable!("one of session/bridge is always built"),
+                (None, None, Some(session)) => {
+                    run_live_pinned(session, &corpus, &q.question, args.pin_intent.clone()).await
+                }
+                (None, None, None) => unreachable!("one of session/bridge is always built"),
             }
         };
         let answer_full = live.visible.clone();
@@ -542,7 +569,20 @@ async fn run(rest: &[String]) -> i32 {
         // (replayed by `rescore`) carries them for the partition.
         let gate_action_full = live.gate_action.clone();
         let draft_full = live.draft.clone();
-        let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify, args.gv_shadow).await;
+        let row = score_question(
+            live,
+            judge.as_ref(),
+            &args.judge_model,
+            critic.as_ref(),
+            &args.critic_model,
+            &corpus,
+            &model_id,
+            q,
+            naked_provider.is_some(),
+            args.grounding_verify,
+            args.gv_shadow,
+        )
+        .await;
         if let Some(f) = transcript_file.as_mut() {
             use std::io::Write as _;
             let rec = serde_json::json!({
@@ -696,11 +736,13 @@ async fn score_question(
         if gold_match(&visible, &q.gold_keywords) {
             Some(true)
         } else {
-            let j = judge_correctness(judge, judge_model, &q.question, &q.gold_keywords, &visible).await;
+            let j = judge_correctness(judge, judge_model, &q.question, &q.gold_keywords, &visible)
+                .await;
             eprintln!(
                 "  [correctness-escalate] {}: gold-forms missed → judge={}",
                 q.id,
-                j.map(|b| if b { "correct" } else { "wrong" }).unwrap_or("unavailable")
+                j.map(|b| if b { "correct" } else { "wrong" })
+                    .unwrap_or("unavailable")
             );
             Some(j.unwrap_or(false))
         }
@@ -772,8 +814,7 @@ async fn score_question(
     // with a caveat — a value absent from THIS corpus is the honest shape there,
     // not a confabulation. AbsentOutOfDomain is exactly that class, so exclude it
     // or the metric flags every caveated GK answer as a false positive.
-    let (asserted_value, asserted_value_grounded) =
-        if answered
+    let (asserted_value, asserted_value_grounded) = if answered
             && !naked
             && !chunk_texts.is_empty()
             && q.qtype != QuestionType::AbsentOutOfDomain
@@ -784,16 +825,16 @@ async fn score_question(
             // blatant-confab metric — the documented essay regression. Same pivot
             // here keeps blatant_confab honest on discursive answers.
             && visible.chars().count() <= 1_800
-        {
-            use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-            match assess_asserted_value(critic, &q.question, &visible, &chunk_texts).await {
-                AssertedValue::Grounded(v) => (Some(v), Some(true)),
-                AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
-                AssertedValue::NoValue => (None, None),
-            }
-        } else {
-            (None, None)
-        };
+    {
+        use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
+        match assess_asserted_value(critic, &q.question, &visible, &chunk_texts).await {
+            AssertedValue::Grounded(v) => (Some(v), Some(true)),
+            AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
+            AssertedValue::NoValue => (None, None),
+        }
+    } else {
+        (None, None)
+    };
 
     let excerpt: String = visible.chars().take(200).collect();
     let mut row = ResultRow {
@@ -833,12 +874,11 @@ async fn rescore(rest: &[String]) -> i32 {
     let mut bank_path: Option<PathBuf> = None;
     let mut transcripts: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
-    let mut critic_model = sovereign_core::role::default_profile_for(
-        sovereign_core::role::Role::Critic,
-    )
-    .preferred_tier
-    .model_stem()
-    .to_string();
+    let mut critic_model =
+        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
+            .preferred_tier
+            .model_stem()
+            .to_string();
     let mut base_url = "http://localhost:9741".to_string();
     let mut manifest: Option<PathBuf> = None;
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
@@ -906,12 +946,21 @@ async fn rescore(rest: &[String]) -> i32 {
     };
 
     let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> =
-        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &judge_model, PROVIDER_CTX));
+    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &judge_model,
+        PROVIDER_CTX,
+    ));
     let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
         std::sync::Arc::clone(&judge)
     } else {
-        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &critic_model, PROVIDER_CTX))
+        std::sync::Arc::new(RemoteApiProvider::new(
+            &v1,
+            None,
+            &critic_model,
+            PROVIDER_CTX,
+        ))
     };
 
     eprintln!(
@@ -936,7 +985,11 @@ async fn rescore(rest: &[String]) -> i32 {
             continue;
         };
         let live = crate::bench_cmd::live_runner::LiveAnswer {
-            visible: rec.get("answer").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            visible: rec
+                .get("answer")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
             retrieved_chunk_texts: rec
                 .get("retrieved_chunks")
                 .and_then(|v| v.as_array())
@@ -949,8 +1002,14 @@ async fn rescore(rest: &[String]) -> i32 {
             // Recovered from the transcript when present (new runs persist them);
             // older transcripts lack them → None, and the partition degrades to
             // the retrieval-attributed coarse cells for those rows.
-            gate_action: rec.get("gate_action").and_then(|v| v.as_str()).map(str::to_string),
-            draft: rec.get("draft").and_then(|v| v.as_str()).map(str::to_string),
+            gate_action: rec
+                .get("gate_action")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            draft: rec
+                .get("draft")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
             metadata: serde_json::Value::Null,
         };
         let row = score_question(
@@ -974,7 +1033,9 @@ async fn rescore(rest: &[String]) -> i32 {
             format!("{:?}", q.qtype.expected_action()),
             format!("{:?}", row.agent_action),
             row.is_pass(),
-            row.violation_prob.map(|v| format!("{v:.3}")).unwrap_or_else(|| "-".into()),
+            row.violation_prob
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "-".into()),
         );
         rows.push(row);
     }
@@ -1008,12 +1069,11 @@ async fn rescore(rest: &[String]) -> i32 {
 async fn score_answer(rest: &[String]) -> i32 {
     let mut input: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
-    let mut critic_model = sovereign_core::role::default_profile_for(
-        sovereign_core::role::Role::Critic,
-    )
-    .preferred_tier
-    .model_stem()
-    .to_string();
+    let mut critic_model =
+        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
+            .preferred_tier
+            .model_stem()
+            .to_string();
     let mut base_url = "http://localhost:9741".to_string();
 
     let mut i = 0;
@@ -1076,12 +1136,24 @@ async fn score_answer(rest: &[String]) -> i32 {
             return 2;
         }
     };
-    let question = rec.get("question").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-    let answer = rec.get("answer").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let question = rec
+        .get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let answer = rec
+        .get("answer")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
     let chunks: Vec<String> = rec
         .get("chunks")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| c.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     if question.trim().is_empty() || answer.trim().is_empty() {
         eprintln!("error: input must carry non-empty `question` and `answer`");
@@ -1089,12 +1161,21 @@ async fn score_answer(rest: &[String]) -> i32 {
     }
 
     let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> =
-        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &judge_model, PROVIDER_CTX));
+    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
+        &v1,
+        None,
+        &judge_model,
+        PROVIDER_CTX,
+    ));
     let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
         std::sync::Arc::clone(&judge)
     } else {
-        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &critic_model, PROVIDER_CTX))
+        std::sync::Arc::new(RemoteApiProvider::new(
+            &v1,
+            None,
+            &critic_model,
+            PROVIDER_CTX,
+        ))
     };
 
     // The shared gold-free grounding primitive — the gate DECIDEs with it, the
@@ -1156,7 +1237,10 @@ async fn score_answer(rest: &[String]) -> i32 {
         "critic_model": critic_model,
         "judge_model": judge_model,
     });
-    println!("{}", serde_json::to_string(&out).unwrap_or_else(|_| "{}".into()));
+    println!(
+        "{}",
+        serde_json::to_string(&out).unwrap_or_else(|_| "{}".into())
+    );
     0
 }
 
@@ -1167,7 +1251,9 @@ fn load_gates(path: Option<&Path>) -> Gates {
         eprintln!("[manifest] {path:?} not found — using default gates");
         return g;
     };
-    let Ok(val) = text.parse::<toml::Value>() else { return g };
+    let Ok(val) = text.parse::<toml::Value>() else {
+        return g;
+    };
     if let Some(t) = val.get("gates").and_then(|v| v.as_table()) {
         let get = |k: &str, d: f64| t.get(k).and_then(|v| v.as_float()).unwrap_or(d);
         g.min_competence = get("min_competence", g.min_competence);
@@ -1273,7 +1359,11 @@ fn print_summary(
     );
     eprintln!(
         "\n  VERDICT: {}  (both gates must pass; no blended score)",
-        if verdict.overall_pass { "PASS ✓" } else { "FAIL ✗" }
+        if verdict.overall_pass {
+            "PASS ✓"
+        } else {
+            "FAIL ✗"
+        }
     );
 }
 

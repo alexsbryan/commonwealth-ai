@@ -10,9 +10,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{
-    PhaseCache, PhaseRunner, RunOutputWriter,
-};
+use corpus_engine::enrichment::pipeline::{PhaseCache, PhaseRunner, RunOutputWriter};
 
 use super::config::EnrichConfig;
 use super::corpus_io::build_corpus;

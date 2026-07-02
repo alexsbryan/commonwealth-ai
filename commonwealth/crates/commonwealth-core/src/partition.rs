@@ -115,8 +115,14 @@ mod tests {
         // hosts — even though 2 is the lower NodeId that election would pick.
         let anchors = nodes(&[2, 5, 8]);
         let pin = Some(NodeId::from_u128(5));
-        assert!(should_host(NodeId::from_u128(5), pin, &anchors), "pin hosts");
-        assert!(!should_host(NodeId::from_u128(2), pin, &anchors), "low id yields to pin");
+        assert!(
+            should_host(NodeId::from_u128(5), pin, &anchors),
+            "pin hosts"
+        );
+        assert!(
+            !should_host(NodeId::from_u128(2), pin, &anchors),
+            "low id yields to pin"
+        );
         assert!(!should_host(NodeId::from_u128(8), pin, &anchors));
     }
 
@@ -126,7 +132,10 @@ mod tests {
         // fails over to the elected leader (min) of the survivors, here node 2.
         let survivors = nodes(&[2, 8]);
         let pin = Some(NodeId::from_u128(5));
-        assert!(should_host(NodeId::from_u128(2), pin, &survivors), "elected leader hosts");
+        assert!(
+            should_host(NodeId::from_u128(2), pin, &survivors),
+            "elected leader hosts"
+        );
         assert!(!should_host(NodeId::from_u128(8), pin, &survivors));
     }
 
@@ -140,7 +149,11 @@ mod tests {
     #[test]
     fn should_host_nobody_when_no_anchors() {
         assert!(!should_host(NodeId::from_u128(2), None, &[]));
-        assert!(!should_host(NodeId::from_u128(2), Some(NodeId::from_u128(2)), &[]));
+        assert!(!should_host(
+            NodeId::from_u128(2),
+            Some(NodeId::from_u128(2)),
+            &[]
+        ));
     }
 
     #[test]

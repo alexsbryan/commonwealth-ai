@@ -52,9 +52,7 @@ const VISIT_CAP: usize = 30_000;
 fn data_dir() -> PathBuf {
     std::env::var("SOVEREIGN_DATA_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(std::env::var("HOME").expect("HOME")).join(".sovereign")
-        })
+        .unwrap_or_else(|_| PathBuf::from(std::env::var("HOME").expect("HOME")).join(".sovereign"))
 }
 
 fn is_tool(name: &str) -> bool {
@@ -63,7 +61,10 @@ fn is_tool(name: &str) -> bool {
 
 #[tokio::main]
 async fn main() {
-    let db = data_dir().join("indexes").join(CORPUS).join("scip_graph.db");
+    let db = data_dir()
+        .join("indexes")
+        .join(CORPUS)
+        .join("scip_graph.db");
     let graph = ScipGraph::open(&db, CORPUS).unwrap_or_else(|e| {
         panic!("open SCIP graph at {}: {e}", db.display());
     });
@@ -173,7 +174,9 @@ async fn main() {
                     .take(3)
                     .map(|c| format!("{} ({}:{})", c.symbol_name, c.file_path, c.line))
                     .collect();
-                let from_loop = callers.iter().any(|c| SUBJECTS.contains(&c.symbol_name.as_str()));
+                let from_loop = callers
+                    .iter()
+                    .any(|c| SUBJECTS.contains(&c.symbol_name.as_str()));
                 println!(
                     "  {probe}: {} caller(s) — e.g. {}  | called by the answer loop? {}",
                     callers.len(),

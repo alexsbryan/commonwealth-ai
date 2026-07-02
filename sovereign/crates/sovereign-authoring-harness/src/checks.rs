@@ -79,7 +79,11 @@ pub fn check_enrich(out: &EnrichOutput) -> StageResult {
                 Status::Fail
             },
             expected: "every cited quote is a verbatim substring of its chunk".into(),
-            observed: format!("{} non-verbatim of {} refs", out.non_verbatim.len(), out.refs),
+            observed: format!(
+                "{} non-verbatim of {} refs",
+                out.non_verbatim.len(),
+                out.refs
+            ),
             evidence: out
                 .non_verbatim
                 .iter()
@@ -164,7 +168,12 @@ pub fn check_acquire(m: &CaptureManifest) -> StageResult {
 /// ≥ `min_coverage` of docs (or source files, for section extractors).
 pub fn check_extract(out: &ExtractOutput, recipe: &Recipe, decl: &Declaration) -> StageResult {
     let mut verdicts = Vec::new();
-    for c in coverage(&recipe.extract, &out.docs, &out.section_misses, out.source_files) {
+    for c in coverage(
+        &recipe.extract,
+        &out.docs,
+        &out.section_misses,
+        out.source_files,
+    ) {
         let ratio = if c.total == 0 {
             0.0
         } else {
@@ -247,7 +256,10 @@ pub fn check_filter(out: &FilterOutput, recipe: &Recipe) -> StageResult {
         Status::Pass
     };
     let observed = if out.active {
-        format!("kept {kept}, dropped {dropped}  ({})", out.descriptions.join("; "))
+        format!(
+            "kept {kept}, dropped {dropped}  ({})",
+            out.descriptions.join("; ")
+        )
     } else {
         format!("no filter declared; {kept} docs pass through")
     };
@@ -284,7 +296,10 @@ pub fn check_chunk(out: &ChunkOutput, recipe: &Recipe) -> StageResult {
     let min_len = sizes.iter().copied().min().unwrap_or(0);
     let bounded = out.declared_max_chars != usize::MAX;
     let over = if bounded {
-        sizes.iter().filter(|&&s| s > out.declared_max_chars).count()
+        sizes
+            .iter()
+            .filter(|&&s| s > out.declared_max_chars)
+            .count()
     } else {
         0
     };
@@ -349,12 +364,19 @@ pub fn check_chunk(out: &ChunkOutput, recipe: &Recipe) -> StageResult {
 pub fn check_index(out: &IndexOutput, recipe: &Recipe) -> StageResult {
     let mut verdicts = vec![Verdict {
         check: CheckId::IndexRoundtrip,
-        status: if out.built { Status::Pass } else { Status::Fail },
+        status: if out.built {
+            Status::Pass
+        } else {
+            Status::Fail
+        },
         expected: "index builds and opens".into(),
         observed: if out.built {
             "built + opened (FTS, model-free)".into()
         } else {
-            format!("build failed: {}", out.error.as_deref().unwrap_or("unknown"))
+            format!(
+                "build failed: {}",
+                out.error.as_deref().unwrap_or("unknown")
+            )
         },
         evidence: Vec::new(),
     }];

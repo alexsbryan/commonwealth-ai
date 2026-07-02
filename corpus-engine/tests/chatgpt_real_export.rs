@@ -40,12 +40,18 @@ fn real_chatgpt_export_parses_and_renders_cleanly() {
             doc.source_id
         );
         let has_turn = doc.content.contains("] user\n") || doc.content.contains("] assistant\n");
-        assert!(has_turn, "doc {:?} has no user/assistant turns", doc.source_id);
+        assert!(
+            has_turn,
+            "doc {:?} has no user/assistant turns",
+            doc.source_id
+        );
 
         // No Private-Use-Area marker control chars may leak into chunk
         // text / embeddings — they must all be cleaned to readable text.
         assert!(
-            !doc.content.chars().any(|c| ('\u{E200}'..='\u{E20F}').contains(&c)),
+            !doc.content
+                .chars()
+                .any(|c| ('\u{E200}'..='\u{E20F}').contains(&c)),
             "doc {:?} leaked PUA marker chars into content",
             doc.source_id
         );

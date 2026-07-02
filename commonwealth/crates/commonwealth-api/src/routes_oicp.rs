@@ -176,8 +176,7 @@ pub async fn capabilities(
                 // and the throughput size-ratio extrapolation. (The
                 // pre-2026-06-10 `None` here was an outdated claim
                 // that ModelInfo had no size — it always did.)
-                size_gb: (model.size_bytes > 0)
-                    .then(|| model.size_bytes as f32 / 1_000_000_000.0),
+                size_gb: (model.size_bytes > 0).then(|| model.size_bytes as f32 / 1_000_000_000.0),
                 claims,
             }
         })

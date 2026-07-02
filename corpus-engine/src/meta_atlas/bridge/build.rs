@@ -128,11 +128,19 @@ pub async fn build_bridge(
     let out_path = if cfg.dry_run {
         None
     } else {
-        Some(cfg.edges_out.clone().or_else(default_bridge_edges_path).ok_or_else(
-            || Error::Extraction("no bridge edges output path (HOME unset)".into()),
-        )?)
+        Some(
+            cfg.edges_out
+                .clone()
+                .or_else(default_bridge_edges_path)
+                .ok_or_else(|| {
+                    Error::Extraction("no bridge edges output path (HOME unset)".into())
+                })?,
+        )
     };
-    let dir = out_path.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);
+    let dir = out_path
+        .as_ref()
+        .and_then(|p| p.parent())
+        .map(Path::to_path_buf);
     let progress_path = dir.as_ref().map(|d| d.join("bridge_progress.json"));
 
     // ── Resume: load prior edges + done-set unless fresh/dry. ──
@@ -220,7 +228,10 @@ pub async fn build_bridge(
                 continue;
             }
         };
-        let hits = match right_index.search(&qvec, &left.title, cfg.k_candidates).await {
+        let hits = match right_index
+            .search(&qvec, &left.title, cfg.k_candidates)
+            .await
+        {
             Ok(h) => h,
             Err(e) => {
                 tracing::warn!(topic = %left.topic_id, error = %e, "bridge: ANN search failed");

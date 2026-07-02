@@ -24,11 +24,11 @@ use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::stubs::PassthroughRouter;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
-use sovereign_core::ConversationStore; // brings `save_message` into scope
 use sovereign_core::types::{
     CompletionRequest, CompletionResponse, Depth, InferenceConfig, Message, ProviderCapabilities,
     Role, Speed,
 };
+use sovereign_core::ConversationStore; // brings `save_message` into scope
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_store::sqlite::SqliteStateStore;
 
@@ -135,7 +135,10 @@ fn build_app(
     sched: FairScheduler,
 ) -> Router {
     let authed = Router::new()
-        .route("/v1/conversations", post(crate::routes::create_conversation))
+        .route(
+            "/v1/conversations",
+            post(crate::routes::create_conversation),
+        )
         .route("/v1/conversations", get(crate::routes::list_conversations))
         .route(
             "/v1/conversations/{id}",
@@ -150,10 +153,7 @@ fn build_app(
             post(crate::routes::send_message),
         )
         .route("/v1/corpora", get(crate::routes::list_corpora))
-        .route(
-            "/v1/conversations/{id}/stream",
-            get(crate::ws::ws_handler),
-        )
+        .route("/v1/conversations/{id}/stream", get(crate::ws::ws_handler))
         .layer(middleware::from_fn(crate::auth::auth_middleware))
         .layer(Extension(AuthState::disabled()));
 
@@ -192,7 +192,10 @@ fn build_isolation_app(
     auth: AuthState,
 ) -> Router {
     let authed = Router::new()
-        .route("/v1/conversations", post(crate::routes::create_conversation))
+        .route(
+            "/v1/conversations",
+            post(crate::routes::create_conversation),
+        )
         .route(
             "/v1/conversations/{id}/messages",
             post(crate::routes::send_message),
@@ -576,7 +579,9 @@ async fn ws_streams_tokens_then_complete() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, app.into_make_service()).await.unwrap();
+        axum::serve(listener, app.into_make_service())
+            .await
+            .unwrap();
     });
 
     let url = format!("ws://{addr}/v1/conversations/convWS/stream");
@@ -617,7 +622,10 @@ async fn ws_streams_tokens_then_complete() {
         }
     }
 
-    assert!(tokens >= 1, "expected at least one token frame, got {tokens}");
+    assert!(
+        tokens >= 1,
+        "expected at least one token frame, got {tokens}"
+    );
     assert!(complete_id.is_some(), "expected a terminal complete frame");
     assert_eq!(
         complete_backend.as_deref(),

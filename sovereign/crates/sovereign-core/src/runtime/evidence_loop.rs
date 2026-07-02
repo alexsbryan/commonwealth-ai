@@ -137,9 +137,29 @@ fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
 /// atlas-atom matching.
 fn question_keywords(message: &str) -> Vec<String> {
     const STOP: &[&str] = &[
-        "which", "who", "what", "does", "kind", "with", "near", "the", "end", "novel",
-        "their", "from", "into", "takes", "that", "this", "her", "his", "and", "when",
-        "where", "about", "according",
+        "which",
+        "who",
+        "what",
+        "does",
+        "kind",
+        "with",
+        "near",
+        "the",
+        "end",
+        "novel",
+        "their",
+        "from",
+        "into",
+        "takes",
+        "that",
+        "this",
+        "her",
+        "his",
+        "and",
+        "when",
+        "where",
+        "about",
+        "according",
     ];
     let mut out: Vec<String> = Vec::new();
     for w in message.split(|c: char| !c.is_alphanumeric()) {
@@ -342,9 +362,6 @@ fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-
-
-
 /// Atlas atom records matching the question's content words. The
 /// enrichment pipeline already did the hard part at ingest time —
 /// event/relation atoms carry pronoun-resolved, single-sentence
@@ -355,10 +372,7 @@ fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
 /// code over the (small) atom file — no model call, no embedding.
 /// Returns `(description, passage_previews, keyword_hits)` for atoms
 /// with ≥2 distinct keyword hits, best first, capped at 4.
-fn atlas_atom_matches(
-    corpus_id: &str,
-    keywords: &[String],
-) -> Vec<(String, Vec<String>, usize)> {
+fn atlas_atom_matches(corpus_id: &str, keywords: &[String]) -> Vec<(String, Vec<String>, usize)> {
     if keywords.len() < 2 {
         return Vec::new();
     }
@@ -397,10 +411,7 @@ fn atlas_atom_matches(
     }
     scored.sort_by(|a, b| (b.3, b.2).cmp(&(a.3, a.2)));
     scored.truncate(3);
-    scored
-        .into_iter()
-        .map(|(d, p, h, _)| (d, p, h))
-        .collect()
+    scored.into_iter().map(|(d, p, h, _)| (d, p, h)).collect()
 }
 
 /// Distinct corpus ids present in a chunk set — the implicit scope
@@ -523,7 +534,9 @@ impl Runtime {
                         target: "agentic_kq",
                         "sufficiency judge failed — treating as INSUFFICIENT (fail-forward to round-2)"
                     );
-                    dbg("agentic loop: sufficiency judge FAILED (None) → fail-forward, run round-2");
+                    dbg(
+                        "agentic loop: sufficiency judge FAILED (None) → fail-forward, run round-2",
+                    );
                     1.0
                 }
             }
@@ -555,8 +568,11 @@ impl Runtime {
             // installed set, so a forged `enabled_corpora` can't widen
             // retrieval into a forbidden (another principal's Private) corpus.
             Some(ids) if !ids.is_empty() => {
-                let scoped: std::collections::HashSet<&str> =
-                    context.installed_corpora.iter().map(String::as_str).collect();
+                let scoped: std::collections::HashSet<&str> = context
+                    .installed_corpora
+                    .iter()
+                    .map(String::as_str)
+                    .collect();
                 ids.iter()
                     .filter(|id| scoped.contains(id.as_str()))
                     .cloned()
@@ -580,7 +596,9 @@ impl Runtime {
             .map(|cid| (cid.clone(), atlas_atom_matches(cid, &kw)))
             .collect();
         let atom_count: usize = atom_matches.iter().map(|(_, m)| m.len()).sum();
-        dbg(&format!("entity_anchored={entity_anchored} atom_matches={atom_count}"));
+        dbg(&format!(
+            "entity_anchored={entity_anchored} atom_matches={atom_count}"
+        ));
 
         // In-world question, and the semantic index has nothing for it:
         // an entity-anchored question whose content words match NO atlas
@@ -606,7 +624,10 @@ impl Runtime {
             return (chunks, true, true, true);
         }
 
-        let queries = match self.formulate_evidence_queries(message, &chunks, context).await {
+        let queries = match self
+            .formulate_evidence_queries(message, &chunks, context)
+            .await
+        {
             Some(q) if !q.is_empty() => q,
             _ => {
                 tracing::warn!(
@@ -630,10 +651,7 @@ impl Runtime {
         let key = |c: &corpus_engine::ScoredChunk| -> (String, String) {
             match c.chunk_id {
                 Some(id) => (c.corpus_id.clone(), id.to_string()),
-                None => (
-                    c.corpus_id.clone(),
-                    c.content.chars().take(120).collect(),
-                ),
+                None => (c.corpus_id.clone(), c.content.chars().take(120).collect()),
             }
         };
         let mut seen: HashSet<(String, String)> = chunks.iter().map(&key).collect();
@@ -651,8 +669,11 @@ impl Runtime {
             // forged `enabled_corpora` cannot widen round-2 evidence into a
             // forbidden corpus.
             Some(ids) if !ids.is_empty() => {
-                let scoped: HashSet<&str> =
-                    context.installed_corpora.iter().map(String::as_str).collect();
+                let scoped: HashSet<&str> = context
+                    .installed_corpora
+                    .iter()
+                    .map(String::as_str)
+                    .collect();
                 ids.iter()
                     .filter(|id| scoped.contains(id.as_str()))
                     .cloned()
@@ -801,7 +822,6 @@ impl Runtime {
         (merged, still_insufficient, entity_anchored, corpus_anchored)
     }
 
-
     /// Forced-choice logprob pass: P(evidence is INSUFFICIENT). Uses
     /// the `x_forced_choice` sentinel (one decoded token, distribution
     /// read off the masked logits) — deterministic, no sampled verdict.
@@ -813,7 +833,12 @@ impl Runtime {
         let excerpts: Vec<String> = chunks
             .iter()
             .take(sufficiency_chunks())
-            .map(|c| c.content.chars().take(sufficiency_chars_per_chunk()).collect())
+            .map(|c| {
+                c.content
+                    .chars()
+                    .take(sufficiency_chars_per_chunk())
+                    .collect()
+            })
             .collect();
         let prompt = format!(
             "PASSAGES retrieved for a question:\n\"\"\"\n{}\n\"\"\"\n\n\
@@ -829,7 +854,9 @@ impl Runtime {
         );
         let req = CompletionRequest {
             prompt,
-            system_message: Some("You are a careful evidence auditor. Answer with a single letter.".into()),
+            system_message: Some(
+                "You are a careful evidence auditor. Answer with a single letter.".into(),
+            ),
             // PRIMARY tier, not Fast. The `x_forced_choice` logit-distribution
             // sentinel is NOT honored on the fast slot — it returns a sampled
             // token ("\"B") instead of the {A,B} distribution, so the parse below
@@ -960,7 +987,10 @@ impl Runtime {
         }
         let mut world = String::new();
         if !corpora.is_empty() {
-            world.push_str(&format!("Knowledge base being searched: {}.\n", corpora.join(", ")));
+            world.push_str(&format!(
+                "Knowledge base being searched: {}.\n",
+                corpora.join(", ")
+            ));
         }
         if !titles.is_empty() {
             world.push_str(&format!(
@@ -1044,7 +1074,9 @@ impl Runtime {
                     .collect::<Vec<_>>()
                     .join(" ")
             })
-            .filter(|q| !q.is_empty() && q.len() <= 80 && !q.to_lowercase().contains("searches for"))
+            .filter(|q| {
+                !q.is_empty() && q.len() <= 80 && !q.to_lowercase().contains("searches for")
+            })
             .collect();
         Some(queries)
     }
@@ -1057,10 +1089,16 @@ mod tests {
     #[test]
     fn corpus_deictic_catches_story_year_class() {
         assert!(question_is_corpus_deictic("In what year is the story set?"));
-        assert!(question_is_corpus_deictic("What year is this document from?"));
+        assert!(question_is_corpus_deictic(
+            "What year is this document from?"
+        ));
         assert!(question_is_corpus_deictic("Who wrote the novel?"));
-        assert!(!question_is_corpus_deictic("What is the capital of Canada?"));
-        assert!(!question_is_corpus_deictic("How do I reverse a linked list in Python?"));
+        assert!(!question_is_corpus_deictic(
+            "What is the capital of Canada?"
+        ));
+        assert!(!question_is_corpus_deictic(
+            "How do I reverse a linked list in Python?"
+        ));
     }
 
     /// The env gate must default OFF — existing surfaces and benches

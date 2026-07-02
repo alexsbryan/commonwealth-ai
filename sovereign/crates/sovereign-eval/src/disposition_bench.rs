@@ -11,8 +11,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 // Reuse the proven split + peek-budget primitives — do NOT redefine.
-pub use crate::entity_resolution_bench::{PeekBudget, Split};
 use crate::disposition_score::Labeling;
+pub use crate::entity_resolution_bench::{PeekBudget, Split};
 
 fn default_label_source() -> String {
     "FIXTURE".to_string()
@@ -228,12 +228,14 @@ mod tests {
     #[test]
     fn merge_unsealed_holdout_replaces_in_place() {
         let dir = tempfile::tempdir().unwrap();
-        let pub_lines =
-            vec![r#"{"case_id":"h1","official_category":"<sealed>","split":"holdout"}"#.to_string()];
+        let pub_lines = vec![
+            r#"{"case_id":"h1","official_category":"<sealed>","split":"holdout"}"#.to_string(),
+        ];
         let p = write_lines(dir.path(), "gold.jsonl", &pub_lines);
         let mut gold = GoldLabels::load(&p).unwrap();
-        let secret =
-            vec![r#"{"case_id":"h1","official_category":"UNIDENTIFIED","split":"holdout"}"#.to_string()];
+        let secret = vec![
+            r#"{"case_id":"h1","official_category":"UNIDENTIFIED","split":"holdout"}"#.to_string(),
+        ];
         let ps = write_lines(dir.path(), "holdout.jsonl", &secret);
         let added = gold.merge_unsealed_holdout(&ps).unwrap();
         assert_eq!(added, 1);

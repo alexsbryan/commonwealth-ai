@@ -562,7 +562,10 @@ pub async fn announce_departure(app_state: &AppState) {
     for contact in &targets {
         let eps = transport.endpoints(contact, TrafficClass::Gossip).await;
         for ep in &eps {
-            if gossip_with_peer(&http, &ep.base_url, &snapshot).await.is_ok() {
+            if gossip_with_peer(&http, &ep.base_url, &snapshot)
+                .await
+                .is_ok()
+            {
                 announced += 1;
                 break;
             }

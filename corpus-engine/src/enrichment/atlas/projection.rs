@@ -186,7 +186,11 @@ pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
         }
         AtomEnvelope::Relation(r) => {
             label = r.label.clone();
-            participants = r.participants.iter().map(|p| p.as_str().to_string()).collect();
+            participants = r
+                .participants
+                .iter()
+                .map(|p| p.as_str().to_string())
+                .collect();
         }
         AtomEnvelope::Claim(c) => {
             content = c.content.clone();

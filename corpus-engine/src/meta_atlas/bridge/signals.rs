@@ -48,8 +48,12 @@ pub struct SignalHit {
 
 /// A graded similarity signal over a candidate `(sep, wiki)` pair.
 pub trait AlignmentSignal: Send + Sync {
-    fn score(&self, left: &BridgeTopic, right: &BridgeTopic, ctx: &SignalContext)
-        -> Option<SignalHit>;
+    fn score(
+        &self,
+        left: &BridgeTopic,
+        right: &BridgeTopic,
+        ctx: &SignalContext,
+    ) -> Option<SignalHit>;
     fn kind(&self) -> BridgeSignal;
 }
 
@@ -61,7 +65,12 @@ impl AlignmentSignal for NameMatchSignal {
     fn kind(&self) -> BridgeSignal {
         BridgeSignal::NameMatch
     }
-    fn score(&self, left: &BridgeTopic, right: &BridgeTopic, _: &SignalContext) -> Option<SignalHit> {
+    fn score(
+        &self,
+        left: &BridgeTopic,
+        right: &BridgeTopic,
+        _: &SignalContext,
+    ) -> Option<SignalHit> {
         let j = jaccard(&tokens(&left.title), &tokens(&right.title));
         (j > 0.0).then_some(SignalHit {
             signal: BridgeSignal::NameMatch,
@@ -77,7 +86,12 @@ impl AlignmentSignal for EmbeddingSignal {
     fn kind(&self) -> BridgeSignal {
         BridgeSignal::Embedding
     }
-    fn score(&self, left: &BridgeTopic, right: &BridgeTopic, ctx: &SignalContext) -> Option<SignalHit> {
+    fn score(
+        &self,
+        left: &BridgeTopic,
+        right: &BridgeTopic,
+        ctx: &SignalContext,
+    ) -> Option<SignalHit> {
         // Prefer a direct cosine of stored vectors; otherwise fall back
         // to the orchestrator's pre-computed similarity (the ANN hit's
         // `1 - vector_distance`).
@@ -102,7 +116,12 @@ impl AlignmentSignal for SharedEntitiesSignal {
     fn kind(&self) -> BridgeSignal {
         BridgeSignal::SharedEntities
     }
-    fn score(&self, left: &BridgeTopic, right: &BridgeTopic, _: &SignalContext) -> Option<SignalHit> {
+    fn score(
+        &self,
+        left: &BridgeTopic,
+        right: &BridgeTopic,
+        _: &SignalContext,
+    ) -> Option<SignalHit> {
         let o = overlap_coefficient(&left.entity_keys, &right.entity_keys);
         (o > 0.0).then_some(SignalHit {
             signal: BridgeSignal::SharedEntities,
@@ -137,7 +156,12 @@ impl AlignmentSignal for ArticulationComplementaritySignal {
     fn kind(&self) -> BridgeSignal {
         BridgeSignal::ArticulationComplementarity
     }
-    fn score(&self, left: &BridgeTopic, right: &BridgeTopic, _: &SignalContext) -> Option<SignalHit> {
+    fn score(
+        &self,
+        left: &BridgeTopic,
+        right: &BridgeTopic,
+        _: &SignalContext,
+    ) -> Option<SignalHit> {
         let (ld, rd) = (left.articulation.dominant(), right.articulation.dominant());
         if ld == rd {
             return None; // same register → not complementary
@@ -351,7 +375,10 @@ mod tests {
             topic_id: "t".into(),
             title: title.into(),
             concept_text: title.into(),
-            entity_keys: entity_keys.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>(),
+            entity_keys: entity_keys
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<BTreeSet<_>>(),
             argument_names: Vec::new(),
             atom_profile: BTreeMap::new(),
             articulation,
@@ -360,17 +387,31 @@ mod tests {
     }
 
     fn left_like(title: &str, keys: &[&str], emb: Option<Vec<f32>>) -> BridgeTopic {
-        topic("sep-x", title, keys, ArticulationVector::new(0.10, 0.85, 0.05), emb)
+        topic(
+            "sep-x",
+            title,
+            keys,
+            ArticulationVector::new(0.10, 0.85, 0.05),
+            emb,
+        )
     }
     fn right_like(title: &str, keys: &[&str], emb: Option<Vec<f32>>) -> BridgeTopic {
-        topic("wikipedia", title, keys, ArticulationVector::new(0.80, 0.15, 0.05), emb)
+        topic(
+            "wikipedia",
+            title,
+            keys,
+            ArticulationVector::new(0.80, 0.15, 0.05),
+            emb,
+        )
     }
 
     #[test]
     fn name_match_scores_token_jaccard() {
         let s = left_like("Semantic Externalism", &[], None);
         let w = right_like("Semantic externalism", &[], None);
-        let hit = NameMatchSignal.score(&s, &w, &SignalContext::default()).unwrap();
+        let hit = NameMatchSignal
+            .score(&s, &w, &SignalContext::default())
+            .unwrap();
         assert_eq!(hit.score, 1.0); // same two tokens, case-insensitive
     }
 
@@ -378,7 +419,9 @@ mod tests {
     fn name_match_partial_overlap() {
         let s = left_like("Externalism About the Mind", &[], None);
         let w = right_like("Semantic externalism", &[], None);
-        let hit = NameMatchSignal.score(&s, &w, &SignalContext::default()).unwrap();
+        let hit = NameMatchSignal
+            .score(&s, &w, &SignalContext::default())
+            .unwrap();
         assert!(hit.score > 0.0 && hit.score < 1.0); // "externalism" shared only
     }
 
@@ -386,10 +429,14 @@ mod tests {
     fn embedding_signal_needs_both_vectors() {
         let s = left_like("X", &[], Some(vec![1.0, 0.0]));
         let w_no = right_like("X", &[], None);
-        assert!(EmbeddingSignal.score(&s, &w_no, &SignalContext::default()).is_none());
+        assert!(EmbeddingSignal
+            .score(&s, &w_no, &SignalContext::default())
+            .is_none());
 
         let w = right_like("X", &[], Some(vec![1.0, 0.0]));
-        let hit = EmbeddingSignal.score(&s, &w, &SignalContext::default()).unwrap();
+        let hit = EmbeddingSignal
+            .score(&s, &w, &SignalContext::default())
+            .unwrap();
         assert!((hit.score - 1.0).abs() < 1e-6); // identical direction
     }
 
@@ -397,9 +444,15 @@ mod tests {
     fn shared_entities_uses_overlap_not_jaccard() {
         // WP page names 1 entity that IS in the SEP article's 4 — overlap
         // coefficient is 1.0 even though Jaccard would be 0.25.
-        let s = left_like("Abduction", &["abduction", "peirce", "inference", "hypothesis"], None);
+        let s = left_like(
+            "Abduction",
+            &["abduction", "peirce", "inference", "hypothesis"],
+            None,
+        );
         let w = right_like("Abductive reasoning", &["abduction"], None);
-        let hit = SharedEntitiesSignal.score(&s, &w, &SignalContext::default()).unwrap();
+        let hit = SharedEntitiesSignal
+            .score(&s, &w, &SignalContext::default())
+            .unwrap();
         assert_eq!(hit.score, 1.0);
     }
 
@@ -450,7 +503,11 @@ mod tests {
     #[test]
     fn strong_pair_bands_auto_same() {
         let emb = Some(vec![1.0, 0.0, 0.0]);
-        let s = left_like("Semantic Externalism", &["semantic externalism", "putnam"], emb.clone());
+        let s = left_like(
+            "Semantic Externalism",
+            &["semantic externalism", "putnam"],
+            emb.clone(),
+        );
         let w = right_like("Semantic externalism", &["semantic externalism"], emb);
         let ctx = SignalContext {
             co_neighbor_overlap: 0.7,
@@ -464,8 +521,16 @@ mod tests {
     #[test]
     fn middling_pair_bands_uncertain() {
         // Decent embedding + name overlap, no structural corroboration.
-        let s = left_like("Externalism About the Mind", &["externalism mind"], Some(vec![0.9, 0.4]));
-        let w = right_like("Semantic externalism", &["semantic externalism"], Some(vec![0.8, 0.6]));
+        let s = left_like(
+            "Externalism About the Mind",
+            &["externalism mind"],
+            Some(vec![0.9, 0.4]),
+        );
+        let w = right_like(
+            "Semantic externalism",
+            &["semantic externalism"],
+            Some(vec![0.8, 0.6]),
+        );
         let score = SignalStack::default_stack().evaluate(&s, &w, &SignalContext::default());
         assert_eq!(score.band, AlignmentBand::Uncertain);
     }

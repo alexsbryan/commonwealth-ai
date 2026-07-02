@@ -115,12 +115,7 @@ mod tests {
         SigningKey::from_bytes(&[5u8; 32])
     }
 
-    fn sign(
-        k: &SigningKey,
-        version: u64,
-        relay: Option<&str>,
-        addrs: &[SocketAddr],
-    ) -> [u8; 64] {
+    fn sign(k: &SigningKey, version: u64, relay: Option<&str>, addrs: &[SocketAddr]) -> [u8; 64] {
         let pk = NodePubkey(k.verifying_key().to_bytes());
         k.sign(&dial_info_message(&pk, version, relay, addrs))
             .to_bytes()
@@ -145,8 +140,14 @@ mod tests {
     fn addr_order_does_not_affect_signature() {
         let k = key();
         let pk = NodePubkey(k.verifying_key().to_bytes());
-        let a: Vec<SocketAddr> = vec!["10.0.0.5:9742".parse().unwrap(), "10.0.0.6:9742".parse().unwrap()];
-        let b: Vec<SocketAddr> = vec!["10.0.0.6:9742".parse().unwrap(), "10.0.0.5:9742".parse().unwrap()];
+        let a: Vec<SocketAddr> = vec![
+            "10.0.0.5:9742".parse().unwrap(),
+            "10.0.0.6:9742".parse().unwrap(),
+        ];
+        let b: Vec<SocketAddr> = vec![
+            "10.0.0.6:9742".parse().unwrap(),
+            "10.0.0.5:9742".parse().unwrap(),
+        ];
         let sig = sign(&k, 1, None, &a);
         // Same set in a different order still verifies (canonical sort).
         assert!(verify_dial_info(&pk, 1, None, &b, &sig));
@@ -160,16 +161,34 @@ mod tests {
         let sig = sign(&k, 3, Some("https://relay.example./"), &addrs);
 
         // Wrong version.
-        assert!(!verify_dial_info(&pk, 4, Some("https://relay.example./"), &addrs, &sig));
+        assert!(!verify_dial_info(
+            &pk,
+            4,
+            Some("https://relay.example./"),
+            &addrs,
+            &sig
+        ));
         // Stripped relay.
         assert!(!verify_dial_info(&pk, 3, None, &addrs, &sig));
         // Substituted addr.
         let other: Vec<SocketAddr> = vec!["10.0.0.99:9742".parse().unwrap()];
-        assert!(!verify_dial_info(&pk, 3, Some("https://relay.example./"), &other, &sig));
+        assert!(!verify_dial_info(
+            &pk,
+            3,
+            Some("https://relay.example./"),
+            &other,
+            &sig
+        ));
         // Different key.
         let attacker = SigningKey::from_bytes(&[9u8; 32]);
         let apk = NodePubkey(attacker.verifying_key().to_bytes());
-        assert!(!verify_dial_info(&apk, 3, Some("https://relay.example./"), &addrs, &sig));
+        assert!(!verify_dial_info(
+            &apk,
+            3,
+            Some("https://relay.example./"),
+            &addrs,
+            &sig
+        ));
     }
 
     #[test]

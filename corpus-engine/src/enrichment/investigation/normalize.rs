@@ -236,15 +236,21 @@ mod tests {
     /// exercise the same transforms the recipe drives — without baking the
     /// vocabulary into the engine.
     fn facility_normalizer() -> Normalizer {
-        let states: Vec<String> = [
-            "ohio", "texas", "california", "new mexico", "louisiana",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+        let states: Vec<String> = ["ohio", "texas", "california", "new mexico", "louisiana"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let suffixes: Vec<String> = [
-            "air", "airforce", "aiforce", "force", "forcebase", "airforcebase",
-            "base", "field", "afb", "af",
+            "air",
+            "airforce",
+            "aiforce",
+            "force",
+            "forcebase",
+            "airforcebase",
+            "base",
+            "field",
+            "afb",
+            "af",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -259,11 +265,7 @@ mod tests {
                     ("wpafb".into(), "wright patterson".into()),
                     ("wp afb".into(), "wright patterson".into()),
                 ],
-                leading_prefixes: vec![
-                    "air material command".into(),
-                    "atic".into(),
-                    "hq".into(),
-                ],
+                leading_prefixes: vec!["air material command".into(), "atic".into(), "hq".into()],
                 trailing_qualifiers: states,
                 trailing_suffixes: suffixes,
             }],
@@ -273,7 +275,10 @@ mod tests {
     #[test]
     fn no_rule_folds_case_and_punctuation_only() {
         let n = Normalizer::default();
-        assert_eq!(n.coalesce_key("company", "NVIDIA Corp."), "company|nvidia corp");
+        assert_eq!(
+            n.coalesce_key("company", "NVIDIA Corp."),
+            "company|nvidia corp"
+        );
         // No facility folding without a rule.
         assert_ne!(
             n.coalesce_key("installation", "Wright-Patterson AFB"),
@@ -299,10 +304,16 @@ mod tests {
     fn folds_trailing_state_and_leading_org() {
         let n = facility_normalizer();
         let canon = "installation|wright patterson";
-        assert_eq!(n.coalesce_key("installation", "Wright-Patterson AFB, Ohio"), canon);
+        assert_eq!(
+            n.coalesce_key("installation", "Wright-Patterson AFB, Ohio"),
+            canon
+        );
         assert_eq!(n.coalesce_key("installation", "ATIC WPAFB OHIO"), canon);
         assert_eq!(
-            n.coalesce_key("installation", "Air Material Command Wright-Patterson Air Force Base"),
+            n.coalesce_key(
+                "installation",
+                "Air Material Command Wright-Patterson Air Force Base"
+            ),
             canon
         );
         assert_eq!(
@@ -329,7 +340,10 @@ mod tests {
         let n = facility_normalizer();
         assert_eq!(
             n.entity_id("installation", "Wright-Patterson AFB, Ohio"),
-            n.entity_id("installation", "Air Material Command Wright-Patterson Air Force Base"),
+            n.entity_id(
+                "installation",
+                "Air Material Command Wright-Patterson Air Force Base"
+            ),
         );
         assert_eq!(
             n.entity_id("installation", "Wright-Patterson AFB"),
@@ -346,7 +360,9 @@ mod tests {
             "Wright-Patterson Air Force Base",
             "Wright-Patterson AFB, Ohio",
         ];
-        let best = n.best_canonical("installation", names.iter().copied()).unwrap();
+        let best = n
+            .best_canonical("installation", names.iter().copied())
+            .unwrap();
         assert_eq!(best, "Wright-Patterson Air Force Base");
     }
 

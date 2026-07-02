@@ -237,7 +237,9 @@ impl Runtime {
         let asked_terms = quoted_terms(message);
         let any_term_present = asked_terms.iter().any(|t| {
             let tl = t.to_lowercase();
-            chunks.iter().any(|c| c.content.to_lowercase().contains(&tl))
+            chunks
+                .iter()
+                .any(|c| c.content.to_lowercase().contains(&tl))
         });
         let committed_prefix: String = if !asked_terms.is_empty() && !any_term_present {
             format!(
@@ -280,10 +282,8 @@ impl Runtime {
         // full released text against exactly the evidence the model
         // saw (graceful no-op when knowledge_block is empty).
         let full_text = format!("{committed_prefix}{}", completion.text);
-        let verified = crate::quote_verification::verify_answer_against_evidence(
-            &full_text,
-            &knowledge_block,
-        );
+        let verified =
+            crate::quote_verification::verify_answer_against_evidence(&full_text, &knowledge_block);
         if verified.demoted_count > 0 {
             tracing::warn!(
                 demoted = verified.demoted_count,

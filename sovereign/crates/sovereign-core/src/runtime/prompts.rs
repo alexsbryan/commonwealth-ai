@@ -7,7 +7,6 @@
 //! `pub(crate)` visibility via the glob re-export in `runtime.rs`, so
 //! all `super::*`-style consumers are unchanged.
 
-
 /// System prompt for KnowledgeQuery synthesis — three-tier confidence framework.
 ///
 /// Tier 1 (Retrieved): Claims drawn from passages, cited with [Source: title].
@@ -178,7 +177,6 @@ tier, distinct from RETRIEVED and PARAMETRIC:\n\
   the per-work corpus's full-text passages instead of offering to \
   ingest again.";
 
-
 /// Thinking directive — orients `<think>` toward substantive reasoning.
 ///
 /// Without this, models default to source-adequacy bookkeeping in their
@@ -213,7 +211,6 @@ unrelated background. Lead with the single sharpest contrast. Keep \
 the answer compact: a short paragraph or three bullet points, not \
 an essay. Use exact source terminology for technical terms, dates, \
 and proper nouns — paraphrase only the connective prose.";
-
 
 /// How many trailing turns (mixed user + assistant) to include when
 /// rendering conversation history into the synthesis system prompt.
@@ -326,7 +323,6 @@ pub(crate) const KQ_PER_CORPUS_LIMIT: usize = 20;
 pub(crate) const KQ_MERGED_LIMIT: usize = 20;
 
 // ─── Wikipedia link-graph one-hop expansion (Atlas Layer 0) ──
-
 
 /// One-hop neighbor cap per seed title. Higher values pull in
 /// less-relevant neighbors and inflate latency.

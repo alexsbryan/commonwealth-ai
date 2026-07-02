@@ -265,8 +265,9 @@ fn toml_to_json(v: &toml::Value) -> serde_json::Value {
 }
 
 fn stub_engine() -> corpus_engine::CorpusEngine {
-    let stub: corpus_engine::EmbedFn =
-        std::sync::Arc::new(|_| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
+    let stub: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
+        Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) })
+    });
     let tmp = std::env::temp_dir().join("sovereign-desktop-recipe-import");
     corpus_engine::CorpusEngine::new(tmp.clone(), tmp, stub)
 }

@@ -306,10 +306,9 @@ pub async fn perform_encrypted_join(
         }),
         Err(TunnelFailure::NotAccepted) => Err(JoinError::NoPeerFound {
             mesh_name: "(encrypted mesh)".to_string(),
-            direct_hint_msg:
-                " — the founder did not accept the encrypted join (expired invite, \
+            direct_hint_msg: " — the founder did not accept the encrypted join (expired invite, \
                  wrong key, or unreachable over iroh)"
-                    .to_string(),
+                .to_string(),
         }),
     }
 }
@@ -350,7 +349,9 @@ async fn iroh_tunnel_handshake(
     let secret = SecretKey::from_bytes(&joiner_seed);
     let endpoint = build_relayed_endpoint(secret, vec![ALPN.to_vec()], relay_cfg)
         .await
-        .map_err(|e| TunnelFailure::Setup(format!("failed to build iroh endpoint for join: {e}")))?;
+        .map_err(|e| {
+            TunnelFailure::Setup(format!("failed to build iroh endpoint for join: {e}"))
+        })?;
 
     let bridge = HttpBridge::spawn(endpoint, target, ALPN)
         .await
@@ -453,7 +454,9 @@ pub async fn perform_join(
                 tunnel_failure = Some(reason);
             }
             Ok(Err(TunnelFailure::NotAccepted)) => {
-                warn!("join: founder did not accept over the iroh tunnel — falling back to IP/mDNS");
+                warn!(
+                    "join: founder did not accept over the iroh tunnel — falling back to IP/mDNS"
+                );
                 tunnel_failure =
                     Some("the founder did not accept the join over the iroh tunnel".into());
             }

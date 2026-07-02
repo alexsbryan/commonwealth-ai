@@ -11,8 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    CascadeStep, ChapterSelection, PhaseCache, PhaseRunner, PipelinePhase,
-    RunOutputWriter,
+    CascadeStep, ChapterSelection, PhaseCache, PhaseRunner, PipelinePhase, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;

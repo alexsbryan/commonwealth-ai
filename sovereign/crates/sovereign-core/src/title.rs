@@ -88,8 +88,7 @@ pub async fn generate_title_from_messages(
          Assistant: {assistant_snippet}"
     );
 
-    let system_message =
-        Some("Output only the title — a few words, nothing else.".to_string());
+    let system_message = Some("Output only the title — a few words, nothing else.".to_string());
 
     let request = CompletionRequest {
         prompt,
@@ -1106,7 +1105,11 @@ mod tests {
             "in the corner.",
         ]);
         let out = collect(strip_thinking_stream(inner)).await;
-        assert_eq!(out.len(), 4, "every chunk should pass through as it arrives");
+        assert_eq!(
+            out.len(),
+            4,
+            "every chunk should pass through as it arrives"
+        );
         assert_eq!(out[0], "Once upon a time ");
         assert_eq!(out[3], "in the corner.");
     }
@@ -1118,7 +1121,11 @@ mod tests {
         // early-stream cutover must not leak "Thinking Process:" prose.
         let inner = ok_stream(vec!["Thinking Pro", "cess:\nplan plan\nReply: ", "Done."]);
         let out = collect(strip_thinking_stream(inner)).await;
-        assert_eq!(out.len(), 1, "preamble shape flushes the stripped reply once");
+        assert_eq!(
+            out.len(),
+            1,
+            "preamble shape flushes the stripped reply once"
+        );
         assert_eq!(out[0], "Done.");
     }
 

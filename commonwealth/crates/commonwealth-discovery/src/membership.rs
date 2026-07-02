@@ -476,7 +476,10 @@ mod tests {
         revoke_member(&mut mesh, bob_id, 1_000).unwrap();
         // Tombstoned, NOT deleted — the record stays so the removal can
         // out-compete stale live copies via gossip (the immortal-ghost fix).
-        let bob = mesh.members.get(&bob_id).expect("tombstone record retained");
+        let bob = mesh
+            .members
+            .get(&bob_id)
+            .expect("tombstone record retained");
         assert_eq!(bob.removed_at, Some(1_000));
         assert!(!bob.is_active());
         assert_eq!(bob.status, NodeStatus::Offline);

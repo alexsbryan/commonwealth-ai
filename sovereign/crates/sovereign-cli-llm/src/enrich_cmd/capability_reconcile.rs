@@ -39,11 +39,47 @@ const RETRIEVE_K: usize = 6;
 /// they leak through `impl#[Type][Trait]` spines and doc prose alike (mirror
 /// scratch/recon.py STOP). Anything shorter than 4 chars is also dropped.
 const STOP: &[&str] = &[
-    "new", "run", "execute", "build", "self", "impl", "from", "into", "next", "drop",
-    "Clone", "Default", "Self", "Debug", "Eq", "PartialEq", "Hash", "Copy", "Ord",
-    "PartialOrd", "Send", "Sync", "Serialize", "Deserialize", "Display", "Error",
-    "Iterator", "IntoIterator", "Result", "Option", "Vec", "String", "Box", "Arc",
-    "From", "Into", "TryFrom", "Ordering", "HashMap", "HashSet", "BTreeMap",
+    "new",
+    "run",
+    "execute",
+    "build",
+    "self",
+    "impl",
+    "from",
+    "into",
+    "next",
+    "drop",
+    "Clone",
+    "Default",
+    "Self",
+    "Debug",
+    "Eq",
+    "PartialEq",
+    "Hash",
+    "Copy",
+    "Ord",
+    "PartialOrd",
+    "Send",
+    "Sync",
+    "Serialize",
+    "Deserialize",
+    "Display",
+    "Error",
+    "Iterator",
+    "IntoIterator",
+    "Result",
+    "Option",
+    "Vec",
+    "String",
+    "Box",
+    "Arc",
+    "From",
+    "Into",
+    "TryFrom",
+    "Ordering",
+    "HashMap",
+    "HashSet",
+    "BTreeMap",
 ];
 
 const VERIFY_SYSTEM: &str = "You decide whether a CAPABILITY is documented. Architecture docs describe what the system DOES, in prose — they almost NEVER name internal function names, and you must NOT require them to. Judge purely by MEANING: does any excerpt explain the same job / purpose / behaviour this capability performs? If an excerpt conveys what this capability is for (even without naming any of its functions), that is DOCUMENTED. Answer UNDOCUMENTED only if no excerpt addresses what this capability actually does. Answer on one line: 'DOCUMENTED: <doc> — <why, <=12 words>' or 'UNDOCUMENTED: <why, <=12 words>'.";
@@ -143,7 +179,9 @@ fn backtick_refs(docs: &[(String, String)]) -> HashMap<String, HashSet<String>> 
                 let span = &text[s..s + end_rel];
                 for tok in idents_in(span) {
                     if !is_stop(tok) {
-                        refs.entry(tok.to_string()).or_default().insert(name.clone());
+                        refs.entry(tok.to_string())
+                            .or_default()
+                            .insert(name.clone());
                     }
                 }
                 i = s + end_rel + 1;
@@ -171,13 +209,20 @@ fn doc_paragraphs(docs: &[(String, String)]) -> Vec<(String, String)> {
 }
 
 /// Top-k paragraphs by keyword hit count (cheap BM25-lite).
-fn retrieve<'a>(paras: &'a [(String, String)], keywords: &[String], k: usize) -> Vec<&'a (String, String)> {
+fn retrieve<'a>(
+    paras: &'a [(String, String)],
+    keywords: &[String],
+    k: usize,
+) -> Vec<&'a (String, String)> {
     let kws: Vec<String> = keywords.iter().map(|k| k.to_lowercase()).collect();
     let mut scored: Vec<(usize, &(String, String))> = paras
         .iter()
         .map(|p| {
             let low = p.1.to_lowercase();
-            let score = kws.iter().map(|k| low.matches(k.as_str()).count()).sum::<usize>();
+            let score = kws
+                .iter()
+                .map(|k| low.matches(k.as_str()).count())
+                .sum::<usize>();
             (score, p)
         })
         .filter(|(s, _)| *s > 0)
@@ -189,7 +234,11 @@ fn retrieve<'a>(paras: &'a [(String, String)], keywords: &[String], k: usize) ->
 /// Keywords identifying a capability for retrieval: label segments + rep names.
 fn cap_keywords(cap: &Cap) -> Vec<String> {
     let mut kws: Vec<String> = cap.label.split(['/', '_']).map(|s| s.to_string()).collect();
-    kws.extend(cap.reps.iter().flat_map(|r| r.split('_').map(|s| s.to_string())));
+    kws.extend(
+        cap.reps
+            .iter()
+            .flat_map(|r| r.split('_').map(|s| s.to_string())),
+    );
     kws.into_iter().filter(|k| k.len() >= 4).collect()
 }
 
@@ -226,7 +275,9 @@ fn discover_docs(source: &Path) -> Vec<PathBuf> {
 fn read_source_path(corpus_dir: &Path) -> Option<PathBuf> {
     let raw = fs::read_to_string(corpus_dir.join("_corpus_meta.json")).ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    v.get("source_path").and_then(|s| s.as_str()).map(PathBuf::from)
+    v.get("source_path")
+        .and_then(|s| s.as_str())
+        .map(PathBuf::from)
 }
 
 /// label → first ~2 paragraphs of its narration (the best "what it actually does").
@@ -243,7 +294,12 @@ fn load_narrations(caps_dir: &Path) -> HashMap<String, String> {
     }
     match fs::read_to_string(caps_dir.join("capability_doc.json")) {
         Ok(s) => serde_json::from_str::<Doc>(&s)
-            .map(|d| d.capabilities.into_iter().map(|c| (c.label, c.narration)).collect())
+            .map(|d| {
+                d.capabilities
+                    .into_iter()
+                    .map(|c| (c.label, c.narration))
+                    .collect()
+            })
             .unwrap_or_default(),
         Err(_) => HashMap::new(),
     }
@@ -263,7 +319,9 @@ fn parse_flag(args: &[String], key: &str) -> Option<String> {
 }
 
 async fn ask(chat: &ChatCompletionFn, system: &str, user: String) -> String {
-    let prompt = ChatPrompt::new(system, user).with_temperature(0.1).with_max_output_tokens(120);
+    let prompt = ChatPrompt::new(system, user)
+        .with_temperature(0.1)
+        .with_max_output_tokens(120);
     match (chat)(&prompt).await {
         Ok(s) => s.trim().to_string(),
         Err(e) => format!("[verify unavailable: {e}]"),
@@ -272,7 +330,10 @@ async fn ask(chat: &ChatCompletionFn, system: &str, user: String) -> String {
 
 fn render_markdown(set: &FindingSet) -> String {
     let mut s = String::new();
-    s.push_str(&format!("# {} — Capability Reconciliation (derived vs docs)\n\n", set.corpus_id));
+    s.push_str(&format!(
+        "# {} — Capability Reconciliation (derived vs docs)\n\n",
+        set.corpus_id
+    ));
     s.push_str(&format!(
         "_Derived capabilities reconciled against the architecture docs — {} corroborated · {} undocumented · {} drifted. \
          Regenerate with `svrn enrich capability-reconcile {}`._\n\n",
@@ -282,7 +343,10 @@ fn render_markdown(set: &FindingSet) -> String {
     let by = |k: FindingKind| set.findings.iter().filter(move |f| f.kind == k);
 
     if set.drifted > 0 {
-        s.push_str(&format!("## ⚠ Drift — docs contradict the code ({})\n\n", set.drifted));
+        s.push_str(&format!(
+            "## ⚠ Drift — docs contradict the code ({})\n\n",
+            set.drifted
+        ));
         for f in by(FindingKind::Drifted) {
             s.push_str(&format!("- **{}** — {}", f.label, f.evidence));
             if let Some(d) = &f.docs {
@@ -296,7 +360,8 @@ fn render_markdown(set: &FindingSet) -> String {
     // Undocumented: collapse repeated dominant-labels (sub-capabilities under one
     // capability area share a label) into one crisp line per area, so the human/demo
     // view reads cleanly. The JSON mirror below keeps every finding for the tools.
-    let mut undoc: std::collections::BTreeMap<&str, (usize, usize, &str)> = std::collections::BTreeMap::new();
+    let mut undoc: std::collections::BTreeMap<&str, (usize, usize, &str)> =
+        std::collections::BTreeMap::new();
     for f in by(FindingKind::Undocumented) {
         let e = undoc.entry(f.label.as_str()).or_insert((0, 0, ""));
         e.0 += 1;
@@ -313,7 +378,10 @@ fn render_markdown(set: &FindingSet) -> String {
     s.push_str("_Things the system does that no architecture doc describes (LLM-verified)._\n\n");
     for (label, (n, entries, note)) in &undoc {
         if *n > 1 {
-            s.push_str(&format!("- **{}** — {} sub-capabilities ({}e) — {}\n", label, n, entries, note));
+            s.push_str(&format!(
+                "- **{}** — {} sub-capabilities ({}e) — {}\n",
+                label, n, entries, note
+            ));
         } else {
             s.push_str(&format!("- **{}** ({}e) — {}\n", label, entries, note));
         }
@@ -368,7 +436,10 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
         let raw = match fs::read_to_string(&json_path) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("error: reading {} (run the full reconcile first): {e}", json_path.display());
+                eprintln!(
+                    "error: reading {} (run the full reconcile first): {e}",
+                    json_path.display()
+                );
                 return 1;
             }
         };
@@ -386,7 +457,10 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
         }
         println!(
             "capability-reconcile: re-rendered {} corroborated · {} undocumented · {} drifted → {}",
-            set.corroborated, set.undocumented, set.drifted, md_path.display()
+            set.corroborated,
+            set.undocumented,
+            set.drifted,
+            md_path.display()
         );
         return 0;
     }
@@ -404,12 +478,18 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
 
     // Doc side: discover + read the architecture narratives.
     let Some(source) = read_source_path(&corpus_dir) else {
-        eprintln!("error: no source_path in {}/_corpus_meta.json", corpus_dir.display());
+        eprintln!(
+            "error: no source_path in {}/_corpus_meta.json",
+            corpus_dir.display()
+        );
         return 1;
     };
     let doc_paths = discover_docs(&source);
     if doc_paths.is_empty() {
-        eprintln!("error: no architecture docs found under {}", source.display());
+        eprintln!(
+            "error: no architecture docs found under {}",
+            source.display()
+        );
         return 1;
     }
     let docs: Vec<(String, String)> = doc_paths
@@ -447,8 +527,17 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
             }
             let mut dv: Vec<String> = docset.into_iter().collect();
             dv.sort();
-            let ev = matched.iter().take(4).map(|s| s.as_str()).collect::<Vec<_>>().join(", ");
-            corroborated.push((cap.clone(), ev, dv.into_iter().take(3).collect::<Vec<_>>().join(", ")));
+            let ev = matched
+                .iter()
+                .take(4)
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            corroborated.push((
+                cap.clone(),
+                ev,
+                dv.into_iter().take(3).collect::<Vec<_>>().join(", "),
+            ));
         }
     }
 
@@ -461,7 +550,10 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
         }
     };
     if !probe_daemon(&cfg.base_url).await {
-        eprintln!("error: daemon is not responding at {} — start it first", cfg.base_url);
+        eprintln!(
+            "error: daemon is not responding at {} — start it first",
+            cfg.base_url
+        );
         return 2;
     }
     let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
@@ -480,46 +572,65 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
         corroborated.len(),
         undoc_candidates.len(),
     );
-    let verified: Vec<(Cap, bool, String)> = stream::iter(undoc_candidates.into_iter().map(|cap| {
-        let chat = chat.clone();
-        let paras = &paras;
-        let narrations = &narrations;
-        async move {
-            let kws = cap_keywords(&cap);
-            let hits = retrieve(paras, &kws, RETRIEVE_K);
-            let excerpts = hits
-                .iter()
-                .map(|(n, p)| format!("[{n}] {}", p.chars().take(450).collect::<String>()))
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            let identity = narrations
-                .get(&cap.label)
-                .map(|n| format!("{} — {}", cap.label, n.chars().take(400).collect::<String>()))
-                .unwrap_or_else(|| {
-                    let methods: Vec<String> =
-                        cap.core.iter().chain(cap.entries.iter()).map(|q| method_name(q)).filter(|m| !is_stop(m)).take(10).collect();
-                    format!("{} — functions: {}", cap.label, methods.join(", "))
-                });
-            let excerpts = if excerpts.is_empty() { "(no relevant excerpts found)".to_string() } else { excerpts };
-            let verdict = ask(
-                &chat,
-                VERIFY_SYSTEM,
-                format!("CAPABILITY:\n{identity}\n\nDOC EXCERPTS:\n{excerpts}\n\nVerdict:"),
-            )
-            .await;
-            let documented = verdict.to_ascii_uppercase().starts_with("DOCUMENTED");
-            (cap, documented, verdict)
-        }
-    }))
-    .buffer_unordered(LLM_CONCURRENCY)
-    .collect()
-    .await;
+    let verified: Vec<(Cap, bool, String)> =
+        stream::iter(undoc_candidates.into_iter().map(|cap| {
+            let chat = chat.clone();
+            let paras = &paras;
+            let narrations = &narrations;
+            async move {
+                let kws = cap_keywords(&cap);
+                let hits = retrieve(paras, &kws, RETRIEVE_K);
+                let excerpts = hits
+                    .iter()
+                    .map(|(n, p)| format!("[{n}] {}", p.chars().take(450).collect::<String>()))
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                let identity = narrations
+                    .get(&cap.label)
+                    .map(|n| {
+                        format!(
+                            "{} — {}",
+                            cap.label,
+                            n.chars().take(400).collect::<String>()
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        let methods: Vec<String> = cap
+                            .core
+                            .iter()
+                            .chain(cap.entries.iter())
+                            .map(|q| method_name(q))
+                            .filter(|m| !is_stop(m))
+                            .take(10)
+                            .collect();
+                        format!("{} — functions: {}", cap.label, methods.join(", "))
+                    });
+                let excerpts = if excerpts.is_empty() {
+                    "(no relevant excerpts found)".to_string()
+                } else {
+                    excerpts
+                };
+                let verdict = ask(
+                    &chat,
+                    VERIFY_SYSTEM,
+                    format!("CAPABILITY:\n{identity}\n\nDOC EXCERPTS:\n{excerpts}\n\nVerdict:"),
+                )
+                .await;
+                let documented = verdict.to_ascii_uppercase().starts_with("DOCUMENTED");
+                (cap, documented, verdict)
+            }
+        }))
+        .buffer_unordered(LLM_CONCURRENCY)
+        .collect()
+        .await;
 
     // ── 5b drift: corroborated capabilities whose docs contradict the code ──
     let mut drift_findings: Vec<(String, String, String)> = Vec::new(); // (label, contradiction, docs)
     if do_drift {
-        let drift_targets: Vec<&(Cap, String, String)> =
-            corroborated.iter().filter(|(c, _, _)| narrations.contains_key(&c.label)).collect();
+        let drift_targets: Vec<&(Cap, String, String)> = corroborated
+            .iter()
+            .filter(|(c, _, _)| narrations.contains_key(&c.label))
+            .collect();
         println!("capability-reconcile: 5b drift → checking {} corroborated capabilities with narrations…", drift_targets.len());
         let drift_results: Vec<Option<(String, String, String)>> = stream::iter(drift_targets.into_iter().map(|(cap, _ev, docs)| {
             let chat = chat.clone();
@@ -584,7 +695,10 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
                 label: cap.label.clone(),
                 n_entries: cap.n_entries,
                 n_core: cap.n_core,
-                evidence: format!("described in prose — {}", verdict.splitn(2, ':').nth(1).unwrap_or("").trim()),
+                evidence: format!(
+                    "described in prose — {}",
+                    verdict.splitn(2, ':').nth(1).unwrap_or("").trim()
+                ),
                 docs: None,
             });
         } else {
@@ -593,7 +707,12 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
                 label: cap.label.clone(),
                 n_entries: cap.n_entries,
                 n_core: cap.n_core,
-                evidence: verdict.splitn(2, ':').nth(1).unwrap_or(&verdict).trim().to_string(),
+                evidence: verdict
+                    .splitn(2, ':')
+                    .nth(1)
+                    .unwrap_or(&verdict)
+                    .trim()
+                    .to_string(),
                 docs: None,
             });
         }
@@ -608,15 +727,28 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
             n_entries: cap.n_entries,
             n_core: cap.n_core,
             evidence: format!("docs reference {}", ev),
-            docs: if docs.is_empty() { None } else { Some(docs.clone()) },
+            docs: if docs.is_empty() {
+                None
+            } else {
+                Some(docs.clone())
+            },
         });
     }
 
     let set = FindingSet {
         corpus_id: corpus_id.clone(),
-        corroborated: findings.iter().filter(|f| f.kind == FindingKind::Corroborated).count(),
-        undocumented: findings.iter().filter(|f| f.kind == FindingKind::Undocumented).count(),
-        drifted: findings.iter().filter(|f| f.kind == FindingKind::Drifted).count(),
+        corroborated: findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::Corroborated)
+            .count(),
+        undocumented: findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::Undocumented)
+            .count(),
+        drifted: findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::Drifted)
+            .count(),
         findings,
     };
 

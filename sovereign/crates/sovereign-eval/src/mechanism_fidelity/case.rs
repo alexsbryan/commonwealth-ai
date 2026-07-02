@@ -125,14 +125,39 @@ const FIRST_NAMES: &[&str] = &[
 ];
 
 const LAST_NAMES: &[&str] = &[
-    "Vale", "Okonkwo", "Hargrove", "Lindqvist", "Marchetti", "Devereux", "Halloran", "Beaumont",
-    "Castellan", "Voss", "Aaltonen", "Rhodes", "Saint-Clair", "Norrington", "Falk", "Greaves",
-    "Underwood", "Calloway", "Brandt", "Pelletier",
+    "Vale",
+    "Okonkwo",
+    "Hargrove",
+    "Lindqvist",
+    "Marchetti",
+    "Devereux",
+    "Halloran",
+    "Beaumont",
+    "Castellan",
+    "Voss",
+    "Aaltonen",
+    "Rhodes",
+    "Saint-Clair",
+    "Norrington",
+    "Falk",
+    "Greaves",
+    "Underwood",
+    "Calloway",
+    "Brandt",
+    "Pelletier",
 ];
 
 const NATIONALITIES: &[&str] = &[
-    "Northvian", "Solsebran", "Aurelian", "Kestrelander", "Marivanthe", "Hallendish", "Verdene",
-    "Castovian", "Brunhild", "Tessaran",
+    "Northvian",
+    "Solsebran",
+    "Aurelian",
+    "Kestrelander",
+    "Marivanthe",
+    "Hallendish",
+    "Verdene",
+    "Castovian",
+    "Brunhild",
+    "Tessaran",
 ];
 
 const INDUSTRIES: &[&str] = &[
@@ -229,7 +254,14 @@ mod tests {
         // The control's validity rests on the narrative never naming a
         // feature. Cheap guard against accidental leakage in edits.
         let banned = [
-            "wealth", "liquid", "mobility", "exit tax", "tax rate", "enforcement", "€", "%",
+            "wealth",
+            "liquid",
+            "mobility",
+            "exit tax",
+            "tax rate",
+            "enforcement",
+            "€",
+            "%",
         ];
         for c in generate_cases(200, 1) {
             let low = c.narrative.to_lowercase();

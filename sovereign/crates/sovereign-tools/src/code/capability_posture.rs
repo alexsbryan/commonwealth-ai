@@ -201,15 +201,18 @@ impl Tool for CapabilityPostureTool {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {
-                return Ok(StepOutput::Json(json!({ "status": "never_run", "hint": e })));
+                return Ok(StepOutput::Json(
+                    json!({ "status": "never_run", "hint": e }),
+                ));
             }
         };
         let narrative_paths = resolve_narratives(params, self.workspace_root.as_deref());
         let posture = compute_posture(&caps_dir, &narrative_paths);
-        let counts: FindingCounts = std::fs::read_to_string(caps_dir.join("capability_findings.json"))
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default();
+        let counts: FindingCounts =
+            std::fs::read_to_string(caps_dir.join("capability_findings.json"))
+                .ok()
+                .and_then(|raw| serde_json::from_str(&raw).ok())
+                .unwrap_or_default();
         Ok(StepOutput::Json(json!({
             "status": status_str(posture.status),
             "corpus_id": counts.corpus_id,

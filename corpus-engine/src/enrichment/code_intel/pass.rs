@@ -46,8 +46,8 @@ fn load_cache(cache_dir: &Path) -> HashMap<String, SymbolEnrichment> {
 }
 
 fn save_cache(cache_dir: &Path, enrichments: &[SymbolEnrichment]) -> Result<()> {
-    let json = serde_json::to_string(enrichments)
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let json =
+        serde_json::to_string(enrichments).map_err(|e| Error::Serialization(e.to_string()))?;
     std::fs::write(cache_dir.join(CACHE_FILE), json)?;
     Ok(())
 }
@@ -124,8 +124,7 @@ pub async fn run_code_intel(
     let total_chunks = sources.len().div_ceil(CHECKPOINT_CHUNK).max(1);
 
     for (i, chunk) in sources.chunks(CHECKPOINT_CHUNK).enumerate() {
-        let (chunk_out, rep) =
-            enrich_symbols_incremental(chat, chunk.to_vec(), &reuse_pool).await;
+        let (chunk_out, rep) = enrich_symbols_incremental(chat, chunk.to_vec(), &reuse_pool).await;
         // Cache-only mode (`index` is None when SOVEREIGN_ENRICH_SKIP_INDEX is
         // set): produce just the body-hash cache (code_intel_cache.json) — the
         // sole artifact capability-doc / reconcile read — and never open or write
@@ -214,7 +213,16 @@ pub async fn run_code_intel_for_corpus(
         tracing::info!(target: "enrichment.code_intel", ms = t.elapsed().as_millis() as u64, "open: corpus_index");
         Some(idx)
     };
-    run_code_intel(&scip, index_owned.as_ref(), &source_root, corpus_dir, chat, embed, file_filter).await
+    run_code_intel(
+        &scip,
+        index_owned.as_ref(),
+        &source_root,
+        corpus_dir,
+        chat,
+        embed,
+        file_filter,
+    )
+    .await
 }
 
 /// Resolve the corpus's original source tree from its `_corpus_meta.json`
@@ -284,29 +292,58 @@ mod tests {
             .unwrap();
 
         let idxdir = tempfile::tempdir().unwrap();
-        let index =
-            CorpusIndex::create(&idxdir.path().join("c"), "c", "C", "test-model", 4, false, "MIT")
-                .await
-                .unwrap();
+        let index = CorpusIndex::create(
+            &idxdir.path().join("c"),
+            "c",
+            "C",
+            "test-model",
+            4,
+            false,
+            "MIT",
+        )
+        .await
+        .unwrap();
 
         let cache = tempfile::tempdir().unwrap();
         let (chat, embed) = (fake_chat(), fake_embed());
 
         // First pass: one symbol, summarized + indexed.
-        let rep = run_code_intel(&scip, Some(&index), src.path(), cache.path(), &chat, &embed, &[])
-            .await
-            .unwrap();
+        let rep = run_code_intel(
+            &scip,
+            Some(&index),
+            src.path(),
+            cache.path(),
+            &chat,
+            &embed,
+            &[],
+        )
+        .await
+        .unwrap();
         assert_eq!(rep.symbols, 1);
         assert_eq!(rep.enrich.regenerated, 1, "summarized once");
         assert_eq!(rep.index.upserted, 1, "indexed once");
         assert_eq!(index.chunk_count().await.unwrap(), 1);
 
         // Second pass: unchanged body -> cache hit (no LLM) + index skip (no write).
-        let rep2 = run_code_intel(&scip, Some(&index), src.path(), cache.path(), &chat, &embed, &[])
-            .await
-            .unwrap();
-        assert_eq!(rep2.enrich.reused, 1, "summary reused from the body-hash cache");
-        assert_eq!(rep2.enrich.regenerated, 0, "no model call for an unchanged body");
+        let rep2 = run_code_intel(
+            &scip,
+            Some(&index),
+            src.path(),
+            cache.path(),
+            &chat,
+            &embed,
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            rep2.enrich.reused, 1,
+            "summary reused from the body-hash cache"
+        );
+        assert_eq!(
+            rep2.enrich.regenerated, 0,
+            "no model call for an unchanged body"
+        );
         assert_eq!(rep2.index.skipped, 1, "chunk unchanged");
         assert_eq!(index.chunk_count().await.unwrap(), 1, "no new rows");
     }
@@ -351,6 +388,9 @@ mod tests {
             .iter()
             .filter(|e| e.meta.qualified_name == "crate::handle")
             .count();
-        assert_eq!(handle_entries, 1, "exactly one cache entry per symbol (no stale dup)");
+        assert_eq!(
+            handle_entries, 1,
+            "exactly one cache entry per symbol (no stale dup)"
+        );
     }
 }

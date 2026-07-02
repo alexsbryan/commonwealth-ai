@@ -219,7 +219,10 @@ mod tests {
             ]),
         ];
         let mut resolved = HashMap::new();
-        resolved.insert("c1".to_string(), "a paragraph about widgets and gadgets".to_string());
+        resolved.insert(
+            "c1".to_string(),
+            "a paragraph about widgets and gadgets".to_string(),
+        );
 
         let out = check_evidence(&atoms, &resolved);
         assert_eq!(out.atoms, 2);

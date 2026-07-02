@@ -518,7 +518,10 @@ mod tests {
         // identical bytes — and such a payload reads back as None/empty.
         let bare = member(NodeId::from_u128(1), "a", 1);
         let json = serde_json::to_value(&bare).unwrap();
-        assert!(json.get("relay_url").is_none(), "relay_url omitted when None");
+        assert!(
+            json.get("relay_url").is_none(),
+            "relay_url omitted when None"
+        );
         assert!(
             json.get("iroh_direct_addrs").is_none(),
             "iroh_direct_addrs omitted when empty"
@@ -588,7 +591,9 @@ mod tests {
         m.relay_url = relay.map(|s| s.to_string());
         m.iroh_direct_addrs = addrs.to_vec();
         m.dial_info_version = version;
-        let sig = key.sign(&crate::dial_sig::dial_info_message(&pk, version, relay, addrs));
+        let sig = key.sign(&crate::dial_sig::dial_info_message(
+            &pk, version, relay, addrs,
+        ));
         m.dial_info_sig = Some(hex::encode(sig.to_bytes()));
         m
     }
@@ -783,10 +788,7 @@ mod tests {
         let report = local.merge_from(a, &remote);
         assert_eq!(report.added, 0);
         assert_eq!(report.updated, 0);
-        assert!(
-            report.observed.is_empty(),
-            "no advance => nothing observed"
-        );
+        assert!(report.observed.is_empty(), "no advance => nothing observed");
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
     }
 
@@ -837,7 +839,10 @@ mod tests {
         let remote = mesh_with(vec![member(b, "B-rejoined", 100)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.updated, 1, "rejoin (last_seen 100 > removed_at 50) wins");
+        assert_eq!(
+            report.updated, 1,
+            "rejoin (last_seen 100 > removed_at 50) wins"
+        );
         let merged = local.members.get(&b).unwrap();
         assert!(merged.is_active(), "rejoin clears the tombstone");
         assert_eq!(merged.last_seen, 100);

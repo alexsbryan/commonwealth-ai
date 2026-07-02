@@ -59,8 +59,7 @@ struct FanoutSelection {
 /// client-side `corpora` argument cannot bypass (defence behind the client seal).
 fn select_fanout_corpora(installed: &[(String, u64)], filter: &[String]) -> FanoutSelection {
     let explicit = !filter.is_empty();
-    let filter_set: std::collections::HashSet<&str> =
-        filter.iter().map(|s| s.as_str()).collect();
+    let filter_set: std::collections::HashSet<&str> = filter.iter().map(|s| s.as_str()).collect();
 
     let mut candidates: Vec<(String, u64)> = installed
         .iter()

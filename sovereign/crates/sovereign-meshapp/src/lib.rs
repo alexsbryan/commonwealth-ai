@@ -192,11 +192,19 @@ pub fn load_graph(index_path: &Path) -> Result<Graph, String> {
     if index_path.join(INVESTIGATION_DIRNAME).is_dir() {
         let (entities, rels, findings) = read_investigation_graph(index_path)
             .map_err(|e| format!("read investigation graph: {e}"))?;
-        return Ok(Graph { entities, rels, findings });
+        return Ok(Graph {
+            entities,
+            rels,
+            findings,
+        });
     }
     if index_path.join("atlas").is_dir() {
         let (entities, rels, findings) = load_atlas_as_investigation(index_path)?;
-        return Ok(Graph { entities, rels, findings });
+        return Ok(Graph {
+            entities,
+            rels,
+            findings,
+        });
     }
     Err("corpus has neither an investigation graph nor an atlas to explore".to_string())
 }
@@ -290,7 +298,15 @@ fn load_atlas_as_investigation(
                 } else {
                     r.label.clone()
                 };
-                push_pairwise_edges(&mut rels, r.id.as_str(), &participants, &rtype, &excerpt, &chunk, &serde_json::Map::new());
+                push_pairwise_edges(
+                    &mut rels,
+                    r.id.as_str(),
+                    &participants,
+                    &rtype,
+                    &excerpt,
+                    &chunk,
+                    &serde_json::Map::new(),
+                );
             }
             AtomEnvelope::Event(ev) => {
                 let participants = entity_participants(&ev.participants, &entity_ids);
@@ -302,7 +318,15 @@ fn load_atlas_as_investigation(
                 if !ev.description.is_empty() {
                     attrs.insert("description".into(), ev.description.clone().into());
                 }
-                push_pairwise_edges(&mut rels, ev.id.as_str(), &participants, ev.event_type.as_str_repr(), &excerpt, &chunk, &attrs);
+                push_pairwise_edges(
+                    &mut rels,
+                    ev.id.as_str(),
+                    &participants,
+                    ev.event_type.as_str_repr(),
+                    &excerpt,
+                    &chunk,
+                    &attrs,
+                );
             }
             _ => {}
         }
@@ -313,7 +337,10 @@ fn load_atlas_as_investigation(
 
 /// Participant ids that are real entities (drop dangling refs), capped so one
 /// big multi-party atom can't dominate the degree distribution.
-fn entity_participants<'a>(participants: &'a [AtomId], entity_ids: &HashSet<String>) -> Vec<&'a str> {
+fn entity_participants<'a>(
+    participants: &'a [AtomId],
+    entity_ids: &HashSet<String>,
+) -> Vec<&'a str> {
     participants
         .iter()
         .map(|p| p.as_str())
@@ -325,11 +352,17 @@ fn entity_participants<'a>(participants: &'a [AtomId], entity_ids: &HashSet<Stri
 /// Resolve an atom's first evidence ref into `(excerpt, source_chunk)`, where
 /// `source_chunk` is the numeric `chunks.lance` row id the section maps to (via
 /// `chapters.json`), falling back to the raw section id when unmapped.
-fn first_evidence(evidence: Option<&ChunkRef>, sec_to_chunk: &HashMap<String, String>) -> (String, String) {
+fn first_evidence(
+    evidence: Option<&ChunkRef>,
+    sec_to_chunk: &HashMap<String, String>,
+) -> (String, String) {
     match evidence {
         Some(cr) => {
             let excerpt = cr.passage_preview.clone().unwrap_or_default();
-            let chunk = sec_to_chunk.get(&cr.chunk_id).cloned().unwrap_or_else(|| cr.chunk_id.clone());
+            let chunk = sec_to_chunk
+                .get(&cr.chunk_id)
+                .cloned()
+                .unwrap_or_else(|| cr.chunk_id.clone());
             (excerpt, chunk)
         }
         None => (String::new(), String::new()),
@@ -356,7 +389,10 @@ fn push_pairwise_edges(
                 to_entity_id: participants[j].to_string(),
                 relationship_type: relationship_type.to_string(),
                 attributes: attributes.clone(),
-                evidence: InvEvidence { chunk_id: chunk_id.to_string(), excerpt: excerpt.to_string() },
+                evidence: InvEvidence {
+                    chunk_id: chunk_id.to_string(),
+                    excerpt: excerpt.to_string(),
+                },
                 confidence: 1.0,
             });
             k += 1;
@@ -405,7 +441,11 @@ pub fn graph_nodes(g: &Graph, node_type: Option<&str>, limit: usize) -> Vec<Grap
         .filter(|e| node_type.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
         .map(|e| to_graph_node(e, &deg))
         .collect();
-    nodes.sort_by(|a, b| b.degree.cmp(&a.degree).then_with(|| b.alias_count.cmp(&a.alias_count)));
+    nodes.sort_by(|a, b| {
+        b.degree
+            .cmp(&a.degree)
+            .then_with(|| b.alias_count.cmp(&a.alias_count))
+    });
     nodes.truncate(limit);
     nodes
 }
@@ -465,7 +505,9 @@ pub fn findings(g: &Graph, pattern: Option<&str>) -> Vec<FindingDto> {
                     let e = by_id.get(eid.as_str());
                     FindingEntityDto {
                         id: eid.clone(),
-                        canonical_name: e.map(|x| x.canonical_name.clone()).unwrap_or_else(|| eid.clone()),
+                        canonical_name: e
+                            .map(|x| x.canonical_name.clone())
+                            .unwrap_or_else(|| eid.clone()),
                         entity_type: e.map(|x| x.entity_type.clone()).unwrap_or_default(),
                     }
                 })
@@ -479,7 +521,12 @@ pub fn findings(g: &Graph, pattern: Option<&str>) -> Vec<FindingDto> {
 
 /// Case-folded substring over canonical name, aliases, and string attribute
 /// values. Degree-ranked.
-pub fn search_entities(g: &Graph, query: &str, node_type: Option<&str>, limit: usize) -> Vec<GraphNodeDto> {
+pub fn search_entities(
+    g: &Graph,
+    query: &str,
+    node_type: Option<&str>,
+    limit: usize,
+) -> Vec<GraphNodeDto> {
     let q = query.trim().to_lowercase();
     if q.is_empty() {
         return Vec::new();
@@ -492,7 +539,9 @@ pub fn search_entities(g: &Graph, query: &str, node_type: Option<&str>, limit: u
         .filter(|e| {
             e.canonical_name.to_lowercase().contains(&q)
                 || e.aliases.iter().any(|a| a.to_lowercase().contains(&q))
-                || e.attributes.values().any(|v| v.as_str().is_some_and(|s| s.to_lowercase().contains(&q)))
+                || e.attributes
+                    .values()
+                    .any(|v| v.as_str().is_some_and(|s| s.to_lowercase().contains(&q)))
         })
         .map(|e| to_graph_node(e, &deg))
         .collect();
@@ -644,7 +693,8 @@ fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, String> {
         return Ok(Vec::new());
     }
     let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let file: ChaptersFile = serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let file: ChaptersFile =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
     Ok(file.chapters)
 }
 
@@ -665,7 +715,9 @@ fn read_reconciliation_rows(atlas_dir: &Path) -> Vec<MergedEntityRow> {
     let Ok(bytes) = std::fs::read(path) else {
         return Vec::new();
     };
-    serde_json::from_slice::<ReconFile>(&bytes).map(|f| f.merged_entities).unwrap_or_default()
+    serde_json::from_slice::<ReconFile>(&bytes)
+        .map(|f| f.merged_entities)
+        .unwrap_or_default()
 }
 
 fn read_reconciliation_index(atlas_dir: &Path) -> HashMap<String, MergeRecord> {
@@ -745,15 +797,28 @@ pub fn corpus_stats(index_path: &Path) -> CorpusStatsDto {
 /// email chunk carries. Empty when the corpus has no `chapters.json`.
 pub async fn timeline(index_path: &Path) -> Result<TimelineDto, String> {
     let chapters = read_chapters(index_path)?;
-    let first_ids: Vec<u64> = chapters.iter().filter_map(|c| c.chunk_ids.first().copied()).collect();
+    let first_ids: Vec<u64> = chapters
+        .iter()
+        .filter_map(|c| c.chunk_ids.first().copied())
+        .collect();
     let total = first_ids.len();
     if first_ids.is_empty() {
-        return Ok(TimelineDto { buckets: Vec::new(), dated: 0, total: 0 });
+        return Ok(TimelineDto {
+            buckets: Vec::new(),
+            dated: 0,
+            total: 0,
+        });
     }
-    let index = CorpusIndex::open(index_path).await.map_err(|e| format!("open index: {e}"))?;
-    let chunks = index.get_chunks(&first_ids).await.map_err(|e| format!("read chunks: {e}"))?;
+    let index = CorpusIndex::open(index_path)
+        .await
+        .map_err(|e| format!("open index: {e}"))?;
+    let chunks = index
+        .get_chunks(&first_ids)
+        .await
+        .map_err(|e| format!("read chunks: {e}"))?;
 
-    let mut by_ym: std::collections::BTreeMap<String, (usize, Vec<u64>)> = std::collections::BTreeMap::new();
+    let mut by_ym: std::collections::BTreeMap<String, (usize, Vec<u64>)> =
+        std::collections::BTreeMap::new();
     let mut dated = 0;
     for c in &chunks {
         if let Some(ym) = parse_email_year_month(&c.content) {
@@ -767,17 +832,37 @@ pub async fn timeline(index_path: &Path) -> Result<TimelineDto, String> {
     }
     let buckets = by_ym
         .into_iter()
-        .map(|(ym, (count, chunk_ids))| TimelineBucketDto { ym, count, chunk_ids })
+        .map(|(ym, (count, chunk_ids))| TimelineBucketDto {
+            ym,
+            count,
+            chunk_ids,
+        })
         .collect();
-    Ok(TimelineDto { buckets, dated, total })
+    Ok(TimelineDto {
+        buckets,
+        dated,
+        total,
+    })
 }
 
 /// One chunk's full text by its numeric id.
 pub async fn read_chunk(index_path: &Path, chunk_id: u64) -> Result<ChunkDto, String> {
-    let index = CorpusIndex::open(index_path).await.map_err(|e| format!("open index: {e}"))?;
-    let chunks = index.get_chunks(&[chunk_id]).await.map_err(|e| format!("read chunk {chunk_id}: {e}"))?;
-    let c = chunks.into_iter().next().ok_or_else(|| format!("no chunk {chunk_id}"))?;
-    Ok(ChunkDto { chunk_id: chunk_id.to_string(), content: c.content, title: c.title })
+    let index = CorpusIndex::open(index_path)
+        .await
+        .map_err(|e| format!("open index: {e}"))?;
+    let chunks = index
+        .get_chunks(&[chunk_id])
+        .await
+        .map_err(|e| format!("read chunk {chunk_id}: {e}"))?;
+    let c = chunks
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("no chunk {chunk_id}"))?;
+    Ok(ChunkDto {
+        chunk_id: chunk_id.to_string(),
+        content: c.content,
+        title: c.title,
+    })
 }
 
 /// Pull `YYYY-MM` from the `Date:` line of an email chunk's RFC5322 preamble.
@@ -823,8 +908,18 @@ fn year_month_from_rfc5322(s: &str) -> Option<String> {
 fn month_num(tok: &str) -> Option<u32> {
     let t = tok.to_ascii_lowercase();
     Some(match &t[..t.len().min(3)] {
-        "jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6,
-        "jul" => 7, "aug" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12,
+        "jan" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "apr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "aug" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dec" => 12,
         _ => return None,
     })
 }

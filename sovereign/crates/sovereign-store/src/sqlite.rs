@@ -947,10 +947,7 @@ impl StepExecutionStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn find_execution(
-        &self,
-        idempotency_key: &str,
-    ) -> Result<Option<StepExecution>> {
+    async fn find_execution(&self, idempotency_key: &str) -> Result<Option<StepExecution>> {
         let conn = self.conn.lock().await;
         conn.query_row(
             "SELECT id, task_id, step_id, tool_id, status, idempotency_key,

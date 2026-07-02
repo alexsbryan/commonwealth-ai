@@ -26,10 +26,10 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
-use sovereign_cli_shared::help::{self, Help, HelpSection};
 use corpus_engine::enrichment::pipeline::{
     BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 use std::sync::Arc;
 
 const HELP: Help = Help {
@@ -1230,7 +1230,10 @@ mod tests {
 
         // Absent / unparseable / missing ⇒ can't trust it ⇒ re-resolve.
         std::fs::write(&p, r#"{"schema_version":1}"#).unwrap();
-        assert!(resolve_cache_is_structural_placeholder(&p), "absent atoms key");
+        assert!(
+            resolve_cache_is_structural_placeholder(&p),
+            "absent atoms key"
+        );
         std::fs::write(&p, "not json").unwrap();
         assert!(resolve_cache_is_structural_placeholder(&p), "unparseable");
         assert!(

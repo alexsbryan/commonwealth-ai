@@ -225,8 +225,15 @@ pub async fn write_wikipedia_columnar_store(
         .chunks(BATCH)
         .map(|c| articles_batch(c, &asch))
         .collect::<Result<Vec<_>, _>>()?;
-    let articles_path =
-        write_table(atlas_dir, ARTICLES_LANCE_DIRNAME, ARTICLES_TABLE, asch, abatches, None).await?;
+    let articles_path = write_table(
+        atlas_dir,
+        ARTICLES_LANCE_DIRNAME,
+        ARTICLES_TABLE,
+        asch,
+        abatches,
+        None,
+    )
+    .await?;
 
     let esch = edges_schema();
     let ebatches = edges
@@ -279,17 +286,51 @@ mod tests {
     }
 
     async fn read_articles(atlas_dir: &Path) -> Vec<WikiArticleRow> {
-        let db = lancedb::connect(atlas_dir.to_str().unwrap()).execute().await.unwrap();
+        let db = lancedb::connect(atlas_dir.to_str().unwrap())
+            .execute()
+            .await
+            .unwrap();
         let tbl = db.open_table(ARTICLES_TABLE).execute().await.unwrap();
-        let batches: Vec<RecordBatch> =
-            tbl.query().execute().await.unwrap().try_collect().await.unwrap();
-        let s = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<StringArray>().unwrap().clone();
-        let i = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<Int64Array>().unwrap().clone();
-        let bo = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<BooleanArray>().unwrap().clone();
+        let batches: Vec<RecordBatch> = tbl
+            .query()
+            .execute()
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let s = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap()
+                .clone()
+        };
+        let i = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .clone()
+        };
+        let bo = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<BooleanArray>()
+                .unwrap()
+                .clone()
+        };
         let mut out = Vec::new();
         for b in &batches {
             let (title, qid) = (s(b, "title"), s(b, "wikidata_qid"));
-            let (rev, pov, cit) = (i(b, "revision_id"), i(b, "pov_total"), i(b, "citation_total"));
+            let (rev, pov, cit) = (
+                i(b, "revision_id"),
+                i(b, "pov_total"),
+                i(b, "citation_total"),
+            );
             let (insc, cont) = (bo(b, "in_scope"), bo(b, "is_contested"));
             for k in 0..b.num_rows() {
                 out.push(WikiArticleRow {
@@ -308,16 +349,52 @@ mod tests {
     }
 
     async fn read_edges(atlas_dir: &Path) -> Vec<WikiEdgeRow> {
-        let db = lancedb::connect(atlas_dir.to_str().unwrap()).execute().await.unwrap();
+        let db = lancedb::connect(atlas_dir.to_str().unwrap())
+            .execute()
+            .await
+            .unwrap();
         let tbl = db.open_table(EDGES_TABLE).execute().await.unwrap();
-        let batches: Vec<RecordBatch> =
-            tbl.query().execute().await.unwrap().try_collect().await.unwrap();
-        let s = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<StringArray>().unwrap().clone();
-        let i = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<Int64Array>().unwrap().clone();
-        let bo = |b: &RecordBatch, n| b.column_by_name(n).unwrap().as_any().downcast_ref::<BooleanArray>().unwrap().clone();
+        let batches: Vec<RecordBatch> = tbl
+            .query()
+            .execute()
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let s = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap()
+                .clone()
+        };
+        let i = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .clone()
+        };
+        let bo = |b: &RecordBatch, n| {
+            b.column_by_name(n)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<BooleanArray>()
+                .unwrap()
+                .clone()
+        };
         let mut out = Vec::new();
         for b in &batches {
-            let (src, tgt, rel, lt, sect) = (s(b, "source_title"), s(b, "target_title"), s(b, "relationship_type"), s(b, "link_text"), s(b, "source_section_path"));
+            let (src, tgt, rel, lt, sect) = (
+                s(b, "source_title"),
+                s(b, "target_title"),
+                s(b, "relationship_type"),
+                s(b, "link_text"),
+                s(b, "source_section_path"),
+            );
             let occ = i(b, "occurrence_count");
             let tin = bo(b, "target_in_scope");
             for k in 0..b.num_rows() {
@@ -366,10 +443,16 @@ mod tests {
             && e.relationship_type == "contested"
             && e.source_section_path == "Criticism"));
         // dangling/out-of-scope target preserved (the neighbor query filters on it).
-        assert!(alpha.iter().any(|e| e.target_title == "External" && !e.target_in_scope));
+        assert!(alpha
+            .iter()
+            .any(|e| e.target_title == "External" && !e.target_in_scope));
         // occurrence_count survives (the neighbor query SUMs it).
         assert_eq!(
-            alpha.iter().find(|e| e.target_title == "Beta").unwrap().occurrence_count,
+            alpha
+                .iter()
+                .find(|e| e.target_title == "Beta")
+                .unwrap()
+                .occurrence_count,
             2
         );
     }

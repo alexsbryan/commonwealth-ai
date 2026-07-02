@@ -35,7 +35,10 @@ pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePair
 /// `sovereign-server` child that delegates inference to the daemon; stopping
 /// aborts the supervise task, whose `kill_on_drop` SIGKILLs the child.
 #[tauri::command]
-pub async fn set_mobile_access(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
+pub async fn set_mobile_access(
+    state: State<'_, Arc<AppState>>,
+    enabled: bool,
+) -> Result<(), String> {
     let mut guard = state.mobile_host_supervisor.write().await;
     if enabled {
         if guard.is_none() {

@@ -203,9 +203,7 @@ mod tests {
         assert_eq!(bearer_token(&req_with("Basic tok123")), None);
         assert_eq!(bearer_token(&req_with("Bearer ")), None);
         // No header at all.
-        let bare = Request::builder()
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let bare = Request::builder().body(axum::body::Body::empty()).unwrap();
         assert_eq!(bearer_token(&bare), None);
     }
 

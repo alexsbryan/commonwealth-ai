@@ -41,10 +41,20 @@ impl DetRng {
 /// A scheduled fault, applied at the start of a specific round.
 #[derive(Debug, Clone)]
 pub enum FaultEvent {
-    Partition { a: NodeId, b: NodeId },
-    HealPartition { a: NodeId, b: NodeId },
-    NodeDown { node: NodeId },
-    NodeUp { node: NodeId },
+    Partition {
+        a: NodeId,
+        b: NodeId,
+    },
+    HealPartition {
+        a: NodeId,
+        b: NodeId,
+    },
+    NodeDown {
+        node: NodeId,
+    },
+    NodeUp {
+        node: NodeId,
+    },
     SetWire {
         observer: NodeId,
         target: NodeId,
@@ -145,7 +155,13 @@ impl FaultSchedule {
                             },
                         ));
                         let clear = (round + 1 + rng.below(2)).min(last);
-                        events.push((clear, FaultEvent::ClearWire { observer: a, target: b }));
+                        events.push((
+                            clear,
+                            FaultEvent::ClearWire {
+                                observer: a,
+                                target: b,
+                            },
+                        ));
                     }
                 }
             }
@@ -174,12 +190,14 @@ mod tests {
         }
         // Different seed => (almost surely) a different timeline.
         let c = FaultSchedule::generate(43, &nodes, 20);
-        assert!(a.events.len() != c.events.len() || {
-            a.events
-                .iter()
-                .zip(c.events.iter())
-                .any(|((ra, _), (rc, _))| ra != rc)
-        });
+        assert!(
+            a.events.len() != c.events.len() || {
+                a.events
+                    .iter()
+                    .zip(c.events.iter())
+                    .any(|((ra, _), (rc, _))| ra != rc)
+            }
+        );
     }
 
     #[test]

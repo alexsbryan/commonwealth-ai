@@ -63,7 +63,12 @@ impl Variant {
     /// All variants, base first (the base must be elicited before its
     /// perturbations so the scorer has a reference probability).
     pub fn all() -> [Variant; 4] {
-        [Variant::Base, Variant::DirP1, Variant::DirP2, Variant::InvI1]
+        [
+            Variant::Base,
+            Variant::DirP1,
+            Variant::DirP2,
+            Variant::InvI1,
+        ]
     }
 
     /// Stable snake-case label used in `ResultRow.variant` and the
@@ -267,7 +272,10 @@ mod tests {
         let base = Case::base_example();
         let p1 = Variant::DirP1.apply(&base, &mut rng());
         let d = structural_p_relocate(&p1) - structural_p_relocate(&base);
-        assert!(d < -0.5, "P1 must produce a large negative structural delta, got {d}");
+        assert!(
+            d < -0.5,
+            "P1 must produce a large negative structural delta, got {d}"
+        );
         assert_eq!(Variant::DirP1.expected_sign(), -1);
     }
 
@@ -305,7 +313,10 @@ mod tests {
         let p1 = Variant::DirP1.apply(&base, &mut rng());
         let base_ctrl = render_prompt(&base, RenderMode::Stripped, false);
         let p1_ctrl = render_prompt(&p1, RenderMode::Stripped, false);
-        assert_eq!(base_ctrl, p1_ctrl, "control must be blind to DIR feature changes");
+        assert_eq!(
+            base_ctrl, p1_ctrl,
+            "control must be blind to DIR feature changes"
+        );
 
         // The full render, by contrast, must differ (the features show).
         let base_full = render_prompt(&base, RenderMode::Full, false);

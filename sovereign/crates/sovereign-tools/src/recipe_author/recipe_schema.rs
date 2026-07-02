@@ -50,7 +50,11 @@ fn desc_variants(section: &str) -> Vec<(String, Vec<String>)> {
             let key = v["key"].as_str().unwrap_or_default().to_string();
             let required = v["required"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
             (key, required)
         })
@@ -503,18 +507,43 @@ mod tests {
         // 4 of 22 (email/jsonl/csv/markdown were unauthorable).
         let s = recipe_json_schema();
         let arms = variant_consts(&s["properties"]["extract"]["oneOf"]);
-        for v in ["jsonl", "csv", "email", "markdown", "code", "parquet", "html", "html_sections"] {
-            assert!(arms.iter().any(|x| x == v), "missing extractor arm `{v}`; got {arms:?}");
+        for v in [
+            "jsonl",
+            "csv",
+            "email",
+            "markdown",
+            "code",
+            "parquet",
+            "html",
+            "html_sections",
+        ] {
+            assert!(
+                arms.iter().any(|x| x == v),
+                "missing extractor arm `{v}`; got {arms:?}"
+            );
         }
-        assert!(arms.len() >= 20, "expected the full extractor catalog, got {}", arms.len());
+        assert!(
+            arms.len() >= 20,
+            "expected the full extractor catalog, got {}",
+            arms.len()
+        );
     }
 
     #[test]
     fn acquire_covers_all_generated_variants() {
         let s = recipe_json_schema();
         let arms = variant_consts(&s["properties"]["acquire"]["oneOf"]);
-        for v in ["bulk_download", "http_api", "huggingface_dataset", "local_file", "web_crawl"] {
-            assert!(arms.iter().any(|x| x == v), "missing acquire arm `{v}`; got {arms:?}");
+        for v in [
+            "bulk_download",
+            "http_api",
+            "huggingface_dataset",
+            "local_file",
+            "web_crawl",
+        ] {
+            assert!(
+                arms.iter().any(|x| x == v),
+                "missing acquire arm `{v}`; got {arms:?}"
+            );
         }
     }
 
@@ -534,18 +563,36 @@ mod tests {
             .iter()
             .filter_map(|v| v.as_str())
             .collect();
-        assert!(required.contains(&"requests"), "http_api must require requests");
-        assert!(!required.contains(&"base_url"), "base_url is defaulted, must not be required");
+        assert!(
+            required.contains(&"requests"),
+            "http_api must require requests"
+        );
+        assert!(
+            !required.contains(&"base_url"),
+            "base_url is defaulted, must not be required"
+        );
     }
 
     #[test]
     fn chunk_and_filter_and_pattern_enums_are_generated() {
         let s = recipe_json_schema();
         let chunk: Vec<&str> = s["properties"]["chunk"]["properties"]["type"]["enum"]
-            .as_array().unwrap().iter().filter_map(|v| v.as_str()).collect();
-        assert!(chunk.contains(&"threaded_turns"), "chunk enum should include threaded_turns; got {chunk:?}");
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            chunk.contains(&"threaded_turns"),
+            "chunk enum should include threaded_turns; got {chunk:?}"
+        );
         let pats: Vec<&str> = s["properties"]["enrichment"]["properties"]["patterns"]["items"]
-            ["properties"]["type"]["enum"].as_array().unwrap().iter().filter_map(|v| v.as_str()).collect();
+            ["properties"]["type"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
         assert!(pats.contains(&"role_overlap"));
     }
 }

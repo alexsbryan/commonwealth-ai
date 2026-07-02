@@ -115,9 +115,11 @@ fn worker_cache_dir() -> Result<PathBuf, String> {
         Ok(v) => {
             let v = v.trim();
             if v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0" {
-                return Err("RPC tensor cache is disabled (SOVEREIGN_RPC_CACHE_DIR=off) — \
+                return Err(
+                    "RPC tensor cache is disabled (SOVEREIGN_RPC_CACHE_DIR=off) — \
                             cannot auto-warm; the host will load local-only"
-                    .to_string());
+                        .to_string(),
+                );
             }
             Ok(PathBuf::from(v))
         }
@@ -244,7 +246,10 @@ pub async fn warm_cache_from_ranges(
                 .send()
                 .await
             {
-                Ok(r) if r.status() == reqwest::StatusCode::PARTIAL_CONTENT || r.status().is_success() => {
+                Ok(r)
+                    if r.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                        || r.status().is_success() =>
+                {
                     url_idx = i;
                     resp = Some(r);
                     break;
@@ -253,7 +258,8 @@ pub async fn warm_cache_from_ranges(
                 Err(e) => last_err = format!("{}: {e}", source_urls[i]),
             }
         }
-        let resp = resp.ok_or_else(|| format!("range GET {name} failed on all sources: {last_err}"))?;
+        let resp =
+            resp.ok_or_else(|| format!("range GET {name} failed on all sources: {last_err}"))?;
 
         // Stream → hash → temp file; verify both length and hash; atomic rename so
         // a torn write never looks like a valid cache entry.
@@ -273,7 +279,9 @@ pub async fn warm_cache_from_ranges(
                     .map_err(|e| format!("write {name}: {e}"))?;
                 written += chunk.len() as u64;
             }
-            out.flush().await.map_err(|e| format!("flush {name}: {e}"))?;
+            out.flush()
+                .await
+                .map_err(|e| format!("flush {name}: {e}"))?;
         }
 
         if written != t.nbytes {
@@ -603,10 +611,7 @@ async fn orchestrate_warm(
             let label = format!("{endpoint} (device {})", body.device_index);
             match http.post(&warm_url).json(&body).send().await {
                 Ok(r) if r.status().is_success() => {
-                    let stats = r
-                        .json::<RpcWarmShardResponse>()
-                        .await
-                        .unwrap_or_default();
+                    let stats = r.json::<RpcWarmShardResponse>().await.unwrap_or_default();
                     tracing::info!(
                         worker = %label,
                         written = stats.tensors_written,
@@ -670,7 +675,10 @@ mod tests {
                     let slice = data[s as usize..=(e as usize)].to_vec();
                     return (
                         axum::http::StatusCode::PARTIAL_CONTENT,
-                        [(axum::http::header::CONTENT_RANGE, format!("bytes {s}-{e}/{size}"))],
+                        [(
+                            axum::http::header::CONTENT_RANGE,
+                            format!("bytes {s}-{e}/{size}"),
+                        )],
                         slice,
                     )
                         .into_response();
@@ -685,7 +693,10 @@ mod tests {
         let server = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        (format!("http://{addr}/internal/v1/models/file/m.gguf"), server)
+        (
+            format!("http://{addr}/internal/v1/models/file/m.gguf"),
+            server,
+        )
     }
 
     #[tokio::test]

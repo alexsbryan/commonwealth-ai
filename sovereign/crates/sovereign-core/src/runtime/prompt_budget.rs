@@ -163,11 +163,9 @@ pub(crate) fn enforce(
         .saturating_sub(reserved)
         .saturating_sub(TEMPLATE_MARGIN_TOKENS);
 
-    let input_tokens =
-        |req: &CompletionRequest| -> u32 {
-            count(req.system_message.as_deref().unwrap_or(""))
-                .saturating_add(count(&req.prompt))
-        };
+    let input_tokens = |req: &CompletionRequest| -> u32 {
+        count(req.system_message.as_deref().unwrap_or("")).saturating_add(count(&req.prompt))
+    };
 
     let measured = MeasuredAssembly {
         system_tokens: count(request.system_message.as_deref().unwrap_or("")),
@@ -222,7 +220,10 @@ pub(crate) fn enforce(
         .saturating_sub(after_trims)
         .saturating_sub(TEMPLATE_MARGIN_TOKENS) as usize;
     if available_for_response >= MIN_RESPONSE_TOKENS {
-        if request.max_tokens.is_some_and(|m| m > available_for_response) {
+        if request
+            .max_tokens
+            .is_some_and(|m| m > available_for_response)
+        {
             applied.push(format!(
                 "response reservation: {} → {available_for_response} tokens",
                 request.max_tokens.unwrap_or(0),
@@ -248,7 +249,10 @@ pub(crate) fn enforce(
 }
 
 fn trimmed_outcome(applied: Vec<String>) -> BudgetOutcome {
-    let note = format!("prompt trimmed to fit context window ({})", applied.join("; "));
+    let note = format!(
+        "prompt trimmed to fit context window ({})",
+        applied.join("; ")
+    );
     tracing::warn!(%note, "prompt budget enforced");
     BudgetOutcome::Trimmed { note }
 }
@@ -408,8 +412,14 @@ mod tests {
         assert!(sys.contains("Base instructions."));
         assert!(sys.contains("Trailing block stays."));
         assert!(sys.contains(TRIM_MARKER));
-        assert!(sys.contains("ASSISTANT: newest reply"), "newest line must survive");
-        assert!(!sys.contains("old message number 0"), "oldest line must drop");
+        assert!(
+            sys.contains("ASSISTANT: newest reply"),
+            "newest line must survive"
+        );
+        assert!(
+            !sys.contains("old message number 0"),
+            "oldest line must drop"
+        );
     }
 
     #[test]
@@ -422,7 +432,10 @@ mod tests {
         assert!(r.prompt.starts_with(TRIM_MARKER));
         assert!(r.prompt.ends_with("QUESTION: what is the answer?"));
         let total = est(r.system_message.as_deref().unwrap()) + est(&r.prompt);
-        assert!(total + 256 + TEMPLATE_MARGIN_TOKENS <= 2048, "total {total} too big");
+        assert!(
+            total + 256 + TEMPLATE_MARGIN_TOKENS <= 2048,
+            "total {total} too big"
+        );
     }
 
     #[test]
@@ -447,6 +460,9 @@ mod tests {
         let mut r = req("sys", &prompt, 512);
         // Window smaller than even the floor + margin can absorb.
         let (out, _) = enforce(&mut r, &est, 300);
-        assert!(matches!(out, BudgetOutcome::CannotFit { .. }), "got {out:?}");
+        assert!(
+            matches!(out, BudgetOutcome::CannotFit { .. }),
+            "got {out:?}"
+        );
     }
 }

@@ -99,17 +99,11 @@ pub async fn run_atos(args: &[String]) -> i32 {
             milestone::cmd_start_milestone(rest).await
         }
         "end-milestone" => {
-            announce(
-                "svrn atos end-milestone",
-                "svrn milestone <feature-id> <N>",
-            );
+            announce("svrn atos end-milestone", "svrn milestone <feature-id> <N>");
             milestone::cmd_end_milestone(rest).await
         }
         "archive" => {
-            announce(
-                "svrn atos archive",
-                "svrn audit <feature-id> --archive",
-            );
+            announce("svrn atos archive", "svrn audit <feature-id> --archive");
             provision::cmd_archive(rest).await
         }
         "status" => {
@@ -131,10 +125,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
             status::cmd_report(rest).await
         }
         "teardown" => {
-            announce(
-                "svrn atos teardown",
-                "svrn audit <feature-id> --archive",
-            );
+            announce("svrn atos teardown", "svrn audit <feature-id> --archive");
             teardown::cmd_teardown(rest).await
         }
         "feature" => feature::cmd_feature(rest).await,

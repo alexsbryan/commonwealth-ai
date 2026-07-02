@@ -15,8 +15,8 @@ mod chat_cmd;
 mod claim_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
-mod corpus_resolve;
 mod corpus_extract_entities_cmd;
+mod corpus_resolve;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
@@ -24,13 +24,10 @@ mod enrich_cmd;
 mod eval_cmd;
 mod govern_cmd;
 mod gym_judge;
-mod portfolio_cmd;
-mod proxy_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;
 mod mesh_cmd;
-mod workflow_cmd;
 mod mesh_soak;
 mod meshapp_cmd;
 mod meshapp_registry;
@@ -38,6 +35,8 @@ mod meta_atlas_cmd;
 mod mobile_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
+mod portfolio_cmd;
+mod proxy_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
@@ -46,6 +45,7 @@ mod router_cache_cmd;
 mod search_gym_cmd;
 mod voice_eval;
 mod worker_pod_provider;
+mod workflow_cmd;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 
@@ -94,9 +94,7 @@ async fn async_main() {
         // RUST_LOG is explicitly set — so a measurement run can be debugged
         // (e.g. `RUST_LOG=retrieval_audit=info` to watch the atom-enum /
         // atlas-grounding retrieval decisions, or `agentic_kq=info`) on demand.
-        "bench" if std::env::var_os("RUST_LOG").is_some() => {
-            init_tracing("sovereign_cli_llm=info")
-        }
+        "bench" if std::env::var_os("RUST_LOG").is_some() => init_tracing("sovereign_cli_llm=info"),
         // chat: glassbox the grounded synth/gate lifecycle on demand (truncation
         // trace 2026-06-30) — quiet by default so `--format json` stays parseable.
         "chat" if std::env::var_os("RUST_LOG").is_some() => {

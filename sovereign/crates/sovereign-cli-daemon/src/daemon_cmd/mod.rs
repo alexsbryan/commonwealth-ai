@@ -32,8 +32,8 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // the separable lifecycle / workspace / provider / worker / tool-registry
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
-mod build;
 mod bootstrap;
+mod build;
 mod lifecycle;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
 // `install-service`'s double-start guard and doctor's supervision check.
@@ -44,8 +44,7 @@ mod worker;
 mod workspace;
 
 use lifecycle::{
-    reload_daemon, restart_daemon, start_daemon, status_daemon,
-    stop_daemon, wait_for_shutdown,
+    reload_daemon, restart_daemon, start_daemon, status_daemon, stop_daemon, wait_for_shutdown,
 };
 use tool_registry::build_tool_registry;
 use worker::run_worker_daemon;
@@ -316,7 +315,6 @@ async fn run_daemon(args: &[String]) -> i32 {
         return 1;
     }
 
-
     // ── Force-tool-calls config → process env ─────────────────────
     //
     // The inference adapter reads `SOVEREIGN_FORCE_TOOL_CALLS` per
@@ -358,7 +356,6 @@ async fn run_daemon(args: &[String]) -> i32 {
              engaged on tools-using requests (set via setup_config.toml)"
         );
     }
-
 
     // Inference provider — load the embedded llama.cpp provider (3 GGUF
     // slots + extras/idle/rerank wiring); full rationale on
@@ -547,8 +544,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // The raw `Arc<GlinerExtractor>` is hoisted alongside the
     // trait-object wrapper so the NoteStore T2 path can install
     // it as a `GlinerFn` adapter without re-loading the model.
-    let (gliner_raw, chunk_entity_extractor) =
-        bootstrap::load_gliner_extractor(&data_dir);
+    let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(&data_dir);
 
     let engine: Arc<CorpusEngine> = bootstrap::build_corpus_engine(
         &data_dir,
@@ -618,7 +614,6 @@ async fn run_daemon(args: &[String]) -> i32 {
     sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
 
     bootstrap::spawn_rpc_worker_discovery(Arc::clone(&daemon), engine_handle);
-
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
 
@@ -919,10 +914,6 @@ fn home_dir_buf() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
-
-
-
-
 /// Surface orphaned per-corpus SCIP indexes at startup.
 ///
 /// On an upgrade from a pre-registry sovereign, `~/.sovereign/
@@ -980,5 +971,3 @@ fn warn_orphaned_indexes(
     );
     eprintln!();
 }
-
-

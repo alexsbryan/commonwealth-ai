@@ -213,19 +213,29 @@ fn run(args: &[String], diagnose: bool) -> i32 {
     let detected = match load_detected(&index_root) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("error: reading enriched atlas for `{}`: {e}", parsed.corpus_id);
-            eprintln!("  run `svrn enrich build {} --full` first.", parsed.corpus_id);
+            eprintln!(
+                "error: reading enriched atlas for `{}`: {e}",
+                parsed.corpus_id
+            );
+            eprintln!(
+                "  run `svrn enrich build {} --full` first.",
+                parsed.corpus_id
+            );
             return 1;
         }
     };
 
-    let truth_path = parsed.truth.clone().map(std::path::PathBuf::from).unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".sovereign/recipes")
-            .join(&parsed.corpus_id)
-            .join("truth.json")
-    });
+    let truth_path = parsed
+        .truth
+        .clone()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".sovereign/recipes")
+                .join(&parsed.corpus_id)
+                .join("truth.json")
+        });
     let truth = match GovernanceTruth::load(&truth_path) {
         Ok(t) => t,
         Err(e) => {
@@ -344,7 +354,10 @@ fn split_label(splits: &[Split]) -> String {
 }
 
 fn print_report(r: &DetectorReport, corpus: &str, splits: &[Split]) {
-    println!("=== bench governance — {corpus} (recall split: {}) ===", split_label(splits));
+    println!(
+        "=== bench governance — {corpus} (recall split: {}) ===",
+        split_label(splits)
+    );
     println!(
         "  precision {:.2}  recall {:.2}  f1 {:.2}",
         r.overall.precision, r.overall.recall, r.overall.f1
@@ -363,10 +376,21 @@ fn print_report(r: &DetectorReport, corpus: &str, splits: &[Split]) {
 
 fn print_diagnose(r: &DetectorReport) {
     println!("--- diagnose ---");
-    println!("  planted FOUND  ({}): {}", r.planted_found.len(), r.planted_found.join(", "));
-    println!("  planted MISSED ({}): {}", r.planted_missed.len(), r.planted_missed.join(", "));
+    println!(
+        "  planted FOUND  ({}): {}",
+        r.planted_found.len(),
+        r.planted_found.join(", ")
+    );
+    println!(
+        "  planted MISSED ({}): {}",
+        r.planted_missed.len(),
+        r.planted_missed.join(", ")
+    );
     if !r.flagged_decoys.is_empty() {
-        println!("  !! flagged expected-non/decoys: {}", r.flagged_decoys.join(", "));
+        println!(
+            "  !! flagged expected-non/decoys: {}",
+            r.flagged_decoys.join(", ")
+        );
     }
     if !r.flagged_other.is_empty() {
         println!("  flagged unlabeled pairs ({}):", r.flagged_other.len());

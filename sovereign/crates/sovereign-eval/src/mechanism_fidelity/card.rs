@@ -103,14 +103,22 @@ impl FidelityCard {
     /// `~/.sovereign/model-fidelity-cards` (honours `$HOME`).
     pub fn default_dir() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".sovereign").join("model-fidelity-cards")
+        PathBuf::from(home)
+            .join(".sovereign")
+            .join("model-fidelity-cards")
     }
 
     /// A filesystem-safe filename for a model id (slashes/colons → '_').
     fn file_for(model_id: &str) -> String {
         let safe: String = model_id
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '.' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '.' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         format!("{safe}.json")
     }
@@ -123,7 +131,10 @@ impl FidelityCard {
                 return c;
             }
         }
-        FidelityCard { model_id: model_id.to_string(), cards: BTreeMap::new() }
+        FidelityCard {
+            model_id: model_id.to_string(),
+            cards: BTreeMap::new(),
+        }
     }
 
     /// Insert/replace the entry for its class.
@@ -163,7 +174,10 @@ fn mean_finite(xs: impl Iterator<Item = f64>) -> f64 {
 
 /// Fraction of `Some(true)` among the band's applicable cases. Returns
 /// `(fraction, n_applicable)`; fraction is NaN when the band never applied.
-fn pass_frac<'a>(rows: impl Iterator<Item = &'a ResultRow>, pick: impl Fn(&ResultRow) -> Option<bool>) -> (f64, usize) {
+fn pass_frac<'a>(
+    rows: impl Iterator<Item = &'a ResultRow>,
+    pick: impl Fn(&ResultRow) -> Option<bool>,
+) -> (f64, usize) {
     let vals: Vec<bool> = rows.filter_map(|r| pick(r)).collect();
     if vals.is_empty() {
         return (f64::NAN, 0);
@@ -245,7 +259,9 @@ pub fn grade_class(
 
     let (grade, confidence) = if control_present && control_leaks {
         // Confidence in the leak = how far past chance / the flat band.
-        let c = control_dir_acc.max(control_abs_delta / th.flat_max).min(1.0);
+        let c = control_dir_acc
+            .max(control_abs_delta / th.flat_max)
+            .min(1.0);
         (Grade::ControlLeak, c)
     } else if n_cases < th.min_cases {
         (Grade::Inconclusive, 0.0)
@@ -254,7 +270,11 @@ pub fn grade_class(
         (Grade::Faithful, c)
     } else {
         // Unfaithful: confident to the extent the magnitude band is missed.
-        let c = if mag_pass.is_finite() { 1.0 - mag_pass } else { 0.5 };
+        let c = if mag_pass.is_finite() {
+            1.0 - mag_pass
+        } else {
+            0.5
+        };
         (Grade::Unfaithful, c.clamp(0.0, 1.0))
     };
 
@@ -299,7 +319,11 @@ mod tests {
             case_id: case.into(),
             pool: "dev".into(),
             variant: variant.into(),
-            render: if control { "stripped".into() } else { "full".into() },
+            render: if control {
+                "stripped".into()
+            } else {
+                "full".into()
+            },
             paraphrase: false,
             control,
             expected_sign: 0,
@@ -327,11 +351,55 @@ mod tests {
         let mut rows = Vec::new();
         for i in 0..20 {
             let case = format!("c{i}");
-            rows.push(row(model, "wt", "dir_p1", false, -0.9, -0.95, Some(true), None, None, &format!("{case}~p1")));
-            rows.push(row(model, "wt", "dir_p2", false, 0.01, 0.0, None, Some(true), None, &format!("{case}~p2")));
-            rows.push(row(model, "wt", "inv_i1", false, 0.01, 0.0, None, None, Some(true), &format!("{case}~inv")));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                false,
+                -0.9,
+                -0.95,
+                Some(true),
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p2",
+                false,
+                0.01,
+                0.0,
+                None,
+                Some(true),
+                None,
+                &format!("{case}~p2"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "inv_i1",
+                false,
+                0.01,
+                0.0,
+                None,
+                None,
+                Some(true),
+                &format!("{case}~inv"),
+            ));
             // Blindfold control: cannot see the change → no movement.
-            rows.push(row(model, "wt", "dir_p1", true, 0.0, -0.95, None, None, None, &format!("{case}~p1")));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                true,
+                0.0,
+                -0.95,
+                None,
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
         }
         rows
     }
@@ -339,7 +407,16 @@ mod tests {
     #[test]
     fn faithful_battery_grades_faithful() {
         let rows = faithful_rows("m");
-        let e = grade_class(&rows, "m", "wt", "dev", &GradeThresholds::default(), &Bands::default(), "fp", "t".into());
+        let e = grade_class(
+            &rows,
+            "m",
+            "wt",
+            "dev",
+            &GradeThresholds::default(),
+            &Bands::default(),
+            "fp",
+            "t".into(),
+        );
         assert_eq!(e.grade, Grade::Faithful);
         assert_eq!(e.n_cases, 20);
         assert!(e.p1_delta < -0.4);
@@ -353,12 +430,65 @@ mod tests {
         let mut rows = Vec::new();
         for i in 0..20 {
             let case = format!("c{i}");
-            rows.push(row(model, "wt", "dir_p1", false, 0.0, -0.95, Some(false), None, None, &format!("{case}~p1")));
-            rows.push(row(model, "wt", "dir_p2", false, 0.01, 0.0, None, Some(true), None, &format!("{case}~p2")));
-            rows.push(row(model, "wt", "inv_i1", false, 0.01, 0.0, None, None, Some(true), &format!("{case}~inv")));
-            rows.push(row(model, "wt", "dir_p1", true, 0.0, -0.95, None, None, None, &format!("{case}~p1")));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                false,
+                0.0,
+                -0.95,
+                Some(false),
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p2",
+                false,
+                0.01,
+                0.0,
+                None,
+                Some(true),
+                None,
+                &format!("{case}~p2"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "inv_i1",
+                false,
+                0.01,
+                0.0,
+                None,
+                None,
+                Some(true),
+                &format!("{case}~inv"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                true,
+                0.0,
+                -0.95,
+                None,
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
         }
-        let e = grade_class(&rows, model, "wt", "dev", &GradeThresholds::default(), &Bands::default(), "fp", "t".into());
+        let e = grade_class(
+            &rows,
+            model,
+            "wt",
+            "dev",
+            &GradeThresholds::default(),
+            &Bands::default(),
+            "fp",
+            "t".into(),
+        );
         assert_eq!(e.grade, Grade::Unfaithful);
     }
 
@@ -372,7 +502,16 @@ mod tests {
                 r.d_agent = -0.9; // control "sees" the negation → leak
             }
         }
-        let e = grade_class(&rows, "m", "wt", "dev", &GradeThresholds::default(), &Bands::default(), "fp", "t".into());
+        let e = grade_class(
+            &rows,
+            "m",
+            "wt",
+            "dev",
+            &GradeThresholds::default(),
+            &Bands::default(),
+            "fp",
+            "t".into(),
+        );
         assert_eq!(e.grade, Grade::ControlLeak);
     }
 
@@ -382,10 +521,41 @@ mod tests {
         let mut rows = Vec::new();
         for i in 0..5 {
             let case = format!("c{i}");
-            rows.push(row(model, "wt", "dir_p1", false, -0.9, -0.95, Some(true), None, None, &format!("{case}~p1")));
-            rows.push(row(model, "wt", "dir_p1", true, 0.0, -0.95, None, None, None, &format!("{case}~p1")));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                false,
+                -0.9,
+                -0.95,
+                Some(true),
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
+            rows.push(row(
+                model,
+                "wt",
+                "dir_p1",
+                true,
+                0.0,
+                -0.95,
+                None,
+                None,
+                None,
+                &format!("{case}~p1"),
+            ));
         }
-        let e = grade_class(&rows, model, "wt", "dev", &GradeThresholds::default(), &Bands::default(), "fp", "t".into());
+        let e = grade_class(
+            &rows,
+            model,
+            "wt",
+            "dev",
+            &GradeThresholds::default(),
+            &Bands::default(),
+            "fp",
+            "t".into(),
+        );
         assert_eq!(e.grade, Grade::Inconclusive);
     }
 
@@ -414,7 +584,12 @@ mod tests {
         card.upsert(mk("attribution", Grade::Unfaithful));
         let path = card.save(&dir).unwrap();
         // Filename is sanitized.
-        assert!(path.file_name().unwrap().to_str().unwrap().starts_with("model_x_1"));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("model_x_1"));
 
         let reloaded = FidelityCard::load_or_new(&dir, "model/x:1");
         assert_eq!(reloaded.cards.len(), 2);

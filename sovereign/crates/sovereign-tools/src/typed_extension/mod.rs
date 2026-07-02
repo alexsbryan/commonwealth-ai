@@ -224,19 +224,17 @@ pub async fn run_typed_extension(
     // level above the atlas dir; open it once (best-effort — on any
     // failure Pass A degrades to summary+quote-span input, the v1
     // behavior).
-    let index = corpus_engine::index::CorpusIndex::open(
-        atlas_dir.parent().unwrap_or(atlas_dir),
-    )
-    .await
-    .map_err(|e| {
-        tracing::warn!(
-            corpus = corpus_id,
-            error = %e,
-            "typed_extension: corpus index open failed; Pass A runs without member excerpts"
-        );
-        e
-    })
-    .ok();
+    let index = corpus_engine::index::CorpusIndex::open(atlas_dir.parent().unwrap_or(atlas_dir))
+        .await
+        .map_err(|e| {
+            tracing::warn!(
+                corpus = corpus_id,
+                error = %e,
+                "typed_extension: corpus index open failed; Pass A runs without member excerpts"
+            );
+            e
+        })
+        .ok();
 
     let mut sections: Vec<SectionExtraction> = Vec::with_capacity(leaves.len() + themes.len());
     let mut soft_failures: Vec<String> = Vec::new();
@@ -340,14 +338,14 @@ pub async fn run_typed_extension(
 
     let mut resolved = resolve_type_extensions(
         &sections,
-        &person_seeds, // proponent / supports resolution targets
-        &[],           // no existing positions
-        &[],           // no existing claims
+        &person_seeds,          // proponent / supports resolution targets
+        &[],                    // no existing positions
+        &[],                    // no existing claims
         person_seeds.len() + 1, // next_entity_idx — seeds occupy 1..=N
-        1,             // next_claim_idx
-        1,             // next_position_idx
-        1,             // next_opposition_idx
-        1,             // next_edge_idx
+        1,                      // next_claim_idx
+        1,                      // next_position_idx
+        1,                      // next_opposition_idx
+        1,                      // next_edge_idx
     );
     // The seeds must also PERSIST (the resolver treats `existing_*`
     // as already-on-disk, but this atlas is written from scratch).
@@ -641,9 +639,7 @@ const PASS_B_QUOTE_CAP_PER_THEME: usize = 6;
 /// Canonical = the most frequent multi-token surface form. Returns
 /// entities with sequential ids starting at 1 (caller offsets the
 /// resolver's `next_entity_idx` accordingly).
-fn build_person_seed_entities(
-    rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
-) -> Vec<Entity> {
+fn build_person_seed_entities(rows: &[sovereign_core::conv_tiered::ChunkEntityRow]) -> Vec<Entity> {
     use corpus_engine::enrichment::atlas::atoms::ChunkRef;
     use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
@@ -686,7 +682,10 @@ fn build_person_seed_entities(
             .filter(|(mk, ..)| mk.split_whitespace().any(|w| w == k));
         match (hosts.next(), hosts.next()) {
             (Some((host_key, ..)), None) => {
-                aliases.entry(host_key.clone()).or_default().push(surface.clone());
+                aliases
+                    .entry(host_key.clone())
+                    .or_default()
+                    .push(surface.clone());
                 *extra_counts.entry(host_key.clone()).or_default() += n;
             }
             _ => {} // host-less or ambiguous single token → dropped
@@ -773,7 +772,10 @@ async fn member_source_for_leaf(
     for c in &chunks {
         let excerpt: String = c.content.chars().take(PASS_A_EXCERPT_CHARS).collect();
         let tail: String = c.content.chars().skip(PASS_A_EXCERPT_CHARS).collect();
-        figures.extend(figure_sentences_from(&tail, PASS_A_FIGURE_SENTENCES_PER_CHUNK));
+        figures.extend(figure_sentences_from(
+            &tail,
+            PASS_A_FIGURE_SENTENCES_PER_CHUNK,
+        ));
         let mut text = excerpt;
         if !tail.is_empty() {
             text.push('…');

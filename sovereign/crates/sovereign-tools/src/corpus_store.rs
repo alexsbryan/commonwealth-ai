@@ -93,11 +93,14 @@ impl Tool for CorpusStoreTool {
         // stringified the upstream artifact) or as an already-spliced JSON
         // *array* (a lone `{chunk.output}` ref — the workflow value-splices a
         // whole step output). Accept both, then zip by position.
-        let chunk_vals: Vec<serde_json::Value> = serde_json::from_value(collection_param(params, "chunks")?)
-            .map_err(|e| Error::Execution(format!("corpus_store: `chunks` shape: {e}")))?;
+        let chunk_vals: Vec<serde_json::Value> =
+            serde_json::from_value(collection_param(params, "chunks")?)
+                .map_err(|e| Error::Execution(format!("corpus_store: `chunks` shape: {e}")))?;
         let embeddings: Vec<Vec<f32>> = {
-            let raw: Vec<Vec<f64>> = serde_json::from_value(collection_param(params, "embeddings")?)
-                .map_err(|e| Error::Execution(format!("corpus_store: `embeddings` shape: {e}")))?;
+            let raw: Vec<Vec<f64>> =
+                serde_json::from_value(collection_param(params, "embeddings")?).map_err(|e| {
+                    Error::Execution(format!("corpus_store: `embeddings` shape: {e}"))
+                })?;
             raw.into_iter()
                 .map(|v| v.into_iter().map(|x| x as f32).collect())
                 .collect()
@@ -245,7 +248,9 @@ fn collection_param(params: &serde_json::Value, key: &str) -> Result<serde_json:
         Some(serde_json::Value::String(s)) => serde_json::from_str(s)
             .map_err(|e| Error::Execution(format!("corpus_store: parse `{key}`: {e}"))),
         Some(other) => Ok(other.clone()),
-        None => Err(Error::Execution(format!("corpus_store: missing required `{key}`"))),
+        None => Err(Error::Execution(format!(
+            "corpus_store: missing required `{key}`"
+        ))),
     }
 }
 

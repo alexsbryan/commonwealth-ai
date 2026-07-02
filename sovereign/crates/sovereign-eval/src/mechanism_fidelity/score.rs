@@ -209,7 +209,10 @@ mod tests {
         // Predicted flat (differential unchanged); faithful agent flat.
         let s = score(PerturbKind::Dir, 0.03, 0.0, &b);
         assert_eq!(s.flat_ok, Some(true));
-        assert_eq!(s.direction_ok, None, "no direction band on a flat prediction");
+        assert_eq!(
+            s.direction_ok, None,
+            "no direction band on a flat prediction"
+        );
         assert_eq!(s.magnitude_ok, None);
 
         // Agent that learned 'higher tax ⇒ flight' lurches → flat fails.
@@ -220,8 +223,14 @@ mod tests {
     #[test]
     fn invariance_scored_only_on_inv() {
         let b = Bands::default();
-        assert_eq!(score(PerturbKind::Inv, 0.02, 0.0, &b).invariance_ok, Some(true));
-        assert_eq!(score(PerturbKind::Inv, 0.4, 0.0, &b).invariance_ok, Some(false));
+        assert_eq!(
+            score(PerturbKind::Inv, 0.02, 0.0, &b).invariance_ok,
+            Some(true)
+        );
+        assert_eq!(
+            score(PerturbKind::Inv, 0.4, 0.0, &b).invariance_ok,
+            Some(false)
+        );
     }
 
     #[test]

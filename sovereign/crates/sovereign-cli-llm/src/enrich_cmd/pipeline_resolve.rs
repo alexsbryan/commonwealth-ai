@@ -29,7 +29,9 @@ use super::config::EnrichConfig;
 /// "unknown pipeline" error handling.
 pub fn resolve_pipeline(cfg: &EnrichConfig) -> Option<Arc<dyn Pipeline>> {
     if let Some(spec) = &cfg.ontology {
-        return Some(Arc::new(LiteraryAtlasPipeline::with_custom_ontology(spec)) as Arc<dyn Pipeline>);
+        return Some(
+            Arc::new(LiteraryAtlasPipeline::with_custom_ontology(spec)) as Arc<dyn Pipeline>
+        );
     }
     PipelineRegistry::builtin().get(&cfg.pipeline_id)
 }

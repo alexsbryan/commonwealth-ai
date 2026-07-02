@@ -177,9 +177,7 @@ pub async fn resume_contributions(
 /// HTTP implementation behind `resume_contributions`, with the daemon's
 /// internal base URL passed explicitly so the tray menu (which holds
 /// an `AppHandle`, not a `tauri::State`) can call it.
-pub(crate) async fn resume_contributions_at(
-    base_url: &str,
-) -> Result<ContributionStatus, String> {
+pub(crate) async fn resume_contributions_at(base_url: &str) -> Result<ContributionStatus, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

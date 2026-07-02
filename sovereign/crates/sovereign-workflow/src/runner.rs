@@ -139,7 +139,14 @@ impl Runner {
         let reports: Vec<ItemReport> = stream::iter(items.into_iter())
             .map(|item| {
                 run_item(
-                    wf, &steps, &order, &do_cache, &self.cache, &self.params, observer, item,
+                    wf,
+                    &steps,
+                    &order,
+                    &do_cache,
+                    &self.cache,
+                    &self.params,
+                    observer,
+                    item,
                     concurrency,
                 )
             })
@@ -179,9 +186,18 @@ async fn run_item(
     item: SourceItem,
     concurrency: usize,
 ) -> ItemReport {
-    let report =
-        run_item_inner(wf, steps, order, do_cache, cache, params, observer, item, concurrency)
-            .await;
+    let report = run_item_inner(
+        wf,
+        steps,
+        order,
+        do_cache,
+        cache,
+        params,
+        observer,
+        item,
+        concurrency,
+    )
+    .await;
     emit(
         observer,
         WorkflowProgress::ItemDone {
@@ -328,7 +344,8 @@ async fn run_item_inner(
             .with_failures(failures)
         } else {
             let args = template::resolve_args(spec, &scope);
-            let key = cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, &fingerprint));
+            let key =
+                cacheable.then(|| cache::cache_key(&spec.uses, &spec.id, &args, &fingerprint));
             match run_one(step, &args, key.as_deref(), cache, &ctx).await {
                 Ok((art, was_cached)) => {
                     if was_cached {
@@ -411,7 +428,10 @@ async fn run_one(
 /// real Phase-1 runner stamping `chapter_id` over whatever the model emitted).
 fn apply_stamp(output: StepOutput, stamp: &serde_json::Value) -> StepOutput {
     match (output, stamp) {
-        (StepOutput::Json(serde_json::Value::Object(mut obj)), serde_json::Value::Object(fields)) => {
+        (
+            StepOutput::Json(serde_json::Value::Object(mut obj)),
+            serde_json::Value::Object(fields),
+        ) => {
             for (k, v) in fields {
                 obj.insert(k.clone(), v.clone());
             }

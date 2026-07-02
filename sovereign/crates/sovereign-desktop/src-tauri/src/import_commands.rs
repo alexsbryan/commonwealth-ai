@@ -213,17 +213,18 @@ async fn run_conversation_import(
     );
 
     let total_messages =
-        count_messages_in_file(&extracted_bytes.canonical_path, source.count_needle()).unwrap_or_else(|e| {
-            // Counting is best-effort. We have the file at the
-            // canonical path either way; the ETA just degrades to
-            // "we don't know" rather than blocking the install.
-            tracing::warn!(
-                target: "imports",
-                error = %e,
-                "imports: message-count probe failed — ETA will degrade",
-            );
-            0
-        });
+        count_messages_in_file(&extracted_bytes.canonical_path, source.count_needle())
+            .unwrap_or_else(|e| {
+                // Counting is best-effort. We have the file at the
+                // canonical path either way; the ETA just degrades to
+                // "we don't know" rather than blocking the install.
+                tracing::warn!(
+                    target: "imports",
+                    error = %e,
+                    "imports: message-count probe failed — ETA will degrade",
+                );
+                0
+            });
 
     let estimated_minutes = if total_messages > 0 {
         (total_messages as f64 * SECONDS_PER_MESSAGE / 60.0).max(0.5)
@@ -429,8 +430,9 @@ struct ExtractedEntry {
 }
 
 fn canonical_landing_path(source: ImportSource) -> Result<PathBuf, String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "HOME is not set; cannot resolve the conversations landing dir".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| {
+        "HOME is not set; cannot resolve the conversations landing dir".to_string()
+    })?;
     let dir = home.join(source.canonical_rel_dir());
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     Ok(dir.join(CANONICAL_FILE))
@@ -706,7 +708,10 @@ mod tests {
         // The two sources must never collide on corpus id or landing
         // dir — both vendors name the export file `conversations.json`,
         // so a shared dir would clobber on re-import across vendors.
-        assert_eq!(ImportSource::Anthropic.corpus_id(), "conversations-anthropic");
+        assert_eq!(
+            ImportSource::Anthropic.corpus_id(),
+            "conversations-anthropic"
+        );
         assert_eq!(ImportSource::Chatgpt.corpus_id(), "conversations-chatgpt");
         assert_ne!(
             ImportSource::Anthropic.canonical_rel_dir(),

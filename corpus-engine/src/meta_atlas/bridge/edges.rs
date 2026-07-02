@@ -358,7 +358,11 @@ mod tests {
 
     fn edge() -> BridgeEdge {
         BridgeEdge {
-            left: TopicRef::new("sep-externalism-mind", "externalism-mind", "Externalism About the Mind"),
+            left: TopicRef::new(
+                "sep-externalism-mind",
+                "externalism-mind",
+                "Externalism About the Mind",
+            ),
             right: TopicRef::new("wikipedia", "98765", "Semantic externalism"),
             relation: BridgeRelation::Same,
             confidence: 0.91,
@@ -372,14 +376,20 @@ mod tests {
     #[test]
     fn other_side_resolves_via_title_or_entity_key() {
         let e = edge(); // left "Externalism About the Mind" (+entity "putnam") → right "Semantic externalism"
-        // matched left via a constituent ENTITY → fetch RIGHT (the exact
-        // case the live trace exposed: "Kant" matched left, but the old
-        // title-only check returned left and added nothing).
+                        // matched left via a constituent ENTITY → fetch RIGHT (the exact
+                        // case the live trace exposed: "Kant" matched left, but the old
+                        // title-only check returned left and added nothing).
         assert_eq!(e.other_side("Putnam").title, "Semantic externalism");
         // matched left via title → fetch right
-        assert_eq!(e.other_side("Externalism About the Mind").title, "Semantic externalism");
+        assert_eq!(
+            e.other_side("Externalism About the Mind").title,
+            "Semantic externalism"
+        );
         // matched right via title → fetch left
-        assert_eq!(e.other_side("Semantic externalism").title, "Externalism About the Mind");
+        assert_eq!(
+            e.other_side("Semantic externalism").title,
+            "Externalism About the Mind"
+        );
     }
 
     #[test]
@@ -405,7 +415,11 @@ mod tests {
     #[test]
     fn edges_for_matches_either_side() {
         let file = BridgeEdgesFile::new(vec![edge()], vec![]);
-        assert_eq!(file.edges_for("sep-externalism-mind::externalism-mind").count(), 1);
+        assert_eq!(
+            file.edges_for("sep-externalism-mind::externalism-mind")
+                .count(),
+            1
+        );
         assert_eq!(file.edges_for("wikipedia::98765").count(), 1);
         assert_eq!(file.edges_for("wikipedia::00000").count(), 0);
     }

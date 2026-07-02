@@ -202,11 +202,9 @@ fn rpc_worker_listening(bind: &str) -> bool {
         h => h,
     };
     match (host, port).to_socket_addrs() {
-        Ok(addrs) => {
-            addrs.into_iter().any(|addr| {
-                TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()
-            })
-        }
+        Ok(addrs) => addrs
+            .into_iter()
+            .any(|addr| TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()),
         Err(_) => false,
     }
 }

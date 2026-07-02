@@ -189,9 +189,7 @@ async fn run_turn(
                     let raw = resp.message.content.clone();
                     let metadata = resp.message.metadata.clone();
                     match format {
-                        OutputFormat::Text => {
-                            render_text(&raw, metadata.as_ref(), show_reasoning)
-                        }
+                        OutputFormat::Text => render_text(&raw, metadata.as_ref(), show_reasoning),
                         OutputFormat::Json => {
                             render_json(&resp.message.id, conversation_id, &raw, metadata.as_ref())
                         }

@@ -315,7 +315,10 @@ mod tests {
         std::fs::write(&p, "alpha paragraph\n\nbeta paragraph").unwrap();
 
         let out = ChunkTool
-            .execute(&serde_json::json!({ "path": p.to_string_lossy() }), &tool_ctx())
+            .execute(
+                &serde_json::json!({ "path": p.to_string_lossy() }),
+                &tool_ctx(),
+            )
             .await
             .unwrap();
         match out {
@@ -329,10 +332,16 @@ mod tests {
 
         // The inline `text` branch works too (no file read).
         let out2 = ChunkTool
-            .execute(&serde_json::json!({ "text": "just one chunk" }), &tool_ctx())
+            .execute(
+                &serde_json::json!({ "text": "just one chunk" }),
+                &tool_ctx(),
+            )
             .await
             .unwrap();
-        assert!(matches!(out2, StepOutput::Json(serde_json::Value::Array(_))));
+        assert!(matches!(
+            out2,
+            StepOutput::Json(serde_json::Value::Array(_))
+        ));
 
         // Neither `path` nor `text` is a loud error.
         assert!(ChunkTool

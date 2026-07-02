@@ -294,11 +294,7 @@ async fn run_and_frame(
         // NDJSON: one content frame, then a terminal frame. Non-incremental
         // in v1 (see module docs) but a valid Ollama stream.
         let body = format!("{}\n{}\n", frame(&content, false), frame("", true));
-        (
-            [(header::CONTENT_TYPE, "application/x-ndjson")],
-            body,
-        )
-            .into_response()
+        ([(header::CONTENT_TYPE, "application/x-ndjson")], body).into_response()
     } else {
         Json(frame(&content, true)).into_response()
     }
@@ -314,7 +310,9 @@ pub(crate) async fn version() -> Response {
 /// `GET /api/tags` — list installed/advertised models. Reuses the
 /// liveness-filtered `/v1/models` output.
 pub(crate) async fn tags(State(state): State<AppState>) -> Response {
-    let resp = routes_inference::list_models(State(state)).await.into_response();
+    let resp = routes_inference::list_models(State(state))
+        .await
+        .into_response();
     let (status, raw) = match body_bytes(resp).await {
         Ok(pair) => pair,
         Err(resp) => return resp,
@@ -324,7 +322,12 @@ pub(crate) async fn tags(State(state): State<AppState>) -> Response {
     }
     let list: ModelListResponse = match serde_json::from_slice(&raw) {
         Ok(l) => l,
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, format!("parse models: {e}")),
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("parse models: {e}"),
+            )
+        }
     };
     let now = now_rfc3339();
     let models: Vec<Value> = list
@@ -375,14 +378,19 @@ pub(crate) async fn ps(State(state): State<AppState>) -> Response {
 /// `POST /api/show` — minimal model metadata. We don't track per-model
 /// Modelfile/template details, so we return a valid-shaped stub with the
 /// honest capability we expose (`completion`).
-pub(crate) async fn show(State(state): State<AppState>, Json(req): Json<OllamaShowRequest>) -> Response {
+pub(crate) async fn show(
+    State(state): State<AppState>,
+    Json(req): Json<OllamaShowRequest>,
+) -> Response {
     let want = req.model.or(req.name).unwrap_or_default();
     if want.trim().is_empty() {
         return err(StatusCode::BAD_REQUEST, "missing 'model'");
     }
     // Confirm the model is known (so a typo 404s rather than silently
     // returning a stub for a non-existent model).
-    let resp = routes_inference::list_models(State(state)).await.into_response();
+    let resp = routes_inference::list_models(State(state))
+        .await
+        .into_response();
     if let Ok((status, raw)) = body_bytes(resp).await {
         if status.is_success() {
             if let Ok(list) = serde_json::from_slice::<ModelListResponse>(&raw) {
@@ -443,7 +451,12 @@ pub(crate) async fn generate(
 ) -> Response {
     let want_stream = req.stream.unwrap_or(true);
     let mut messages: Vec<Value> = Vec::new();
-    if let Some(sys) = req.system.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    if let Some(sys) = req
+        .system
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
         messages.push(json!({ "role": "system", "content": sys }));
     }
     messages.push(json!({ "role": "user", "content": req.prompt.unwrap_or_default() }));
@@ -496,10 +509,17 @@ pub(crate) async fn embed(
 ) -> Response {
     let input = match req.input {
         Value::String(s) => EmbeddingInput::Single(s),
-        Value::Array(a) => {
-            EmbeddingInput::Batch(a.into_iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        Value::Array(a) => EmbeddingInput::Batch(
+            a.into_iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+        ),
+        _ => {
+            return err(
+                StatusCode::BAD_REQUEST,
+                "'input' must be a string or array of strings",
+            )
         }
-        _ => return err(StatusCode::BAD_REQUEST, "'input' must be a string or array of strings"),
     };
     let model = req.model.clone();
     match run_embeddings(state, headers, req.model, input).await {
@@ -521,7 +541,12 @@ pub(crate) async fn embeddings(
     let input = EmbeddingInput::Single(req.prompt.unwrap_or_default());
     match run_embeddings(state, headers, req.model, input).await {
         Ok(resp) => {
-            let embedding = resp.data.into_iter().next().map(|d| d.embedding).unwrap_or_default();
+            let embedding = resp
+                .data
+                .into_iter()
+                .next()
+                .map(|d| d.embedding)
+                .unwrap_or_default();
             Json(json!({ "embedding": embedding })).into_response()
         }
         Err(resp) => resp,
@@ -547,7 +572,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert!(json["version"].as_str().is_some_and(|v| !v.is_empty()));
     }
@@ -559,7 +586,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         // Empty test state → empty (but present) models array.
         assert!(json["models"].is_array());
@@ -572,7 +601,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert!(json["models"].is_array());
     }
@@ -592,7 +623,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert!(json["error"].as_str().is_some());
     }
@@ -643,8 +676,17 @@ mod tests {
             top_k: None,
             num_predict: Some(-1),
         };
-        let req = build_openai_request("m", vec![json!({"role":"user","content":"x"})], Some(&opts), None, None)
-            .expect("translate");
-        assert_eq!(req.max_tokens, None, "-1 (unbounded) must not set a max_tokens cap");
+        let req = build_openai_request(
+            "m",
+            vec![json!({"role":"user","content":"x"})],
+            Some(&opts),
+            None,
+            None,
+        )
+        .expect("translate");
+        assert_eq!(
+            req.max_tokens, None,
+            "-1 (unbounded) must not set a max_tokens cap"
+        );
     }
 }

@@ -131,7 +131,13 @@ mod tests {
         let inference: Arc<dyn InferenceProvider> = Arc::new(StubInference);
 
         build_health_monitor(
-            &slot, &shutdown, &config, &store, &corpus, &inference, "test-embed",
+            &slot,
+            &shutdown,
+            &config,
+            &store,
+            &corpus,
+            &inference,
+            "test-embed",
         )
         .await;
         assert!(
@@ -141,7 +147,13 @@ mod tests {
 
         // Idempotent: a second call is a no-op (the monitor survives).
         build_health_monitor(
-            &slot, &shutdown, &config, &store, &corpus, &inference, "test-embed",
+            &slot,
+            &shutdown,
+            &config,
+            &store,
+            &corpus,
+            &inference,
+            "test-embed",
         )
         .await;
         assert!(slot.read().await.is_some());

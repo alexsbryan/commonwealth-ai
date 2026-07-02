@@ -306,7 +306,10 @@ async fn departure_tombstones_self_on_peers() {
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
-            m.insert(a_id, member_at(a_id, "A", 100, "127.0.0.1:1".parse().unwrap()));
+            m.insert(
+                a_id,
+                member_at(a_id, "A", 100, "127.0.0.1:1".parse().unwrap()),
+            );
             m
         },
         peers: vec![],
@@ -323,7 +326,10 @@ async fn departure_tombstones_self_on_peers() {
         members: {
             let mut m = HashMap::new();
             m.insert(a_id, member_at(a_id, "A", 100, addr_a));
-            m.insert(b_id, member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()));
+            m.insert(
+                b_id,
+                member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()),
+            );
             m
         },
         peers: vec![],
@@ -333,8 +339,10 @@ async fn departure_tombstones_self_on_peers() {
     // A learns B (so it has a record to tombstone).
     {
         let mut mesh = state_a.inner.mesh.write().await;
-        mesh.members
-            .insert(b_id, member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()));
+        mesh.members.insert(
+            b_id,
+            member_at(b_id, "B", 150, "127.0.0.1:2".parse().unwrap()),
+        );
     }
     assert!(state_a.inner.mesh.read().await.members[&b_id].is_active());
 

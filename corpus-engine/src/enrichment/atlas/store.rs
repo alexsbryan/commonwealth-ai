@@ -29,8 +29,8 @@ use futures::TryStreamExt;
 use lancedb::query::ExecutableQuery;
 use memmap2::Mmap;
 
-use super::projection::{arch_edge_type, project, ArchEdgeType, AtomKindTag, AtomRecord};
 use super::edges::{Edge, EdgeProvenance, EdgeType};
+use super::projection::{arch_edge_type, project, ArchEdgeType, AtomKindTag, AtomRecord};
 use super::AtomEnvelope;
 
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
@@ -45,13 +45,13 @@ pub const EDGES_CSR_FILENAME: &str = "edges.csr";
 const ATOMS_TABLE: &str = "atoms";
 
 const CSR_MAGIC: u32 = 0x4353_5256; // "CSRV"
-// v2 adds a per-edge provenance byte alongside the type byte. The Stage-1 BFS
-// can't distinguish a `scip_structural` call edge from a `containment_structural`
-// parent edge by `edge_type` alone (both are `Involves`); provenance is the
-// ground-truth discriminant the code-atlas CallChain filters on. Bumping the
-// version means a v1 `edges.csr` is rejected by `CsrEdges::open`; rebuild the
-// store with `sovereign atlas migrate-all <id>` (the v2 store is the only read
-// path after the v2 cleanup — there is no rkyv fallback).
+                                    // v2 adds a per-edge provenance byte alongside the type byte. The Stage-1 BFS
+                                    // can't distinguish a `scip_structural` call edge from a `containment_structural`
+                                    // parent edge by `edge_type` alone (both are `Involves`); provenance is the
+                                    // ground-truth discriminant the code-atlas CallChain filters on. Bumping the
+                                    // version means a v1 `edges.csr` is rejected by `CsrEdges::open`; rebuild the
+                                    // store with `sovereign atlas migrate-all <id>` (the v2 store is the only read
+                                    // path after the v2 cleanup — there is no rkyv fallback).
 const CSR_VERSION: u32 = 2;
 
 // ── atoms.lance ──────────────────────────────────────────────────────────────
@@ -221,9 +221,7 @@ fn atoms_schema() -> Arc<Schema> {
 
 fn atoms_batch(rows: &[AtomRow], sch: &Arc<Schema>) -> Result<RecordBatch, String> {
     let str_col = |f: &dyn Fn(&AtomRow) -> &str| {
-        Arc::new(StringArray::from(
-            rows.iter().map(f).collect::<Vec<_>>(),
-        )) as arrow_array::ArrayRef
+        Arc::new(StringArray::from(rows.iter().map(f).collect::<Vec<_>>())) as arrow_array::ArrayRef
     };
     let cols: Vec<arrow_array::ArrayRef> = vec![
         Arc::new(UInt32Array::from(
@@ -310,7 +308,12 @@ fn pad_to_4(buf: &mut Vec<u8>) {
 /// bytes, provenance bytes, [pad to 4], confidence f32s. The two byte arrays
 /// (type, prov) sit adjacent so a single pad re-aligns the f32 conf array.
 /// `neighbor` selects which endpoint is the stored neighbor for this direction.
-fn push_csr(buf: &mut Vec<u8>, offsets: &[u32], sorted: &[LocalEdge], neighbor: impl Fn(&LocalEdge) -> u32) {
+fn push_csr(
+    buf: &mut Vec<u8>,
+    offsets: &[u32],
+    sorted: &[LocalEdge],
+    neighbor: impl Fn(&LocalEdge) -> u32,
+) {
     for o in offsets {
         buf.extend_from_slice(&o.to_le_bytes());
     }
@@ -562,7 +565,10 @@ pub async fn build_and_write_store(atlas_dir: &Path, corpus_id: &str) -> Result<
 /// Sync bridge for the disk-reading entry — runs the async build on a dedicated
 /// thread with its own runtime, so it is safe to call from sync code whether or
 /// not an ambient tokio runtime exists (no nested-runtime panic).
-pub fn build_and_write_store_blocking(atlas_dir: &Path, corpus_id: &str) -> Result<PathBuf, String> {
+pub fn build_and_write_store_blocking(
+    atlas_dir: &Path,
+    corpus_id: &str,
+) -> Result<PathBuf, String> {
     run_blocking(build_and_write_store(atlas_dir, corpus_id))
 }
 
@@ -812,7 +818,11 @@ impl LancePreload {
         self.adjacent(atom_id, Dir::In)
     }
 
-    fn adjacent(&self, atom_id: &str, dir: Dir) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
+    fn adjacent(
+        &self,
+        atom_id: &str,
+        dir: Dir,
+    ) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
         let Some(&local) = self.by_str_id.get(atom_id) else {
             return Vec::new();
         };
@@ -840,8 +850,8 @@ mod tests {
     use super::*;
     use crate::enrichment::atlas::atoms::Entity;
     use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
-    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
     use crate::enrichment::atlas::{AtomId, ChunkRef, Edge, EdgeId};
+    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn entity(idx: usize, name: &str) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
@@ -913,9 +923,24 @@ mod tests {
         };
         let mut rows = Vec::new();
         for b in &batches {
-            let (id, kind, sal, conf) = (u32c(b, "id"), u8c(b, "kind"), f32c(b, "salience"), f32c(b, "confidence"));
-            let (sid, name, label, content) = (strc(b, "str_id"), strc(b, "name"), strc(b, "label"), strc(b, "content"));
-            let (subtype, desc, exc, payload) = (strc(b, "subtype"), strc(b, "description"), strc(b, "excerpt"), strc(b, "payload"));
+            let (id, kind, sal, conf) = (
+                u32c(b, "id"),
+                u8c(b, "kind"),
+                f32c(b, "salience"),
+                f32c(b, "confidence"),
+            );
+            let (sid, name, label, content) = (
+                strc(b, "str_id"),
+                strc(b, "name"),
+                strc(b, "label"),
+                strc(b, "content"),
+            );
+            let (subtype, desc, exc, payload) = (
+                strc(b, "subtype"),
+                strc(b, "description"),
+                strc(b, "excerpt"),
+                strc(b, "payload"),
+            );
             for i in 0..b.num_rows() {
                 rows.push(AtomRow {
                     local_id: id.value(i),
@@ -983,11 +1008,7 @@ mod tests {
     async fn lance_row_equals_projection_on_a_frozen_fixture() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        let atoms = vec![
-            entity(1, "Alice"),
-            entity(2, "Bob"),
-            entity(3, "Carol"),
-        ];
+        let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
         let edges = vec![Edge {
             id: EdgeId::from_raw("edge-0001"),
             edge_type: EdgeType::Involves,
@@ -1043,25 +1064,40 @@ mod tests {
         for (i, n) in [1usize, 2, 3].iter().enumerate() {
             by_id.insert(AtomId::entity(*n).as_str().to_string(), i as u32);
         }
-        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
-            Edge {
-                id: EdgeId::from_raw(id),
-                edge_type: ty,
-                source: AtomId::entity(src),
-                target: AtomId::entity(tgt),
-                evidence: vec![],
-                trigger_event: None,
-                sub_question: None,
-                confidence: conf,
-                provenance: prov,
-            }
-        };
+        let mk =
+            |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
+                Edge {
+                    id: EdgeId::from_raw(id),
+                    edge_type: ty,
+                    source: AtomId::entity(src),
+                    target: AtomId::entity(tgt),
+                    evidence: vec![],
+                    trigger_event: None,
+                    sub_question: None,
+                    confidence: conf,
+                    provenance: prov,
+                }
+            };
         // Distinct provenances prove the v2 CSR carries the discriminant the
         // CallChain filters on — both edges are `Involves`-typed, so only the
         // provenance byte tells `scip_structural` from `containment_structural`.
         let edges = vec![
-            mk(1, 3, EdgeType::Involves, 0.9, EdgeProvenance::ScipStructural, "e1"),
-            mk(2, 3, EdgeType::Causes, 0.5, EdgeProvenance::ContainmentStructural, "e2"),
+            mk(
+                1,
+                3,
+                EdgeType::Involves,
+                0.9,
+                EdgeProvenance::ScipStructural,
+                "e1",
+            ),
+            mk(
+                2,
+                3,
+                EdgeType::Causes,
+                0.5,
+                EdgeProvenance::ContainmentStructural,
+                "e2",
+            ),
         ];
         write_edges_csr(dir, 3, &by_id, &edges).unwrap();
 
@@ -1122,7 +1158,10 @@ mod tests {
         bytes[4] = 1; // CSR_VERSION 2 → the pre-provenance v1 format
         std::fs::write(&csr, &bytes).unwrap();
         assert_eq!(edges_csr_version(&csr), Some(1));
-        assert!(store_needs_build(dir), "a v1 edges.csr must force a rebuild");
+        assert!(
+            store_needs_build(dir),
+            "a v1 edges.csr must force a rebuild"
+        );
     }
 
     #[tokio::test]
@@ -1134,22 +1173,37 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         let atoms = vec![entity(1, "Alice"), entity(2, "Bob"), entity(3, "Carol")];
-        let mk = |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
-            Edge {
-                id: EdgeId::from_raw(id),
-                edge_type: ty,
-                source: AtomId::entity(src),
-                target: AtomId::entity(tgt),
-                evidence: vec![],
-                trigger_event: None,
-                sub_question: None,
-                confidence: conf,
-                provenance: prov,
-            }
-        };
+        let mk =
+            |src: usize, tgt: usize, ty: EdgeType, conf: f32, prov: EdgeProvenance, id: &str| {
+                Edge {
+                    id: EdgeId::from_raw(id),
+                    edge_type: ty,
+                    source: AtomId::entity(src),
+                    target: AtomId::entity(tgt),
+                    evidence: vec![],
+                    trigger_event: None,
+                    sub_question: None,
+                    confidence: conf,
+                    provenance: prov,
+                }
+            };
         let edges = vec![
-            mk(1, 3, EdgeType::Involves, 0.9, EdgeProvenance::ScipStructural, "e1"),
-            mk(2, 3, EdgeType::Causes, 0.5, EdgeProvenance::ContainmentStructural, "e2"),
+            mk(
+                1,
+                3,
+                EdgeType::Involves,
+                0.9,
+                EdgeProvenance::ScipStructural,
+                "e1",
+            ),
+            mk(
+                2,
+                3,
+                EdgeType::Causes,
+                0.5,
+                EdgeProvenance::ContainmentStructural,
+                "e2",
+            ),
         ];
         write_store(dir, "frozen", &atoms, &edges).await.unwrap();
 
@@ -1162,7 +1216,11 @@ mod tests {
         // (the scalar columns drop them), proving the payload round-trips them.
         for atom in &atoms {
             let got = pre.atom(atom.id().as_str()).expect("atom present");
-            assert_eq!(*got, project(atom), "preload record != canonical projection");
+            assert_eq!(
+                *got,
+                project(atom),
+                "preload record != canonical projection"
+            );
         }
         let alice = pre.atom(AtomId::entity(1).as_str()).unwrap();
         assert_eq!(alice.aliases, vec!["Alice-alias".to_string()]);

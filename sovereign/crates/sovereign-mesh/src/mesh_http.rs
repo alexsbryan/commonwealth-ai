@@ -272,8 +272,12 @@ async fn mesh_status(
     // Shared-model cluster health (None unless this node is in a shared-model
     // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
     let shared_model = shared_model_status(&daemon).await;
-    let (peer_inflight_current, peer_inflight_ceiling, fanout_inflight_current, active_corpus_ingests) =
-        daemon.glassbox_signals().await;
+    let (
+        peer_inflight_current,
+        peer_inflight_ceiling,
+        fanout_inflight_current,
+        active_corpus_ingests,
+    ) = daemon.glassbox_signals().await;
     let Some(s) = daemon.mesh_state().await else {
         // Running but no mesh — e.g. the daemon started solo and the
         // user hasn't run `mesh create` yet. Empty but valid payload
@@ -383,7 +387,10 @@ async fn mesh_create(
     // config change.
     daemon.expose_client_api();
 
-    match daemon.create_mesh_with(&mesh_name, &node_name, encrypt).await {
+    match daemon
+        .create_mesh_with(&mesh_name, &node_name, encrypt)
+        .await
+    {
         Ok(result) => (
             StatusCode::OK,
             Json(

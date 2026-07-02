@@ -96,7 +96,10 @@ impl McpTransport for HttpSseTransport {
             // application/json AND text/event-stream, or they reject with 406. Our
             // own reference server is lenient, but spec-compliant off-the-shelf
             // servers enforce it — so always send it.
-            .header(reqwest::header::ACCEPT, "application/json, text/event-stream")
+            .header(
+                reqwest::header::ACCEPT,
+                "application/json, text/event-stream",
+            )
             .json(&body);
         req = self.auth.inject(req);
 
@@ -172,7 +175,10 @@ impl McpTransport for HttpSseTransport {
         let mut req = self
             .client
             .post(endpoint)
-            .header(reqwest::header::ACCEPT, "application/json, text/event-stream")
+            .header(
+                reqwest::header::ACCEPT,
+                "application/json, text/event-stream",
+            )
             .json(&body);
         req = self.auth.inject(req);
 
@@ -225,7 +231,8 @@ mod tests {
     /// interop fix (the filesystem server returns exactly this).
     #[test]
     fn parses_jsonrpc_from_sse_data_line() {
-        let sse = "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n";
+        let sse =
+            "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n";
         let v = parse_sse_data(sse).expect("data line parses");
         assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 0);
         // A body with no JSON `data:` line is None (caller errors loudly).

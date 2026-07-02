@@ -38,7 +38,10 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
             }
             "--concurrency" => {
                 i += 1;
-                concurrency = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(concurrency);
+                concurrency = args
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(concurrency);
             }
             s if !s.starts_with('-') && folder.is_none() => folder = Some(s.to_string()),
             other => {

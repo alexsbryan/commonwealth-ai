@@ -122,15 +122,17 @@ pub async fn run(args: &[String]) -> i32 {
             Ok(()) => eprintln!("--force: removed {}", manifest.display()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
-                eprintln!("error: --force could not remove {}: {e}", manifest.display());
+                eprintln!(
+                    "error: --force could not remove {}: {e}",
+                    manifest.display()
+                );
                 return 1;
             }
         }
     }
 
     let started = std::time::Instant::now();
-    let report = match run_typed_extension(&corpus_id, &store, &inference, &atlas_dir).await
-    {
+    let report = match run_typed_extension(&corpus_id, &store, &inference, &atlas_dir).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: typed extension failed: {e}");

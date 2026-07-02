@@ -318,12 +318,27 @@ mod tests {
     #[test]
     fn gemma_alternative_offered_to_capable_tiers_only() {
         // Surfaced as a NON-recommended option on Default and up...
-        assert!(offers_gemma_alt(&ProfileName::Default), "default should offer Gemma");
-        assert!(offers_gemma_alt(&ProfileName::High), "high should offer Gemma");
-        assert!(offers_gemma_alt(&ProfileName::VeryHigh), "very_high should offer Gemma");
+        assert!(
+            offers_gemma_alt(&ProfileName::Default),
+            "default should offer Gemma"
+        );
+        assert!(
+            offers_gemma_alt(&ProfileName::High),
+            "high should offer Gemma"
+        );
+        assert!(
+            offers_gemma_alt(&ProfileName::VeryHigh),
+            "very_high should offer Gemma"
+        );
         // ...and withheld from tiers that can't run a 7.4 GB model.
-        assert!(!offers_gemma_alt(&ProfileName::LowMem), "low_mem must not offer Gemma");
-        assert!(!offers_gemma_alt(&ProfileName::CpuOnly), "cpu_only must not offer Gemma");
+        assert!(
+            !offers_gemma_alt(&ProfileName::LowMem),
+            "low_mem must not offer Gemma"
+        );
+        assert!(
+            !offers_gemma_alt(&ProfileName::CpuOnly),
+            "cpu_only must not offer Gemma"
+        );
     }
 
     #[test]
@@ -346,7 +361,11 @@ mod tests {
 
     #[test]
     fn gemma_alternative_is_never_the_auto_default() {
-        for p in [ProfileName::Default, ProfileName::High, ProfileName::VeryHigh] {
+        for p in [
+            ProfileName::Default,
+            ProfileName::High,
+            ProfileName::VeryHigh,
+        ] {
             let rec = recommended_primary(&p).expect("a recommended primary exists");
             assert!(
                 !rec.base_name.to_lowercase().contains("gemma"),

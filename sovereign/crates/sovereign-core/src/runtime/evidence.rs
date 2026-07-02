@@ -1273,16 +1273,37 @@ mod operation_tests {
     fn operation_of_maps_referential_intents() {
         // Comparison is its own operation, and dominates the atom-enum flag
         // (mirrors the legacy route ladder: Comparison checked first).
-        assert_eq!(operation_of(&Intent::ComparisonQuery, false), Some(Operation::Compare));
-        assert_eq!(operation_of(&Intent::ComparisonQuery, true), Some(Operation::Compare));
+        assert_eq!(
+            operation_of(&Intent::ComparisonQuery, false),
+            Some(Operation::Compare)
+        );
+        assert_eq!(
+            operation_of(&Intent::ComparisonQuery, true),
+            Some(Operation::Compare)
+        );
         // Atom-enum flag → Enumerate, regardless of the carrier intent.
-        assert_eq!(operation_of(&Intent::KnowledgeQuery, true), Some(Operation::Enumerate));
-        assert_eq!(operation_of(&Intent::DeepQuery, true), Some(Operation::Enumerate));
+        assert_eq!(
+            operation_of(&Intent::KnowledgeQuery, true),
+            Some(Operation::Enumerate)
+        );
+        assert_eq!(
+            operation_of(&Intent::DeepQuery, true),
+            Some(Operation::Enumerate)
+        );
         // Simple / Knowledge / Deep all collapse to one Answer operation —
         // they differ only in effort, not in what the answer does.
-        assert_eq!(operation_of(&Intent::SimpleQuery, false), Some(Operation::Answer));
-        assert_eq!(operation_of(&Intent::KnowledgeQuery, false), Some(Operation::Answer));
-        assert_eq!(operation_of(&Intent::DeepQuery, false), Some(Operation::Answer));
+        assert_eq!(
+            operation_of(&Intent::SimpleQuery, false),
+            Some(Operation::Answer)
+        );
+        assert_eq!(
+            operation_of(&Intent::KnowledgeQuery, false),
+            Some(Operation::Answer)
+        );
+        assert_eq!(
+            operation_of(&Intent::DeepQuery, false),
+            Some(Operation::Answer)
+        );
     }
 
     #[test]
@@ -1380,7 +1401,10 @@ mod output_budget_tests {
         let shape = build_test_evidence_shape(5, 1, false, 1);
         let simple = resolve_output_budget(&Intent::SimpleQuery, &shape).soft_target;
         let deep = resolve_output_budget(&Intent::DeepQuery, &shape).soft_target;
-        assert!(deep > simple, "deep ({deep}) should target more than simple ({simple})");
+        assert!(
+            deep > simple,
+            "deep ({deep}) should target more than simple ({simple})"
+        );
     }
 
     #[test]
@@ -1389,7 +1413,10 @@ mod output_budget_tests {
         let broad = build_test_evidence_shape(5, 5, false, 1); // five distinct sources
         let a = resolve_output_budget(&Intent::KnowledgeQuery, &narrow).soft_target;
         let b = resolve_output_budget(&Intent::KnowledgeQuery, &broad).soft_target;
-        assert!(b > a, "broader evidence ({b}) should target more than narrow ({a})");
+        assert!(
+            b > a,
+            "broader evidence ({b}) should target more than narrow ({a})"
+        );
     }
 
     #[test]
@@ -1397,9 +1424,18 @@ mod output_budget_tests {
         let shape = build_test_evidence_shape(1, 1, false, 1);
         let b = resolve_output_budget(&Intent::SimpleQuery, &shape);
         assert!(b.soft_target >= 350, "soft target respects the floor");
-        assert!(b.soft_target <= 2000, "soft target respects the upper clamp");
-        assert!(b.hard_ceiling >= 4096, "hard ceiling is generous; auto-continue backstops it");
-        assert!(b.hard_ceiling > b.soft_target, "ceiling sits above the target as a net");
+        assert!(
+            b.soft_target <= 2000,
+            "soft target respects the upper clamp"
+        );
+        assert!(
+            b.hard_ceiling >= 4096,
+            "hard ceiling is generous; auto-continue backstops it"
+        );
+        assert!(
+            b.hard_ceiling > b.soft_target,
+            "ceiling sits above the target as a net"
+        );
     }
 
     #[test]
@@ -1408,10 +1444,12 @@ mod output_budget_tests {
         assert!(ends_mid_thought("The sheer number of"));
         assert!(ends_mid_thought("It depends on the"));
         assert!(ends_mid_thought("Reasons include:")); // promised a list, never delivered
-        // Properly landed -> false.
+                                                       // Properly landed -> false.
         assert!(!ends_mid_thought("That is the whole story."));
         assert!(!ends_mid_thought("Is it really?"));
-        assert!(!ends_mid_thought("...the Union [Source: Federalist No. 10]")); // citation closes
+        assert!(!ends_mid_thought(
+            "...the Union [Source: Federalist No. 10]"
+        )); // citation closes
         assert!(!ends_mid_thought("She taught at Girton.\n")); // trailing whitespace ok
         assert!(!ends_mid_thought("a focused **summary**")); // markdown closer
         assert!(!ends_mid_thought("a deliberate trail-off...")); // ellipsis is intentional

@@ -429,7 +429,13 @@ mod tests {
     #[test]
     fn recurrent_arch_matches_every_observed_qwen_moe_spelling() {
         // Observed gguf arch values across the Qwen MoE families.
-        for arch in ["qwen3moe", "qwen35moe", "qwen3_moe", "qwen36moe", "Qwen3MoE"] {
+        for arch in [
+            "qwen3moe",
+            "qwen35moe",
+            "qwen3_moe",
+            "qwen36moe",
+            "Qwen3MoE",
+        ] {
             assert!(is_recurrent_arch(arch), "{arch} must classify recurrent");
         }
     }
@@ -447,7 +453,10 @@ mod tests {
         // string ladder can't see hybrids; libllama's is_hybrid()
         // flag covers them (see prefix_cache_gate clause 0).
         for arch in ["qwen3", "qwen35", "llama", "gemma3", "phi4", ""] {
-            assert!(!is_recurrent_arch(arch), "{arch} must NOT classify recurrent");
+            assert!(
+                !is_recurrent_arch(arch),
+                "{arch} must NOT classify recurrent"
+            );
         }
     }
 
@@ -480,7 +489,10 @@ mod tests {
         let g = prefix_cache_gate(false, true, "qwen35", false, false, no_env);
         assert!(!g.safe);
         assert!(g.model_says_recurrent);
-        assert!(!g.arch_says_recurrent, "ladder must NOT be what catches this");
+        assert!(
+            !g.arch_says_recurrent,
+            "ladder must NOT be what catches this"
+        );
     }
 
     #[test]
@@ -492,7 +504,10 @@ mod tests {
         assert!(empty_arch.quirks_say_recurrent);
 
         let arch_present = prefix_cache_gate(false, false, "llama", true, false, no_env);
-        assert!(arch_present.safe, "quirks must be ignored when arch is present");
+        assert!(
+            arch_present.safe,
+            "quirks must be ignored when arch is present"
+        );
         assert!(!arch_present.quirks_say_recurrent);
     }
 
@@ -531,7 +546,10 @@ mod tests {
         // The bite-back mitigation from the gate doc: operator disable
         // must always win, including for archs the repro cleared.
         let disable = env(&[("SOVEREIGN_FAST_SHORT_DISABLE", "1")]);
-        assert_eq!(fast_short_gate("qwen3moe", &disable), FastShortGate::Disabled);
+        assert_eq!(
+            fast_short_gate("qwen3moe", &disable),
+            FastShortGate::Disabled
+        );
         assert_eq!(fast_short_gate("qwen3", &disable), FastShortGate::Disabled);
     }
 
@@ -549,7 +567,13 @@ mod tests {
         // workload reproduced `Decode Error -3` on APEX qwen35moe (daemon +
         // desktop). The veto is restored for the MoE variants — see the
         // fast_short_gate doc for the evidence + the FORCE diagnostic escape.
-        for arch in ["qwen3moe", "qwen35moe", "qwen36moe", "qwen3_moe", "Qwen35MoE"] {
+        for arch in [
+            "qwen3moe",
+            "qwen35moe",
+            "qwen36moe",
+            "qwen3_moe",
+            "Qwen35MoE",
+        ] {
             assert_eq!(
                 fast_short_gate(arch, no_env),
                 FastShortGate::UnsafeQwenMoeBiteback,
@@ -586,7 +610,10 @@ mod tests {
         // The clearing lever for an untested recurrent arch.
         assert_eq!(fast_short_gate("mamba2", &force), FastShortGate::ForcedSafe);
         // FORCE also overrides the qwen-MoE bite-back veto (diagnostic escape).
-        assert_eq!(fast_short_gate("qwen3moe", &force), FastShortGate::ForcedSafe);
+        assert_eq!(
+            fast_short_gate("qwen3moe", &force),
+            FastShortGate::ForcedSafe
+        );
         // Force is inert when nothing is vetoed (dense attention model).
         assert_eq!(fast_short_gate("qwen3", &force), FastShortGate::Safe);
         // Operator disable still wins over the diagnostic force.
@@ -666,7 +693,10 @@ mod tests {
         // an identical prompt must re-prefill exactly 1 token, never 0.
         let toks = [1, 2, 3, 4];
         let lcp = compute_lcp(&toks, &toks, true);
-        assert_eq!(lcp.raw, 3, "raw LCP must stop at len-1 on identical prompts");
+        assert_eq!(
+            lcp.raw, 3,
+            "raw LCP must stop at len-1 on identical prompts"
+        );
         assert_eq!(lcp.effective, 3);
     }
 
@@ -705,7 +735,10 @@ mod tests {
             "type": "string",
             "enum": ["a", "b"]
         }));
-        assert!(forced_choice_candidates(&r).is_none(), "no marker → no sentinel");
+        assert!(
+            forced_choice_candidates(&r).is_none(),
+            "no marker → no sentinel"
+        );
 
         r.structured_output = Some(serde_json::json!({
             "type": "string",
@@ -862,7 +895,10 @@ mod tests {
             assert!(env_flag_truthy(env(&[("F", v)]), "F"), "{v} must be truthy");
         }
         for v in ["0", "false", "yes", "on", ""] {
-            assert!(!env_flag_truthy(env(&[("F", v)]), "F"), "{v} must NOT be truthy");
+            assert!(
+                !env_flag_truthy(env(&[("F", v)]), "F"),
+                "{v} must NOT be truthy"
+            );
         }
         assert!(!env_flag_truthy(no_env, "F"));
     }

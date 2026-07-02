@@ -464,13 +464,9 @@ impl CorpusUpdater {
             include_functions,
             include_private,
         };
-        let delta = extract_atoms_for_symbols(
-            self.engine.clone(),
-            &cfg,
-            &change.changed,
-            &change.removed,
-        )
-        .await?;
+        let delta =
+            extract_atoms_for_symbols(self.engine.clone(), &cfg, &change.changed, &change.removed)
+                .await?;
         if delta.is_empty() {
             tracing::info!(
                 corpus_id,
@@ -708,7 +704,10 @@ mod tests {
         ];
         stamp_doc_identity(&mut chunks, "notes/daily/2026-06-10.md");
         for c in &chunks {
-            assert_eq!(c.source_doc_id.as_deref(), Some("notes/daily/2026-06-10.md"));
+            assert_eq!(
+                c.source_doc_id.as_deref(),
+                Some("notes/daily/2026-06-10.md")
+            );
         }
         assert_eq!(chunks[0].title.as_deref(), Some("2026-06-10"));
         assert_eq!(chunks[1].title.as_deref(), Some("Existing"));

@@ -5,7 +5,6 @@
 
 use std::path::PathBuf;
 
-
 use super::fmt::{dir_size_bytes, format_count, human_bytes};
 
 // ── Mesh subcommand implementations ──────────────────────

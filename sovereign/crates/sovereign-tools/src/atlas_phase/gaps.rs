@@ -68,7 +68,10 @@ impl Tool for AtlasGapsTool {
             ))
         })?;
         let edges = read_atlas_edges(&atlas_dir).map_err(|e| {
-            Error::Execution(format!("atlas_gaps: read {}/edges.json: {e}", atlas_dir.display()))
+            Error::Execution(format!(
+                "atlas_gaps: read {}/edges.json: {e}",
+                atlas_dir.display()
+            ))
         })?;
 
         // Partition atoms by kind — only Claim / State / Question drive the
@@ -127,8 +130,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let atlas = dir.path().join("c1").join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
-        std::fs::write(atlas.join("atoms.json"), r#"{"schema_version":"2.0","atoms":[]}"#).unwrap();
-        std::fs::write(atlas.join("edges.json"), r#"{"schema_version":"2.0","edges":[]}"#).unwrap();
+        std::fs::write(
+            atlas.join("atoms.json"),
+            r#"{"schema_version":"2.0","atoms":[]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            atlas.join("edges.json"),
+            r#"{"schema_version":"2.0","edges":[]}"#,
+        )
+        .unwrap();
 
         let params = serde_json::json!({
             "corpus": "c1",
@@ -142,12 +153,14 @@ mod tests {
 
         // gaps.json is written in the schema the downstream reads.
         let g: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(atlas.join("gaps.json")).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(atlas.join("gaps.json")).unwrap())
+                .unwrap();
         assert_eq!(g["gaps"].as_array().unwrap().len(), 0);
         assert_eq!(g["schema_version"], "2.0");
 
         // A missing atlas is a loud error (points the operator at resolve).
-        let bad = serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
+        let bad =
+            serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
         assert!(AtlasGapsTool.execute(&bad, &ctx()).await.is_err());
     }
 }

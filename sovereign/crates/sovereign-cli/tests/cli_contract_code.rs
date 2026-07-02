@@ -42,7 +42,10 @@ fn sovereign() -> Command {
 }
 
 fn run(args: &[&str]) -> Output {
-    sovereign().args(args).output().expect("spawn sovereign-cli")
+    sovereign()
+        .args(args)
+        .output()
+        .expect("spawn sovereign-cli")
 }
 
 fn combined(out: &Output) -> String {
@@ -60,9 +63,13 @@ fn siblings_built() -> bool {
     let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
         .parent()
         .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
-    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
-        .iter()
-        .all(|b| dir.join(b).is_file())
+    [
+        "sovereign-cli-dev",
+        "sovereign-cli-daemon",
+        "sovereign-cli-llm",
+    ]
+    .iter()
+    .all(|b| dir.join(b).is_file())
 }
 
 macro_rules! require_siblings {

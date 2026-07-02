@@ -415,15 +415,20 @@ mod parse_judge_tests {
 
     #[test]
     fn boolean_present_field() {
-        assert_eq!(parse_judge(r#"{"present": true}"#), Some((true, String::new())));
+        assert_eq!(
+            parse_judge(r#"{"present": true}"#),
+            Some((true, String::new()))
+        );
     }
 
     #[test]
     fn concept_present_fallback_key() {
         assert_eq!(
-            parse_judge(r#"```json
+            parse_judge(
+                r#"```json
 {"concept_present": false, "evidence": "(absent)"}
-```"#),
+```"#
+            ),
             Some((false, "(absent)".into()))
         );
     }

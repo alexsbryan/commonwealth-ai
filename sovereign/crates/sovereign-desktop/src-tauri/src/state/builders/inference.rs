@@ -247,8 +247,7 @@ mod tests {
     #[tokio::test]
     async fn reuses_pre_seeded_provider_and_skips_the_model_load() {
         let stub: Arc<dyn InferenceProvider> = Arc::new(StubInference);
-        let slot: RwLock<Option<Arc<dyn InferenceProvider>>> =
-            RwLock::new(Some(Arc::clone(&stub)));
+        let slot: RwLock<Option<Arc<dyn InferenceProvider>>> = RwLock::new(Some(Arc::clone(&stub)));
         let config = DesktopConfig::default();
 
         let (raw, inference) = load_inference(&slot, None, &config, |_| {})

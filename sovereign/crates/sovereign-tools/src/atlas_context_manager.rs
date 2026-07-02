@@ -26,12 +26,12 @@
 //! entities run hundreds-to-thousands of chars. Operators tuning
 //! the filter can override via `AtlasContextManager::with_filter`.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
@@ -317,11 +317,7 @@ impl AtlasContextManager {
         }
         let loaded = self.contexts.read().await.len();
         let graphs_loaded = self.graphs.read().await.len();
-        let graphs_available = self
-            .graph_dirs
-            .read()
-            .map(|m| m.len())
-            .unwrap_or_default();
+        let graphs_available = self.graph_dirs.read().map(|m| m.len()).unwrap_or_default();
         tracing::info!(
             contexts = loaded,
             graphs = graphs_loaded,
@@ -362,15 +358,14 @@ impl AtlasContextManager {
         let load_started = std::time::Instant::now();
         // Load the v2 store (atoms.lance + edges.csr). A corpus without one
         // (e.g. wikipedia — columnar WikipediaGraph, no atom store) is skipped.
-        let graph = match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
-            corpus_id, atlas_dir,
-        ) {
-            Ok(g) => g,
-            Err(e) => {
-                tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
-                return false;
-            }
-        };
+        let graph =
+            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
+                Ok(g) => g,
+                Err(e) => {
+                    tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
+                    return false;
+                }
+            };
         // Attach the ANN seed table on THIS long-lived runtime (the held
         // lancedb::Table is queried later by `atlas_navigate_ann`).
         let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
@@ -536,7 +531,6 @@ impl AtlasContextManager {
             .map(|s| s.counts.clone())
             .unwrap_or_default()
     }
-
 }
 
 #[async_trait::async_trait]
@@ -631,10 +625,8 @@ impl AtlasContextProvider for AtlasContextManager {
         // pre-init-completion query), it loads without ANN and the retrieval
         // gate (`has_ann_seed_table` over the whole pool) falls back to the v1
         // cosine seed — correct, just not the ANN win until the eager warm.
-        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
-            atlas_corpus_id,
-            &atlas_dir,
-        ) {
+        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(atlas_corpus_id, &atlas_dir)
+        {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
                 let graph = Arc::new(graph);

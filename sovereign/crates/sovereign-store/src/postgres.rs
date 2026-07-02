@@ -711,10 +711,7 @@ impl StepExecutionStore for PostgresStateStore {
         Ok(())
     }
 
-    async fn find_execution(
-        &self,
-        idempotency_key: &str,
-    ) -> Result<Option<StepExecution>> {
+    async fn find_execution(&self, idempotency_key: &str) -> Result<Option<StepExecution>> {
         let client = self
             .pool
             .get()

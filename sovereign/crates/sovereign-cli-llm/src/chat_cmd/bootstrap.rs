@@ -736,8 +736,7 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
     match (chat_found, embed_found) {
         (Some(c), Some(e)) => Ok((c, e)),
         (None, _) => Err(Error::Serialization(
-            "daemon lists no chat models — check `svrn setup` and the primary/fast slots"
-                .into(),
+            "daemon lists no chat models — check `svrn setup` and the primary/fast slots".into(),
         )),
         (_, None) => Err(Error::Serialization(
             "daemon lists no embedding model — retrieval will fail. Set `[models] embed` in \

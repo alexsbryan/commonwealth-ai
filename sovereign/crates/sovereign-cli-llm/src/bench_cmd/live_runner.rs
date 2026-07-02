@@ -16,7 +16,9 @@
 
 use futures::StreamExt as _;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, DocumentAsset, DocumentSession, Message, Role, Speed};
+use sovereign_core::types::{
+    CompletionRequest, DocumentAsset, DocumentSession, Message, Role, Speed,
+};
 
 use crate::chat_cmd::bootstrap::ChatSession;
 
@@ -76,7 +78,10 @@ pub async fn run_live_pinned(
         .unwrap_or(0);
     // Seal retrieval to the bank's corpus so ABSENT questions genuinely have
     // nothing to find.
-    let _ = session.store.insert_empty_conversation(&conv_id, created_at, None).await;
+    let _ = session
+        .store
+        .insert_empty_conversation(&conv_id, created_at, None)
+        .await;
     let _ = session
         .store
         .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
@@ -89,7 +94,12 @@ pub async fn run_live_pinned(
                 .handle_message_stream_as(question, &conv_id, intent)
                 .await
         }
-        None => session.runtime.handle_message_stream(question, &conv_id).await,
+        None => {
+            session
+                .runtime
+                .handle_message_stream(question, &conv_id)
+                .await
+        }
     };
     let raw = match stream_start {
         Ok(handle) => {
@@ -141,7 +151,11 @@ pub async fn run_live_pinned(
         .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()));
     let chunk_refs: Vec<serde_json::Value> = last_meta
         .as_ref()
-        .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
+        .and_then(|m| {
+            m.get("retrieved_chunks")
+                .and_then(|v| v.as_array())
+                .cloned()
+        })
         .unwrap_or_default();
     // The gate's own decision + the draft it acted on, from the SAME persisted
     // metadata. The production gate ran in-process during this turn; its action
@@ -297,7 +311,11 @@ pub async fn run_attached(
             metadata: serde_json::Value::Null,
         };
     }
-    let visible = match session.runtime.handle_turn(question, &conversation_id).await {
+    let visible = match session
+        .runtime
+        .handle_turn(question, &conversation_id)
+        .await
+    {
         Ok(resp) => strip_think(&resp.message.content),
         Err(e) => {
             eprintln!("    [attached] turn failed: {e}");
@@ -389,7 +407,11 @@ pub fn strip_think(raw: &str) -> String {
 }
 
 /// Forced-choice answer-vs-abstain classifier. `Some(true)` = abstained.
-pub async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer: &str) -> Option<bool> {
+pub async fn classify_abstain(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    answer: &str,
+) -> Option<bool> {
     if answer.trim().is_empty() {
         return Some(true);
     }
@@ -421,7 +443,9 @@ pub async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer
          does not have the information?\n\n\
          Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information."
     );
-    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| b > a)
+    forced_choice_ab(judge, model, &prompt)
+        .await
+        .map(|(a, b)| b > a)
 }
 
 /// Information-transmission classifier for ANSWERABLE questions — the
@@ -472,7 +496,9 @@ pub async fn classify_extraction(
          B = no, it does not (it only declines, hedges, or says the information \
          is unavailable)."
     );
-    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| b > a)
+    forced_choice_ab(judge, model, &prompt)
+        .await
+        .map(|(a, b)| b > a)
 }
 
 /// Whether the question-aware extraction scorer is active. DEFAULT as of
@@ -503,7 +529,11 @@ pub fn extraction_scorer_enabled() -> bool {
 /// Forced-choice provenance-caveat classifier for out-of-domain answers.
 /// `Some(true)` = the reply explicitly flags the answer is general knowledge /
 /// NOT drawn from the provided passages.
-pub async fn classify_caveat(judge: &dyn InferenceProvider, model: &str, answer: &str) -> Option<bool> {
+pub async fn classify_caveat(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    answer: &str,
+) -> Option<bool> {
     if answer.trim().is_empty() {
         return Some(false);
     }
@@ -515,7 +545,9 @@ pub async fn classify_caveat(judge: &dyn InferenceProvider, model: &str, answer:
          Answer with exactly one letter — A = yes, it flagged the answer as general knowledge / not from the sources, B = no, it gave the answer with no such provenance caveat.",
         answer.chars().take(1200).collect::<String>()
     );
-    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| a > b)
+    forced_choice_ab(judge, model, &prompt)
+        .await
+        .map(|(a, b)| a > b)
 }
 
 /// Forced-choice CORRECTNESS judge — the escalation used when the deterministic
@@ -544,7 +576,9 @@ pub async fn judge_correctness(
         q = question.chars().take(300).collect::<String>(),
         a = answer.chars().take(800).collect::<String>(),
     );
-    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| a > b)
+    forced_choice_ab(judge, model, &prompt)
+        .await
+        .map(|(a, b)| a > b)
 }
 
 /// EXTERNAL grounding-verifier — the tier-agnostic abstention lever from the
@@ -585,7 +619,10 @@ pub async fn verify_grounding(
     // correct essay gets suppressed). Long-form replies pass through
     // ungated; per-claim auditing of essays is separate machinery.
     if answer.chars().count() > 1_800 {
-        eprintln!("    [gv] long-form answer ({} chars) — out of gate scope", answer.chars().count());
+        eprintln!(
+            "    [gv] long-form answer ({} chars) — out of gate scope",
+            answer.chars().count()
+        );
         return Some(0.0);
     }
     // Two-step, decomposed (2026-06-10 iteration C). The earlier
@@ -615,7 +652,9 @@ pub async fn verify_grounding(
     );
     let claim_req = CompletionRequest {
         prompt: claim_prompt,
-        system_message: Some("You extract claims precisely. Reply with one sentence or NO_CLAIM.".into()),
+        system_message: Some(
+            "You extract claims precisely. Reply with one sentence or NO_CLAIM.".into(),
+        ),
         preferred_speed: Speed::Medium,
         max_tokens: Some(64),
         temperature: Some(0.0),
@@ -683,7 +722,11 @@ pub async fn verify_grounding(
 }
 
 /// One forced-choice A/B logprob pass. Returns `(p_A, p_B)`.
-async fn forced_choice_ab(judge: &dyn InferenceProvider, model: &str, prompt: &str) -> Option<(f64, f64)> {
+async fn forced_choice_ab(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    prompt: &str,
+) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
@@ -699,8 +742,12 @@ async fn forced_choice_ab(judge: &dyn InferenceProvider, model: &str, prompt: &s
     };
     match judge.complete(&req).await {
         Ok(resp) => {
-            let m: std::collections::HashMap<String, f64> = serde_json::from_str(resp.text.trim()).ok()?;
-            Some((m.get("A").copied().unwrap_or(0.0), m.get("B").copied().unwrap_or(0.0)))
+            let m: std::collections::HashMap<String, f64> =
+                serde_json::from_str(resp.text.trim()).ok()?;
+            Some((
+                m.get("A").copied().unwrap_or(0.0),
+                m.get("B").copied().unwrap_or(0.0),
+            ))
         }
         Err(e) => {
             eprintln!("    [judge] {e}");

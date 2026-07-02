@@ -35,12 +35,12 @@ pub use configuration::{
     RelationSynopsis, TrajectorySynopsis,
 };
 pub use gaps::{detect_deterministic_gaps, Gap, GapKind, GapsOutput};
+pub use holistic_classifier::{
+    parse_holistic_response, render_holistic_user_body, HolisticTension,
+};
 pub use parcel_analytics::{
     compute_aggregates, flags, per_parcel_deltas, FlagKind, ParcelAggregates, ParcelDelta,
     ParcelFlag,
-};
-pub use holistic_classifier::{
-    parse_holistic_response, render_holistic_user_body, HolisticTension,
 };
 pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response, phase6_classifier_response_schema,

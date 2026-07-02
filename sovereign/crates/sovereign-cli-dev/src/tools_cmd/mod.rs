@@ -118,10 +118,7 @@ async fn cmd_list(_args: &[String]) -> i32 {
         ("ReadWrite", "External"),
     ];
 
-    println!(
-        "svrn tools — {} tool(s) available\n",
-        env.registry.count()
-    );
+    println!("svrn tools — {} tool(s) available\n", env.registry.count());
     for (effect, scope) in order {
         let key = (effect.to_string(), scope.to_string());
         let Some(mut tools) = grouped.remove(&key) else {

@@ -206,7 +206,10 @@ mod tests {
     #[test]
     fn render_joins_summary_and_asks() {
         let e = enr("f", "h", "It decides the route.");
-        assert_eq!(render_for_index(&e), "It decides the route.\nWhat does it do?");
+        assert_eq!(
+            render_for_index(&e),
+            "It decides the route.\nWhat does it do?"
+        );
     }
 
     #[tokio::test]
@@ -215,21 +218,44 @@ mod tests {
         let embed = const_embed();
 
         // First pass: both new -> upserted, two rows.
-        let rep = index_symbol_enrichments(&index, &embed, &[enr("f", "hAAA", "f one"), enr("g", "hBBB", "g one")]).await;
+        let rep = index_symbol_enrichments(
+            &index,
+            &embed,
+            &[enr("f", "hAAA", "f one"), enr("g", "hBBB", "g one")],
+        )
+        .await;
         assert_eq!(rep.upserted, 2);
         assert_eq!(rep.skipped, 0);
         assert_eq!(index.chunk_count().await.unwrap(), 2);
 
         // Re-run unchanged -> both skipped (content-hash gate), still two rows.
-        let rep2 = index_symbol_enrichments(&index, &embed, &[enr("f", "hAAA", "f one"), enr("g", "hBBB", "g one")]).await;
+        let rep2 = index_symbol_enrichments(
+            &index,
+            &embed,
+            &[enr("f", "hAAA", "f one"), enr("g", "hBBB", "g one")],
+        )
+        .await;
         assert_eq!(rep2.skipped, 2);
         assert_eq!(rep2.upserted, 0);
-        assert_eq!(index.chunk_count().await.unwrap(), 2, "no new rows on a no-op");
+        assert_eq!(
+            index.chunk_count().await.unwrap(),
+            2,
+            "no new rows on a no-op"
+        );
 
         // f's body changes (new hash) -> upsert f, skip g; still two rows (replace, not append).
-        let rep3 = index_symbol_enrichments(&index, &embed, &[enr("f", "hCCC", "f two"), enr("g", "hBBB", "g one")]).await;
+        let rep3 = index_symbol_enrichments(
+            &index,
+            &embed,
+            &[enr("f", "hCCC", "f two"), enr("g", "hBBB", "g one")],
+        )
+        .await;
         assert_eq!(rep3.upserted, 1, "f re-indexed");
         assert_eq!(rep3.skipped, 1, "g unchanged");
-        assert_eq!(index.chunk_count().await.unwrap(), 2, "upsert replaced f, did not append");
+        assert_eq!(
+            index.chunk_count().await.unwrap(),
+            2,
+            "upsert replaced f, did not append"
+        );
     }
 }

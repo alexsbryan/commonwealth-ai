@@ -11,9 +11,7 @@ use commonwealth_core::activity::{ActivityEventKind, ServedFor};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
-use commonwealth_inference::oicp::{
-    self, CapabilityClaim, InferenceRequirements, ShardingPrivacy,
-};
+use commonwealth_inference::oicp::{self, CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
 use std::time::Instant;
 

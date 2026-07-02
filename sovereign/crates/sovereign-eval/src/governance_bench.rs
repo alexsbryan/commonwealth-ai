@@ -46,7 +46,10 @@ impl SectionKey {
     pub fn from_title(title: &str) -> Self {
         if let Some(idx) = title.find("Article ") {
             let rest = &title[idx + "Article ".len()..];
-            let num: String = rest.chars().take_while(|c| "IVXLCDM".contains(*c)).collect();
+            let num: String = rest
+                .chars()
+                .take_while(|c| "IVXLCDM".contains(*c))
+                .collect();
             if !num.is_empty() {
                 return SectionKey::Article(num);
             }
@@ -55,8 +58,16 @@ impl SectionKey {
         let mut i = 0;
         while i + 10 <= b.len() {
             let d = |j: usize| b[j].is_ascii_digit();
-            if d(i) && d(i + 1) && d(i + 2) && d(i + 3) && b[i + 4] == b'-' && d(i + 5) && d(i + 6)
-                && b[i + 7] == b'-' && d(i + 8) && d(i + 9)
+            if d(i)
+                && d(i + 1)
+                && d(i + 2)
+                && d(i + 3)
+                && b[i + 4] == b'-'
+                && d(i + 5)
+                && d(i + 6)
+                && b[i + 7] == b'-'
+                && d(i + 8)
+                && d(i + 9)
             {
                 return SectionKey::Date(title[i..i + 10].to_string());
             }
@@ -233,8 +244,7 @@ pub fn score_detector(
 
     // ── precision (corpus-wide): a flagged pair matching ANY genuine
     //    tension is a TP; otherwise FP (decoy or unlabeled "other") ──
-    let all_planted: HashSet<PairKey> =
-        truth.planted_tensions.iter().map(|p| p.pair()).collect();
+    let all_planted: HashSet<PairKey> = truth.planted_tensions.iter().map(|p| p.pair()).collect();
     let decoys: HashMap<PairKey, String> = truth
         .expected_non_tensions
         .iter()
@@ -266,7 +276,11 @@ pub fn score_detector(
 
     flagged_decoys.sort();
     DetectorReport {
-        overall: Pr { precision, recall, f1 },
+        overall: Pr {
+            precision,
+            recall,
+            f1,
+        },
         recall_by_type,
         planted_found,
         planted_missed,
@@ -303,17 +317,53 @@ mod tests {
             b,
             why: String::new(),
         };
-        let aref = |s: &str| SectionRef { article: Some(s.into()), date: None };
-        let dref = |s: &str| SectionRef { article: None, date: Some(s.into()) };
+        let aref = |s: &str| SectionRef {
+            article: Some(s.into()),
+            date: None,
+        };
+        let dref = |s: &str| SectionRef {
+            article: None,
+            date: Some(s.into()),
+        };
         GovernanceTruth {
             planted_tensions: vec![
-                p("T1", "direct_contradiction", Split::Test, aref("I"), dref("2026-03-14")),
-                p("T2", "direct_contradiction", Split::Test, aref("VI"), dref("2026-06-03")),
-                p("T3", "scope_overlap", Split::Train, dref("2026-02-10"), dref("2026-06-22")),
+                p(
+                    "T1",
+                    "direct_contradiction",
+                    Split::Test,
+                    aref("I"),
+                    dref("2026-03-14"),
+                ),
+                p(
+                    "T2",
+                    "direct_contradiction",
+                    Split::Test,
+                    aref("VI"),
+                    dref("2026-06-03"),
+                ),
+                p(
+                    "T3",
+                    "scope_overlap",
+                    Split::Train,
+                    dref("2026-02-10"),
+                    dref("2026-06-22"),
+                ),
             ],
             expected_non_tensions: vec![
-                NonRow { id: "D1".into(), split: Split::Test, a: aref("I"), b: dref("2026-03-28"), why: String::new() },
-                NonRow { id: "N1".into(), split: Split::Test, a: aref("II"), b: dref("2026-02-24"), why: String::new() },
+                NonRow {
+                    id: "D1".into(),
+                    split: Split::Test,
+                    a: aref("I"),
+                    b: dref("2026-03-28"),
+                    why: String::new(),
+                },
+                NonRow {
+                    id: "N1".into(),
+                    split: Split::Test,
+                    a: aref("II"),
+                    b: dref("2026-02-24"),
+                    why: String::new(),
+                },
             ],
         }
     }
@@ -358,9 +408,9 @@ mod tests {
     fn flagged_decoy_lowers_precision_and_is_named() {
         let t = truth();
         let detected = vec![
-            pk(art("I"), date("2026-03-14")),     // TP
-            pk(art("I"), date("2026-03-28")),     // FP: decoy D1
-            pk(art("III"), date("2026-09-09")),   // FP: other (unlabeled)
+            pk(art("I"), date("2026-03-14")),   // TP
+            pk(art("I"), date("2026-03-28")),   // FP: decoy D1
+            pk(art("III"), date("2026-09-09")), // FP: other (unlabeled)
         ];
         let r = score_detector(&t, &detected, &[Split::Test]);
         // 1 TP of 3 flagged.

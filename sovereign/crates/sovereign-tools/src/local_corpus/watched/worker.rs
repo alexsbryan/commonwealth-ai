@@ -661,9 +661,10 @@ impl Worker {
         // diff (an unchanged sweep is silent). A folder without a runtime or without
         // `run_on_changes` behaves exactly as before.
         if !diff.is_empty() {
-            if let (Some(rt), Some(workflow)) =
-                (&self.workflow_runtime, watched_cfg.run_on_changes.as_deref())
-            {
+            if let (Some(rt), Some(workflow)) = (
+                &self.workflow_runtime,
+                watched_cfg.run_on_changes.as_deref(),
+            ) {
                 self.emit(WatchedFolderEvent::WorkflowTriggered {
                     corpus_id: corpus_id.clone(),
                     workflow: workflow.to_string(),

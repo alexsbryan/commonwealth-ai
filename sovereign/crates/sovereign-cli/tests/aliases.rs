@@ -274,11 +274,7 @@ fn alias_notes() {
     // reflection view that `svrn notes` now owns. The banner
     // fires inside `run_reflect` regardless of the args passed —
     // `--help` is the cheapest probe (no DB / fs touch).
-    banner_fires(
-        &["reflect", "--help"],
-        "svrn reflect",
-        "svrn notes",
-    );
+    banner_fires(&["reflect", "--help"], "svrn reflect", "svrn notes");
 }
 
 // ─── Quiet-mode suppression ─────────────────────────────────────

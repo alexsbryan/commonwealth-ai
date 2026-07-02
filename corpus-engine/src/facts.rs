@@ -53,7 +53,8 @@ pub struct Facts {
 impl Facts {
     pub fn load(path: &Path) -> std::io::Result<Facts> {
         let s = std::fs::read_to_string(path)?;
-        serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        serde_json::from_str(&s)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
@@ -133,9 +134,15 @@ mod ts {
                 let mut ms = c.matches(&q, root, b);
                 while let Some(m) = ms.next() {
                     if let Some(n) = m.nodes_for_capture_index(si).next() {
-                        let content: String = n.utf8_text(b).unwrap_or("").chars().take(200).collect();
+                        let content: String =
+                            n.utf8_text(b).unwrap_or("").chars().take(200).collect();
                         if content.len() > 3 {
-                            f.str_lits.push(StrLit { content, enclosing_fn: enclosing_fn(n, b), file: rel.to_string(), line: n.start_position().row + 1 });
+                            f.str_lits.push(StrLit {
+                                content,
+                                enclosing_fn: enclosing_fn(n, b),
+                                file: rel.to_string(),
+                                line: n.start_position().row + 1,
+                            });
                         }
                     }
                 }
@@ -149,7 +156,11 @@ mod ts {
                 let mut ms = c.matches(&q, root, b);
                 while let Some(m) = ms.next() {
                     if let Some(n) = m.nodes_for_capture_index(ni).next() {
-                        f.fn_defs.push(FnDef { name: n.utf8_text(b).unwrap_or("").to_string(), file: rel.to_string(), line: n.start_position().row + 1 });
+                        f.fn_defs.push(FnDef {
+                            name: n.utf8_text(b).unwrap_or("").to_string(),
+                            file: rel.to_string(),
+                            line: n.start_position().row + 1,
+                        });
                     }
                 }
             }
@@ -169,7 +180,11 @@ pub fn extract_facts(repo: &Path, roots: &[String]) -> Facts {
     let mut f = Facts::default();
     for path in &files {
         if let Ok(src) = std::fs::read_to_string(path) {
-            let rel = path.strip_prefix(repo).unwrap_or(path).to_string_lossy().to_string();
+            let rel = path
+                .strip_prefix(repo)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
             ts::extract_file(&rel, &src, &lang, &mut f);
         }
     }

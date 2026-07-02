@@ -88,9 +88,8 @@ impl Extractor for JsonlExtractor {
 /// - a directory with no JSONL files is a recipe error surfaced
 ///   cleanly — not an empty corpus, not a runaway.
 fn collect_jsonl_files(source_path: &Path) -> Result<Vec<std::path::PathBuf>> {
-    let meta = std::fs::metadata(source_path).map_err(|e| {
-        Error::Extraction(format!("Failed to stat {}: {e}", source_path.display()))
-    })?;
+    let meta = std::fs::metadata(source_path)
+        .map_err(|e| Error::Extraction(format!("Failed to stat {}: {e}", source_path.display())))?;
     if meta.is_file() {
         return Ok(vec![source_path.to_path_buf()]);
     }
@@ -230,9 +229,7 @@ impl Iterator for JsonlIterator {
                     Some(Err(e)) => {
                         let src = current.source_file.clone();
                         self.current = None;
-                        return Some(Err(Error::Extraction(format!(
-                            "read error in {src}: {e}"
-                        ))));
+                        return Some(Err(Error::Extraction(format!("read error in {src}: {e}"))));
                     }
                 }
             };

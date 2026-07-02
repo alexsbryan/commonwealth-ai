@@ -37,9 +37,11 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use sovereign_store::recipe_project_store::{RecipeProjectError, RecipeProjectRow, RecipeProjectStore};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_core::error::{Error, Result};
+use sovereign_store::recipe_project_store::{
+    RecipeProjectError, RecipeProjectRow, RecipeProjectStore,
+};
 
 /// Wrap an `std::io::Error` into a `sovereign_core::Error` carrying
 /// the path that produced it. Matches the convention in

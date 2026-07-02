@@ -83,7 +83,10 @@ mod tests {
         std::env::set_var(key, "true");
         assert!(env_truthy(key), "\"true\" should be truthy");
         std::env::set_var(key, "TRUE");
-        assert!(env_truthy(key), "\"TRUE\" should be truthy (case-insensitive)");
+        assert!(
+            env_truthy(key),
+            "\"TRUE\" should be truthy (case-insensitive)"
+        );
         std::env::set_var(key, "0");
         assert!(!env_truthy(key), "\"0\" should be falsy");
         std::env::set_var(key, "yes");

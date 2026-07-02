@@ -509,7 +509,9 @@ mod tests {
         );
         // Non-embedding ids resolve to empty → embed_query is a no-op.
         assert!(m.embed_query_instruction("Qwen3.5-9B-Q4_K_M").is_empty());
-        assert!(m.embed_query_instruction("some-random-chat-model").is_empty());
+        assert!(m
+            .embed_query_instruction("some-random-chat-model")
+            .is_empty());
     }
 
     #[test]

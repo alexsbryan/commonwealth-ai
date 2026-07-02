@@ -302,7 +302,10 @@ mod tests {
         assert_eq!(slugify("   "), "corpus");
         // Owner stays raw (it must match the principal verbatim); only the
         // untrusted name is slugified.
-        assert_eq!(private_corpus_id("alice", "My Notes"), "user:alice:my-notes");
+        assert_eq!(
+            private_corpus_id("alice", "My Notes"),
+            "user:alice:my-notes"
+        );
         assert!(!private_corpus_id("alice", "../escape").contains('/'));
     }
 

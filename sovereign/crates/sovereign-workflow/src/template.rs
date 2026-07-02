@@ -16,7 +16,9 @@ fn ref_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     // The key may be dotted (`a.b.c`) so a `{element.chapter.id}` reaches a
     // nested field; the leading reference itself stays a single identifier.
-    RE.get_or_init(|| Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_][A-Za-z0-9_.]*)\}").unwrap())
+    RE.get_or_init(|| {
+        Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_][A-Za-z0-9_.]*)\}").unwrap()
+    })
 }
 
 /// Step ids referenced by `text` (the `ref` of `{ref.key}`), excluding the
@@ -72,7 +74,8 @@ fn resolve_one(reference: &str, key: &str, scope: &Scope) -> String {
     }
     let Some(artifact) = scope.completed.get(reference) else {
         tracing::warn!(
-            reference, key,
+            reference,
+            key,
             "resolve: reference to an unknown/incomplete step — empty string"
         );
         return String::new();
@@ -154,7 +157,9 @@ pub fn resolve_value(v: &toml::Value, scope: &Scope) -> serde_json::Value {
             serde_json::Value::Array(a.iter().map(|x| resolve_value(x, scope)).collect())
         }
         toml::Value::Table(t) => serde_json::Value::Object(
-            t.iter().map(|(k, x)| (k.clone(), resolve_value(x, scope))).collect(),
+            t.iter()
+                .map(|(k, x)| (k.clone(), resolve_value(x, scope)))
+                .collect(),
         ),
     }
 }
@@ -257,7 +262,10 @@ pub fn resolve_args(spec: &StepSpec, scope: &Scope) -> ResolvedArgs {
         system_file: spec.system_file.as_ref().map(|p| resolve_str(p, scope)),
         input: spec.input.as_ref().map(|i| resolve_str(i, scope)),
         params: spec.params.as_ref().map(|p| resolve_value(p, scope)),
-        structured_output: spec.structured_output.as_ref().map(|v| resolve_value(v, scope)),
+        structured_output: spec
+            .structured_output
+            .as_ref()
+            .map(|v| resolve_value(v, scope)),
         grammar: spec.grammar.as_ref().map(|g| resolve_str(g, scope)),
         stamp: spec.stamp.as_ref().map(|v| resolve_value(v, scope)),
         raw_output: spec.raw_output.unwrap_or(false),
@@ -351,13 +359,24 @@ mod tests {
             serde_json::json!({ "text": "hi", "id": "sec_0001" }),
             "an object sub-field splices"
         );
-        assert_eq!(out["tags"], serde_json::json!(["a", "b"]), "an array sub-field splices");
-        assert_eq!(out["idx"], serde_json::json!("0"), "a scalar sub-field stays a string");
+        assert_eq!(
+            out["tags"],
+            serde_json::json!(["a", "b"]),
+            "an array sub-field splices"
+        );
+        assert_eq!(
+            out["idx"],
+            serde_json::json!("0"),
+            "a scalar sub-field stays a string"
+        );
 
         // Dotted access reaches a nested field (e.g. stamping chapter_id from a
         // zipped {result, chapter} element).
         let nested: toml::Value = toml::from_str("id = \"{element.chapter.id}\"").unwrap();
-        assert_eq!(resolve_value(&nested, &scope)["id"], serde_json::json!("sec_0001"));
+        assert_eq!(
+            resolve_value(&nested, &scope)["id"],
+            serde_json::json!("sec_0001")
+        );
     }
 
     /// A bare `{element}` ref splices the WHOLE element by value — so a for_each
@@ -386,7 +405,10 @@ mod tests {
             ..Default::default()
         };
         // Prose position (resolve_str): interpolates.
-        assert_eq!(super::resolve_str("{param.folder}/x", &scope), "/tmp/notes/x");
+        assert_eq!(
+            super::resolve_str("{param.folder}/x", &scope),
+            "/tmp/notes/x"
+        );
         // Value position: stays a string (no splice path).
         assert_eq!(
             resolve_value(&toml::Value::String("{param.folder}".into()), &scope),

@@ -130,7 +130,10 @@ input = "{a.output}"
         } => assert_eq!(step, "b"),
         other => panic!("expected StepDone(b), got {other:?}"),
     }
-    assert!(matches!(evs[3], WorkflowProgress::ItemDone { ok: true, .. }));
+    assert!(matches!(
+        evs[3],
+        WorkflowProgress::ItemDone { ok: true, .. }
+    ));
     assert!(matches!(
         evs[4],
         WorkflowProgress::RunFinished { ok: 1, failed: 0 }
@@ -328,7 +331,9 @@ structured_output = { type = "object", required = ["atoms"] }
     let so = args.structured_output.expect("structured_output resolved");
     assert_eq!(so.get("type").and_then(|v| v.as_str()), Some("object"));
     assert_eq!(
-        so.get("required").and_then(|v| v.as_array()).map(|a| a.len()),
+        so.get("required")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len()),
         Some(1)
     );
 }
@@ -457,7 +462,11 @@ prompt = "hi"
     .unwrap();
     // No inference provider wired → resolving the model step must error, not panic.
     let registry = StepRegistry::new(None, Arc::new(ToolRegistry::new()));
-    let err = Runner::new(registry).run(&wf, 1).await.unwrap_err().to_string();
+    let err = Runner::new(registry)
+        .run(&wf, 1)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("daemon"), "{err}");
 }
 
@@ -479,15 +488,24 @@ fn cache_key_is_stable_and_input_sensitive() {
         input: Some("y".into()),
         ..Default::default()
     };
-    assert_ne!(k1, cache_key("transform:upper", "up", &b, "fp1"), "args change");
-    assert_ne!(k1, cache_key("transform:upper", "up", &a, "fp2"), "fingerprint change");
+    assert_ne!(
+        k1,
+        cache_key("transform:upper", "up", &b, "fp1"),
+        "args change"
+    );
+    assert_ne!(
+        k1,
+        cache_key("transform:upper", "up", &a, "fp2"),
+        "fingerprint change"
+    );
 }
 
 #[tokio::test]
 async fn read_step_is_cached_on_rerun() {
     let dir = tempfile::tempdir().unwrap();
-    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
-        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> = Arc::new(
+        sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()),
+    );
     let toml = r#"
 [workflow]
 name = "cache-me"
@@ -501,17 +519,31 @@ input = "{item.name}"
 "#;
     let wf = Workflow::parse(toml).unwrap();
 
-    let r1 = Runner::with_cache(StepRegistry::new(None, Arc::new(ToolRegistry::new())), cache.clone())
-        .run(&wf, 1)
-        .await
-        .unwrap();
-    assert_eq!((r1.ran_total(), r1.cached_total()), (1, 0), "first run runs");
+    let r1 = Runner::with_cache(
+        StepRegistry::new(None, Arc::new(ToolRegistry::new())),
+        cache.clone(),
+    )
+    .run(&wf, 1)
+    .await
+    .unwrap();
+    assert_eq!(
+        (r1.ran_total(), r1.cached_total()),
+        (1, 0),
+        "first run runs"
+    );
 
-    let r2 = Runner::with_cache(StepRegistry::new(None, Arc::new(ToolRegistry::new())), cache.clone())
-        .run(&wf, 1)
-        .await
-        .unwrap();
-    assert_eq!((r2.ran_total(), r2.cached_total()), (0, 1), "re-run is fully cached");
+    let r2 = Runner::with_cache(
+        StepRegistry::new(None, Arc::new(ToolRegistry::new())),
+        cache.clone(),
+    )
+    .run(&wf, 1)
+    .await
+    .unwrap();
+    assert_eq!(
+        (r2.ran_total(), r2.cached_total()),
+        (0, 1),
+        "re-run is fully cached"
+    );
 }
 
 struct WriteCounterTool {
@@ -550,8 +582,9 @@ impl Tool for WriteCounterTool {
 #[tokio::test]
 async fn write_step_is_never_cached() {
     let dir = tempfile::tempdir().unwrap();
-    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
-        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> = Arc::new(
+        sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()),
+    );
     let calls = Arc::new(AtomicUsize::new(0));
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(WriteCounterTool {
@@ -574,17 +607,18 @@ uses = "tool:wc"
     .unwrap();
 
     for _ in 0..2 {
-        let r = Runner::with_cache(
-            StepRegistry::new(None, Arc::clone(&tools)),
-            cache.clone(),
-        )
-        .run(&wf, 1)
-        .await
-        .unwrap();
+        let r = Runner::with_cache(StepRegistry::new(None, Arc::clone(&tools)), cache.clone())
+            .run(&wf, 1)
+            .await
+            .unwrap();
         // A Write step is never cached — it always runs (the side effect must happen).
         assert_eq!(r.cached_total(), 0);
     }
-    assert_eq!(calls.load(Ordering::SeqCst), 2, "write ran both times, never cached");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "write ran both times, never cached"
+    );
 }
 
 // ── for_each fan-out (collection → map) ───────────────────────
@@ -676,8 +710,9 @@ input = "{element.text}"
 #[tokio::test]
 async fn for_each_caches_per_element() {
     let dir = tempfile::tempdir().unwrap();
-    let cache: Arc<dyn sovereign_workflow::ArtifactCache> =
-        Arc::new(sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()));
+    let cache: Arc<dyn sovereign_workflow::ArtifactCache> = Arc::new(
+        sovereign_workflow::FileArtifactCache::new(dir.path().to_path_buf()),
+    );
 
     let toml = |items: &str| {
         format!(
@@ -706,14 +741,22 @@ input = "{{element.text}}"
         .run(&wf1, 1)
         .await
         .unwrap();
-    assert_eq!((r1.ran_total(), r1.cached_total()), (4, 0), "first run runs all");
+    assert_eq!(
+        (r1.ran_total(), r1.cached_total()),
+        (4, 0),
+        "first run runs all"
+    );
 
     // Run 2, identical — everything is a cache hit.
     let r2 = Runner::with_cache(StepRegistry::new(None, split_registry()), cache.clone())
         .run(&wf1, 1)
         .await
         .unwrap();
-    assert_eq!((r2.ran_total(), r2.cached_total()), (0, 4), "re-run fully cached");
+    assert_eq!(
+        (r2.ran_total(), r2.cached_total()),
+        (0, 4),
+        "re-run fully cached"
+    );
 
     // Run 3, edit ONE element (c → X): `split` re-runs (its input changed), and
     // only the changed element re-maps — `a` and `b` are reused. This is the
@@ -832,7 +875,10 @@ params = { text = "{element.text}" }
 fn shipped_examples_parse() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
     let mut parsed = Vec::new();
-    for entry in std::fs::read_dir(&dir).expect("examples dir exists").flatten() {
+    for entry in std::fs::read_dir(&dir)
+        .expect("examples dir exists")
+        .flatten()
+    {
         let p = entry.path();
         if p.extension().and_then(|e| e.to_str()) != Some("toml") {
             continue;
@@ -1033,7 +1079,11 @@ impl InferenceProvider for EchoSystemProvider {
 async fn model_system_file_loads_the_system_prompt_from_disk() {
     let dir = tempfile::tempdir().unwrap();
     let prompt_path = dir.path().join("phase1a_seed_system.md");
-    std::fs::write(&prompt_path, "YOU ARE A SEED EXTRACTOR. Respond ONLY with JSON.").unwrap();
+    std::fs::write(
+        &prompt_path,
+        "YOU ARE A SEED EXTRACTOR. Respond ONLY with JSON.",
+    )
+    .unwrap();
 
     let toml = r#"
 [workflow]

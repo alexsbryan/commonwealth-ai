@@ -103,7 +103,9 @@ impl Tool for AtlasTensionsTool {
         let out = TensionCandidatesOutput::new(candidates);
         let n = out.candidates.len();
         let path = write_tension_candidates(&atlas_dir, &out).map_err(|e| {
-            Error::Execution(format!("atlas_tensions: write tension_candidates.json: {e}"))
+            Error::Execution(format!(
+                "atlas_tensions: write tension_candidates.json: {e}"
+            ))
         })?;
 
         Ok(StepOutput::Text(format!(
@@ -138,7 +140,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let atlas = dir.path().join("c1").join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
-        std::fs::write(atlas.join("atoms.json"), r#"{"schema_version":"2.0","atoms":[]}"#).unwrap();
+        std::fs::write(
+            atlas.join("atoms.json"),
+            r#"{"schema_version":"2.0","atoms":[]}"#,
+        )
+        .unwrap();
 
         let params = serde_json::json!({
             "corpus": "c1",
@@ -159,7 +165,8 @@ mod tests {
         assert_eq!(v["schema_version"], "2.0");
 
         // A missing atlas is a loud error.
-        let bad = serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
+        let bad =
+            serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
         assert!(AtlasTensionsTool.execute(&bad, &ctx()).await.is_err());
     }
 }

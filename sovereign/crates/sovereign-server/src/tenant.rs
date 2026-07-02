@@ -41,9 +41,7 @@ impl TenantRuntime {
             .into_iter()
             .filter(|s| s.deleted_at.is_none())
             .filter_map(|s| match s.visibility {
-                CorpusVisibility::Private { owner } if owner != self.tenant_id => {
-                    Some(s.corpus_id)
-                }
+                CorpusVisibility::Private { owner } if owner != self.tenant_id => Some(s.corpus_id),
                 _ => None,
             })
             .collect())

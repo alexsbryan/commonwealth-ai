@@ -24,7 +24,6 @@ pub mod atlas_query;
 pub mod atlas_reconcile;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
-pub mod workflow_primitives;
 pub mod atlas_tensions_classify;
 pub mod build;
 pub mod capability_doc;
@@ -68,6 +67,7 @@ pub mod status;
 pub mod templates;
 pub mod triage;
 pub mod validate;
+pub mod workflow_primitives;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

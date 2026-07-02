@@ -330,14 +330,13 @@ async fn run_enrich_and_verify(
 
     // Daemon-backed engine via the canonical provider + adapters (SSOT — the
     // same path `chat` bootstraps).
-    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> = Arc::new(
-        crate::chat_cmd::bootstrap::SplitInferenceProvider::new(
+    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> =
+        Arc::new(crate::chat_cmd::bootstrap::SplitInferenceProvider::new(
             &v1,
             chat_model,
             embed_model.clone(),
             8192,
-        ),
-    );
+        ));
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
     let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
 
@@ -555,7 +554,8 @@ async fn cmd_list(args: &[String]) -> i32 {
 ///
 /// The stub returns zero-vectors; it is never called when `embed = false`.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
+    let stub_embed: EmbedFn =
+        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
 
     // Use a temporary location for downloads; the engine's index_dir is
     // unused since we never write a production index.

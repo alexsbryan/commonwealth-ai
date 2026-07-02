@@ -68,7 +68,8 @@ fn recipe_schema_is_fresh() {
         let path = manifest.join(rel);
         let src = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        let file = syn::parse_file(&src).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+        let file =
+            syn::parse_file(&src).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
         for item in &file.items {
             match item {
                 Item::Struct(s) if is_deserialize(&s.attrs) && !skipped(&s.ident.to_string()) => {
@@ -332,7 +333,10 @@ fn render_enum(e: &syn::ItemEnum) -> String {
 fn first_diff(a: &str, b: &str) -> String {
     for (i, (x, y)) in a.lines().zip(b.lines()).enumerate() {
         if x != y {
-            return format!("first diff at line {}:\n  committed: {x}\n  generated: {y}", i + 1);
+            return format!(
+                "first diff at line {}:\n  committed: {x}\n  generated: {y}",
+                i + 1
+            );
         }
     }
     String::from("(content is a prefix/length mismatch)")

@@ -1187,7 +1187,9 @@ impl ScipGraph {
             )
             .map_err(|e| Error::Database(format!("all_qualified_edges prepare: {e}")))?;
         let rows: Vec<(String, String)> = stmt
-            .query_map(params![self.corpus_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![self.corpus_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
             .map_err(|e| Error::Database(format!("all_qualified_edges query: {e}")))?
             .filter_map(|r| r.ok())
             .collect();
@@ -2011,16 +2013,18 @@ mod tests {
         graph.ingest_symbols_and_refs(syms, refs).await.unwrap();
 
         let got_syms = graph.iter_all_symbols().await.unwrap();
-        assert_eq!(got_syms.len(), n_syms, "iter_all_symbols returns every defined symbol");
+        assert_eq!(
+            got_syms.len(),
+            n_syms,
+            "iter_all_symbols returns every defined symbol"
+        );
         assert!(got_syms.iter().any(|s| s.name == "login_handler"));
 
         let got_refs = graph.iter_all_refs().await.unwrap();
         assert_eq!(got_refs.len(), n_refs, "iter_all_refs returns every edge");
         assert!(
-            got_refs
-                .iter()
-                .any(|r| r.caller_symbol == "auth_middleware"
-                    && r.callee_symbol == "validate_access_token"),
+            got_refs.iter().any(|r| r.caller_symbol == "auth_middleware"
+                && r.callee_symbol == "validate_access_token"),
             "a known edge survives the round-trip"
         );
     }

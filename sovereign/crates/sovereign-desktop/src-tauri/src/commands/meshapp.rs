@@ -144,8 +144,7 @@ pub async fn meshapp_read_corpus(
         .into_iter()
         .filter_map(|env| match env {
             AtomEnvelope::Entity(e)
-                if want.contains(e.id.as_str())
-                    || want.contains(e.canonical_name.as_str()) =>
+                if want.contains(e.id.as_str()) || want.contains(e.canonical_name.as_str()) =>
             {
                 Some(ParcelDto {
                     atom_id: e.id.as_str().to_string(),
@@ -246,7 +245,10 @@ pub async fn meshapp_parcel_analytics(
 
     let agg = compute_aggregates(&parcels, &corpus_id, target, DEFAULT_PROPERTY_TAX_RATE);
     let fs = flags(&parcels);
-    let high = fs.iter().filter(|f| f.kind == FlagKind::HighLandShare).count();
+    let high = fs
+        .iter()
+        .filter(|f| f.kind == FlagKind::HighLandShare)
+        .count();
     let under = fs.iter().filter(|f| f.kind == FlagKind::Underused).count();
 
     // The revenue-neutral property-tax → land-only swap is computed by the lib
@@ -343,7 +345,11 @@ pub async fn meshapp_graph(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     let path = resolve_index_path(&state, &corpus_id).await?;
     let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::graph_nodes(&g, node_type.as_deref(), limit.unwrap_or(50).min(500)))
+    Ok(sovereign_meshapp::graph_nodes(
+        &g,
+        node_type.as_deref(),
+        limit.unwrap_or(50).min(500),
+    ))
 }
 
 /// `window.meshApp.node(corpusId, id)` — gated on `mesh_store_read`. One
@@ -395,7 +401,12 @@ pub async fn meshapp_search_entities(
     }
     let path = resolve_index_path(&state, &corpus_id).await?;
     let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::search_entities(&g, &query, node_type.as_deref(), limit.unwrap_or(25).min(100)))
+    Ok(sovereign_meshapp::search_entities(
+        &g,
+        &query,
+        node_type.as_deref(),
+        limit.unwrap_or(25).min(100),
+    ))
 }
 
 /// `window.meshApp.claims(corpusId, limit?)` — gated on `mesh_store_read`.
@@ -459,7 +470,11 @@ pub async fn meshapp_subgraph(
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     let path = resolve_index_path(&state, &corpus_id).await?;
     let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
-    Ok(sovereign_meshapp::subgraph(&g, node_type.as_deref(), limit.unwrap_or(30).min(80)))
+    Ok(sovereign_meshapp::subgraph(
+        &g,
+        node_type.as_deref(),
+        limit.unwrap_or(30).min(80),
+    ))
 }
 
 /// `window.meshApp.corpusStats(corpusId)` — gated on `mesh_store_read`.
@@ -554,8 +569,12 @@ pub async fn meshapp_open_outer_work(
         .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
     let _ = main.set_focus();
-    app.emit_to("main", "meshapp-open-outer-work", serde_json::json!({ "corpus_id": corpus_id }))
-        .map_err(|e| format!("emit meshapp-open-outer-work: {e}"))
+    app.emit_to(
+        "main",
+        "meshapp-open-outer-work",
+        serde_json::json!({ "corpus_id": corpus_id }),
+    )
+    .map_err(|e| format!("emit meshapp-open-outer-work: {e}"))
 }
 
 // ─── Host-side install management ────────────────────────────────────
@@ -823,7 +842,8 @@ pub async fn open_corpus_explorer(
                 trust: crate::meshapp::MeshAppTrust::Unsigned,
                 recorded_at_unix,
             });
-            cfg.save().map_err(|e| format!("save desktop config: {e}"))?;
+            cfg.save()
+                .map_err(|e| format!("save desktop config: {e}"))?;
         }
     }
 
@@ -875,7 +895,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let d = tmp.path();
         std::fs::create_dir_all(d.join("enron")).unwrap();
-        std::fs::write(d.join("enron").join("meshapp.json"), r#"{"id":"enron","name":"Enron"}"#).unwrap();
+        std::fs::write(
+            d.join("enron").join("meshapp.json"),
+            r#"{"id":"enron","name":"Enron"}"#,
+        )
+        .unwrap();
         std::fs::create_dir_all(d.join("_sdk")).unwrap(); // shared SDK — skipped
         std::fs::create_dir_all(d.join("artifacts")).unwrap(); // publish cache — skipped
         std::fs::create_dir_all(d.join("nomanifest")).unwrap(); // no meshapp.json — skipped

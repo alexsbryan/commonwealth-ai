@@ -63,8 +63,7 @@ pub const EVALUATOR_TERMINATING_SUBSET: &[PrimitiveKind] = &[
 /// is deterministic waste — the dead-loop pathology); AgentDone is
 /// excluded (tests are red). Forces forward progress instead of a
 /// sticky / no-progress kill.
-pub const EVALUATOR_MUST_HANDOFF_SUBSET: &[PrimitiveKind] =
-    &[PrimitiveKind::HandoffToImplementer];
+pub const EVALUATOR_MUST_HANDOFF_SUBSET: &[PrimitiveKind] = &[PrimitiveKind::HandoffToImplementer];
 
 /// Tool subset for the recovery-escalation: after the Implementer has had
 /// a SPLICE edit (patch_file / replace_function) rejected repeatedly at

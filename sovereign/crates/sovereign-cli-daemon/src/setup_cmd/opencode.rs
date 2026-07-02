@@ -67,7 +67,10 @@ pub(super) fn install_opencode_config(client_port: u16) -> Result<OpencodeInstal
     install_opencode_config_at(&opencode_config_path(), client_port)
 }
 
-pub(super) fn install_opencode_config_at(path: &Path, client_port: u16) -> Result<OpencodeInstall, String> {
+pub(super) fn install_opencode_config_at(
+    path: &Path,
+    client_port: u16,
+) -> Result<OpencodeInstall, String> {
     // Fresh install — easy path.
     if !path.exists() {
         if let Some(parent) = path.parent() {

@@ -22,13 +22,33 @@ const ROOTS: &[&str] = &[
 ];
 
 #[derive(serde::Serialize)]
-struct CtorField { struct_type: String, field: String, value: String, enclosing_fn: String, file: String, line: usize }
+struct CtorField {
+    struct_type: String,
+    field: String,
+    value: String,
+    enclosing_fn: String,
+    file: String,
+    line: usize,
+}
 #[derive(serde::Serialize)]
-struct StrLit { content: String, enclosing_fn: String, file: String, line: usize }
+struct StrLit {
+    content: String,
+    enclosing_fn: String,
+    file: String,
+    line: usize,
+}
 #[derive(serde::Serialize)]
-struct FnDef { name: String, file: String, line: usize }
+struct FnDef {
+    name: String,
+    file: String,
+    line: usize,
+}
 #[derive(serde::Serialize, Default)]
-struct Facts { ctor_fields: Vec<CtorField>, str_lits: Vec<StrLit>, fn_defs: Vec<FnDef> }
+struct Facts {
+    ctor_fields: Vec<CtorField>,
+    str_lits: Vec<StrLit>,
+    fn_defs: Vec<FnDef>,
+}
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(rd) = std::fs::read_dir(dir) {
@@ -69,11 +89,19 @@ fn extract(rel: &str, src: &str, lang: &tree_sitter::Language, f: &mut Facts) {
 
     // construction fields (the data-flow primitive)
     let q = Query::new(lang, "(struct_expression name: (_) @s body: (field_initializer_list (field_initializer field: (field_identifier) @f value: (_) @v)))").unwrap();
-    let (si, fi, vi) = (q.capture_index_for_name("s").unwrap(), q.capture_index_for_name("f").unwrap(), q.capture_index_for_name("v").unwrap());
+    let (si, fi, vi) = (
+        q.capture_index_for_name("s").unwrap(),
+        q.capture_index_for_name("f").unwrap(),
+        q.capture_index_for_name("v").unwrap(),
+    );
     let mut c = QueryCursor::new();
     let mut ms = c.matches(&q, root, b);
     while let Some(m) = ms.next() {
-        if let (Some(s), Some(fl), Some(v)) = (m.nodes_for_capture_index(si).next(), m.nodes_for_capture_index(fi).next(), m.nodes_for_capture_index(vi).next()) {
+        if let (Some(s), Some(fl), Some(v)) = (
+            m.nodes_for_capture_index(si).next(),
+            m.nodes_for_capture_index(fi).next(),
+            m.nodes_for_capture_index(vi).next(),
+        ) {
             f.ctor_fields.push(CtorField {
                 struct_type: s.utf8_text(b).unwrap_or("").to_string(),
                 field: fl.utf8_text(b).unwrap_or("").to_string(),
@@ -94,7 +122,12 @@ fn extract(rel: &str, src: &str, lang: &tree_sitter::Language, f: &mut Facts) {
         if let Some(n) = m.nodes_for_capture_index(si).next() {
             let content: String = n.utf8_text(b).unwrap_or("").chars().take(200).collect();
             if content.len() > 3 {
-                f.str_lits.push(StrLit { content, enclosing_fn: enclosing_fn(n, b), file: rel.to_string(), line: n.start_position().row + 1 });
+                f.str_lits.push(StrLit {
+                    content,
+                    enclosing_fn: enclosing_fn(n, b),
+                    file: rel.to_string(),
+                    line: n.start_position().row + 1,
+                });
             }
         }
     }
@@ -106,7 +139,11 @@ fn extract(rel: &str, src: &str, lang: &tree_sitter::Language, f: &mut Facts) {
     let mut ms = c.matches(&q, root, b);
     while let Some(m) = ms.next() {
         if let Some(n) = m.nodes_for_capture_index(ni).next() {
-            f.fn_defs.push(FnDef { name: n.utf8_text(b).unwrap_or("").to_string(), file: rel.to_string(), line: n.start_position().row + 1 });
+            f.fn_defs.push(FnDef {
+                name: n.utf8_text(b).unwrap_or("").to_string(),
+                file: rel.to_string(),
+                line: n.start_position().row + 1,
+            });
         }
     }
 }
@@ -117,7 +154,11 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let repo = args.get(1).map(String::as_str).unwrap_or(REPO).to_string();
     let out = args.get(2).map(String::as_str).unwrap_or(OUT).to_string();
-    let roots: Vec<String> = if args.len() > 3 { args[3..].to_vec() } else { ROOTS.iter().map(|s| s.to_string()).collect() };
+    let roots: Vec<String> = if args.len() > 3 {
+        args[3..].to_vec()
+    } else {
+        ROOTS.iter().map(|s| s.to_string()).collect()
+    };
 
     let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
     let mut files = Vec::new();
@@ -127,7 +168,11 @@ fn main() {
     let mut f = Facts::default();
     for path in &files {
         if let Ok(src) = std::fs::read_to_string(path) {
-            let rel = path.strip_prefix(&repo).unwrap_or(path).to_string_lossy().to_string();
+            let rel = path
+                .strip_prefix(&repo)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
             extract(&rel, &src, &lang, &mut f);
         }
     }
@@ -143,7 +188,11 @@ fn main() {
         json.len() / 1_000_000
     );
     // sanity spot-checks
-    let tools = f.ctor_fields.iter().filter(|c| c.struct_type == "CompletionRequest" && c.field == "tools").count();
+    let tools = f
+        .ctor_fields
+        .iter()
+        .filter(|c| c.struct_type == "CompletionRequest" && c.field == "tools")
+        .count();
     let sr = f.fn_defs.iter().any(|d| d.name == "select_route");
     println!("spot-check: CompletionRequest.tools sites={tools}, select_route present={sr}");
 }

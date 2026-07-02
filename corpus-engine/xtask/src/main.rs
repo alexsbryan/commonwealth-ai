@@ -297,7 +297,10 @@ fn push_components(path: &Path, root: &Path, out: &mut Vec<Vec<String>>) {
 /// Anchoring the tail means `foo/bar.rs` never matches `foo/bar.rs.bak`,
 /// and a citation of a directory must name a real terminal directory.
 fn subsequence_resolves(index: &[Vec<String>], span: &str) -> bool {
-    let want: Vec<&str> = span.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
+    let want: Vec<&str> = span
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect();
     let Some(last) = want.last() else {
         return false;
     };
@@ -306,8 +309,7 @@ fn subsequence_resolves(index: &[Vec<String>], span: &str) -> bool {
             return false;
         }
         let mut it = path.iter();
-        want.iter()
-            .all(|w| it.by_ref().any(|c| c == w))
+        want.iter().all(|w| it.by_ref().any(|c| c == w))
     })
 }
 

@@ -84,10 +84,25 @@ mod tests {
     fn stamps_distinct_source_count_on_target() {
         let mut entities = vec![ent("e-installation-wpafb", "installation")];
         let rels = vec![
-            edge("r0", "e-sighting-1", "e-installation-wpafb", "occurred_near"),
-            edge("r1", "e-sighting-2", "e-installation-wpafb", "occurred_near"),
+            edge(
+                "r0",
+                "e-sighting-1",
+                "e-installation-wpafb",
+                "occurred_near",
+            ),
+            edge(
+                "r1",
+                "e-sighting-2",
+                "e-installation-wpafb",
+                "occurred_near",
+            ),
             // duplicate source — must not double-count.
-            edge("r2", "e-sighting-2", "e-installation-wpafb", "occurred_near"),
+            edge(
+                "r2",
+                "e-sighting-2",
+                "e-installation-wpafb",
+                "occurred_near",
+            ),
         ];
         stamp_edge_counts(&mut entities, &rels, "occurred_near", "sighting_count");
         assert_eq!(
@@ -99,7 +114,12 @@ mod tests {
     #[test]
     fn ignores_non_target_edge_types() {
         let mut entities = vec![ent("e-installation-wpafb", "installation")];
-        let rels = vec![edge("r0", "e-witness-a", "e-installation-wpafb", "investigated_at")];
+        let rels = vec![edge(
+            "r0",
+            "e-witness-a",
+            "e-installation-wpafb",
+            "investigated_at",
+        )];
         stamp_edge_counts(&mut entities, &rels, "occurred_near", "sighting_count");
         assert!(entities[0].attributes.get("sighting_count").is_none());
     }

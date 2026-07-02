@@ -288,10 +288,7 @@ fn uninstall_launchd() -> Result<(), String> {
 fn systemd_unit_path() -> Result<PathBuf, String> {
     let config =
         dirs::config_dir().ok_or_else(|| "cannot resolve user config directory".to_string())?;
-    Ok(config
-        .join("systemd")
-        .join("user")
-        .join("svrnmesh.service"))
+    Ok(config.join("systemd").join("user").join("svrnmesh.service"))
 }
 
 #[cfg(target_os = "linux")]

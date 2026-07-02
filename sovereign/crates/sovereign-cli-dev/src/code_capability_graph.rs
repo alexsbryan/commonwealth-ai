@@ -195,10 +195,12 @@ fn load_fn_vecs(data_dir: &Path, corpus_id: &str) -> Result<FnVecs, String> {
         )
     };
     let side_raw = std::fs::read_to_string(&side_path).map_err(|_| missing())?;
-    let side: FnVecSidecar =
-        serde_json::from_str(&side_raw).map_err(|e| format!("parsing {}: {e}", side_path.display()))?;
+    let side: FnVecSidecar = serde_json::from_str(&side_raw)
+        .map_err(|e| format!("parsing {}: {e}", side_path.display()))?;
     if side.dim == 0 {
-        return Err(format!("embedding dim is 0 for {corpus_id} — re-run spec-reconcile"));
+        return Err(format!(
+            "embedding dim is 0 for {corpus_id} — re-run spec-reconcile"
+        ));
     }
     let bytes = std::fs::read(&bin_path).map_err(|_| missing())?;
     let expected = side.count.saturating_mul(side.dim).saturating_mul(4);
@@ -216,7 +218,9 @@ fn load_fn_vecs(data_dir: &Path, corpus_id: &str) -> Result<FnVecs, String> {
     let mut by_fileleaf = HashMap::new();
     let mut summaries = Vec::with_capacity(side.fns.len());
     for (i, m) in side.fns.iter().enumerate() {
-        by_fileline.entry(format!("{}:{}", m.file, m.line)).or_insert(i);
+        by_fileline
+            .entry(format!("{}:{}", m.file, m.line))
+            .or_insert(i);
         by_fileleaf
             .entry((m.file.clone(), m.name.clone()))
             .or_insert(i);
@@ -437,10 +441,11 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
         let fv = fn_vecs.as_ref()?;
         let &(file, line) = pos_by_qn.get(qn)?;
         let key = format!("{file}:{}", line + 1);
-        fv.by_fileline
-            .get(&key)
-            .copied()
-            .or_else(|| fv.by_fileleaf.get(&(file.to_string(), leaf.to_string())).copied())
+        fv.by_fileline.get(&key).copied().or_else(|| {
+            fv.by_fileleaf
+                .get(&(file.to_string(), leaf.to_string()))
+                .copied()
+        })
     };
 
     // ── fn_to_cap: qualified name → capability index (first cap wins) ──
@@ -648,8 +653,11 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
                     }
                 }
             }
-            let names = names
-                .unwrap_or_else(|| (0..k).map(|r| region_crate_name(r, &placed, &nodes)).collect());
+            let names = names.unwrap_or_else(|| {
+                (0..k)
+                    .map(|r| region_crate_name(r, &placed, &nodes))
+                    .collect()
+            });
             regions = names
                 .into_iter()
                 .enumerate()

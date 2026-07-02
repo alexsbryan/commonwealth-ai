@@ -80,7 +80,12 @@ pub async fn run(args: &[String]) -> i32 {
                 let mut v: Vec<String> = rd
                     .flatten()
                     .filter(|e| e.path().join(ATLAS_DIRNAME).join("atoms.json").exists())
-                    .filter_map(|e| e.path().file_name().and_then(|n| n.to_str()).map(String::from))
+                    .filter_map(|e| {
+                        e.path()
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .map(String::from)
+                    })
                     .filter(|n| !n.starts_with('.') && !n.starts_with('_'))
                     .collect();
                 v.sort();
@@ -128,7 +133,8 @@ pub async fn run(args: &[String]) -> i32 {
         "corpus", "store", "ann", "flip"
     );
     println!("{}", "-".repeat(82));
-    let (mut stores, mut anns, mut flips, mut wikis, mut errs) = (0usize, 0usize, 0usize, 0usize, 0usize);
+    let (mut stores, mut anns, mut flips, mut wikis, mut errs) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
 
     for corpus_id in &corpora {
         let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
@@ -137,19 +143,28 @@ pub async fn run(args: &[String]) -> i32 {
         let wiki_db = WikipediaGraph::default_db_path(&indexes_dir, corpus_id);
         if wiki_db.exists() {
             if skip_wiki {
-                println!("{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (skipped)", "-", "-", "-");
+                println!(
+                    "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (skipped)",
+                    "-", "-", "-"
+                );
                 continue;
             }
             let columnar = atlas_dir.join("articles.lance");
             if columnar.exists() && newer_than(&columnar, &wiki_db) {
-                println!("{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (current)", "-", "-", "-");
+                println!(
+                    "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (current)",
+                    "-", "-", "-"
+                );
                 continue;
             }
             match WikipediaGraph::open(&wiki_db, corpus_id) {
                 Ok(g) => match g.export_columnar(&atlas_dir).await {
                     Ok(()) => {
                         wikis += 1;
-                        println!("{corpus_id:<46} {:>7} {:>8} {:>5}  wiki columnar", "-", "-", "-");
+                        println!(
+                            "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki columnar",
+                            "-", "-", "-"
+                        );
                     }
                     Err(e) => {
                         errs += 1;
@@ -285,9 +300,13 @@ fn newer_than(a: &Path, b: &Path) -> bool {
 fn print_help() {
     println!("svrn atlas migrate-all — reusable ATLAS_STORAGE_V2 full-port (idempotent)\n");
     println!("  sovereign atlas migrate-all                 migrate every atlas-bearing corpus + flip read_v2");
-    println!("  sovereign atlas migrate-all --no-flip       build v2 artifacts but do NOT flip read_v2");
+    println!(
+        "  sovereign atlas migrate-all --no-flip       build v2 artifacts but do NOT flip read_v2"
+    );
     println!("  sovereign atlas migrate-all --skip-wiki     skip wiki-class (columnar) corpora");
     println!("  sovereign atlas migrate-all <corpus_id>     migrate one corpus");
-    println!("\natom corpora -> atoms.lance + edges.csr (+ atoms_ann.lance if embedded) + .read_v2");
+    println!(
+        "\natom corpora -> atoms.lance + edges.csr (+ atoms_ann.lance if embedded) + .read_v2"
+    );
     println!("wiki-class   -> articles.lance + edges.lance (columnar; no atoms.lance/ANN/read_v2)");
 }
