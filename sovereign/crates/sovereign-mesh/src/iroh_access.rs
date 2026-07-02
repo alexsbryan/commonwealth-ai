@@ -29,8 +29,8 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use commonwealth_transport::iroh::{
-    build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, ALPN,
-    CLIENT_ALPN,
+    build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, RelayConfig,
+    ALPN, CLIENT_ALPN,
 };
 use commonwealth_transport::TrafficClass;
 
@@ -128,6 +128,37 @@ fn env_kill_switch() -> bool {
     )
 }
 
+/// The live iroh connection path to one peer (H2 observability). A
+/// point-in-time snapshot from the endpoint's `remote_info`; the
+/// operator's answer to "is this peer on a direct path or the relay?"
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeerTransportPath {
+    /// `direct` (active IP path, hole-punched), `relayed` (active only
+    /// via a relay), `mixed` (both active), `idle` (known peer, no
+    /// active path this moment), or `unknown` (endpoint has no record).
+    pub path: String,
+    /// The relay URL in active use, if the path rides one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
+    /// Count of active direct (IP) addresses to this peer.
+    pub active_direct_addrs: usize,
+}
+
+/// Classify a peer's live path from what iroh reports ACTIVE: a direct
+/// (hole-punched) IP path is preferred once established; the relay is
+/// the always-works fallback. `any_addr` distinguishes "known peer,
+/// nothing active right now" (`idle`) from "endpoint has no record"
+/// (`unknown`).
+fn classify_path(direct_active: bool, relay_active: bool, any_addr: bool) -> &'static str {
+    match (direct_active, relay_active) {
+        (true, true) => "mixed",
+        (true, false) => "direct",
+        (false, true) => "relayed",
+        (false, false) if any_addr => "idle",
+        (false, false) => "unknown",
+    }
+}
+
 /// Handle to the running mesh iroh access path. Holds the endpoint
 /// (for live status / pairing reads) and the acceptor task, which is
 /// aborted on drop — so dropping this stops accepting dial-by-key
@@ -152,7 +183,7 @@ impl MeshIrohAccess {
         internal_port: u16,
         client_port: u16,
         enabled: bool,
-        relay_urls: &[String],
+        relay_cfg: &RelayConfig,
     ) -> Option<MeshIrohAccess> {
         if !enabled {
             return None;
@@ -173,7 +204,7 @@ impl MeshIrohAccess {
         let secret = commonwealth_transport::iroh::SecretKey::from_bytes(&identity.to_bytes());
 
         let endpoint =
-            match build_relayed_endpoint(secret, vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()], relay_urls).await {
+            match build_relayed_endpoint(secret, vec![ALPN.to_vec(), CLIENT_ALPN.to_vec()], relay_cfg).await {
                 Ok(ep) => ep,
                 Err(e) => {
                     tracing::error!(
@@ -280,6 +311,47 @@ impl MeshIrohAccess {
         self.endpoint.clone()
     }
 
+    /// The live connection path to `peer_pubkey` over iroh, from the
+    /// endpoint's `remote_info` snapshot (H2 observability — the
+    /// "is anyone actually on the relay?" question). Returns the
+    /// `path` classification, the active relay if any, and the count
+    /// of active direct addresses. `None` when the endpoint has no
+    /// record of this peer (never dialed, or not iroh-reachable).
+    /// Takes an [`Endpoint`] handle (see [`Self::endpoint_handle`]) so
+    /// the caller needn't hold the daemon-state lock across the await.
+    pub async fn peer_path_on(
+        endpoint: &Endpoint,
+        peer_pubkey: &[u8; 32],
+    ) -> Option<PeerTransportPath> {
+        let id = commonwealth_transport::iroh::PublicKey::from_bytes(peer_pubkey).ok()?;
+        let info = endpoint.remote_info(id).await?;
+        let mut active_relay: Option<String> = None;
+        let mut active_direct = 0usize;
+        let mut any_addr = false;
+        for a in info.addrs() {
+            any_addr = true;
+            let active = matches!(
+                a.usage(),
+                commonwealth_transport::iroh::TransportAddrUsage::Active
+            );
+            match a.addr() {
+                commonwealth_transport::iroh::TransportAddr::Relay(url) if active => {
+                    active_relay.get_or_insert_with(|| url.to_string());
+                }
+                commonwealth_transport::iroh::TransportAddr::Ip(_) if active => {
+                    active_direct += 1;
+                }
+                _ => {}
+            }
+        }
+        let path = classify_path(active_direct > 0, active_relay.is_some(), any_addr);
+        Some(PeerTransportPath {
+            path: path.to_string(),
+            relay: active_relay,
+            active_direct_addrs: active_direct,
+        })
+    }
+
     /// Bounded wait for a RELAY-bearing dial string, polling every
     /// 250 ms. Direct addrs appear near-instantly at bind, but a
     /// relay-bearing dial is what makes an invite work OFF-LAN — so
@@ -366,6 +438,17 @@ mod tests {
         let out = iroh_routed_classes(&section(|t| t.inference = Some("carrier-pigeon".into())));
         assert!(out.contains(&TrafficClass::Inference));
         assert_eq!(out, TrafficClass::ALL.to_vec());
+    }
+
+    #[test]
+    fn classify_path_covers_all_states() {
+        assert_eq!(classify_path(true, true, true), "mixed");
+        assert_eq!(classify_path(true, false, true), "direct");
+        assert_eq!(classify_path(false, true, true), "relayed");
+        // Known peer (has addrs) but nothing active this instant.
+        assert_eq!(classify_path(false, false, true), "idle");
+        // Endpoint has no record of the peer at all.
+        assert_eq!(classify_path(false, false, false), "unknown");
     }
 
     #[test]

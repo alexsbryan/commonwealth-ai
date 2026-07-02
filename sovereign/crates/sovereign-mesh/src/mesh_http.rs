@@ -162,6 +162,13 @@ pub struct StatusResponse {
     /// inference-contention signal (0 when idle).
     #[serde(default)]
     pub active_corpus_ingests: usize,
+    /// Per-peer iroh connection path (H2 observability): `direct` /
+    /// `relayed` / `mixed` / `idle` for each known peer. Empty when
+    /// iroh isn't running (mesh on the IP path) — so it also answers
+    /// "is this mesh actually on iroh, and via relay or direct?".
+    /// Serde default keeps older consumers wire-compatible.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iroh_transport: Vec<crate::daemon::IrohPeerPath>,
 }
 
 /// Cluster-health snapshot of a shared-model fleet, surfaced on
@@ -290,12 +297,16 @@ async fn mesh_status(
                     peer_inflight_ceiling,
                     fanout_inflight_current,
                     active_corpus_ingests,
+                    iroh_transport: vec![], // no mesh → no peers
                 })
                 .unwrap(),
             ),
         )
             .into_response();
     };
+
+    // H2: per-peer iroh path (empty when iroh isn't running).
+    let iroh_transport = daemon.iroh_transport_snapshot().await;
 
     // Map MemberStatus to its serde-renamed variant. `MeshMember`
     // already owns its `node_id` as a String (set by `mesh_state`), so
@@ -342,6 +353,7 @@ async fn mesh_status(
                 peer_inflight_ceiling,
                 fanout_inflight_current,
                 active_corpus_ingests,
+                iroh_transport,
             })
             .unwrap(),
         ),

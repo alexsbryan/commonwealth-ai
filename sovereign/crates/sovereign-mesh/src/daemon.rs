@@ -258,6 +258,16 @@ pub struct CreateMeshResult {
     pub client_token: Option<String>,
 }
 
+/// One peer's live iroh connection path (H2 observability). `path` is
+/// `None` when the endpoint has no record of this peer yet.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IrohPeerPath {
+    pub node_id: NodeId,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub path: Option<crate::iroh_access::PeerTransportPath>,
+}
+
 /// Result of joining an existing mesh.
 pub struct JoinMeshResult {
     pub mesh_name: String,
@@ -1092,15 +1102,20 @@ impl EmbeddedDaemon {
             ),
         ));
 
-        // Self-hosted relays (if configured) for the join's one-shot
-        // iroh endpoint, so a joiner behind a firewall that blocks n0's
-        // relays reaches the founder via the fleet's own relay (W4).
-        // Empty = n0 default.
-        let join_relay_urls: Vec<String> = {
+        // Relay/discovery posture (if configured) for the join's
+        // one-shot iroh endpoint, so a joiner behind a firewall that
+        // blocks n0's relays reaches the founder via the fleet's own
+        // relay (W4), or with n0 fully severed (H1). Default = n0.
+        let join_relay_cfg: commonwealth_transport::iroh::RelayConfig = {
             let guard = self.setup_config.read().await;
             guard
                 .as_ref()
-                .map(|c| c.iroh.relay_urls.clone())
+                .map(|c| {
+                    commonwealth_transport::iroh::RelayConfig::from_parts(
+                        c.iroh.relay_urls.clone(),
+                        c.iroh.discovery.as_deref(),
+                    )
+                })
                 .unwrap_or_default()
         };
         let handshake = if let (Some(dial), true) = (iroh_dial.as_deref(), invite_encrypted) {
@@ -1118,7 +1133,7 @@ impl EmbeddedDaemon {
                 node_name,
                 addrs,
                 identity_key.to_bytes(),
-                &join_relay_urls,
+                &join_relay_cfg,
                 Some(stable_id),
                 identity,
             )
@@ -1135,7 +1150,7 @@ impl EmbeddedDaemon {
                 iroh_dial
                     .as_deref()
                     .map(|d| (d, identity_key.to_bytes())),
-                &join_relay_urls,
+                &join_relay_cfg,
                 relay_hint.as_deref(),
                 mdns.as_deref(),
                 std::time::Duration::from_secs(5),
@@ -1413,6 +1428,46 @@ impl EmbeddedDaemon {
             expires_at,
         );
         Some((key, link))
+    }
+
+    /// H2 observability: per-peer iroh connection path (`direct` /
+    /// `relayed` / `mixed` / `idle`), for the operator surface
+    /// (`/v1/mesh/status.iroh_transport`, `sovereign mesh transport`).
+    /// Empty when iroh isn't running (no endpoint) — the mesh is on the
+    /// IP path, nothing to report here. Only members with a known
+    /// pubkey are queried (an iroh peer must have one).
+    pub async fn iroh_transport_snapshot(&self) -> Vec<IrohPeerPath> {
+        let state = self.state.read().await;
+        let (app_state, endpoint) = match &*state {
+            DaemonState::Running {
+                app_state,
+                iroh_access: Some(access),
+                ..
+            } => (app_state.clone(), access.endpoint_handle()),
+            _ => return Vec::new(),
+        };
+        drop(state);
+        let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
+            let mesh = app_state.inner.mesh.read().await;
+            mesh.members
+                .values()
+                .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
+                .cloned()
+                .collect()
+        };
+        let mut out = Vec::with_capacity(members.len());
+        for m in members {
+            let pubkey = m.node_pubkey.expect("filtered to Some above");
+            let path =
+                crate::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0).await;
+            out.push(IrohPeerPath {
+                node_id: m.node_id,
+                name: m.name.clone(),
+                path,
+            });
+        }
+        out
     }
 
     /// Replace the in-memory cached plaintext join key. Called by
@@ -2413,15 +2468,18 @@ impl EmbeddedDaemon {
         // failure logs and yields `None`, leaving the `IpTransport`
         // path untouched. Forwarding is lazy per stream, so binding
         // after the listener spawn (which races to bind) is safe.
-        let (cfg_iroh_enabled, iroh_transport_cfg, iroh_relay_urls) = {
+        let (cfg_iroh_enabled, iroh_transport_cfg, iroh_relay_cfg) = {
             let guard = self.setup_config.read().await;
             match guard.as_ref() {
                 Some(c) => (
                     c.iroh.enabled,
                     c.iroh.transport.clone(),
-                    c.iroh.relay_urls.clone(),
+                    commonwealth_transport::iroh::RelayConfig::from_parts(
+                        c.iroh.relay_urls.clone(),
+                        c.iroh.discovery.as_deref(),
+                    ),
                 ),
-                None => (None, Default::default(), Vec::new()),
+                None => (None, Default::default(), Default::default()),
             }
         };
         // Enablement is tri-state: explicit `[iroh] enabled` wins;
@@ -2441,7 +2499,7 @@ impl EmbeddedDaemon {
             internal_port,
             client_port,
             iroh_enabled,
-            &iroh_relay_urls,
+            &iroh_relay_cfg,
         )
         .await;
         // Which classes route over iroh, and which of those are

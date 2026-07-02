@@ -321,6 +321,21 @@ assert_iroh_carried_traffic() {
       FAILS=$((FAILS+1))
     fi
   done
+  # H2 observability: node0's /v1/mesh/status must expose iroh_transport with a
+  # real path (direct/relayed/mixed) for its peers — the operator surface, on a
+  # live daemon. In-netns peers are loopback ⇒ expect "direct".
+  local paths
+  paths=$(jget "$(status_url 0)" '",".join(p.get("path",{}).get("path","?") for p in d.get("iroh_transport",[]))')
+  if [ -n "$paths" ]; then
+    echo "  node0 iroh_transport paths: $paths"
+    case "$paths" in
+      *direct*|*relayed*|*mixed*) finding '{"kind":"iroh","check":"status_surface","node":0,"ok":true}';;
+      *) echo "  node0: iroh_transport present but no active path ✗"; FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_surface","node":0,"ok":false}';;
+    esac
+  else
+    echo "  node0: /v1/mesh/status exposed no iroh_transport ✗"
+    FAILS=$((FAILS+1)); finding '{"kind":"iroh","check":"status_surface","node":0,"ok":false}'
+  fi
 }
 
 # Forensic capture — dump the DURABLE identity state + daemon identity events at

@@ -144,6 +144,16 @@ pub struct IrohSection {
     /// ```
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relay_urls: Vec<String>,
+    /// Which discovery/relay infrastructure to use (H1 sovereignty
+    /// knob). `"n0"` or absent (the default) = n0's public relays AND
+    /// n0's DNS/pkarr address-lookup. `"none"` / `"self"` / `"local"`
+    /// = sever ALL n0 contact: reach peers only via gossiped direct
+    /// addresses (a flat LAN/VPC) and/or `relay_urls` above (a
+    /// self-hosted relay). Setting `relay_urls` ALONE does not stop the
+    /// n0 DNS lookup — set `discovery = "none"` for a true no-third-party
+    /// deployment. Consumed by `build_relayed_endpoint` via `RelayConfig`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discovery: Option<String>,
 }
 
 /// Per-traffic-class transport selection (Track W3 of
@@ -1083,15 +1093,19 @@ embed = "/m/e.gguf"
         let out = toml::to_string_pretty(&cfg).unwrap();
         assert!(!out.contains("relay_urls"), "empty relay_urls must serialize as absent: {out}");
 
-        // A configured self-hosted relay fleet round-trips.
+        // A configured self-hosted relay fleet round-trips, and the
+        // sovereignty `discovery` knob parses.
         let with_relays: SetupConfig = toml::from_str(&format!(
-            "{base}\n[iroh]\nenabled = true\nrelay_urls = [\"https://relay.corp.example:443\"]\n"
+            "{base}\n[iroh]\nenabled = true\nrelay_urls = [\"https://relay.corp.example:443\"]\ndiscovery = \"none\"\n"
         ))
         .unwrap();
         assert_eq!(
             with_relays.iroh.relay_urls,
             vec!["https://relay.corp.example:443".to_string()]
         );
+        assert_eq!(with_relays.iroh.discovery.as_deref(), Some("none"));
+        // Absent discovery = None (n0 default).
+        assert_eq!(cfg.iroh.discovery, None);
     }
 
     #[test]

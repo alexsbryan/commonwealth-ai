@@ -1219,12 +1219,28 @@ instance hangs off commonwealth-api's `AppState`
   reachability — normal LWW, unlike `node_pubkey`'s anti-downgrade);
   the daemon self-stamps its live dial info each gossip round via a
   pull-provider on `AppState`; `IrohTransport` dials peers purely from
-  the gossiped contact (**membership = dialability**). W3: `[iroh.transport]
-  <class> = "iroh"` installs a `RoutedTransport` for the flipped
-  classes (IP fallback retained); **no class is flipped by default**,
-  so the daemon still routes its own traffic over `IpTransport` until
-  an operator flips one (recommended order: gossip first, then soak).
-  Join-over-iroh is W2b.
+  the gossiped contact (**membership = dialability**).
+- **The no-VPN mesh (2026-07, uncommitted on `saas`; unit + e2e +
+  soak-axis verified).** When iroh is enabled, `RoutedTransport`
+  routes **every** `TrafficClass` iroh-first with automatic per-dial
+  IP fallback — `[iroh.transport] <class> = "ip"` is now an opt-OUT,
+  not an opt-in flip. Enablement is `[iroh] enabled: Option<bool>`:
+  absent = AUTO (on iff this node is in a mesh, keyed off the
+  `client-exposed` marker — a meshless daemon never contacts relays),
+  `Some(false)` = kill-switch (also `SOVEREIGN_IROH=off`). Plaintext
+  invites carry a `dial=` connect code (distinct from the encrypted
+  `iroh=`); `join::perform_join` dials the founder by key first and
+  falls back to `?relay=`/mDNS (W2c). A `RelayConfig` (`[iroh]
+  relay_urls` + `discovery`) drives `build_relayed_endpoint`:
+  self-hosted relays (W4), and `discovery = "none"` builds from
+  `presets::Minimal` to sever ALL n0 services (H1 — `relay_urls`
+  alone keeps n0's DNS lookup, so it is not a no-third-party
+  posture). `proxy_from_env` is always on, so the mesh survives
+  UDP-blocked corporate networks over relay-TCP:443 through a
+  (Basic-auth) HTTP proxy. Encrypted meshes
+  (`require_encryption`) stay the fail-closed variant (all classes
+  REQUIRE iroh, loopback-only listeners). `IpTransport` remains the
+  permanent fallback; every piece is config-reversible.
 - **Track M (mobile) is implemented**: `sovereign-server`'s
   `[iroh] enabled` block accepts dial-by-key clients on ALPN
   `cwth/client/0` (`src/iroh_access.rs`; pairing string at
@@ -1238,8 +1254,10 @@ instance hangs off commonwealth-api's `AppState`
 - **Out of seam, by design**: the join handshake (pre-membership
   bootstrap), worker-pod `PinnedTransport` (separate trust model),
   loopback self-probes, and the raw-TCP `llama-server`/`rpc-server`
-  tensor traffic (stays on the IP overlay until a tunnel proxy is
-  worth building).
+  tensor traffic. The last is the decided W6 posture: multi-host
+  inference needs its GPU anchors on a shared IP network (LAN/VPC) —
+  which every supported topology already has — rather than a VPN or a
+  per-worker iroh sidecar (specced as Option B, gated on a tok/s A/B).
 - **Migration order** (when a second transport goes live) is encoded
   by `TrafficClass`, not config: a small `RoutedTransport` mapping
   classes → transports slots into the same `Arc<dyn PeerTransport>`

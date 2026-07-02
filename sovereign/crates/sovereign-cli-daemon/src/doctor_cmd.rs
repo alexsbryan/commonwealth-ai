@@ -770,6 +770,60 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
     }
 }
 
+/// H3 egress posture: report whether mesh traffic is on iroh and via
+/// which path, plus whether an HTTP(S) proxy is engaged for the relay
+/// (credentials redacted). Informational — a mesh on the IP path is
+/// perfectly valid; this exists so a netops operator can confirm from
+/// one command what the node touches.
+async fn check_iroh_egress(client_url: &str) -> CheckResult {
+    // Local proxy posture, mirroring iroh's HTTPS_PROXY→HTTP_PROXY
+    // precedence, userinfo redacted.
+    let proxy = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
+        .iter()
+        .find_map(|v| std::env::var(v).ok().filter(|s| !s.trim().is_empty()))
+        .map(|u| match (u.find("://"), u.find('@')) {
+            (Some(s), Some(at)) if at > s + 3 => format!("{}***@{}", &u[..s + 3], &u[at + 1..]),
+            _ => u,
+        });
+    let proxy_note = match &proxy {
+        Some(p) => format!("; proxy={p} (Basic auth only — NTLM/Kerberos unsupported)"),
+        None => String::new(),
+    };
+
+    let url = format!("{client_url}/v1/mesh/status");
+    match http_get_json(&url).await {
+        Some(json) => {
+            let paths: Vec<&str> = json["iroh_transport"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|p| p["path"]["path"].as_str())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let msg = if paths.is_empty() {
+                format!("mesh on the IP path (iroh not carrying peer traffic){proxy_note}")
+            } else {
+                format!("mesh carrying traffic over iroh — peer paths: {}{proxy_note}", paths.join(", "))
+            };
+            CheckResult {
+                name: "iroh_egress",
+                layer: Layer::Commonwealth,
+                status: CheckStatus::Passed,
+                message: msg,
+                repair: Repair::None,
+            }
+        }
+        None => CheckResult {
+            name: "iroh_egress",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Warning,
+            message: format!("could not read mesh status from {url}{proxy_note}"),
+            repair: Repair::None,
+        },
+    }
+}
+
 async fn check_inference_capable(client_url: &str) -> CheckResult {
     // The daemon exposes `inference.loaded_models` on `/status`.
     // Earlier versions had a flat `inference_capable` bool at the top
@@ -1759,6 +1813,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
         results.push(check_daemon_running().await);
         results.push(check_daemon_memory(&client_url).await);
         results.push(check_mesh_member(&client_url).await);
+        results.push(check_iroh_egress(&client_url).await);
         results.push(check_inference_capable(&client_url).await);
         results.push(check_activity_reporting(&internal_url).await);
     }
