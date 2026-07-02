@@ -58,6 +58,15 @@ jobs:
         with:
           workspaces: "."
           key: router-cache-gate
+          cache-on-failure: true
+      # mold + clang: the workspace .cargo/config.toml pins them as the
+      # Linux linker — even this "cheap" job's proc-macro build scripts
+      # link through ld.mold ("invalid linker name" without it).
+      # protoc + libprotobuf: sovereign-core → corpus-engine → LanceDB
+      # (lance-encoding's prost-build). No llama in this dep tree, so no
+      # cmake/Vulkan needed.
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y mold clang protobuf-compiler libprotobuf-dev
       - name: Router embed cache is fresh
         run: cargo test -p sovereign-core --test router_cache_fresh
 
