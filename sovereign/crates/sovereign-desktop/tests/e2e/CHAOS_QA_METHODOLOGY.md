@@ -288,6 +288,32 @@ false-premise acceptance, literary extraction). Next levers if pushed further:
 prompt-side premise-checking, or a stronger draft model — not more gate
 machinery.
 
+### PUSH-PAST-90 LOOPS (gen75d/e/f, 2026-07-02) — CEILING REACHED ≈ 90 ± 3
+
+| Run | Raw | Verified | Note |
+|---|---|---|---|
+| gen75d | 88/89 | 90/91 | identifier veto, fragment guard, premise rule |
+| gen75e | 77/78 | 82/81 | harder+bigger draw (78 answered); exposed the under-pivot ghost band |
+| gen75f | **89/89** | **89/91** | short-path sweep; raw–verified gap = ZERO |
+
+Fixes landed in these loops: identifier-attribution veto (+ sentence-level
+sweep in BOTH gate paths — the ghost family had been hiding in the
+1,500–1,800-char band UNDER the longform pivot), fragment guard
+(abstained_fragment), premise-check synthesis rule, space-respace, phantom
+[ev-…]/[passage N] strip. Outcome audits: gen75f had ZERO known-ghosts, zero
+unclosed citations, zero truncation tails; 41/42 citations verified.
+
+**Ceiling evidence:** raw converged to verified (the app no longer produces
+judge-confusing shapes); every deterministic class is dead across ≥2
+consecutive runs; the verified-broke set is heterogeneous SINGLES:
+interpretive picks on degenerate open-ended prompts, real-world-true GK
+quotes the judge counts against evidence (Noam Cohen ×3 across runs — a
+judge-philosophy boundary, not fabrication), literary attribution nuance,
+and ~1/run rare leak variants. Remaining systematic item (queued):
+empty-retrieval ungated path (retrieved=0 → gate off → speculative tail;
+fix = scoped-zero-hit honest decline template). Past this: stronger draft
+model, or accept ≈90 ± 3 (mix-dependent) as the 35B tier's resting state.
+
 ### The judge-calibration gate (anti-gaming — read before touching the rubric)
 
 `tests/e2e/calibration-bank.jsonl` = 18 receipt-verified (question, answer,
