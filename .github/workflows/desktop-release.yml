@@ -464,15 +464,19 @@ jobs:
         shell: bash
         run: |
           # Prefer explicit workflow_dispatch input. Otherwise we must be
-          # on a tag push — `refs/tags/desktop-vX.Y.Z`. Refuse to proceed
-          # if the ref isn't a tag (e.g. workflow_dispatch on `main` with
-          # no input), because otherwise we'd create a Release tagged
-          # `main` and confuse everyone.
+          # on a tag push — `refs/tags/desktop-vX.Y.Z`. A dispatch on a
+          # BRANCH with no tag input is a supported BUILD-ONLY run (cache
+          # seeding / leg validation): skip publishing instead of failing
+          # after 1.5h of green builds — the installers stay downloadable
+          # as workflow-run artifacts. A malformed tag is still a hard
+          # error (we'd otherwise create a Release tagged `main`).
           tag="${{ inputs.tag }}"
           if [[ -z "$tag" ]]; then
             if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-              echo "::error::No tag input and ref is not a tag ($GITHUB_REF). Re-run with the tag input set." >&2
-              exit 1
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::No tag input and ref is not a tag ($GITHUB_REF) — build-only run; skipping the GitHub Release. Artifacts are attached to this workflow run; re-dispatch with the tag input set to publish."
+              echo "### Build-only run — no Release published (no tag input; ref $GITHUB_REF). Artifacts are on this run's page." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
             fi
             tag="${GITHUB_REF##refs/tags/}"
           fi
@@ -480,14 +484,17 @@ jobs:
             echo "::error::Tag '$tag' does not match desktop-v* pattern." >&2
             exit 1
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download all build artifacts
+        if: steps.resolve.outputs.skip != 'true'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
       - name: Flatten artifact tree
+        if: steps.resolve.outputs.skip != 'true'
         run: |
           mkdir -p release-assets
           # Each artifact dir is `desktop-<platform-name>/...`. Flatten
@@ -511,6 +518,7 @@ jobs:
           fi
 
       - name: Publish draft release
+        if: steps.resolve.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.resolve.outputs.tag }}
