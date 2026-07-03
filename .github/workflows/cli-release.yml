@@ -248,11 +248,31 @@ jobs:
         id: tag
         shell: bash
         run: |
+          # No tag input + branch ref = supported BUILD-ONLY run (cache
+          # seeding / leg validation): skip publishing instead of failing —
+          # or worse, the old behavior, which would have tried to publish a
+          # release literally tagged "refs/heads/main". Malformed tags stay
+          # hard errors.
           t="${{ inputs.tag }}"
-          [ -n "$t" ] || t="${GITHUB_REF#refs/tags/}"
+          if [ -z "$t" ]; then
+            case "$GITHUB_REF" in
+              refs/tags/*) t="${GITHUB_REF#refs/tags/}" ;;
+              *)
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                echo "::notice::No tag input and ref is not a tag ($GITHUB_REF) — build-only run; skipping the GitHub Release. Tarballs are attached to this workflow run."
+                echo "### Build-only run — no Release published (no tag input; ref $GITHUB_REF). Artifacts are on this run's page." >> "$GITHUB_STEP_SUMMARY"
+                exit 0 ;;
+            esac
+          fi
+          case "$t" in
+            cli-v*) ;;
+            *) echo "::error::Tag '$t' does not match cli-v* pattern." >&2; exit 1 ;;
+          esac
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "tag=$t" >> "$GITHUB_OUTPUT"
 
       - name: Publish draft release
+        if: steps.tag.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           draft: true # publish manually after a smoke test, per desktop-release
