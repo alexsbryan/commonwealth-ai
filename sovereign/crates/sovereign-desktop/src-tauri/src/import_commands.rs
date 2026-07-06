@@ -578,8 +578,388 @@ fn count_messages_in_file(path: &Path, needle: &[u8]) -> Result<u64, String> {
     Ok(total)
 }
 
+// ---------------------------------------------------------------------------
+// Email archive import (mbox / maildir / .eml folder)
+// ---------------------------------------------------------------------------
+//
+// Same lifecycle as the conversation imports (short-circuit → destructive
+// confirm → POST install → optimistic progress frame), with two deliberate
+// divergences:
+//
+//   1. NO staging copy. The `email-archive` recipe declares a required
+//      `path` parameter and reads the mailbox IN PLACE — the picked path
+//      travels through the install POST's `parameters` map and is
+//      interpolated into the recipe's `[acquire] path = "{path}"` at
+//      acquire time (`ingest_factories::render_against_parameters`).
+//   2. NO auto-enrichment downstream. The recipe ships `[enrichment]`
+//      off (LLM-bound, hours on a big mailbox); the frontend store for
+//      this corpus completes at ingest instead of chaining
+//      `enrich_build_async`.
+
+/// The bundled recipe this import drives. Its `scope = "local"` makes
+/// the privacy promise structural: never advertised, never replicated,
+/// never federated-queried.
+pub const EMAIL_CORPUS_ID: &str = "email-archive";
+
+/// Embed-bound estimate (no enrichment pass runs on this path). The
+/// live ETA refines it as soon as real phases stream.
+const EMAIL_SECONDS_PER_MESSAGE: f64 = 0.05;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImportEmailArchiveRequest {
+    /// The user-picked mailbox: a Takeout/Apple-Mail `.mbox` file, a
+    /// Thunderbird mbox store (no extension), a maildir root, a folder
+    /// of `.eml` files, or a single `.eml`.
+    pub path: PathBuf,
+    /// Explicit user confirmation to wipe a pre-existing partial index.
+    #[serde(default)]
+    pub reset_partial: bool,
+}
+
+#[tauri::command]
+pub async fn import_email_archive(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    request: ImportEmailArchiveRequest,
+) -> Result<ImportStartResponse, String> {
+    run_email_import(app_handle, state, request).await
+}
+
+async fn run_email_import(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    request: ImportEmailArchiveRequest,
+) -> Result<ImportStartResponse, String> {
+    let source_path = request.path.clone();
+    validate_email_source(&source_path)?;
+
+    let corpus_id = EMAIL_CORPUS_ID.to_string();
+
+    // Preflight count — best-effort, like the conversation imports'
+    // needle scan. mbox counts postmarks; a folder counts files.
+    let count_path = source_path.clone();
+    let total_messages = match tokio::task::spawn_blocking(move || count_emails(&count_path)).await
+    {
+        Ok(Ok(n)) => n,
+        Ok(Err(e)) => {
+            tracing::warn!(target: "imports", error = %e, "imports: email preflight count failed");
+            0
+        }
+        Err(e) => {
+            tracing::warn!(target: "imports", error = %e, "imports: email preflight count join error");
+            0
+        }
+    };
+    let estimated_minutes = if total_messages > 0 {
+        (total_messages as f64 * EMAIL_SECONDS_PER_MESSAGE / 60.0).max(0.5)
+    } else {
+        0.0
+    };
+
+    // Already-ingesting short-circuit — same reasoning as the
+    // conversation flow (see the long comment above).
+    {
+        let map = state.install_progress.read().await;
+        if let Some(p) = map.get(&corpus_id) {
+            if p.phase != "complete" && p.phase != "failed" {
+                tracing::info!(
+                    target: "imports",
+                    corpus_id = %corpus_id,
+                    current_phase = %p.phase,
+                    "imports: email install short-circuited — daemon already ingesting"
+                );
+                return Ok(ImportStartResponse::Started {
+                    corpus_id: corpus_id.clone(),
+                    total_messages,
+                    estimated_minutes,
+                    canonical_path: source_path.display().to_string(),
+                });
+            }
+        }
+    }
+
+    // Destructive-confirm flow, identical gate to the conversation
+    // imports — keyed purely on the on-disk index dir.
+    let index_dir = email_index_dir()?;
+    if index_dir.exists() && index_has_content(&index_dir) {
+        if !request.reset_partial {
+            return Ok(ImportStartResponse::PartialIndexExists {
+                corpus_id,
+                index_path: index_dir.display().to_string(),
+                total_messages,
+                estimated_minutes,
+                canonical_path: source_path.display().to_string(),
+            });
+        }
+        tracing::warn!(
+            target: "imports",
+            index_dir = %index_dir.display(),
+            "imports: removing partial email index on user-confirmed reset"
+        );
+        if let Err(e) = std::fs::remove_dir_all(&index_dir) {
+            return Err(format!(
+                "could not reset partial index at {}: {e}",
+                index_dir.display()
+            ));
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let daemon = state.internal_base_url();
+    let url = format!("{daemon}/internal/corpus/install");
+    let mut parameters = serde_json::Map::new();
+    parameters.insert(
+        "path".to_string(),
+        serde_json::Value::String(source_path.display().to_string()),
+    );
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({
+            "corpus_id": corpus_id,
+            "parameters": parameters,
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::warn!(
+                target: "imports",
+                error = %e,
+                "imports: POST /internal/corpus/install (email) failed"
+            );
+            "Couldn't reach svrnmesh. Make sure the daemon is running \
+             (try `sovereign daemon start`) and click Import again."
+                .to_string()
+        })?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        tracing::warn!(
+            target: "imports",
+            status = %status,
+            body = %body,
+            "imports: daemon /internal/corpus/install (email) returned non-success"
+        );
+        return Err(format!(
+            "svrnmesh rejected the import (HTTP {status}). Check the \
+             daemon logs at ~/.sovereign/logs/daemon.out for details."
+        ));
+    }
+
+    let initial = crate::commands::CorpusProgressPayload {
+        corpus_id: corpus_id.clone(),
+        phase: "downloading".into(),
+        percent: 0.0,
+        chunks_processed: 0,
+        message: Some("Starting…".into()),
+    };
+    if let Ok(mut map) = state.install_progress.try_write() {
+        map.insert(corpus_id.clone(), initial.clone());
+    }
+    use tauri::Emitter;
+    let _ = app_handle.emit("corpus-progress", initial);
+
+    tracing::info!(
+        target: "imports",
+        corpus_id = %corpus_id,
+        total_messages,
+        estimated_minutes,
+        source = %source_path.display(),
+        "imports: email install dispatched"
+    );
+
+    Ok(ImportStartResponse::Started {
+        corpus_id,
+        total_messages,
+        estimated_minutes,
+        canonical_path: source_path.display().to_string(),
+    })
+}
+
+/// `~/.sovereign/indexes/email-archive` — same convention as
+/// [`conversations_index_dir`].
+fn email_index_dir() -> Result<PathBuf, String> {
+    let home =
+        dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
+    Ok(home.join(".sovereign").join("indexes").join(EMAIL_CORPUS_ID))
+}
+
+/// Friendly pre-validation: the path must exist, a folder must not be
+/// empty, and a file must look like mail (an mbox postmark or an
+/// RFC-5322 header line) — content, not extension, so Thunderbird's
+/// extensionless stores pass and a mispicked PDF fails with a clear
+/// message instead of a cryptic ingest error later.
+fn validate_email_source(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "That path doesn't exist: {}. Pick the exported .mbox file \
+             (Gmail Takeout / Apple Mail) or a mail folder.",
+            path.display()
+        ));
+    }
+    if path.is_dir() {
+        let has_child = std::fs::read_dir(path)
+            .map(|rd| {
+                rd.flatten()
+                    .any(|e| !e.file_name().to_string_lossy().starts_with('.'))
+            })
+            .unwrap_or(false);
+        if !has_child {
+            return Err(format!(
+                "That folder is empty: {}. Point at a maildir root or a \
+                 folder of .eml files.",
+                path.display()
+            ));
+        }
+        return Ok(());
+    }
+    let mut head = [0u8; 1024];
+    let n = std::fs::File::open(path)
+        .and_then(|mut f| f.read(&mut head))
+        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let head = &head[..n];
+    if head.starts_with(b"From ") {
+        return Ok(()); // mbox postmark
+    }
+    // Single RFC-5322 message: first line is `Header-Name: value`.
+    let first_line = head.split(|b| *b == b'\n').next().unwrap_or(head);
+    let looks_rfc5322 = first_line
+        .iter()
+        .position(|b| *b == b':')
+        .map(|colon| {
+            colon > 0
+                && first_line[..colon]
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || *b == b'-')
+        })
+        .unwrap_or(false);
+    if looks_rfc5322 {
+        return Ok(());
+    }
+    Err(format!(
+        "{} doesn't look like an email archive. Expected an mbox export \
+         (Gmail Takeout, Apple Mail) or an .eml message — got neither an \
+         mbox `From ` postmark nor an email header.",
+        path.display()
+    ))
+}
+
+/// Best-effort message count for the preflight ETA. mbox: one per
+/// unescaped `From ` postmark, streamed so a multi-gigabyte Takeout
+/// costs one pass and no memory. Folder: visible files, recursively.
+/// Single message file: 1.
+fn count_emails(path: &Path) -> std::io::Result<u64> {
+    fn count_dir(dir: &Path, n: &mut u64) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(dir)?.flatten() {
+            let p = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') || name == "Thumbs.db" {
+                continue;
+            }
+            if p.is_dir() {
+                count_dir(&p, n)?;
+            } else {
+                *n += 1;
+            }
+        }
+        Ok(())
+    }
+
+    if path.is_dir() {
+        let mut n = 0u64;
+        count_dir(path, &mut n)?;
+        return Ok(n);
+    }
+    use std::io::BufRead;
+    let file = std::fs::File::open(path)?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut line: Vec<u8> = Vec::new();
+    let mut postmarks = 0u64;
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line)? == 0 {
+            break;
+        }
+        if line.starts_with(b"From ") {
+            postmarks += 1;
+        }
+    }
+    // Not an mbox (no postmarks) but it validated as mail → one message.
+    Ok(postmarks.max(1))
+}
+
 #[cfg(test)]
 mod tests {
+
+    // ── email import helpers ─────────────────────────────────────
+
+    #[test]
+    fn count_emails_counts_mbox_postmarks_not_escaped_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("takeout.mbox");
+        std::fs::write(
+            &p,
+            b"From a@x Mon Jun 1 10:00:00 2026\nFrom: a@x\n\nbody\n>From escaped line\n\nFrom b@x Mon Jun 1 11:00:00 2026\nFrom: b@x\n\nbody two\n",
+        )
+        .unwrap();
+        assert_eq!(count_emails(&p).unwrap(), 2);
+    }
+
+    #[test]
+    fn count_emails_single_message_file_is_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("one.eml");
+        std::fs::write(&p, b"From: a@x\nSubject: hi\n\nbody\n").unwrap();
+        assert_eq!(count_emails(&p).unwrap(), 1);
+    }
+
+    #[test]
+    fn count_emails_folder_counts_visible_files_recursively() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("cur");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("a.eml"), b"From: a@x\n\nb\n").unwrap();
+        std::fs::write(sub.join("b.eml"), b"From: b@x\n\nb\n").unwrap();
+        std::fs::write(dir.path().join(".hidden"), b"x").unwrap();
+        assert_eq!(count_emails(dir.path()).unwrap(), 2);
+    }
+
+    #[test]
+    fn validate_email_source_accepts_mbox_eml_and_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let mbox = dir.path().join("m.mbox");
+        std::fs::write(&mbox, b"From a@x Mon Jun 1 10:00:00 2026\nFrom: a@x\n\nb\n").unwrap();
+        assert!(validate_email_source(&mbox).is_ok());
+        let eml = dir.path().join("no_extension");
+        std::fs::write(&eml, b"Received: by mail\nFrom: a@x\n\nb\n").unwrap();
+        assert!(validate_email_source(&eml).is_ok());
+        assert!(validate_email_source(dir.path()).is_ok()); // non-empty folder
+    }
+
+    #[test]
+    fn validate_email_source_rejects_non_mail_and_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let pdf = dir.path().join("report.pdf");
+        std::fs::write(&pdf, b"%PDF-1.7 not mail at all").unwrap();
+        let err = validate_email_source(&pdf).unwrap_err();
+        assert!(err.contains("doesn't look like an email archive"), "{err}");
+        let missing = dir.path().join("nope.mbox");
+        let err = validate_email_source(&missing).unwrap_err();
+        assert!(err.contains("doesn't exist"), "{err}");
+        let empty = dir.path().join("emptydir");
+        std::fs::create_dir_all(&empty).unwrap();
+        let err = validate_email_source(&empty).unwrap_err();
+        assert!(err.contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn email_index_dir_tracks_corpus_id() {
+        let d = email_index_dir().unwrap();
+        assert!(d.ends_with(std::path::Path::new(".sovereign/indexes/email-archive")));
+    }
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;

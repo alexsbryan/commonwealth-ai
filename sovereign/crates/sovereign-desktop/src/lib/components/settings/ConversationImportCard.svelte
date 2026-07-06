@@ -44,6 +44,19 @@
     testidPrefix: string;
     /** Rich export-instructions snippet rendered in the picker card. */
     help: Snippet;
+    /** File-picker extension filter. Default `["zip"]` (the chat
+     *  exports). Email passes mbox/eml. */
+    pickExtensions?: string[];
+    /** When set, renders a secondary directory-mode pick button (email:
+     *  maildir / folder-of-.eml imports). */
+    folderPickLabel?: string;
+    /** data-testid for the secondary folder pick button. */
+    folderPickTestId?: string;
+    /** When set, the complete state shows this note instead of the
+     *  "Open in Atlas" action (sources that don't build an atlas). */
+    completeNote?: string;
+    /** Card icon glyph. */
+    icon?: string;
   }
 
   let {
@@ -56,6 +69,11 @@
     pickTestId,
     testidPrefix,
     help,
+    pickExtensions = ["zip"],
+    folderPickLabel,
+    folderPickTestId,
+    completeNote,
+    icon = "💬",
   }: Props = $props();
 
   // 1Hz tick so the live ETA + "last update" indicator refresh
@@ -188,7 +206,7 @@
     return 0;
   });
 
-  async function pickAndStart() {
+  async function pickAndStart(pickDirectory = false) {
     if (
       importState.stage === "starting" ||
       importState.stage === "ingesting" ||
@@ -202,8 +220,11 @@
     try {
       picked = await open({
         multiple: false,
-        directory: false,
-        filters: [{ name: fileFilterName, extensions: ["zip"] }],
+        directory: pickDirectory,
+        // Extension filters make no sense in directory mode.
+        filters: pickDirectory
+          ? undefined
+          : [{ name: fileFilterName, extensions: pickExtensions }],
       });
     } catch (e) {
       store.setError(e instanceof Error ? e.message : String(e));
@@ -268,7 +289,7 @@
 {#if pickerVisible}
   <article class="source-card source-card--active">
     <header class="source-card-header">
-      <div class="source-icon">💬</div>
+      <div class="source-icon">{icon}</div>
       <div class="source-meta">
         <h3 class="source-name">
           {sourceName}
@@ -282,7 +303,7 @@
     <button
       type="button"
       class="primary"
-      onclick={pickAndStart}
+      onclick={() => pickAndStart(false)}
       disabled={importState.stage === "starting" || importState.stage === "ingesting" || importState.stage === "enriching"}
       data-testid={pickTestId}
     >
@@ -296,6 +317,17 @@
         {importLabel}
       {/if}
     </button>
+    {#if folderPickLabel}
+      <button
+        type="button"
+        class="secondary"
+        onclick={() => pickAndStart(true)}
+        disabled={importState.stage === "starting" || importState.stage === "ingesting" || importState.stage === "enriching"}
+        data-testid={folderPickTestId}
+      >
+        {folderPickLabel}
+      </button>
+    {/if}
   </article>
 {/if}
 
@@ -380,14 +412,18 @@
 
     {#if importState.stage === "complete"}
       <div class="actions">
-        <button
-          type="button"
-          class="primary"
-          onclick={openInAtlas}
-          data-testid="{testidPrefix}-open-in-atlas"
-        >
-          Open in Atlas
-        </button>
+        {#if completeNote}
+          <p class="complete-note" data-testid="{testidPrefix}-complete-note">{completeNote}</p>
+        {:else}
+          <button
+            type="button"
+            class="primary"
+            onclick={openInAtlas}
+            data-testid="{testidPrefix}-open-in-atlas"
+          >
+            Open in Atlas
+          </button>
+        {/if}
       </div>
     {/if}
     {#if importState.stage === "failed"}
@@ -622,6 +658,12 @@
     margin: 0;
     color: var(--danger, #c33);
     font-size: 0.84rem;
+  }
+
+  .complete-note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #9aa4af);
   }
 
   .resume-banner {

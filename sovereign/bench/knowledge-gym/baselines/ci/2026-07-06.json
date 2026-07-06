@@ -1,0 +1,12 @@
+{
+  "lane": "knowledge-gym",
+  "captured_at": "2026-07-06T13:55:08.997167+00:00",
+  "note": "9/9 replays passed",
+  "metrics": {
+    "pass_rate": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.2
+    }
+  }
+}

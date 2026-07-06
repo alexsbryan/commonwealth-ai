@@ -664,10 +664,12 @@ mod tests {
         // (Portal:Current_events freshness daemon) + the 2026-05
         // conversations-anthropic recipe (private threaded-turn ingest) +
         // the uap-blue-book trio (hero / scans / metadata index) + the
-        // 2026-06 conversations-chatgpt recipe (private ChatGPT import).
+        // 2026-06 conversations-chatgpt recipe (private ChatGPT import) +
+        // the 2026-07 email-archive recipe (your own mailbox: Takeout
+        // mbox / Apple Mail export / maildir / .eml, scope=local).
         // (`alignment` removed 2026-06-19 — it synced the author's
         // ~/.claude and is not part of the open-source recipe set.)
-        assert_eq!(entries.len(), 26, "snapshot should have 26 entries");
+        assert_eq!(entries.len(), 27, "snapshot should have 27 entries");
     }
 
     #[test]
@@ -779,8 +781,10 @@ sha256 = ""
         //   (Portal:Current_events daemon) + conversations-anthropic
         //   (2026-05 threaded-turn ingest) + the uap-blue-book trio
         //   (hero / scans / index) + conversations-chatgpt (2026-06
-        //   ChatGPT import). (`alignment` removed 2026-06-19.)
-        assert_eq!(catalog.len(), 26);
+        //   ChatGPT import) + email-archive (2026-07 own-mailbox
+        //   ingest). (`alignment` removed 2026-06-19.)
+        assert_eq!(catalog.len(), 27);
+        assert!(catalog.iter().any(|c| c.id == "email-archive"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));
         assert!(catalog.iter().any(|c| c.id == "conversations-chatgpt"));

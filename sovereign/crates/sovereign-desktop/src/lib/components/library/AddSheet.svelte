@@ -35,7 +35,7 @@
 
   const SECTIONS: { id: Section; label: string; sub: string }[] = [
     { id: "files", label: "Your files", sub: "Folders, vaults, watched directories" },
-    { id: "imports", label: "Conversations", sub: "Import a Claude or ChatGPT export" },
+    { id: "imports", label: "Conversations", sub: "Import your email, Claude, or ChatGPT" },
     { id: "catalog", label: "Catalog", sub: "Install a ready-made library" },
   ];
 </script>

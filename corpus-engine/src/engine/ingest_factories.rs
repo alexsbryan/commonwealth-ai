@@ -34,15 +34,7 @@ impl CorpusEngine {
                 // can pick up a `[parameters.year]` install-time value.
                 // Empty placeholder set is a clean no-op for legacy
                 // recipes that never declare parameters.
-                let bindings: std::collections::BTreeMap<String, String> = recipe
-                    .resolved_parameters
-                    .values
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.as_interpolation()))
-                    .collect();
-                let render = |tpl: &str| {
-                    crate::acquirers::http_api::template::render_template(tpl, "", &bindings)
-                };
+                let render = |tpl: &str| render_against_parameters(tpl, recipe);
                 let url_rendered = url.as_deref().map(render).transpose()?;
                 let urls_rendered = urls
                     .as_ref()
@@ -69,7 +61,13 @@ impl CorpusEngine {
                     .await
             }
             AcquirerConfig::LocalFile { path } => {
-                let acq = LocalFileAcquirer::new(path);
+                // `{name}` placeholders resolve against install-time
+                // parameters — the same contract bulk_download URLs get —
+                // so a recipe can declare `[parameters.path]` and acquire
+                // `path = "{path}"` (e.g. `email-archive`). No-op for the
+                // legacy literal-path recipes.
+                let rendered = render_against_parameters(path, recipe)?;
+                let acq = LocalFileAcquirer::new(&rendered);
                 acq.acquire()
             }
             AcquirerConfig::HuggingFaceDataset {
@@ -428,5 +426,74 @@ impl CorpusEngine {
                 Box::new(chunkers::threaded_turns::ThreadedTurnsChunker::new())
             }
         }
+    }
+}
+
+/// Render `{name}` placeholders in a recipe-supplied template string
+/// against the recipe's install-time resolved parameters (the same
+/// contract for `bulk_download` URLs and `local_file` paths). A recipe
+/// with no parameters passes its strings through untouched.
+fn render_against_parameters(template: &str, recipe: &Recipe) -> Result<String> {
+    let bindings: std::collections::BTreeMap<String, String> = recipe
+        .resolved_parameters
+        .values
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_interpolation()))
+        .collect();
+    crate::acquirers::http_api::template::render_template(template, "", &bindings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn recipe_with_path_param() -> Recipe {
+        let toml = r#"
+[corpus]
+id = "t"
+name = "t"
+
+[parameters.path]
+type = "string"
+required = true
+description = "mailbox path"
+
+[acquire]
+type = "local_file"
+path = "{path}"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+"#;
+        Recipe::from_toml(toml).expect("test recipe parses")
+    }
+
+    #[test]
+    fn local_file_path_interpolates_resolved_parameters() {
+        let recipe = recipe_with_path_param();
+        let mut provided = std::collections::BTreeMap::new();
+        provided.insert(
+            "path".to_string(),
+            toml::Value::String("/tmp/mailbox".to_string()),
+        );
+        let resolved = recipe
+            .resolve_parameters(&provided)
+            .expect("path parameter resolves");
+        let recipe = recipe.with_resolved_parameters(resolved);
+        let rendered = render_against_parameters("{path}", &recipe).expect("renders");
+        assert_eq!(rendered, "/tmp/mailbox");
+    }
+
+    #[test]
+    fn literal_paths_pass_through_untouched() {
+        let recipe = recipe_with_path_param();
+        // No resolved parameters installed — a literal path must survive.
+        let rendered =
+            render_against_parameters("~/.sovereign/corpora-staging/enron", &recipe)
+                .expect("literal renders");
+        assert_eq!(rendered, "~/.sovereign/corpora-staging/enron");
     }
 }

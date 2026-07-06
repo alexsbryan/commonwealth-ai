@@ -500,6 +500,7 @@ fn main() -> ExitCode {
             recipe_commands::corpus_install_with_parameters,
             import_commands::import_anthropic_zip,
             import_commands::import_chatgpt_zip,
+            import_commands::import_email_archive,
             recipe_author_commands::recipe_author_list_projects,
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,

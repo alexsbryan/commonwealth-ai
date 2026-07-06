@@ -1,0 +1,23 @@
+{
+  "lane": "multiturn",
+  "captured_at": "2026-07-06T13:55:08.944226+00:00",
+  "corpus": "wikipedia",
+  "note": "16 threads · bank=wikipedia-learn-v0 · judge coverage on 16/16 threads",
+  "metrics": {
+    "mean_fact_recall_slope": {
+      "value": -0.09495384839012638,
+      "direction": "higher_is_better",
+      "tolerance": 0.05
+    },
+    "mean_judge_coverage": {
+      "value": 0.6419229134917259,
+      "direction": "higher_is_better",
+      "tolerance": 0.1
+    },
+    "min_first_failure_turn": {
+      "value": 0.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.5
+    }
+  }
+}

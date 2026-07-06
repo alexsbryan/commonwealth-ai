@@ -578,4 +578,85 @@ test.describe("Library → Add → Conversations (imports)", () => {
       /Extracting conversations/,
     );
   });
+
+  // Email import — the third card. Pins the two properties that differ
+  // from the chat imports: (a) the picked path travels to the backend
+  // command as-is (it becomes the recipe's `path` parameter — there is
+  // no staging copy), and (b) NO auto-enrichment: the email-archive
+  // recipe ships `[enrichment]` off, so ingest `complete` is terminal —
+  // the completion note replaces "Open in Atlas" and
+  // `enrich_build_async` must never fire for this corpus.
+  test("email import completes at ingest with no enrichment hop", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openLibraryAdd(page, chat);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+        __emailImportArgs?: unknown;
+        __enrichCalls?: number;
+      };
+      w.__enrichCalls = 0;
+      w.__sovereign_test__.setHandler("plugin:dialog|open", () => {
+        return "/tmp/takeout.mbox";
+      });
+      w.__sovereign_test__.setHandler("import_email_archive", (args) => {
+        w.__emailImportArgs = args;
+        return {
+          kind: "started",
+          corpus_id: "email-archive",
+          total_messages: 6_214,
+          estimated_minutes: 5.2,
+          canonical_path: "/tmp/takeout.mbox",
+        };
+      });
+      w.__sovereign_test__.setHandler("enrich_build_async", () => {
+        w.__enrichCalls = (w.__enrichCalls ?? 0) + 1;
+        return {
+          job_id: "test-job-email",
+          corpus_id: "email-archive",
+          channel: "enrich://progress/test-job-email",
+        };
+      });
+    });
+    await openConversations(page);
+
+    // Both pick modes are offered (file for .mbox/.eml, folder for
+    // maildir), and the privacy-forward card is present.
+    await expect(page.getByText("Email (your own mailbox)")).toBeVisible();
+    await expect(page.getByTestId("imports-email-pick-folder")).toBeVisible();
+
+    await page.getByTestId("imports-pick-email").click();
+    await expect(page.getByTestId("imports-email-progress-card")).toBeVisible();
+    await expect(page.getByText(/6,214 messages/)).toBeVisible();
+
+    // The backend command received the picked path verbatim.
+    const args = await page.evaluate(
+      () => (window as unknown as { __emailImportArgs?: unknown }).__emailImportArgs,
+    );
+    expect(JSON.stringify(args)).toContain("/tmp/takeout.mbox");
+
+    // Ingest completes → terminal. Note shown, no atlas button, and the
+    // enrichment subprocess was never spawned for this corpus.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
+      };
+      w.__sovereign_test__.emit("corpus-progress", {
+        corpus_id: "email-archive",
+        phase: "complete",
+        percent: 100,
+        chunks_processed: 6214,
+      });
+    });
+    await expect(page.getByTestId("imports-email-complete-note")).toBeVisible();
+    await expect(page.getByTestId("imports-email-open-in-atlas")).toHaveCount(0);
+    const enrichCalls = await page.evaluate(
+      () => (window as unknown as { __enrichCalls?: number }).__enrichCalls,
+    );
+    expect(enrichCalls).toBe(0);
+  });
 });

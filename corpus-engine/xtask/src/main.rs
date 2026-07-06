@@ -238,10 +238,12 @@ fn cmd_arch_gate(args: &[String]) -> i32 {
 // this class shipped: a `~/.claude/plans/…` machine-local citation survived
 // in §2 until an external review caught it (fixed 2026-07-01).
 
-/// The narrative contracts whose citations are gated.
+/// The narrative contracts whose citations are gated, plus the newcomer
+/// tour (a compressed rendering of the contract — same rot exposure).
 const DOCS_GATE_DOCS: &[&str] = &[
     "sovereign/SYSTEM_OVERVIEW.md",
     "sovereign/ARCH_PRINCIPLES.md",
+    "docs/ARCHITECTURE_TOUR.md",
 ];
 
 /// Extensions worth resolving. Deliberately EXCLUDES runtime artifacts

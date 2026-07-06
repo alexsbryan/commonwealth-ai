@@ -21,11 +21,13 @@
     atlasDownloadGlinerModel,
     importAnthropicZip,
     importChatgptZip,
+    importEmailArchive,
   } from "../../api";
   import type { GlinerModelStatus } from "../../types";
   import {
     anthropicImportsStore,
     chatgptImportsStore,
+    emailImportsStore,
   } from "../../stores/importsStore.svelte";
   import ConversationImportCard from "./ConversationImportCard.svelte";
 
@@ -119,6 +121,23 @@
       help={chatgptHelp}
     />
 
+    <ConversationImportCard
+      store={emailImportsStore}
+      importFn={importEmailArchive}
+      sourceName="Email (your own mailbox)"
+      progressLabel="Email archive"
+      importLabel="Import mailbox export"
+      fileFilterName="Email archive (.mbox / .eml)"
+      pickExtensions={["mbox", "eml"]}
+      folderPickLabel="Import a mail folder instead (maildir / .eml)"
+      folderPickTestId="imports-email-pick-folder"
+      pickTestId="imports-pick-email"
+      testidPrefix="imports-email"
+      icon="✉️"
+      completeNote="Done — your mailbox is now a notebook in the Library. Open it and Ask; every answer cites the original message. It stays on this machine: never shared to the mesh, never replicated, never queried by peers."
+      help={emailHelp}
+    />
+
     <article class="source-card source-card--disabled">
       <header class="source-card-header">
         <div class="source-icon">💬</div>
@@ -199,6 +218,14 @@
   Go to <strong>ChatGPT → Settings → Data controls → Export data</strong>.
   OpenAI emails a download link with a <code>.zip</code> of your
   conversations.
+{/snippet}
+
+{#snippet emailHelp()}
+  <strong>Gmail:</strong> Google Takeout → Mail → download the
+  <code>.mbox</code>. <strong>Apple Mail:</strong> select a mailbox →
+  File → Export Mailbox…. Thunderbird stores, maildir folders, and
+  <code>.eml</code> files work too — formats are detected by content.
+  Read in place; nothing is uploaded anywhere.
 {/snippet}
 
 <style>

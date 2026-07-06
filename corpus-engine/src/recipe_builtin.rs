@@ -91,6 +91,9 @@ pub enum RecipeId {
     /// OCR narrative and no investigation enrichment. Distributed via
     /// `[prebuilt]`; a local rebuild needs the dataprep metadata JSONL.
     UapBlueBookIndex,
+    /// Your own mailbox — maildir / mbox / .eml folder, acquired via the
+    /// required `path` parameter; `scope = "local"` keeps it off-mesh.
+    EmailArchive,
 }
 
 impl RecipeId {
@@ -127,6 +130,7 @@ impl RecipeId {
             Self::UapBlueBook => "uap-blue-book",
             Self::UapBlueBookScans => "uap-blue-book-scans",
             Self::UapBlueBookIndex => "uap-blue-book-index",
+            Self::EmailArchive => "email-archive",
         }
     }
 
@@ -160,6 +164,7 @@ impl RecipeId {
             "uap-blue-book" => Some(Self::UapBlueBook),
             "uap-blue-book-scans" => Some(Self::UapBlueBookScans),
             "uap-blue-book-index" => Some(Self::UapBlueBookIndex),
+            "email-archive" => Some(Self::EmailArchive),
             _ => None,
         }
     }
@@ -306,6 +311,12 @@ impl RecipeId {
                     "/recipes/uap-blue-book-index/recipe.toml"
                 ))
             }
+            Self::EmailArchive => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/email-archive/recipe.toml"
+                ))
+            }
         }
     }
 
@@ -339,6 +350,7 @@ impl RecipeId {
         Self::UapBlueBook,
         Self::UapBlueBookScans,
         Self::UapBlueBookIndex,
+        Self::EmailArchive,
     ];
 }
 
