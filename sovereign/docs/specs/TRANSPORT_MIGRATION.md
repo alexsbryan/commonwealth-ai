@@ -313,29 +313,26 @@ encrypted-mesh feature (a mesh created with `require_encryption`); a
 plaintext mesh still joins over the legacy IP path with the `?relay=`
 hint.
 
-**W2c — plaintext join over iroh (specced, not started).** The
-`?relay=` hint is the last place the product literally asks a person
-for a Tailscale address (`join.rs`'s isolation-failure error text
-says "try a Tailscale `?relay=…`"). The fix is small because W2b
-built all the machinery:
+**W2c — plaintext join over iroh: DONE.** A joiner with no shared IP
+route can now reach a trusted-network mesh's founder by key over an iroh
+QUIC tunnel and complete `/internal/join` through it — pinned by
+`sovereign-mesh/tests/plaintext_join_over_iroh_e2e.rs`. The shape:
 
-- The invite for a plaintext mesh gains the same
-  `&iroh=<endpoint-id>@<relay-or-addr>[,…]&exp=<ttl>` fields the
-  encrypted invite carries — the founder's endpoint is already bound
-  whenever `[iroh] enabled` (and `require_encryption` force-enables
-  it; for plaintext meshes the invite generator enables it or omits
-  the param, never emits a dead one).
-- `join::perform_join` (the plaintext path) prefers the iroh tunnel
-  when `iroh=` is present — the same one-shot endpoint +
-  `HttpBridge` dial W2b uses — and falls back to the legacy IP path
-  when absent or unreachable (unlike the encrypted path, fallback is
-  allowed: the mesh's own traffic is plaintext anyway, so
-  fail-closed buys nothing here).
-- The `?relay=` hint stays accepted for old invites but drops out of
-  generated invites and error text once this lands.
+- A plaintext-mesh invite carries a
+  `&dial=<endpoint-id>@<relay-or-addr>[,…]` connect code — deliberately
+  distinct from the encrypted invite's `&iroh=` param so an older client
+  never misparses one for the other (`deep_link.rs::dial_from_params`).
+- `join::perform_join` (the plaintext path) prefers the iroh tunnel when
+  `dial=` is present — the same one-shot endpoint + `HttpBridge` dial W2b
+  uses — and falls back to the legacy IP path (direct `?relay=` hint, then
+  mDNS) when it's absent or unreachable. Unlike the encrypted path this
+  fallback is allowed: a trusted-network mesh's own traffic is plaintext
+  anyway, so fail-closed buys nothing here.
+- The `?relay=` hint stays accepted for old invites but has dropped out of
+  generated invites and join-error text.
 
-Exit: a fresh off-LAN machine with no VPN joins a **plaintext** mesh
-from a deep link; the Tailscale suggestion is gone from join errors.
+Exit (met): a fresh off-LAN machine with no VPN joins a trusted-network
+mesh from a deep link; the Tailscale suggestion is gone from join errors.
 
 ### W3 — per-class flips via `RoutedTransport`
 
@@ -533,7 +530,7 @@ feature's network path accounted for." The audit, by feature:
 | GGUF/shard pulls, rpc-warm push | seam, `ModelTransfer` | same; iroh-blobs is the optional upgrade | W3 |
 | Peer inference + capability/status probes | seam, `Inference`/`StatusProbe` (client ALPN) | same | W3 + TTFT A/B gate |
 | Join — encrypted mesh | one-shot iroh dial of the founder key | **done** (W2b), fail-closed | — |
-| Join — plaintext mesh | legacy IP + `?relay=` hint | **not covered** — error text suggests a Tailscale address | W2c |
+| Join — plaintext (trusted-network) mesh | prefer-iroh dial (`dial=` invite), IP / `?relay=` / mDNS fallback | **done** (W2c), fail-soft — no Tailscale suggestion in error text | — |
 | Mobile (chat, stream, citations, history) | `cwth/client/0` bridge | **done** (M1–M3, LTE-proven) | M4 default flip (battery numbers) |
 | Desktop mobile-host pairing | `/status.iroh.dial` no-VPN code + QR deep link | **done** | — |
 | mDNS LAN discovery | LAN multicast | never involved a VPN (multicast doesn't traverse one) | — |

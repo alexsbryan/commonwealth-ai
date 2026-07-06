@@ -549,7 +549,7 @@ impl LocalCorpusManager {
             )));
         }
 
-        let cfg = self.require_watched(corpus_id).await?;
+        let cfg = self.require_enrichable(corpus_id).await?;
         let source_path = cfg.root_path.clone();
 
         // Mutate the in-memory + persisted config to record the
@@ -740,7 +740,7 @@ impl LocalCorpusManager {
     /// directory cleanly via `corpus_engine::atlas_teardown`, and
     /// resets the config + state to `Off`.
     pub async fn disable_enrichment(&self, corpus_id: &str) -> Result<()> {
-        let _ = self.require_watched(corpus_id).await?;
+        let _ = self.require_enrichable(corpus_id).await?;
 
         // Signal cancellation if there's a running build. The
         // subprocess will tear down on its next stdout poll.
@@ -814,26 +814,42 @@ impl LocalCorpusManager {
     /// isn't currently in `On` state — the user must enable
     /// first to pick a pipeline.
     pub async fn rebuild_enrichment(&self, corpus_id: &str) -> Result<String> {
-        let cfg = self.require_watched(corpus_id).await?;
+        let cfg = self.require_enrichable(corpus_id).await?;
         let pipeline_id = match cfg
             .source_type
             .watched_config()
             .map(|w| w.enrichment.clone())
         {
             Some(super::config::WatchedEnrichmentConfig::On { pipeline_id, .. }) => pipeline_id,
-            _ => {
+            // Watched but enrichment was turned off — require an explicit
+            // enable so the user re-picks a pipeline.
+            Some(_) => {
                 return Err(Error::Execution(
                     "rebuild_enrichment: corpus has no enrichment configured; \
                      call enable_enrichment first to pick a pipeline"
                         .into(),
                 ));
             }
+            // Non-watched folders (vaults, one-shot document folders) carry no
+            // per-watch pipeline stamp; tiered enrichment is universal and
+            // ignores the pipeline id, so default it rather than erroring.
+            None => "referential_atlas".to_string(),
         };
         // Same path as enable: the atlas dir is overwritten in
         // place by the orchestrator's writer, so we don't tear it
         // down first. (If the user wants a clean slate, they can
         // disable then enable — same effect, more steps.)
         self.enable_enrichment(corpus_id, &pipeline_id).await
+    }
+
+    /// One-shot tiered enrichment for a folder corpus (vault, watched, or
+    /// a one-shot document folder) — no pipeline id needed. This is "the
+    /// watched folder's first sweep, without the watching": it runs the
+    /// same tiered build (`start_tiered_build`) the enable path uses, so a
+    /// drag-drop import gets the RAPTOR + entity atlas a watched folder
+    /// gets. The pipeline id is a formality the tiered path ignores.
+    pub async fn enrich_now(&self, corpus_id: &str) -> Result<String> {
+        self.enable_enrichment(corpus_id, "referential_atlas").await
     }
 
     fn set_enrichment_runtime_status(
@@ -1934,6 +1950,18 @@ impl LocalCorpusManager {
             )));
         }
         Ok(cfg)
+    }
+
+    /// Like `require_watched`, but for the enrichment lifecycle — which is
+    /// a property of ingest, not of watching. Every folder corpus (vault,
+    /// watched, or one-shot document folder) can be enriched; the only
+    /// thing a `DocumentFolder` gives up vs a `WatchedFolder` is the sync
+    /// worker, not the atlas. All `LocalCorpusConfig` corpora are folder
+    /// corpora, so existence is the only precondition.
+    async fn require_enrichable(&self, corpus_id: &str) -> Result<LocalCorpusConfig> {
+        self.get(corpus_id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{corpus_id}' not registered")))
     }
 }
 
