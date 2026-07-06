@@ -22,6 +22,7 @@ pub mod mcp_config;
 pub mod memory_config;
 pub mod observer;
 pub mod rebrand;
+pub mod recipe;
 pub mod registry;
 pub mod setup_config;
 pub mod skills;
