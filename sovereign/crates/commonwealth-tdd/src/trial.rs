@@ -444,6 +444,8 @@ struct CandidateOutcome {
     workdir: PathBuf,
     outcome: Result<TestRunResult, String>,
     body: String,
+    /// True when the pointed repair turn produced the applied edit.
+    repaired: bool,
 }
 
 impl CandidateOutcome {
@@ -493,6 +495,7 @@ impl CandidateOutcome {
             error,
             body_chars: self.body.chars().count(),
             body_tail,
+            repaired: self.repaired,
         }
     }
 
@@ -522,8 +525,13 @@ impl CandidateOutcome {
         // `~` marks a header-inferred action (model emitted only the
         // source block) — keeps inference-rescued candidates
         // attributable in the trajectory.
-        if self.response.as_ref().is_some_and(|r| r.inferred) {
+        let shape = if self.response.as_ref().is_some_and(|r| r.inferred) {
             format!("~{shape}")
+        } else {
+            shape
+        };
+        if self.repaired {
+            format!("{shape}+r")
         } else {
             shape
         }
@@ -552,10 +560,11 @@ async fn try_candidate(
             workdir: candidate_workdir,
             outcome: Err(format!("snapshot: {e}")),
             body: String::new(),
+            repaired: false,
         };
     }
     let resp = match backend
-        .complete(&model, messages, temperature, emit_max_tokens)
+        .complete(&model, messages.clone(), temperature, emit_max_tokens)
         .await
     {
         Ok(r) => r,
@@ -566,6 +575,7 @@ async fn try_candidate(
                 workdir: candidate_workdir,
                 outcome: Err(format!("backend: {e}")),
                 body: String::new(),
+                repaired: false,
             };
         }
     };
@@ -580,6 +590,7 @@ async fn try_candidate(
                 // Keep the raw content: a parse failure is only
                 // diagnosable from what the model actually said.
                 body: resp.content,
+                repaired: false,
             };
         }
     };
@@ -593,6 +604,8 @@ async fn try_candidate(
     if let Some(v) = syntax_validator {
         ctx = ctx.with_syntax_validator(v);
     }
+    let mut parsed = parsed;
+    let mut repaired = false;
     if let Err(e) = apply_edit(&ctx, &target_path, &parsed).await {
         // Full multi-line cargo-shape error message preserved here
         // so the next round's prompt can surface it as feedback —
@@ -600,13 +613,62 @@ async fn try_candidate(
         // trial-2 2026-05-24: validator rejected but model kept
         // making the same syntax error because it had no idea what
         // was wrong).
-        return CandidateOutcome {
-            temp: temperature,
-            response: Some(parsed.clone()),
-            workdir: candidate_workdir,
-            outcome: Err(format!("apply: {}", e.render_for_agent())),
-            body: parsed.body.clone(),
+        let first_err = format!("apply: {}", e.render_for_agent());
+        // Pointed repair turn — ONE follow-up call on a rejected
+        // apply. The harness holds a rendered, line-anchored error
+        // for a candidate it is about to discard; small models fix
+        // pointed errors far better than they avoid them cold
+        // (B-arm 3.2-lights-out t1: 7/12 candidates died to the
+        // pre-write syntax check). One repair per candidate keeps
+        // the call budget bounded at 2x worst-case.
+        let repair_msgs = {
+            let mut m = messages.clone();
+            m.push(json!({ "role": "assistant", "content": resp.content }));
+            m.push(json!({ "role": "user", "content": format!(
+                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix the problem and re-emit: ONE fenced JSON action, then ONE fenced source block with the corrected content. No commentary."
+            ) }));
+            m
         };
+        let repair_ok = match backend
+            .complete(&model, repair_msgs, temperature, emit_max_tokens)
+            .await
+        {
+            Ok(r2) => match parse_response(&r2.content) {
+                Some(p2) => match apply_edit(&ctx, &target_path, &p2).await {
+                    Ok(_) => {
+                        parsed = p2;
+                        repaired = true;
+                        true
+                    }
+                    Err(e2) => {
+                        return CandidateOutcome {
+                            temp: temperature,
+                            response: Some(p2.clone()),
+                            workdir: candidate_workdir,
+                            outcome: Err(format!(
+                                "apply: {} [after repair; first: {}]",
+                                e2.render_for_agent(),
+                                first_err
+                            )),
+                            body: p2.body,
+                            repaired: true,
+                        };
+                    }
+                },
+                None => false,
+            },
+            Err(_) => false,
+        };
+        if !repair_ok {
+            return CandidateOutcome {
+                temp: temperature,
+                response: Some(parsed.clone()),
+                workdir: candidate_workdir,
+                outcome: Err(first_err),
+                body: parsed.body.clone(),
+                repaired: false,
+            };
+        }
     }
     let test_result = run_tests(&candidate_workdir, &test_command, language, timeout).await;
     let body = parsed.body.clone();
@@ -616,6 +678,7 @@ async fn try_candidate(
         workdir: candidate_workdir,
         outcome: Ok(test_result),
         body,
+        repaired,
     }
 }
 
@@ -968,6 +1031,7 @@ mod tests {
             workdir: std::path::PathBuf::new(),
             outcome: Err(format!("{class_prefix}: {msg}")),
             body: String::new(),
+            repaired: false,
         }
     }
 

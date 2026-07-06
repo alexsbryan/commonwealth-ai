@@ -187,4 +187,8 @@ pub struct CandidateDetail {
     /// truncation, reasoning-leak-into-code, and fence problems.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_tail: Option<String>,
+    /// True when the applied edit came from the pointed repair turn
+    /// (first apply rejected, one follow-up call fixed it).
+    #[serde(default)]
+    pub repaired: bool,
 }
