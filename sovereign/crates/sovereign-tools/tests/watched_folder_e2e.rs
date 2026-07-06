@@ -120,6 +120,30 @@ async fn register(fx: &Fixture, watched_cfg: WatchedFolderConfig) -> String {
     id
 }
 
+/// Enrichment is a property of ingest, not of watching: the enrich
+/// lifecycle must accept a one-shot document folder, not just watched
+/// folders. Before decoupling ingest from watching this errored with
+/// "corpus is not a watched folder". `disable_enrichment` is the
+/// subprocess-free lifecycle method (idempotent teardown, no build
+/// spawned), so it's the clean probe that `require_enrichable` accepts a
+/// `DocumentFolder` — the manager half of "a watched folder without the
+/// watching".
+#[tokio::test]
+async fn document_folder_accepts_the_enrich_lifecycle() {
+    let fx = boot().await;
+    write(&fx.folder.join("a.md"), "# Title\n\nbody text");
+    let cfg = LocalCorpusConfig::document_folder(fx.folder.clone(), "manuals".into());
+    let id = fx.manager.register(cfg).await.expect("register");
+    fx.manager
+        .ingest(&id, None, None)
+        .await
+        .expect("ingest document folder");
+    fx.manager
+        .disable_enrichment(&id)
+        .await
+        .expect("enrich lifecycle must accept a one-shot document folder");
+}
+
 /// A test double for the living-trigger runtime that records each `dispatch`
 /// instead of running a workflow — so the seam can be asserted in-process without
 /// a daemon or a real workflow run.
