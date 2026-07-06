@@ -37,7 +37,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use sovereign_contracts::recipe::notes::{NoteRow, NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_core::error::{Error, Result};
 use sovereign_store::recipe_project_store::{
     RecipeProjectError, RecipeProjectRow, RecipeProjectStore,
@@ -51,14 +51,6 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
     Error::InvalidInput(format!("{op} {}: {e}", path.as_ref().display()))
 }
 
-/// Bridge a `corpus_engine::Error` into a `sovereign_core::Error`.
-/// The two crates' error enums are intentionally disjoint; everything
-/// from corpus-engine surfaces as a `Storage` failure here, which is
-/// the closest matching variant.
-fn ce_err(e: corpus_engine::Error) -> Error {
-    Error::Storage(e.to_string())
-}
-
 /// Bridge a `RecipeProjectStore` error into a `sovereign_core::Error`.
 /// Empty/duplicate-id preconditions surface as `InvalidInput` so the agent
 /// can react; everything else surfaces as `Storage`.
@@ -67,12 +59,6 @@ fn ce_rps_err(e: RecipeProjectError) -> Error {
         RecipeProjectError::InvalidInput(s) => Error::InvalidInput(s),
         other => Error::Storage(other.to_string()),
     }
-}
-
-/// Same shape for `corpus-engine-notes::Error` (NoteStore carved out
-/// 2026-05-23, step 3). NoteStore call sites bubble this error type.
-fn ce_notes_err(e: corpus_engine_notes::Error) -> Error {
-    Error::Storage(e.to_string())
 }
 
 /// Default global maintainer inbox directory (created on demand).
@@ -227,7 +213,7 @@ pub struct RecipeProject {
     title: String,
     artifact_kind: ArtifactKind,
     project_dir: PathBuf,
-    notes: Arc<NoteStore>,
+    notes: Arc<dyn RecipeNotes>,
     features: Arc<RecipeProjectStore>,
 }
 
@@ -238,7 +224,7 @@ impl RecipeProject {
     pub async fn new(
         title: &str,
         charter_md: &str,
-        notes: Arc<NoteStore>,
+        notes: Arc<dyn RecipeNotes>,
         features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
         Self::new_with_kind(title, charter_md, ArtifactKind::Recipe, notes, features).await
@@ -252,7 +238,7 @@ impl RecipeProject {
         title: &str,
         charter_md: &str,
         artifact_kind: ArtifactKind,
-        notes: Arc<NoteStore>,
+        notes: Arc<dyn RecipeNotes>,
         features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
         let feature_id = uuid::Uuid::new_v4().to_string();
@@ -304,7 +290,7 @@ impl RecipeProject {
     /// isn't in the `RecipeAuthoring` state.
     pub async fn load(
         feature_id: &str,
-        notes: Arc<NoteStore>,
+        notes: Arc<dyn RecipeNotes>,
         features: Arc<RecipeProjectStore>,
     ) -> Result<Self> {
         let row = features
@@ -493,7 +479,6 @@ impl RecipeProject {
         self.notes
             .read_notes_scoped(None, &[], &[], &[], limit, false, &scope)
             .await
-            .map_err(ce_notes_err)
     }
 
     /// RecipeProjectStore handle access for sibling tools that need to
@@ -503,7 +488,7 @@ impl RecipeProject {
     }
 
     /// NoteStore handle for sibling tools.
-    pub fn notes(&self) -> &Arc<NoteStore> {
+    pub fn notes(&self) -> &Arc<dyn RecipeNotes> {
         &self.notes
     }
 

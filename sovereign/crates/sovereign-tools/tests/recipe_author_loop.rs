@@ -239,7 +239,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use std::sync::Arc;
 
-    use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+    use corpus_engine_notes::NoteStore;
+    use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
     use sovereign_store::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
@@ -247,6 +248,7 @@ async fn recipe_author_project_lifecycle_end_to_end() {
         decision_log::{DecisionAttribution, DecisionKind, DecisionPayload},
         situated_context, CapabilityRequestTool, DecisionLogTool,
     };
+    use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
     use sovereign_tools::RecipeProject;
 
     let home = tempfile::tempdir().unwrap();
@@ -254,7 +256,9 @@ async fn recipe_author_project_lifecycle_end_to_end() {
     let recipes_dir = home.path().join(".sovereign/recipes");
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
-    let notes = Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
+    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
+        NoteStore::open(&home.path().join("notes.db")).unwrap(),
+    )));
     let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(

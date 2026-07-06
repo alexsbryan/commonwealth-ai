@@ -52,7 +52,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -84,7 +84,7 @@ pub struct CapabilityRequest {
 
 #[derive(Default)]
 pub struct CapabilityRequestTool {
-    notes: Option<Arc<NoteStore>>,
+    notes: Option<Arc<dyn RecipeNotes>>,
     features: Option<Arc<RecipeProjectStore>>,
     /// Test-only override for the maintainer inbox directory. None
     /// in production (resolves to `~/.sovereign/capability-requests/inbox/`).
@@ -96,7 +96,7 @@ impl CapabilityRequestTool {
         Self::default()
     }
 
-    pub fn with_stores(notes: Arc<NoteStore>, features: Arc<RecipeProjectStore>) -> Self {
+    pub fn with_stores(notes: Arc<dyn RecipeNotes>, features: Arc<RecipeProjectStore>) -> Self {
         Self {
             notes: Some(notes),
             features: Some(features),
@@ -367,8 +367,7 @@ impl Tool for CapabilityRequestTool {
                 None,
                 Some(&payload.to_string()),
             )
-            .await
-            .map_err(ce_err)?;
+            .await?;
 
         Ok(StepOutput::Json(json!({
             "request_id": request_id,
@@ -397,13 +396,12 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
     Error::InvalidInput(format!("{op} {}: {e}", path.as_ref().display()))
 }
 
-fn ce_err(e: corpus_engine_notes::Error) -> Error {
-    Error::Storage(e.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipe_notes_adapter::NoteStoreRecipeNotes;
+    use corpus_engine_notes::NoteStore;
+    use sovereign_contracts::recipe::notes::ScopeFilter;
 
     // HOME is process-global: hold the CRATE-WIDE lock
     // (`recipe_author::home_test_lock`) — a module-local mutex
@@ -412,7 +410,7 @@ mod tests {
     // resurfaced the same land-in-the-wrong-tempdir flake in
     // checkpoint.rs on 2026-07-02.
     async fn fresh() -> (
-        Arc<NoteStore>,
+        Arc<dyn RecipeNotes>,
         Arc<RecipeProjectStore>,
         RecipeProject,
         tempfile::TempDir,
@@ -420,7 +418,9 @@ mod tests {
     ) {
         let guard = crate::recipe_author::home_test_lock();
         let dir = tempfile::tempdir().unwrap();
-        let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
+            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
+        )));
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         std::env::set_var("HOME", dir.path());
         let project = RecipeProject::new(
@@ -534,7 +534,7 @@ mod tests {
         assert_eq!(parsed.feature_id, project.feature_id());
 
         // Also a NoteStore note `kind = capability_request`.
-        let scope = corpus_engine_notes::ScopeFilter {
+        let scope = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.feature_id().to_string()),
         };
