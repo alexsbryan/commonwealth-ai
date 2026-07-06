@@ -116,7 +116,7 @@ impl AgentRunner for SearchRunner {
         let trial = Trial {
             workdir,
             model: ctx.model_handle.clone(),
-            prompt: ctx.prompt.clone(),
+            prompt: strip_delivery_section(&ctx.prompt),
             test_command: ctx.verify_cmd.clone(),
             polarity: Polarity::MaximizePassing,
             config: TrialConfig::default(),
@@ -233,5 +233,59 @@ mod tests {
             String,
         >::new(
         ))));
+    }
+}
+
+/// The battery's prompt.md files end with a "## How to deliver"
+/// section written for TOOL-CALLING runners ("use the write tool…
+/// **Do NOT paste the solution into chat**"). Under the search
+/// runner the delivery contract is the trial prompt's own — emit one
+/// fenced JSON action plus one fenced source block, i.e. exactly
+/// "paste the solution into chat". Forwarding the tool-agent section
+/// verbatim hands a small model two contradictory delivery contracts
+/// in one prompt. Delivery instructions belong to the RUNNER, not
+/// the problem statement; cut the section, keep everything else.
+fn strip_delivery_section(prompt: &str) -> String {
+    const HEADING: &str = "## How to deliver";
+    let Some(start) = prompt.find(HEADING) else {
+        return prompt.to_string();
+    };
+    let tail = &prompt[start + HEADING.len()..];
+    let mut out = String::with_capacity(prompt.len());
+    out.push_str(prompt[..start].trim_end());
+    out.push('\n');
+    if let Some(i) = tail.find("\n## ") {
+        out.push('\n');
+        out.push_str(&tail[i + 1..]);
+    }
+    out
+}
+
+#[cfg(test)]
+mod delivery_strip_tests {
+    use super::strip_delivery_section;
+
+    #[test]
+    fn strips_trailing_delivery_section() {
+        let p = "# Task\n\nBody text.\n\n## How to deliver\n\nUse the write tool.\n**Do NOT paste the solution into chat.**\n";
+        let s = strip_delivery_section(p);
+        assert!(!s.contains("How to deliver"));
+        assert!(!s.contains("Do NOT paste"));
+        assert!(s.contains("Body text."));
+    }
+
+    #[test]
+    fn keeps_sections_after_a_mid_prompt_delivery_section() {
+        let p = "# Task\n\n## How to deliver\n\nwrite tool stuff\n\n## Constraints\n\n- std only\n";
+        let s = strip_delivery_section(p);
+        assert!(!s.contains("write tool stuff"));
+        assert!(s.contains("## Constraints"));
+        assert!(s.contains("- std only"));
+    }
+
+    #[test]
+    fn prompt_without_section_unchanged() {
+        let p = "# Task\n\nJust a body.\n";
+        assert_eq!(strip_delivery_section(p), p);
     }
 }
