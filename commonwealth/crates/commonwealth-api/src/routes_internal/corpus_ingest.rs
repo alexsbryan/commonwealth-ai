@@ -411,7 +411,7 @@ pub async fn corpus_status(State(state): State<AppState>) -> Json<CorpusStatusRe
     Json(CorpusStatusResponse { entries })
 }
 
-fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
+pub(crate) fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
     use corpus_engine::IngestProgress as P;
     match progress {
         P::Downloading { percent, .. } => Some((*percent / 100.0).clamp(0.0, 1.0)),

@@ -12,6 +12,7 @@ use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
 use crate::routes_oicp;
+use crate::routes_oicp_ingest;
 use crate::routes_ollama;
 use crate::routes_responses;
 use crate::routes_status;
@@ -65,6 +66,20 @@ pub fn client_router(state: AppState) -> Router {
         .route("/status", get(routes_status::status))
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
+        // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
+        // poll coarse progress, and dry-run a recipe. Protocol DTOs only
+        // (no `corpus_engine` types on the wire); advertised in the
+        // manifest's `knowledge.ingest` when a corpus engine is wired.
+        // Covered by the outer `client_auth` layer like the rest of :9741.
+        .route(
+            "/oicp/v1/corpus/install",
+            post(routes_oicp_ingest::corpus_install),
+        )
+        .route(
+            "/oicp/v1/corpus/progress",
+            get(routes_oicp_ingest::corpus_progress),
+        )
+        .route("/oicp/v1/recipe/test", post(routes_oicp_ingest::recipe_test))
         // Ollama-native /api/* compatibility shim. Pure translation over the
         // OpenAI handlers above — no new inference/routing logic. Chat +
         // generate carry the same peer-admission gate as /v1/chat/completions

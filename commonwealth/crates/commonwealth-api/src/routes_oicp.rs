@@ -7,8 +7,8 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_inference::oicp::features;
 use commonwealth_inference::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
-    FederationManifest, KnowledgeManifest, LatencyClass, ModelStatus, PeerDescriptor, ProviderInfo,
-    ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
+    FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
+    PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -150,17 +150,35 @@ pub(crate) fn synthesize_fingerprint(
     }
 }
 
-/// Apply OICP v0.4 additive enrichment to an outbound manifest (§2/§4/§6),
+/// Apply OICP v0.4 additive enrichment to an outbound manifest (§2/§4/§5/§6),
 /// on BOTH the local-inference and hub-synthesized paths so a client sees
 /// identical v0.4 posture regardless of daemon shape: advertise the
-/// honoured `features`, stamp per-model fingerprints, and publish the
-/// local embed model (with its query-instruction prefix) into the
-/// knowledge section. The ingest surface (§5) is advertised separately by
-/// the ingest routes once they are mounted.
+/// honoured `features`, stamp per-model fingerprints, publish the local
+/// embed model (with its query-instruction prefix), and — when a corpus
+/// engine is wired — advertise the ingest endpoints (§5) that
+/// `routes_oicp_ingest` serves.
 fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut ProviderManifest) {
     // §2 features.
-    let feats = if embedded { EMBEDDED_FEATURES } else { HUB_FEATURES };
-    manifest.features = feats.iter().map(|s| s.to_string()).collect();
+    let mut feats: Vec<String> = if embedded { EMBEDDED_FEATURES } else { HUB_FEATURES }
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    // §5 ingest surface — advertised iff a corpus engine is wired on this
+    // node (the routes 503 without one). The `knowledge.ingest` endpoints
+    // and these feature strings MUST travel together, so they are derived
+    // in one place: the `.then` both pushes the features and yields the
+    // endpoints, or neither happens.
+    let ingest = state.inner.corpus_engine.is_some().then(|| {
+        feats.push(features::INGEST_V1.to_string());
+        feats.push(features::INGEST_RECIPE_TEST.to_string());
+        IngestEndpoints {
+            install_endpoint: "/oicp/v1/corpus/install".into(),
+            progress_endpoint: "/oicp/v1/corpus/progress".into(),
+            test_endpoint: Some("/oicp/v1/recipe/test".into()),
+        }
+    });
+    manifest.features = feats;
 
     // §6 per-model fingerprints (leave any already set by the source).
     for model in &mut manifest.models {
@@ -173,20 +191,28 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
         }
     }
 
-    // §4 embed-model completeness. The embed model (with its v0.4
-    // query-instruction prefix) already lives in the inference store,
-    // set by the daemon at bootstrap. Publish it in the knowledge
-    // section so a client can reconstruct bit-compatible query
-    // embeddings for federated search.
-    if let Some(embed_model) = state.inner.inference_store.get_local_embed_model() {
+    // §4 embed-model completeness + §5 ingest endpoints, both published in
+    // the knowledge section. The embed model (with its v0.4 query-
+    // instruction prefix) already lives in the inference store, set by the
+    // daemon at bootstrap; a client reconstructs bit-compatible query
+    // embeddings from it for federated search.
+    let embed_model = state.inner.inference_store.get_local_embed_model();
+    if embed_model.is_some() || ingest.is_some() {
         match &mut manifest.knowledge {
-            Some(k) => k.embed_model = Some(embed_model),
+            Some(k) => {
+                if embed_model.is_some() {
+                    k.embed_model = embed_model;
+                }
+                if ingest.is_some() {
+                    k.ingest = ingest;
+                }
+            }
             None => {
                 manifest.knowledge = Some(KnowledgeManifest {
                     corpora: Vec::new(),
                     search_endpoint: "/v1/knowledge/search".into(),
-                    embed_model: Some(embed_model),
-                    ingest: None,
+                    embed_model,
+                    ingest,
                 });
             }
         }
