@@ -1,20 +1,45 @@
 name: Release (manual)
 
-# One button to cut a coordinated release of the CLI and/or the desktop app.
-# Owner-only. Reuses the existing cli-release.yml and desktop-release.yml build
-# pipelines via `workflow_call` — no duplicated build matrix, and no release
-# PAT to manage. Each produces its own DRAFT GitHub Release that you smoke-test
-# and Publish by hand, exactly like the tag-driven path in RELEASING.md.
+# One button to cut a coordinated release of the CLI and/or the desktop app —
+# INCLUDING the version bump. Pick patch/minor/major and this workflow:
+#   1. bumps the version trio (root Cargo.toml + tauri.conf.json + package.json)
+#      via scripts/bump-desktop-version.sh (file edits only in CI —
+#      BUMP_SKIP_ROUTER_CHECK=1; desktop-release's router-cache-gate is the
+#      enforcing backstop for cache freshness),
+#   2. commits that to main and pushes cli-v<V> / desktop-v<V> tags (only for
+#      the selected targets),
+#   3. reuses cli-release.yml / desktop-release.yml via `workflow_call`, with
+#      each build checking out THE TAG (not the dispatch SHA), so the version
+#      checks see the bumped files.
+# Each produces its own DRAFT GitHub Release that you smoke-test and Publish
+# by hand, exactly like the tag-driven path in RELEASING.md.
 #
-# Prereq: bump the workspace version first (scripts/bump-desktop-version.sh),
-# commit it, and let CI go green on main. This workflow refuses to build if the
-# version input disagrees with Cargo.toml.
+# `bump: none` preserves the old flow: bump + commit yourself first, then
+# dispatch; the guard verifies the version input against Cargo.toml.
+#
+# Tag pushes here use GITHUB_TOKEN, which deliberately does NOT trigger the
+# tag-push (`on: push: tags:`) workflows — no double builds; the workflow_call
+# jobs in THIS run do the building. The direct `git tag && git push --tags`
+# path still works and is unaffected.
+#
+# Caveat: the guard pushes straight to main. If branch protection ever
+# forbids that, this job needs a bypass-capable app token — or use bump: none.
 
 on:
   workflow_dispatch:
     inputs:
+      bump:
+        description: "Version bump to apply before releasing."
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none
       version:
-        description: "Version to release, e.g. 0.2.0. Blank = current workspace version in Cargo.toml."
+        description: "Only with bump: none — version to release, e.g. 0.2.0. Blank = current workspace version."
         required: false
         type: string
       targets:
@@ -28,14 +53,14 @@ on:
           - desktop
 
 permissions:
-  contents: write # the reused workflows create/upload draft GitHub Releases
+  contents: write # push the bump commit + tags; reused workflows create draft Releases
 
 jobs:
   guard:
-    name: authorize + resolve version
+    name: authorize + bump + tag
     runs-on: ubuntu-22.04
     outputs:
-      version: ${{ steps.resolve.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
       cli: ${{ steps.plan.outputs.cli }}
       desktop: ${{ steps.plan.outputs.desktop }}
     steps:
@@ -55,20 +80,10 @@ jobs:
           echo "authorized: ${{ github.actor }}"
 
       - uses: actions/checkout@v4
-
-      - name: Resolve + verify version
-        id: resolve
-        shell: bash
-        run: |
-          set -euo pipefail
-          want="${{ inputs.version }}"
-          actual="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
-          if [ -n "$want" ] && [ "$want" != "$actual" ]; then
-            echo "::error::requested version '$want' but Cargo.toml [workspace.package] is '$actual'. Bump with scripts/bump-desktop-version.sh and commit first, or leave the version input blank." >&2
-            exit 1
-          fi
-          echo "version=$actual" >> "$GITHUB_OUTPUT"
-          echo "releasing version $actual"
+        with:
+          # Dispatch is main-only in practice, but pin the branch explicitly so
+          # the bump commit lands on a branch, never a detached SHA.
+          ref: ${{ github.ref_name }}
 
       - name: Plan targets
         id: plan
@@ -79,6 +94,64 @@ jobs:
             cli)     echo "cli=true"  >> "$GITHUB_OUTPUT"; echo "desktop=false" >> "$GITHUB_OUTPUT" ;;
             desktop) echo "cli=false" >> "$GITHUB_OUTPUT"; echo "desktop=true"  >> "$GITHUB_OUTPUT" ;;
           esac
+
+      - name: Bump version, commit, tag, push
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          bump="${{ inputs.bump }}"
+          if [ "$bump" = "none" ]; then
+            # Old flow: version already bumped + committed by hand. Verify.
+            want="${{ inputs.version }}"
+            actual="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+            if [ -n "$want" ] && [ "$want" != "$actual" ]; then
+              echo "::error::requested version '$want' but Cargo.toml [workspace.package] is '$actual'. Bump with scripts/bump-desktop-version.sh and commit first, or use a bump input." >&2
+              exit 1
+            fi
+            version="$actual"
+            # Tags may or may not exist yet in this flow; create any missing
+            # ones for the selected targets so workflow_call has a ref to
+            # check out (no-op when the tag already points at HEAD's history).
+          else
+            if [ -n "${{ inputs.version }}" ]; then
+              echo "::error::the version input is only for bump: none — with bump: $bump the version is computed." >&2
+              exit 1
+            fi
+            BUMP_SKIP_ROUTER_CHECK=1 scripts/bump-desktop-version.sh "$bump"
+            version="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+            # Cargo.lock records every workspace member's version; without
+            # this, the release builds' `--locked` flag fails on a stale
+            # lockfile. `update --workspace` rewrites only the member
+            # entries — no dependency changes, no network, no compilation.
+            cargo update --workspace
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Cargo.toml Cargo.lock \
+              sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \
+              sovereign/crates/sovereign-desktop/package.json
+            git commit -m "release: v${version} (${bump} bump via Release workflow)"
+          fi
+
+          # Tag only the selected targets — a desktop-only release must not
+          # mint a cli-v tag that was never built.
+          tags=()
+          [ "${{ steps.plan.outputs.cli }}" = "true" ]     && tags+=("cli-v${version}")
+          [ "${{ steps.plan.outputs.desktop }}" = "true" ] && tags+=("desktop-v${version}")
+          for t in "${tags[@]}"; do
+            if git rev-parse -q --verify "refs/tags/$t" >/dev/null; then
+              echo "tag $t already exists — leaving it as-is"
+            else
+              git tag -a "$t" -m "$t"
+            fi
+          done
+
+          # Atomic: the bump commit and its tags land together or not at all.
+          # A non-fast-forward here means main moved since dispatch — rerun.
+          git push --atomic origin "HEAD:${{ github.ref_name }}" "${tags[@]}"
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Releasing v${version} (${bump}) — tags: ${tags[*]}" >> "$GITHUB_STEP_SUMMARY"
 
   cli:
     name: CLI
