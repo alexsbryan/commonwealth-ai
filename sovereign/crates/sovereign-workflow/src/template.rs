@@ -6,7 +6,7 @@
 use std::sync::OnceLock;
 
 use regex::Regex;
-use sovereign_core::types::StepOutput;
+use sovereign_contracts::types::StepOutput;
 
 use crate::model::{ResolvedArgs, Scope, StepSpec};
 
@@ -277,7 +277,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    use sovereign_core::types::StepOutput;
+    use sovereign_contracts::types::StepOutput;
 
     use super::resolve_value;
     use crate::model::{Artifact, Scope};

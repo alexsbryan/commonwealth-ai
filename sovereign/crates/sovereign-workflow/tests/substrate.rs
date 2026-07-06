@@ -9,10 +9,10 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_core::error::Result as CoreResult;
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::{InferenceProvider, Tool};
-use sovereign_core::types::{
+use sovereign_contracts::error::Result as CoreResult;
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::{InferenceProvider, Tool};
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, Effect, Idempotency, Latency, Permission,
     ProviderCapabilities, Scope as ToolScope, Speed, StepOutput, ToolContext, ToolDescriptor,
 };
@@ -239,7 +239,7 @@ uses = "transform:upper"
 
 #[test]
 fn step_kind_parse_and_resource_classification() {
-    use sovereign_core::oicp::LatencyClass;
+    use sovereign_contracts::oicp::LatencyClass;
     use sovereign_workflow::{ResourceNeed, StepKind};
 
     // Parse maps the wire form to the typed variant — the one boundary.
@@ -927,7 +927,9 @@ impl Tool for FlakyTool {
     ) -> CoreResult<StepOutput> {
         let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
         if text == "BOOM" {
-            return Err(sovereign_core::error::Error::Execution("kaboom".into()));
+            return Err(sovereign_contracts::error::Error::Execution(
+                "kaboom".into(),
+            ));
         }
         Ok(StepOutput::Text(text.to_uppercase()))
     }

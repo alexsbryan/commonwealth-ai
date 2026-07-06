@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use futures::stream::{self, StreamExt};
-use sovereign_core::error::Result;
-use sovereign_core::types::StepOutput;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::types::StepOutput;
 
 use crate::cache::{ArtifactCache, NoCache};
 use crate::kind::StepKind;

@@ -34,4 +34,4 @@ pub use progress::{StepObserver, WorkflowProgress};
 pub use runner::{ItemReport, RunReport, Runner};
 pub use steps::{Step, StepCtx, StepRegistry};
 
-pub use sovereign_core::error::{Error, Result};
+pub use sovereign_contracts::error::{Error, Result};

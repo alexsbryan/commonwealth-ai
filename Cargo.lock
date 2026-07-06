@@ -12580,7 +12580,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-core",
+ "sovereign-contracts",
  "tempfile",
  "tokio",
  "toml 0.8.2",

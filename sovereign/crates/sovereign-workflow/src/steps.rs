@@ -8,11 +8,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sovereign_core::error::{Error, Result};
-use sovereign_core::oicp::{InferenceRequirements, LatencyClass};
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::{CorpusInstaller, InferenceProvider};
-use sovereign_core::types::{CompletionRequest, Effect, Speed, StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::oicp::{InferenceRequirements, LatencyClass};
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::{CorpusInstaller, InferenceProvider};
+use sovereign_contracts::types::{CompletionRequest, Effect, Speed, StepOutput, ToolContext};
 
 use crate::kind::StepKind;
 use crate::model::{Artifact, ResolvedArgs, ResourceNeed, StepDescriptor};
@@ -429,7 +429,7 @@ impl StepRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::InstallOutcome;
+    use sovereign_contracts::traits::InstallOutcome;
     use std::sync::Mutex;
 
     /// Records each `ensure_installed` so the RecipeStep delegation can be asserted

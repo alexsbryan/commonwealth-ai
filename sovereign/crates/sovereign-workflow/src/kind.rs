@@ -15,8 +15,8 @@
 //! assemble the daemon provider. With `resources()` below as an exhaustive
 //! match, that bug cannot compile.
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::oicp::LatencyClass;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::oicp::LatencyClass;
 
 use crate::model::ResourceNeed;
 

@@ -9,8 +9,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{Effect, StepOutput};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{Effect, StepOutput};
 
 use crate::template;
 
