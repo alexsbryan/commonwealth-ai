@@ -17,7 +17,7 @@ pub use crate::observer::{
 /// [`ConversationContext`][crate::types::ConversationContext] after
 /// skill routing has resolved.
 ///
-/// Defined in `sovereign-core` so [`Runtime`][crate::runtime::Runtime]
+/// Defined here in the contract crate so `sovereign-core`'s `Runtime`
 /// can splice digests without depending on `sovereign-tools` (which
 /// would create a circular dependency). `KnowledgeViewManager` in
 /// `sovereign-tools` is the canonical implementation.
@@ -42,7 +42,7 @@ pub trait LandscapeDigestProvider: Send + Sync {
     /// Default impl returns `None` — uniform decay applies. The
     /// `KnowledgeViewManager` implementation overrides this to
     /// expose its on-disk atom inventory.
-    async fn entity_inventory(&self) -> Option<crate::memory::EntityInventory> {
+    async fn entity_inventory(&self) -> Option<EntityInventory> {
         None
     }
 }
@@ -58,7 +58,7 @@ pub trait LandscapeDigestProvider: Send + Sync {
 /// is one layer of defence — the recipe-level invariants
 /// (`scope=Local`, `mesh_sharing=false`) are the others.
 ///
-/// Defined in `sovereign-core` so [`Runtime`][crate::runtime::Runtime]
+/// Defined here in the contract crate so `sovereign-core`'s `Runtime`
 /// can apply the filter without depending on `sovereign-tools`
 /// (which holds the canonical `WatchedFolderConfig.sensitive` flag).
 /// The `LocalCorpusManager` in `sovereign-tools` is the canonical

@@ -847,7 +847,11 @@ pub const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;
 /// case-insensitive (substring `Sarah` does NOT match `Sarahkov`).
 /// The set is rebuilt from the personal + conversational atlas's
 /// `atoms.json` files at the end of each enrichment cycle.
-pub type EntityInventory = std::collections::HashSet<String>;
+///
+/// Relocated to `sovereign-contracts::types` (so the `LandscapeDigestProvider`
+/// contract trait can name it); re-exported here at the historical
+/// `sovereign_core::memory::EntityInventory` path.
+pub use sovereign_contracts::types::EntityInventory;
 
 /// Calculate decayed confidence for a memory based on time since last use.
 /// `decay_rate` is the fraction lost per month (default 0.10 = 10%).
