@@ -138,6 +138,14 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
     let mut history: Vec<String> = vec![];
     let mut trajectory: Vec<RoundSummary> = vec![];
     let mut rounds_without_improvement: u32 = 0;
+    // Consecutive rounds where the candidate pool produced NO
+    // outcome different from the base — not even a different failure
+    // mix. A dry pool means the sampling distribution is degenerate
+    // for this prompt/base; more rounds are the same draw (3.3 H-arm
+    // receipts: three rounds of identical 6p/1f ties). Gradient-
+    // bearing stalls (varied partial passes) keep the full
+    // max_stall_rounds runway.
+    let mut dry_rounds: u32 = 0;
     let mut status: Option<TrialStatus> = None;
     let mut winning_body = String::new();
     // Feedback from the previous round's errored candidates,
@@ -311,6 +319,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 after.failed
             ));
             rounds_without_improvement = 0;
+            dry_rounds = 0;
             trajectory.push(RoundSummary {
                 round: round as u32,
                 candidates: candidate_labels,
@@ -344,6 +353,25 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 failed_after: current.failed,
                 details: candidate_details,
             });
+            let round_has_novelty = candidates.iter().any(|c| match &c.outcome {
+                Ok(t) => {
+                    t.parsed.total > 0
+                        && (t.parsed.passed, t.parsed.failed) != (current.passed, current.failed)
+                }
+                Err(_) => false,
+            });
+            if round_has_novelty {
+                dry_rounds = 0;
+            } else {
+                dry_rounds = dry_rounds.saturating_add(1);
+            }
+            if dry_rounds >= 2 {
+                tracing::info!(round, "trial: two consecutive dry rounds — early stall");
+                status = Some(TrialStatus::Stalled {
+                    rounds_without_improvement,
+                });
+                break;
+            }
             if rounds_without_improvement >= config.max_stall_rounds {
                 status = Some(TrialStatus::Stalled {
                     rounds_without_improvement,
