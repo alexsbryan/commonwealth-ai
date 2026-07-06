@@ -31,24 +31,39 @@ def test_statistics():
     assert abs(std - 1.41421356) < 1e-5
 
 
-def test_every_source_file_within_30_lines():
-    # The task's structural goal, straight from the prompt: "split
-    # calc.py into source files where every source file is <= 30
-    # lines". Encoded as a test so the fitness signal covers the
-    # WHOLE goal — without it the behavior tests pass at baseline
-    # and a maximize-passing solver correctly does nothing. The
-    # grader's held-out suite replaces this file at witness time, so
-    # correctness scoring stays behavior-only; this test exists for
-    # the iteration loop.
+def _max_source_lines():
+    # Shared walker for the structural ladder below.
     root = os.path.dirname(os.path.dirname(__file__))
-    offenders = []
+    worst = 0
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in ("tests", "__pycache__", ".git")]
         for name in filenames:
             if name.endswith(".py"):
-                path = os.path.join(dirpath, name)
-                with open(path) as fh:
-                    count = sum(1 for _ in fh)
-                if count > 30:
-                    offenders.append(f"{os.path.relpath(path, root)}: {count} lines")
-    assert not offenders, f"source files over the 30-line budget: {offenders}"
+                with open(os.path.join(dirpath, name)) as fh:
+                    worst = max(worst, sum(1 for _ in fh))
+    return worst
+
+
+# The task's structural goal, straight from the prompt ("every source
+# file <= 30 lines"), expressed as a LADDER of thresholds rather than
+# one cliff: each behavior-preserving extraction that shrinks the
+# largest file flips another rung, so the maximize-passing loop can
+# climb the refactor one manageable step at a time and merge upward.
+# The grader's held-out suite replaces this file at witness time, so
+# correctness scoring stays behavior-only; the ladder exists for the
+# iteration loop.
+
+def test_largest_source_file_within_80_lines():
+    assert _max_source_lines() <= 80
+
+
+def test_largest_source_file_within_60_lines():
+    assert _max_source_lines() <= 60
+
+
+def test_largest_source_file_within_45_lines():
+    assert _max_source_lines() <= 45
+
+
+def test_every_source_file_within_30_lines():
+    assert _max_source_lines() <= 30
