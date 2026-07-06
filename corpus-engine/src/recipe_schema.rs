@@ -2,29 +2,18 @@
 //! The recipe variant-catalog descriptor — the generated bridge between the
 //! recipe config enums and the authoring JSON Schema.
 //!
-//! corpus-engine owns the recipe types (`recipe.rs`), so it owns their catalog.
-//! `tests/recipe_schema.rs` regenerates the checked-in artifact
+//! corpus-engine owns the recipe types (`recipe.rs`), so `tests/recipe_schema.rs`
+//! regenerates the checked-in artifact
 //! `sovereign-recipes/schema/recipe_schema_descriptor.json` from those types
-//! (drift-gated). This module embeds that artifact and exposes it as a typed
-//! const, so a consumer references
-//! `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON` instead of
-//! counting `../` from its own source file to a repo-root path. Moving the
-//! consuming crate can't break the reference — cargo resolves the dependency,
-//! and the one unavoidable repo-relative hop lives here, once.
+//! (drift-gated). The raw artifact itself is embedded once in
+//! [`sovereign_contracts::recipe::schema`] — the contract crate both this engine
+//! and the recipe-authoring package depend on — and re-exported here so existing
+//! `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON` callers are
+//! unaffected. Housing the const in contracts is what lets the recipe-author
+//! stack read it without a `corpus-engine` dependency.
 //!
 //! (This replaced a `sovereign-tools/build.rs` that reached *across* the crate
 //! boundary to parse `corpus-engine/src/recipe.rs` with `syn` at build time — a
 //! source-tree path no package split survived.)
 
-/// The checked-in recipe variant-catalog descriptor, as raw JSON. Shape:
-/// `{ "acquire": [{key, required}], "extract": [{key, required}],
-///    "chunk": [key, …], "filter": [key, …], "pattern": [key, …],
-///    "comparison": [key, …] }`.
-///
-/// Anchored at `CARGO_MANIFEST_DIR` — this crate sits directly under the repo
-/// root, so the single repo-relative hop is one `..` and is stable (the engine
-/// crate does not move).
-pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../sovereign-recipes/schema/recipe_schema_descriptor.json"
-));
+pub use sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON;

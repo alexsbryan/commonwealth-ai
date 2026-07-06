@@ -16,7 +16,7 @@
 //!
 //! The discriminator strings and required fields for `acquire` / `extract` /
 //! `chunk` / `filter` / `enrichment.patterns` come from
-//! [`corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`], a typed
+//! [`sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`], a typed
 //! const over the checked-in artifact
 //! `sovereign-recipes/schema/recipe_schema_descriptor.json`, which
 //! `corpus-engine/tests/recipe_schema.rs` regenerates (drift-gated) from
@@ -27,10 +27,11 @@
 //! extractors). corpus-engine owns the catalog (it owns the types); this file
 //! owns the schema shape + hand-authored overlays.
 //!
-//! When the recipe-author bundle is extracted to its own corpus-engine-free
-//! crate (plan B:P4), this const moves to `sovereign-contracts::recipe`
-//! alongside the other relocated recipe helpers; the consumer keeps referencing
-//! a typed const, not a path.
+//! The descriptor const lives in `sovereign_contracts::recipe::schema` (the
+//! contract crate both corpus-engine and this authoring stack depend on), so
+//! this file references a typed const, not a path, and needs no `corpus-engine`
+//! dependency — which is what lets the recipe-author bundle move to its own
+//! crate (plan B:P6).
 //!
 //! What stays hand-authored here is the *shape* (the grammar-friendly
 //! tagged-union JSON Schema) plus **rich overlays** for variants worth extra
@@ -42,11 +43,11 @@ use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
 /// Recipe variant catalog generated from `recipe.rs` by the corpus-engine
-/// `recipe_schema` test, exposed by corpus-engine as a typed const. No build
-/// script, no cross-crate source-tree reach-in, and no repo-relative path in
-/// this crate — the descriptor travels with the dependency.
+/// `recipe_schema` test, embedded as a typed const in `sovereign-contracts`. No
+/// build script, no cross-crate source-tree reach-in, and no repo-relative path
+/// in this crate — the descriptor travels with the contract dependency.
 static DESCRIPTOR: LazyLock<Value> = LazyLock::new(|| {
-    serde_json::from_str(corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON)
+    serde_json::from_str(sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON)
         .expect("checked-in recipe_schema_descriptor.json must parse")
 });
 

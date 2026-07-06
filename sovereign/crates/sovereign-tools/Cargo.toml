@@ -6,6 +6,10 @@ license.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+# Recipe-author reads the recipe schema descriptor + (B:P4) url_template /
+# registry consts from the contract crate directly, so it needs no corpus-engine
+# dependency — the seam that lets the authoring stack extract (B:P6).
+sovereign-contracts = { workspace = true }
 # The 11 pure workflow tools (shell, web, chunk, section, file/json/csv/zip/
 # vector, MCP client) were extracted here; re-exported at their old paths
 # (`sovereign_tools::{shell, web, mcp, rag::chunk, ...}`).
