@@ -10,4 +10,6 @@
 //! contract rather than a coincidence, and lets the package compute them
 //! locally instead of shipping whole documents over MCP.
 
+pub mod schema;
 pub mod sections;
+pub mod url_template;
