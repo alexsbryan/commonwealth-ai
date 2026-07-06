@@ -4,14 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# Build-time only: parse corpus-engine/src/recipe.rs to generate the
-# recipe-author JSON Schema variant catalog (see build.rs + recipe_author/
-# recipe_schema.rs). Keeps the author tool's grammar from drifting behind the
-# real recipe types. Not linked into the runtime binary.
-[build-dependencies]
-syn = { version = "2", features = ["full", "extra-traits"] }
-serde_json = "1"
-
 [dependencies]
 sovereign-core = { workspace = true }
 # Atlas peer-advice (Phase C3) consumes `CorpusShardInfo` from
