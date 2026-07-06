@@ -151,14 +151,23 @@ fn ident_prefix(s: &str) -> Option<String> {
 /// call and re-parses the combined text.
 pub fn has_dangling_action(content: &str) -> bool {
     let fence = Regex::new(r"(?s)```(\w*)[ \t]*\n(.*?)(```|\z)").unwrap();
+    let mut any_fence = false;
     let mut last_is_action = false;
     for cap in fence.captures_iter(content) {
+        any_fence = true;
         let lang = cap[1].to_string();
         let body = cap[2].to_string();
         last_is_action = lang.eq_ignore_ascii_case("json")
             || (body.trim_start().starts_with('{') && body.contains("\"action\""));
     }
-    last_is_action
+    if last_is_action {
+        return true;
+    }
+    // Second EOS shape (5.1 H-arm receipts): the model stops BEFORE
+    // the first fence — a pure plan with no blocks at all. Same
+    // spontaneous-stop class, same remedy: one continuation call.
+    // Trivial/empty responses stay parse-fails (nothing to continue).
+    !any_fence && content.trim().len() >= 80
 }
 
 /// Parse a response into ONE OR MORE (action, body) edits — a
@@ -416,5 +425,22 @@ mod dangling_action_tests {
     fn partial_transaction_with_trailing_action_is_dangling() {
         let content = "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```\n```json\n{\"action\": \"write_file\", \"path\": \"b.py\"}\n```";
         assert!(has_dangling_action(content));
+    }
+}
+
+#[cfg(test)]
+mod plan_only_eos_tests {
+    use super::*;
+
+    #[test]
+    fn plan_only_response_triggers_continuation() {
+        let content = "Plan: fix the tokenizer's multi-char operator handling first, then the parser's precedence for power. I will rewrite tokenize to scan two-char operators before single-char ones.";
+        assert!(has_dangling_action(content));
+    }
+
+    #[test]
+    fn short_or_empty_responses_do_not_trigger() {
+        assert!(!has_dangling_action(""));
+        assert!(!has_dangling_action("OK."));
     }
 }
