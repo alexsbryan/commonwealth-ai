@@ -91,7 +91,7 @@ impl Default for TrialConfig {
             candidates_per_round: 4,
             rounds_per_trial: 6,
             max_stall_rounds: 3,
-            emit_max_tokens: 2500,
+            emit_max_tokens: 4000,
             candidate_test_timeout: Duration::from_secs(60),
             temp_ladder_default: vec![0.2, 0.4, 0.7, 0.9],
             temp_ladder_wide: vec![0.3, 0.6, 0.9, 1.1],
