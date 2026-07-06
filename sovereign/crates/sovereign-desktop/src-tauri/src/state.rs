@@ -1130,6 +1130,7 @@ pub async fn bootstrap_with_progress(
                 dimensions: dims,
                 pooling,
                 normalization,
+                query_instruction_prefix: String::new(),
             };
             tracing::info!(
                 model_id = %embed_info.model_id,
