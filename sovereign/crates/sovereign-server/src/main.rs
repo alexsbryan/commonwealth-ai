@@ -484,7 +484,9 @@ async fn main() {
         use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
         tools.register(Box::new(RecipeReadTool::new()));
         tools.register(Box::new(RecipeWriteTool::new()));
-        tools.register(Box::new(RecipeWriteStructuredTool::new()));
+        tools.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
+            CorpusEngineRecipeTester::new(),
+        ))));
         tools.register(Box::new(RecipeValidateTool::new(Arc::new(
             CorpusEngineRecipeTester::new(),
         ))));
