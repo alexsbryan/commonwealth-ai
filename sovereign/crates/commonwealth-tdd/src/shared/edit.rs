@@ -140,6 +140,27 @@ fn ident_prefix(s: &str) -> Option<String> {
 }
 
 
+
+/// True when the response ENDS with a fenced JSON action that has no
+/// source block after it — the model declared an edit and stopped
+/// before emitting its content. MTP models emit spontaneous EOS
+/// mid-response (finish=Stop, not Length — chaos-side finding
+/// b1f09a19, reproduced here: G-arm 3.3 receipts show plans that
+/// enumerate a full multi-file split, one action fence, then
+/// nothing). Detect by CONTENT; the caller issues one continuation
+/// call and re-parses the combined text.
+pub fn has_dangling_action(content: &str) -> bool {
+    let fence = Regex::new(r"(?s)```(\w*)[ \t]*\n(.*?)(```|\z)").unwrap();
+    let mut last_is_action = false;
+    for cap in fence.captures_iter(content) {
+        let lang = cap[1].to_string();
+        let body = cap[2].to_string();
+        last_is_action = lang.eq_ignore_ascii_case("json")
+            || (body.trim_start().starts_with('{') && body.contains("\"action\""));
+    }
+    last_is_action
+}
+
 /// Parse a response into ONE OR MORE (action, body) edits — a
 /// TRANSACTION. Multi-file goals (split a module, extract a package)
 /// are impossible as single edits: any half-step leaves the workdir
@@ -372,5 +393,28 @@ def evaluate(s):
         let edits = parse_response_edits(content);
         assert_eq!(edits.len(), 1);
         assert!(edits[0].inferred);
+    }
+}
+
+#[cfg(test)]
+mod dangling_action_tests {
+    use super::*;
+
+    #[test]
+    fn dangling_action_detected_when_response_ends_after_action_fence() {
+        let content = "Plan: split into three files.\n\n```json\n{\"action\": \"write_file\", \"path\": \"calc/tokenize.py\"}\n```";
+        assert!(has_dangling_action(content));
+    }
+
+    #[test]
+    fn complete_pair_is_not_dangling() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```";
+        assert!(!has_dangling_action(content));
+    }
+
+    #[test]
+    fn partial_transaction_with_trailing_action_is_dangling() {
+        let content = "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```\n```json\n{\"action\": \"write_file\", \"path\": \"b.py\"}\n```";
+        assert!(has_dangling_action(content));
     }
 }

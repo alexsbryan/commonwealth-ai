@@ -27,7 +27,8 @@ use tokio::task::JoinSet;
 use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
-    apply_edit, discover_source_files, parse_response_edits, render_with_line_numbers, run_tests,
+    apply_edit, discover_source_files, has_dangling_action, parse_response_edits,
+    render_with_line_numbers, run_tests,
     snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
 };
 use crate::types::{Polarity, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus};
@@ -587,7 +588,28 @@ async fn try_candidate(
             };
         }
     };
-    let edits = parse_response_edits(&resp.content);
+    let mut content = resp.content;
+    // Spontaneous-EOS completion: the model declared an action fence
+    // and stopped before its source block (MTP emits finish=Stop
+    // mid-response; detect by CONTENT — chaos-side pattern). ONE
+    // continuation call, then parse the combined text so dangling
+    // actions pair with their late-arriving blocks.
+    if has_dangling_action(&content) {
+        let cont_msgs = {
+            let mut m = messages.clone();
+            m.push(json!({ "role": "assistant", "content": content }));
+            m.push(json!({ "role": "user", "content": "Continue exactly where you stopped: emit the fenced source block for the action you declared, plus any remaining action+block pairs from your plan. No re-planning, no commentary." }));
+            m
+        };
+        if let Ok(cont) = backend
+            .complete(&model, cont_msgs, temperature, emit_max_tokens)
+            .await
+        {
+            content.push('\n');
+            content.push_str(&cont.content);
+        }
+    }
+    let edits = parse_response_edits(&content);
     if edits.is_empty() {
         return CandidateOutcome {
             temp: temperature,
@@ -596,7 +618,7 @@ async fn try_candidate(
             outcome: Err("parse: no action+block found".into()),
             // Keep the raw content: a parse failure is only
             // diagnosable from what the model actually said.
-            body: resp.content,
+            body: content,
             repaired: false,
         };
     }
@@ -660,7 +682,7 @@ async fn try_candidate(
         // the call budget bounded at 2x worst-case.
         let repair_msgs = {
             let mut m = messages.clone();
-            m.push(json!({ "role": "assistant", "content": resp.content }));
+            m.push(json!({ "role": "assistant", "content": content.clone() }));
             m.push(json!({ "role": "user", "content": format!(
                 "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix ONLY the reported error — keep the same action(s) and keep every other line of your source block(s) identical. Re-emit the full response (each fenced JSON action followed by its fenced source block). Smallest possible change; no commentary."
             ) }));
