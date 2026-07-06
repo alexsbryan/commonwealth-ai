@@ -73,6 +73,88 @@ walk down the list and ask "does this change satisfy criterion N?".
 
 ---
 
+## 2026-07-06 — run-measure-improve loop, iteration 1 (search runner, full battery)
+
+Mission (operator): drive the battery to consistent perfect scores by
+improving the HARNESS around the open-weight model — "the model IS
+capable of the presented tasks but often only with the right context
+and system around it." Methodology imported from the chaos-QA loop
+(`sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md`):
+instrument first, receipts before diagnosis, class fixes only,
+paired replay validation.
+
+**Instrument (committed `bda56ec7`):** per-candidate receipts. Trial
+trajectory labels now carry the failure class (`err:parse` /
+`err:apply` / `err:backend` / `err:snapshot`), and `RoundSummary`
+gains `details[]` (full error capped 600ch, body_chars, 200-char
+body_tail) persisted into `requests.jsonl`. Before this, a stalled
+trial was 12 bare `err`s — undiagnosable from artifacts.
+
+**Classes found + fixed this iteration (each generalizes; per the
+operator: never target the problem/language under test brittle-y):**
+
+1. **NoBaseline scaffolds (fixed `6f3619b5`).** 1.1/1.2/1.3 shipped
+   zero scaffold smoke tests → the TDD Machine died in 227ms
+   ("test_command produced no test results") — a structural 0
+   indistinguishable from failure (same invisible-zero family as the
+   2026-06-08 `[lints]` bug). Authored 3 smoke tests each, encoding
+   ONLY the prompts' own worked examples, per the 8/11-problem
+   convention. All three problems went 0 → 9/9 (3/3 trials each).
+   DEEPER generalization queued: solver-side fallback (no tests →
+   `GenerateOneFailing` Red polarity) so future problems never need
+   hand-authored smoke tests.
+
+2. **`replace_function` was Python-only (fixed `2e4be993`).**
+   `find_function_bounds` knew `def`/`class` + indent walking. Every
+   `rewrite <fn>` against a brace language died with "no function or
+   class named X found" — with the stub in plain sight. Receipts:
+   9/12 candidates on 2.2 and 10/12 on 3.2-lights-out (Rust) died to
+   exactly this; the model's PREFERRED move (function-granular
+   rewrite — the right-sized emission) was structurally rejected,
+   forcing it into whole-file writes, which is where its Rust
+   fluency actually breaks. Fix: layered finder — indent walker
+   (unchanged, Python), syn span lookup (Rust — existing dependency,
+   parser-grade, attrs included), textual keyword-introduced
+   brace-function family `fn`/`func`/`function` (Go/TS + fallback).
+   7 pinning tests.
+
+3. **Reasoning-leak-into-code (OPEN — next lever).** Controlled
+   probe (solver's exact round-0 prompt, 4 calls): 0/4 Rust
+   whole-file emissions compile; thinking surfaces INSIDE the source
+   block ("// Wait, I made an error in the Gaussian elimination
+   swap…"). NOT truncation (1821–2214 toks < 2500 cap, fences
+   closed). The trial system prompt forbids commentary outside the
+   fenced blocks — the model has no sanctioned thinking channel (the
+   same flaw CI_GATE_HANDOFF flagged for pi). Candidate fixes:
+   sanctioned pre-block thinking (prose outside fences is already
+   structurally ignored by the parser), and/or a pointed
+   syntax-repair turn on syn rejection (small models fix pointed
+   errors well). ALSO: `prompt.md`'s "How to deliver" tail
+   (write-tool + "do NOT paste the solution into chat") contradicts
+   the search runner's paste-code contract — delivery instructions
+   belong to the runner, not the problem statement.
+
+**A-arm baseline (pre-fix binary, `target/agent-bench/baseline-2026-07-06/`):**
+1.1/1.2/1.3/2.1 = 9/9 ×3 each (post smoke-test fix); 2.2 = 0/8/6
+(variance = whether the model recovered from the broken finder by
+switching shapes); 3.2-rust = 0 ×3 (10/12 finder + 2/12 backend).
+**Everything from 3.2-python onward is VOID — the daemon was
+jetsam-killed mid-run** (all candidates `err:backend` transport;
+log cuts mid-inference-setup, no error line; auto-restarted ~08:17).
+3.3's "1/9 completed" ×3 is void too. Known §E class.
+
+**B-arm (fixed binary, fresh daemon, `target/agent-bench/barm-2026-07-06/`):**
+full battery ×3 trials, running as of this entry — the paired replay
+for fixes 1+2 and the first honest full-battery measurement.
+
+**Operator ground rules recorded:** (a) fixes must generalize to
+categories/families, never the problem or language under test;
+(b) leverage existing tools/libraries first (syn over hand-rolled;
+tree-sitter is the designated escalation for parser-grade Go/TS
+spans if receipts demand).
+
+---
+
 ## 2026-05-21 night — PR 2 role layer + multi-language primitives
 
 Built on top of PR 1 (`commonwealth-agent-tools` canonical crate +
