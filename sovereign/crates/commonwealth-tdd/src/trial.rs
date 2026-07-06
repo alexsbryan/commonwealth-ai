@@ -27,7 +27,7 @@ use tokio::task::JoinSet;
 use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
-    apply_edit, discover_source_file, parse_response, render_with_line_numbers, run_tests,
+    apply_edit, discover_source_files, parse_response, render_with_line_numbers, run_tests,
     snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
 };
 use crate::types::{Polarity, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus};
@@ -72,7 +72,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
     // canonical Green-phase shape (where a source file exists and
     // gets patched), optional for Red (which writes test files)
     // and the multi-file path (where the user prompt names targets).
-    let source_file = discover_source_file(&base_workdir);
+    let source_files = discover_source_files(&base_workdir);
+    let source_file = source_files.first().cloned();
     let language = source_file
         .as_deref()
         .map(Language::from_path)
@@ -152,10 +153,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             }
         }
 
-        let file_listing = source_file
-            .as_ref()
-            .map(|s| render_with_line_numbers(&base_workdir.join(s)))
-            .unwrap_or_default();
+        let file_listing = render_source_files(&base_workdir, &source_files);
         let history_block = history
             .iter()
             .rev()
@@ -168,10 +166,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
         // The model sees the pristine-baseline file listing on the
         // restart candidate, so the message it generates is grounded
         // in the original code, not the partial-fit winner.
-        let pristine_listing = source_file
-            .as_ref()
-            .map(|s| render_with_line_numbers(&pristine_baseline.join(s)))
-            .unwrap_or_default();
+        let pristine_listing = render_source_files(&pristine_baseline, &source_files);
         let feedback_block = last_round_feedback.render(config.candidates_per_round);
         let regular_messages = vec![
             system_message(),
@@ -221,7 +216,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             let backend = Arc::clone(&backend);
             let model = model.clone();
             let test_command_local = test_command.clone();
-            let source_local = source_file.clone();
+            let source_local = source_files.clone();
             // Restart slot: candidate 0 when the loop has stalled at
             // least one round. Snapshots from pristine_baseline and
             // gets the restart-shaped prompt so the model sees a
@@ -542,7 +537,7 @@ impl CandidateOutcome {
 async fn try_candidate(
     backend: Arc<dyn ChatBackend>,
     candidate_workdir: PathBuf,
-    source_file: Option<String>,
+    source_files: Vec<String>,
     test_command: String,
     language: Language,
     model: String,
@@ -594,12 +589,18 @@ async fn try_candidate(
             };
         }
     };
-    // If no source file was discovered, route all edits via the
-    // WriteFile primitive against the JSON action's implicit target —
-    // for now we require source_file to apply patches. WriteFile-
-    // shape edits are written to the inferred path from the JSON
-    // (which the model is asked to name in `prompt` when relevant).
-    let target_path = source_file.unwrap_or_else(|| "_unspecified.py".to_string());
+    // Default edit target = first discovered source file. For
+    // rewrite_function the target is resolved ACROSS the discovered
+    // files — the model names the function, the harness locates its
+    // home file (multi-file packages: forcing every edit into the
+    // first file made cross-file fixes structurally impossible —
+    // 5.1-minilang B-arm 2026-07-06).
+    let default_target = source_files
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "_unspecified.py".to_string());
+    let target_path = resolve_edit_target(&candidate_workdir, &source_files, &parsed.action)
+        .unwrap_or_else(|| default_target.clone());
     let mut ctx = ExecCtx::new(candidate_workdir.clone());
     if let Some(v) = syntax_validator {
         ctx = ctx.with_syntax_validator(v);
@@ -634,7 +635,10 @@ async fn try_candidate(
             .await
         {
             Ok(r2) => match parse_response(&r2.content) {
-                Some(p2) => match apply_edit(&ctx, &target_path, &p2).await {
+                Some(p2) => {
+                    let t2 = resolve_edit_target(&candidate_workdir, &source_files, &p2.action)
+                        .unwrap_or_else(|| default_target.clone());
+                    match apply_edit(&ctx, &t2, &p2).await {
                     Ok(_) => {
                         parsed = p2;
                         repaired = true;
@@ -654,7 +658,8 @@ async fn try_candidate(
                             repaired: true,
                         };
                     }
-                },
+                    }
+                }
                 None => false,
             },
             Err(_) => false,
@@ -679,6 +684,59 @@ async fn try_candidate(
         outcome: Ok(test_result),
         body,
         repaired,
+    }
+}
+
+/// Render every discovered source file, path-labeled and
+/// line-numbered, under a shared character budget. Files past the
+/// budget are listed by name so the model knows they exist (silent
+/// truncation would read as "covered everything").
+fn render_source_files(root: &std::path::Path, files: &[String]) -> String {
+    const BUDGET_CHARS: usize = 14_000;
+    let mut out = String::new();
+    let mut omitted: Vec<&str> = Vec::new();
+    for f in files {
+        let rendered = render_with_line_numbers(&root.join(f));
+        if out.len() + rendered.len() > BUDGET_CHARS && !out.is_empty() {
+            omitted.push(f);
+            continue;
+        }
+        out.push_str(&format!("### `{f}`\n{rendered}\n\n"));
+    }
+    if !omitted.is_empty() {
+        out.push_str(&format!(
+            "(additional files not shown, address by path via write_file: {})\n",
+            omitted.join(", ")
+        ));
+    }
+    out
+}
+
+/// Locate the file an edit action should land in. `rewrite_function`
+/// searches the discovered files for the named function (first hit
+/// wins, shallowest-first order); `write_file` honors an explicit
+/// path. Everything else (patches, pathless writes) → None, meaning
+/// the caller's default target.
+fn resolve_edit_target(
+    workdir: &std::path::Path,
+    source_files: &[String],
+    action: &EditAction,
+) -> Option<String> {
+    match action {
+        EditAction::RewriteFunction { name } => {
+            for f in source_files {
+                if let Ok(content) = std::fs::read_to_string(workdir.join(f)) {
+                    if commonwealth_agent_tools::executor::find_function_bounds(&content, name)
+                        .is_some()
+                    {
+                        return Some(f.clone());
+                    }
+                }
+            }
+            None
+        }
+        EditAction::WriteFile { path: Some(p) } => Some(p.clone()),
+        _ => None,
     }
 }
 
@@ -721,7 +779,7 @@ fn user_message(
         ),
     };
     let content = format!(
-        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Current file (`{source_file}`, line-numbered)\n\n```\n{file_listing}\n```\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit ONE fenced JSON action describing your edit, then ONE fenced source code block with the new content.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. Indent the source block to match the file's existing indent at the edit site. No commentary outside the two fenced blocks.\n"
+        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Source files (line-numbered; primary: `{source_file}`)\n\n{file_listing}\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit ONE fenced JSON action describing your edit, then ONE fenced source code block with the new content.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. `rewrite_function` finds the named function in whichever listed file holds it; to create or fully replace a specific file, use {{\"action\": \"write_file\", \"path\": \"<file>\"}}. Line-number actions (patch_lines / insert_before) address the PRIMARY file only. Indent the source block to match the file's existing indent at the edit site. No commentary outside the two fenced blocks.\n"
     );
     json!({ "role": "user", "content": content })
 }
@@ -1104,5 +1162,59 @@ mod tests {
         assert!(content.contains("Restart slot"));
         assert!(content.contains("PRISTINE BASELINE"));
         assert!(content.contains("different overall approach"));
+    }
+}
+
+#[cfg(test)]
+mod multi_file_target_tests {
+    use super::*;
+
+    #[test]
+    fn rewrite_resolves_to_the_file_holding_the_function() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("minilang")).unwrap();
+        std::fs::write(tmp.path().join("minilang/__init__.py"), "from .evaluator import evaluate_ast\n").unwrap();
+        std::fs::write(
+            tmp.path().join("minilang/evaluator.py"),
+            "def evaluate_ast(node, env):\n    return None\n",
+        )
+        .unwrap();
+        let files = vec![
+            "minilang/__init__.py".to_string(),
+            "minilang/evaluator.py".to_string(),
+        ];
+        let action = EditAction::RewriteFunction {
+            name: "evaluate_ast".into(),
+        };
+        assert_eq!(
+            resolve_edit_target(tmp.path(), &files, &action).as_deref(),
+            Some("minilang/evaluator.py")
+        );
+    }
+
+    #[test]
+    fn explicit_write_file_path_wins_and_patches_stay_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        let files = vec!["a.py".to_string()];
+        let w = EditAction::WriteFile {
+            path: Some("pkg/new_module.py".into()),
+        };
+        assert_eq!(
+            resolve_edit_target(tmp.path(), &files, &w).as_deref(),
+            Some("pkg/new_module.py")
+        );
+        let p = EditAction::PatchLines { start: 1, end: 3 };
+        assert!(resolve_edit_target(tmp.path(), &files, &p).is_none());
+    }
+
+    #[test]
+    fn render_source_files_labels_paths_and_reports_omissions() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "x = 1\n").unwrap();
+        std::fs::write(tmp.path().join("b.py"), "y = 2\n").unwrap();
+        let out = render_source_files(tmp.path(), &["a.py".into(), "b.py".into()]);
+        assert!(out.contains("### `a.py`"));
+        assert!(out.contains("### `b.py`"));
+        assert!(!out.contains("additional files not shown"));
     }
 }
