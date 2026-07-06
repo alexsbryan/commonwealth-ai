@@ -270,6 +270,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             .iter()
             .map(|c| format!("{}@T{}={}", c.shape_summary(), c.temp, c.passing_or_error()))
             .collect();
+        let candidate_details: Vec<crate::types::CandidateDetail> =
+            candidates.iter().map(|c| c.detail()).collect();
 
         // Pick the strict-improvement winner under the active polarity.
         let winner = candidates
@@ -319,6 +321,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 winner: Some(format!("{}@T{}", w.shape_summary(), w.temp)),
                 passing_after: current.passed,
                 failed_after: current.failed,
+                details: candidate_details,
             });
             // Polarity-aware terminal check after winning.
             if reached_terminal(&current, &polarity) {
@@ -343,6 +346,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 winner: None,
                 passing_after: current.passed,
                 failed_after: current.failed,
+                details: candidate_details,
             });
             if rounds_without_improvement >= config.max_stall_rounds {
                 status = Some(TrialStatus::Stalled {
@@ -446,7 +450,49 @@ impl CandidateOutcome {
     fn passing_or_error(&self) -> String {
         match &self.outcome {
             Ok(t) => format!("{}p/{}f", t.parsed.passed, t.parsed.failed),
-            Err(_) => "err".into(),
+            // Keep the label terse but carry the failure CLASS —
+            // "err" alone made a stalled trial undiagnosable from
+            // its trajectory (all-err rounds, 2026-07-06).
+            Err(e) => format!("err:{}", e.split(':').next().unwrap_or("unknown")),
+        }
+    }
+
+    fn detail(&self) -> crate::types::CandidateDetail {
+        const ERROR_CAP: usize = 600;
+        const TAIL_CHARS: usize = 200;
+        let error = match &self.outcome {
+            Ok(_) => None,
+            Err(e) => Some(if e.len() > ERROR_CAP {
+                let cut = e
+                    .char_indices()
+                    .map(|(i, _)| i)
+                    .take_while(|&i| i <= ERROR_CAP)
+                    .last()
+                    .unwrap_or(0);
+                format!("{}…", &e[..cut])
+            } else {
+                e.clone()
+            }),
+        };
+        let body_tail = if self.body.is_empty() {
+            None
+        } else {
+            let start = self
+                .body
+                .char_indices()
+                .rev()
+                .map(|(i, _)| i)
+                .nth(TAIL_CHARS.saturating_sub(1))
+                .unwrap_or(0);
+            Some(self.body[start..].to_string())
+        };
+        crate::types::CandidateDetail {
+            shape: self.shape_summary(),
+            temp: self.temp,
+            outcome: self.passing_or_error(),
+            error,
+            body_chars: self.body.chars().count(),
+            body_tail,
         }
     }
 
@@ -523,7 +569,9 @@ async fn try_candidate(
                 response: None,
                 workdir: candidate_workdir,
                 outcome: Err("parse: no action+block found".into()),
-                body: String::new(),
+                // Keep the raw content: a parse failure is only
+                // diagnosable from what the model actually said.
+                body: resp.content,
             };
         }
     };

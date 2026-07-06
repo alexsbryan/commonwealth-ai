@@ -158,4 +158,33 @@ pub struct RoundSummary {
     pub winner: Option<String>,
     pub passing_after: u32,
     pub failed_after: u32,
+    /// Per-candidate receipts: why each candidate landed where it
+    /// did. The labels above stay terse for prompt-side history;
+    /// this carries the diagnostic detail (error class + message,
+    /// emission size, response tail) for post-run analysis.
+    #[serde(default)]
+    pub details: Vec<CandidateDetail>,
+}
+
+/// Diagnostic receipt for one candidate in one round. Persisted in
+/// the trajectory so a stalled trial can be diagnosed from artifacts
+/// alone — without re-running the trial under a debugger.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateDetail {
+    /// Edit shape (`rewrite <fn>` / `patch a-b` / `<parse-failed>` …).
+    pub shape: String,
+    pub temp: f32,
+    /// `NNp/MMf` on a run that reached tests, else `err:<class>`
+    /// where class ∈ {backend, parse, apply, snapshot}.
+    pub outcome: String,
+    /// Full error message (capped) when the candidate errored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Char length of the model's emitted source body (0 when the
+    /// response never parsed).
+    pub body_chars: usize,
+    /// Last ~200 chars of the emitted body — enough to spot
+    /// truncation, reasoning-leak-into-code, and fence problems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_tail: Option<String>,
 }

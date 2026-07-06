@@ -47,6 +47,7 @@ pub use backend::{
 pub use shared::{EditAction, Language, ParsedResponse, TestParseResult, TestRunResult};
 pub use trial::run_trial;
 pub use types::{
-    Polarity, RoundSummary, TestSummary, Trial, TrialConfig, TrialResult, TrialStatus,
+    CandidateDetail, Polarity, RoundSummary, TestSummary, Trial, TrialConfig, TrialResult,
+    TrialStatus,
 };
 pub use workdir::{DirtyWorkdir, Workdir};

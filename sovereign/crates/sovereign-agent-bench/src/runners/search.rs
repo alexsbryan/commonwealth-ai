@@ -159,6 +159,7 @@ impl AgentRunner for SearchRunner {
                 request: json!({
                     "search_round": round.round,
                     "candidates": round.candidates,
+                    "details": round.details,
                 }),
                 response: json!({
                     "winner": round.winner,
