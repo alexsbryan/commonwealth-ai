@@ -10,7 +10,12 @@ pub mod hybrid;
 pub mod json_grammar;
 pub mod llama;
 pub mod llguidance_constraint;
-pub mod remote;
+// `remote.rs` was extracted wholesale to the `oicp-client` crate (pure-HTTP
+// OICP client, no llama.cpp). Re-exported here so `sovereign_inference::remote::*`
+// (RemoteApiProvider, SplitInferenceProvider, …) is unchanged for all callers.
+pub mod remote {
+    pub use oicp_client::*;
+}
 pub mod reranker_standalone;
 pub mod router_circuit;
 pub mod selector;

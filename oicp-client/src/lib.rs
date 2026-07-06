@@ -1,4 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//! `oicp-client` — a pure-HTTP OICP / OpenAI-compatible inference client.
+//!
+//! `RemoteApiProvider` speaks the OpenAI chat/embeddings wire (plus the OICP
+//! request envelope and `/oicp/v1/capabilities` manifest fetch);
+//! `SplitInferenceProvider` fans chat and embed to two model ids over one
+//! endpoint. Both implement `sovereign_contracts::traits::InferenceProvider`,
+//! so a package can drive a Sovereign daemon (or any OICP-conforming host)
+//! without linking the local llama.cpp engine. Moved wholesale from
+//! `sovereign-inference/src/remote.rs`; the daemon crate re-exports it at the
+//! historical `sovereign_inference::remote::*` path.
+
 use std::pin::Pin;
 use std::time::Instant;
 
@@ -6,10 +17,10 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use serde::Deserialize;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::oicp::{OicpResponseMeta, ProviderManifest};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::oicp::{OicpResponseMeta, ProviderManifest};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
 
 /// OpenAI-compatible API client.
 ///
@@ -70,8 +81,12 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             context_size,
-            query_instruction: sovereign_core::models_manifest::DEFAULT_MANIFEST
-                .embed_query_instruction(model_id),
+            // The embed query-instruction prefix is model-family knowledge
+            // that this pure HTTP client no longer computes. Callers that
+            // need it (the embed slot of `SplitInferenceProvider`) set it via
+            // `with_query_instruction`; chat providers and document-embed
+            // (`embed`, which ignores the prefix) leave it empty.
+            query_instruction: String::new(),
         }
     }
 
@@ -97,9 +112,23 @@ impl RemoteApiProvider {
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             context_size,
-            query_instruction: sovereign_core::models_manifest::DEFAULT_MANIFEST
-                .embed_query_instruction(model_id),
+            // The embed query-instruction prefix is model-family knowledge
+            // that this pure HTTP client no longer computes. Callers that
+            // need it (the embed slot of `SplitInferenceProvider`) set it via
+            // `with_query_instruction`; chat providers and document-embed
+            // (`embed`, which ignores the prefix) leave it empty.
+            query_instruction: String::new(),
         }
+    }
+
+    /// Set the query-side embedding instruction prefix (empty by default).
+    /// Applied by `embed_query` so a remote query embedding is bit-identical
+    /// to the embedded engine's. The prefix is model-family knowledge the
+    /// caller resolves (from the OICP manifest's `EmbedModelInfo`, or —
+    /// pre-v0.4 — from `ModelsManifest::embed_query_instruction`).
+    pub fn with_query_instruction(mut self, query_instruction: String) -> Self {
+        self.query_instruction = query_instruction;
+        self
     }
 
     fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
@@ -157,12 +186,12 @@ impl RemoteApiProvider {
             serde_json::to_value(oicp).ok()
         } else {
             let class = match request.preferred_speed {
-                Speed::Fast => sovereign_core::oicp::LatencyClass::Fast,
-                Speed::Medium => sovereign_core::oicp::LatencyClass::Normal,
-                Speed::Slow => sovereign_core::oicp::LatencyClass::Extended,
+                Speed::Fast => sovereign_contracts::oicp::LatencyClass::Fast,
+                Speed::Medium => sovereign_contracts::oicp::LatencyClass::Normal,
+                Speed::Slow => sovereign_contracts::oicp::LatencyClass::Extended,
             };
             let mut req =
-                sovereign_core::oicp::InferenceRequirements::new().with_latency_class(class);
+                sovereign_contracts::oicp::InferenceRequirements::new().with_latency_class(class);
             if let Some(n) = request.max_tokens {
                 req = req.with_max_output_tokens(n as u32);
             }
@@ -477,8 +506,8 @@ impl InferenceProvider for RemoteApiProvider {
     async fn complete_stream_with_finish(
         &self,
         request: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>> {
-        use sovereign_core::types::{FinishReason, StreamFrame, StreamUsage};
+    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
+        use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
         let url = format!("{}/chat/completions", self.endpoint);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
@@ -775,6 +804,7 @@ impl SplitInferenceProvider {
         chat_model_id: String,
         embed_model_id: String,
         context_size: u32,
+        embed_query_instruction: String,
     ) -> Self {
         let chat = std::sync::Arc::new(RemoteApiProvider::new(
             endpoint_v1,
@@ -782,18 +812,61 @@ impl SplitInferenceProvider {
             &chat_model_id,
             context_size,
         ));
-        let embed = std::sync::Arc::new(RemoteApiProvider::new(
-            endpoint_v1,
-            None,
-            &embed_model_id,
-            context_size,
-        ));
+        // The embed slot carries the query-instruction prefix so
+        // `embed_query` stays bit-identical to the embedded engine. The chat
+        // slot never embeds, so it leaves the prefix empty.
+        let embed = std::sync::Arc::new(
+            RemoteApiProvider::new(endpoint_v1, None, &embed_model_id, context_size)
+                .with_query_instruction(embed_query_instruction),
+        );
         Self {
             chat,
             embed,
             chat_model_id,
             context_size,
         }
+    }
+
+    /// Build from an OICP manifest (v0.4 §7 context discoverability): resolve
+    /// the chat slot's context window from the advertised
+    /// [`ProviderModel::context_tokens`] rather than a hardcoded default, so a
+    /// client's budget-aware compaction matches the host's real window.
+    ///
+    /// Falls back to the historical 8192 when the manifest doesn't advertise
+    /// the chat model's context (a v0.3 host, or a model absent from
+    /// `/v1/models`) — never a hard failure.
+    pub fn from_manifest(
+        endpoint_v1: &str,
+        manifest: &ProviderManifest,
+        chat_model_id: String,
+        embed_model_id: String,
+    ) -> Self {
+        /// The pre-v0.4 client default, used when the host doesn't advertise a
+        /// truthful `context_tokens` for the chat model.
+        const V03_FALLBACK_CONTEXT: u32 = 8192;
+        let context_size = manifest
+            .models
+            .iter()
+            .find(|m| m.id == chat_model_id)
+            .map(|m| m.context_tokens)
+            .filter(|&c| c > 0)
+            .unwrap_or(V03_FALLBACK_CONTEXT);
+        // v0.4 §4: the embed model's query-instruction prefix is advertised in
+        // the knowledge section; empty on a v0.3 host (or one without a
+        // knowledge plane).
+        let embed_query_instruction = manifest
+            .knowledge
+            .as_ref()
+            .and_then(|k| k.embed_model.as_ref())
+            .map(|e| e.query_instruction_prefix.clone())
+            .unwrap_or_default();
+        Self::new(
+            endpoint_v1,
+            chat_model_id,
+            embed_model_id,
+            context_size,
+            embed_query_instruction,
+        )
     }
 }
 
@@ -914,7 +987,7 @@ mod tests {
 
     #[test]
     fn build_request_with_oicp() {
-        use sovereign_core::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
+        use sovereign_contracts::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
 
         let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 

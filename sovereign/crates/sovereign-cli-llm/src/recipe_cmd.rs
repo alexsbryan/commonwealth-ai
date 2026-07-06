@@ -336,6 +336,8 @@ async fn run_enrich_and_verify(
             chat_model,
             embed_model.clone(),
             8192,
+            sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .embed_query_instruction(&embed_model),
         ));
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
     let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));

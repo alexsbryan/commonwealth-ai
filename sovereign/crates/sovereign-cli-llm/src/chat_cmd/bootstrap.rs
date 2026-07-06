@@ -122,6 +122,9 @@ pub async fn build_session_with_skills(
         // `capabilities().max_context_tokens`; for today's models
         // this is approximate but non-blocking.
         8192,
+        // Behavior-preserving: the embed slot's query-instruction prefix, which
+        // the old constructor derived from `DEFAULT_MANIFEST` internally.
+        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
     ));
 
     // 3. Open the state store. Creating the data dir on the fly is
