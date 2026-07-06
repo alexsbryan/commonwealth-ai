@@ -151,8 +151,8 @@ for fixes 1+2 and the first honest full-battery measurement.
 `target/agent-bench/{baseline,barm,darm,earm}-2026-07-06/`.
 
 B-arm (finder+smoke fixes): grand 69/99. Tier-1 ×4 + 3.2-py all 9/9;
-2.2 = 8/9 ×3 (judge anchor); 3.2-rust 0/8/0 wait — that was D-arm;
-B-arm 3.2-rust 9/0/0; 3.3 2/9 ×3 (goal outside fitness signal);
+2.2 = 8/9 ×3 (judge anchor); 3.2-rust 9/0/0 (emission variance);
+3.3 2/9 ×3 (goal outside fitness signal);
 4.1 6/9 ×3 (judge parser bug); 4.2 8/6/9; 5.1 0 ×3 (single-file
 tunnel vision).
 
