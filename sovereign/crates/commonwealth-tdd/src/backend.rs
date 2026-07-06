@@ -79,7 +79,13 @@ pub struct ReqwestChatBackend {
 impl ReqwestChatBackend {
     pub fn new(provider_url: impl Into<String>) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(180))
+            // Sized for QUEUED parallel candidates, not one request:
+            // K=4 candidates (plus repair turns) serialize on a
+            // single local model slot, so the tail candidate's wall
+            // time is ~K× one generation. At 180s the tail reliably
+            // died as `backend: transport` — a self-inflicted ~25%
+            // candidate tax observed on the 2026-07-06 C-arm.
+            .timeout(Duration::from_secs(600))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         Self {

@@ -626,7 +626,7 @@ async fn try_candidate(
             let mut m = messages.clone();
             m.push(json!({ "role": "assistant", "content": resp.content }));
             m.push(json!({ "role": "user", "content": format!(
-                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix the problem and re-emit: ONE fenced JSON action, then ONE fenced source block with the corrected content. No commentary."
+                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix ONLY the reported error — keep the same action and keep every other line of your source block identical. Re-emit: ONE fenced JSON action, then ONE fenced source block. Smallest possible change; no commentary."
             ) }));
             m
         };
