@@ -299,8 +299,17 @@ pub async fn run_workflow_in_process(
         let chat = models.chat.clone().unwrap_or_default();
         let embed = models.embed.clone().unwrap_or_default();
         tracing::info!(daemon, chat = %chat, embed = %embed, "workflow-host: daemon inference");
+        // Behavior-preserving: the embed slot's query-instruction prefix, which
+        // the old constructor derived from `DEFAULT_MANIFEST` internally.
+        // Computed before `embed` is moved into arg 3.
+        let embed_query_instruction =
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed);
         Some(Arc::new(SplitInferenceProvider::new(
-            &v1, chat, embed, 8192,
+            &v1,
+            chat,
+            embed,
+            8192,
+            embed_query_instruction,
         )))
     } else {
         None

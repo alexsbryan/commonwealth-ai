@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     # Wire-protocol types — bottom of the dep graph.
+    "oicp-client",
     "oicp-types",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
@@ -108,6 +109,7 @@ field_reassign_with_default = "allow"
 
 [workspace.dependencies]
 # ── Internal crates (paths are relative to the workspace root) ──────────
+oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
