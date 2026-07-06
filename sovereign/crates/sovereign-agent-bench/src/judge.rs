@@ -155,9 +155,17 @@ pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> 
         .map_err(|_| JudgeError::Parse {
             raw: raw.to_string(),
         })?;
+    // Accept the anchor as a number OR a numeric string — judges
+    // reliably emit {"anchor": "3"} some fraction of the time, and
+    // rejecting it scored a fully-correct run's dim as 0 (B-arm
+    // 4.1-config-applier 2026-07-06: rationale said "fixed all four
+    // bugs", anchor arrived as "3", dim_b landed 0).
     let anchor_raw = v
         .get("anchor")
-        .and_then(|x| x.as_i64())
+        .and_then(|x| {
+            x.as_i64()
+                .or_else(|| x.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+        })
         .ok_or_else(|| JudgeError::Parse {
             raw: raw.to_string(),
         })?;
@@ -418,6 +426,19 @@ fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_judge_response_accepts_string_anchor() {
+        // Judges reliably emit {"anchor": "3"} some fraction of the
+        // time; rejecting it scored a fully-correct run's dim 0
+        // (4.1-config-applier B-arm, 2026-07-06).
+        let s = r#"{"anchor": "3", "rationale": "fixed all four bugs"}"#;
+        let out = parse_judge_response(s).unwrap();
+        assert_eq!(out.anchor, 3);
+        // Out-of-range and non-numeric strings still fail.
+        assert!(parse_judge_response(r#"{"anchor": "7", "rationale": ""}"#).is_err());
+        assert!(parse_judge_response(r#"{"anchor": "high", "rationale": ""}"#).is_err());
+    }
 
     #[test]
     fn parse_judge_response_repairs_latex_backslashes() {
