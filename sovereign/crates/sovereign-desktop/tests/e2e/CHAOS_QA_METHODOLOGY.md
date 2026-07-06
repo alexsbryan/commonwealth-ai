@@ -410,8 +410,13 @@ a regression.** Receipts (per-question diff vs the 2026-06-10 baseline):
   (same contamination shape as the 2026-06-30 UX-judge length finding). The
   drop is the intended grounded-behaviour trade; the real (modest) gap is
   famous-topic extraction efficiency (26/42 on `summarize` vs 40/42 obscure).
-- Baselines are stale (26–42d, pre-grounding-gate era) — re-mint with
-  `--update-baseline` once this adjudication is accepted.
+- Baselines were stale (26–42d, pre-grounding-gate era) — **RE-MINTED
+  2026-07-06 (`6335e10f`)** after the user accepted this adjudication: gate
+  lanes captured from the verified artifacts, retrieval/routing re-run live
+  (0 regressed), synth:sep minted from the run objects. All gates verified
+  PASS against the new baselines. Beware: `latest.json` in baseline dirs is a
+  SYMLINK to the dated file — write the dated file and re-link, never write
+  through `latest.json` (it clobbers history; had to restore from git).
 
 **Environment confound found & fixed mid-verification:** every atlas graph
 failed lazy-load during the synth lane (`edges.csr schema v1 != reader v2`) —
