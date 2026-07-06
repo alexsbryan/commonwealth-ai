@@ -716,16 +716,17 @@ overlap_chars = {overlap_chars}
             d.category.unwrap_or_default(),
             d.icon.unwrap_or_default()
         ),
-        // DocumentFolder is one-shot drag-drop ingest — no daemon-side
-        // sweeper, no tiered enrichment. Stays uncategorised.
+        // Defensive: every source type currently returns a category from
+        // display_meta(), so this arm is unreached — kept for a future
+        // uncategorised source kind.
         None => String::new(),
     };
-    let enrichment = match &config.source_type {
-        LocalCorpusSourceType::ObsidianVault { .. } | LocalCorpusSourceType::WatchedFolder(_) => {
-            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n"
-        }
-        LocalCorpusSourceType::DocumentFolder => "",
-    };
+    // Enrichment is a property of ingest, not of watching: every folder
+    // import gets the tiered atlas (RAPTOR + entity extraction). A
+    // DocumentFolder differs from a WatchedFolder only in that no sync
+    // worker is spawned for it — see `display_meta` above and the enrich
+    // lifecycle in `manager.rs`.
+    let enrichment = "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n";
 
     format!(
         r#"[corpus]
@@ -788,8 +789,10 @@ impl LocalCorpusSourceType {
     /// (sovereign-core/conv_briefing) gates the tiered retrieval
     /// surface — RAPTOR briefings + the entity-PPR rerank — on it, so
     /// a corpus without a category is silently exempt from
-    /// entity-aware retrieval. `None` for `DocumentFolder` (one-shot
-    /// drag-drop ingest, deliberately uncategorised).
+    /// entity-aware retrieval. `DocumentFolder` reuses the
+    /// `watched_folder` category on purpose: a one-shot import enriches
+    /// like a watched folder (minus the sync worker), so it must be
+    /// retrieval-visible too.
     pub fn display_meta(&self) -> Option<corpus_engine::recipe::DisplayMeta> {
         match self {
             LocalCorpusSourceType::ObsidianVault { .. } => {
@@ -802,7 +805,15 @@ impl LocalCorpusSourceType {
                 category: Some("watched_folder".to_string()),
                 icon: Some("folder".to_string()),
             }),
-            LocalCorpusSourceType::DocumentFolder => None,
+            // A one-shot drag-drop import enriches like a watched folder
+            // (RAPTOR + entity atlas), minus the sync worker — so it reuses
+            // the `watched_folder` category, which is what lands it in
+            // TIERED_DISPLAY_CATEGORIES for entity-aware retrieval. Watching,
+            // not enrichment, is the only thing DocumentFolder gives up.
+            LocalCorpusSourceType::DocumentFolder => Some(corpus_engine::recipe::DisplayMeta {
+                category: Some("watched_folder".to_string()),
+                icon: Some("folder".to_string()),
+            }),
         }
     }
 
@@ -937,21 +948,23 @@ mod tests {
     }
 
     #[test]
-    fn document_folder_recipe_skips_display_and_enrichment() {
-        // Document folders are one-shot drag-drop ingest — no daemon
-        // sweeper, no tiered enrichment. They should NOT emit a tiered
-        // display category OR an enrichment block.
+    fn document_folder_recipe_has_display_and_enrichment() {
+        // A one-shot drag-drop import enriches like a watched folder minus
+        // the sync worker: it stamps the shared `watched_folder` display
+        // category (so it's retrieval-visible via TIERED_DISPLAY_CATEGORIES)
+        // and requests tiered enrichment. Watching is the only thing it
+        // gives up — see `display_meta` and `recipe_toml`.
         let cfg =
             LocalCorpusConfig::document_folder(PathBuf::from("/tmp/folder"), "Manuals".into());
         let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
         assert!(
-            !toml.contains("[display]"),
-            "document folder recipe leaked a [display] section. \
+            toml.contains("[display]") && toml.contains("category = \"watched_folder\""),
+            "document folder recipe should stamp the watched_folder display category. \
              Full recipe:\n{toml}"
         );
         assert!(
-            !toml.contains("[enrichment]"),
-            "document folder recipe leaked an [enrichment] section. \
+            toml.contains("[enrichment]") && toml.contains("type = \"tiered\""),
+            "document folder recipe should request tiered enrichment. \
              Full recipe:\n{toml}"
         );
     }

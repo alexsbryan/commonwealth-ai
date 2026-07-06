@@ -173,13 +173,19 @@ sequenceDiagram
     Note over A,B: mesh_sharing = false ⇒ replication of A's index is refused,<br/>independently of query access. Peer offline ⇒ B degrades to local, never breaks.
 ```
 
-**Transport honesty.** A plaintext mesh (the default) trusts the network
-perimeter — a tailnet, WireGuard, or your LAN. An *encrypted mesh*
-(founder-set, fail-closed) moves everything onto iroh QUIC/TLS,
-dial-by-Ed25519-key, with relays that can be self-hosted or severed from
-public infrastructure entirely. The one residual: tensor-split RPC stays
-raw TCP — the docs forbid claiming end-to-end encryption while it's in
-use.
+**Two transport modes, both deliberate.** By default a mesh runs in
+**trusted-network mode**: you pool machines on a network you already
+control — a tailnet, WireGuard, or your LAN — and the perimeter is the
+boundary. Since the iroh migration even this mode dials peers over
+encrypted QUIC *first*, falling back to the trusted network only when a
+direct encrypted path isn't available. Turn on **encrypted mode**
+(`require_encryption`, founder-set) and every node moves onto iroh
+QUIC/TLS, dial-by-Ed25519-key, fail-closed — no plaintext path exists, the
+daemon refuses to start if it can't encrypt, a stale or hostile peer can't
+downgrade it, and relays can be self-hosted or severed from public
+infrastructure entirely. The one documented exception, in either mode, is
+multi-host tensor-split RPC, which stays raw TCP — so we don't claim
+end-to-end encryption while it's in use.
 
 *Deep dive: SYSTEM_OVERVIEW §5; [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md);
 hands-on: [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md). The
@@ -211,7 +217,7 @@ work.
 | Port | Surface | Default exposure |
 |---|---|---|
 | `:9741` | client API — OpenAI-compatible `/v1/*`, Ollama shim `/api/*`, MCP `/mcp`, mesh apps | **loopback**; any remote caller needs a bearer token (fail-closed); MCP is loopback-only |
-| `:9742` | internal mesh — gossip, join, scheduling, knowledge fan-out | **perimeter-trusted** on a plaintext mesh; loopback + iroh-only when encrypted |
+| `:9742` | internal mesh — gossip, join, scheduling, knowledge fan-out | **perimeter-trusted** in trusted-network mode (encrypted-QUIC-first); loopback + iroh-only in encrypted mode |
 | `:8080` | `sovereign-server` — multi-tenant REST/WS, the phone's host | **loopback**; refuses to start non-loopback without auth keys (explicit opt-out exists) |
 | `:50052` | tensor-split RPC (multi-host inference) | **raw TCP, no auth/TLS** — perimeter only, opt-in via env |
 
