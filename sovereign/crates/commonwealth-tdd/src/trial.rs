@@ -509,7 +509,7 @@ impl CandidateOutcome {
     }
 
     fn shape_summary(&self) -> String {
-        match self.response.as_ref().map(|r| &r.action) {
+        let shape = match self.response.as_ref().map(|r| &r.action) {
             Some(EditAction::RewriteFunction { name }) => format!("rewrite {name}"),
             Some(EditAction::PatchLines { start, end }) => format!("patch {start}-{end}"),
             Some(EditAction::InsertBefore { line }) => format!("insert@{line}"),
@@ -517,7 +517,15 @@ impl CandidateOutcome {
                 Some(p) => format!("write_file→{p}"),
                 None => "write_file".to_string(),
             },
-            None => "<parse-failed>".to_string(),
+            None => return "<parse-failed>".to_string(),
+        };
+        // `~` marks a header-inferred action (model emitted only the
+        // source block) — keeps inference-rescued candidates
+        // attributable in the trajectory.
+        if self.response.as_ref().is_some_and(|r| r.inferred) {
+            format!("~{shape}")
+        } else {
+            shape
         }
     }
 }
