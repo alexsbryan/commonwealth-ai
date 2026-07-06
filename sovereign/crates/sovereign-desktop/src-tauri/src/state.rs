@@ -1253,7 +1253,9 @@ pub async fn bootstrap_with_progress(
         tools.register(Box::new(RegistryBrowseTool));
         tools.register(Box::new(RecipeReadTool::new()));
         tools.register(Box::new(RecipeWriteTool::new()));
-        tools.register(Box::new(RecipeWriteStructuredTool::new()));
+        tools.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
+            CorpusEngineRecipeTester::new(),
+        ))));
         tools.register(Box::new(RecipeValidateTool::new(Arc::new(
             CorpusEngineRecipeTester::new(),
         ))));

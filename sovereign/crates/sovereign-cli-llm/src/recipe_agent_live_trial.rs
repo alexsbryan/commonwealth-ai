@@ -1368,7 +1368,9 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(RecipeReadTool::new()));
     registry.register(Box::new(RecipeWriteTool::new()));
-    registry.register(Box::new(RecipeWriteStructuredTool::new()));
+    registry.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
+        CorpusEngineRecipeTester::new(),
+    ))));
     registry.register(Box::new(RecipeValidateTool::new(Arc::new(
         CorpusEngineRecipeTester::new(),
     ))));

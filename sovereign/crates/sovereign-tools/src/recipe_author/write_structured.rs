@@ -29,10 +29,12 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
 
+use sovereign_contracts::recipe::testing::{RecipeTestParams, RecipeTester};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -41,22 +43,28 @@ use super::json_to_toml::{json_to_toml, toml_value_to_string};
 use super::recipe_schema::recipe_json_schema;
 use super::resolve_recipe_path;
 
-#[derive(Default)]
 pub struct RecipeWriteStructuredTool {
     /// Optional override for the recipes-dir root. Tests inject a
     /// per-test tempdir so the tool runs without mutating
     /// process-global `HOME`.
     recipes_dir: Option<PathBuf>,
+    /// Runs the on-disk validation after writing (the RecipeTester seam, so
+    /// this tool carries no corpus-engine dependency).
+    tester: Arc<dyn RecipeTester>,
 }
 
 impl RecipeWriteStructuredTool {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(tester: Arc<dyn RecipeTester>) -> Self {
+        Self {
+            recipes_dir: None,
+            tester,
+        }
     }
 
-    pub fn with_recipes_dir(dir: PathBuf) -> Self {
+    pub fn with_recipes_dir(tester: Arc<dyn RecipeTester>, dir: PathBuf) -> Self {
         Self {
             recipes_dir: Some(dir),
+            tester,
         }
     }
 }
@@ -230,7 +238,7 @@ impl Tool for RecipeWriteStructuredTool {
         //    file is still on disk (the agent gets to inspect /
         //    iterate); the response just reports the failure so
         //    the agent can fix it on the next call.
-        let validation_report = run_disk_validation(&resolved).await;
+        let validation_report = run_disk_validation(&resolved, self.tester.as_ref()).await;
 
         // Push the agent through the fix-and-rewrite cycle in the
         // SAME turn instead of yielding to the partner with a
@@ -276,31 +284,19 @@ fn preview(s: &str, max_chars: usize) -> String {
 /// no extraction. Returns a `{passed, errors, warnings}` JSON
 /// object so the tool's response shape is uniform across success
 /// and failure paths.
-async fn run_disk_validation(path: &std::path::Path) -> serde_json::Value {
-    use corpus_engine::testing::TestOptions;
-    use corpus_engine::CorpusEngine;
-    let recipes_dir = path
-        .parent()
-        .and_then(|p| p.parent())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    let indexes_dir = recipes_dir
-        .parent()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| recipes_dir.clone());
-    let stub_embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_text| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![]) })
-    });
-    let engine = CorpusEngine::new(recipes_dir, indexes_dir, stub_embed);
-    let opts = TestOptions {
+async fn run_disk_validation(
+    path: &std::path::Path,
+    tester: &dyn RecipeTester,
+) -> serde_json::Value {
+    let params = RecipeTestParams {
         sample_size: 0,
         offline: true,
         ..Default::default()
     };
-    match engine.test_recipe(path, &opts).await {
+    match tester.test(path, &params).await {
         Ok(report) => {
-            let passed = report.passed();
-            let errors: Vec<String> = report.validation.errors.to_vec();
+            let passed = report.passed;
+            let errors: Vec<String> = report.validation.errors.clone();
             let warnings: Vec<String> = report.warnings();
             json!({
                 "passed": passed,
@@ -319,6 +315,11 @@ async fn run_disk_validation(path: &std::path::Path) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
+
+    fn tester() -> Arc<dyn RecipeTester> {
+        Arc::new(CorpusEngineRecipeTester::new())
+    }
 
     fn ctx() -> ToolContext {
         ToolContext {
@@ -341,7 +342,7 @@ mod tests {
     async fn writes_clean_recipe_from_structured_input() {
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
         let out = tool
             .execute(
                 &json!({
@@ -382,7 +383,7 @@ mod tests {
     async fn nested_arrays_become_double_bracket_blocks() {
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
         tool.execute(
             &json!({
                 "path": "investigation-shape",
@@ -427,7 +428,7 @@ mod tests {
         // valid recipe TOML.
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
         let out = tool
             .execute(
                 &json!({
@@ -461,7 +462,7 @@ mod tests {
         // raw-recipe_write fallback.
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
         let out = tool
             .execute(
                 &json!({
@@ -498,7 +499,7 @@ mod tests {
         // recipe_write_structured (previously a hard conversion failure).
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(tester(), root.clone());
         let mut threshold = serde_json::Map::new();
         threshold.insert("type".into(), json!("threshold"));
         threshold.insert("name".into(), json!("hotspots"));

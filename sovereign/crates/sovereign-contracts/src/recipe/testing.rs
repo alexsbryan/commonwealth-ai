@@ -80,6 +80,25 @@ pub struct RecipeTestOutcome {
     pub passed: bool,
 }
 
+impl RecipeTestOutcome {
+    /// Non-fatal observations worth surfacing — the validation warnings plus a
+    /// low-extraction-rate note when extraction ran at 80–90%. Mirrors
+    /// `corpus_engine::TestReport::warnings()` so `RecipeWriteStructuredTool`'s
+    /// disk-validation output is unchanged.
+    pub fn warnings(&self) -> Vec<String> {
+        let mut w = self.validation.warnings.clone();
+        if let Some(ref ext) = self.extraction {
+            if ext.extraction_rate >= 0.80 && ext.extraction_rate < 0.90 {
+                w.push(format!(
+                    "Low extraction rate: {:.1}% (above 80% threshold but below 90%)",
+                    ext.extraction_rate * 100.0
+                ));
+            }
+        }
+        w
+    }
+}
+
 /// Run a recipe through the test harness. A monolith-side adapter implements
 /// this over `corpus_engine::CorpusEngine::test_recipe`.
 ///
