@@ -38,6 +38,7 @@ pub mod pii;
 pub mod progress;
 pub mod recipe;
 pub mod recipe_builtin;
+pub mod recipe_schema;
 mod recipe_parsing;
 pub mod registry;
 pub mod safety;

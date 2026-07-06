@@ -1,0 +1,181 @@
+{
+  "acquire": [
+    {
+      "key": "bulk_download",
+      "required": []
+    },
+    {
+      "key": "web_crawl",
+      "required": [
+        "seed_urls",
+        "link_pattern"
+      ]
+    },
+    {
+      "key": "http_api",
+      "required": [
+        "requests"
+      ]
+    },
+    {
+      "key": "local_file",
+      "required": [
+        "path"
+      ]
+    },
+    {
+      "key": "huggingface_dataset",
+      "required": [
+        "repo"
+      ]
+    },
+    {
+      "key": "custom",
+      "required": [
+        "kind"
+      ]
+    }
+  ],
+  "chunk": [
+    "paragraph",
+    "sentence",
+    "fixed",
+    "semantic",
+    "passthrough",
+    "portal_event_bullet",
+    "threaded_turns"
+  ],
+  "comparison": [
+    "greater_than",
+    "greater_or_equal",
+    "less_than",
+    "less_or_equal",
+    "equal"
+  ],
+  "extract": [
+    {
+      "key": "mediawiki_xml",
+      "required": []
+    },
+    {
+      "key": "stackexchange_xml",
+      "required": []
+    },
+    {
+      "key": "jsonl",
+      "required": []
+    },
+    {
+      "key": "json",
+      "required": [
+        "document_path",
+        "content_field"
+      ]
+    },
+    {
+      "key": "tabular_atoms",
+      "required": [
+        "id_column"
+      ]
+    },
+    {
+      "key": "html",
+      "required": []
+    },
+    {
+      "key": "html_sections",
+      "required": [
+        "sections"
+      ]
+    },
+    {
+      "key": "csv",
+      "required": [
+        "content_column"
+      ]
+    },
+    {
+      "key": "gutenberg_catalog",
+      "required": []
+    },
+    {
+      "key": "wikipedia_catalog",
+      "required": []
+    },
+    {
+      "key": "wikipedia_api_article",
+      "required": []
+    },
+    {
+      "key": "parquet",
+      "required": [
+        "content_column"
+      ]
+    },
+    {
+      "key": "plaintext",
+      "required": []
+    },
+    {
+      "key": "wikipedia_structured",
+      "required": []
+    },
+    {
+      "key": "wikipedia_jsonl",
+      "required": []
+    },
+    {
+      "key": "code",
+      "required": []
+    },
+    {
+      "key": "markdown",
+      "required": []
+    },
+    {
+      "key": "custom",
+      "required": [
+        "kind",
+        "extension"
+      ]
+    },
+    {
+      "key": "email",
+      "required": []
+    },
+    {
+      "key": "described_asset",
+      "required": []
+    },
+    {
+      "key": "xml_sections",
+      "required": [
+        "element"
+      ]
+    },
+    {
+      "key": "alignment_workspace",
+      "required": []
+    },
+    {
+      "key": "anthropic_export",
+      "required": []
+    },
+    {
+      "key": "chatgpt_export",
+      "required": []
+    }
+  ],
+  "filter": [
+    "pageview_rank",
+    "title_list",
+    "knowledge_density",
+    "boilerplate"
+  ],
+  "pattern": [
+    "circular_flow",
+    "role_overlap",
+    "threshold",
+    "custom_sql"
+  ]
+}
