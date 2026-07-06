@@ -474,11 +474,13 @@ async fn main() {
     // catalog only surfaces these when `active_mode == recipe-author`, so
     // generic chat is unaffected.
     {
+        use sovereign_contracts::recipe::notes::RecipeNotes;
         use sovereign_tools::recipe_author::{
             CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool,
             RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
             RegistryBrowseTool, ResearchFindingTool,
         };
+        use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
         tools.register(Box::new(RecipeReadTool::new()));
         tools.register(Box::new(RecipeWriteTool::new()));
         tools.register(Box::new(RecipeWriteStructuredTool::new()));
@@ -493,18 +495,27 @@ async fn main() {
             tools.register(t);
         }
         if let Some(ref notes) = note_store_for_runtime {
-            tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(notes))));
-            tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(notes))));
+            // The recipe-author tools take the RecipeNotes contract, not the
+            // concrete NoteStore; wrap once in the seam adapter. (The general
+            // note tools above still hold the concrete Arc<NoteStore>.)
+            let recipe_notes: Arc<dyn RecipeNotes> =
+                Arc::new(NoteStoreRecipeNotes::new(Arc::clone(notes)));
+            tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(
+                &recipe_notes,
+            ))));
+            tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(
+                &recipe_notes,
+            ))));
             let features_db = home.join(".sovereign").join("features.db");
             match sovereign_store::recipe_project_store::RecipeProjectStore::open(&features_db) {
                 Ok(features) => {
                     let features = Arc::new(features);
                     tools.register(Box::new(CheckpointTool::with_stores(
-                        Arc::clone(notes),
+                        Arc::clone(&recipe_notes),
                         Arc::clone(&features),
                     )));
                     tools.register(Box::new(CapabilityRequestTool::with_stores(
-                        Arc::clone(notes),
+                        Arc::clone(&recipe_notes),
                         Arc::clone(&features),
                     )));
                     tracing::info!("Recipe-author: tools registered (with feature store)");

@@ -50,6 +50,10 @@ pub mod rag;
 pub use sovereign_tools_base::read_file;
 pub use sovereign_tools_base::read_json;
 pub mod recipe_author;
+/// Monolith-side adapter binding the real `NoteStore` to the `RecipeNotes`
+/// contract the recipe-author tools depend on (keeps that bundle
+/// corpus-engine-notes-free).
+pub mod recipe_notes_adapter;
 pub use sovereign_tools_base::search;
 pub use sovereign_tools_base::shell;
 pub mod spec_watcher;

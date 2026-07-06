@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -111,7 +111,7 @@ pub struct DecisionPayload {
 
 #[derive(Default)]
 pub struct DecisionLogTool {
-    notes: Option<Arc<NoteStore>>,
+    notes: Option<Arc<dyn RecipeNotes>>,
 }
 
 impl DecisionLogTool {
@@ -122,7 +122,7 @@ impl DecisionLogTool {
         Self::default()
     }
 
-    pub fn with_notes(notes: Arc<NoteStore>) -> Self {
+    pub fn with_notes(notes: Arc<dyn RecipeNotes>) -> Self {
         Self { notes: Some(notes) }
     }
 }
@@ -296,11 +296,20 @@ impl Tool for DecisionLogTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipe_notes_adapter::NoteStoreRecipeNotes;
+    use corpus_engine_notes::NoteStore;
+    use sovereign_contracts::recipe::notes::ScopeFilter;
     use sovereign_store::recipe_project_store::RecipeProjectStore;
 
-    async fn fresh_stores() -> (Arc<NoteStore>, Arc<RecipeProjectStore>, tempfile::TempDir) {
+    async fn fresh_stores() -> (
+        Arc<dyn RecipeNotes>,
+        Arc<RecipeProjectStore>,
+        tempfile::TempDir,
+    ) {
         let dir = tempfile::tempdir().unwrap();
-        let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
+            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
+        )));
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         (notes, features, dir)
     }
@@ -344,7 +353,7 @@ mod tests {
         assert_eq!(v["decision_kind"], "schema_choice");
         let id = v["decision_id"].as_str().unwrap().to_string();
 
-        let scope = corpus_engine_notes::ScopeFilter {
+        let scope = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.id.clone()),
         };
@@ -410,7 +419,7 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("{kind}: {e}"));
         }
-        let scope = corpus_engine_notes::ScopeFilter {
+        let scope = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.id.clone()),
         };

@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+sovereign-contracts = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }

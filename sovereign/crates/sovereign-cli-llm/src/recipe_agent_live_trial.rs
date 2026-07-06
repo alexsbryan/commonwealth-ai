@@ -61,7 +61,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::NoteStore;
+use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
@@ -72,6 +73,7 @@ use sovereign_tools::recipe_author::{
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
     RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
+use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 // ─── OpenAI-style wire types ────────────────────────────────────
 //
@@ -1288,8 +1290,8 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         }
     };
     let dotsovereign = home.join(".sovereign");
-    let notes = match NoteStore::open(&dotsovereign.join("notes.db")) {
-        Ok(s) => Arc::new(s),
+    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&dotsovereign.join("notes.db")) {
+        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
         Err(e) => {
             eprintln!("live-trial: notes store: {e}");
             return 2;

@@ -1242,11 +1242,13 @@ pub async fn bootstrap_with_progress(
     // in bootstrap, so the rest of the chat surface stays healthy
     // even when notes.db / features.db are unavailable.
     {
+        use sovereign_contracts::recipe::notes::RecipeNotes;
         use sovereign_tools::recipe_author::{
             maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
             ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
             RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
         };
+        use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
         tools.register(Box::new(RegistryBrowseTool));
         tools.register(Box::new(RecipeReadTool::new()));
         tools.register(Box::new(RecipeWriteTool::new()));
@@ -1255,7 +1257,12 @@ pub async fn bootstrap_with_progress(
         tools.register(Box::new(RecipeTestTool::new()));
         tools.register(Box::new(ProbeUrlTool::new()));
 
-        let notes_handle = state.notes.read().await.as_ref().map(Arc::clone);
+        // Wrap the concrete NoteStore in the RecipeNotes seam adapter so the
+        // recipe-author tools depend only on the contract.
+        let notes_handle: Option<Arc<dyn RecipeNotes>> =
+            state.notes.read().await.as_ref().map(|ns| {
+                Arc::new(NoteStoreRecipeNotes::new(Arc::clone(ns))) as Arc<dyn RecipeNotes>
+            });
         let features_handle = state.features.read().await.as_ref().map(Arc::clone);
 
         if let Some(ns) = notes_handle.clone() {
