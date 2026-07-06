@@ -1226,6 +1226,21 @@ export async function importChatgptZip(
   });
 }
 
+/** Library → Add → Conversations: index a mailbox the user owns via the
+ *  `email-archive` recipe. Unlike the chat imports there is NO staging
+ *  copy — `path` (a Takeout/Apple-Mail `.mbox`, a Thunderbird store, a
+ *  maildir root, or a folder of `.eml`s) is read in place, passed through
+ *  the install's `parameters` map into the recipe's `{path}` placeholder.
+ *  Pass `resetPartial: true` after the destructive-reset confirmation. */
+export async function importEmailArchive(
+  path: string,
+  resetPartial = false,
+): Promise<ImportStartResponse> {
+  return invoke("import_email_archive", {
+    request: { path, reset_partial: resetPartial },
+  });
+}
+
 
 // ─── Insights ──────────────────────────────────────────────
 

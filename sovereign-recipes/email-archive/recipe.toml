@@ -1,0 +1,79 @@
+# Your own email archive — one export, one command.
+#
+#   Gmail        Google Takeout → Mail → produces a single .mbox file
+#   Apple Mail   select a mailbox → File → Export Mailbox… → .mbox
+#   Thunderbird  point straight at the profile's mbox store (no extension)
+#   anything     a maildir tree or any folder of .eml files also works
+#
+#   sovereign corpus install email-archive --params path=~/Takeout/Mail/inbox.mbox
+#
+# Formats are detected by content, not extension — mbox is recognized by
+# its `From ` postmark and streamed message-by-message, so a
+# multi-gigabyte Takeout export never loads into memory at once. This is
+# the generic form of the enron-sample family: the same RFC-5322/MIME
+# extractor, boilerplate stripping, and paragraph chunking.
+#
+# Privacy is structural, not advisory: `scope = "local"` keeps this
+# corpus off-mesh entirely — never advertised to peers, never replicated,
+# never reachable by federated queries — and the explicit sharing flags
+# say the same thing twice on purpose.
+
+[corpus]
+id = "email-archive"
+name = "Email Archive (your own mailbox)"
+description = "Index a mailbox you own — a maildir tree, an mbox file, or any folder of RFC-5322 .eml files — into a searchable, cited corpus. Bodies are stripped of signatures, quoted replies, and disclaimers before chunking; parsed headers ride along as metadata, and thread ids are derived from the In-Reply-To / References chain."
+license = "personal-data (your own mailbox; not redistributable)"
+schema_version = 1
+mesh_sharing = false
+query_sharing = false
+scope = "local"
+# Depends entirely on the mailbox; a 6k-message maildir indexes to ~0.3 GB.
+size_compressed_gb = 0.0
+size_indexed_gb = 0.3
+
+[parameters.path]
+type = "string"
+required = true
+description = "Path to the mailbox: a maildir root, an .mbox file, or a folder of .eml files. Tilde expands. The data is read in place — nothing is copied out of your control."
+
+[acquire]
+type = "local_file"
+path = "{path}"
+
+[extract]
+type = "email"
+max_body_bytes = 4194304
+# Attachments are skipped in v1 (no asset store wired on the generic
+# path). Raise this and install an AssetStore + sub-extractor registry to
+# get the described-asset treatment the enron-sample recipes exercise.
+max_attachment_bytes = 0
+
+[[filter]]
+type = "boilerplate"
+strip_signatures = true
+strip_quoted_replies = true
+strip_disclaimers = true
+min_body_chars_after_strip = 20
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+# Enrichment (the conversational entity atlas the enron-sample family
+# tunes) is deliberately OFF by default: it is LLM-bound and turns a
+# minutes-long index into an hours-long one on a big mailbox. To opt in,
+# add:
+#
+#   [enrichment]
+#   enabled = true
+#   type = "atlas"
+#   domain = "conversational"
+
+[display]
+category = "email"
+icon = "mail"

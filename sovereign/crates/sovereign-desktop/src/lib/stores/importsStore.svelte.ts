@@ -124,6 +124,11 @@ export interface ImportsStoreConfig {
    *  desktop restart restore the message-count + estimate display.
    *  Must be unique per source so two imports don't collide. */
   localStorageKey: string;
+  /** Chain `enrich_build_async` when ingest completes (the chat imports'
+   *  conversation-atlas hop). Default `true`. The email-archive recipe
+   *  ships `[enrichment]` OFF — LLM-bound, hours on a big mailbox — so
+   *  its store completes at ingest instead. */
+  autoEnrich?: boolean;
 }
 
 /** The reactive surface a consumer (ImportsTab / ConversationImportCard)
@@ -142,11 +147,17 @@ export function createImportsStore(cfg: ImportsStoreConfig) {
     _state = { ..._state, ingestProgress: p };
     if (_state.stage === "starting" || _state.stage === "ingesting") {
       if (p.phase === "complete") {
-        // Ingest done — kick the v2 atlas enrichment subprocess. Without
-        // this hop, the conversation_atlas pipeline never runs against
-        // the freshly-ingested chunks and `atoms.json` never lands, so
-        // the Atlas-View "Conversations" header never gets a row.
-        void triggerEnrichment();
+        if (cfg.autoEnrich === false) {
+          // No enrichment hop for this source (email-archive ships
+          // `[enrichment]` off) — ingest complete IS complete.
+          _state = { ..._state, stage: "complete", alreadyInstalled: true };
+        } else {
+          // Ingest done — kick the v2 atlas enrichment subprocess. Without
+          // this hop, the conversation_atlas pipeline never runs against
+          // the freshly-ingested chunks and `atoms.json` never lands, so
+          // the Atlas-View "Conversations" header never gets a row.
+          void triggerEnrichment();
+        }
       } else if (p.phase === "failed") {
         _state = {
           ..._state,
@@ -432,6 +443,14 @@ export const anthropicImportsStore = createImportsStore({
 export const chatgptImportsStore = createImportsStore({
   corpusId: "conversations-chatgpt",
   localStorageKey: "imports.lastStartResponse.chatgpt.v1",
+});
+
+/** Library → Add store for the email-archive source. No auto-enrich:
+ *  the recipe ships `[enrichment]` off, so ingest completion is terminal. */
+export const emailImportsStore = createImportsStore({
+  corpusId: "email-archive",
+  localStorageKey: "imports.lastStartResponse.email.v1",
+  autoEnrich: false,
 });
 
 /** Back-compat alias — the original single-source export. Points at the

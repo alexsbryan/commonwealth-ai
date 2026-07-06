@@ -1,0 +1,22 @@
+{
+  "lane": "governance",
+  "captured_at": "2026-07-06T13:55:08.904235+00:00",
+  "note": "precision 0.67 · recall 1.00 · 4 planted found, 0 missed · 15 flagged pairs",
+  "metrics": {
+    "f1": {
+      "value": 0.8,
+      "direction": "higher_is_better",
+      "tolerance": 0.12
+    },
+    "precision": {
+      "value": 0.6666666666666666,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    },
+    "recall": {
+      "value": 1.0,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    }
+  }
+}

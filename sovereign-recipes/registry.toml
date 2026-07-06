@@ -253,6 +253,18 @@ sha256 = ""
 catalog_status = "hidden"
 
 [[recipes]]
+id = "email-archive"
+name = "Email Archive (your own mailbox)"
+description = "Index a mailbox you own — maildir, mbox, or a folder of .eml files — via the `path` parameter: `corpus install email-archive --params path=~/Mail`. Signatures/quoted replies/disclaimers stripped; thread ids from In-Reply-To chains. scope=local: structurally off-mesh — never advertised, replicated, or federated-queried."
+license = "personal-data (your own mailbox; not redistributable)"
+size_compressed_gb = 0.0
+size_indexed_gb = 0.3
+enrichment_enabled = false
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/email-archive/recipe.toml"
+sha256 = ""
+
+[[recipes]]
 id = "enron-sample"
 name = "Enron Email Corpus (CMU)"
 description = "Full Enron email corpus from the CMU 2015-05-07 snapshot. ~500k messages × 150 mailboxes. The forcing function for the architecture-over-Enron substrate (asset store + described-asset dispatcher + email extractor + multi-origin reconciliation). Operator downloads the tarball manually (see recipe TOML); ingest runs through the full Phase 1-4 chain."

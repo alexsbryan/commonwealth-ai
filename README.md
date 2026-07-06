@@ -10,6 +10,11 @@ It comes in two parts:
 - **svrnmesh** is the assistant you run. Ask it to write, to search what you already know, or to think a problem through — the model answering you lives on the machine in front of you.
 - **Commonwealth** is the optional mesh. Pool a few machines you trust and you can run a model none of them could hold alone, or share a knowledge base across the group. There's no central server, and nothing leaves the group.
 
+New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is the
+ten-minute map —
+diagrams, tables, and the vocabulary. The verifiable deep map is
+[sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md).
+
 ## What you get
 
 Your conversations, documents, and memory stay on your machine. Answers come grounded in sources you choose to keep — Wikipedia, the Stanford Encyclopedia of Philosophy, Stack Exchange, scholarly abstracts, your own files — searched before each reply and cited, so you can trace a claim back to where it came from. It remembers what mattered from earlier instead of starting cold every time. Web search is there if you want it, off by default and labelled plainly when it runs. There's no telemetry; nothing was built to phone home.

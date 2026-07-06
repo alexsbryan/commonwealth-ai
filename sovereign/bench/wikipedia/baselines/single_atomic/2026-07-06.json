@@ -1,0 +1,253 @@
+{
+  "bank_name": "single-atomic-bombings",
+  "corpus": "wikipedia",
+  "limit": 30,
+  "started_at_unix": 1783346385,
+  "results": [
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.032795697,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bombings were unnecessary for the war's end and were a war crime, raising moral and ethical implications."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.030000001,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
+          "score": 0.029116046,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  all major belligerents during World War II was not prohibited by positive or specific customary international humanitarian law.  In 1963 the bombings were subjected to judicial review in Ryuichi Shimoda v. The State. The District Court of Tokyo ruled the use of nuclear weapons in warfare was not illegal, but held in its obiter dictum that the atomic bombings of both Hiroshima and Nagasaki were illegal under international law of that time, as an indiscriminate bombardment of undefended cities. The court denied the appellants compensation on the grounds…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
+          "score": 0.028158147,
+          "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.027579736,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Ward Wilson believes that the bombing of Hiroshima was not the reason for Japan's surrender, because the preliminary report of the Japanese Army investigation team on the bombing of Hiroshima was not submitted until August 10. Ward Wilson believes that Japan decided to surrender long before its leaders realized the devastation caused by the atomic bombs on Hiroshima and Nagasaki.According to Ward Wilson, Japanese leaders had long concluded: it is possible to fight a decisive battle against a great power attacking from one direction, but it is impossib…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.027242402,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.016393442,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "James B. Conant",
+          "url": "https://en.wikipedia.org/wiki/James_B._Conant#National_Defense_Research_Committee",
+          "score": 0.015873017,
+          "snippet": "James B. Conant  Stimson with the help of McGeorge Bundy, the article stressed that the atomic bombings of Hiroshima and Nagasaki were used to avoid the possibility of \"over a million casualties\", from a figure found in the estimates given to the Joint Chiefs of Staff by its Joint Planning Staff in 1945."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.015873017,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  On 6 and 9 August 1945, the United States detonated two atomic bombs over the Japanese cities of Hiroshima and Nagasaki. The bombings killed between 150,000 and 246,000 people, most of whom were civilians, and remain the only use of nuclear weapons in an armed conflict. Japan surrendered to the Allies on 15 August, six days after the bombing of Nagasaki and the Soviet Union's declaration of war against Japan and invasion of Japanese-occupied Manchuria. The Japanese government signed the instrument of surrender on 2 September, effectively ending the wa…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.015625,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.015625,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.015384615,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  on 26 July 1945, the alternative being \"prompt and utter destruction\". The Japanese government ignored the ultimatum.  The consent of the United Kingdom was obtained for the bombing, as was required by the Quebec Agreement, and orders were issued on 25 July by General Thomas Handy, the acting chief of staff of the United States Army, for atomic bombs to be used against Hiroshima, Kokura, Niigata, and Nagasaki. These targets were chosen because they were large urban areas that also held militarily significant facilities. On 6 August, a Little Boy was d…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "score": 0.015151516,
+          "snippet": "History of nuclear weapons  \"Super\" bomb. Only Teller continued working on the project—against the will of project leaders Oppenheimer and Hans Bethe.  The Joe-1 atomic bomb test by the Soviet Union that took place in August 1949 came earlier than expected by Americans, and over the next several months there was an intense debate within the U.S. government, military, and scientific communities regarding whether to proceed with development of the far more powerful Super.  After the atomic bombings of Japan, many scientists at Los Alamos rebelled against the notion of creating a weapon thousands…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Hibakusha",
+          "score": 0.015151516,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  as of August 2024, the memorials record the names of more than 540,000 hibakusha; 344,306 in Hiroshima and 198,785 in Nagasaki."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Choice_of_targets",
+          "score": 0.014925373,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  city may be destroyed. The Emperor's palace in Tokyo has a greater fame than any other target but is of least strategic value.\"  Edwin O. Reischauer, a Japan expert for the U.S. Army Intelligence Service, was incorrectly said to have prevented the bombing of Kyoto. In his autobiography, Reischauer specifically refuted this claim:  ... the only person deserving credit for saving Kyoto from destruction is Henry L. Stimson, the Secretary of War at the time, who had known and admired Kyoto ever since his honeymoon there several decades earlier."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.014925373,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear testing at Bikini Atoll",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_testing_at_Bikini_Atoll#Japanese_fishermen_contaminated",
+          "score": 0.014705882,
+          "snippet": "Nuclear testing at Bikini Atoll  crew members were infected with hepatitis C through blood transfusions during part of their acute radiation syndrome treatment.  Edward Teller was one of the driving minds behind the development of the hydrogen bomb and an architect of the Marshall Island tests. After the mass media painted the fisherman's death as an anti-nuclear call to arms, Teller notoriously commented, \"It's unreasonable to make such a big deal over the death of a fisherman.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.014705882,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  A member of the United States Strategic Bombing Survey, Lieutenant Daniel A. McGovern, arrived in September 1945 to document the effects of the bombing of Japan. He used a film crew to document the effects of the bombings in early 1946. The film crew shot 27,000 m (90,000 ft) of film, resulting in a three-hour documentary titled The Effects of the Atomic Bombs Against Hiroshima and Nagasaki. The documentary included images from hospitals, burned-out buildings and cars, and rows of skulls and bones on the ground. It was classified \"secret\" for the next…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 0.014492754,
+          "snippet": "Air raids on Japan  During early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied attacks. The number of fighter aircraft and anti-aircraft guns assigned to defensive duties in the home islands was inadequate, and most of these aircraft and guns had difficulty reaching the high altitudes at which B-29s often operated. Fuel shortages, inadequate pilot training, and a lack of coordination between units also constrained the effectiveness of the fighter force. Despite the vulnerabi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Thomas Blake Glover",
+          "url": "https://en.wikipedia.org/wiki/Thomas_Blake_Glover#Family",
+          "score": 0.014492754,
+          "snippet": "Thomas Blake Glover  the atomic bombings of Hiroshima and Nagasaki and a few weeks before the arrival of American occupation forces in Nagasaki."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Internment of Japanese Americans",
+          "url": "https://en.wikipedia.org/wiki/Internment_of_Japanese_Americans#Loyalty_questions_and_segregation",
+          "score": 0.014285714,
+          "snippet": "Internment of Japanese Americans  choice of renunciation. At the time, they feared what their futures held were they to remain American and remain incarcerated.  These renunciations of American citizenship have been highly controversial, for a number of reasons. Some apologists for incarceration have cited the renunciations as evidence that \"disloyalty\" or anti-Americanism was well represented among the incarcerated peoples, thereby justifying the incarceration. Many historians have dismissed the latter argument, for its failure to consider that the small number of individuals in question had …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Double_survivors",
+          "score": 0.014285714,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Perhaps as many as 200 people from Hiroshima sought refuge in Nagasaki. The 2006 documentary Twice Survived: The Doubly Atomic Bombed of Hiroshima and Nagasaki documented 165 nijū hibakusha (lit. double explosion-affected people), nine of whom claimed to be in the blast zone in both cities. On 24 March 2009, the Japanese government officially recognized Tsutomu Yamaguchi as a double hibakusha. He was confirmed to be 3 km (1.9 mi) from ground zero in Hiroshima on a business trip when the bomb was detonated. He was seriously burnt on his left side and s…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Collective memory",
+          "url": "https://en.wikipedia.org/wiki/Collective_memory#Perspectives_on_collective_memory",
+          "score": 0.014084507,
+          "snippet": "Collective memory  mentions forms detached from the everyday; they can be particular materialized and fixed points as, e.g. texts and monuments.  The theory of collective memory was also discussed by former Hiroshima resident and atomic-bomb survivor, Kiyoshi Tanimoto, in a tour of the United States as an attempt to rally support and funding for the reconstruction of his Memorial Methodist Church in Hiroshima. He theorized that the use of the atomic bomb had forever added to the world's collective memory and would serve in the future as a warning against such devices. See John Hersey 's 1946 b…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Harakiri (1962 film)",
+          "url": "https://en.wikipedia.org/wiki/Harakiri_(1962_film)#Plot",
+          "score": 0.013888889,
+          "snippet": "Harakiri (1962 film)  Saitō refuses, calling Motome an \"extortionist\" who deserved to die."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Post-attack_casualties",
+          "score": 0.013888889,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Nearly all of the remainder of victims died within two to four months, due to radiation exposure and resulting complications.  In the spring of 1948, the Atomic Bomb Casualty Commission (ABCC) was established in accordance with a presidential directive from Truman to the National Academy of Sciences – National Research Council to conduct investigations of the late effects of radiation among the survivors in Hiroshima and Nagasaki. In 1956, the ABCC published The Effect of Exposure to the Atomic Bombs on Pregnancy Termination in Hiroshima and Nagasaki.…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yokosuka",
+          "url": "https://en.wikipedia.org/wiki/Yokosuka",
+          "score": 0.01369863,
+          "snippet": "with Yokosuka and other cities to prepare for the possibility that people on board the ship might be exposed to radiation.  One unintended consequence of anti-nuclear sentiment is the construction of coal-fired power plants, which causes air pollution and worsens global warming. As of 2020, two coal-fired power plants are proposed to be built in Yokosuka, even despite the climate emergency. These coal-fired power plants are being built without a full environmental review, and local residents are suing the government of Japan over its construction. Environment minister ShinjirÅ Koizumi has bee…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Leaflets",
+          "score": 0.01369863,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  In preparation for dropping an atomic bomb on Hiroshima, the Oppenheimer-led Scientific Panel of the Interim Committee decided against a demonstration bomb and against a special leaflet warning. Those decisions were implemented because of the uncertainty of a successful detonation and also because of the wish to maximize shock in the leadership. No warning was given to Hiroshima that a new and much more destructive bomb was going to be dropped. Various sources gave conflicting information about when the last leaflets were dropped on Hiroshima prior to…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "J. Robert Oppenheimer",
+          "url": "https://en.wikipedia.org/wiki/J._Robert_Oppenheimer#Trinity",
+          "score": 0.013513514,
+          "snippet": "J. Robert Oppenheimer  multi-armed form and says, \"Now I am become Death, the destroyer of worlds.\" I suppose we all thought that, one way or another.  Rabi described seeing Oppenheimer somewhat later: \"I'll never forget his walk... like High Noon... this kind of strut. He had done it.\" Despite many scientists' opposition to using the bomb on Japan, Compton, Fermi, and Oppenheimer believed that a test explosion would not convince Japan to surrender. At an August 6 assembly at Los Alamos, the evening of the atomic bombing of Hiroshima, Oppenheimer took to the stage and clasped his hands togethe…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Puyi",
+          "url": "https://en.wikipedia.org/wiki/Puyi#Collapse_of_Manchukuo",
+          "score": 0.013513514,
+          "snippet": "Puyi  In his address, the Showa Emperor described the Americans as having used a \"most unusual and cruel bomb\" that had just destroyed the cities of Hiroshima and Nagasaki; this was the first time that Puyi heard of the atomic bombings of Hiroshima and Nagasaki, which the Japanese had not seen fit to tell him about until then."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Soviet–Japanese War",
+          "url": "https://en.wikipedia.org/wiki/Soviet%E2%80%93Japanese_War#Impact_on_the_Japanese_decision_to_surrender",
+          "score": 0.013333334,
+          "snippet": "Soviet–Japanese War  The Manchurian Strategic Offensive Operation, along with the atomic bombings of Hiroshima and Nagasaki, combined to break the Japanese political deadlock and force the Japanese leaders to accept the terms of surrender demanded by the Allies.  In the \"Sixty Years after Hiroshima\" issue of The Weekly Standard, the American historian Richard B. Frank points out that there are a number of schools of thought with varying opinions of what caused the Japanese to surrender. He describes what he calls the \"traditionalist\" view, which asserts that the Japanese surrendered because th…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties",
+          "demonstration"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 60,
+      "search_ms": 2942,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

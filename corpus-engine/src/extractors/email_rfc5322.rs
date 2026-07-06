@@ -27,7 +27,7 @@
 
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{BufWriter, Write as _};
+use std::io::{BufRead as _, BufReader, BufWriter, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -71,8 +71,11 @@ impl Default for EmailExtractorConfig {
 }
 
 /// RFC-5322 + MIME folder walker. Handles maildir layout (one file per
-/// message, no `.eml` extension) and `.eml` files. `.mbox` support is
-/// deferred — re-export `.mbox` to maildir if you need it for now.
+/// message, no `.eml` extension), `.eml` files, and mbox files (Gmail
+/// Takeout, Apple Mail export, Thunderbird stores). Mbox is detected by
+/// content — a leading `From ` postmark, never a valid header — not by
+/// extension, and is streamed one message at a time so a multi-gigabyte
+/// Takeout export never resides in memory at once.
 pub struct EmailExtractor {
     pub config: EmailExtractorConfig,
     /// Optional asset store + dispatcher for attachments. When `None`,
@@ -116,6 +119,7 @@ impl Extractor for EmailExtractor {
         files.sort();
         Ok(Box::new(EmailIterator {
             files: files.into(),
+            mbox: None,
             config: self.config.clone(),
             dispatch: self.asset_dispatch.clone(),
         }))
@@ -124,6 +128,9 @@ impl Extractor for EmailExtractor {
 
 struct EmailIterator {
     files: VecDeque<PathBuf>,
+    /// An open mbox being drained message-by-message; takes priority
+    /// over `files` so one mbox's messages stay contiguous.
+    mbox: Option<MboxStream>,
     config: EmailExtractorConfig,
     dispatch: Option<EmailAssetDispatch>,
 }
@@ -133,7 +140,33 @@ impl Iterator for EmailIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            if let Some(stream) = self.mbox.as_mut() {
+                match stream.next_message() {
+                    Ok(Some((bytes, origin))) => match self.parse_message(&bytes, &origin) {
+                        Ok(Some(doc)) => return Some(Ok(doc)),
+                        Ok(None) => continue,
+                        Err(e) => return Some(Err(e)),
+                    },
+                    Ok(None) => {
+                        self.mbox = None;
+                        continue;
+                    }
+                    Err(e) => {
+                        self.mbox = None;
+                        return Some(Err(e));
+                    }
+                }
+            }
             let path = self.files.pop_front()?;
+            if file_has_mbox_postmark(&path) {
+                match MboxStream::open(&path) {
+                    Ok(s) => {
+                        self.mbox = Some(s);
+                        continue;
+                    }
+                    Err(e) => return Some(Err(e)),
+                }
+            }
             match self.parse_one(&path) {
                 Ok(Some(doc)) => return Some(Ok(doc)),
                 Ok(None) => continue,
@@ -147,10 +180,17 @@ impl EmailIterator {
     fn parse_one(&self, path: &Path) -> Result<Option<ExtractedDoc>> {
         let bytes = fs::read(path)
             .map_err(|e| Error::Extraction(format!("email: read {}: {e}", path.display())))?;
+        self.parse_message(&bytes, path)
+    }
+
+    /// Parse ONE RFC-5322 message. `path` is the source file — or, for
+    /// mbox members, a synthetic `<file>#<n>` label — used in error
+    /// messages and the Message-ID fallback hash.
+    fn parse_message(&self, bytes: &[u8], path: &Path) -> Result<Option<ExtractedDoc>> {
         if bytes.is_empty() {
             return Ok(None);
         }
-        let parsed = parse_mail(&bytes).map_err(|e| {
+        let parsed = parse_mail(bytes).map_err(|e| {
             Error::Extraction(format!(
                 "email: rfc5322 parse failed for {}: {e}",
                 path.display()
@@ -658,6 +698,83 @@ fn default_ext_for_mime(mime: &str) -> &'static str {
     }
 }
 
+/// True when the file opens with the mbox postmark `From ` (with a
+/// space — an RFC-5322 header would be `From:`). Content sniff, not
+/// extension: Thunderbird's mbox stores carry no extension at all.
+/// IO errors report `false`; the per-file parse surfaces the real error.
+fn file_has_mbox_postmark(path: &Path) -> bool {
+    let mut head = [0u8; 5];
+    match fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)) {
+        Ok(()) => &head == b"From ",
+        Err(_) => false,
+    }
+}
+
+/// Streaming mbox reader: yields one message's bytes at a time.
+/// Boundary = a line starting with `From ` (the postmark). Postmark
+/// lines are dropped; mboxrd-escaped body lines (`>From `, `>>From `, …)
+/// lose exactly one `>` so round-tripped bodies come back verbatim.
+struct MboxStream {
+    reader: BufReader<fs::File>,
+    origin: PathBuf,
+    /// 1-based index of the NEXT message to be yielded.
+    index: usize,
+}
+
+impl MboxStream {
+    fn open(path: &Path) -> Result<Self> {
+        let file = fs::File::open(path)
+            .map_err(|e| Error::Extraction(format!("email: open mbox {}: {e}", path.display())))?;
+        let mut reader = BufReader::new(file);
+        // Consume the leading postmark; the first message starts after it.
+        let mut postmark = Vec::new();
+        reader
+            .read_until(b'\n', &mut postmark)
+            .map_err(|e| Error::Extraction(format!("email: read mbox {}: {e}", path.display())))?;
+        Ok(Self {
+            reader,
+            origin: path.to_path_buf(),
+            index: 1,
+        })
+    }
+
+    /// The next message's bytes plus its synthetic origin label, or
+    /// `None` at end of file.
+    fn next_message(&mut self) -> Result<Option<(Vec<u8>, PathBuf)>> {
+        let mut msg: Vec<u8> = Vec::new();
+        let mut line: Vec<u8> = Vec::new();
+        loop {
+            line.clear();
+            let n = self.reader.read_until(b'\n', &mut line).map_err(|e| {
+                Error::Extraction(format!("email: read mbox {}: {e}", self.origin.display()))
+            })?;
+            if n == 0 {
+                if msg.iter().all(|b| b.is_ascii_whitespace()) {
+                    return Ok(None);
+                }
+                break;
+            }
+            if line.starts_with(b"From ") {
+                if msg.iter().all(|b| b.is_ascii_whitespace()) {
+                    // Consecutive postmarks / leading blank block — skip.
+                    msg.clear();
+                    continue;
+                }
+                break;
+            }
+            let escapes = line.iter().take_while(|b| **b == b'>').count();
+            if escapes > 0 && line[escapes..].starts_with(b"From ") {
+                msg.extend_from_slice(&line[1..]);
+            } else {
+                msg.extend_from_slice(&line);
+            }
+        }
+        let origin = PathBuf::from(format!("{}#{}", self.origin.display(), self.index));
+        self.index += 1;
+        Ok(Some((msg, origin)))
+    }
+}
+
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     if dir.is_file() {
         out.push(dir.to_path_buf());
@@ -801,6 +918,96 @@ Notes body here.\r\n\
         let p = dir.join(name);
         std::fs::write(&p, body.as_bytes()).unwrap();
         p
+    }
+
+    const TAKEOUT_MBOX: &str = "From alice@example.com Mon Jun  1 10:00:00 2026\n\
+From: alice@example.com\n\
+To: bob@example.com\n\
+Subject: first\n\
+Message-ID: <mb1@example.com>\n\
+\n\
+Body one.\n\
+>From the beginning this line was mboxrd-escaped.\n\
+From: not a postmark — has a colon, stays in the body.\n\
+\n\
+From bob@example.com Mon Jun  1 11:00:00 2026\n\
+From: bob@example.com\n\
+To: alice@example.com\n\
+Subject: second\n\
+Message-ID: <mb2@example.com>\n\
+In-Reply-To: <mb1@example.com>\n\
+\n\
+Body two.\n\
+\n\
+From carol@example.com Tue Jun  2 09:00:00 2026\n\
+From: carol@example.com\n\
+To: alice@example.com\n\
+Subject: third\n\
+\n\
+Body three, no Message-ID header on purpose.\n";
+
+    /// The average-user path: one Takeout/Apple-Mail style mbox file
+    /// must split on `From ` postmarks — not parse as a single message.
+    #[test]
+    fn mbox_splits_into_messages() {
+        let dir = tempfile::tempdir().unwrap();
+        let mbox = write_msg(dir.path(), "takeout.mbox", TAKEOUT_MBOX);
+
+        let extractor = EmailExtractor::new(EmailExtractorConfig::default());
+        let docs: Vec<_> = extractor
+            .extract(&mbox)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(docs.len(), 3, "postmark split must yield 3 messages");
+
+        // mboxrd unescape: exactly one `>` stripped.
+        assert!(
+            docs[0]
+                .content
+                .contains("From the beginning this line was mboxrd-escaped."),
+            "unescaped >From line missing: {:?}",
+            docs[0].content
+        );
+        assert!(
+            !docs[0].content.contains(">From the beginning"),
+            "mboxrd escape survived"
+        );
+        // A body line starting `From:` (colon — not a postmark) must NOT split.
+        assert!(docs[0].content.contains("not a postmark"));
+        // Threading survives the split.
+        assert_eq!(
+            docs[1].metadata.as_ref().unwrap()["thread_id"],
+            docs[0].metadata.as_ref().unwrap()["thread_id"],
+            "reply must share the root's thread id"
+        );
+        // A message with no Message-ID gets a synthetic one distinct from
+        // its mbox siblings (origin label carries the member index).
+        let ids: std::collections::HashSet<String> = docs
+            .iter()
+            .map(|d| d.metadata.as_ref().unwrap()["message_id"].to_string())
+            .collect();
+        assert_eq!(ids.len(), 3, "message ids must be distinct: {ids:?}");
+    }
+
+    /// Extension-independent detection: a Thunderbird-style mbox with no
+    /// extension inside a walked folder still splits, while sibling .eml
+    /// files keep parsing one-per-file.
+    #[test]
+    fn mbox_detected_by_postmark_inside_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let inbox = dir.path().join("inbox");
+        std::fs::create_dir_all(&inbox).unwrap();
+        write_msg(&inbox, "archive", TAKEOUT_MBOX); // no extension
+        write_msg(&inbox, "single.eml", SIMPLE_EMAIL);
+
+        let extractor = EmailExtractor::new(EmailExtractorConfig::default());
+        let docs: Vec<_> = extractor
+            .extract(&inbox)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(docs.len(), 4, "3 mbox members + 1 eml");
     }
 
     #[test]
