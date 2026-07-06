@@ -126,6 +126,7 @@ async fn capabilities_handler() -> impl IntoResponse {
                     4_000,
                     0.80,
                 )],
+                fingerprint: None,
             },
             ProviderModel {
                 id: "Qwen3.5-27B.test".into(),
@@ -152,10 +153,12 @@ async fn capabilities_handler() -> impl IntoResponse {
                     4_000,
                     0.80,
                 )],
+                fingerprint: None,
             },
         ],
         knowledge: None,
         federation: None,
+        features: Vec::new(),
     };
     Json(manifest)
 }
@@ -317,9 +320,11 @@ async fn oicp_503_fails_over_to_next_peer() {
                     4_000,
                     0.92,
                 )],
+                fingerprint: None,
             }],
             knowledge: None,
             federation: None,
+            features: Vec::new(),
         };
         Json(manifest)
     }

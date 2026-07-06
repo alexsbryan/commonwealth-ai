@@ -996,6 +996,7 @@ pub(super) async fn advertise_embed_model(
                 dimensions: probe_vec.len(),
                 pooling,
                 normalization,
+                query_instruction_prefix: String::new(),
             };
             tracing::info!(
                 model_id = %embed_info.model_id,

@@ -458,6 +458,7 @@ mod tests {
             dimensions: 1024,
             pooling: PoolingStrategy::Mean,
             normalization: NormalizationStrategy::Application,
+            query_instruction_prefix: String::new(),
         }
     }
 
@@ -468,6 +469,7 @@ mod tests {
             dimensions: 768,
             pooling: PoolingStrategy::Mean,
             normalization: NormalizationStrategy::Application,
+            query_instruction_prefix: String::new(),
         }
     }
 

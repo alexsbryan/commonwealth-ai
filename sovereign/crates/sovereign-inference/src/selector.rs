@@ -412,6 +412,7 @@ mod tests {
             },
             size_gb: None,
             claims,
+            fingerprint: None,
         }])
     }
 

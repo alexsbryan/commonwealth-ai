@@ -581,6 +581,7 @@ mod tests {
             },
             size_gb,
             claims: vec![claim],
+            fingerprint: None,
         }])
     }
 

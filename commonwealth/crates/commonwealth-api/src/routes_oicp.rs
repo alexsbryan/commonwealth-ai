@@ -178,6 +178,7 @@ pub async fn capabilities(
                 // that ModelInfo had no size — it always did.)
                 size_gb: (model.size_bytes > 0).then(|| model.size_bytes as f32 / 1_000_000_000.0),
                 claims,
+                fingerprint: None,
             }
         })
         .collect();
@@ -226,8 +227,10 @@ pub async fn capabilities(
             corpora: Vec::<CorpusDescriptor>::new(),
             search_endpoint: "/v1/knowledge/search".into(),
             embed_model: None,
+            ingest: None,
         }),
         federation,
+        features: Vec::new(),
     };
     apply_peer_preference(&state, &requester, &mut manifest);
     Json(manifest)
@@ -316,9 +319,11 @@ mod tests {
                     4_000,
                     affinity,
                 )],
+                fingerprint: None,
             }],
             knowledge: None,
             federation: None,
+            features: Vec::new(),
         }
     }
 

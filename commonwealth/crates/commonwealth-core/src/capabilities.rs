@@ -351,6 +351,7 @@ mod tests {
                 dimensions: 1024,
                 pooling: PoolingStrategy::Mean,
                 normalization: NormalizationStrategy::Application,
+                query_instruction_prefix: String::new(),
             }),
             benchmark: None,
             current_in_flight: None,
