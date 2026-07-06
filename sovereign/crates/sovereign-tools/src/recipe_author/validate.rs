@@ -2,37 +2,44 @@
 //! `RecipeValidateTool` — schema + regex compile + URL-template
 //! placeholder cross-reference checks against a recipe TOML.
 //!
-//! Wraps `corpus_engine`'s test harness in `--offline, sample_size
-//! = 0` mode so it runs the full validator without touching any
-//! network or file beyond the recipe itself. Returns a structured
-//! `{errors: [...], warnings: [...], passed: bool}` payload so the
-//! LLM can branch on `passed` and iterate on the bad pattern.
+//! Runs the injected [`RecipeTester`] in `offline, sample_size = 0`
+//! mode so it exercises the full validator (schema + regex compile +
+//! placeholder cross-reference + for_each resolution) without touching
+//! any network or file beyond the recipe itself. The in-process tester
+//! adapter wraps `corpus_engine`'s test harness; the tool depends only
+//! on the contract. Returns a structured `{errors, warnings, passed}`
+//! payload so the LLM can branch on `passed` and iterate on the bad
+//! pattern.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
+use sovereign_contracts::recipe::testing::{RecipeTestParams, RecipeTester};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::resolve_recipe_path;
 
-#[derive(Default)]
 pub struct RecipeValidateTool {
     recipes_dir: Option<PathBuf>,
+    tester: Arc<dyn RecipeTester>,
 }
 
 impl RecipeValidateTool {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(tester: Arc<dyn RecipeTester>) -> Self {
+        Self {
+            recipes_dir: None,
+            tester,
+        }
     }
 
-    pub fn with_recipes_dir(dir: PathBuf) -> Self {
+    pub fn with_recipes_dir(tester: Arc<dyn RecipeTester>, dir: PathBuf) -> Self {
         Self {
             recipes_dir: Some(dir),
+            tester,
         }
     }
 }
@@ -97,17 +104,16 @@ impl Tool for RecipeValidateTool {
             )));
         }
 
-        let engine = build_stub_engine();
-        let options = TestOptions {
+        // sample_size = 0 = validation-only: schema + regex-compile +
+        // URL-template placeholder cross-reference + for_each resolution, no
+        // download or extraction.
+        let params = RecipeTestParams {
             sample_size: 0,
             embed: false,
             offline: true,
             ..Default::default()
         };
-        let report = engine
-            .test_recipe(&resolved, &options)
-            .await
-            .map_err(|e| Error::InvalidInput(format!("{e}")))?;
+        let report = self.tester.test(&resolved, &params).await?;
         let passed = report.validation.errors.is_empty();
         Ok(StepOutput::Json(serde_json::json!({
             "passed": passed,
@@ -118,19 +124,14 @@ impl Tool for RecipeValidateTool {
     }
 }
 
-/// CorpusEngine with a stub embed function. Validation never
-/// touches embeddings, but the engine constructor requires an
-/// EmbedFn.
-fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn =
-        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
-    let tmp = std::env::temp_dir().join("sovereign-recipe-author-validate");
-    CorpusEngine::new(tmp.clone(), tmp, stub_embed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
+
+    fn tester() -> Arc<dyn RecipeTester> {
+        Arc::new(CorpusEngineRecipeTester::new())
+    }
 
     fn ctx() -> ToolContext {
         ToolContext {
@@ -176,7 +177,7 @@ type = "sentence"
         )
         .unwrap();
 
-        let tool = RecipeValidateTool::with_recipes_dir(root);
+        let tool = RecipeValidateTool::with_recipes_dir(tester(), root);
         let out = tool
             .execute(&serde_json::json!({"path": "clean"}), &ctx())
             .await
@@ -223,7 +224,7 @@ type = "sentence"
         )
         .unwrap();
 
-        let tool = RecipeValidateTool::with_recipes_dir(root);
+        let tool = RecipeValidateTool::with_recipes_dir(tester(), root);
         let out = tool
             .execute(&serde_json::json!({"path": "bad"}), &ctx())
             .await

@@ -2,13 +2,14 @@
 //! `RecipeTestTool` — drive a sample acquire / extract / chunk
 //! against a recipe, with structured per-section miss reporting.
 //!
-//! Delegates to `corpus_engine`'s [`CorpusEngine::test_recipe`]
-//! with `--offline` to skip live HTTP, `embed = false` because no
-//! model is loaded inside the tool, and a small `sample_size`
-//! tuned for fast LLM iteration loops. Returns a
-//! `{validation, extraction, section_misses, passed}` payload —
-//! the LLM reads `section_misses` to figure out which regex
-//! needs anchoring next.
+//! Delegates to the injected [`RecipeTester`] with `offline` to skip
+//! live HTTP, `embed = false` because no model is loaded inside the
+//! tool, and a small `sample_size` tuned for fast LLM iteration loops.
+//! The in-process tester adapter wraps `corpus_engine`'s
+//! `test_recipe`; the tool depends only on the contract. Returns a
+//! `{validation, extraction, section_misses, passed}` payload — the
+//! LLM reads `section_misses` to figure out which regex needs
+//! anchoring next.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -16,26 +17,30 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
+use sovereign_contracts::recipe::testing::{RecipeTestOutcome, RecipeTestParams, RecipeTester};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::resolve_recipe_path;
 
-#[derive(Default)]
 pub struct RecipeTestTool {
     recipes_dir: Option<PathBuf>,
+    tester: Arc<dyn RecipeTester>,
 }
 
 impl RecipeTestTool {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(tester: Arc<dyn RecipeTester>) -> Self {
+        Self {
+            recipes_dir: None,
+            tester,
+        }
     }
 
-    pub fn with_recipes_dir(dir: PathBuf) -> Self {
+    pub fn with_recipes_dir(tester: Arc<dyn RecipeTester>, dir: PathBuf) -> Self {
         Self {
             recipes_dir: Some(dir),
+            tester,
         }
     }
 }
@@ -177,20 +182,15 @@ impl Tool for RecipeTestTool {
             })
             .unwrap_or_default();
 
-        let engine = build_stub_engine();
-        let options = TestOptions {
+        let params = RecipeTestParams {
             sample_size,
             embed: false,
             offline,
             parameters: recipe_params,
-            ..Default::default()
         };
-        let report = engine
-            .test_recipe(&resolved, &options)
-            .await
-            .map_err(|e| Error::InvalidInput(format!("{e}")))?;
+        let report = self.tester.test(&resolved, &params).await?;
 
-        let passed = report.passed();
+        let passed = report.passed;
         let extraction = report.extraction.as_ref().map(|e| {
             serde_json::json!({
                 "records_attempted": e.records_attempted,
@@ -240,8 +240,8 @@ impl Tool for RecipeTestTool {
 /// Compose a single-line "you might want to try X first" nudge
 /// based on the test report's failure shape. Returns `None` when
 /// the test passed cleanly — we don't want noise on green runs.
-fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
-    if report.passed() {
+fn compose_nudge(report: &RecipeTestOutcome) -> Option<String> {
+    if report.passed {
         return None;
     }
     // Acquisition / HTTP failures land in `validation.errors` with a
@@ -289,13 +289,6 @@ fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
     None
 }
 
-fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn =
-        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
-    let tmp = std::env::temp_dir().join("sovereign-recipe-author-test");
-    CorpusEngine::new(tmp.clone(), tmp, stub_embed)
-}
-
 fn json_to_toml(v: &serde_json::Value) -> Option<toml::Value> {
     match v {
         serde_json::Value::String(s) => Some(toml::Value::String(s.clone())),
@@ -322,6 +315,11 @@ fn json_to_toml(v: &serde_json::Value) -> Option<toml::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
+
+    fn tester() -> Arc<dyn RecipeTester> {
+        Arc::new(CorpusEngineRecipeTester::new())
+    }
 
     fn ctx() -> ToolContext {
         ToolContext {
@@ -368,7 +366,7 @@ type = "sentence"
         .unwrap();
 
         // sample_size = 0 = validation-only path through test_recipe.
-        let tool = RecipeTestTool::with_recipes_dir(root);
+        let tool = RecipeTestTool::with_recipes_dir(tester(), root);
         let out = tool
             .execute(
                 &serde_json::json!({"path": "clean", "sample_size": 0, "offline": true}),

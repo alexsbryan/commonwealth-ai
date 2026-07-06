@@ -13,4 +13,5 @@
 pub mod notes;
 pub mod schema;
 pub mod sections;
+pub mod testing;
 pub mod url_template;
