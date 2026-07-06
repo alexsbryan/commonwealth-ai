@@ -1007,7 +1007,7 @@ fn render_polarity_block(polarity: &Polarity, current: &TestSummary) -> String {
     };
     match polarity {
         Polarity::MaximizePassing => format!(
-            "Maximize tests passing. Currently {passed}/{total} ({failed} failing). Strict improvement is required to land a candidate.\n\nFailing tests:\n{failing_names}",
+            "Maximize tests passing. Currently {passed}/{total} ({failed} failing). Your edit lands ONLY if a currently-failing test passes after it — an edit that leaves the counts unchanged is discarded and the next round starts from the same base, so partial steps that don't flip a failing test are wasted. Make the complete change in this response.\n\nFailing tests:\n{failing_names}",
             passed = current.passed,
             failed = current.failed,
             total = current.total,
