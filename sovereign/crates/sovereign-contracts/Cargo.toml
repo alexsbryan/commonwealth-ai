@@ -23,6 +23,11 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 # Home-dir + platform config-dir resolution for setup_config's path helpers.
 dirs = "5"
+# Line-anchored section detection (recipe::sections). The detector half of
+# corpus-engine's sectioned chunker lives here so the workflow SectionTool and
+# the bespoke ingest path share ONE segmentation implementation — a pure-CPU
+# contract, no document-shipping over MCP.
+regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

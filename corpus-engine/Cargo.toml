@@ -6,6 +6,12 @@ license.workspace = true
 description = "Shared corpus ingestion and index management for Sovereign and Commonwealth"
 
 [dependencies]
+# The pure section detectors (`recipe::sections`) live in the contract crate so
+# the workflow SectionTool and this crate's ingest path share one segmentation
+# implementation; re-exported at `chunkers::sectioned::*`. Leaf dep (contracts
+# depends only on oicp-types + serde), no cycle.
+sovereign-contracts = { workspace = true }
+
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
