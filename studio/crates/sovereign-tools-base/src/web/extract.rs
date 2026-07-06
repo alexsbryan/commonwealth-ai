@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 /// Extract readable text content from HTML.
 /// Strips tags, scripts, styles, and navigation — keeps body text.

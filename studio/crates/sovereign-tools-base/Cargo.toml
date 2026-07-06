@@ -1,0 +1,37 @@
+[package]
+name = "sovereign-tools-base"
+description = "The pure, leaf-dependency workflow tools (shell, web, chunk, section, file/json/csv/zip/vector, MCP client) — the tool set the extractable studio package builds on"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+# The dependency budget IS the point of this crate: the contract vocabulary
+# (Tool, ToolRegistry, StepOutput, Error/Result, SetupConfig, McpServerConfig,
+# recipe::sections) plus ordinary async/HTTP/serde leaves — no corpus-engine,
+# no llama.cpp, no mesh. Tools that need those (extract, corpus_store/search,
+# atlas_*) stay in `sovereign-tools` and are injected via `extra_tools`.
+
+[dependencies]
+sovereign-contracts = { workspace = true }
+
+async-trait = { workspace = true }
+# `McpError` (mcp/transport.rs) derives thiserror::Error.
+thiserror = { workspace = true }
+csv = "1.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+# ~/.sovereign resolution for the MCP secret store.
+dirs = "5"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

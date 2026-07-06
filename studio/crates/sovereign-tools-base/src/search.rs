@@ -4,9 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_contracts::types::*;
 
 use crate::web::search::{SearchBackend, SearchOrchestrator};
 use crate::web::WebSearchTool;

@@ -29,7 +29,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 /// A search result from any backend.
 #[derive(Debug, Clone, Deserialize)]

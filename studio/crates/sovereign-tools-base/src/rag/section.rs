@@ -28,10 +28,10 @@
 
 use async_trait::async_trait;
 
-use corpus_engine::chunkers::sectioned::{ChapterRegexDetector, SectionDetector};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::recipe::sections::{ChapterRegexDetector, SectionDetector};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use crate::rag::chunk::chunk_text;
 

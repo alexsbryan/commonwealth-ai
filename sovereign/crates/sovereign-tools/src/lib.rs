@@ -35,30 +35,30 @@ pub mod local_corpus;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
-pub mod read_csv;
-pub mod vector_mean;
+pub use sovereign_tools_base::read_csv;
+pub use sovereign_tools_base::vector_mean;
 pub mod wikipedia_fetch;
 // `manifest` module retired 2026-05-22 — commonwealth-api now
 // injects tool descriptors at construction time rather than pulling
 // from a global static. See `commonwealth-api::middleware::tool_injector`
 // and `context_injector` for the new shape.
-pub mod mcp;
+pub use sovereign_tools_base::mcp;
 pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
-pub mod read_file;
-pub mod read_json;
+pub use sovereign_tools_base::read_file;
+pub use sovereign_tools_base::read_json;
 pub mod recipe_author;
-pub mod search;
-pub mod shell;
+pub use sovereign_tools_base::search;
+pub use sovereign_tools_base::shell;
 pub mod spec_watcher;
 pub mod typed_call;
 pub mod typed_extension;
-pub mod web;
-pub mod write_file;
-pub mod write_json;
-pub mod zip;
+pub use sovereign_tools_base::web;
+pub use sovereign_tools_base::write_file;
+pub use sovereign_tools_base::write_json;
+pub use sovereign_tools_base::zip;
 
 pub use attached_document_search::AttachedDocumentSearchTool;
 #[cfg(feature = "treesitter")]

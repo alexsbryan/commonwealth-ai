@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use sovereign_core::error::Error;
+use sovereign_contracts::error::Error;
 
 use super::{search as legacy_dispatch, SearchBackend as LegacyBackend, SearchResult};
 
