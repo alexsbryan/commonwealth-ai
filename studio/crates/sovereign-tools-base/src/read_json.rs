@@ -15,9 +15,9 @@
 
 use async_trait::async_trait;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 pub struct ReadJsonTool;
 

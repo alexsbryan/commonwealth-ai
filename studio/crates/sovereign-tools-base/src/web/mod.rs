@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, Tool};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::{InferenceProvider, Tool};
+use sovereign_contracts::types::*;
 
 use self::extract::fetch_and_extract;
 use self::search::{

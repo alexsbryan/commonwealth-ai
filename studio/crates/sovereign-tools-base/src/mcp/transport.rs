@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 /// Transport-level error type for MCP operations.
-/// Separate from `sovereign_core::Error` — mapped at the adapter boundary.
+/// Separate from `sovereign_contracts::Error` — mapped at the adapter boundary.
 #[derive(Debug, thiserror::Error)]
 pub enum McpError {
     #[error("Transport error: {0}")]

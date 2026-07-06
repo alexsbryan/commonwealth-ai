@@ -4,9 +4,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 /// Execute shell commands in a sandboxed subprocess.
 /// Always requires Shell permission and per-action approval.

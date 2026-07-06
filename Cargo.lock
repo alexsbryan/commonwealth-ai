@@ -12509,6 +12509,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-core",
  "sovereign-store",
+ "sovereign-tools-base",
  "sovereign-work-atlas",
  "strsim",
  "tempfile",
@@ -12520,6 +12521,26 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "sovereign-tools-base"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "csv",
+ "dirs 5.0.1",
+ "futures",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-contracts",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]

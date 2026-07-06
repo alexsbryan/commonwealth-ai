@@ -6,9 +6,9 @@
 
 use tokio::sync::RwLock;
 
-use sovereign_core::error::Result;
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::Tool;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::Tool;
 
 use super::auth::McpAuth;
 use super::config::{McpServerConfig, McpTransportConfig};

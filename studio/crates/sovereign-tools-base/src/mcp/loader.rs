@@ -9,8 +9,8 @@
 //! surface is available in all of them — parity by construction, the same
 //! discipline as `sovereign_core::router_bootstrap::build_llm_router`.
 
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::setup_config::SetupConfig;
 
 use super::McpServerManager;
 

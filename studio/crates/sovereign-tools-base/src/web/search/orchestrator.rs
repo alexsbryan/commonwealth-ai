@@ -236,7 +236,7 @@ mod tests {
     use super::*;
     use crate::web::search::backend_trait::{MockBackendImpl, SearchCost};
     use async_trait::async_trait;
-    use sovereign_core::error::Error;
+    use sovereign_contracts::error::Error;
 
     /// Test stub: a configurable backend. Returns a fixed result
     /// set on success, or a tagged error string. Doesn't hit the
