@@ -54,6 +54,10 @@ pub mod recipe_author;
 /// contract the recipe-author tools depend on (keeps that bundle
 /// corpus-engine-notes-free).
 pub mod recipe_notes_adapter;
+/// Monolith-side adapter binding the real `CorpusEngine::test_recipe` to the
+/// `RecipeTester` contract the recipe validate/test tools depend on (keeps that
+/// bundle corpus-engine-free).
+pub mod recipe_tester_adapter;
 pub use sovereign_tools_base::search;
 pub use sovereign_tools_base::shell;
 pub mod spec_watcher;
