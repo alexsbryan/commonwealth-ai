@@ -102,6 +102,11 @@ pub fn corpus_watch_router() -> Router {
             "/internal/corpus/watch/{corpus_id}/enrich/rebuild",
             post(enrich_rebuild_handler),
         )
+        // One-shot enrichment for a corpus the *desktop* ingested with its own
+        // provider-less manager — e.g. a drag-drop DocumentFolder. Registers it
+        // into the daemon's tiered-capable manager (no sweep worker) and runs a
+        // single tiered build. "Watched-folder registration without the watcher."
+        .route("/internal/corpus/enrich-once", post(enrich_once_handler))
         .route("/internal/corpus/watch/{corpus_id}", delete(remove_handler))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
@@ -384,6 +389,17 @@ pub struct EnrichJobAck {
 #[derive(Debug, Serialize)]
 pub struct AckResponse {
     pub corpus_id: String,
+    pub ok: bool,
+}
+
+/// Response from `enrich-once`: the daemon ingested the folder (stats
+/// below) and kicked off the tiered atlas build in the background. The
+/// atlas status is pollable via `/internal/enrichment/status`.
+#[derive(Debug, Serialize)]
+pub struct EnrichOnceAck {
+    pub corpus_id: String,
+    pub files_indexed: usize,
+    pub chunks_written: u64,
     pub ok: bool,
 }
 
@@ -1060,6 +1076,65 @@ async fn enrich_rebuild_handler(
         .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
+}
+
+/// `POST /internal/corpus/enrich-once` — body is a `LocalCorpusConfig`.
+/// Registers a one-shot corpus (a drag-drop DocumentFolder the desktop
+/// ingested with its own provider-less manager) into the daemon's
+/// tiered-capable manager, then kicks off a single tiered enrichment
+/// build. Deliberately does NOT add it to the sweep registry — no
+/// watcher, just the initial atlas. Idempotent on the register; uses the
+/// id `register` returns (path-identity may canonicalise it).
+async fn enrich_once_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(cfg): Json<LocalCorpusConfig>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(manager) = watched_folder_runtime::manager() else {
+        return service_unavailable("watched-folder runtime not installed").into_response();
+    };
+    // Register the folder in the daemon's manager (idempotent). We deliberately
+    // do NOT add it to the sweep registry — this is watched-folder registration
+    // WITHOUT the watcher.
+    let corpus_id = match manager.register(cfg).await {
+        Ok(id) => id,
+        Err(e) => {
+            return error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response()
+        }
+    };
+    // Ingest in the daemon (blocking) so the SAME process that writes the index
+    // is the one that reads it to enrich. Doing the ingest in the desktop and
+    // the enrich here deadlocked `enable_enrichment`'s index open on the
+    // cross-process handoff — keeping writer and reader in one process is the fix.
+    let stats = match manager.ingest(&corpus_id, None, None).await {
+        Ok(s) => s,
+        Err(e) => {
+            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
+                .into_response()
+        }
+    };
+    // Enrich in the background — RAPTOR is slow and reads the index we just
+    // wrote (in-process, no handoff). Fire-and-forget; the atlas status is
+    // pollable via /internal/enrichment/status.
+    let mgr = manager.clone();
+    let id = corpus_id.clone();
+    tokio::spawn(async move {
+        match mgr.enrich_now(&id).await {
+            Ok(job) => tracing::info!(corpus_id = %id, job, "enrich-once: tiered build started"),
+            Err(e) => {
+                tracing::warn!(corpus_id = %id, "enrich-once: enrichment did not start: {e}")
+            }
+        }
+    });
+    Json(EnrichOnceAck {
+        corpus_id,
+        files_indexed: stats.files_indexed,
+        chunks_written: stats.chunks_written,
+        ok: true,
+    })
+    .into_response()
 }
 
 /// `POST /internal/corpus/watch/sync-now/{corpus_id}` — request a

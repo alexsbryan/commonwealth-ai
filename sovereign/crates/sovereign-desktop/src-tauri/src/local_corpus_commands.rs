@@ -525,6 +525,75 @@ pub async fn lc_ingest(
     let manager = require_manager(&state).await?;
     let job_id = new_job_id();
     let progress = make_emitter(app.clone(), job_id.clone());
+    let daemon_url = state.client_base_url();
+
+    // One-shot document folder → the daemon owns ingest AND enrich (it holds the
+    // tiered providers; the desktop's manager doesn't). Ingesting here and
+    // enriching in the daemon deadlocks on the cross-process index handoff, so
+    // hand the whole job over. The daemon does NOT add it to the sweep scheduler
+    // ⇒ no ongoing watch — "a watched folder without the watching".
+    if with_ocr != Some(true) {
+        if let Some(cfg) = manager.get(&corpus_id).await {
+            if matches!(
+                cfg.source_type,
+                sovereign_tools::local_corpus::config::LocalCorpusSourceType::DocumentFolder
+            ) {
+                let cid = corpus_id.clone();
+                let progress = progress.clone();
+                tokio::spawn(async move {
+                    let client = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(600))
+                        .build()
+                        .unwrap_or_else(|_| reqwest::Client::new());
+                    let url = format!("{daemon_url}/internal/corpus/enrich-once");
+                    tracing::info!(
+                        corpus_id = %cid,
+                        "lc_ingest: handing document folder to the daemon (ingest + tiered enrich)"
+                    );
+                    match client.post(&url).json(&cfg).send().await {
+                        Ok(r) if r.status().is_success() => {
+                            let body: serde_json::Value = r.json().await.unwrap_or_default();
+                            let files = body
+                                .get("files_indexed")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0) as usize;
+                            let chunks = body
+                                .get("chunks_written")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            tracing::info!(
+                                corpus_id = %cid, files, chunks,
+                                "lc_ingest: daemon ingested; tiered enrichment building in background"
+                            );
+                            progress(LocalCorpusProgress::Complete {
+                                result: CompletionResult::Ingest(IngestStats {
+                                    corpus_id: cid.clone(),
+                                    files_indexed: files,
+                                    chunks_written: chunks,
+                                    runtime_failures: Vec::new(),
+                                    excerpt_chunks: Vec::new(),
+                                    duration_secs: 0,
+                                }),
+                            });
+                        }
+                        Ok(r) => {
+                            let status = r.status();
+                            let msg = r.text().await.unwrap_or_default();
+                            progress(LocalCorpusProgress::Error {
+                                message: format!("daemon ingest+enrich failed ({status}): {msg}"),
+                                recoverable: false,
+                            });
+                        }
+                        Err(e) => progress(LocalCorpusProgress::Error {
+                            message: format!("could not reach daemon for ingest+enrich: {e}"),
+                            recoverable: false,
+                        }),
+                    }
+                });
+                return Ok(job_id);
+            }
+        }
+    }
 
     // Opt-in: route folder ingest through the workflow Runner (the substrate
     // adoption path — same `notebook` definition the CLI + Run view use) when
@@ -554,14 +623,58 @@ pub async fn lc_ingest(
     // Bespoke path (default). Spawn so the command doesn't block; the UI drives the
     // progress panel off the emit channel; failure propagates via
     // `LocalCorpusProgress::Error`.
+    //
+    // Enrichment is daemon-side (tiered providers are wired only in the daemon),
+    // so a one-shot document folder is handed to the daemon after ingest — see
+    // the Ok branch below. The corpus-watch HTTP surface (incl. enrich-once) is
+    // mounted on the CLIENT port, same router the watched-folder commands hit.
+    // Capture it now; the Tauri `state` guard can't cross the spawn boundary.
+    let daemon_url = state.client_base_url();
     tokio::spawn(async move {
         match manager
             .ingest(&corpus_id, with_ocr, Some(progress.clone()))
             .await
         {
             Ok(_stats) => {
-                // The manager already emits Complete; nothing to do
-                // here.
+                // The manager already emits Complete. Enrichment follows
+                // ingest, but the tiered providers (RAPTOR + entity extraction)
+                // live only in the daemon — the desktop's own manager can't run
+                // them. So hand a one-shot document folder to the daemon:
+                // register-without-watch + tiered build ("a watched folder
+                // without the watching"). Watched folders and vaults already
+                // enrich via the reconciliation worker, so this is gated to
+                // DocumentFolder. Glassbox-logged for soak/chaos runs.
+                if let Some(cfg) = manager.get(&corpus_id).await {
+                    if matches!(
+                        cfg.source_type,
+                        sovereign_tools::local_corpus::config::LocalCorpusSourceType::DocumentFolder
+                    ) {
+                        let url = format!("{daemon_url}/internal/corpus/enrich-once");
+                        tracing::info!(
+                            %corpus_id,
+                            "lc_ingest: document folder — requesting daemon-side tiered enrichment"
+                        );
+                        let client = reqwest::Client::new();
+                        match client.post(&url).json(&cfg).send().await {
+                            Ok(r) if r.status().is_success() => tracing::info!(
+                                %corpus_id,
+                                "lc_ingest: daemon accepted one-shot enrichment"
+                            ),
+                            Ok(r) => {
+                                let status = r.status();
+                                let body = r.text().await.unwrap_or_default();
+                                tracing::warn!(
+                                    %corpus_id, %status, body,
+                                    "lc_ingest: daemon rejected one-shot enrichment"
+                                );
+                            }
+                            Err(e) => tracing::warn!(
+                                %corpus_id,
+                                "lc_ingest: could not reach daemon for enrichment: {e}"
+                            ),
+                        }
+                    }
+                }
             }
             Err(e) => {
                 let err = LocalCorpusProgress::Error {
