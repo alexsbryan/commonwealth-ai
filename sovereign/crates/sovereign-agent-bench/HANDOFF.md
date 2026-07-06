@@ -147,6 +147,47 @@ log cuts mid-inference-setup, no error line; auto-restarted ~08:17).
 full battery ×3 trials, running as of this entry — the paired replay
 for fixes 1+2 and the first honest full-battery measurement.
 
+**Arms B–E and iterations 2–6 (same day).** Full trial log in
+`target/agent-bench/{baseline,barm,darm,earm}-2026-07-06/`.
+
+B-arm (finder+smoke fixes): grand 69/99. Tier-1 ×4 + 3.2-py all 9/9;
+2.2 = 8/9 ×3 (judge anchor); 3.2-rust 0/8/0 wait — that was D-arm;
+B-arm 3.2-rust 9/0/0; 3.3 2/9 ×3 (goal outside fitness signal);
+4.1 6/9 ×3 (judge parser bug); 4.2 8/6/9; 5.1 0 ×3 (single-file
+tunnel vision).
+
+Iterations 2–6, all committed, each receipt-anchored + family-level:
+- d961369a header inference (~ labels) + delivery-section strip
+- 3209399b pointed syntax-repair turn (+r labels)
+- a6e6a15a 3.3 structural red test (goal INTO the fitness signal)
+- 23a7b937 multi-file addressing (render all sources; cross-file
+  rewrite resolution; write_file{path})
+- 5e99ea82 judge anchor accepts numeric strings ("3") — 4.1's whole
+  3-point gap
+- 5e97447f 600s queue-aware backend timeout (K parallel candidates
+  serialize on one local slot; 180s killed the tail = fake
+  err:backend ~25% tax) + minimal-change repair prompt
+- 41dd1375/7a4e4723 sanctioned thinking channel (leak-into-code was
+  the mangle source; prose outside fences is already ignored; LAST
+  source block wins = existing parser behavior)
+- 62454754 transactional multi-edit candidates (split goals are
+  impossible as single edits under strict-improvement gating)
+
+D-arm (through multi-file addressing): 3.2-rust 0/8/0 (repair
+converts some; emission variance remains — thinking channel is the
+E-arm lever); 3.2-py 9/9/8; 3.3 2/9 ×3 (needs transactions — E-arm);
+5.1 **8/7/2 from 0/0/0** — multi-file addressing validated live.
+
+Gotchas learned: --problems is PREFIX-matched (3.2-lights-out pulls
+the -python sibling too); bench wall cap kills the runner mid-flight
+and DROPS the trajectory receipts (instrument gap, open); detached
+launcher sentinels must be rm'd before relaunch or monitors read the
+stale kill's rc=-15.
+
+Certification plan when the hard bank pins: full battery ×3 with
+--judge-trials 3 (majority vote — 2.2's dropped point is single-judge
+anchor noise; CI passes 1).
+
 **Operator ground rules recorded:** (a) fixes must generalize to
 categories/families, never the problem or language under test;
 (b) leverage existing tools/libraries first (syn over hand-rolled;
