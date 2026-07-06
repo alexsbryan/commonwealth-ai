@@ -88,7 +88,13 @@ impl Default for TrialConfig {
         // values. The solver loop's median 20/20 on the 4.2-mini-
         // evaluator was measured at these settings.
         Self {
-            candidates_per_round: 4,
+            // 6 candidates: the primary is a ~3B-active MoE — decode
+            // is cheap, so widen the sample per round (operator
+            // philosophy: more faster trials; 2026-07-06 receipts put
+            // per-candidate p(compiling Rust fn) ≈ 0.2-0.35, so 6
+            // samples/round ≈ 0.77-0.92 round-level hit rate vs
+            // 0.59-0.82 at 4).
+            candidates_per_round: 6,
             rounds_per_trial: 6,
             max_stall_rounds: 3,
             emit_max_tokens: 4000,
