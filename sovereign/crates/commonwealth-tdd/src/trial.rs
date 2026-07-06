@@ -27,7 +27,7 @@ use tokio::task::JoinSet;
 use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
-    apply_edit, discover_source_files, parse_response, render_with_line_numbers, run_tests,
+    apply_edit, discover_source_files, parse_response_edits, render_with_line_numbers, run_tests,
     snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
 };
 use crate::types::{Polarity, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus};
@@ -435,7 +435,11 @@ fn errored(reason: &str) -> TrialResult {
 #[derive(Clone)]
 struct CandidateOutcome {
     temp: f32,
-    response: Option<ParsedResponse>,
+    /// Applied edits, in order. Empty = the response never parsed.
+    /// Usually one; multi-edit TRANSACTIONS carry several (split /
+    /// extract goals need coordinated writes — no single edit can
+    /// strictly improve the fitness signal).
+    edits: Vec<ParsedResponse>,
     workdir: PathBuf,
     outcome: Result<TestRunResult, String>,
     body: String,
@@ -507,23 +511,32 @@ impl CandidateOutcome {
     }
 
     fn shape_summary(&self) -> String {
-        let shape = match self.response.as_ref().map(|r| &r.action) {
-            Some(EditAction::RewriteFunction { name }) => format!("rewrite {name}"),
-            Some(EditAction::PatchLines { start, end }) => format!("patch {start}-{end}"),
-            Some(EditAction::InsertBefore { line }) => format!("insert@{line}"),
-            Some(EditAction::WriteFile { path }) => match path {
-                Some(p) => format!("write_file→{p}"),
-                None => "write_file".to_string(),
-            },
-            None => return "<parse-failed>".to_string(),
-        };
-        // `~` marks a header-inferred action (model emitted only the
-        // source block) — keeps inference-rescued candidates
-        // attributable in the trajectory.
-        let shape = if self.response.as_ref().is_some_and(|r| r.inferred) {
-            format!("~{shape}")
-        } else {
-            shape
+        fn one(r: &ParsedResponse) -> String {
+            let shape = match &r.action {
+                EditAction::RewriteFunction { name } => format!("rewrite {name}"),
+                EditAction::PatchLines { start, end } => format!("patch {start}-{end}"),
+                EditAction::InsertBefore { line } => format!("insert@{line}"),
+                EditAction::WriteFile { path } => match path {
+                    Some(p) => format!("write_file→{p}"),
+                    None => "write_file".to_string(),
+                },
+            };
+            // `~` marks a header-inferred action (model emitted only
+            // the source block) — keeps inference-rescued candidates
+            // attributable in the trajectory.
+            if r.inferred {
+                format!("~{shape}")
+            } else {
+                shape
+            }
+        }
+        let shape = match self.edits.len() {
+            0 => return "<parse-failed>".to_string(),
+            1 => one(&self.edits[0]),
+            _ => format!(
+                "txn[{}]",
+                self.edits.iter().map(one).collect::<Vec<_>>().join("; ")
+            ),
         };
         if self.repaired {
             format!("{shape}+r")
@@ -551,7 +564,7 @@ async fn try_candidate(
     if let Err(e) = snapshot_dir(&base_workdir, &candidate_workdir) {
         return CandidateOutcome {
             temp: temperature,
-            response: None,
+            edits: vec![],
             workdir: candidate_workdir,
             outcome: Err(format!("snapshot: {e}")),
             body: String::new(),
@@ -566,7 +579,7 @@ async fn try_candidate(
         Err(e) => {
             return CandidateOutcome {
                 temp: temperature,
-                response: None,
+                edits: vec![],
                 workdir: candidate_workdir,
                 outcome: Err(format!("backend: {e}")),
                 body: String::new(),
@@ -574,47 +587,70 @@ async fn try_candidate(
             };
         }
     };
-    let parsed = match parse_response(&resp.content) {
-        Some(p) => p,
-        None => {
-            return CandidateOutcome {
-                temp: temperature,
-                response: None,
-                workdir: candidate_workdir,
-                outcome: Err("parse: no action+block found".into()),
-                // Keep the raw content: a parse failure is only
-                // diagnosable from what the model actually said.
-                body: resp.content,
-                repaired: false,
-            };
-        }
-    };
+    let edits = parse_response_edits(&resp.content);
+    if edits.is_empty() {
+        return CandidateOutcome {
+            temp: temperature,
+            edits: vec![],
+            workdir: candidate_workdir,
+            outcome: Err("parse: no action+block found".into()),
+            // Keep the raw content: a parse failure is only
+            // diagnosable from what the model actually said.
+            body: resp.content,
+            repaired: false,
+        };
+    }
     // Default edit target = first discovered source file. For
     // rewrite_function the target is resolved ACROSS the discovered
     // files — the model names the function, the harness locates its
     // home file (multi-file packages: forcing every edit into the
     // first file made cross-file fixes structurally impossible —
-    // 5.1-minilang B-arm 2026-07-06).
+    // 5.1-minilang B-arm 2026-07-06). Edits apply in order as ONE
+    // transaction; the first failure aborts (workdir is a snapshot,
+    // so partial application is discarded with the candidate).
     let default_target = source_files
         .first()
         .cloned()
         .unwrap_or_else(|| "_unspecified.py".to_string());
-    let target_path = resolve_edit_target(&candidate_workdir, &source_files, &parsed.action)
-        .unwrap_or_else(|| default_target.clone());
     let mut ctx = ExecCtx::new(candidate_workdir.clone());
     if let Some(v) = syntax_validator {
         ctx = ctx.with_syntax_validator(v);
     }
-    let mut parsed = parsed;
+    async fn apply_all(
+        ctx: &ExecCtx,
+        workdir: &std::path::Path,
+        source_files: &[String],
+        default_target: &str,
+        edits: &[ParsedResponse],
+    ) -> Result<(), String> {
+        for (i, e) in edits.iter().enumerate() {
+            let target = resolve_edit_target(workdir, source_files, &e.action)
+                .unwrap_or_else(|| default_target.to_string());
+            if let Err(err) = apply_edit(ctx, &target, e).await {
+                // Full multi-line cargo-shape error message preserved
+                // so the repair turn / next round's prompt can surface
+                // it — the model can't fix what it can't see.
+                let which = if edits.len() > 1 {
+                    format!(" (edit {} of {})", i + 1, edits.len())
+                } else {
+                    String::new()
+                };
+                return Err(format!("apply{which}: {}", err.render_for_agent()));
+            }
+        }
+        Ok(())
+    }
+    let mut edits = edits;
     let mut repaired = false;
-    if let Err(e) = apply_edit(&ctx, &target_path, &parsed).await {
-        // Full multi-line cargo-shape error message preserved here
-        // so the next round's prompt can surface it as feedback —
-        // the model can't fix what it can't see (lights-out
-        // trial-2 2026-05-24: validator rejected but model kept
-        // making the same syntax error because it had no idea what
-        // was wrong).
-        let first_err = format!("apply: {}", e.render_for_agent());
+    if let Err(first_err) = apply_all(
+        &ctx,
+        &candidate_workdir,
+        &source_files,
+        &default_target,
+        &edits,
+    )
+    .await
+    {
         // Pointed repair turn — ONE follow-up call on a rejected
         // apply. The harness holds a rendered, line-anchored error
         // for a candidate it is about to discard; small models fix
@@ -626,60 +662,74 @@ async fn try_candidate(
             let mut m = messages.clone();
             m.push(json!({ "role": "assistant", "content": resp.content }));
             m.push(json!({ "role": "user", "content": format!(
-                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix ONLY the reported error — keep the same action and keep every other line of your source block identical. Re-emit: ONE fenced JSON action, then ONE fenced source block. Smallest possible change; no commentary."
+                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix ONLY the reported error — keep the same action(s) and keep every other line of your source block(s) identical. Re-emit the full response (each fenced JSON action followed by its fenced source block). Smallest possible change; no commentary."
             ) }));
             m
         };
-        let repair_ok = match backend
+        let mut repair_ok = false;
+        if let Ok(r2) = backend
             .complete(&model, repair_msgs, temperature, emit_max_tokens)
             .await
         {
-            Ok(r2) => match parse_response(&r2.content) {
-                Some(p2) => {
-                    let t2 = resolve_edit_target(&candidate_workdir, &source_files, &p2.action)
-                        .unwrap_or_else(|| default_target.clone());
-                    match apply_edit(&ctx, &t2, &p2).await {
+            let edits2 = parse_response_edits(&r2.content);
+            if !edits2.is_empty() {
+                match apply_all(
+                    &ctx,
+                    &candidate_workdir,
+                    &source_files,
+                    &default_target,
+                    &edits2,
+                )
+                .await
+                {
                     Ok(_) => {
-                        parsed = p2;
+                        edits = edits2;
                         repaired = true;
-                        true
+                        repair_ok = true;
                     }
                     Err(e2) => {
+                        let body2 = edits2
+                            .iter()
+                            .map(|e| e.body.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n");
                         return CandidateOutcome {
                             temp: temperature,
-                            response: Some(p2.clone()),
+                            edits: edits2,
                             workdir: candidate_workdir,
-                            outcome: Err(format!(
-                                "apply: {} [after repair; first: {}]",
-                                e2.render_for_agent(),
-                                first_err
-                            )),
-                            body: p2.body,
+                            outcome: Err(format!("{e2} [after repair; first: {first_err}]")),
+                            body: body2,
                             repaired: true,
                         };
                     }
-                    }
                 }
-                None => false,
-            },
-            Err(_) => false,
-        };
+            }
+        }
         if !repair_ok {
+            let body = edits
+                .iter()
+                .map(|e| e.body.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
             return CandidateOutcome {
                 temp: temperature,
-                response: Some(parsed.clone()),
+                edits,
                 workdir: candidate_workdir,
                 outcome: Err(first_err),
-                body: parsed.body.clone(),
+                body,
                 repaired: false,
             };
         }
     }
     let test_result = run_tests(&candidate_workdir, &test_command, language, timeout).await;
-    let body = parsed.body.clone();
+    let body = edits
+        .iter()
+        .map(|e| e.body.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     CandidateOutcome {
         temp: temperature,
-        response: Some(parsed),
+        edits,
         workdir: candidate_workdir,
         outcome: Ok(test_result),
         body,
@@ -779,7 +829,7 @@ fn user_message(
         ),
     };
     let content = format!(
-        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Source files (line-numbered; primary: `{source_file}`)\n\n{file_listing}\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit ONE fenced JSON action describing your edit, then ONE fenced source code block with the new content.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. `rewrite_function` finds the named function in whichever listed file holds it; to create or fully replace a specific file, use {{\"action\": \"write_file\", \"path\": \"<file>\"}}. Line-number actions (patch_lines / insert_before) address the PRIMARY file only. Indent the source block to match the file's existing indent at the edit site. You may plan briefly in plain text before the blocks; only the fenced blocks are parsed, and code blocks must contain code only.\n"
+        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Source files (line-numbered; primary: `{source_file}`)\n\n{file_listing}\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit one fenced JSON action describing your edit, then one fenced source code block with the new content. When the goal REQUIRES coordinated changes to several files (e.g. splitting a module), emit multiple action+block pairs in one response — they apply together as a single transaction.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. `rewrite_function` finds the named function in whichever listed file holds it; to create or fully replace a specific file, use {{\"action\": \"write_file\", \"path\": \"<file>\"}}. Line-number actions (patch_lines / insert_before) address the PRIMARY file only. Indent the source block to match the file's existing indent at the edit site. You may plan briefly in plain text before the blocks; only the fenced blocks are parsed, and code blocks must contain code only.\n"
     );
     json!({ "role": "user", "content": content })
 }
@@ -1085,7 +1135,7 @@ mod tests {
     fn errored(class_prefix: &str, msg: &str) -> CandidateOutcome {
         CandidateOutcome {
             temp: 0.0,
-            response: None,
+            edits: vec![],
             workdir: std::path::PathBuf::new(),
             outcome: Err(format!("{class_prefix}: {msg}")),
             body: String::new(),

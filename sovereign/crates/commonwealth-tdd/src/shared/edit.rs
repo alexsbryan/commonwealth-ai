@@ -139,6 +139,45 @@ fn ident_prefix(s: &str) -> Option<String> {
     }
 }
 
+
+/// Parse a response into ONE OR MORE (action, body) edits — a
+/// TRANSACTION. Multi-file goals (split a module, extract a package)
+/// are impossible as single edits: any half-step leaves the workdir
+/// inconsistent and the strict-improvement gate rejects it
+/// (3.3-calc-split D-arm 2026-07-06: every lone write scored 0p/0f
+/// on import errors or tied the baseline). Pairs are positional:
+/// each fenced json action binds to the next fenced source block.
+/// Falls back to [`parse_response`]'s single-edit semantics
+/// (including header inference) when fewer than two pairs are found.
+pub fn parse_response_edits(content: &str) -> Vec<ParsedResponse> {
+    let fence = Regex::new(r"(?s)```(\w*)[ \t]*\n(.*?)```").unwrap();
+    let mut pairs: Vec<ParsedResponse> = Vec::new();
+    let mut pending: Option<EditAction> = None;
+    for cap in fence.captures_iter(content) {
+        let lang = cap[1].to_string();
+        let body = cap[2].to_string();
+        let is_json = lang.eq_ignore_ascii_case("json")
+            || (body.trim_start().starts_with('{') && body.contains("\"action\""));
+        if is_json {
+            if let Ok(a) = serde_json::from_str::<EditAction>(body.trim()) {
+                pending = Some(a);
+            }
+            continue;
+        }
+        if let Some(a) = pending.take() {
+            pairs.push(ParsedResponse {
+                action: a,
+                body,
+                inferred: false,
+            });
+        }
+    }
+    if pairs.len() >= 2 {
+        return pairs;
+    }
+    parse_response(content).into_iter().collect()
+}
+
 fn parse_action_json(content: &str) -> Option<EditAction> {
     let fenced = Regex::new(r"(?s)```json\s*\n(\{[^`]*?\})\s*\n```").unwrap();
     if let Some(c) = fenced.captures(content) {
@@ -287,5 +326,51 @@ mod inference_tests {
         let content = "```json\n{\"action\": \"rewrite_function\", \"name\": \"f\"}\n```\n```python\ndef f():\n    return 1\n```";
         let r = parse_response(content).unwrap();
         assert!(!r.inferred);
+    }
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use super::*;
+
+    #[test]
+    fn multi_pair_response_parses_as_transaction() {
+        let content = r#"Plan: split calc into a package.
+
+```json
+{"action": "write_file", "path": "calc/__init__.py"}
+```
+```python
+from .core import evaluate
+```
+
+```json
+{"action": "write_file", "path": "calc/core.py"}
+```
+```python
+def evaluate(s):
+    return 1.0
+```"#;
+        let edits = parse_response_edits(content);
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0].action, EditAction::WriteFile { path: Some(p) } if p == "calc/__init__.py"));
+        assert!(matches!(&edits[1].action, EditAction::WriteFile { path: Some(p) } if p == "calc/core.py"));
+        assert!(edits[1].body.contains("def evaluate"));
+    }
+
+    #[test]
+    fn single_pair_falls_back_to_single_semantics() {
+        let content = "```json\n{\"action\": \"rewrite_function\", \"name\": \"f\"}\n```\n```python\ndef f():\n    return 1\n```";
+        let edits = parse_response_edits(content);
+        assert_eq!(edits.len(), 1);
+        assert!(!edits[0].inferred);
+    }
+
+    #[test]
+    fn bare_block_still_infers_via_fallback() {
+        let content = "```python\ndef solve(g):\n    return []\n```";
+        let edits = parse_response_edits(content);
+        assert_eq!(edits.len(), 1);
+        assert!(edits[0].inferred);
     }
 }
