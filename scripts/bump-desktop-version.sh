@@ -171,6 +171,22 @@ echo
 # ── Verify with the existing consistency checker ──
 "$SCRIPT_DIR/check-desktop-version.sh" "$NEW_VERSION"
 
+# BUMP_SKIP_ROUTER_CHECK=1: file edits only — for the release workflow's
+# hosted-runner bump job, where the freshness check below can't run (it
+# compiles sovereign-cli-llm at release profile, and a rebuild needs the
+# embed model). Safe to skip THERE because desktop-release.yml's
+# router-cache-gate is the enforcing backstop, per the comment below.
+# Local/human runs should NOT set this: catching staleness at bump time
+# (where the rebuild can actually run) beats catching it in a failed release.
+if [[ "${BUMP_SKIP_ROUTER_CHECK:-0}" == "1" ]]; then
+    echo
+    echo "BUMP_SKIP_ROUTER_CHECK=1 — skipping router-cache freshness check"
+    echo "(desktop-release.yml's router-cache-gate enforces it at release time)."
+    echo
+    echo "Version finalized: $CURRENT_VERSION -> $NEW_VERSION"
+    exit 0
+fi
+
 # ── Router embed cache: regenerate if stale ──────────────────────────
 # The desktop ships sovereign/router/router-embed-cache.json baked into the
 # binary so first launch HITS the cache instead of re-embedding ~310 router

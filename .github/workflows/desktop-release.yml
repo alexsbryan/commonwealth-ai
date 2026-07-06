@@ -51,6 +51,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the TAG when called by release.yml's bump flow (the run's
+          # own SHA predates the bump commit). Empty on tag pushes → default.
+          ref: ${{ inputs.tag }}
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo
@@ -153,6 +157,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the TAG when called by release.yml's bump flow (the run's
+          # own SHA predates the bump commit). Empty on tag pushes → default.
+          ref: ${{ inputs.tag }}
 
       - name: Verify version consistency
         # Cheap pre-flight: refuse to spend 30+ minutes building a tag whose
@@ -458,6 +466,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the TAG when called by release.yml's bump flow (the run's
+          # own SHA predates the bump commit). Empty on tag pushes → default.
+          ref: ${{ inputs.tag }}
 
       - name: Resolve tag
         id: resolve
