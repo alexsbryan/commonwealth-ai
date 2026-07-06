@@ -6,6 +6,10 @@ license.workspace = true
 
 [dependencies]
 oicp-types = { path = "../../../oicp-types" }
+# The daemon↔package contract (error, traits, registry, tool_result_cache,
+# setup_config, types) was carved out here; sovereign-core re-exports every
+# item at its historical path so importers are unaffected.
+sovereign-contracts = { workspace = true }
 # `treesitter` feature dropped 2026-05-22: sovereign-core's
 # corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
 # not treesitter-gated. The only "ScipGraph" / "symbol_lookup"

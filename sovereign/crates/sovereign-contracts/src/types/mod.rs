@@ -8,6 +8,12 @@ pub type TaskId = String;
 pub type ConversationId = String;
 pub type MessageId = String;
 
+/// Canonical entity names + aliases extracted from the live atlases, used by
+/// the relationship-weighted memory-decay path. Relocated here from
+/// `sovereign-core::memory` (which re-exports it) so the `LandscapeDigestProvider`
+/// contract trait can name it without depending on the runtime.
+pub type EntityInventory = std::collections::HashSet<String>;
+
 // ─── Inference Types ───────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

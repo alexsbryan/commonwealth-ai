@@ -22,6 +22,7 @@ members = [
     "corpus-engine-archaeology",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
+    "sovereign/crates/sovereign-contracts",
     "sovereign/crates/sovereign-core",
     "sovereign/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
@@ -113,6 +114,7 @@ corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
+sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }

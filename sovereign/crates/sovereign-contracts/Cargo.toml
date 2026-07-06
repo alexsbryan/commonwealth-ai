@@ -1,0 +1,31 @@
+[package]
+name = "sovereign-contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The daemon↔package contract, extracted from sovereign-core so a package
+# (workflow / recipe authoring) can build against the trait + type vocabulary
+# WITHOUT dragging the runtime hub. Depends only on oicp-types + serde leaves —
+# the exact dependency budget a third-party implementation can lift.
+
+[dependencies]
+oicp-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+# Home-dir + platform config-dir resolution for setup_config's path helpers.
+dirs = "5"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

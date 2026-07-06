@@ -279,7 +279,7 @@ fn default_quorum_anchors() -> u32 {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemorySection {
     #[serde(default)]
-    pub compaction: crate::memory_compaction::CompactionConfig,
+    pub compaction: crate::memory_config::CompactionConfig,
 }
 
 /// Absolute paths to the loaded GGUF models. Two slots are
