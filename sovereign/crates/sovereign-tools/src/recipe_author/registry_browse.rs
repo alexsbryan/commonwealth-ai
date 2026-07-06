@@ -2,15 +2,16 @@
 //! `RegistryBrowseTool` — list recipes the agent can read for
 //! shape examples, including the user's locally-published ones.
 //!
-//! Lightweight, read-only, no network — uses the same bundled
-//! snapshot + local-registry-merge path the CLI's `recipe list`
-//! uses. Returns one row per recipe with `is_local` so the LLM
-//! can prefer locally-authored examples (likely the most
-//! relevant) over the upstream catalog.
+//! Lightweight, read-only, no network — reads the checked-in registry
+//! catalog (`sovereign_contracts::recipe::registry::merged_catalog`)
+//! which replicates the engine's bundled-snapshot + local-registry
+//! merge without a corpus-engine dependency. Returns one row per recipe
+//! with `is_local` so the LLM can prefer locally-authored examples
+//! (likely the most relevant) over the upstream catalog.
 
 use async_trait::async_trait;
 
-use corpus_engine::RecipeRegistry;
+use sovereign_contracts::recipe::registry::merged_catalog;
 use sovereign_core::error::Result;
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -79,14 +80,12 @@ impl Tool for RegistryBrowseTool {
             .and_then(|v| v.as_str())
             .map(|s| s.to_lowercase());
 
-        let local_dir = RecipeRegistry::default_local_recipes_dir();
-        let mut registry = RecipeRegistry::from_bundled(local_dir.clone());
-        if let Some(d) = &local_dir {
-            registry = registry.with_local_registry(&d.join("registry.toml"));
-        }
-
+        // Bundled catalog merged with the user's `~/.sovereign/recipes/
+        // registry.toml`, local entries winning by id (same precedence as the
+        // engine's `RecipeRegistry::list_entries`). No network refresh.
         let mut rows = Vec::new();
-        for entry in registry.list_entries() {
+        for row in merged_catalog() {
+            let entry = &row.entry;
             if let Some(needle) = &filter {
                 let id = entry.id.to_lowercase();
                 let name = entry.name.to_lowercase();
@@ -102,7 +101,7 @@ impl Tool for RegistryBrowseTool {
                 "size_compressed_gb": entry.size_compressed_gb,
                 "size_indexed_gb": entry.size_indexed_gb,
                 "enrichment_enabled": entry.enrichment_enabled,
-                "is_local": registry.is_local_entry(&entry.id),
+                "is_local": row.is_local,
             }));
         }
         Ok(StepOutput::Json(serde_json::json!({ "recipes": rows })))

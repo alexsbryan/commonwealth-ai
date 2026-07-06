@@ -11,6 +11,7 @@
 //! locally instead of shipping whole documents over MCP.
 
 pub mod notes;
+pub mod registry;
 pub mod schema;
 pub mod sections;
 pub mod testing;
