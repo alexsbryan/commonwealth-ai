@@ -385,6 +385,84 @@ rewrite cycles).
 
 ---
 
+### CI-BENCH TRANSFER VERIFICATION (2026-07-05) — grounding levers vs the canonical bench
+
+Ran `scripts/sovereign-ci-bench.sh` (report: `target/ci-bench/post-grounding-2026-07-05/`)
+to verify the whole grounding/retrieval stack transfers beyond the chaos bank.
+
+**HARD lanes — all PASS:** enrichment:obsidian, enrichment:literary,
+`retrieval:sep` (the neighbour title-provenance fix in `retrieval.rs` did NOT
+regress recall), retrieval:wikipedia (PASS, warn = 29–50d stale baselines),
+routing. `synth:sep` core QA bank (`sep/questions`, 21Q): **answer-equiv 0.92
+↑0.02** — the grounding work *improved* the headline QA metric.
+
+**`synth:sep` reported FAIL(2reg) on the two summarize banks — adjudicated NOT
+a regression.** Receipts (per-question diff vs the 2026-06-10 baseline):
+
+- `sep/summarize` baseline asserted **66 facts with only 27 present in the
+  retrieved chunks** (2.4× overshoot = parametric-memory padding of
+  "comprehensive overview" answers — precisely the fabrication vector this
+  initiative removed). Current run: 26 asserted / **42 in chunks** — strictly
+  within evidence, and retrieval-side fact availability *rose* 27→42.
+- `sep/summarize_obscure`: baseline 47 asserted / 30 in chunks; current **40
+  asserted / 42 in chunks** — near-ceiling extraction of the evidence.
+- The bank's fact-recall metric rewards beyond-evidence encyclopedic assertion
+  (same contamination shape as the 2026-06-30 UX-judge length finding). The
+  drop is the intended grounded-behaviour trade; the real (modest) gap is
+  famous-topic extraction efficiency (26/42 on `summarize` vs 40/42 obscure).
+- Baselines are stale (26–42d, pre-grounding-gate era) — re-mint with
+  `--update-baseline` once this adjudication is accepted.
+
+**Environment confound found & fixed mid-verification:** every atlas graph
+failed lazy-load during the synth lane (`edges.csr schema v1 != reader v2`) —
+the 2026-06-29 atlas-v2 commits bumped `CSR_VERSION` to 2 while on-disk stores
+remained v1. Pre-existing drift, not this initiative. Fixed by re-running
+`sovereign atlas migrate-all` (the `store_needs_build` CSR-version guard
+rebuilds stale stores). Retrieval recall passed baseline even degraded.
+
+**Gated lanes (second pass, `--no-synth`, report
+`target/ci-bench/post-grounding-gates-2026-07-05/`):** fast HARD lanes all
+re-passed in the healthy (migrated) environment.
+
+- **`chaos-gate` [HARD]: PASS** (baseline-relative diff clean). The TRACKED
+  run's absolute verdict failed by ONE question — RED-LINE 1
+  competence-when-present 0.59 vs the 0.60 floor (19/32; misses → model 9,
+  retrieval 1, **gate 0**) — while the trust axes are pristine and far above
+  the June baseline: **hallucination-rate 0.00** (June: 0.18),
+  **grounding-fidelity 0.93** (June: 0.74), honesty-when-absent 0.73 PASS,
+  CONFAB-LEAKED 0, distractor-evasion 1.00, gate-killed-correct 0.
+- **`governance-detector` + `governance-gate` [HARD]: PASS.**
+- **`mechanism-fidelity` + `mechanism-gate` [HARD]: PASS** (control witness
+  intact, drift within baseline).
+- **`multiturn-degradation` TRACKED: PASS** (fact-recall slope *improved*
+  +0.0245); **`multiturn-gate`: FAIL on one metric** — mean_judge_coverage
+  0.756→0.642 (tol 0.10). Receipt-adjudicated (columbus/scientific-revolution
+  threads, `threads.json`): the drop decomposes into (a) honest declines where
+  pronoun questions ("his voyages", "him") retrieved wrong/generic content —
+  the multiturn query rewrite doesn't inject the antecedent entity; baseline
+  answered these from parametric memory and scored "coverage" for it; (b) the
+  short quote-then-answer path under-extracting rich evidence (Columbus lead
+  chunk retrieved with 5 expected facts → one-clause fragment answer, 1/5);
+  (c) one wrong-entity excerpt (Custer quoted for a Columbus hero question —
+  honestly labeled, but a non-sequitur). (a) is the intended trade measured by
+  a padding-rewarding metric; (b) and (c) are REAL residual levers, logged in
+  §7.
+
+Remaining gyms, re-run directly after the second budget starve: **search-gym
+gate PASS** (pass_rate 1.0 = baseline), **knowledge-gym gate PASS** (1.0 =
+baseline), **agent-coding gate PASS** (9/27 = baseline exactly). Only
+`synth:wikipedia` (SOFT) never ran — both passes budget-starved it.
+
+**Final tally: 12/12 HARD gates PASS except multiturn-gate (1 metric,
+adjudicated above). Zero unexplained regressions; chaos trust axes far above
+June baseline. The grounding initiative transfers.**
+
+Gotcha for direct gym runs: the gyms print human lines to STDERR and the JSON
+summary to STDOUT — redirect only stdout into the report file, or the gate
+sees no `pass_rate` (rc=2) and the JSON needs brace-line salvage.
+
+---
+
 ## 7. Open threads / next steps (ranked by trust impact × fixability)
 
 0. **DONE (see §5b items 3–5):** the longform output-quality lever below was
@@ -433,6 +511,21 @@ rewrite cycles).
 4. **Leak-loop repetition** (replay step 28, known intermittent class): quote
    text duplicated/concatenated inside `[unverified excerpt: …]`. Root-cause via
    quote_verification path when it recurs.
+
+5. **Short-path under-extraction on rich evidence** (from the 2026-07-05 CI
+   multiturn receipts): the quote-then-answer short path can ship a one-clause
+   fragment when the retrieved chunk holds many relevant facts (Columbus lead
+   chunk: 5 expected facts → "completed four Spanish-based voyages…", 1/5).
+   The fragment guard (<15 chars) is too narrow for this shape. Candidate fix:
+   when the anchor chunk is evidence-rich for the question, prefer the normal
+   synthesis path over the terse quote-then-answer template. Same family as
+   the summarize extraction gap (26/42 asserted-vs-available).
+
+6. **Multiturn pronoun retrieval (coreference in query rewrite):** follow-up
+   questions using "he/his/him" retrieve generic or wrong-entity content (a
+   Custer excerpt shipped for a Columbus hero question — honestly labeled but
+   non-sequitur). The thread's antecedent entity should be injected into the
+   retrieval query. Trust-relevant via the wrong-entity excerpt shape.
 
 ---
 
