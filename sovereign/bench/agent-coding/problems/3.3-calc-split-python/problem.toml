@@ -38,13 +38,18 @@ fixture_subdir = "fixtures"
 scaffold_subdir = "scaffold"
 # pytest auto-discovers tests/test_calc.py. No-op build (interpreted).
 verify_cmd = "python3 -m pytest -q tests/test_calc.py 2>&1"
-# Refactor problem — keeping all 6 tests passing is the safety gate.
-# Structural success (max line count ≤ 30) is measured by the
-# multi-file solver's aggregate metric, not the bench's score
-# buckets. v1 bench-runner integration is pending.
+# Refactor problem — dim_a grades BEHAVIOR PRESERVATION against the
+# held-out fixtures (full marks only when nothing broke). The
+# structural goal (every file <= 30 lines) lives in the scaffold's
+# ladder tests during iteration and is judged by dims b/c on the
+# final layout. (The original buckets capped dim_a at 1 "pending v1
+# bench-runner integration" — that out-of-band metric never landed,
+# which silently made 9/9 unreachable for this problem.)
 score_buckets = [
-  [0.0,  1.0,    0],
-  [1.0,  1.001,  1],
+  [0.0,   0.5,   0],
+  [0.5,   0.85,  1],
+  [0.85,  0.999, 2],
+  [0.999, 1.001, 3],
 ]
 
 [budget]
