@@ -41,6 +41,7 @@ pub(crate) use lifecycle::read_daemon_pid;
 mod provider;
 mod tool_registry;
 mod worker;
+mod workflow_trigger;
 mod workspace;
 
 use lifecycle::{

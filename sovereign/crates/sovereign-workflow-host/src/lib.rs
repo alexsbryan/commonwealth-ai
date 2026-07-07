@@ -1,31 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-workflow-host` — the daemon-runnable workflow host.
 //!
-//! The `sovereign-workflow` engine is core-only (Step·Artifact·Runner over
-//! `sovereign-core` traits); it doesn't know about concrete tools or inference.
+//! The `sovereign-workflow` engine is contract-only (Step·Artifact·Runner over
+//! `sovereign-contracts` traits); it doesn't know about concrete tools or inference.
 //! Running a workflow needs that *assembly*: the standard tool registry
-//! (`sovereign-tools` built-ins + the MCP servers from `~/.sovereign/config.toml`),
-//! daemon-routed inference (a `SplitInferenceProvider`), and the content cache.
+//! (`sovereign-tools-base` pure built-ins + the MCP servers from
+//! `~/.sovereign/config.toml`), daemon-routed inference (a `SplitInferenceProvider`
+//! from `oicp-client`), and the content cache.
 //!
 //! That assembly used to live inside the CLI (`workflow_cmd::run_assembled`), so
 //! only the CLI could run a workflow. This crate hoists it to a place the **daemon**
-//! can depend on (it depends on `sovereign-tools` already, but not `sovereign-cli-llm`),
-//! which is the prerequisite for the living trigger (a watched folder running a
-//! workflow on its own). The CLI now calls [`run_workflow_in_process`] and adds its
-//! own presentation; the daemon calls it headless.
+//! can depend on, which is the prerequisite for the living trigger (a watched folder
+//! running a workflow on its own). The CLI now calls [`run_workflow_in_process`] and
+//! adds its own presentation; the daemon calls it headless.
 //!
-//! Dependency shape: `workflow-host → {sovereign-workflow, sovereign-tools,
-//! sovereign-inference, sovereign-core}`. No cycle (workflow is core-only; tools and
-//! inference don't depend on workflow).
+//! Dependency shape (the extractable "studio" package boundary): `workflow-host →
+//! {sovereign-contracts, oicp-client, sovereign-tools-base, sovereign-workflow}` — all
+//! contract crates or leaves, no reach into the monolith. The corpus/atlas tools the
+//! base registry drops are injected by call sites via the runner's `extra_tools` slot
+//! (`sovereign_tools::workflow_corpus_tools()`), and the living trigger's daemon glue
+//! moved to `sovereign-cli-daemon`. No cycle.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::{CorpusInstaller, InferenceProvider, Tool};
-use sovereign_core::types::{Effect, Permission};
-use sovereign_inference::remote::SplitInferenceProvider;
+use oicp_client::SplitInferenceProvider;
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::{CorpusInstaller, InferenceProvider, Tool};
+use sovereign_contracts::types::{Effect, Permission};
 use sovereign_workflow::{
     ArtifactCache, FileArtifactCache, NoCache, ResourceNeed, RunReport, Runner, StepKind,
     StepRegistry, Workflow,
@@ -35,9 +38,6 @@ use sovereign_workflow::{
 /// observer and type the events it receives without depending on
 /// `sovereign-workflow` directly.
 pub use sovereign_workflow::{StepObserver, WorkflowProgress};
-
-pub mod trigger;
-pub use trigger::DaemonWorkflowRuntime;
 
 pub mod author;
 pub use author::{
@@ -90,7 +90,7 @@ pub const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
 /// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
 /// target). Resolved from the same home-dir as the setup config + workflow cache.
 pub fn workflows_dir() -> std::path::PathBuf {
-    sovereign_core::setup_config::SetupConfig::default_path()
+    sovereign_contracts::setup_config::SetupConfig::default_path()
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_default()
@@ -203,7 +203,7 @@ pub fn uses_embed(wf: &Workflow) -> bool {
 
 /// `~/.sovereign/workflow-cache` — alongside the canonical config.
 pub fn cache_dir() -> std::path::PathBuf {
-    sovereign_core::setup_config::SetupConfig::default_path()
+    sovereign_contracts::setup_config::SetupConfig::default_path()
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_default()
@@ -211,6 +211,28 @@ pub fn cache_dir() -> std::path::PathBuf {
 }
 
 // ── Registry + run ──────────────────────────────────────────────────────
+
+/// The corpus/atlas tool ids that [`standard_registry`] deliberately does NOT
+/// register — each is backed by corpus-engine/LanceDB, which the base bundle
+/// exists to avoid. Call sites that run workflows inject the concrete tools via
+/// the runner's `extra_tools` slot (`sovereign_tools::workflow_corpus_tools()`),
+/// so at runtime these ids ARE resolvable.
+///
+/// This const is the contract's manifest of "provided by injection, not by the
+/// base registry": the shipped-workflow resolution test treats a `tool:` step
+/// naming one of these as valid even though the standalone base registry can't
+/// resolve it. It must mirror `sovereign_tools::workflow_corpus_tools()` (the
+/// helper that actually constructs these tools). Drift is self-correcting: a
+/// shipped workflow that names a corpus tool absent from BOTH the base registry
+/// and this list trips `shipped_recipes_parse_and_resolve_tools`, which forces
+/// the id to be added here.
+pub const WORKFLOW_CORPUS_TOOL_IDS: &[&str] = &[
+    "extract",
+    "corpus_store",
+    "corpus_search",
+    "atlas_gaps",
+    "atlas_tensions",
+];
 
 /// The standard tool registry: the `sovereign-tools` built-ins every workflow can
 /// use (chunk/section/extract, read/write file+json, zip, corpus_store, web_fetch,
@@ -220,44 +242,40 @@ pub fn cache_dir() -> std::path::PathBuf {
 /// none). The MCP servers are HTTP — Sovereign connects endpoints, it doesn't spawn
 /// subprocesses.
 pub async fn standard_registry(extra_tools: Vec<Box<dyn Tool>>) -> ToolRegistry {
-    use sovereign_tools::atlas_phase::gaps::AtlasGapsTool;
-    use sovereign_tools::atlas_phase::tensions::AtlasTensionsTool;
-    use sovereign_tools::corpus_search::CorpusSearchTool;
-    use sovereign_tools::corpus_store::CorpusStoreTool;
-    use sovereign_tools::extract::ExtractTool;
-    use sovereign_tools::rag::chunk::ChunkTool;
-    use sovereign_tools::rag::section::SectionTool;
-    use sovereign_tools::read_csv::ReadCsvTool;
-    use sovereign_tools::read_file::ReadFileTool;
-    use sovereign_tools::read_json::ReadJsonTool;
-    use sovereign_tools::shell::ShellTool;
-    use sovereign_tools::vector_mean::VectorMeanTool;
-    use sovereign_tools::web::WebFetchTool;
-    use sovereign_tools::write_file::WriteFileTool;
-    use sovereign_tools::write_json::WriteJsonTool;
-    use sovereign_tools::zip::ZipTool;
+    use sovereign_tools_base::rag::chunk::ChunkTool;
+    use sovereign_tools_base::rag::section::SectionTool;
+    use sovereign_tools_base::read_csv::ReadCsvTool;
+    use sovereign_tools_base::read_file::ReadFileTool;
+    use sovereign_tools_base::read_json::ReadJsonTool;
+    use sovereign_tools_base::shell::ShellTool;
+    use sovereign_tools_base::vector_mean::VectorMeanTool;
+    use sovereign_tools_base::web::WebFetchTool;
+    use sovereign_tools_base::write_file::WriteFileTool;
+    use sovereign_tools_base::write_json::WriteJsonTool;
+    use sovereign_tools_base::zip::ZipTool;
 
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(WebFetchTool::new()));
     tools.register(Box::new(ChunkTool));
     tools.register(Box::new(SectionTool));
-    tools.register(Box::new(ExtractTool));
     tools.register(Box::new(ReadJsonTool));
     tools.register(Box::new(ReadFileTool));
     tools.register(Box::new(ZipTool));
-    tools.register(Box::new(CorpusStoreTool));
-    tools.register(Box::new(CorpusSearchTool));
     tools.register(Box::new(ReadCsvTool));
     tools.register(Box::new(VectorMeanTool));
     tools.register(Box::new(WriteJsonTool));
     tools.register(Box::new(WriteFileTool));
-    tools.register(Box::new(AtlasGapsTool));
-    tools.register(Box::new(AtlasTensionsTool));
+    // The corpus/atlas tools ([`WORKFLOW_CORPUS_TOOL_IDS`]: corpus_store,
+    // corpus_search, atlas_gaps, atlas_tensions, and the heavy ExtractTool) stay
+    // in sovereign-tools — registering them here would drag corpus-engine/LanceDB
+    // into this bundle. Call sites that need them inject via `extra_tools` (the
+    // daemon trigger and the CLI/desktop workflow commands do, preserving the full
+    // tool surface).
     for t in extra_tools {
         tools.register(t);
     }
-    let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
+    let mcp = sovereign_tools_base::mcp::load_from_setup_config(&mut tools).await;
     for st in mcp.server_statuses().await {
         if st.connected {
             tracing::info!(server = %st.name, tools = st.tool_count, "workflow-host: mcp connected");
@@ -281,6 +299,12 @@ pub async fn run_workflow_in_process(
     no_cache: bool,
     params: BTreeMap<String, String>,
     extra_tools: Vec<Box<dyn Tool>>,
+    // The embed slot's query-instruction prefix, resolved by the caller from the
+    // discovered embed-model id. Injected (not read from a bundled manifest here)
+    // so this bundle carries no sovereign-core dependency; the CLI and daemon
+    // pass a `ModelsManifest`-backed closure. (B:P9a switches callers to source
+    // it from the OICP capabilities manifest.)
+    embed_query_instruction_for: impl Fn(&str) -> String,
 ) -> std::result::Result<RunReport, String> {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
     let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
@@ -300,10 +324,9 @@ pub async fn run_workflow_in_process(
         let embed = models.embed.clone().unwrap_or_default();
         tracing::info!(daemon, chat = %chat, embed = %embed, "workflow-host: daemon inference");
         // Behavior-preserving: the embed slot's query-instruction prefix, which
-        // the old constructor derived from `DEFAULT_MANIFEST` internally.
-        // Computed before `embed` is moved into arg 3.
-        let embed_query_instruction =
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed);
+        // the old constructor derived from `DEFAULT_MANIFEST` internally — now
+        // supplied by the caller. Computed before `embed` is moved into arg 3.
+        let embed_query_instruction = embed_query_instruction_for(&embed);
         Some(Arc::new(SplitInferenceProvider::new(
             &v1,
             chat,
@@ -523,11 +546,13 @@ pub fn workflow_capabilities(wf: &Workflow, registry: &ToolRegistry) -> Capabili
 mod tests {
     use super::*;
 
-    /// Every shipped recipe parses AND every `tool:` step it names resolves to a
-    /// registered tool. Guards the hand-written `recipes/` TOML against a typo or a
-    /// primitive that doesn't exist (e.g. a renamed/forgotten tool) — parse +
-    /// resolve, no daemon. (`shipped_examples_parse` in sovereign-workflow covers
-    /// `examples/`; this covers the host's `SHIPPED_WORKFLOWS`.)
+    /// Every shipped recipe parses AND every `tool:` step it names resolves — either
+    /// to a tool in the base registry, or to one of the [`WORKFLOW_CORPUS_TOOL_IDS`]
+    /// that real call sites inject via `extra_tools`. Guards the hand-written
+    /// `recipes/` TOML against a typo or a primitive that doesn't exist (e.g. a
+    /// renamed/forgotten tool) — parse + resolve, no daemon. (`shipped_examples_parse`
+    /// in sovereign-workflow covers `examples/`; this covers the host's
+    /// `SHIPPED_WORKFLOWS`.)
     #[tokio::test]
     async fn shipped_recipes_parse_and_resolve_tools() {
         let registry = standard_registry(vec![]).await;
@@ -541,6 +566,12 @@ mod tests {
                 .unwrap_or_else(|e| panic!("shipped recipe `{name}` must parse: {e}"));
             for step in &wf.steps {
                 if let Some(id) = step.uses.strip_prefix("tool:") {
+                    // A shipped workflow may name a corpus/atlas tool the base
+                    // registry omits by design; those are injected at runtime, so
+                    // treat a known-injected id as resolved.
+                    if WORKFLOW_CORPUS_TOOL_IDS.contains(&id) {
+                        continue;
+                    }
                     registry.get(id).unwrap_or_else(|_| {
                         panic!("shipped recipe `{name}` names unregistered tool `{id}`")
                     });

@@ -4,13 +4,13 @@ name = "sovereign-workflow-host"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "Daemon-runnable workflow host — assembles the standard tool registry, resolves the workflow catalog, and runs workflows in-process (sovereign-workflow engine + sovereign-tools tools + daemon-routed inference). The piece that lets the daemon run a workflow, not just the CLI."
+description = "Daemon-runnable workflow host — assembles the standard tool registry, resolves the workflow catalog, and runs workflows in-process (sovereign-workflow engine + sovereign-tools-base tools + daemon-routed inference over oicp-client). The piece that lets the daemon run a workflow, not just the CLI. Depends only on the studio contract crates so it can be distributed with the authoring package."
 
 [dependencies]
-sovereign-core = { workspace = true }
+sovereign-contracts = { workspace = true }
 sovereign-workflow = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
-sovereign-inference = { workspace = true }
+sovereign-tools-base = { workspace = true }
+oicp-client = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

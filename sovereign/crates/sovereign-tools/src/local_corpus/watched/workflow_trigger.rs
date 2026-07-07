@@ -6,9 +6,10 @@
 //! `sovereign-workflow-host`, which depend ON `sovereign-tools`, not the other way
 //! round. To run a workflow when a sweep produces changes WITHOUT inverting that
 //! dependency, the worker calls through this trait. The daemon installs a concrete
-//! `DaemonWorkflowRuntime` (in `sovereign-workflow-host`) that resolves the folder's
-//! `run_on_changes` workflow and runs it; tests and the desktop install nothing
-//! (`None`), so the seam is inert there.
+//! `DaemonWorkflowRuntime` (daemon-side glue in `sovereign-cli-daemon`, which
+//! composes this trait with the `sovereign-workflow-host` runner) that resolves the
+//! folder's `run_on_changes` workflow and runs it; tests and the desktop install
+//! nothing (`None`), so the seam is inert there.
 //!
 //! `dispatch` is fire-and-forget — the implementation spawns + debounces, so it
 //! returns immediately and never blocks the sweep or holds the per-corpus lock.

@@ -12042,6 +12042,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
+ "sovereign-workflow",
  "sovereign-workflow-host",
  "tempfile",
  "tokio",
@@ -12592,11 +12593,11 @@ name = "sovereign-workflow-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "oicp-client",
  "reqwest 0.12.28",
  "serde_json",
- "sovereign-core",
- "sovereign-inference",
- "sovereign-tools",
+ "sovereign-contracts",
+ "sovereign-tools-base",
  "sovereign-workflow",
  "tempfile",
  "tokio",

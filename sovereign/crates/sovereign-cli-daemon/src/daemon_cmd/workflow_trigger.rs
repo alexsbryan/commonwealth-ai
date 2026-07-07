@@ -8,10 +8,12 @@
 //! in-process against the daemon's own loopback inference, passing the changed
 //! files as parameters.
 //!
-//! It lives here (not in `sovereign-tools`) because running a workflow needs the
-//! engine assembly ([`crate::run_workflow_in_process`]); the trait lives in
-//! `sovereign-tools` precisely so the worker can call across this boundary without
-//! `sovereign-tools` depending on the workflow engine.
+//! It lives here (daemon-side glue, not in the extractable `sovereign-workflow-host`
+//! package) because it composes the monolith's watched-folder machinery
+//! (`sovereign-tools`) with the package runner
+//! ([`sovereign_workflow_host::run_workflow_in_process`]) — a binding only the
+//! daemon needs. The `WorkflowTriggerRuntime` trait stays in `sovereign-tools` so
+//! the worker can call across this boundary without depending on the workflow engine.
 //!
 //! Concurrency policy: **skip-if-in-flight**, per corpus. A folder sweeps at most
 //! every ~60s, so there's no burst to debounce; the real hazard is a *long*
@@ -33,7 +35,7 @@ use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
 use sovereign_workflow::Workflow;
 
-use crate::{resolve_workflow_source, run_workflow_in_process};
+use sovereign_workflow_host::{resolve_workflow_source, run_workflow_in_process};
 
 /// Runs a watched folder's `run_on_changes` workflow on the daemon when a sweep
 /// changes files. Install one via `WatchedSubsystem::install(.., Some(Arc::new(rt)))`.
@@ -152,7 +154,20 @@ async fn run_trigger(
         changed = changed.len(),
         "living-trigger: running workflow"
     );
-    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, vec![]).await {
+    // Preserve the pre-extraction tool surface: `standard_registry` no longer
+    // carries the corpus/atlas tools, so inject them here (the daemon links
+    // sovereign-tools). The embed-slot query-instruction prefix comes from the
+    // bundled `ModelsManifest` — the host bundle takes it as a closure so it
+    // needs no sovereign-core dep.
+    // The daemon trigger historically passed no `extra_tools`, relying on the old
+    // 16-tool `standard_registry`; the corpus/atlas tools are restored here (the
+    // CLI's enrichment-authoring tools were never in the trigger path).
+    let extra = sovereign_tools::workflow_corpus_tools();
+    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra, |id| {
+        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(id)
+    })
+    .await
+    {
         Ok(report) => tracing::info!(
             corpus,
             workflow = %origin,

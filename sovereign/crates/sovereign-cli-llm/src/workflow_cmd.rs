@@ -554,15 +554,22 @@ pub(crate) async fn run_assembled(
     params: std::collections::BTreeMap<String, String>,
 ) -> i32 {
     // Assembly + run live in `sovereign-workflow-host` (so the daemon can run
-    // workflows too). The CLI injects its enrichment-authoring tools as
-    // `extra_tools`; everything else is the standard registry.
+    // workflows too). `standard_registry` now carries only the pure tools; the
+    // corpus/atlas tools moved out of the base bundle, so inject them here to
+    // preserve the pre-extraction surface, alongside the CLI's own
+    // enrichment-authoring tools. The embed-slot query-instruction prefix is
+    // sourced from the bundled `ModelsManifest` (the host bundle carries no
+    // sovereign-core dep, so the caller supplies it as a closure).
+    let mut extra = sovereign_tools::workflow_corpus_tools();
+    extra.extend(enrich_tools());
     let report = match run_workflow_in_process(
         wf,
         daemon,
         concurrency,
         no_cache,
         params.clone(),
-        enrich_tools(),
+        extra,
+        |id| sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(id),
     )
     .await
     {
