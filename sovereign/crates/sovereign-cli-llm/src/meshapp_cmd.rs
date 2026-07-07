@@ -321,6 +321,10 @@ async fn op_handler(
                 a.limit.unwrap_or(25).min(100),
             ))
         }),
+        "document_feed" => {
+            let limit = a.limit.unwrap_or(14).clamp(1, 90) as usize;
+            sovereign_meshapp::document_feed(idx, limit).await.map(to_val)
+        }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
         "corpus_stats" => Ok(to_val(sovereign_meshapp::corpus_stats(idx))),
         "timeline" => sovereign_meshapp::timeline(idx).await.map(to_val),
@@ -437,6 +441,7 @@ const DEV_SHIM: &str = r#"(function () {
     corpusStats: (c) => call('corpus_stats', {}),
     timeline: (c) => call('timeline', {}),
     readChunk: (c, chunkId) => call('read_chunk', { chunk_id: String(chunkId) }),
+    documentFeed: (c, limitDocs) => call('document_feed', { limit: limitDocs }),
     wrappedArtifact: (c) => call('wrapped_artifact', {}),
     openOuterWork: (c) => call('open_outer_work', {}),
   };

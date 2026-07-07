@@ -184,6 +184,10 @@ const HELP: Help = Help {
                 "chat",
                 "CLI mirror of the desktop chat flow (ask / session / inspect)",
             ),
+            (
+                "solve",
+                "Give the daemon a coding goal; it makes the goal test-shaped and iterates to green",
+            ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
             (
                 "mobile",
@@ -355,6 +359,7 @@ const ALL_VERBS: &[&str] = &[
     "search-gym",
     "serve",
     "setup",
+    "solve",
     "status",
     "stop",
     "tools",
@@ -792,6 +797,13 @@ async fn async_main() {
                 // Moved to sovereign-cli-llm (uses sovereign-mesh +
                 // sovereign-work-atlas, both heavy).
                 let code = llm_bin::exec("claim", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "solve" => {
+                // Daemon-hosted TDD solver client (docs/specs/SOLVE_UX.md).
+                // Lives in sovereign-cli-llm with the other daemon-HTTP
+                // clients (chat, claim).
+                let code = llm_bin::exec("solve", &raw_args[1..]);
                 std::process::exit(code);
             }
             "amend" => {

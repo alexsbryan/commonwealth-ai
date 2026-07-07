@@ -268,3 +268,63 @@ fn email_date_parsing_handles_rfc5322_and_us_long_form() {
     assert_eq!(parse_email_year_month(email).as_deref(), Some("2001-07"));
     assert_eq!(parse_email_year_month("just a body, no headers"), None);
 }
+
+#[tokio::test]
+async fn document_feed_orders_docs_desc_and_parses_links() {
+    use corpus_engine::index::{EmbeddedChunk, InsertChunk};
+
+    let dir = tempfile::tempdir().unwrap();
+    let index = CorpusIndex::create_with_sharing(
+        dir.path(),
+        "feed-test",
+        "Feed Test",
+        "test-embed",
+        4,
+        false,
+        Some(false),
+        "test",
+    )
+    .await
+    .unwrap();
+
+    let mk = |content: &str, doc: &str, links_json: &str| EmbeddedChunk {
+        insert: InsertChunk {
+            content: content.to_string(),
+            title: Some(doc.to_string()),
+            url: None,
+            metadata: Some(format!(r#"{{"outbound_links":{links_json}}}"#)),
+            content_hash: None,
+            source_doc_id: Some(doc.to_string()),
+            source_file: None,
+            code: Default::default(),
+            unit_id: None,
+        },
+        embedding: vec![0.1, 0.2, 0.3, 0.4],
+    };
+    index
+        .insert_chunks(&[
+            mk("older day bullet", "2026-07-05", r#"["Kyiv"]"#),
+            mk("newer day bullet one", "2026-07-06", r#"["Gaza war","Benjamin Netanyahu"]"#),
+            mk("newer day bullet two", "2026-07-06", r#"[]"#),
+        ])
+        .await
+        .unwrap();
+
+    let feed = document_feed(dir.path(), 10).await.expect("feed");
+    assert_eq!(feed.docs.len(), 2);
+    // Newest day first.
+    assert_eq!(feed.docs[0].source_doc_id, "2026-07-06");
+    assert_eq!(feed.docs[0].chunks.len(), 2);
+    assert_eq!(
+        feed.docs[0].chunks[0].outbound_links,
+        vec!["Gaza war".to_string(), "Benjamin Netanyahu".to_string()]
+    );
+    assert!(feed.docs[0].chunks[1].outbound_links.is_empty());
+    assert_eq!(feed.docs[1].source_doc_id, "2026-07-05");
+    assert_eq!(feed.docs[1].chunks[0].outbound_links, vec!["Kyiv".to_string()]);
+
+    // limit_docs truncates from the newest end.
+    let latest_only = document_feed(dir.path(), 1).await.expect("feed");
+    assert_eq!(latest_only.docs.len(), 1);
+    assert_eq!(latest_only.docs[0].source_doc_id, "2026-07-06");
+}

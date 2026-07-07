@@ -34,15 +34,17 @@ pub fn split_file(args: SplitFileArgs) -> Trial {
         .test_command
         .unwrap_or_else(|| framework.default_test_command().to_string());
 
-    // Materialize the structural goal as a test the loop's fitness
-    // signal picks up. The template is framework-appropriate —
-    // pytest's `test_max_file_size()`, cargo's `#[test] fn
-    // max_file_size`, etc. — so the model's edits land in the same
-    // language the workdir already uses.
+    // Materialize the structural goal as a LADDER of tests the
+    // loop's fitness signal can climb. A single threshold makes a
+    // refactor a cliff (every extraction that shrinks the largest
+    // file but misses the final budget ties and is discarded —
+    // agent-bench 3.3 receipts, 2026-07-07); rungs from the current
+    // worst file size down to the target make each extraction a
+    // strict improvement.
     write_structural_test(workdir_path, framework, args.max_lines);
 
     let prompt = format!(
-        "Goal: split `{}` until every source file is ≤ {} lines.\n\nThe generated test `max_file_size` (in the project's test directory) enforces this. Make it pass without breaking the others. Each turn, emit ONE EditAction — extract a function to a new file, inline a redundant helper, or rewrite the target file more compactly. The aggregate fitness is the test-pass count; you don't need to plan the whole refactor up front.",
+        "Goal: split `{}` until every source file is ≤ {} lines.\n\nThe generated `max_file_size` test ladder (in the project's test directory) enforces this at descending thresholds — each extraction that shrinks the largest file flips another rung. Make them pass without breaking the behavior tests. Extract cohesive helpers to new files (emit multiple action+block pairs in one response when the step needs coordinated changes); you don't need to plan the whole refactor up front.",
         args.path.display(),
         args.max_lines,
     );
@@ -66,12 +68,63 @@ pub fn write_structural_test(
     framework: crate::tasks::framework::Framework,
     max_lines: usize,
 ) {
-    let (rel_path, content) = structural::render_max_file_size(framework, max_lines);
+    let worst = worst_source_file_lines(workdir, framework);
+    let rungs = structural::ladder_rungs(max_lines, worst);
+    let (rel_path, content) = structural::render_max_file_size_ladder(framework, &rungs);
     let full = workdir.join(&rel_path);
     if let Some(parent) = full.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     let _ = std::fs::write(&full, content);
+}
+
+/// Largest source-file line count in the workdir for the framework's
+/// language — seeds the ladder's top rung. Skips test/build dirs.
+fn worst_source_file_lines(
+    workdir: &Path,
+    framework: crate::tasks::framework::Framework,
+) -> usize {
+    use crate::tasks::framework::Framework;
+    let exts: &[&str] = match framework {
+        Framework::Pytest => &["py"],
+        Framework::Cargo => &["rs"],
+        Framework::Vitest | Framework::Jest => &["ts", "tsx", "js", "jsx"],
+        Framework::GoTest => &["go"],
+    };
+    fn walk(dir: &Path, exts: &[&str], worst: &mut usize) {
+        const SKIP: &[&str] = &[
+            "target",
+            "node_modules",
+            ".git",
+            "tests",
+            "build",
+            "dist",
+            "__pycache__",
+        ];
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for entry in rd.flatten() {
+            let name = entry.file_name();
+            let s = name.to_string_lossy();
+            if SKIP.iter().any(|x| *x == s) || s.starts_with('.') {
+                continue;
+            }
+            let p = entry.path();
+            if p.is_dir() {
+                walk(&p, exts, worst);
+            } else if p
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| exts.contains(&e))
+            {
+                if let Ok(text) = std::fs::read_to_string(&p) {
+                    *worst = (*worst).max(text.lines().count());
+                }
+            }
+        }
+    }
+    let mut worst = 0;
+    walk(workdir, exts, &mut worst);
+    worst
 }
 
 /// Remove the framework-appropriate structural test from the
@@ -92,8 +145,8 @@ mod tests {
         write_structural_test(tmp.path(), Framework::Pytest, 30);
         let p = tmp.path().join("tests/test_max_file_size.py");
         let body = std::fs::read_to_string(&p).expect("test file written");
-        assert!(body.contains("test_max_file_size"));
-        assert!(body.contains("limit = 30"));
+        assert!(body.contains("test_max_file_size_within_30"));
+        assert!(body.contains("def _over"));
     }
 
     #[test]
@@ -102,8 +155,8 @@ mod tests {
         write_structural_test(tmp.path(), Framework::Cargo, 50);
         let p = tmp.path().join("tests/max_file_size.rs");
         let body = std::fs::read_to_string(&p).expect("test file written");
-        assert!(body.contains("fn max_file_size"));
-        assert!(body.contains("MAX_LINES: usize = 50"));
+        assert!(body.contains("fn max_file_size_within_50"));
+        assert!(body.contains("fn over(max_lines: usize)"));
     }
 
     #[test]
@@ -112,8 +165,7 @@ mod tests {
         write_structural_test(tmp.path(), Framework::GoTest, 200);
         let p = tmp.path().join("max_file_size_test.go");
         let body = std::fs::read_to_string(&p).expect("test file written");
-        assert!(body.contains("TestMaxFileSize"));
-        assert!(body.contains("maxLines = 200"));
+        assert!(body.contains("TestMaxFileSizeWithin200"));
     }
 
     #[test]

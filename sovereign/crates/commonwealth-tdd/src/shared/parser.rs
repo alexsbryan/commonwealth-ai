@@ -6,6 +6,21 @@
 //! solver loops drive (Rust libtest, Go test --json, vitest default,
 //! pytest text). The tests in this module pin the empirical edge
 //! cases (multi-binary cargo summaries, pytest -q quiet mode, etc).
+//!
+//! ## Setup errors count as failures (2026-07-07)
+//!
+//! When the framework demonstrably RAN and broke before executing
+//! tests — pytest collection error, cargo compile error, vitest/jest
+//! suite error, go build failure — the parser folds the breakage
+//! into `failed`/`total` with a marked name (`<setup error: …>`,
+//! `<compile error>`, …). Without this fold the most idiomatic TDD
+//! opening — a pin test that imports a function that doesn't exist
+//! yet — parses as 0 tests and is invisible to BOTH polarities'
+//! fitness (live SOLVE receipts, job 419d4d3f): the Red stage can't
+//! accept it and the Green stage sees `NoBaseline` instead of a
+//! gradient. A test command that never ran (binary missing, usage
+//! error) still parses 0/0/0 — that distinction keeps `NoBaseline`
+//! meaning "there is nothing here to steer by".
 
 use crate::shared::lang::Language;
 
@@ -48,14 +63,31 @@ pub fn parse_cargo_libtest(stdout: &str) -> TestParseResult {
     }
     let mut total_passed: u32 = 0;
     let mut total_failed: u32 = 0;
+    let mut saw_summary = false;
     for line in stdout.lines() {
         let trimmed = line.trim();
         if !trimmed.starts_with("test result:") {
             continue;
         }
+        saw_summary = true;
         let (passed, failed) = parse_libtest_summary_line(trimmed);
         total_passed = total_passed.saturating_add(passed);
         total_failed = total_failed.saturating_add(failed);
+    }
+    // Compile failure: rustc diagnostics and no test summary at all.
+    // A test that references a not-yet-written function dies here —
+    // count it as one failing entry so the loop has a gradient. When
+    // any summary exists, tests ran; the "error: test failed" footer
+    // cargo prints after real failures must not double-count.
+    if !saw_summary {
+        let compile_error = stdout.lines().any(|l| {
+            let t = l.trim();
+            t.starts_with("error[") || t.starts_with("error:")
+        });
+        if compile_error {
+            failed_names.push("<compile error>".to_string());
+            total_failed = 1;
+        }
     }
     let total = total_passed.saturating_add(total_failed);
     TestParseResult {
@@ -85,6 +117,7 @@ fn parse_libtest_summary_line(line: &str) -> (u32, u32) {
 pub fn parse_go_test_json(stdout: &str) -> TestParseResult {
     let mut passed: u32 = 0;
     let mut failed: u32 = 0;
+    let mut package_failures: u32 = 0;
     let mut failed_names: Vec<String> = Vec::new();
     for line in stdout.lines() {
         let trimmed = line.trim();
@@ -98,6 +131,11 @@ pub fn parse_go_test_json(stdout: &str) -> TestParseResult {
         let action = v.get("Action").and_then(|x| x.as_str()).unwrap_or("");
         let test = v.get("Test").and_then(|x| x.as_str()).unwrap_or("");
         if test.is_empty() {
+            // Package-level fail with no Test field = build failure
+            // (or a package that broke before its tests ran).
+            if action == "fail" {
+                package_failures = package_failures.saturating_add(1);
+            }
             continue;
         }
         match action {
@@ -108,6 +146,12 @@ pub fn parse_go_test_json(stdout: &str) -> TestParseResult {
             }
             _ => {}
         }
+    }
+    // Packages failed but no test ever ran → build failure. One
+    // failing entry gives the loop a gradient instead of a void.
+    if passed == 0 && failed == 0 && package_failures > 0 {
+        failed = 1;
+        failed_names.push("<build failed>".to_string());
     }
     let total = passed.saturating_add(failed);
     TestParseResult {
@@ -121,10 +165,16 @@ pub fn parse_go_test_json(stdout: &str) -> TestParseResult {
 pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
     let mut passed: u32 = 0;
     let mut failed: u32 = 0;
+    let mut suite_failures: u32 = 0;
     let mut failed_names: Vec<String> = Vec::new();
     for line in stdout.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("Tests") {
+        // Suite-level failures ("Test Files  1 failed (1)" — vitest;
+        // "Test Suites: 1 failed, 1 total" — jest). A syntax or
+        // import error fails the whole file before any test runs.
+        if trimmed.starts_with("Test Files") || trimmed.starts_with("Test Suites") {
+            suite_failures = count_number_before_token(trimmed, "failed");
+        } else if trimmed.starts_with("Tests") {
             passed = count_number_before_token(trimmed, "passed");
             failed = count_number_before_token(trimmed, "failed");
         }
@@ -133,6 +183,13 @@ pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
         } else if let Some(name) = trimmed.strip_prefix("× ") {
             failed_names.push(name.to_string());
         }
+    }
+    // Suites failed but zero tests were counted → the file(s) broke
+    // before running (import of a not-yet-written function, syntax
+    // error). Surface each broken suite as one failing entry.
+    if passed == 0 && failed == 0 && suite_failures > 0 {
+        failed = suite_failures;
+        failed_names.push("<suite error>".to_string());
     }
     let total = passed.saturating_add(failed);
     TestParseResult {
@@ -161,7 +218,9 @@ fn count_number_before_token(s: &str, token: &str) -> u32 {
 pub fn parse_pytest_text(stdout: &str) -> TestParseResult {
     let mut passed: u32 = 0;
     let mut failed: u32 = 0;
+    let mut errors: u32 = 0;
     let mut failed_names: Vec<String> = Vec::new();
+    let mut error_names: Vec<String> = Vec::new();
     for line in stdout.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("FAILED ") {
@@ -170,8 +229,19 @@ pub fn parse_pytest_text(stdout: &str) -> TestParseResult {
                 failed_names.push(name);
             }
         }
+        // Collection/setup error markers: `ERROR tests/test_x.py`.
+        // The space (not colon) distinguishes them from usage errors
+        // like "ERROR: file or directory not found" — those mean the
+        // run never collected anything and must stay invisible.
+        if let Some(rest) = trimmed.strip_prefix("ERROR ") {
+            let name = rest.split_whitespace().next().unwrap_or("").to_string();
+            if !name.is_empty() {
+                error_names.push(format!("<setup error: {name}>"));
+            }
+        }
         let stripped = trimmed.trim_matches('=').trim();
-        if !stripped.contains("passed") && !stripped.contains("failed") {
+        if !stripped.contains("passed") && !stripped.contains("failed") && !stripped.contains("error")
+        {
             continue;
         }
         // Only a real count summary contains " in <duration>" — otherwise
@@ -182,10 +252,24 @@ pub fn parse_pytest_text(stdout: &str) -> TestParseResult {
         }
         let p = count_number_before_token(stripped, "passed");
         let f = count_number_before_token(stripped, "failed");
-        if p > 0 || f > 0 {
+        let e = count_number_before_token(stripped, "error")
+            .max(count_number_before_token(stripped, "errors"));
+        if p > 0 || f > 0 || e > 0 {
             passed = p;
             failed = f;
+            errors = e;
         }
+    }
+    // Fold collection/setup errors into the failure counts so a pin
+    // test that fails at import time (function doesn't exist yet)
+    // registers as a failing test instead of vanishing.
+    if errors > 0 {
+        if error_names.is_empty() {
+            error_names.push("<setup error>".to_string());
+        }
+        error_names.truncate(errors as usize);
+        failed_names.extend(error_names);
+        failed = failed.saturating_add(errors);
     }
     let total = passed.saturating_add(failed);
     TestParseResult {
@@ -277,5 +361,116 @@ mod tests {
         assert_eq!(r.passed, 0);
         assert_eq!(r.failed, 0);
         assert_eq!(r.failed_names.len(), 2);
+    }
+
+    // ── setup-errors-count-as-failures (2026-07-07) ────────────────
+
+    #[test]
+    fn pytest_collection_error_counts_as_failure() {
+        // The idiomatic pin: test imports a function that doesn't
+        // exist yet → collection error, zero tests collected.
+        let out = "==== ERRORS ====\nERROR tests/test_new_behavior.py\nImportError: cannot import name 'is_palindrome' from 'utils'\n=== 1 error in 0.05s ===\n";
+        let r = parse_pytest_text(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 1);
+        assert_eq!(
+            r.failed_names,
+            vec!["<setup error: tests/test_new_behavior.py>"]
+        );
+    }
+
+    #[test]
+    fn pytest_mixed_passes_and_collection_error() {
+        let out = "ERROR tests/test_new.py\n=== 3 passed, 1 error in 0.20s ===\n";
+        let r = parse_pytest_text(out);
+        assert_eq!(r.passed, 3);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 4);
+    }
+
+    #[test]
+    fn pytest_no_tests_ran_stays_invisible() {
+        // Genuinely-no-tests must stay 0/0/0 — it is the NoBaseline
+        // signal solve's fix→pin fallthrough steers by.
+        let out = "no tests ran in 0.03s\n";
+        let r = parse_pytest_text(out);
+        assert_eq!((r.passed, r.failed, r.total), (0, 0, 0));
+    }
+
+    #[test]
+    fn pytest_usage_error_stays_invisible() {
+        // `ERROR:` (colon) is pytest's usage-error prefix — the run
+        // never collected anything; must not synthesize a failure.
+        let out = "ERROR: file or directory not found: tests/\n";
+        let r = parse_pytest_text(out);
+        assert_eq!((r.passed, r.failed, r.total), (0, 0, 0));
+        assert!(r.failed_names.is_empty());
+    }
+
+    #[test]
+    fn cargo_compile_error_counts_as_failure() {
+        let out = "   Compiling scratch v0.1.0\nerror[E0425]: cannot find function `is_palindrome` in this scope\n --> tests/new_behavior.rs:4:13\nerror: could not compile `scratch` (test \"new_behavior\") due to 1 previous error\n";
+        let r = parse_cargo_libtest(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 1);
+        assert_eq!(r.failed_names, vec!["<compile error>"]);
+    }
+
+    #[test]
+    fn cargo_real_failures_do_not_double_count_the_error_footer() {
+        // After genuine test failures cargo prints "error: test
+        // failed, to rerun ..." — a summary exists, so no synthesis.
+        let out = "test a ... FAILED\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored\nerror: test failed, to rerun pass `--lib`\n";
+        let r = parse_cargo_libtest(out);
+        assert_eq!(r.passed, 1);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 2);
+    }
+
+    #[test]
+    fn cargo_command_not_found_stays_invisible() {
+        let out = "sh: cargo: command not found\n";
+        let r = parse_cargo_libtest(out);
+        assert_eq!((r.passed, r.failed, r.total), (0, 0, 0));
+    }
+
+    #[test]
+    fn vitest_suite_error_with_no_tests_counts_as_failure() {
+        let out = "Test Files  1 failed (1)\nTests  no tests\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<suite error>"]);
+    }
+
+    #[test]
+    fn vitest_suite_failures_do_not_inflate_real_test_counts() {
+        let out = "Test Files  1 failed (2)\nTests  3 passed | 1 failed (4)\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 3);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 4);
+    }
+
+    #[test]
+    fn go_build_failure_counts_as_one_failure() {
+        let out = r##"{"Action":"start","Package":"scratch"}
+{"Action":"output","Package":"scratch","Output":"# scratch\n"}
+{"Action":"fail","Package":"scratch","Elapsed":0}"##;
+        let r = parse_go_test_json(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<build failed>"]);
+    }
+
+    #[test]
+    fn go_package_fail_after_real_test_failures_not_double_counted() {
+        let out = r#"{"Action":"fail","Test":"TestB","Elapsed":0.02}
+{"Action":"fail","Package":"scratch","Elapsed":0.1}"#;
+        let r = parse_go_test_json(out);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["TestB"]);
     }
 }

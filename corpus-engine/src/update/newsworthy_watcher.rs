@@ -628,7 +628,7 @@ impl WikipediaNewsworthyWatcher {
                             "newsworthy.tick_forced — operator-triggered via /internal/newsworthy/tick"
                         );
                     }
-                    match self.tick(Utc::now()).await {
+                    match self.tick(Utc::now(), trigger == "force").await {
                         Ok(report) => tracing::info!(
                             node = %self.host.self_node_id_str(),
                             trigger = trigger,
@@ -656,8 +656,12 @@ impl WikipediaNewsworthyWatcher {
     }
 
     /// One pass of the reconciliation loop. Public so tests can drive
-    /// it without involving the spawn machinery.
-    pub async fn tick(&self, now: DateTime<Utc>) -> Result<TickReport> {
+    /// it without involving the spawn machinery. `force` marks an
+    /// operator-triggered tick (`/internal/newsworthy/tick`), which
+    /// proceeds even when the yield-hook reports foreground inference —
+    /// an explicit request expresses intent to run NOW, and skipping it
+    /// silently starves verification on busy machines.
+    pub async fn tick(&self, now: DateTime<Utc>, force: bool) -> Result<TickReport> {
         // ── Foreground back-pressure ──────────────────────────────
         //
         // The newsworthy tick triggers per-article wikipedia API
@@ -676,13 +680,19 @@ impl WikipediaNewsworthyWatcher {
         // facing inference. The next interval tick will retry.
         if let Some(hook) = self.engine.yield_hook() {
             if hook.should_yield() {
-                tracing::info!(
-                    "newsworthy.tick_skipped — foreground inference active; yielding to user-facing work"
-                );
-                let mut report = TickReport::default();
-                report.role_leader = self.host.is_leader().await;
-                report.elapsed_ms = 0;
-                return Ok(report);
+                if force {
+                    tracing::info!(
+                        "newsworthy.tick_yield_bypassed — operator force-tick proceeds despite foreground inference"
+                    );
+                } else {
+                    tracing::info!(
+                        "newsworthy.tick_skipped — foreground inference active; yielding to user-facing work"
+                    );
+                    let mut report = TickReport::default();
+                    report.role_leader = self.host.is_leader().await;
+                    report.elapsed_ms = 0;
+                    return Ok(report);
+                }
             }
         }
 
@@ -1290,7 +1300,12 @@ pub fn format_yyyy_month_dd(date: NaiveDate) -> String {
         12 => "December",
         _ => "Unknown",
     };
-    format!("{}_{}_{:02}", date.year(), month_name, date.day())
+    // Wikipedia's daily pages use an UNPADDED day ("2026 July 5") —
+    // MediaWiki normalizes underscores to spaces but does NOT strip a
+    // leading zero, so a padded "05" is a missingtitle. Verified live
+    // 2026-07-06 (the padded form 404s; this bug meant no portal page
+    // had ever ingested).
+    format!("{}_{}_{}", date.year(), month_name, date.day())
 }
 
 /// Run an async future and catch panics, logging the panic message
@@ -1477,9 +1492,11 @@ mod tests {
     }
 
     #[test]
-    fn format_yyyy_month_dd_renders_zero_padded_day() {
+    fn format_yyyy_month_dd_renders_unpadded_day() {
+        // Unpadded day is load-bearing: "2026_May_08" is a missingtitle
+        // on en.wikipedia; "2026_May_8" resolves.
         let date = NaiveDate::from_ymd_opt(2026, 5, 8).unwrap();
-        assert_eq!(format_yyyy_month_dd(date), "2026_May_08");
+        assert_eq!(format_yyyy_month_dd(date), "2026_May_8");
     }
 
     #[test]
@@ -1694,11 +1711,42 @@ mod tests {
         // reaches the batch-revisions step the test will fail with a
         // non-empty `errors` count. Yield-skip path must short-circuit
         // before any media client touch.
-        let report = watcher.tick(Utc::now()).await.expect("tick must succeed");
+        let report = watcher.tick(Utc::now(), false).await.expect("tick must succeed");
         assert_eq!(report.tracked_total, 0);
         assert_eq!(report.owned_total, 0);
         assert_eq!(report.errors, 0);
         assert_eq!(report.refreshed, 0);
+    }
+
+    #[tokio::test]
+    async fn force_tick_bypasses_active_yield_hook() {
+        // Same active-hook setup as `tick_skips_when_yield_hook_active`,
+        // but `force = true` must proceed INTO the tick body. Proof of
+        // passage: the yield-skip path returns BEFORE any status
+        // publish, while the very next gate (local-install, which fires
+        // here because the dummy engine has no corpus) publishes a
+        // status row into the host KV. A non-empty stub store therefore
+        // witnesses that the yield gate was bypassed.
+        let stub = StubHost::new("self", true).own_all();
+        let store = stub.store.clone();
+        let host: Arc<dyn NewsworthyHost> = Arc::new(stub);
+        let engine = make_dummy_engine();
+        engine.set_yield_hook(Arc::new(StubYieldHook { yield_now: true }));
+        let watcher = WikipediaNewsworthyWatcher::new(
+            host.clone(),
+            engine,
+            Arc::new(NoopMediaWikiClient),
+            NewsworthyConfig::default(),
+        );
+        let report = watcher
+            .tick(Utc::now(), true)
+            .await
+            .expect("forced tick must succeed");
+        assert_eq!(report.errors, 0);
+        assert!(
+            !store.lock().unwrap().is_empty(),
+            "forced tick must get past the yield gate (status row published)"
+        );
     }
 
     #[tokio::test]
@@ -1716,7 +1764,7 @@ mod tests {
             Arc::new(NoopMediaWikiClient),
             NewsworthyConfig::default(),
         );
-        let report = watcher.tick(Utc::now()).await.expect("tick must succeed");
+        let report = watcher.tick(Utc::now(), false).await.expect("tick must succeed");
         // Tick ran the tracked-load path (returned 0). Distinguishes
         // from the yield-skip case which short-circuits before
         // load_tracked.

@@ -333,6 +333,34 @@ Model ids default to the filename stems of the files the daemon actually loaded 
 
 The daemon at `localhost:9741` must be reachable — `chat` probes `/v1/models` on bootstrap and exits with a remediation hint (`Start it with sovereign daemon run, or pass --daemon <url>`) if the probe fails. Chat + embed + MCP tool calls all flow through the daemon's OpenAI-compatible surface; no model is loaded in-process.
 
+### `svrn solve`
+
+Give the daemon a coding goal, get a green tree back (spec: [`docs/specs/SOLVE_UX.md`](../../docs/specs/SOLVE_UX.md), guide: [`SOLVER_FOR_PI_USERS.md`](./SOLVER_FOR_PI_USERS.md)). The daemon makes the goal test-shaped — driving your failing tests green if you have them, writing the one failing test that pins the goal if you don't — then iterates until the tests pass. Review the result with `git diff` in the workdir.
+
+```
+svrn solve <workdir> "<goal>" [--watch] [options]
+svrn solve --status <job_id>
+svrn solve --cancel <job_id>
+```
+
+Submits to `POST /v1/solve/jobs` on the daemon and prints the job id plus what was detected (framework, test command, model). `--watch` streams the SSE round events — one line per round with the winning candidate and the passing/failing counts — until the job ends.
+
+| Flag | Description |
+|---|---|
+| `--watch` | Stream rounds live until the job finishes |
+| `--verb <fix\|pin\|split>` | Path override when the default inference isn't what you meant: `fix` = only drive existing failing tests green; `pin` = only write the failing test; `split` = shrink oversized files |
+| `--max-lines <n>` | With `--verb split`: the per-file line budget |
+| `--test-command <cmd>` | Override the auto-detected test command |
+| `--model <id>` | Override the daemon's primary model |
+| `--force` | Solve on a dirty tree (uncommitted changes) |
+| `--daemon <url>` | Daemon base URL (default from setup config, `http://localhost:9741`) |
+| `--status <job_id>` | Print a job's state + rounds + result as JSON |
+| `--cancel <job_id>` | Cancel a running job |
+
+The workdir must be a git repository with a clean tree (or `--force`); the daemon refuses system paths outright, allows one running job per workdir and two globally, and never edits outside the workdir. Exit code: 0 on `reached`/`improved`, 1 on `stalled`/`no_baseline`/`errored`, 130 on cancel.
+
+The same engine is exposed to agents as the `solve` / `solve_status` / `solve_cancel` MCP tools on the daemon's `/mcp` surface, and raw over HTTP: `POST /v1/solve/jobs`, `GET /v1/solve/jobs/{id}`, `GET /v1/solve/jobs/{id}/events` (SSE), `DELETE /v1/solve/jobs/{id}`.
+
 ### `svrn enrich`
 
 Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.sovereign/enrichment/<corpus>/` (phase caches + run outputs) and `~/.sovereign/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).

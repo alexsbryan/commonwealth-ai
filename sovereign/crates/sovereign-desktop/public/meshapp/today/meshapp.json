@@ -1,0 +1,19 @@
+{
+  "id": "today",
+  "name": "Today — current events, on your machine",
+  "version": "0.1.0",
+  "blurb": "Wikipedia's Current Events portal as a local, dated feed — every event linking into the encyclopedia you host. Refreshed daily by the newsworthy watcher; nothing fetched at read time.",
+  "corpus": "wikipedia-newsworthy",
+  "entry": "index.html",
+  "grants": {
+    "mesh_store_read": true,
+    "mesh_store_write": false,
+    "inference_access": false,
+    "knowledge_access": false
+  },
+  "trust": "unsigned",
+  "corpus_data": {
+    "size_indexed_gb": 0.1,
+    "recipe": "wikipedia-newsworthy"
+  }
+}

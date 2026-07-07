@@ -1,9 +1,8 @@
-# 3.3 Calc split — judge rubric anchors (stub)
+# 3.3 Calc split — judge rubric anchors
 
-Multi-file refactor problem. The meaningful gate is `dim_a` (tests
-pass) plus the structural metric the multi-file solver reports
-out-of-band. The judged dimensions below are stubs so the bench's
-schema is satisfied.
+Multi-file refactor problem. `dim_a` gates behavior preservation;
+the dimensions below judge the quality of the resulting
+decomposition on the full 0–3 scale.
 
 ## dim_b
 
@@ -17,7 +16,7 @@ Candidate produced a result that breaks the public API
 
 ### 1
 Candidate maintained the public API and didn't introduce new
-dependencies. The default anchor for this stub.
+dependencies.
 
 ### 2
 Candidate not only preserved the public API but produced a clean
@@ -37,7 +36,7 @@ Files left in a mechanically-broken state — syntax errors, missing
 imports, dead references between modules.
 
 ### 1
-Files are syntactically valid and importable. The default anchor
+Files are syntactically valid and importable.
 for this stub.
 
 ### 2

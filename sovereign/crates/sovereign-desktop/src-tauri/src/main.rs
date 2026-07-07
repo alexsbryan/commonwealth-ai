@@ -594,6 +594,7 @@ fn main() -> ExitCode {
             commands::meshapp_corpus_stats,
             commands::meshapp_timeline,
             commands::meshapp_read_chunk,
+            commands::meshapp_document_feed,
             commands::meshapp_wrapped_artifact,
             commands::meshapp_open_outer_work,
             commands::meshapp_list_installs,

@@ -79,7 +79,13 @@ pub struct ReqwestChatBackend {
 impl ReqwestChatBackend {
     pub fn new(provider_url: impl Into<String>) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(180))
+            // Sized for QUEUED parallel candidates, not one request:
+            // K=4 candidates (plus repair turns) serialize on a
+            // single local model slot, so the tail candidate's wall
+            // time is ~K× one generation. At 180s the tail reliably
+            // died as `backend: transport` — a self-inflicted ~25%
+            // candidate tax observed on the 2026-07-06 C-arm.
+            .timeout(Duration::from_secs(600))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         Self {
@@ -106,13 +112,27 @@ impl ChatBackend for ReqwestChatBackend {
             "max_tokens": max_tokens,
             "stream": false,
         });
-        let resp = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| BackendError::Transport(e.to_string()))?;
+        // One retry with a short backoff on transport errors. Local
+        // daemons wedge transiently under queued parallel candidates
+        // (I-arm 5.1 r4: six candidates AND their continuation calls
+        // all died err:backend in one round — a wedged moment, not
+        // six independent failures). A failed retry still errors.
+        let send_once = || async {
+            self.http
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| BackendError::Transport(e.to_string()))
+        };
+        let resp = match send_once().await {
+            Ok(r) => r,
+            Err(first) => {
+                tracing::debug!(error = %first, "backend transport error — one retry in 3s");
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                send_once().await?
+            }
+        };
         let status = resp.status();
         let text = resp
             .text()

@@ -8,7 +8,7 @@
 //! predicate flips with [`Polarity`]:
 //!
 //! - `MaximizePassing` — `after.passed > before.passed`. Default.
-//! - `GenerateOneFailing` — exactly one new failure, no
+//! - `GenerateOneFailing` — ≥1 new tests, ALL of them failing, no
 //!   previously-passing regressed. Red.
 //!
 //! Validated 2026-05-24 against the role-loop runner (median 20/20
@@ -27,12 +27,28 @@ use tokio::task::JoinSet;
 use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
-    apply_edit, discover_source_file, parse_response, render_with_line_numbers, run_tests,
+    apply_edit, discover_source_files, has_dangling_action, parse_response_edits,
+    render_with_line_numbers, run_tests,
     snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
 };
-use crate::types::{Polarity, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus};
+use crate::types::{
+    Polarity, RoundObserver, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus,
+};
 
 pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResult {
+    run_trial_observed(trial, backend, None).await
+}
+
+/// [`run_trial`] with an optional per-round observer. The observer
+/// fires after every round — improved or not — with the entry just
+/// pushed to the trajectory. This is the engine's ONLY concession
+/// to live progress; everything else about the loop is identical
+/// to the unobserved path.
+pub async fn run_trial_observed(
+    trial: Trial,
+    backend: Arc<dyn ChatBackend>,
+    observer: Option<RoundObserver>,
+) -> TrialResult {
     let _started = Instant::now();
     let base_workdir = trial.workdir.path().to_path_buf();
     let polarity = trial.polarity.clone();
@@ -72,7 +88,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
     // canonical Green-phase shape (where a source file exists and
     // gets patched), optional for Red (which writes test files)
     // and the multi-file path (where the user prompt names targets).
-    let source_file = discover_source_file(&base_workdir);
+    let source_files = discover_source_files(&base_workdir);
+    let source_file = source_files.first().cloned();
     let language = source_file
         .as_deref()
         .map(Language::from_path)
@@ -136,6 +153,14 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
     let mut history: Vec<String> = vec![];
     let mut trajectory: Vec<RoundSummary> = vec![];
     let mut rounds_without_improvement: u32 = 0;
+    // Consecutive rounds where the candidate pool produced NO
+    // outcome different from the base — not even a different failure
+    // mix. A dry pool means the sampling distribution is degenerate
+    // for this prompt/base; more rounds are the same draw (3.3 H-arm
+    // receipts: three rounds of identical 6p/1f ties). Gradient-
+    // bearing stalls (varied partial passes) keep the full
+    // max_stall_rounds runway.
+    let mut dry_rounds: u32 = 0;
     let mut status: Option<TrialStatus> = None;
     let mut winning_body = String::new();
     // Feedback from the previous round's errored candidates,
@@ -152,10 +177,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             }
         }
 
-        let file_listing = source_file
-            .as_ref()
-            .map(|s| render_with_line_numbers(&base_workdir.join(s)))
-            .unwrap_or_default();
+        let file_listing = render_source_files(&base_workdir, &source_files);
         let history_block = history
             .iter()
             .rev()
@@ -168,11 +190,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
         // The model sees the pristine-baseline file listing on the
         // restart candidate, so the message it generates is grounded
         // in the original code, not the partial-fit winner.
-        let pristine_listing = source_file
-            .as_ref()
-            .map(|s| render_with_line_numbers(&pristine_baseline.join(s)))
-            .unwrap_or_default();
-        let feedback_block = last_round_feedback.render(config.candidates_per_round);
+        let pristine_listing = render_source_files(&pristine_baseline, &source_files);
+        let feedback_block = last_round_feedback.render_with_ties(config.candidates_per_round);
         let regular_messages = vec![
             system_message(),
             user_message(
@@ -221,7 +240,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             let backend = Arc::clone(&backend);
             let model = model.clone();
             let test_command_local = test_command.clone();
-            let source_local = source_file.clone();
+            let source_local = source_files.clone();
             // Restart slot: candidate 0 when the loop has stalled at
             // least one round. Snapshots from pristine_baseline and
             // gets the restart-shaped prompt so the model sees a
@@ -270,6 +289,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             .iter()
             .map(|c| format!("{}@T{}={}", c.shape_summary(), c.temp, c.passing_or_error()))
             .collect();
+        let candidate_details: Vec<crate::types::CandidateDetail> =
+            candidates.iter().map(|c| c.detail()).collect();
 
         // Pick the strict-improvement winner under the active polarity.
         let winner = candidates
@@ -280,8 +301,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 is_strict_improvement(&current, &after, &polarity)
             })
             // Tie-break: under MaximizePassing prefer most passes;
-            // under GenerateOneFailing all valid candidates are
-            // equally "exactly one new failure" so we take the first.
+            // under GenerateOneFailing every valid candidate has the
+            // same passed count so the first valid one wins.
             .max_by_key(|c| c.summary().passed);
 
         if let Some(w) = winner {
@@ -313,13 +334,18 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 after.failed
             ));
             rounds_without_improvement = 0;
+            dry_rounds = 0;
             trajectory.push(RoundSummary {
                 round: round as u32,
                 candidates: candidate_labels,
                 winner: Some(format!("{}@T{}", w.shape_summary(), w.temp)),
                 passing_after: current.passed,
                 failed_after: current.failed,
+                details: candidate_details,
             });
+            if let Some(obs) = &observer {
+                obs(trajectory.last().expect("round just pushed"));
+            }
             // Polarity-aware terminal check after winning.
             if reached_terminal(&current, &polarity) {
                 status = Some(TrialStatus::Reached);
@@ -343,7 +369,30 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 winner: None,
                 passing_after: current.passed,
                 failed_after: current.failed,
+                details: candidate_details,
             });
+            if let Some(obs) = &observer {
+                obs(trajectory.last().expect("round just pushed"));
+            }
+            let round_has_novelty = candidates.iter().any(|c| match &c.outcome {
+                Ok(t) => {
+                    t.parsed.total > 0
+                        && (t.parsed.passed, t.parsed.failed) != (current.passed, current.failed)
+                }
+                Err(_) => false,
+            });
+            if round_has_novelty {
+                dry_rounds = 0;
+            } else {
+                dry_rounds = dry_rounds.saturating_add(1);
+            }
+            if dry_rounds >= 2 {
+                tracing::info!(round, "trial: two consecutive dry rounds — early stall");
+                status = Some(TrialStatus::Stalled {
+                    rounds_without_improvement,
+                });
+                break;
+            }
             if rounds_without_improvement >= config.max_stall_rounds {
                 status = Some(TrialStatus::Stalled {
                     rounds_without_improvement,
@@ -357,7 +406,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
         // On clean rounds this is empty (no errored candidates → no
         // feedback block). On stall rounds it gives the model
         // actionable signal to avoid the same shape of failure.
-        last_round_feedback = ErrorFeedback::from_candidates(&candidates);
+        last_round_feedback = ErrorFeedback::from_candidates(&candidates, &current);
     }
     // rounds_completed = every round that pushed a trajectory entry,
     // INCLUDING the one we broke out on (Reached / Stalled both push
@@ -393,10 +442,20 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
 fn is_strict_improvement(before: &TestSummary, after: &TestSummary, polarity: &Polarity) -> bool {
     match polarity {
         Polarity::MaximizePassing => after.passed > before.passed,
+        // At least one NEW test, every new test failing, existing
+        // outcomes untouched. Generalized from "exactly one new
+        // failure" on 2026-07-07: the live SOLVE pin path showed the
+        // model idiomatically pins a behavior with 2-4 focused cases,
+        // and the exactly-one gate discarded every one of them (job
+        // 419d4d3f receipts: 0p/2f..0p/4f rejected three rounds
+        // straight). All-new-tests-failing keeps the discrimination
+        // guarantee — nothing vacuously passing sneaks in — and a
+        // multi-case pin hands the green stage a gradient instead of
+        // a cliff (the split_file ladder lesson).
         Polarity::GenerateOneFailing { .. } => {
-            after.failed == before.failed.saturating_add(1)
-                && after.passed == before.passed
-                && after.total == before.total.saturating_add(1)
+            let new_tests = after.total.saturating_sub(before.total);
+            let new_failures = after.failed.saturating_sub(before.failed);
+            new_tests >= 1 && new_failures == new_tests && after.passed == before.passed
         }
     }
 }
@@ -405,8 +464,8 @@ fn reached_terminal(current: &TestSummary, polarity: &Polarity) -> bool {
     match polarity {
         Polarity::MaximizePassing => current.total > 0 && current.passed >= current.total,
         // For GenerateOneFailing, the FIRST strict-improvement
-        // already IS the terminal state — we wanted exactly one new
-        // failure and we got it.
+        // already IS the terminal state — the new failing test(s)
+        // exist, the goal is pinned.
         Polarity::GenerateOneFailing { .. } => current.failed > 0,
     }
 }
@@ -436,17 +495,66 @@ fn errored(reason: &str) -> TrialResult {
 #[derive(Clone)]
 struct CandidateOutcome {
     temp: f32,
-    response: Option<ParsedResponse>,
+    /// Applied edits, in order. Empty = the response never parsed.
+    /// Usually one; multi-edit TRANSACTIONS carry several (split /
+    /// extract goals need coordinated writes — no single edit can
+    /// strictly improve the fitness signal).
+    edits: Vec<ParsedResponse>,
     workdir: PathBuf,
     outcome: Result<TestRunResult, String>,
     body: String,
+    /// True when the pointed repair turn produced the applied edit.
+    repaired: bool,
 }
 
 impl CandidateOutcome {
     fn passing_or_error(&self) -> String {
         match &self.outcome {
             Ok(t) => format!("{}p/{}f", t.parsed.passed, t.parsed.failed),
-            Err(_) => "err".into(),
+            // Keep the label terse but carry the failure CLASS —
+            // "err" alone made a stalled trial undiagnosable from
+            // its trajectory (all-err rounds, 2026-07-06).
+            Err(e) => format!("err:{}", e.split(':').next().unwrap_or("unknown")),
+        }
+    }
+
+    fn detail(&self) -> crate::types::CandidateDetail {
+        const ERROR_CAP: usize = 600;
+        const TAIL_CHARS: usize = 200;
+        let error = match &self.outcome {
+            Ok(_) => None,
+            Err(e) => Some(if e.len() > ERROR_CAP {
+                let cut = e
+                    .char_indices()
+                    .map(|(i, _)| i)
+                    .take_while(|&i| i <= ERROR_CAP)
+                    .last()
+                    .unwrap_or(0);
+                format!("{}…", &e[..cut])
+            } else {
+                e.clone()
+            }),
+        };
+        let body_tail = if self.body.is_empty() {
+            None
+        } else {
+            let start = self
+                .body
+                .char_indices()
+                .rev()
+                .map(|(i, _)| i)
+                .nth(TAIL_CHARS.saturating_sub(1))
+                .unwrap_or(0);
+            Some(self.body[start..].to_string())
+        };
+        crate::types::CandidateDetail {
+            shape: self.shape_summary(),
+            temp: self.temp,
+            outcome: self.passing_or_error(),
+            error,
+            body_chars: self.body.chars().count(),
+            body_tail,
+            repaired: self.repaired,
         }
     }
 
@@ -463,15 +571,37 @@ impl CandidateOutcome {
     }
 
     fn shape_summary(&self) -> String {
-        match self.response.as_ref().map(|r| &r.action) {
-            Some(EditAction::RewriteFunction { name }) => format!("rewrite {name}"),
-            Some(EditAction::PatchLines { start, end }) => format!("patch {start}-{end}"),
-            Some(EditAction::InsertBefore { line }) => format!("insert@{line}"),
-            Some(EditAction::WriteFile { path }) => match path {
-                Some(p) => format!("write_file→{p}"),
-                None => "write_file".to_string(),
-            },
-            None => "<parse-failed>".to_string(),
+        fn one(r: &ParsedResponse) -> String {
+            let shape = match &r.action {
+                EditAction::RewriteFunction { name } => format!("rewrite {name}"),
+                EditAction::PatchLines { start, end } => format!("patch {start}-{end}"),
+                EditAction::InsertBefore { line } => format!("insert@{line}"),
+                EditAction::WriteFile { path } => match path {
+                    Some(p) => format!("write_file→{p}"),
+                    None => "write_file".to_string(),
+                },
+            };
+            // `~` marks a header-inferred action (model emitted only
+            // the source block) — keeps inference-rescued candidates
+            // attributable in the trajectory.
+            if r.inferred {
+                format!("~{shape}")
+            } else {
+                shape
+            }
+        }
+        let shape = match self.edits.len() {
+            0 => return "<parse-failed>".to_string(),
+            1 => one(&self.edits[0]),
+            _ => format!(
+                "txn[{}]",
+                self.edits.iter().map(one).collect::<Vec<_>>().join("; ")
+            ),
+        };
+        if self.repaired {
+            format!("{shape}+r")
+        } else {
+            shape
         }
     }
 }
@@ -480,7 +610,7 @@ impl CandidateOutcome {
 async fn try_candidate(
     backend: Arc<dyn ChatBackend>,
     candidate_workdir: PathBuf,
-    source_file: Option<String>,
+    source_files: Vec<String>,
     test_command: String,
     language: Language,
     model: String,
@@ -494,72 +624,270 @@ async fn try_candidate(
     if let Err(e) = snapshot_dir(&base_workdir, &candidate_workdir) {
         return CandidateOutcome {
             temp: temperature,
-            response: None,
+            edits: vec![],
             workdir: candidate_workdir,
             outcome: Err(format!("snapshot: {e}")),
             body: String::new(),
+            repaired: false,
         };
     }
     let resp = match backend
-        .complete(&model, messages, temperature, emit_max_tokens)
+        .complete(&model, messages.clone(), temperature, emit_max_tokens)
         .await
     {
         Ok(r) => r,
         Err(e) => {
             return CandidateOutcome {
                 temp: temperature,
-                response: None,
+                edits: vec![],
                 workdir: candidate_workdir,
                 outcome: Err(format!("backend: {e}")),
                 body: String::new(),
+                repaired: false,
             };
         }
     };
-    let parsed = match parse_response(&resp.content) {
-        Some(p) => p,
-        None => {
-            return CandidateOutcome {
-                temp: temperature,
-                response: None,
-                workdir: candidate_workdir,
-                outcome: Err("parse: no action+block found".into()),
-                body: String::new(),
-            };
+    let mut content = resp.content;
+    // Spontaneous-EOS completion: the model declared an action fence
+    // and stopped before its source block (MTP emits finish=Stop
+    // mid-response; detect by CONTENT — chaos-side pattern). ONE
+    // continuation call, then parse the combined text so dangling
+    // actions pair with their late-arriving blocks.
+    if has_dangling_action(&content) {
+        let cont_msgs = {
+            let mut m = messages.clone();
+            m.push(json!({ "role": "assistant", "content": content }));
+            m.push(json!({ "role": "user", "content": "Continue exactly where you stopped: emit the fenced source block for the action you declared, plus any remaining action+block pairs from your plan. No re-planning, no commentary." }));
+            m
+        };
+        if let Ok(cont) = backend
+            .complete(&model, cont_msgs, temperature, emit_max_tokens)
+            .await
+        {
+            content.push('\n');
+            content.push_str(&cont.content);
         }
-    };
-    // If no source file was discovered, route all edits via the
-    // WriteFile primitive against the JSON action's implicit target —
-    // for now we require source_file to apply patches. WriteFile-
-    // shape edits are written to the inferred path from the JSON
-    // (which the model is asked to name in `prompt` when relevant).
-    let target_path = source_file.unwrap_or_else(|| "_unspecified.py".to_string());
+    }
+    let mut edits = parse_response_edits(&content);
+    if edits.is_empty() {
+        // Re-sample once at a nudged temperature. A parse-failed
+        // candidate has already burned its slot; when decode wedges
+        // (instant stops after fences — J-arm receipts show whole
+        // rounds lost this way even WITH continuation), asking the
+        // same wedged context to continue returns another instant
+        // stop. A fresh draw at a different temperature is a new
+        // sample from a hopefully-unwedged state. One attempt.
+        let nudged = if temperature <= 0.6 {
+            temperature + 0.3
+        } else {
+            temperature - 0.3
+        };
+        if let Ok(r2) = backend
+            .complete(&model, messages.clone(), nudged, emit_max_tokens)
+            .await
+        {
+            content = r2.content;
+            edits = parse_response_edits(&content);
+        }
+    }
+    if edits.is_empty() {
+        return CandidateOutcome {
+            temp: temperature,
+            edits: vec![],
+            workdir: candidate_workdir,
+            outcome: Err("parse: no action+block found (after continuation + resample)".into()),
+            // Keep the raw content: a parse failure is only
+            // diagnosable from what the model actually said.
+            body: content,
+            repaired: false,
+        };
+    }
+    // Default edit target = first discovered source file. For
+    // rewrite_function the target is resolved ACROSS the discovered
+    // files — the model names the function, the harness locates its
+    // home file (multi-file packages: forcing every edit into the
+    // first file made cross-file fixes structurally impossible —
+    // 5.1-minilang B-arm 2026-07-06). Edits apply in order as ONE
+    // transaction; the first failure aborts (workdir is a snapshot,
+    // so partial application is discarded with the candidate).
+    let default_target = source_files
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "_unspecified.py".to_string());
     let mut ctx = ExecCtx::new(candidate_workdir.clone());
     if let Some(v) = syntax_validator {
         ctx = ctx.with_syntax_validator(v);
     }
-    if let Err(e) = apply_edit(&ctx, &target_path, &parsed).await {
-        // Full multi-line cargo-shape error message preserved here
-        // so the next round's prompt can surface it as feedback —
-        // the model can't fix what it can't see (lights-out
-        // trial-2 2026-05-24: validator rejected but model kept
-        // making the same syntax error because it had no idea what
-        // was wrong).
-        return CandidateOutcome {
-            temp: temperature,
-            response: Some(parsed.clone()),
-            workdir: candidate_workdir,
-            outcome: Err(format!("apply: {}", e.render_for_agent())),
-            body: parsed.body.clone(),
+    async fn apply_all(
+        ctx: &ExecCtx,
+        workdir: &std::path::Path,
+        source_files: &[String],
+        default_target: &str,
+        edits: &[ParsedResponse],
+    ) -> Result<(), String> {
+        for (i, e) in edits.iter().enumerate() {
+            let target = resolve_edit_target(workdir, source_files, &e.action)
+                .unwrap_or_else(|| default_target.to_string());
+            if let Err(err) = apply_edit(ctx, &target, e).await {
+                // Full multi-line cargo-shape error message preserved
+                // so the repair turn / next round's prompt can surface
+                // it — the model can't fix what it can't see.
+                let which = if edits.len() > 1 {
+                    format!(" (edit {} of {})", i + 1, edits.len())
+                } else {
+                    String::new()
+                };
+                return Err(format!("apply{which}: {}", err.render_for_agent()));
+            }
+        }
+        Ok(())
+    }
+    let mut repaired = false;
+    if let Err(first_err) = apply_all(
+        &ctx,
+        &candidate_workdir,
+        &source_files,
+        &default_target,
+        &edits,
+    )
+    .await
+    {
+        // Pointed repair turn — ONE follow-up call on a rejected
+        // apply. The harness holds a rendered, line-anchored error
+        // for a candidate it is about to discard; small models fix
+        // pointed errors far better than they avoid them cold
+        // (B-arm 3.2-lights-out t1: 7/12 candidates died to the
+        // pre-write syntax check). One repair per candidate keeps
+        // the call budget bounded at 2x worst-case.
+        let repair_msgs = {
+            let mut m = messages.clone();
+            m.push(json!({ "role": "assistant", "content": content.clone() }));
+            m.push(json!({ "role": "user", "content": format!(
+                "The harness rejected that edit:\n\n```\n{first_err}\n```\n\nFix ONLY the reported error — keep the same action(s) and keep every other line of your source block(s) identical. Re-emit the full response (each fenced JSON action followed by its fenced source block). Smallest possible change; no commentary."
+            ) }));
+            m
         };
+        let mut repair_ok = false;
+        if let Ok(r2) = backend
+            .complete(&model, repair_msgs, temperature, emit_max_tokens)
+            .await
+        {
+            let edits2 = parse_response_edits(&r2.content);
+            if !edits2.is_empty() {
+                match apply_all(
+                    &ctx,
+                    &candidate_workdir,
+                    &source_files,
+                    &default_target,
+                    &edits2,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        edits = edits2;
+                        repaired = true;
+                        repair_ok = true;
+                    }
+                    Err(e2) => {
+                        let body2 = edits2
+                            .iter()
+                            .map(|e| e.body.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        return CandidateOutcome {
+                            temp: temperature,
+                            edits: edits2,
+                            workdir: candidate_workdir,
+                            outcome: Err(format!("{e2} [after repair; first: {first_err}]")),
+                            body: body2,
+                            repaired: true,
+                        };
+                    }
+                }
+            }
+        }
+        if !repair_ok {
+            let body = edits
+                .iter()
+                .map(|e| e.body.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            return CandidateOutcome {
+                temp: temperature,
+                edits,
+                workdir: candidate_workdir,
+                outcome: Err(first_err),
+                body,
+                repaired: false,
+            };
+        }
     }
     let test_result = run_tests(&candidate_workdir, &test_command, language, timeout).await;
-    let body = parsed.body.clone();
+    let body = edits
+        .iter()
+        .map(|e| e.body.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     CandidateOutcome {
         temp: temperature,
-        response: Some(parsed),
+        edits,
         workdir: candidate_workdir,
         outcome: Ok(test_result),
         body,
+        repaired,
+    }
+}
+
+/// Render every discovered source file, path-labeled and
+/// line-numbered, under a shared character budget. Files past the
+/// budget are listed by name so the model knows they exist (silent
+/// truncation would read as "covered everything").
+fn render_source_files(root: &std::path::Path, files: &[String]) -> String {
+    const BUDGET_CHARS: usize = 14_000;
+    let mut out = String::new();
+    let mut omitted: Vec<&str> = Vec::new();
+    for f in files {
+        let rendered = render_with_line_numbers(&root.join(f));
+        if out.len() + rendered.len() > BUDGET_CHARS && !out.is_empty() {
+            omitted.push(f);
+            continue;
+        }
+        out.push_str(&format!("### `{f}`\n{rendered}\n\n"));
+    }
+    if !omitted.is_empty() {
+        out.push_str(&format!(
+            "(additional files not shown, address by path via write_file: {})\n",
+            omitted.join(", ")
+        ));
+    }
+    out
+}
+
+/// Locate the file an edit action should land in. `rewrite_function`
+/// searches the discovered files for the named function (first hit
+/// wins, shallowest-first order); `write_file` honors an explicit
+/// path. Everything else (patches, pathless writes) → None, meaning
+/// the caller's default target.
+fn resolve_edit_target(
+    workdir: &std::path::Path,
+    source_files: &[String],
+    action: &EditAction,
+) -> Option<String> {
+    match action {
+        EditAction::RewriteFunction { name } => {
+            for f in source_files {
+                if let Ok(content) = std::fs::read_to_string(workdir.join(f)) {
+                    if commonwealth_agent_tools::executor::find_function_bounds(&content, name)
+                        .is_some()
+                    {
+                        return Some(f.clone());
+                    }
+                }
+            }
+            None
+        }
+        EditAction::WriteFile { path: Some(p) } => Some(p.clone()),
+        _ => None,
     }
 }
 
@@ -602,7 +930,7 @@ fn user_message(
         ),
     };
     let content = format!(
-        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Current file (`{source_file}`, line-numbered)\n\n```\n{file_listing}\n```\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit ONE fenced JSON action describing your edit, then ONE fenced source code block with the new content.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. Indent the source block to match the file's existing indent at the edit site. No commentary outside the two fenced blocks.\n"
+        "{stall_prefix}{feedback_block}## Goal\n\n{user_prompt}\n\n## Fitness\n\n{polarity_block}\n\n## Source files (line-numbered; primary: `{source_file}`)\n\n{file_listing}\n\n## Last test output\n\n```\n{test_tail}\n```\n\n## Attempts so far (for diversity — don't repeat)\n\n{history_block}\n\n## Your output\n\nEmit one fenced JSON action describing your edit, then one fenced source code block with the new content. When the goal REQUIRES coordinated changes to several files (e.g. splitting a module), emit multiple action+block pairs in one response — they apply together as a single transaction.\n\n{actions}\n\nPick whichever edit shape best addresses the most-impactful failing test. `rewrite_function` finds the named function in whichever listed file holds it; to create or fully replace a specific file, use {{\"action\": \"write_file\", \"path\": \"<file>\"}}. Line-number actions (patch_lines / insert_before) address the PRIMARY file only. Indent the source block to match the file's existing indent at the edit site. You may plan briefly in plain text before the blocks; only the fenced blocks are parsed, and code blocks must contain code only.\n"
     );
     json!({ "role": "user", "content": content })
 }
@@ -618,6 +946,19 @@ fn user_message(
 #[derive(Debug, Clone, Default)]
 struct ErrorFeedback {
     buckets: Vec<ErrorBucket>,
+    /// Targets of candidates that applied cleanly but flipped no
+    /// failing test (outcome identical to the base). Silence here
+    /// bred fixation: 3.3 I-arm receipts show _lexer.py (21 lines,
+    /// innocent) rewritten five times while the failing assertion
+    /// named _rpn.py — nothing ever told the model its target was
+    /// flipping nothing.
+    tie_targets: Vec<String>,
+    /// Targets of candidates that applied cleanly but made things
+    /// WORSE than the base ("shape (3p→1p)"). The 5.1 fixation loop
+    /// was mostly these — whole-file rewrites of a working module
+    /// that regressed passing tests, retried round after round with
+    /// no signal that they were destructive.
+    regressed_targets: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -634,20 +975,46 @@ struct ErrorBucket {
 
 impl ErrorFeedback {
     /// Build feedback from the previous round's candidate outcomes.
-    /// Returns an empty `ErrorFeedback` if no candidate errored.
-    fn from_candidates(candidates: &[CandidateOutcome]) -> Self {
+    /// Returns an empty `ErrorFeedback` if no candidate errored or
+    /// tied.
+    fn from_candidates(candidates: &[CandidateOutcome], base: &TestSummary) -> Self {
         use std::collections::BTreeMap;
         let mut by_class: BTreeMap<&'static str, (usize, Option<String>)> = BTreeMap::new();
+        let mut tie_targets: Vec<String> = Vec::new();
+        let mut regressed_targets: Vec<String> = Vec::new();
         for c in candidates {
-            let Err(ref msg) = c.outcome else { continue };
-            let class = classify_error(msg);
-            let entry = by_class.entry(class).or_insert((0, None));
-            entry.0 += 1;
-            // Keep the first non-empty sample. Later candidates'
-            // errors are usually variants of the same shape so the
-            // first is representative.
-            if entry.1.is_none() && !msg.trim().is_empty() {
-                entry.1 = Some(msg.clone());
+            match &c.outcome {
+                Err(msg) => {
+                    let class = classify_error(msg);
+                    let entry = by_class.entry(class).or_insert((0, None));
+                    entry.0 += 1;
+                    // Keep the first non-empty sample. Later candidates'
+                    // errors are usually variants of the same shape so the
+                    // first is representative.
+                    if entry.1.is_none() && !msg.trim().is_empty() {
+                        entry.1 = Some(msg.clone());
+                    }
+                }
+                Ok(t) => {
+                    if (t.parsed.passed, t.parsed.failed) == (base.passed, base.failed)
+                        && t.parsed.total > 0
+                    {
+                        let shape = c.shape_summary();
+                        if !tie_targets.contains(&shape) {
+                            tie_targets.push(shape);
+                        }
+                    } else if t.parsed.passed < base.passed {
+                        let label = format!(
+                            "{} ({}p→{}p)",
+                            c.shape_summary(),
+                            base.passed,
+                            t.parsed.passed
+                        );
+                        if !regressed_targets.contains(&label) {
+                            regressed_targets.push(label);
+                        }
+                    }
+                }
             }
         }
         let buckets = by_class
@@ -658,11 +1025,15 @@ impl ErrorFeedback {
                 sample: sample.unwrap_or_else(|| String::from("(no detail)")),
             })
             .collect();
-        Self { buckets }
+        Self {
+            buckets,
+            tie_targets,
+            regressed_targets,
+        }
     }
 
     fn is_empty(&self) -> bool {
-        self.buckets.is_empty()
+        self.buckets.is_empty() && self.tie_targets.is_empty() && self.regressed_targets.is_empty()
     }
 
     fn render(&self, total_candidates: usize) -> String {
@@ -682,6 +1053,29 @@ impl ErrorFeedback {
         s.push_str(
             "\nRead the error text carefully — re-emitting the same shape will hit the same rejection. Fix what the error names.\n\n",
         );
+        s
+    }
+
+    fn render_with_ties(&self, total_candidates: usize) -> String {
+        let mut s = self.render(total_candidates);
+        if !self.tie_targets.is_empty() {
+            if s.is_empty() {
+                s.push_str("## What failed last round\n\n");
+            }
+            s.push_str(&format!(
+                "- These edits applied cleanly but flipped NO failing test (counts unchanged, so they were discarded): {}. Re-read the failing test output above — the actual offender may be a different file or function than the one you keep editing.\n\n",
+                self.tie_targets.join(", ")
+            ));
+        }
+        if !self.regressed_targets.is_empty() {
+            if s.is_empty() {
+                s.push_str("## What failed last round\n\n");
+            }
+            s.push_str(&format!(
+                "- These edits made things WORSE and were discarded: {}. They broke tests that were passing — do NOT rewrite whole working modules; make the smallest change that flips a failing test while keeping everything else intact.\n\n",
+                self.regressed_targets.join(", ")
+            ));
+        }
         s
     }
 }
@@ -758,7 +1152,7 @@ fn render_polarity_block(polarity: &Polarity, current: &TestSummary) -> String {
     };
     match polarity {
         Polarity::MaximizePassing => format!(
-            "Maximize tests passing. Currently {passed}/{total} ({failed} failing). Strict improvement is required to land a candidate.\n\nFailing tests:\n{failing_names}",
+            "Maximize tests passing. Currently {passed}/{total} ({failed} failing). Your edit lands ONLY if a currently-failing test passes after it — an edit that leaves the counts unchanged is discarded and the next round starts from the same base, so partial steps that don't flip a failing test are wasted. Make the complete change in this response.\n\nFailing tests:\n{failing_names}",
             passed = current.passed,
             failed = current.failed,
             total = current.total,
@@ -769,7 +1163,7 @@ fn render_polarity_block(polarity: &Polarity, current: &TestSummary) -> String {
                 .map(|n| format!(" Hint: name the test `{n}` if you can.\n"))
                 .unwrap_or_default();
             format!(
-                "Generate ONE failing test. Currently {passed}/{total}. Your edit must add exactly one new failing test (an assertion-style failure on the unchanged code) without breaking any currently-passing test.{hint}",
+                "Add a new failing test. Currently {passed}/{total}. Rules: every test you add must FAIL on the current code. Do not touch existing tests. Failing at import counts as failing.{hint}",
                 passed = current.passed,
                 total = current.total,
             )
@@ -808,20 +1202,29 @@ mod tests {
     }
 
     #[test]
-    fn generate_one_failing_requires_exactly_one_new_failure() {
+    fn generate_one_failing_accepts_all_new_tests_failing() {
         let p = Polarity::GenerateOneFailing {
             test_name_hint: None,
         };
         let before = summary(3, 0, 3);
-        // Exactly one new failure, no passes lost.
+        // One new failure, no passes lost — the classic Red win.
         let win = summary(3, 1, 4);
         assert!(is_strict_improvement(&before, &win, &p));
-        // Two new failures — too many. Reject.
-        let too_many = summary(3, 2, 5);
-        assert!(!is_strict_improvement(&before, &too_many, &p));
-        // One new failure but a passing test regressed.
+        // Several new tests, ALL failing — the idiomatic multi-case
+        // pin (live SOLVE receipts 2026-07-07). Accept.
+        let multi = summary(3, 3, 6);
+        assert!(is_strict_improvement(&before, &multi, &p));
+        // New failure but a passing test regressed. Reject.
         let regressed = summary(2, 2, 4);
         assert!(!is_strict_improvement(&before, &regressed, &p));
+        // New tests where one vacuously PASSES — not discriminating.
+        // (passed moved 3→4, so the pin isn't all-failing.) Reject.
+        let vacuous = summary(4, 1, 5);
+        assert!(!is_strict_improvement(&before, &vacuous, &p));
+        // No new tests at all — flipping an existing test to failing
+        // is breakage, not a pin. Reject.
+        let flipped = summary(2, 1, 3);
+        assert!(!is_strict_improvement(&before, &flipped, &p));
     }
 
     #[test]
@@ -908,10 +1311,11 @@ mod tests {
     fn errored(class_prefix: &str, msg: &str) -> CandidateOutcome {
         CandidateOutcome {
             temp: 0.0,
-            response: None,
+            edits: vec![],
             workdir: std::path::PathBuf::new(),
             outcome: Err(format!("{class_prefix}: {msg}")),
             body: String::new(),
+            repaired: false,
         }
     }
 
@@ -922,7 +1326,7 @@ mod tests {
             errored("parse", "no action+block found"),
             errored("apply", "syntax error at line 3"),
         ];
-        let fb = ErrorFeedback::from_candidates(&cands);
+        let fb = ErrorFeedback::from_candidates(&cands, &TestSummary::default());
         assert_eq!(fb.buckets.len(), 2);
         // BTreeMap orders alphabetically — apply, parse
         assert_eq!(fb.buckets[0].class, "apply");
@@ -933,7 +1337,7 @@ mod tests {
 
     #[test]
     fn error_feedback_is_empty_when_no_candidate_errored() {
-        let fb = ErrorFeedback::from_candidates(&[]);
+        let fb = ErrorFeedback::from_candidates(&[], &TestSummary::default());
         assert!(fb.is_empty());
         assert_eq!(fb.render(4), String::new());
     }
@@ -941,7 +1345,7 @@ mod tests {
     #[test]
     fn error_feedback_render_surfaces_sample_and_count() {
         let cands = vec![errored("parse", "no action+block found")];
-        let fb = ErrorFeedback::from_candidates(&cands);
+        let fb = ErrorFeedback::from_candidates(&cands, &TestSummary::default());
         let r = fb.render(4);
         assert!(r.contains("What failed last round"));
         assert!(r.contains("`parse` failed 1 of 4"));
@@ -984,5 +1388,59 @@ mod tests {
         assert!(content.contains("Restart slot"));
         assert!(content.contains("PRISTINE BASELINE"));
         assert!(content.contains("different overall approach"));
+    }
+}
+
+#[cfg(test)]
+mod multi_file_target_tests {
+    use super::*;
+
+    #[test]
+    fn rewrite_resolves_to_the_file_holding_the_function() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("minilang")).unwrap();
+        std::fs::write(tmp.path().join("minilang/__init__.py"), "from .evaluator import evaluate_ast\n").unwrap();
+        std::fs::write(
+            tmp.path().join("minilang/evaluator.py"),
+            "def evaluate_ast(node, env):\n    return None\n",
+        )
+        .unwrap();
+        let files = vec![
+            "minilang/__init__.py".to_string(),
+            "minilang/evaluator.py".to_string(),
+        ];
+        let action = EditAction::RewriteFunction {
+            name: "evaluate_ast".into(),
+        };
+        assert_eq!(
+            resolve_edit_target(tmp.path(), &files, &action).as_deref(),
+            Some("minilang/evaluator.py")
+        );
+    }
+
+    #[test]
+    fn explicit_write_file_path_wins_and_patches_stay_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        let files = vec!["a.py".to_string()];
+        let w = EditAction::WriteFile {
+            path: Some("pkg/new_module.py".into()),
+        };
+        assert_eq!(
+            resolve_edit_target(tmp.path(), &files, &w).as_deref(),
+            Some("pkg/new_module.py")
+        );
+        let p = EditAction::PatchLines { start: 1, end: 3 };
+        assert!(resolve_edit_target(tmp.path(), &files, &p).is_none());
+    }
+
+    #[test]
+    fn render_source_files_labels_paths_and_reports_omissions() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "x = 1\n").unwrap();
+        std::fs::write(tmp.path().join("b.py"), "y = 2\n").unwrap();
+        let out = render_source_files(tmp.path(), &["a.py".into(), "b.py".into()]);
+        assert!(out.contains("### `a.py`"));
+        assert!(out.contains("### `b.py`"));
+        assert!(!out.contains("additional files not shown"));
     }
 }

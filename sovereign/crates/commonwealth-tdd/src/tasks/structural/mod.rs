@@ -15,3 +15,4 @@
 pub mod max_file_size;
 
 pub use max_file_size::render as render_max_file_size;
+pub use max_file_size::{ladder_rungs, render_ladder as render_max_file_size_ladder};

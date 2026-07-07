@@ -146,6 +146,33 @@ pub struct ChunkDto {
     pub title: Option<String>,
 }
 
+/// One chunk inside a [`FeedDocDto`] — carries the raw-metadata-derived
+/// `outbound_links` (wikilink target titles for newsworthy; empty for
+/// corpora whose extractor doesn't stamp links).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedChunkDto {
+    pub chunk_id: String,
+    pub content: String,
+    pub title: Option<String>,
+    pub outbound_links: Vec<String>,
+}
+
+/// One source document in a [`document_feed`] response — for the
+/// newsworthy corpus, one portal day (`source_doc_id = "YYYY-MM-DD"`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedDocDto {
+    pub source_doc_id: String,
+    pub chunks: Vec<FeedChunkDto>,
+}
+
+/// [`document_feed`] response: documents newest-first by
+/// `source_doc_id` (dates sort correctly lexicographically).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentFeedDto {
+    pub corpus_id: String,
+    pub docs: Vec<FeedDocDto>,
+}
+
 /// A claim atom projected for the explorer's "arguments" view — the entity
 /// graph ops don't surface claims, so this carries the proposition, its
 /// discourse + epistemic framing, who it's attributed to (entity name,
@@ -863,6 +890,80 @@ pub async fn read_chunk(index_path: &Path, chunk_id: u64) -> Result<ChunkDto, St
         content: c.content,
         title: c.title,
     })
+}
+
+/// Document-keyed feed over a corpus: the latest `limit_docs` source
+/// documents (by `source_doc_id`, descending — date-keyed corpora like
+/// `wikipedia-newsworthy` therefore come newest-first), each with its
+/// chunks in id order and the `outbound_links` parsed from raw chunk
+/// metadata. This is the read primitive behind feed-shaped mesh apps
+/// (the "Today" current-events app; a future inbox app groups by
+/// thread the same way).
+pub async fn document_feed(
+    index_path: &Path,
+    limit_docs: usize,
+) -> Result<DocumentFeedDto, String> {
+    let index = CorpusIndex::open(index_path)
+        .await
+        .map_err(|e| format!("open index: {e}"))?;
+
+    let by_doc = index
+        .group_chunks_by_source_doc()
+        .await
+        .map_err(|e| format!("group by source doc: {e}"))?;
+    let mut doc_ids: Vec<String> = by_doc.keys().cloned().collect();
+    doc_ids.sort();
+    doc_ids.reverse();
+    doc_ids.truncate(limit_docs.max(1));
+
+    // Raw metadata is a separate projection (content is not in it, and
+    // `get_chunks` drops metadata) — join the two by chunk id.
+    let metadata_by_id: HashMap<u64, String> = index
+        .all_chunks_with_raw_metadata()
+        .await
+        .map_err(|e| format!("read chunk metadata: {e}"))?
+        .into_iter()
+        .filter_map(|c| c.metadata_raw.map(|m| (c.id, m)))
+        .collect();
+
+    let mut docs = Vec::with_capacity(doc_ids.len());
+    for doc_id in doc_ids {
+        let mut ids = by_doc.get(&doc_id).cloned().unwrap_or_default();
+        ids.sort_unstable();
+        let chunks = index
+            .get_chunks(&ids)
+            .await
+            .map_err(|e| format!("read chunks for {doc_id}: {e}"))?;
+        let feed_chunks = chunks
+            .into_iter()
+            .map(|c| FeedChunkDto {
+                outbound_links: metadata_by_id
+                    .get(&c.id)
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+                    .and_then(|v| {
+                        v.get("outbound_links").and_then(|l| l.as_array()).map(|a| {
+                            a.iter()
+                                .filter_map(|s| s.as_str().map(String::from))
+                                .collect()
+                        })
+                    })
+                    .unwrap_or_default(),
+                chunk_id: c.id.to_string(),
+                content: c.content,
+                title: c.title,
+            })
+            .collect();
+        docs.push(FeedDocDto {
+            source_doc_id: doc_id,
+            chunks: feed_chunks,
+        });
+    }
+
+    let corpus_id = index_path
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    Ok(DocumentFeedDto { corpus_id, docs })
 }
 
 /// Pull `YYYY-MM` from the `Date:` line of an email chunk's RFC5322 preamble.

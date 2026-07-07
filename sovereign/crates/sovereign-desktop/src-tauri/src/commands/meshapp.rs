@@ -528,6 +528,26 @@ pub async fn meshapp_read_chunk(
         .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
+/// `window.meshApp.documentFeed(corpusId, limitDocs)` — gated on
+/// `mesh_store_read`. The latest N source documents with their chunks
+/// and metadata-derived `outbound_links`, newest `source_doc_id` first —
+/// the read primitive for feed-shaped apps (the "Today" current-events
+/// app renders portal days; an inbox app would render threads).
+#[tauri::command]
+pub async fn meshapp_document_feed(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    limit_docs: Option<u32>,
+) -> Result<sovereign_meshapp::DocumentFeedDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    sovereign_meshapp::document_feed(&path, limit_docs.unwrap_or(14).clamp(1, 90) as usize)
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
+}
+
 /// `window.meshApp.wrappedArtifact(corpusId)` — gated on `mesh_store_read`.
 /// The precomputed Wrapped story-card artifact. Desktop-native build
 /// trigger: the lib op returns the cached `wrapped/all-time.json` under the

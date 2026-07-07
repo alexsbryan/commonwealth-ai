@@ -25,8 +25,8 @@ use std::sync::Arc;
 use crate::backend::ChatBackend;
 use crate::tasks::make_passing::{make_failing_tests_pass, MakePassingArgs};
 use crate::tasks::write_failing_test::{write_failing_test, WriteFailingTestArgs};
-use crate::trial::run_trial;
-use crate::types::{TrialConfig, TrialResult, TrialStatus};
+use crate::trial::run_trial_observed;
+use crate::types::{RoundObserver, RoundSummary, TrialConfig, TrialResult, TrialStatus};
 use crate::workdir::Workdir;
 
 pub struct BddCycleArgs {
@@ -63,6 +63,20 @@ pub enum ReviewMode {
     PauseAfterSynthesis,
 }
 
+/// Which of the cycle's two trials a streamed round belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BddStage {
+    /// The Red trial — writing the one failing test.
+    Synthesis,
+    /// The MaximizePassing trial — driving it green.
+    Green,
+}
+
+/// Stage-labeled round observer for the cycle. Same contract as
+/// [`RoundObserver`], with the stage disambiguating which trial the
+/// round came from.
+pub type BddRoundObserver = Arc<dyn Fn(BddStage, &RoundSummary) + Send + Sync>;
+
 pub struct BddCycleResult {
     pub synthesis: TrialResult,
     /// `Some(green_result)` when the green stage ran (Auto mode +
@@ -76,6 +90,15 @@ pub struct BddCycleResult {
 }
 
 pub async fn bdd_cycle(args: BddCycleArgs, backend: Arc<dyn ChatBackend>) -> BddCycleResult {
+    bdd_cycle_observed(args, backend, None).await
+}
+
+/// [`bdd_cycle`] with an optional stage-labeled round observer.
+pub async fn bdd_cycle_observed(
+    args: BddCycleArgs,
+    backend: Arc<dyn ChatBackend>,
+    observer: Option<BddRoundObserver>,
+) -> BddCycleResult {
     let BddCycleArgs {
         workdir,
         model,
@@ -102,7 +125,11 @@ pub async fn bdd_cycle(args: BddCycleArgs, backend: Arc<dyn ChatBackend>) -> Bdd
         test_command: test_command.clone(),
         config: config.clone(),
     });
-    let synthesis = run_trial(synthesis_trial, Arc::clone(&backend)).await;
+    let synthesis_observer: Option<RoundObserver> = observer.as_ref().map(|o| {
+        let o = Arc::clone(o);
+        Arc::new(move |r: &RoundSummary| o(BddStage::Synthesis, r)) as RoundObserver
+    });
+    let synthesis = run_trial_observed(synthesis_trial, Arc::clone(&backend), synthesis_observer).await;
 
     let (generated_test_path, generated_test_content) =
         if matches!(synthesis.status, TrialStatus::Reached) {
@@ -168,7 +195,11 @@ pub async fn bdd_cycle(args: BddCycleArgs, backend: Arc<dyn ChatBackend>) -> Bdd
         test_command,
         config,
     });
-    let green = run_trial(green_trial, backend).await;
+    let green_observer: Option<RoundObserver> = observer.as_ref().map(|o| {
+        let o = Arc::clone(o);
+        Arc::new(move |r: &RoundSummary| o(BddStage::Green, r)) as RoundObserver
+    });
+    let green = run_trial_observed(green_trial, backend, green_observer).await;
 
     BddCycleResult {
         synthesis,
@@ -182,7 +213,7 @@ pub async fn bdd_cycle(args: BddCycleArgs, backend: Arc<dyn ChatBackend>) -> Bdd
 /// most-recently-modified test file path. Best-effort — used only
 /// for surfacing the synthesized test back to the caller when no
 /// `test_file_hint` was supplied.
-fn most_recently_modified_test(workdir: &std::path::Path) -> Option<PathBuf> {
+pub(crate) fn most_recently_modified_test(workdir: &std::path::Path) -> Option<PathBuf> {
     use std::time::SystemTime;
     let mut best: Option<(SystemTime, PathBuf)> = None;
     let candidates = [workdir.join("tests"), workdir.to_path_buf()];
