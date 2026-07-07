@@ -777,10 +777,14 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // Search with specific corpora.
-    // Both query_embedding and query_text are required by OICP §6.1.
+    // Search with specific corpora. This exercises shard routing, so we
+    // supply a pre-embedded query (the mesh-internal shape). OICP v0.4 §6.1
+    // makes `query_embedding` optional — when absent the host embeds
+    // `query_text` — but that thin-client path needs local inference the
+    // simulated harness doesn't run; it's covered by the oicp-types unit
+    // tests and the oicp-conformance suite instead.
     let request = serde_json::json!({
-        "query_embedding": [],
+        "query_embedding": [0.1, 0.2, 0.3],
         "query_text": "Ostrom design principles",
         "corpora": ["wikipedia", "sep"],
         "limit": 10
@@ -805,8 +809,10 @@ async fn knowledge_search_empty_when_no_shards() {
     // No knowledge plan set — should return 503.
     tokio::time::sleep(Duration::from_millis(50)).await;
 
+    // Pre-embedded query (see the shard-routing test above for why the
+    // text-only §6.1 path isn't exercised in the simulated harness).
     let request = serde_json::json!({
-        "query_embedding": [],
+        "query_embedding": [0.1, 0.2, 0.3],
         "query_text": "test query",
         "limit": 5
     });

@@ -843,7 +843,18 @@ pub enum MatchQuality {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeSearchRequest {
+    /// Pre-computed query embedding. OPTIONAL as of v0.4: when empty,
+    /// the HOST embeds `query_text` with its advertised
+    /// [`EmbedModelInfo::query_instruction_prefix`] — the OICP contract
+    /// is thin-client (the host owns the embed model), so a client need
+    /// only send text. Mesh peers still pre-embed and send this to
+    /// avoid re-embedding on every hop; when present it is used as-is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub query_embedding: Vec<f32>,
+    /// The query text. `query` is accepted as an alias — it is the
+    /// natural OICP thin-client field name; `query_text` is retained
+    /// for the mesh-internal shape.
+    #[serde(default, alias = "query")]
     pub query_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corpora: Option<Vec<String>>,
@@ -2937,5 +2948,41 @@ mod tests {
         let best = best_claim_for_request(&manifest, &req).unwrap();
         // Specialist at exact-hint 0.95 beats generalist's 0.5-fallback path.
         assert_eq!(best.model_id, "coder");
+    }
+
+    #[test]
+    fn knowledge_search_thin_client_shape_deserializes() {
+        // OICP v0.4 §6.1: a thin client sends only `query` — no embedding,
+        // and the OICP field name `query` (not `query_text`).
+        let req: KnowledgeSearchRequest =
+            serde_json::from_value(serde_json::json!({"query": "stoic virtue", "limit": 3})).unwrap();
+        assert_eq!(req.query_text, "stoic virtue");
+        assert!(req.query_embedding.is_empty(), "host embeds when absent");
+        assert_eq!(req.effective_limit(), 3);
+    }
+
+    #[test]
+    fn knowledge_search_mesh_shape_still_deserializes() {
+        // The mesh-internal shape (pre-embedded, `query_text`) is unchanged.
+        let req: KnowledgeSearchRequest = serde_json::from_value(serde_json::json!({
+            "query_embedding": [0.1, 0.2, 0.3],
+            "query_text": "stoic virtue",
+        }))
+        .unwrap();
+        assert_eq!(req.query_embedding, vec![0.1, 0.2, 0.3]);
+        assert_eq!(req.query_text, "stoic virtue");
+    }
+
+    #[test]
+    fn knowledge_search_empty_embedding_omitted_from_wire() {
+        // An absent embedding must not serialize as `query_embedding: []`.
+        let req = KnowledgeSearchRequest {
+            query_embedding: Vec::new(),
+            query_text: "q".into(),
+            corpora: None,
+            limit: None,
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        assert!(v.get("query_embedding").is_none());
     }
 }
