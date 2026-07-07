@@ -26,7 +26,10 @@ function alive(pid: number): boolean {
 
 export default async function globalTeardown(): Promise<void> {
   // Stop the harness-owned daemon first (it holds the shared index dir open).
-  if (process.env.SOVEREIGN_REAL_MANAGED_DAEMON === "1") {
+  // Managed mode is the default (global-setup.ts); attach mode (the opt-out)
+  // never started a daemon, so there's nothing to stop.
+  const managed = process.env.SOVEREIGN_REAL_ALLOW_ATTACH !== "1";
+  if (managed) {
     try {
       execSync(`${JSON.stringify(DAEMON_BIN)} daemon stop`, {
         env: {
