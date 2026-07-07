@@ -112,13 +112,27 @@ impl ChatBackend for ReqwestChatBackend {
             "max_tokens": max_tokens,
             "stream": false,
         });
-        let resp = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| BackendError::Transport(e.to_string()))?;
+        // One retry with a short backoff on transport errors. Local
+        // daemons wedge transiently under queued parallel candidates
+        // (I-arm 5.1 r4: six candidates AND their continuation calls
+        // all died err:backend in one round — a wedged moment, not
+        // six independent failures). A failed retry still errors.
+        let send_once = || async {
+            self.http
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| BackendError::Transport(e.to_string()))
+        };
+        let resp = match send_once().await {
+            Ok(r) => r,
+            Err(first) => {
+                tracing::debug!(error = %first, "backend transport error — one retry in 3s");
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                send_once().await?
+            }
+        };
         let status = resp.status();
         let text = resp
             .text()
