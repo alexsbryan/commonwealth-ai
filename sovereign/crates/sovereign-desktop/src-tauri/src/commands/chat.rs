@@ -199,7 +199,20 @@ pub async fn send_message_stream(
                     .and_then(|m| m.get("intent"))
                     .and_then(|v| v.as_str())
                     == Some("RecipeAuthor");
-                let full_text = if is_recipe_author {
+                // A cancelled turn is shown EXACTLY as it streamed — the raw
+                // partial (or nothing). `present_answer` must be skipped: its
+                // empty-input path substitutes an "I couldn't generate a
+                // response" fallback, which is both wrong for a turn the user
+                // deliberately stopped AND breaks stream integrity (the FE
+                // received 0 chunks, so a 50-char fallback in the terminal
+                // makes concat(chunks) != full_text). See finish_reason.
+                let was_cancelled = metadata
+                    .as_ref()
+                    .and_then(|m| m.get("provenance"))
+                    .and_then(|p| p.get("finish_reason"))
+                    .and_then(|f| f.as_str())
+                    == Some("cancelled");
+                let full_text = if is_recipe_author || was_cancelled {
                     full_text
                 } else {
                     sovereign_core::pipeline::presenter::present_answer(&full_text)
@@ -564,25 +577,42 @@ pub async fn cancel_stream(
 ) -> Result<(), String> {
     let guard = require_runtime!(state);
     let runtime = guard.as_ref().unwrap();
-    if let Some(session) = runtime.sessions.latest_for_conversation(&conversation_id) {
-        tracing::info!(
-            session_id = %session.id,
+    // Cancel the registered session if one exists…
+    let hit_session = runtime
+        .sessions
+        .latest_for_conversation(&conversation_id)
+        .map(|session| {
+            session.cancel.cancel();
+            session.id.clone()
+        });
+    // …AND trip any reserved preparing-window token. On a slow model the
+    // Stop click races session registration: `latest_for_conversation`
+    // above may have cancelled the PREVIOUS (stale) session while the real
+    // turn is still in preparing (build-context + classify + retrieve, ~5s
+    // on a 4B). `cancel_preparing` trips the token `sessions.begin` will
+    // ADOPT, so the cancel carries through no matter which side of
+    // registration we landed on. (2026-07-07 slow-model race.)
+    let hit_preparing = runtime.sessions.cancel_preparing(&conversation_id);
+    match (&hit_session, hit_preparing) {
+        (Some(id), _) => tracing::info!(
+            session_id = %id,
+            preparing = hit_preparing,
             conversation_id,
             "cancel_stream: user requested abort"
-        );
-        session.cancel.cancel();
-    } else {
-        // A miss means the backend cancel is a no-op (the turn runs to natural
-        // completion). This is expected when the stream already finished, but on a
-        // slow model it can also mean the FE cancelled during `preparing` — before
-        // the turn's session was registered — so log the live inventory at info to
-        // keep the id/timing mismatch legible. The desktop UI no longer depends on
-        // this succeeding: `handleStop` recovers the UI optimistically regardless.
-        tracing::info!(
+        ),
+        (None, true) => tracing::info!(
+            conversation_id,
+            "cancel_stream: cancelled a preparing turn (raced session registration)"
+        ),
+        (None, false) => tracing::info!(
+            // Neither a live session nor a preparing turn — the stream
+            // likely already finished. The desktop UI recovers optimistically
+            // in `handleStop` regardless; log the inventory so an id/timing
+            // mismatch stays legible.
             conversation_id,
             live_sessions = ?runtime.sessions.conversation_ids(),
-            "cancel_stream: no live session — cancel is a no-op (already finished, or FE raced session registration)"
-        );
+            "cancel_stream: nothing in flight — cancel is a no-op (already finished?)"
+        ),
     }
     Ok(())
 }
