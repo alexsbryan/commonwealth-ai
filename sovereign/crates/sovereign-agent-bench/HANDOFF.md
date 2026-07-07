@@ -222,6 +222,22 @@ dim_a to 1 (certification question) + residual fixation/EOS tails.
 J-arm (3.3+5.1, --trials 1) running at handoff time. After J:
 certification candidate = Python bank x3 with --judge-trials 3.
 
+**GENERALIZATION PROTOCOL (operator, 2026-07-07): reaching 45/45 on
+the training bank must trigger an overfit challenge.** Three axes:
+(1) HOLDOUT battery — new problems in the same format, derived
+mechanically from external canonical sources (Exercism/MBPP-shaped),
+same class spectrum. Holdout receipts are READ-ONLY: no harness
+change may cite them as motivation (the chaos-QA frozen-rubric
+discipline); first-run score = the generalization number;
+training-minus-holdout delta = the tracked overfit measure.
+(2) Cross-model — same battery on a different zoo model
+(Darwin-36B / 4B) separates 'harness helps small models' from
+'harness fits this Qwen'. (3) Cross-language — the parked Rust plus
+roadmap Go/TS problems exercise the family-generality claims
+(bounds finder, validators, edit inference) that Python mastery
+never touches. Holdout problems live under problems/ with ids
+prefixed `h.` and are EXCLUDED from iteration arms by convention.
+
 **Operator ground rules recorded:** (a) fixes must generalize to
 categories/families, never the problem or language under test;
 (b) leverage existing tools/libraries first (syn over hand-rolled;
