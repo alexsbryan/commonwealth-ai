@@ -37,6 +37,10 @@ members = [
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
     "studio/crates/sovereign-workflow-host",
+    # Headless studio CLI — authors + tests recipes and runs workflows against any
+    # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
+    # no sovereign-core). The proof the studio package is independently usable.
+    "studio/crates/sovereign-studio",
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
@@ -130,6 +134,7 @@ sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
+sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
