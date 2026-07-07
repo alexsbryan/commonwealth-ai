@@ -51,6 +51,10 @@ journeyTest(J_CORPUS_FILTER, async ({ page, run }) => {
     "with a source enabled and text typed, Send is available",
   ).toBeEnabled();
 
+  // The scope now lives behind the AskScopeBar (elegance refactor — Move 1):
+  // the strip is revealed by clicking the "Asking ‹…›" bar, not always shown.
+  await page.getByTestId("ask-scope-bar").click();
+
   // ── Disable the only corpus: the empty allow-list is enforced ──
   const strip = page.locator(".corpus-filter-strip");
   await expect(

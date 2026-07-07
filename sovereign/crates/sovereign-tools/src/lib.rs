@@ -35,30 +35,44 @@ pub mod local_corpus;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
-pub mod read_csv;
-pub mod vector_mean;
+pub use sovereign_tools_base::read_csv;
+pub use sovereign_tools_base::vector_mean;
 pub mod wikipedia_fetch;
 // `manifest` module retired 2026-05-22 — commonwealth-api now
 // injects tool descriptors at construction time rather than pulling
 // from a global static. See `commonwealth-api::middleware::tool_injector`
 // and `context_injector` for the new shape.
-pub mod mcp;
+pub use sovereign_tools_base::mcp;
 pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
-pub mod read_file;
-pub mod read_json;
-pub mod recipe_author;
-pub mod search;
-pub mod shell;
+/// The recipe-authoring tool bundle moved into the extractable
+/// `sovereign-recipe-author` package; re-exported here as the `recipe_author`
+/// module so every existing `sovereign_tools::recipe_author::…` path (and the
+/// crate-root tool re-exports below) keeps resolving unchanged. The monolith
+/// adapters that back its seams (`recipe_notes_adapter`, `recipe_tester_adapter`)
+/// stay in this crate.
+pub use sovereign_recipe_author as recipe_author;
+pub use sovereign_tools_base::read_file;
+pub use sovereign_tools_base::read_json;
+/// Monolith-side adapter binding the real `NoteStore` to the `RecipeNotes`
+/// contract the recipe-author tools depend on (keeps that bundle
+/// corpus-engine-notes-free).
+pub mod recipe_notes_adapter;
+/// Monolith-side adapter binding the real `CorpusEngine::test_recipe` to the
+/// `RecipeTester` contract the recipe validate/test tools depend on (keeps that
+/// bundle corpus-engine-free).
+pub mod recipe_tester_adapter;
+pub use sovereign_tools_base::search;
+pub use sovereign_tools_base::shell;
 pub mod spec_watcher;
 pub mod typed_call;
 pub mod typed_extension;
-pub mod web;
-pub mod write_file;
-pub mod write_json;
-pub mod zip;
+pub use sovereign_tools_base::web;
+pub use sovereign_tools_base::write_file;
+pub use sovereign_tools_base::write_json;
+pub use sovereign_tools_base::zip;
 
 pub use attached_document_search::AttachedDocumentSearchTool;
 #[cfg(feature = "treesitter")]
@@ -124,3 +138,26 @@ pub use recipe_author::{
 };
 pub use sovereign_core;
 pub use wikipedia_fetch::WikipediaFetchTool;
+
+/// The corpus/atlas-backed workflow tools that intentionally do NOT live in
+/// `sovereign-tools-base` — each drags corpus-engine/LanceDB, which is exactly
+/// what the base bundle exists to avoid. `sovereign-workflow-host`'s
+/// `standard_registry` therefore registers only the pure tools; every call site
+/// that runs workflows and wants the *full* surface (the CLI `workflow run` /
+/// `corpus ingest`, the desktop run/ingest commands, the daemon living-trigger)
+/// injects these through the runner's `extra_tools` slot.
+///
+/// Kept here — beside the tools themselves — so "which five" is stated once
+/// rather than re-listed (and drifting) at each injection site. Registration
+/// order is irrelevant: the registry keys on tool id and these ids are distinct
+/// from the base set, so injecting them via `extra_tools` reproduces exactly the
+/// pre-extraction 16-tool registry.
+pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
+    vec![
+        Box::new(extract::ExtractTool),
+        Box::new(corpus_store::CorpusStoreTool),
+        Box::new(corpus_search::CorpusSearchTool),
+        Box::new(atlas_phase::gaps::AtlasGapsTool),
+        Box::new(atlas_phase::tensions::AtlasTensionsTool),
+    ]
+}

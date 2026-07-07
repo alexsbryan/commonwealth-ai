@@ -750,7 +750,10 @@ async fn run_ingest_via_runner(
         4,
         false,
         params,
-        vec![],
+        // Preserve the full tool surface: the corpus/atlas tools moved out of the
+        // host's base registry, so inject them here (the desktop links
+        // sovereign-tools).
+        sovereign_tools::workflow_corpus_tools(),
         Some(observer),
     )
     .await

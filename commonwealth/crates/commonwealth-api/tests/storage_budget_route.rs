@@ -175,6 +175,7 @@ fn embed() -> EmbedModelInfo {
         dimensions: 1024,
         pooling: PoolingStrategy::Mean,
         normalization: NormalizationStrategy::Application,
+        query_instruction_prefix: String::new(),
     }
 }
 

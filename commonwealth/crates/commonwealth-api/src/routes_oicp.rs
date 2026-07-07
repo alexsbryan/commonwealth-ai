@@ -4,10 +4,11 @@ use axum::http::HeaderMap;
 use axum::Json;
 
 use commonwealth_core::ids::NodeId;
+use commonwealth_inference::oicp::features;
 use commonwealth_inference::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
-    FederationManifest, KnowledgeManifest, LatencyClass, ModelStatus, PeerDescriptor, ProviderInfo,
-    ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
+    FederationManifest, IngestEndpoints, KnowledgeManifest, LatencyClass, ModelStatus,
+    PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -95,6 +96,129 @@ pub(crate) fn synthesize_default_claims(
     }
 }
 
+/// OICP v0.4 §2.1 features the *embedded* llama.cpp inference path
+/// honours. The embedded sampler enforces JSON-Schema and Lark grammars
+/// and the sampler allow-lists, consumes the `oicp` request envelope,
+/// honours `think_budget`, and stamps model fingerprints — the full set.
+const EMBEDDED_FEATURES: &[&str] = &[
+    features::CONSTRAINT_JSON_SCHEMA,
+    features::CONSTRAINT_JSON_OBJECT,
+    features::CONSTRAINT_LARK,
+    features::CONSTRAINT_ALLOWLIST_URL,
+    features::CONSTRAINT_ALLOWLIST_EVIDENCE_ID,
+    features::CONSTRAINT_ALLOWLIST_CMD_PREFIX,
+    features::THINK_BUDGET,
+    features::OICP_REQUEST_PROPERTIES,
+];
+
+/// Conservative feature set for the standalone-Commonwealth orchestrator
+/// path, which may front heterogeneous backends. We claim only what any
+/// OpenAI-compatible llama-server the orchestrator spawns reliably
+/// honours: JSON-Schema / JSON-object structured output and the routing
+/// envelope. Lark grammar and the sampler allow-lists are embedded-only
+/// and NOT advertised here.
+const HUB_FEATURES: &[&str] = &[
+    features::CONSTRAINT_JSON_SCHEMA,
+    features::CONSTRAINT_JSON_OBJECT,
+    features::OICP_REQUEST_PROPERTIES,
+];
+
+// NOTE: `features::MODEL_FINGERPRINT` is intentionally NOT advertised
+// yet. We populate `ProviderModel.fingerprint` below (harmless extra
+// data a client may read), but the feature's contract (§6) also requires
+// the concrete model's fingerprint to be echoed in every response's OICP
+// meta — that response-echo, and the PhaseCache keying that consumes it,
+// land together in the behavior-change phase. Advertise the feature there.
+
+/// Opaque model fingerprint (OICP v0.4 §6): changes when the served
+/// weights / quantization / template change, so a client can key
+/// model-dependent caches on `(id, fingerprint)`. Synthesized from the
+/// stable identity a manifest already carries — id, quantization, size.
+/// Alias rows (`primary` / `fast`) carry no quant/size and fall back to
+/// the bare id; the concrete model rows they front carry the real ones,
+/// and a response's `model` field resolves to a concrete id (§6).
+pub(crate) fn synthesize_fingerprint(
+    id: &str,
+    quantization: Option<&str>,
+    size_gb: Option<f32>,
+) -> String {
+    match (quantization.filter(|q| !q.is_empty()), size_gb) {
+        (Some(q), Some(gb)) => format!("{id}@{q}#{gb:.3}"),
+        (Some(q), None) => format!("{id}@{q}"),
+        (None, Some(gb)) => format!("{id}#{gb:.3}"),
+        (None, None) => id.to_string(),
+    }
+}
+
+/// Apply OICP v0.4 additive enrichment to an outbound manifest (§2/§4/§5/§6),
+/// on BOTH the local-inference and hub-synthesized paths so a client sees
+/// identical v0.4 posture regardless of daemon shape: advertise the
+/// honoured `features`, stamp per-model fingerprints, publish the local
+/// embed model (with its query-instruction prefix), and — when a corpus
+/// engine is wired — advertise the ingest endpoints (§5) that
+/// `routes_oicp_ingest` serves.
+fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut ProviderManifest) {
+    // §2 features.
+    let mut feats: Vec<String> = if embedded { EMBEDDED_FEATURES } else { HUB_FEATURES }
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    // §5 ingest surface — advertised iff a corpus engine is wired on this
+    // node (the routes 503 without one). The `knowledge.ingest` endpoints
+    // and these feature strings MUST travel together, so they are derived
+    // in one place: the `.then` both pushes the features and yields the
+    // endpoints, or neither happens.
+    let ingest = state.inner.corpus_engine.is_some().then(|| {
+        feats.push(features::INGEST_V1.to_string());
+        feats.push(features::INGEST_RECIPE_TEST.to_string());
+        IngestEndpoints {
+            install_endpoint: "/oicp/v1/corpus/install".into(),
+            progress_endpoint: "/oicp/v1/corpus/progress".into(),
+            test_endpoint: Some("/oicp/v1/recipe/test".into()),
+        }
+    });
+    manifest.features = feats;
+
+    // §6 per-model fingerprints (leave any already set by the source).
+    for model in &mut manifest.models {
+        if model.fingerprint.is_none() {
+            model.fingerprint = Some(synthesize_fingerprint(
+                &model.id,
+                model.quantization.as_deref(),
+                model.size_gb,
+            ));
+        }
+    }
+
+    // §4 embed-model completeness + §5 ingest endpoints, both published in
+    // the knowledge section. The embed model (with its v0.4 query-
+    // instruction prefix) already lives in the inference store, set by the
+    // daemon at bootstrap; a client reconstructs bit-compatible query
+    // embeddings from it for federated search.
+    let embed_model = state.inner.inference_store.get_local_embed_model();
+    if embed_model.is_some() || ingest.is_some() {
+        match &mut manifest.knowledge {
+            Some(k) => {
+                if embed_model.is_some() {
+                    k.embed_model = embed_model;
+                }
+                if ingest.is_some() {
+                    k.ingest = ingest;
+                }
+            }
+            None => {
+                manifest.knowledge = Some(KnowledgeManifest {
+                    corpora: Vec::new(),
+                    search_endpoint: "/v1/knowledge/search".into(),
+                    embed_model,
+                    ingest,
+                });
+            }
+        }
+    }
+}
+
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
 ///
 /// Reads the optional `X-Node-Id` request header and, when present,
@@ -130,6 +254,8 @@ pub async fn capabilities(
                     provider_type: Some(ProviderType::Mesh),
                 });
             }
+            drop(mesh);
+            apply_v04_enrichment(&state, true, &mut manifest);
             apply_peer_preference(&state, &requester, &mut manifest);
             return Json(manifest);
         }
@@ -178,6 +304,7 @@ pub async fn capabilities(
                 // that ModelInfo had no size — it always did.)
                 size_gb: (model.size_bytes > 0).then(|| model.size_bytes as f32 / 1_000_000_000.0),
                 claims,
+                fingerprint: None,
             }
         })
         .collect();
@@ -226,9 +353,13 @@ pub async fn capabilities(
             corpora: Vec::<CorpusDescriptor>::new(),
             search_endpoint: "/v1/knowledge/search".into(),
             embed_model: None,
+            ingest: None,
         }),
         federation,
+        features: Vec::new(),
     };
+    drop(mesh);
+    apply_v04_enrichment(&state, false, &mut manifest);
     apply_peer_preference(&state, &requester, &mut manifest);
     Json(manifest)
 }
@@ -292,6 +423,33 @@ mod tests {
         NodeId::from_u128(byte as u128)
     }
 
+    #[test]
+    fn fingerprint_distinguishes_quant_and_size() {
+        // §6: the fingerprint must change when quant/size change, and
+        // fall back to the bare id when neither is known (alias rows).
+        let a = synthesize_fingerprint("qwen3-9b", Some("Q4_K_M"), Some(5.2));
+        let b = synthesize_fingerprint("qwen3-9b", Some("Q6_K"), Some(7.1));
+        let c = synthesize_fingerprint("qwen3-9b", None, None);
+        assert_ne!(a, b, "different quant/size ⇒ different fingerprint");
+        assert_eq!(c, "qwen3-9b", "alias row falls back to id");
+        // Empty-string quant (the ModelInfo default) is treated as absent.
+        assert_eq!(synthesize_fingerprint("m", Some(""), None), "m");
+    }
+
+    #[test]
+    fn feature_sets_are_registered_and_hub_is_a_subset() {
+        for f in EMBEDDED_FEATURES.iter().chain(HUB_FEATURES) {
+            assert!(features::is_valid(f), "advertised feature {f} is registered");
+        }
+        // The hub is more conservative than embedded: every hub feature
+        // is also honoured by the embedded path.
+        for f in HUB_FEATURES {
+            assert!(EMBEDDED_FEATURES.contains(f), "hub feature {f} ⊆ embedded");
+        }
+        // Lark + allow-lists are embedded-only.
+        assert!(!HUB_FEATURES.contains(&features::CONSTRAINT_LARK));
+    }
+
     fn manifest_with_affinity(affinity: f32) -> ProviderManifest {
         ProviderManifest {
             oicp_version: OICP_VERSION.to_string(),
@@ -316,9 +474,11 @@ mod tests {
                     4_000,
                     affinity,
                 )],
+                fingerprint: None,
             }],
             knowledge: None,
             federation: None,
+            features: Vec::new(),
         }
     }
 

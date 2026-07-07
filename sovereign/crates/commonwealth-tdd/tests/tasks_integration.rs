@@ -149,7 +149,10 @@ async fn split_file_generates_structural_test_in_tests_dir() {
     assert!(test_path.exists(), "structural test must be generated");
     let body = std::fs::read_to_string(&test_path).unwrap();
     assert!(body.contains("test_max_file_size"));
-    assert!(body.contains("limit = 5"));
+    // The ladder generator (tasks::structural::max_file_size) encodes the
+    // max_lines=5 goal as `_over(5)` inside `test_max_file_size_within_5`,
+    // not a bare `limit = 5` binding (the pre-ladder format).
+    assert!(body.contains("_over(5)"));
 
     // The generated test should PASS for a 2-line file, FAIL for a
     // many-line file. Verify it runs and behaves correctly.

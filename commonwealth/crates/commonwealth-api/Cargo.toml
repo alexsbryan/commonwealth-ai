@@ -15,6 +15,9 @@ commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# Staging recipe TOML to a throwaway file for the OICP recipe-test route
+# (the engine's `test_recipe` reads from a path). Also used in dev-deps.
+tempfile = "3"
 # ATOS feature-lifecycle subsystem (the served middleware pipeline:
 # approval-gate / artifact-surface / session-briefing + the session store).
 # OFF by default behind the `atos` feature so the product mesh daemon carries
@@ -100,7 +103,6 @@ commonwealth-discovery = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tower = "0.5"
 http-body-util = "0.1"
-tempfile = "3"
 
 [lints]
 workspace = true

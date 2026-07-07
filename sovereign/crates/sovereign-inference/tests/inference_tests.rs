@@ -284,6 +284,7 @@ fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderMode
         },
         size_gb: None,
         claims: vec![claim],
+        fingerprint: None,
     }
 }
 

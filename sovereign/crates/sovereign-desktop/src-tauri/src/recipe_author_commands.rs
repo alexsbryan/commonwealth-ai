@@ -25,12 +25,13 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use corpus_engine::Recipe;
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use sovereign_contracts::recipe::notes::{NoteRow, NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
     ProjectSummary, RecipeProject,
 };
+use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 use sovereign_workflow::Workflow;
 
 use crate::state::AppState;
@@ -40,8 +41,8 @@ use crate::state::AppState;
 /// command bodies — the frontend renders these as toast text.
 async fn handles(
     state: &Arc<AppState>,
-) -> Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), String> {
-    let notes = state
+) -> Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), String> {
+    let note_store = state
         .notes
         .read()
         .await
@@ -52,6 +53,9 @@ async fn handles(
              Try restarting the desktop or check the daemon log."
                 .to_string()
         })?;
+    // Wrap the concrete NoteStore in the RecipeNotes seam adapter so the
+    // recipe-author tools see only the contract, not corpus-engine.
+    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(note_store));
     let features = state
         .features
         .read()

@@ -78,6 +78,9 @@ pub async fn embed_model_info(embeddings_url: &str) -> Option<EmbedModelInfo> {
         pooling,
         // llama-server normalises server-side by default via --embd-normalize 2.
         normalization: NormalizationStrategy::Server,
+        // v0.3 reconstruction from /v1/models cannot discover the query
+        // prefix; the v0.4 daemon path (A:P2) threads the real value in.
+        query_instruction_prefix: String::new(),
     })
 }
 

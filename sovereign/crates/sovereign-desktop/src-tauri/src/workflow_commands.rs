@@ -252,7 +252,7 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
 #[tauri::command]
 pub async fn workflow_run(
     app: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     name_or_path: String,
     params: BTreeMap<String, String>,
 ) -> Result<WorkflowRunHandle, String> {
@@ -311,7 +311,10 @@ pub async fn workflow_run(
             4,
             false,
             params,
-            vec![],
+            // Preserve the full tool surface: the corpus/atlas tools moved out of
+            // the host's base registry, so inject them here (the desktop links
+            // sovereign-tools).
+            sovereign_tools::workflow_corpus_tools(),
             Some(observer),
         )
         .await

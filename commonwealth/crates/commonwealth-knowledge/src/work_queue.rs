@@ -503,6 +503,7 @@ mod tests {
             dimensions: 1024,
             pooling: commonwealth_core::oicp::PoolingStrategy::Mean,
             normalization: commonwealth_core::oicp::NormalizationStrategy::Application,
+            query_instruction_prefix: String::new(),
         }
     }
 

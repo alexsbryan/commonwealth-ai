@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    PhaseCache, PhaseRunner, PipelineRegistry, RunOutputWriter, SeedStrategy,
+    PhaseRunner, PipelineRegistry, RunOutputWriter, SeedStrategy,
 };
 
 use super::config::EnrichConfig;
@@ -124,7 +124,7 @@ pub async fn cmd_seed(args: &[String]) -> i32 {
     };
     let (embed, chat) = client.into_closures();
 
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
     let runner = PhaseRunner::new(
         pipeline,

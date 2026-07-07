@@ -199,6 +199,12 @@ pub struct ResolvedProvider {
     pub api_version: Option<String>,
     pub extra_params: Option<serde_json::Value>,
     pub structured_output_mode: StructuredOutputMode,
+    /// True when the operator set `structured_output_mode` explicitly
+    /// in `providers.toml`. Capability discovery
+    /// ([`ProviderRegistry::discover_structured_output`]) refines only
+    /// providers where this is `false` — an explicit config is a hard
+    /// override the host's advertised features never overturn.
+    pub structured_output_configured: bool,
 }
 
 /// Registry of every configured provider plus the synthesized
@@ -256,6 +262,9 @@ impl ProviderRegistry {
                                     default_thinking_tokens: cfg.default_thinking_tokens,
                                     api_version: cfg.api_version,
                                     extra_params: cfg.extra_params,
+                                    structured_output_configured: cfg
+                                        .structured_output_mode
+                                        .is_some(),
                                     structured_output_mode: cfg.structured_output_mode.unwrap_or(
                                         match cfg.kind {
                                             ProviderKind::OpenaiCompatible => {
@@ -309,6 +318,10 @@ impl ProviderRegistry {
                 default_thinking_tokens: Some(0),
                 api_version: None,
                 extra_params: None,
+                // The synthesized `local` provider carries the
+                // OpenAI-compat default; discovery may refine it
+                // against the daemon's advertised OICP features.
+                structured_output_configured: false,
                 structured_output_mode: StructuredOutputMode::JsonSchema,
             });
 
@@ -321,6 +334,97 @@ impl ProviderRegistry {
 
     pub fn names(&self) -> Vec<&str> {
         self.providers.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Refine each OpenAI-compatible provider's structured-output mode
+    /// against the host's live OICP capability manifest, for providers
+    /// where the operator did not pin the mode in `providers.toml`.
+    ///
+    /// OICP v0.4 §feature-negotiation is normative: a client MUST NOT
+    /// send a constraint the host does not advertise. So rather than
+    /// assume `json_schema` (the OpenAI-compat default), we read the
+    /// host's advertised `features` and pick the strongest constraint
+    /// it actually supports (`constraint:json_schema` →
+    /// [`StructuredOutputMode::JsonSchema`], else
+    /// `constraint:json_object` → [`StructuredOutputMode::JsonObject`]).
+    ///
+    /// Best-effort and non-fatal: a host that doesn't answer
+    /// `/oicp/v1/capabilities` (a v0.3 host, a non-OICP OpenAI-compat
+    /// server, or an offline daemon) leaves the provider's
+    /// configured/default mode untouched. Anthropic providers are
+    /// skipped (their structured output rides `tools`, not
+    /// `response_format`). Explicitly-configured providers are never
+    /// overridden. Partial adoption is safe — the mode is a
+    /// per-request choice, so a caller that skips discovery simply
+    /// keeps the sensible default.
+    pub async fn discover_structured_output(&mut self) {
+        for prov in self.providers.values_mut() {
+            if prov.structured_output_configured
+                || prov.kind != ProviderKind::OpenaiCompatible
+            {
+                continue;
+            }
+            let manifest = match sovereign_inference::remote::fetch_manifest(
+                &prov.base_url,
+                prov.auth_secret.clone(),
+            )
+            .await
+            {
+                Some(m) => m,
+                None => {
+                    tracing::debug!(
+                        provider = %prov.name,
+                        base = %prov.base_url,
+                        mode = ?prov.structured_output_mode,
+                        "OICP manifest unavailable — keeping default structured-output mode"
+                    );
+                    continue;
+                }
+            };
+            match derive_structured_mode_from_features(&manifest.features) {
+                Some(mode) if mode != prov.structured_output_mode => {
+                    tracing::info!(
+                        provider = %prov.name,
+                        from = ?prov.structured_output_mode,
+                        to = ?mode,
+                        "structured-output mode set from advertised OICP features"
+                    );
+                    prov.structured_output_mode = mode;
+                }
+                Some(mode) => {
+                    tracing::debug!(
+                        provider = %prov.name,
+                        mode = ?mode,
+                        "advertised OICP features confirm structured-output mode"
+                    );
+                }
+                None => {
+                    tracing::debug!(
+                        provider = %prov.name,
+                        mode = ?prov.structured_output_mode,
+                        "OICP features advertise no constraint:* — keeping default structured-output mode"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Pick the structured-output mode a host's advertised OICP `features`
+/// support: `constraint:json_schema` → [`StructuredOutputMode::JsonSchema`]
+/// (schema-enforced, the strongest), else `constraint:json_object` →
+/// [`StructuredOutputMode::JsonObject`] (valid JSON, no schema). `None`
+/// when the features name neither — the caller keeps its default rather
+/// than downgrade blindly. `lark` is a distinct capability, not on this
+/// ladder.
+pub fn derive_structured_mode_from_features(features: &[String]) -> Option<StructuredOutputMode> {
+    use oicp_types::features::{CONSTRAINT_JSON_OBJECT, CONSTRAINT_JSON_SCHEMA};
+    if features.iter().any(|f| f == CONSTRAINT_JSON_SCHEMA) {
+        Some(StructuredOutputMode::JsonSchema)
+    } else if features.iter().any(|f| f == CONSTRAINT_JSON_OBJECT) {
+        Some(StructuredOutputMode::JsonObject)
+    } else {
+        None
     }
 }
 
@@ -373,5 +477,46 @@ mod tests {
         let reg = ProviderRegistry::load_default("http://localhost:9741/v1");
         let local = reg.get("local").unwrap();
         assert_eq!(local.base_url, "http://localhost:9741/v1");
+    }
+
+    #[test]
+    fn synthesized_local_is_not_marked_configured() {
+        // The built-in `local` provider must be eligible for capability
+        // discovery — it carries a *default*, not an operator override.
+        let _home = crate::enrich_cmd::test_env::scoped_home();
+        let reg = ProviderRegistry::load_default("http://localhost:9741");
+        assert!(!reg.get("local").unwrap().structured_output_configured);
+    }
+
+    #[test]
+    fn features_json_schema_wins_over_json_object() {
+        let f = vec![
+            "constraint:json_object".to_string(),
+            "constraint:json_schema".to_string(),
+        ];
+        assert_eq!(
+            derive_structured_mode_from_features(&f),
+            Some(StructuredOutputMode::JsonSchema)
+        );
+    }
+
+    #[test]
+    fn features_json_object_only() {
+        let f = vec!["constraint:json_object".to_string()];
+        assert_eq!(
+            derive_structured_mode_from_features(&f),
+            Some(StructuredOutputMode::JsonObject)
+        );
+    }
+
+    #[test]
+    fn features_without_constraint_keep_default() {
+        // A host advertising features but no constraint:* gives no
+        // decisive signal — the caller keeps its own default rather
+        // than downgrade blindly.
+        let f = vec!["think_budget".to_string(), "ingest:v1".to_string()];
+        assert_eq!(derive_structured_mode_from_features(&f), None);
+        // Empty features (a v0.3 host) likewise.
+        assert_eq!(derive_structured_mode_from_features(&[]), None);
     }
 }

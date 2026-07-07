@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
-    CascadeStep, ChapterSelection, PhaseCache, PhaseRunner, PipelinePhase, RunOutputWriter,
+    CascadeStep, ChapterSelection, PhaseRunner, PipelinePhase, RunOutputWriter,
 };
 
 use super::config::EnrichConfig;
@@ -82,8 +82,24 @@ pub async fn cmd_cascade(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // Negotiate structured-output mode against the daemon's advertised
+    // OICP features before dispatch (OICP v0.4 §feature-negotiation).
+    let client = client.discover_capabilities().await;
     let (embed, chat) = client.into_closures();
-    let cache = PhaseCache::new(paths::cache_dir(&corpus_id));
+    let cache = cfg.phase_cache();
+    // Glassbox: if any cached phase was produced by a different model,
+    // say so up front. Cascading from an early phase recomputes and
+    // re-stamps them cleanly; cascading from a later phase will find
+    // its upstream declined (a clean `missing upstream`) rather than
+    // silently mixing model outputs (OICP v0.4 §6).
+    for (phase, prior) in cache.mismatched_phases() {
+        println!(
+            "  ⚠ cached {} was built with model '{}' (now '{}') — it will not be reused",
+            phase.id(),
+            prior.model,
+            cfg.chat_model
+        );
+    }
     let runs = RunOutputWriter::new(paths::runs_dir(&corpus_id));
     let runner = Arc::new(PhaseRunner::new(
         pipeline,

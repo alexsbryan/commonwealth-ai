@@ -71,6 +71,10 @@ test.describe.serial("first-launch setup", () => {
       // Clean first-launch: desktop.toml-only (matches global-setup's
       // proven profile shape), routed to the wizard, no daemon config.
       profile: { setupComplete: false, cliSetupConfig: false },
+      // Force the embedded first-launch path: the managed-daemon suite keeps a
+      // daemon on :9741, which the bootstrap would otherwise Attach to (skipping
+      // the wizard this journey exists to prove).
+      env: { SOVEREIGN_FORCE_LOCAL: "1" },
     });
     // The boot guard must route to the wizard (fires before any model
     // load, so it's fast).

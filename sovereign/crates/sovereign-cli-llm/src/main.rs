@@ -101,6 +101,13 @@ async fn async_main() {
         "chat" if std::env::var_os("RUST_LOG").is_some() => {
             init_tracing("sovereign_cli_llm=info,sovereign_core=info")
         }
+        // workflow: quiet by default so the run summary + `## item` bodies stay
+        // clean for piping, but glassbox the runner on demand — including the
+        // B:P9a decision of whether the chat context window + embed prefix came
+        // from the host's OICP manifest or the v0.3 fallback.
+        "workflow" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_cli_llm=info,sovereign_workflow_host=info,sovereign_workflow=info")
+        }
         _ => {}
     }
 

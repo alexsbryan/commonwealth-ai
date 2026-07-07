@@ -256,6 +256,23 @@ impl DaemonInferenceClient {
         .with_phase_overrides(cfg.phase_overrides_snapshot()))
     }
 
+    /// Refine the provider registry's structured-output modes against
+    /// live OICP capability manifests before dispatching any request
+    /// (see [`ProviderRegistry::discover_structured_output`]). Async,
+    /// best-effort, idempotent: an unreachable host leaves every
+    /// provider on its configured/default mode. Callers on the enrich
+    /// full-run path chain this after [`Self::from_enrich_config`] so
+    /// the `local` provider's mode reflects what the daemon actually
+    /// advertises (OICP v0.4 §feature-negotiation) rather than a
+    /// hard-coded `json_schema`. Skipping it is safe — the default is
+    /// correct for a Sovereign daemon.
+    pub async fn discover_capabilities(mut self) -> Self {
+        let mut registry = (*self.providers).clone();
+        registry.discover_structured_output().await;
+        self.providers = Arc::new(registry);
+        self
+    }
+
     /// Call `/v1/chat/completions` with a single system + user
     /// message. Output-token cap precedence:
     ///   1. `prompt.max_output_tokens` (composer-attached, opts the

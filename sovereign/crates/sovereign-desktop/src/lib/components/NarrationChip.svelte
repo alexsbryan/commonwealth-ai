@@ -18,6 +18,11 @@
   import { narrationPhaseTag } from "../types";
 
   let entries = $derived(routingStore.narrationLog);
+  // Live token-count heartbeat during the gated synthesis hold. Null
+  // except while a grounded turn is accumulating held tokens; renders
+  // as a ticking "writing… N tokens" pulse below the phase chips so a
+  // long synthesis shows movement without leaking the held content.
+  let heartbeat = $derived(routingStore.synthesisProgress);
 
   // Icons keyed by the snake_case discriminator. Works for both unit
   // variants (bare strings) and struct variants (one-key objects) via
@@ -58,7 +63,7 @@
   }
 </script>
 
-{#if entries.length > 0}
+{#if entries.length > 0 || heartbeat}
   <div class="narration-stack" data-testid="narration-stack">
     {#each entries as entry, i (entry.elapsed_ms + "-" + i)}
       {@const isLatest = i === entries.length - 1}
@@ -76,6 +81,31 @@
         <span class="elapsed">{formatElapsed(entry.elapsed_ms)}</span>
       </div>
     {/each}
+
+    <!-- Live synthesis heartbeat. Distinct from the phase chips: it
+         REPLACES in place (one row, count ticking up) rather than
+         stacking, and breathes via a slow pulse so a 20s gated hold
+         reads as "alive and working" not "frozen." The token count is
+         a COUNT, never the held content — glassbox progress without a
+         grounding leak. -->
+    {#if heartbeat}
+      <div
+        class="narration-chip heartbeat latest"
+        data-phase="synthesis_progress"
+        data-testid="synthesis-heartbeat"
+        title="Synthesizing — {heartbeat.tokens} tokens held for the grounding gate"
+      >
+        <span class="phase-icon heartbeat-icon" aria-hidden="true">✎</span>
+        <span class="narration-text">
+          writing…
+          {#key heartbeat.tokens}
+            <span class="token-count">{heartbeat.tokens.toLocaleString()}</span>
+          {/key}
+          {heartbeat.tokens === 1 ? "token" : "tokens"}
+        </span>
+        <span class="elapsed">{formatElapsed(heartbeat.elapsedMs)}</span>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -166,6 +196,38 @@
     line-height: 1;
   }
 
+  /* Heartbeat chip — the live "writing… N tokens" ticker. Solid accent
+     edge (it's the active element, not a receding log entry) with a
+     slow breathe so the eye reads "working" during the silent gated
+     hold. The count itself changing every ~250ms carries the motion;
+     the pulse is a gentle floor beneath it. */
+  .narration-chip.heartbeat {
+    color: var(--text-secondary);
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
+    animation: chip-arrive 280ms cubic-bezier(0.2, 0.7, 0.2, 1),
+               heartbeat-breathe 1.6s ease-in-out 280ms infinite;
+  }
+
+  /* The pen breathes in opacity — a soft "still thinking" signal that
+     isn't a spinner. */
+  .heartbeat-icon {
+    animation: heartbeat-icon-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* Monospaced so the ticking digits don't reflow the row width. Each
+     new count re-mounts via {#key}, replaying token-pop for a subtle
+     "just changed" flash. */
+  .token-count {
+    display: inline-block;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-weight: 600;
+    font-style: normal;
+    color: var(--accent);
+    animation: token-pop 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
   .narration-text {
     overflow: hidden;
     white-space: nowrap;
@@ -198,11 +260,40 @@
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
     }
   }
+  @keyframes heartbeat-breathe {
+    0%, 100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+  }
+  @keyframes heartbeat-icon-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+  @keyframes token-pop {
+    from {
+      transform: translateY(-1px) scale(1.08);
+      color: color-mix(in srgb, var(--accent) 70%, var(--text-secondary));
+    }
+    to {
+      transform: translateY(0) scale(1);
+      color: var(--accent);
+    }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .narration-chip,
     .narration-chip.latest,
-    .narration-chip.bridging {
+    .narration-chip.bridging,
+    .narration-chip.heartbeat,
+    .heartbeat-icon,
+    .token-count {
       animation: none;
       transition: none;
     }

@@ -61,7 +61,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::NoteStore;
+use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
@@ -72,6 +73,8 @@ use sovereign_tools::recipe_author::{
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
     RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
+use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
+use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
 
 // ─── OpenAI-style wire types ────────────────────────────────────
 //
@@ -1288,8 +1291,8 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         }
     };
     let dotsovereign = home.join(".sovereign");
-    let notes = match NoteStore::open(&dotsovereign.join("notes.db")) {
-        Ok(s) => Arc::new(s),
+    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&dotsovereign.join("notes.db")) {
+        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
         Err(e) => {
             eprintln!("live-trial: notes store: {e}");
             return 2;
@@ -1365,9 +1368,15 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(RecipeReadTool::new()));
     registry.register(Box::new(RecipeWriteTool::new()));
-    registry.register(Box::new(RecipeWriteStructuredTool::new()));
-    registry.register(Box::new(RecipeValidateTool::new()));
-    registry.register(Box::new(RecipeTestTool::new()));
+    registry.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
+        CorpusEngineRecipeTester::new(),
+    ))));
+    registry.register(Box::new(RecipeValidateTool::new(Arc::new(
+        CorpusEngineRecipeTester::new(),
+    ))));
+    registry.register(Box::new(RecipeTestTool::new(Arc::new(
+        CorpusEngineRecipeTester::new(),
+    ))));
     registry.register(Box::new(RegistryBrowseTool));
     registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
     registry.register(Box::new(CheckpointTool::with_stores(
@@ -1589,7 +1598,10 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut overall_pass = true;
     if let Some(recipe_id) = summary.recipe_id.as_deref() {
         eprintln!("\nValidating {} …", recipe_id);
-        let validate_tool = RecipeValidateTool::with_recipes_dir(recipes_dir.clone());
+        let validate_tool = RecipeValidateTool::with_recipes_dir(
+            Arc::new(CorpusEngineRecipeTester::new()),
+            recipes_dir.clone(),
+        );
         match validate_tool
             .execute(&serde_json::json!({"path": recipe_id}), &ctx)
             .await
@@ -1633,7 +1645,10 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 args.sample_size,
                 args.params.len()
             );
-            let test_tool = RecipeTestTool::with_recipes_dir(recipes_dir.clone());
+            let test_tool = RecipeTestTool::with_recipes_dir(
+                Arc::new(CorpusEngineRecipeTester::new()),
+                recipes_dir.clone(),
+            );
             // Forward `--param k=v` flags through to `recipe_test` so
             // recipes that declare an install-time parameter (auth tokens,
             // jurisdiction filters, etc.) get the partner's value at fetch

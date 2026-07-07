@@ -341,3 +341,202 @@ fn first_diff(a: &str, b: &str) -> String {
     }
     String::from("(content is a prefix/length mismatch)")
 }
+
+// ── Recipe variant-catalog descriptor ───────────────────────────────────────
+//
+// The authoring JSON Schema (`sovereign-tools/.../recipe_author/recipe_schema.rs`)
+// needs the discriminator strings + required fields of the `AcquirerConfig` /
+// `ExtractorConfig` / `ChunkerConfig` / `FilterConfig` / `PatternDecl` /
+// `Comparison` tagged enums so its grammar can't drift behind the real types.
+// That catalog used to be extracted by a `sovereign-tools/build.rs` that reached
+// *across the crate boundary* to parse `corpus-engine/src/recipe.rs` — a
+// source-tree path no package split survives. It now lives here, next to the
+// SCHEMA.md generator that already parses the same source, and is emitted as a
+// checked-in artifact `sovereign-recipes/schema/recipe_schema_descriptor.json`
+// that the authoring tool `include_str!`s. corpus-engine owns the catalog (it
+// owns the types); the authoring tool owns the schema shape + overlays.
+
+/// Regenerate + drift-gate the recipe variant-catalog descriptor. Same
+/// `UPDATE_RECIPE_SCHEMA=1` bless as the SCHEMA.md gate above.
+#[test]
+fn recipe_schema_descriptor_is_fresh() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let recipe_file = descriptor::parse(&manifest.join("src/recipe.rs"));
+    let filters_file = descriptor::parse(&manifest.join("src/filters/mod.rs"));
+
+    // Keys inserted in ALPHABETICAL order on purpose. serde_json's object
+    // ordering depends on the `preserve_order` feature: a scoped `-p
+    // corpus-engine` build (no preserve_order) sorts keys via BTreeMap, while a
+    // `--workspace` build unifies in `serde_json/preserve_order` and keeps
+    // insertion order. Inserting alphabetically makes both configs emit
+    // byte-identical output, so the bless command's feature set can't skew the
+    // gate. (The array values below are Vec — insertion order always.)
+    let desc = serde_json::json!({
+        "acquire":    descriptor::variants_with_required(&recipe_file, "AcquirerConfig"),
+        "chunk":      descriptor::variant_keys(&recipe_file, "ChunkerConfig"),
+        "comparison": descriptor::variant_keys(&recipe_file, "Comparison"),
+        "extract":    descriptor::variants_with_required(&recipe_file, "ExtractorConfig"),
+        "filter":     descriptor::variant_keys(&filters_file, "FilterConfig"),
+        "pattern":    descriptor::variant_keys(&recipe_file, "PatternDecl"),
+    });
+    // Pretty-print + a trailing newline (checked-in-file hygiene). The consumer
+    // parses with `serde_json::from_str`, which ignores trailing whitespace.
+    let generated = serde_json::to_string_pretty(&desc).unwrap() + "\n";
+
+    let out_dir = manifest.join("../sovereign-recipes/schema");
+    let out_path = out_dir.join("recipe_schema_descriptor.json");
+    if std::env::var("UPDATE_RECIPE_SCHEMA").is_ok() {
+        std::fs::create_dir_all(&out_dir).expect("create schema dir");
+        std::fs::write(&out_path, &generated).expect("write descriptor");
+        eprintln!("wrote {}", out_path.display());
+        return;
+    }
+
+    let committed = std::fs::read_to_string(&out_path).unwrap_or_default();
+    if committed != generated {
+        let (cl, gl) = (committed.lines().count(), generated.lines().count());
+        panic!(
+            "sovereign-recipes/schema/recipe_schema_descriptor.json is stale \
+             ({cl} committed lines vs {gl} generated).\n\
+             The recipe config enums changed — regenerate with:\n  \
+             UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test recipe_schema\n\
+             {}",
+            first_diff(&committed, &generated)
+        );
+    }
+}
+
+/// Descriptor extraction — the recipe variant catalog for the authoring JSON
+/// Schema. Ported verbatim from the retired `sovereign-tools/build.rs` so the
+/// emitted descriptor is byte-identical to what the build script produced.
+mod descriptor {
+    use std::collections::{HashMap, HashSet};
+    use syn::{Attribute, Fields, Item, ItemEnum, Type, Variant};
+
+    pub fn parse(path: &std::path::Path) -> syn::File {
+        let src = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        syn::parse_file(&src).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+    }
+
+    fn find_enum<'a>(file: &'a syn::File, name: &str) -> &'a ItemEnum {
+        file.items
+            .iter()
+            .find_map(|it| match it {
+                Item::Enum(e) if e.ident == name => Some(e),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("enum `{name}` not found"))
+    }
+
+    /// Just the wire-form discriminator strings of a tagged enum.
+    pub fn variant_keys(file: &syn::File, name: &str) -> Vec<String> {
+        let e = find_enum(file, name);
+        let (_, kv) = serde_meta(&e.attrs);
+        let rename_all = kv.get("rename_all").map(String::as_str);
+        e.variants.iter().map(|v| wire_key(v, rename_all)).collect()
+    }
+
+    /// Wire key + required named fields per variant. A field is required iff it
+    /// is non-`Option` and carries no `#[serde(default)]` / `skip`.
+    pub fn variants_with_required(file: &syn::File, name: &str) -> Vec<serde_json::Value> {
+        let e = find_enum(file, name);
+        let (_, kv) = serde_meta(&e.attrs);
+        let rename_all = kv.get("rename_all").map(String::as_str);
+        e.variants
+            .iter()
+            .map(|v| {
+                let required: Vec<String> = match &v.fields {
+                    Fields::Named(n) => n
+                        .named
+                        .iter()
+                        .filter(|f| field_required(f))
+                        .filter_map(field_wire_name)
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                serde_json::json!({ "key": wire_key(v, rename_all), "required": required })
+            })
+            .collect()
+    }
+
+    fn wire_key(v: &Variant, rename_all: Option<&str>) -> String {
+        let (_, kv) = serde_meta(&v.attrs);
+        if let Some(r) = kv.get("rename") {
+            return r.clone();
+        }
+        apply_rename_all(&v.ident.to_string(), rename_all)
+    }
+
+    fn field_required(f: &syn::Field) -> bool {
+        let (keys, _) = serde_meta(&f.attrs);
+        !is_option(&f.ty)
+            && !keys.contains("default")
+            && !keys.contains("skip")
+            && !keys.contains("skip_deserializing")
+    }
+
+    fn field_wire_name(f: &syn::Field) -> Option<String> {
+        let base = f.ident.as_ref()?.to_string();
+        let (_, kv) = serde_meta(&f.attrs);
+        Some(kv.get("rename").cloned().unwrap_or(base))
+    }
+
+    fn is_option(ty: &Type) -> bool {
+        matches!(ty, Type::Path(tp) if tp.path.segments.last().is_some_and(|s| s.ident == "Option"))
+    }
+
+    /// Collect a `#[serde(...)]` attribute's flag keys and `key = "string"` pairs.
+    fn serde_meta(attrs: &[Attribute]) -> (HashSet<String>, HashMap<String, String>) {
+        let mut keys = HashSet::new();
+        let mut kv = HashMap::new();
+        for a in attrs {
+            if !a.path().is_ident("serde") {
+                continue;
+            }
+            let _ = a.parse_nested_meta(|m| {
+                if let Some(id) = m.path.get_ident() {
+                    let k = id.to_string();
+                    keys.insert(k.clone());
+                    // Consume `= <value>` so sibling metas keep parsing; capture
+                    // the value when it's a string literal.
+                    if m.input.peek(syn::Token![=]) {
+                        let v = m.value()?;
+                        let expr: syn::Expr = v.parse()?;
+                        if let syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Str(s),
+                            ..
+                        }) = expr
+                        {
+                            kv.insert(k, s.value());
+                        }
+                    }
+                }
+                Ok(())
+            });
+        }
+        (keys, kv)
+    }
+
+    fn apply_rename_all(ident: &str, rule: Option<&str>) -> String {
+        match rule {
+            Some("lowercase") => ident.to_lowercase(),
+            Some("UPPERCASE") => ident.to_uppercase(),
+            Some("snake_case") | Some("kebab-case") | Some("SCREAMING_SNAKE_CASE") => {
+                let mut s = String::new();
+                for (i, ch) in ident.chars().enumerate() {
+                    if ch.is_uppercase() && i != 0 {
+                        s.push('_');
+                    }
+                    s.push(ch.to_ascii_lowercase());
+                }
+                match rule {
+                    Some("kebab-case") => s.replace('_', "-"),
+                    Some("SCREAMING_SNAKE_CASE") => s.to_uppercase(),
+                    _ => s,
+                }
+            }
+            _ => ident.to_string(),
+        }
+    }
+}

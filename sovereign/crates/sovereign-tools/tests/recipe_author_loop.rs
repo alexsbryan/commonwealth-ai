@@ -18,9 +18,11 @@
 //! solo but not together" regressions.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use sovereign_core::traits::Tool;
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
+use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
 use sovereign_tools::{RecipeReadTool, RecipeValidateTool, RecipeWriteTool, RegistryBrowseTool};
 
 fn ctx() -> ToolContext {
@@ -118,7 +120,10 @@ type = "sentence"
     }
 
     // Step 4: validate — should FAIL with `{category}` flagged.
-    let validate = RecipeValidateTool::with_recipes_dir(root.clone());
+    let validate = RecipeValidateTool::with_recipes_dir(
+        Arc::new(CorpusEngineRecipeTester::new()),
+        root.clone(),
+    );
     let bad_validation = validate
         .execute(&serde_json::json!({"path": "sec-investigation"}), &ctx())
         .await
@@ -213,8 +218,12 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
     let tools: Vec<Box<dyn Tool>> = vec![
         Box::new(RecipeReadTool::new()),
         Box::new(RecipeWriteTool::new()),
-        Box::new(RecipeValidateTool::new()),
-        Box::new(sovereign_tools::RecipeTestTool::new()),
+        Box::new(RecipeValidateTool::new(Arc::new(
+            CorpusEngineRecipeTester::new(),
+        ))),
+        Box::new(sovereign_tools::RecipeTestTool::new(Arc::new(
+            CorpusEngineRecipeTester::new(),
+        ))),
         Box::new(RegistryBrowseTool),
         Box::new(sovereign_tools::CheckpointTool::new()),
         Box::new(sovereign_tools::DecisionLogTool::new()),
@@ -237,9 +246,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 /// checkpoint. Mirrors the M1 acceptance scenario in the plan file.
 #[tokio::test]
 async fn recipe_author_project_lifecycle_end_to_end() {
-    use std::sync::Arc;
-
-    use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+    use corpus_engine_notes::NoteStore;
+    use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
     use sovereign_store::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
@@ -247,6 +255,7 @@ async fn recipe_author_project_lifecycle_end_to_end() {
         decision_log::{DecisionAttribution, DecisionKind, DecisionPayload},
         situated_context, CapabilityRequestTool, DecisionLogTool,
     };
+    use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
     use sovereign_tools::RecipeProject;
 
     let home = tempfile::tempdir().unwrap();
@@ -254,7 +263,9 @@ async fn recipe_author_project_lifecycle_end_to_end() {
     let recipes_dir = home.path().join(".sovereign/recipes");
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
-    let notes = Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
+    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
+        NoteStore::open(&home.path().join("notes.db")).unwrap(),
+    )));
     let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(

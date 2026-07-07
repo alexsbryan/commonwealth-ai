@@ -38,11 +38,65 @@ use crate::state::AppState;
 /// when the mesh has degraded connectivity.
 const PEER_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// A well-shaped empty response for early-return paths (bad request /
+/// embedding unavailable) — keeps the endpoint's contract intact even
+/// when it can't search.
+fn empty_knowledge_response() -> KnowledgeSearchResponse {
+    KnowledgeSearchResponse {
+        results: Vec::new(),
+        corpora_searched: Vec::new(),
+        corpora_unavailable: Vec::new(),
+        total_chunks_searched: None,
+    }
+}
+
 pub async fn knowledge_search(
     State(state): State<AppState>,
-    Json(request): Json<KnowledgeSearchRequest>,
+    Json(mut request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     let limit = request.effective_limit() as usize;
+
+    // OICP thin-client search (v0.4 §6): a client MAY send only `query`
+    // / `query_text` and let the host embed it — the host owns the embed
+    // model, so a client built against the manifest alone need not embed.
+    // When `query_embedding` is absent we embed the text here with the
+    // SAME query-instruction prefix we advertise in the manifest (read
+    // from the identical source routes_oicp uses), so the query vector
+    // lands in the corpus's space. Mesh peers pre-embed (query_embedding
+    // non-empty) and skip this; the vector we fill then fans out to peers
+    // unchanged, so no hop re-embeds.
+    if request.query_embedding.is_empty() {
+        if request.query_text.trim().is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(empty_knowledge_response()));
+        }
+        let Some(local) = state.inner.local_inference.as_ref() else {
+            tracing::warn!("knowledge search: text-only query but no local inference to embed it");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(empty_knowledge_response()),
+            );
+        };
+        let prefix = state
+            .inner
+            .inference_store
+            .get_local_embed_model()
+            .map(|e| e.query_instruction_prefix)
+            .unwrap_or_default();
+        match local
+            .embed(&format!("{prefix}{}", request.query_text))
+            .await
+        {
+            Ok(v) => request.query_embedding = v,
+            Err(e) => {
+                tracing::warn!(error = %e, "knowledge search: host-side query embedding failed");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(empty_knowledge_response()),
+                );
+            }
+        }
+    }
+
     let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
 
     // Step 1: figure out what corpora are locally installed, keyed

@@ -107,6 +107,14 @@ export type ChatEvent =
       metadata?: Metadata;
     }
   | { type: "MESSAGE_ERROR"; error: string }
+  /** User hit Stop. Optimistically return the UI to idle NOW rather than
+   *  waiting on the backend terminal — cancel only takes effect at the
+   *  synthesis checkpoint, so a grounded turn on a slow model can be 20-30s
+   *  from its `message-complete` even after the cancel fires. The partial
+   *  assistant text stays on screen (tagged cancelled); the late terminal
+   *  lands in `idle` (unhandled → ignored) and the `streamingMessageId`
+   *  guards keep it from bleeding into the next turn. */
+  | { type: "CANCELLED" }
   | {
       type: "MESSAGE_REFINED";
       conversationId: string;
@@ -344,6 +352,15 @@ export const chatMachine = setup({
                 }),
               })),
             },
+            // User hit Stop before the stream handshake resolved. No
+            // assistant bubble exists yet, so just return to idle; the
+            // backend turn is cancelled best-effort by handleStop.
+            CANCELLED: {
+              target: "idle",
+              actions: assign({
+                streamingMessageId: () => null,
+              }),
+            },
             // Conversation switch / reset while in `preparing` re-targets
             // idle, mirroring the `streaming` substate. Without this the
             // loading indicator would leak across conversations.
@@ -410,6 +427,24 @@ export const chatMachine = setup({
                 return {
                   messages: updateMessageById(context.messages, id, (m) => {
                     m.content = `${m.content}\n\nError: ${event.error}`;
+                  }),
+                  streamingMessageId: null,
+                };
+              }),
+            },
+            // User hit Stop mid-stream. Return to idle NOW with whatever
+            // partial text streamed so far, tagged `cancelled` so the
+            // renderer can mark it. The backend terminal for this message
+            // arrives later in `idle` (unhandled → ignored); a subsequent
+            // turn's stream is protected by the `streamingMessageId` guards.
+            CANCELLED: {
+              target: "idle",
+              actions: assign(({ context }) => {
+                const id = context.streamingMessageId;
+                if (!id) return { streamingMessageId: null };
+                return {
+                  messages: updateMessageById(context.messages, id, (m) => {
+                    m.metadata = { ...(m.metadata ?? {}), cancelled: true };
                   }),
                   streamingMessageId: null,
                 };

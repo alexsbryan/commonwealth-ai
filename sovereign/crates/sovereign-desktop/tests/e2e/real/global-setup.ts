@@ -12,11 +12,14 @@
 // Models are the one shared resource (multi-GB GGUFs, mmap'd
 // read-only) — referenced by absolute path.
 //
+// Mode: MANAGED by default — the harness owns a fixture-scoped daemon on
+// :9741 (see MANAGED_DAEMON below). Attach mode is the opt-out.
+//
 // Env knobs:
-//   SOVEREIGN_REAL_ALLOW_ATTACH=1  — permit a daemon on :9741 (the app
-//       will silently Attach to it: knowledge/inference state is then
-//       the REAL daemon's, not hermetic. Off by default; the guard
-//       hard-fails instead.)
+//   SOVEREIGN_REAL_ALLOW_ATTACH=1  — attach to an EXISTING daemon on :9741
+//       instead of starting our own (the app Attaches to it: knowledge/
+//       inference state is then the REAL daemon's, not hermetic). Trades the
+//       fixture-scoped determinism for the operator's real model/corpora.
 //   SOVEREIGN_REAL_KEEP_PROFILE=1  — don't wipe the scratch profile
 //       (inspect state across runs / faster reboots).
 //   SOVEREIGN_REAL_XVFB=1          — wrap the app in xvfb-run -a.
@@ -45,10 +48,32 @@ const FIXTURE_CORPUS_DIR = path.join(__dirname, "fixtures/corpus");
 const FIXTURE_ATTACH_DOC = path.join(__dirname, "fixtures/attach/expedition-notes.txt");
 const FIXTURE_DISPLAY_NAME = "E2E Fixture Corpus";
 const BRIDGE = "http://127.0.0.1:9745";
+const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
 
-// Fast profile: smallest viable chat model + the standard embedder.
-// Phase 3 bench replays override with the production primary so score
-// deltas isolate transport, not model.
+// Managed-daemon mode is the DEFAULT for the whole real suite: the harness
+// starts its OWN fixture-scoped daemon on the test-profile HOME, so the daemon's
+// index dir IS the desktop's read path (`list_corpora`/`read_get_chunk` resolve
+// locally) AND retrieval is scoped to the single fixture corpus. It loads a fixed
+// local chat/embed pair (a dense, non-MTP primary + the small embedder) so every
+// spec — chat, journeys, and the workflow-author loop — runs in one deterministic
+// environment. Attach-to-the-dev-daemon is the opt-out (SOVEREIGN_REAL_ALLOW_ATTACH
+// =1): it exercises the operator's actual model/corpora but is non-hermetic and
+// can't provide the fixture-scoped determinism (many corpora + a different, MTP
+// model whose cancellation timing the journeys aren't tuned to). The legacy
+// SOVEREIGN_REAL_MANAGED_DAEMON env is no longer read — managed is the default, so
+// a script that still sets it lands on managed anyway (a harmless no-op).
+const MANAGED_DAEMON = process.env.SOVEREIGN_REAL_ALLOW_ATTACH !== "1";
+
+// Managed profile: the smallest viable chat model + the standard embedder. The 2B
+// is deliberate, not just frugal — the streaming/cancel specs are cadence-sensitive
+// (they assert `stream tokens > 0` inside a short window and "return to idle after
+// cancel"), and a larger model's slower time-to-first-token breaks them (measured:
+// the dense 4B regresses real-cancel-stream + cancellation.journey to 0 tokens /
+// cancel-hang). The 2B greens 18/19 deterministically; the one exception is the
+// agentic workflow-author loop, which needs a capable primary the 2B can't provide
+// and is therefore GATED (see real-workflow-author.spec.ts) — run it in attach mode
+// against a 9B+ daemon, or via SOVEREIGN_REAL_CHAT_MODEL. Phase 3 bench replays also
+// override the model via that env so score deltas isolate transport, not model.
 const DEFAULT_CHAT_MODEL = path.join(REPO_ROOT, "sovereign/models/Qwen3.5-2B.Q6_K.gguf");
 const DEFAULT_EMBED_MODEL = path.join(
   REPO_ROOT,
@@ -226,7 +251,38 @@ function bakeProfile(): void {
   // fails without this. Mirror the HOST's real config — same machine, so its
   // model ids match the daemon's loaded slots. Default (non-attach) mode loads
   // its own model from desktop.toml and doesn't need this.
-  if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
+  if (MANAGED_DAEMON) {
+    // The harness owns the daemon: this file is BOTH the daemon's config (which
+    // models to load, where its data lives) and the desktop's attach SetupConfig.
+    // A fixed local model pair + the test HOME's data dir → a fixture-scoped
+    // daemon whose index dir is the desktop's read path. The desktop derives its
+    // routed model stems from desktop.toml (baked to the SAME chatModel below),
+    // so the ids line up with the daemon's loaded slots.
+    const daemonConfig = [
+      `mcp_servers = []`,
+      ``,
+      `[models]`,
+      `primary = ${JSON.stringify(chatModel)}`,
+      `fast = ${JSON.stringify(chatModel)}`,
+      `embed = ${JSON.stringify(embedModel)}`,
+      `context_size = 32768`,
+      ``,
+      `[daemon]`,
+      `client_port = 9741`,
+      `internal_port = 9742`,
+      `autostart = false`,
+      `client_bind = "127.0.0.1"`,
+      ``,
+      `[data]`,
+      `dir = ${JSON.stringify(sovDir)}`,
+      ``,
+      `[iroh]`,
+      `enabled = false`,
+      ``,
+    ].join("\n");
+    fs.writeFileSync(path.join(sovDir, "config.toml"), daemonConfig);
+    console.log("[real-setup] managed-daemon: wrote fixture-scoped daemon config (small models, test HOME)");
+  } else if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
     const realConfig = path.join(os.homedir(), ".sovereign", "config.toml");
     if (fs.existsSync(realConfig)) {
       fs.copyFileSync(realConfig, path.join(sovDir, "config.toml"));
@@ -248,27 +304,70 @@ function bakeProfile(): void {
   for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
 }
 
+/** Start the harness-owned daemon (HOME = test profile) and wait until it serves
+ *  `/v1/models`. `daemon start` blocks until the daemon reports ready, but we
+ *  re-probe the client port so a mis-started daemon fails here, loudly, rather
+ *  than as a confusing mid-journey inference error. Stopped in global-teardown. */
+async function startManagedDaemon(): Promise<void> {
+  console.log("[real-setup] managed-daemon: starting fixture-scoped daemon (HOME=test profile)…");
+  const env = {
+    ...process.env,
+    HOME,
+    XDG_CONFIG_HOME: path.join(HOME, ".config"),
+    XDG_DATA_HOME: path.join(HOME, ".local/share"),
+    XDG_CACHE_HOME: path.join(HOME, ".cache"),
+  };
+  execSync(`${JSON.stringify(DAEMON_BIN)} daemon start`, {
+    env,
+    stdio: "inherit",
+    timeout: 5 * 60 * 1000,
+  });
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetchJson("http://127.0.0.1:9741/v1/models");
+      if (Array.isArray((r as { data?: unknown }).data)) {
+        console.log("[real-setup] managed-daemon: ready on :9741");
+        return;
+      }
+    } catch {
+      /* not up yet */
+    }
+    await new Promise((res) => setTimeout(res, 1000));
+  }
+  throw new Error("managed-daemon: not serving /v1/models on :9741 within 60s of `daemon start`");
+}
+
 export default async function globalSetup(): Promise<void> {
   fs.mkdirSync(RESULTS, { recursive: true });
   fs.rmSync(LEDGER_REAL, { force: true });
 
-  // ── Guard: a daemon on :9741 flips the app into Attach mode against
-  // real (non-hermetic) knowledge/inference state. Refuse by default.
+  // ── Guard: managed mode (the default) needs :9741 free to start its own
+  // fixture-scoped daemon; attach mode (opt-out) needs a daemon already there.
   if (await portInUse(9741)) {
-    if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
+    if (MANAGED_DAEMON) {
+      throw new Error(
+        "real-mode setup: managed mode (the default) needs :9741 free to start " +
+          "its own fixture-scoped daemon, but something is already listening " +
+          "there. Stop it (`sovereign daemon stop`) first, or set " +
+          "SOVEREIGN_REAL_ALLOW_ATTACH=1 to attach to it instead (non-hermetic).",
+      );
+    } else {
       console.warn(
         "[real-setup] :9741 is occupied — proceeding in ATTACH mode " +
           "(SOVEREIGN_REAL_ALLOW_ATTACH=1). Knowledge/inference state is the " +
           "REAL daemon's; conversations/config remain scratch.",
       );
-    } else {
-      throw new Error(
-        "real-mode setup: a daemon is running on :9741. The app would Attach " +
-          "to it and leak non-hermetic state into the run. Stop it " +
-          "(`sovereign daemon stop`) or set SOVEREIGN_REAL_ALLOW_ATTACH=1 " +
-          "to accept attach-mode semantics.",
-      );
     }
+  } else if (!MANAGED_DAEMON) {
+    // Attach requested but nothing is listening — fail loudly rather than
+    // silently booting an embedded backend that can't ingest (the daemon owns
+    // ingest+enrich; see local_corpus_commands.rs).
+    throw new Error(
+      "real-mode setup: SOVEREIGN_REAL_ALLOW_ATTACH=1 but no daemon is " +
+        "listening on :9741. Start one (`sovereign daemon start`) or unset " +
+        "the flag to use the default managed daemon.",
+    );
   }
 
   // ── Build: embedded frontend assets + the debug binary ──
@@ -284,6 +383,13 @@ export default async function globalSetup(): Promise<void> {
   });
 
   bakeProfile();
+
+  // ── Managed daemon: start the harness-owned fixture-scoped daemon before the
+  // desktop boots, so the app Attaches to it and the fixture ingest lands in the
+  // shared (test-HOME) index dir. ──
+  if (MANAGED_DAEMON) {
+    await startManagedDaemon();
+  }
 
   // ── Launch ──
   const env: NodeJS.ProcessEnv = {

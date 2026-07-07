@@ -28,10 +28,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_contracts::recipe::notes::RecipeNotes;
 use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
 };
+use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 fn print_help() {
     eprintln!(
@@ -277,7 +279,7 @@ async fn run_inbox() -> i32 {
     0
 }
 
-fn open_stores() -> std::result::Result<(Arc<NoteStore>, Arc<RecipeProjectStore>), i32> {
+fn open_stores() -> std::result::Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), i32> {
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => {
@@ -288,8 +290,8 @@ fn open_stores() -> std::result::Result<(Arc<NoteStore>, Arc<RecipeProjectStore>
     let sov = home.join(".sovereign");
     let notes_path = sov.join("notes.db");
     let features_path = sov.join("features.db");
-    let notes = match NoteStore::open(&notes_path) {
-        Ok(s) => Arc::new(s),
+    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&notes_path) {
+        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
         Err(e) => {
             eprintln!(
                 "recipe-agent: failed to open NoteStore at {}: {e}",

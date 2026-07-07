@@ -396,7 +396,11 @@ export type NarrationPhase =
         ok: boolean;
         result_summary: string;
       };
-    };
+    }
+  // Live synthesis heartbeat — the running held-token count while the
+  // grounding gate holds the answer. Rendered as ONE live chip that the
+  // store REPLACES (not appends) on each event; see routing.svelte.ts.
+  | { synthesis_progress: { tokens: number } };
 
 export interface NarrationEvent {
   phase: NarrationPhase;
