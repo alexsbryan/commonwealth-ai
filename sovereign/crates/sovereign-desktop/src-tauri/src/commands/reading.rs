@@ -243,12 +243,51 @@ async fn load_atlas_atoms_for_commands(
     }
 }
 
+/// In Attach mode the desktop owns no local corpus indexes — the CLI daemon
+/// holds them. Route the reading surface to the daemon's loopback `reading_http`
+/// routes (`/internal/corpus/...`, merged into the client router on
+/// `client_port`). Those DTOs are byte-compatible with this module's `*Dto`
+/// shapes (see this file's header: "the same UI works against either the
+/// in-process daemon or a remote daemon (HTTP)"), so the daemon's JSON is
+/// returned verbatim. A 404 (chunk/atom/corpus absent, or an older daemon
+/// without the route) maps to `Ok(None)`, matching the in-process path.
+async fn daemon_reading_get(
+    base_url: &str,
+    path: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    let url = format!("{base_url}{path}");
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("daemon reading GET {url}: {e}"))?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("daemon reading {url} → {status}: {body}"));
+    }
+    resp.json::<serde_json::Value>()
+        .await
+        .map(Some)
+        .map_err(|e| format!("daemon reading decode {url}: {e}"))
+}
+
 #[tauri::command]
 pub async fn read_get_chunk(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     chunk_id: u64,
-) -> Result<Option<ChunkRecordDto>, String> {
+) -> Result<Option<serde_json::Value>, String> {
+    if state.is_attach_mode() {
+        return daemon_reading_get(
+            &state.client_base_url(),
+            &format!("/internal/corpus/{corpus_id}/chunks/{chunk_id}"),
+        )
+        .await;
+    }
     let engine = match state.corpus_engine.read().await.as_ref() {
         Some(e) => Arc::clone(e),
         None => return Err("Corpus engine not initialized".into()),
@@ -275,7 +314,9 @@ pub async fn read_get_chunk(
         }
         None => None,
     };
-    Ok(dto)
+    dto.map(serde_json::to_value)
+        .transpose()
+        .map_err(|e| format!("serialize chunk: {e}"))
 }
 
 #[tauri::command]
@@ -284,8 +325,15 @@ pub async fn read_get_chunk_neighbors(
     corpus_id: String,
     chunk_id: u64,
     radius: Option<usize>,
-) -> Result<Option<NeighborWindowDto>, String> {
+) -> Result<Option<serde_json::Value>, String> {
     let radius = radius.unwrap_or(1).min(5);
+    if state.is_attach_mode() {
+        return daemon_reading_get(
+            &state.client_base_url(),
+            &format!("/internal/corpus/{corpus_id}/chunks/{chunk_id}/neighbors?radius={radius}"),
+        )
+        .await;
+    }
     let engine = match state.corpus_engine.read().await.as_ref() {
         Some(e) => Arc::clone(e),
         None => return Err("Corpus engine not initialized".into()),
@@ -327,13 +375,16 @@ pub async fn read_get_chunk_neighbors(
         next.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
     }
 
-    Ok(Some(NeighborWindowDto {
+    let dto = NeighborWindowDto {
         center,
         prev,
         next,
         outbound_url,
         ordering: window.ordering,
-    }))
+    };
+    Ok(Some(
+        serde_json::to_value(dto).map_err(|e| format!("serialize neighbors: {e}"))?,
+    ))
 }
 
 // ─── Atom Panel ──────────────────────────────────────────────────────────────
@@ -415,7 +466,14 @@ pub async fn read_get_atom_card(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     atom_id: String,
-) -> Result<Option<AtomCardDto>, String> {
+) -> Result<Option<serde_json::Value>, String> {
+    if state.is_attach_mode() {
+        return daemon_reading_get(
+            &state.client_base_url(),
+            &format!("/internal/corpus/{corpus_id}/atoms/{atom_id}"),
+        )
+        .await;
+    }
     let engine = match state.corpus_engine.read().await.as_ref() {
         Some(e) => Arc::clone(e),
         None => return Err("Corpus engine not initialized".into()),
@@ -436,9 +494,12 @@ pub async fn read_get_atom_card(
     let cross = corpus_engine::enrichment::atlas::read_atlas_cross_corpus_edges(&atlas_dir)
         .map(|f| f.edges)
         .unwrap_or_default();
-    Ok(Some(build_atom_card_dto(
-        &corpus_id, atom, &atoms, &edges, &cross,
-    )))
+    Ok(Some(
+        serde_json::to_value(build_atom_card_dto(
+            &corpus_id, atom, &atoms, &edges, &cross,
+        ))
+        .map_err(|e| format!("serialize atom card: {e}"))?,
+    ))
 }
 
 #[tauri::command]
@@ -446,7 +507,14 @@ pub async fn read_get_atom_elsewhere(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     atom_id: String,
-) -> Result<Option<AtomElsewhereDto>, String> {
+) -> Result<Option<serde_json::Value>, String> {
+    if state.is_attach_mode() {
+        return daemon_reading_get(
+            &state.client_base_url(),
+            &format!("/internal/corpus/{corpus_id}/atoms/{atom_id}/elsewhere"),
+        )
+        .await;
+    }
     let engine = match state.corpus_engine.read().await.as_ref() {
         Some(e) => Arc::clone(e),
         None => return Err("Corpus engine not initialized".into()),
@@ -500,12 +568,15 @@ pub async fn read_get_atom_elsewhere(
         .unwrap_or_default();
     let cross_corpus = cross_corpus_links_dto(&target, &cross);
 
-    Ok(Some(AtomElsewhereDto {
+    let dto = AtomElsewhereDto {
         atom_id: target.as_str().to_string(),
         corpus_id,
         same_corpus,
         cross_corpus,
-    }))
+    };
+    Ok(Some(
+        serde_json::to_value(dto).map_err(|e| format!("serialize atom elsewhere: {e}"))?,
+    ))
 }
 
 fn build_atom_card_dto(
