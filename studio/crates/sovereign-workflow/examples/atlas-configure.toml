@@ -8,7 +8,7 @@
 # the lifted LLM core (reusing compose_phase8_configuration / parse_phase8_configuration).
 #
 # Run (daemon up; the corpus resolved so atlas/atoms.json + edges.json exist):
-#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/atlas-configure.toml --no-cache
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/atlas-configure.toml --no-cache
 
 [workflow]
 name = "atlas-configure"

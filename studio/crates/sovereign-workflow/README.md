@@ -53,7 +53,7 @@ mkdir -p notes
 printf 'Standup: shipped the MCP work. TODO: spec the substrate, ping Vega.' > notes/standup.md
 
 # 3. run (needs the daemon up for the model: step)
-sovereign workflow run sovereign/crates/sovereign-workflow/examples/notes-digest.toml
+sovereign workflow run studio/crates/sovereign-workflow/examples/notes-digest.toml
 ```
 
 One file mixes an ecosystem-shaped MCP tool, a local model, and data-authored

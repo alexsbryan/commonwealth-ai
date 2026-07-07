@@ -10,7 +10,7 @@
 # Run (needs the daemon up with an embedding model loaded):
 #   mkdir -p corpus
 #   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
-#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/ingest.toml --concurrency 4
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/ingest.toml --concurrency 4
 #
 # Result: a corpus `secret-agent` under ~/.sovereign/indexes/, searchable.
 # Re-running is idempotent: unchanged files are served from the workflow cache,
