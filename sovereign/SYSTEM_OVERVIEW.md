@@ -1860,7 +1860,13 @@ Default ports:
   knowledge field (philosophy, science, …). The single extension
   point for v1.
 - **Atlas (v2)** — Typed atom graph + `Pipeline` trait + registry +
-  `ExemplarBank` + `PhaseCache`. See `ENRICHMENT_V2.md`.
+  `ExemplarBank` + `PhaseCache`. See `ENRICHMENT_V2.md`. `PhaseCache`
+  stamps each phase output with the producing model (`<phase>.model.json`
+  sidecar) and declines to reuse a phase written by a different model —
+  a model swap forces recomputation rather than silently mixing outputs
+  (OICP v0.4 §6; keyed on `chat_model`, fingerprint deferred). Built via
+  the single `EnrichConfig::phase_cache()` helper so all pipeline reads
+  and writes carry the same identity.
 - **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs`
   stores SCIP data in SQLite; `scip_export.rs` dispatches to
   language-specific analyzers.
