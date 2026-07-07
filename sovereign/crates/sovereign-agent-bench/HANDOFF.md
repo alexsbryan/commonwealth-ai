@@ -238,6 +238,25 @@ roadmap Go/TS problems exercise the family-generality claims
 never touches. Holdout problems live under problems/ with ids
 prefixed `h.` and are EXCLUDED from iteration arms by convention.
 
+**CERTIFICATION + GENERALIZATION GATE (2026-07-07, arms M/N):**
+Python-bank certification (x3 trials, judge-trials 3, report
+marm-2026-07-07): **35/45 median** — 3.2-py 9 (9/8/9), 3.3 4 (4/3/9
+— FIRST 9 ever), 4.1 9 (9/9/9 perfect), 4.2 9 (6/9/9), 5.1 4 (4/9/1
+— FIRST 9 ever). Every problem has demonstrated 9/9; the gap to
+45/45 is per-trial consistency on 3.3 (transaction-landing ~50%) and
+5.1 (fixation variance).
+
+**HOLDOUT first-read (x1, judge-trials 3, report narm-2026-07-07):
+34/36 (94%)** — h.1 8/9, h.2 9/9, h.3 8/9 (the LADDER class on
+never-seen material), h.4 9/9. Holdout OUTSCORED the training
+median: no overfit signal; the class-level fixes generalize.
+Receipts remain READ-ONLY per protocol.
+
+Remaining to 45/45: 3.3/5.1 consistency (regression feedback + EOS
+drip levers landed late, untested at trials>=2 there). Remaining to
+99/99: 2.2 judge point, Rust lights-out emission variance under the
+full current stack, then cross-model + Go/TS gates.
+
 **Operator ground rules recorded:** (a) fixes must generalize to
 categories/families, never the problem or language under test;
 (b) leverage existing tools/libraries first (syn over hand-rolled;
