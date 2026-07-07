@@ -188,6 +188,40 @@ Certification plan when the hard bank pins: full battery ×3 with
 --judge-trials 3 (majority vote — 2.2's dropped point is single-judge
 anchor noise; CI passes 1).
 
+**Iterations 7-14 (late 2026-07-06, arms E→J; operator pivot: master
+PYTHON first, Rust parked as language adaptation):**
+
+- c97f528a bounded thinking (5 lines) + emit 2500→4000 (unbounded
+  channel ballooned emissions and re-truncated — chaos
+  length-governance lesson).
+- b654a40b K=4→6 candidates + decomposition hint (operator
+  correction: the 35B-A3B MoE decodes ~3B-cheap — widen sampling on
+  the existing slot; a 9B dense coder would be SLOWER + memory-risky).
+- 36876410 spontaneous-EOS continuation (dangling action fence → one
+  completion call; chaos b1f09a19 transplant). c09fe512 extends to
+  plan-only EOS (stops before the FIRST fence).
+- 8fd8ed9f **gradient ladders** (operator principle: the SYSTEM owes
+  a decomposition before any capability conclusion): 3.3's <=30-line
+  cliff → <=80/60/45/30 rung tests; I-arm receipt: round-0 full
+  3-file split transaction won (6p→9p, behavior 6/6, calc.py 97→27),
+  score 2/9→4/9, residual = one 40-line file + target fixation.
+- b3843907 acceptance contract stated operationally (ties are
+  discarded; make the complete change in this response).
+- db81d829 outcome-diversity stall (2 dry rounds exit early;
+  gradient stalls keep runway) + protocol: diagnosis arms --trials 1.
+- c772bd9c tie feedback (cleanly-applied edits that flipped nothing
+  are NAMED next round — anti-fixation; _lexer.py rewritten 5x while
+  the assertion said _rpn.py).
+- df069016 one 3s transport retry (I-arm 5.1 r4: a wedged daemon
+  moment wiped 6 candidates + their continuations).
+
+Python bank state: 4.1 PINNED 9/9x3 (G); 4.2 9/9,9/9 + one wall-cap
+timeout (H); 3.2-py 9/9/8; 3.3 4/9 (ladder climbing, tie-feedback
+J-arm read pending); 5.1 witness 18/24=75% but strict buckets floor
+dim_a to 1 (certification question) + residual fixation/EOS tails.
+J-arm (3.3+5.1, --trials 1) running at handoff time. After J:
+certification candidate = Python bank x3 with --judge-trials 3.
+
 **Operator ground rules recorded:** (a) fixes must generalize to
 categories/families, never the problem or language under test;
 (b) leverage existing tools/libraries first (syn over hand-rolled;
