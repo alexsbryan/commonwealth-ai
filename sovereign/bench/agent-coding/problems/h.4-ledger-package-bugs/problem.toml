@@ -1,0 +1,47 @@
+[meta]
+id = "h.4-ledger-package-bugs"
+title = "Ledger package — cross-file multi-bug fix (HOLDOUT)"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+HOLDOUT problem (generalization protocol, 2026-07-07): three-module
+package, five seeded bugs across files (parse sign/cents, overdraft
+atomicity+ordering, zero-default reads, report ordering). Holdout
+receipts are READ-ONLY. Mirrors the 5.1 multi-file class in a fresh
+domain.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Python"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "python3 -m pytest -q tests/test_integration.py 2>&1"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+token_cap = 24000
+wall_seconds_cap = 900
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Cross-file diagnosis"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Contract fidelity"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"
