@@ -332,6 +332,37 @@ impl Tool for WorkflowWriteStructuredTool {
             }
         };
 
+        // Normalize the "name-at-root" shape small models emit: a workflow whose
+        // `name` sits at the document root instead of under the `[workflow]` table
+        // (`{"name": "…", "source": …, "step": […]}`). `WorkflowFile` requires a
+        // `workflow` table (model.rs), so a bare root `name` parses as "missing
+        // [workflow]" — even though every other part is right. Lift it into the
+        // table, the same recover-don't-nag posture as the flatten handling above;
+        // a document that already carries `workflow.name` is left untouched.
+        let doc_normalized: serde_json::Value;
+        let doc: &serde_json::Value = match doc.as_object() {
+            Some(obj)
+                if obj.get("workflow").and_then(|w| w.get("name")).is_none()
+                    && obj.get("name").and_then(|n| n.as_str()).is_some() =>
+            {
+                let mut map = obj.clone();
+                let name = map.remove("name").expect("checked present above");
+                // Merge into an existing (name-less) `workflow` table if the model
+                // emitted one, otherwise synthesize it.
+                let wf_tbl = match map.remove("workflow") {
+                    Some(serde_json::Value::Object(mut w)) => {
+                        w.insert("name".into(), name);
+                        serde_json::Value::Object(w)
+                    }
+                    _ => json!({ "name": name }),
+                };
+                map.insert("workflow".into(), wf_tbl);
+                doc_normalized = serde_json::Value::Object(map);
+                &doc_normalized
+            }
+            _ => doc,
+        };
+
         // 1. JSON → TOML. Reuse the recipe author's sanitizer (drops the null-valued
         //    optional keys + repairs the stray-escaped-quote keys small models emit)
         //    and converter, so a well-formed workflow survives instead of forcing a
@@ -662,6 +693,60 @@ mod tests {
             v["validation"]["passed"],
             serde_json::json!(true),
             "report: {v}"
+        );
+    }
+
+    #[tokio::test]
+    async fn structured_write_lifts_root_name_into_workflow_table() {
+        // The shape a dense small model (observed: Qwen3.5-4B) emits when authoring:
+        // a correct workflow whose `name` sits at the document ROOT instead of under
+        // the `[workflow]` table. `WorkflowFile` requires the table, so without
+        // normalization this parses as "missing [workflow]" and the whole (otherwise
+        // valid) draft is rejected. The write path lifts the bare `name` into the
+        // table so the draft survives and validates — the recover-don't-nag posture.
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().join(".sovereign/workflows");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let tool = WorkflowWriteStructuredTool::with_workflows_dir(root.clone());
+        let out = tool
+            .execute(
+                &serde_json::json!({
+                    "path": "folder-summaries",
+                    "workflow": {
+                        // name at the document root, NOT under a `workflow` table.
+                        "name": "Folder Summaries",
+                        "source": { "type": "folder", "path": "{param.folder}", "glob": "*.txt,*.md" },
+                        "step": [
+                            {
+                                "id": "summarize",
+                                "uses": "model:thoughtful",
+                                "prompt": "Summarize this in 3 sentences:\n\n{item.text}"
+                            }
+                        ]
+                    }
+                }),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+
+        let StepOutput::Json(v) = out else {
+            panic!("expected json output");
+        };
+        let on_disk = root.join("folder-summaries.toml");
+        assert!(on_disk.exists(), "structured write should land on disk");
+        let body = std::fs::read_to_string(&on_disk).unwrap();
+        assert!(
+            body.contains("[workflow]"),
+            "root `name` must be lifted into a [workflow] table; got:\n{body}"
+        );
+        assert!(body.contains("name = \"Folder Summaries\""), "got:\n{body}");
+        assert!(body.contains("[[step]]"));
+        assert_eq!(
+            v["validation"]["passed"],
+            serde_json::json!(true),
+            "lifted workflow must parse + validate: {v}"
         );
     }
 
