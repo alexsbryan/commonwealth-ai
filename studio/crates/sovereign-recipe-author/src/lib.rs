@@ -40,6 +40,7 @@ pub use sovereign_contracts::recipe::paths::assert_under_root;
 pub mod probe_url;
 pub mod project;
 pub mod read;
+pub mod recipe_project_store;
 pub mod recipe_schema;
 pub mod registry_browse;
 pub mod research_finding;
@@ -48,6 +49,12 @@ pub mod test_tool;
 pub mod validate;
 pub mod write;
 pub mod write_structured;
+
+/// In-memory `RecipeNotes` for the tool unit tests (keeps them inside the
+/// package's dependency budget — the real store adapter is exercised by the
+/// sovereign-tools integration test). See the module docs.
+#[cfg(test)]
+mod test_support;
 
 /// Serialize every test that mutates the process-global `HOME` env var.
 ///
@@ -89,7 +96,7 @@ pub use write_structured::RecipeWriteStructuredTool;
 
 use std::path::PathBuf;
 
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 /// Resolve the user's local recipes directory:
 /// `~/.sovereign/recipes/`. Returns an error when `HOME` is

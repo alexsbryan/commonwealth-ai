@@ -37,13 +37,11 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::recipe_project_store::{RecipeProjectError, RecipeProjectRow, RecipeProjectStore};
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::notes::{NoteRow, NoteScope, RecipeNotes, ScopeFilter};
-use sovereign_core::error::{Error, Result};
-use sovereign_store::recipe_project_store::{
-    RecipeProjectError, RecipeProjectRow, RecipeProjectStore,
-};
 
-/// Wrap an `std::io::Error` into a `sovereign_core::Error` carrying
+/// Wrap an `std::io::Error` into a `sovereign_contracts::Error` carrying
 /// the path that produced it. Matches the convention in
 /// `recipe_author/{read,write}.rs` of using `InvalidInput` for
 /// path-scoped IO failures so the agent can read and react.
@@ -51,7 +49,7 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
     Error::InvalidInput(format!("{op} {}: {e}", path.as_ref().display()))
 }
 
-/// Bridge a `RecipeProjectStore` error into a `sovereign_core::Error`.
+/// Bridge a `RecipeProjectStore` error into a `sovereign_contracts::Error`.
 /// Empty/duplicate-id preconditions surface as `InvalidInput` so the agent
 /// can react; everything else surfaces as `Storage`.
 fn ce_rps_err(e: RecipeProjectError) -> Error {

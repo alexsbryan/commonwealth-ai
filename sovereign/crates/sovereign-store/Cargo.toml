@@ -6,6 +6,9 @@ license.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+# Re-exported at `sovereign_store::recipe_project_store` (the store moved into
+# the extractable package; this keeps the old path working).
+sovereign-recipe-author = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

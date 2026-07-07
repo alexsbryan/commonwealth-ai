@@ -19,8 +19,8 @@
 //! path so the desktop workspace doesn't have to replicate it; the
 //! renderer here stays the single source of truth for block shape.
 
+use sovereign_contracts::error::Result;
 use sovereign_contracts::recipe::notes::NoteRow;
-use sovereign_core::error::Result;
 
 use super::decision_log::{DecisionAttribution, DecisionPayload};
 use super::project::{ProjectSummary, RecipeProject};
@@ -249,10 +249,9 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use crate::recipe_notes_adapter::NoteStoreRecipeNotes;
-    use corpus_engine_notes::NoteStore;
+    use crate::recipe_project_store::RecipeProjectStore;
+    use crate::test_support::InMemoryRecipeNotes;
     use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
-    use sovereign_store::recipe_project_store::RecipeProjectStore;
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
 
@@ -264,12 +263,10 @@ mod tests {
     ) {
         // HOME is process-global — hold the crate-wide lock for the
         // test's lifetime (see `recipe_author::home_test_lock`).
-        let guard = crate::recipe_author::home_test_lock();
+        let guard = crate::home_test_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
-        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
-            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
-        )));
+        let notes: Arc<dyn RecipeNotes> = Arc::new(InMemoryRecipeNotes::new());
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         let project = RecipeProject::new(
             "Federal case law (CourtListener)",

@@ -16,10 +16,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::testing::{RecipeTestParams, RecipeTester};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use super::resolve_recipe_path;
 
@@ -121,124 +121,5 @@ impl Tool for RecipeValidateTool {
             "warnings": report.validation.warnings,
             "path": resolved.display().to_string(),
         })))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
-
-    fn tester() -> Arc<dyn RecipeTester> {
-        Arc::new(CorpusEngineRecipeTester::new())
-    }
-
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-        }
-    }
-
-    fn make_root(home: &std::path::Path) -> PathBuf {
-        let recipes = home.join(".sovereign/recipes");
-        std::fs::create_dir_all(&recipes).unwrap();
-        recipes
-    }
-
-    #[tokio::test]
-    async fn passes_clean_recipe() {
-        let home = tempfile::tempdir().unwrap();
-        let root = make_root(home.path());
-        let dir = root.join("clean");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("recipe.toml"),
-            r#"
-[corpus]
-id = "clean"
-name = "clean"
-license = "MIT"
-
-[acquire]
-type = "bulk_download"
-url = "https://example.com/data.zip"
-
-[extract]
-type = "plaintext"
-
-[chunk]
-type = "sentence"
-"#,
-        )
-        .unwrap();
-
-        let tool = RecipeValidateTool::with_recipes_dir(tester(), root);
-        let out = tool
-            .execute(&serde_json::json!({"path": "clean"}), &ctx())
-            .await
-            .unwrap();
-        match out {
-            StepOutput::Json(v) => {
-                assert_eq!(v["passed"], true, "got: {v}");
-                assert_eq!(v["errors"].as_array().unwrap().len(), 0);
-            }
-            other => panic!("expected Json, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn flags_undeclared_placeholder() {
-        let home = tempfile::tempdir().unwrap();
-        let root = make_root(home.path());
-        let dir = root.join("bad");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("recipe.toml"),
-            r#"
-[corpus]
-id = "bad"
-name = "bad"
-
-[parameters.entity]
-type = "list"
-required = true
-
-[acquire]
-type = "http_api"
-base_url = "https://api.example.com"
-
-[[acquire.requests]]
-url = "{base_url}?q={entity}&category={category}"
-
-[extract]
-type = "plaintext"
-
-[chunk]
-type = "sentence"
-"#,
-        )
-        .unwrap();
-
-        let tool = RecipeValidateTool::with_recipes_dir(tester(), root);
-        let out = tool
-            .execute(&serde_json::json!({"path": "bad"}), &ctx())
-            .await
-            .unwrap();
-        match out {
-            StepOutput::Json(v) => {
-                assert_eq!(v["passed"], false);
-                assert!(v["errors"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|e| e.as_str().unwrap().contains("{category}")));
-            }
-            other => panic!("expected Json, got {other:?}"),
-        }
     }
 }

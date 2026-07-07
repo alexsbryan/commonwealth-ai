@@ -47,9 +47,15 @@ pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
+/// The recipe-authoring tool bundle moved into the extractable
+/// `sovereign-recipe-author` package; re-exported here as the `recipe_author`
+/// module so every existing `sovereign_tools::recipe_author::…` path (and the
+/// crate-root tool re-exports below) keeps resolving unchanged. The monolith
+/// adapters that back its seams (`recipe_notes_adapter`, `recipe_tester_adapter`)
+/// stay in this crate.
+pub use sovereign_recipe_author as recipe_author;
 pub use sovereign_tools_base::read_file;
 pub use sovereign_tools_base::read_json;
-pub mod recipe_author;
 /// Monolith-side adapter binding the real `NoteStore` to the `RecipeNotes`
 /// contract the recipe-author tools depend on (keeps that bundle
 /// corpus-engine-notes-free).
