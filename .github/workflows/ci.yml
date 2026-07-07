@@ -247,6 +247,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y mold clang
       - run: cargo run -p xtask -- arch-gate
 
+  boundary-gate:
+    name: Boundary-gate (studio package stays liftable, blocking)
+    runs-on: ubuntu-latest
+    # NOT advisory: a boundary breach means the workflow/recipe package can no
+    # longer be lifted out against just the OICP contract. See studio/BOUNDARY.md.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Same tiny xtask tree as arch-gate / docs-gate.
+          shared-key: xtask
+      # No protoc/cmake — xtask only reads files; mold + clang link xtask itself.
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y mold clang
+      - run: cargo run -p xtask -- boundary-gate
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

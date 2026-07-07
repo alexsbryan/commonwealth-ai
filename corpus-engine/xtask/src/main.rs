@@ -4,6 +4,7 @@
 //! Usage:
 //!   cargo xtask arch-gate [--update-baseline]   Enforce ARCH §3.1 size ratchet + §1 doc-contract
 //!   cargo xtask docs-gate                       Every repo path the narrative docs cite must resolve
+//!   cargo xtask boundary-gate                   The studio package depends only on itself + the shared leaves
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ fn main() {
     let exit_code = match cmd {
         "arch-gate" => cmd_arch_gate(&args[1..]),
         "docs-gate" => cmd_docs_gate(),
+        "boundary-gate" => cmd_boundary_gate(),
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -449,9 +451,11 @@ fn enumeration_failures(root: &Path, doc: &str, allow: &BTreeSet<String>) -> Vec
             for m in body.split('"').skip(1).step_by(2) {
                 if let Some(parent) = m.strip_suffix("/*") {
                     if let Ok(rd) = std::fs::read_dir(root.join(parent)) {
-                        names.extend(rd.flatten().filter(|e| e.path().is_dir()).map(|e| {
-                            e.file_name().to_string_lossy().to_string()
-                        }));
+                        names.extend(
+                            rd.flatten()
+                                .filter(|e| e.path().is_dir())
+                                .map(|e| e.file_name().to_string_lossy().to_string()),
+                        );
                     }
                 } else {
                     names.push(m.rsplit('/').next().unwrap_or(m).to_string());
@@ -523,8 +527,8 @@ fn cmd_docs_gate() -> i32 {
         }
     }
 
-    let overview = std::fs::read_to_string(root.join("sovereign/SYSTEM_OVERVIEW.md"))
-        .unwrap_or_default();
+    let overview =
+        std::fs::read_to_string(root.join("sovereign/SYSTEM_OVERVIEW.md")).unwrap_or_default();
     let enum_fails = enumeration_failures(&root, &overview, &allow);
     let n_enum = enum_fails.len();
     fails.extend(enum_fails);
@@ -552,6 +556,211 @@ fn cmd_docs_gate() -> i32 {
     }
 }
 
+// ── boundary-gate ─────────────────────────────────────────────────────────────
+//
+// Enforces the studio-package extraction boundary (studio/BOUNDARY.md): the
+// package crates may reach only for each other + the shared contract leaves, and
+// the leaves have a hand-pinned budget of their own. Kept green, the package
+// stays liftable out of the monorepo against just the OICP contract.
+
+/// Crates that make up the extractable studio package.
+const PACKAGE_SET: &[&str] = &[
+    "sovereign-tools-base",
+    "sovereign-workflow",
+    "sovereign-workflow-host",
+    "sovereign-recipe-author",
+    "sovereign-studio",
+];
+
+/// The shared contract leaves the package depends on (each with its own tight
+/// budget, pinned in `allowed_leaf_deps`).
+const SHARED_LEAVES: &[&str] = &["sovereign-contracts", "oicp-client", "oicp-types"];
+
+/// The internal (in-repo) deps each SHARED_LEAF is allowed. `None` for a package
+/// crate — those get the union `PACKAGE_SET ∪ SHARED_LEAVES`, computed in the gate.
+fn allowed_leaf_deps(crate_name: &str) -> Option<&'static [&'static str]> {
+    match crate_name {
+        "oicp-types" => Some(&[]),
+        "sovereign-contracts" => Some(&["oicp-types"]),
+        "oicp-client" => Some(&["sovereign-contracts", "oicp-types"]),
+        _ => None,
+    }
+}
+
+fn cmd_boundary_gate() -> i32 {
+    let root = repo_root();
+    let internal = workspace_internal_crates(&root);
+    let pkg_union: BTreeSet<&str> = PACKAGE_SET.iter().chain(SHARED_LEAVES).copied().collect();
+
+    let mut fails: Vec<String> = Vec::new();
+    let mut checked = 0usize;
+
+    for &name in PACKAGE_SET.iter().chain(SHARED_LEAVES) {
+        let Some(rel) = internal.get(name) else {
+            // Not present yet (e.g. `sovereign-studio` arrives in B:P9e). A
+            // missing member is not a violation — skip it.
+            continue;
+        };
+        checked += 1;
+        let dir = root.join(rel);
+
+        // Rules 1/2 — dependency edges.
+        let allowed: BTreeSet<&str> = match allowed_leaf_deps(name) {
+            Some(list) => list.iter().copied().collect(),
+            None => pkg_union.clone(),
+        };
+        for dep in cargo_internal_deps(&dir.join("Cargo.toml"), &internal) {
+            if !allowed.contains(dep.as_str()) {
+                let mut ok: Vec<&str> = allowed.iter().copied().collect();
+                ok.sort_unstable();
+                fails.push(format!(
+                    "{name} → {dep}: dependency crosses the studio boundary \
+                     (allowed for {name}: {})",
+                    ok.join(", ")
+                ));
+            }
+        }
+
+        // Rule 3a — no build.rs (a build script is a source-tree reach-in no
+        // package boundary survives; see B:P0's syn-walk removal).
+        if dir.join("build.rs").exists() {
+            fails.push(format!(
+                "{name}: has a build.rs — package/leaf crates must not carry one"
+            ));
+        }
+
+        // Rule 3b — include_str!/include_bytes! may not escape the crate root
+        // except into the checked-in `sovereign-recipes/` tree (the one shared
+        // data source the contract crate vendors).
+        include_escapes(&dir, name, &mut fails);
+    }
+
+    eprintln!(
+        "boundary-gate: checked {checked}/{} studio-boundary crates \
+         (dep edges, build.rs, include_str escapes)",
+        PACKAGE_SET.len() + SHARED_LEAVES.len()
+    );
+    for f in &fails {
+        eprintln!("  ✗ {f}");
+    }
+    if fails.is_empty() {
+        eprintln!("  ✓ the studio package reaches only for itself + the shared leaves");
+        0
+    } else {
+        eprintln!();
+        eprintln!(
+            "boundary-gate FAILED ({} violations). The studio package must stay \
+             liftable against only the OICP contract — see studio/BOUNDARY.md.",
+            fails.len()
+        );
+        1
+    }
+}
+
+/// Parse root `Cargo.toml`'s `[workspace.dependencies]` for `name = { path = … }`
+/// entries — the authoritative list of internal (in-repo) crates → their dirs.
+fn workspace_internal_crates(root: &Path) -> HashMap<String, String> {
+    std::fs::read_to_string(root.join("Cargo.toml"))
+        .map(|m| parse_workspace_internal_crates(&m))
+        .unwrap_or_default()
+}
+
+fn parse_workspace_internal_crates(manifest: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let mut in_section = false;
+    for line in manifest.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_section = t == "[workspace.dependencies]";
+            continue;
+        }
+        if !in_section || t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let Some((name, rest)) = t.split_once('=') else {
+            continue;
+        };
+        if let Some(pidx) = rest.find("path") {
+            let after = &rest[pidx..];
+            if let Some(q1) = after.find('"') {
+                let after = &after[q1 + 1..];
+                if let Some(q2) = after.find('"') {
+                    out.insert(name.trim().to_string(), after[..q2].to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The internal (in-repo) crate names a crate depends on, across every
+/// `…dependencies` table (normal / dev / build / target-specific). Dev and build
+/// deps count: a crate a third party lifts carries its tests and build scripts.
+fn cargo_internal_deps(cargo_toml: &Path, internal: &HashMap<String, String>) -> BTreeSet<String> {
+    std::fs::read_to_string(cargo_toml)
+        .map(|t| parse_cargo_internal_deps(&t, internal))
+        .unwrap_or_default()
+}
+
+fn parse_cargo_internal_deps(text: &str, internal: &HashMap<String, String>) -> BTreeSet<String> {
+    let mut deps = BTreeSet::new();
+    let mut in_deps = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_deps = t.ends_with("dependencies]");
+            continue;
+        }
+        if !in_deps || t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let Some((name, _)) = t.split_once('=') else {
+            continue;
+        };
+        let name = name.trim().trim_matches('"');
+        if internal.contains_key(name) {
+            deps.insert(name.to_string());
+        }
+    }
+    deps
+}
+
+/// Flag `include_str!` / `include_bytes!` literals that escape the crate root
+/// (climb two+ levels) unless they target the checked-in `sovereign-recipes/`
+/// tree. Grep-level (per-line), recursing the crate's `src/`.
+fn include_escapes(dir: &Path, crate_name: &str, fails: &mut Vec<String>) {
+    fn walk(dir: &Path, crate_name: &str, fails: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, crate_name, fails);
+            } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                for line in text.lines() {
+                    let t = line.trim();
+                    if !(t.contains("include_str!") || t.contains("include_bytes!")) {
+                        continue;
+                    }
+                    // Escapes the crate root iff it climbs two+ levels.
+                    if t.contains("../..") && !t.contains("sovereign-recipes") {
+                        fails.push(format!(
+                            "{crate_name}: {} embeds a file outside the crate root \
+                             and outside sovereign-recipes/: `{t}`",
+                            path.file_name().unwrap_or_default().to_string_lossy()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    walk(&dir.join("src"), crate_name, fails);
+}
+
 fn print_usage() {
     eprintln!("Usage: cargo xtask <command>");
     eprintln!();
@@ -562,4 +771,90 @@ fn print_usage() {
     eprintln!(
         "  docs-gate                      Resolve every repo path cited by the narrative docs"
     );
+    eprintln!(
+        "  boundary-gate                  Enforce the studio-package dependency boundary (studio/BOUNDARY.md)"
+    );
+}
+
+#[cfg(test)]
+mod boundary_gate_tests {
+    use super::*;
+
+    #[test]
+    fn leaf_budgets_are_pinned() {
+        assert_eq!(allowed_leaf_deps("oicp-types"), Some(&[][..]));
+        assert_eq!(
+            allowed_leaf_deps("sovereign-contracts"),
+            Some(&["oicp-types"][..])
+        );
+        assert_eq!(
+            allowed_leaf_deps("oicp-client"),
+            Some(&["sovereign-contracts", "oicp-types"][..])
+        );
+        // A package crate has no fixed leaf budget — it gets the union at runtime.
+        assert_eq!(allowed_leaf_deps("sovereign-workflow-host"), None);
+    }
+
+    #[test]
+    fn parses_workspace_internal_crates() {
+        let manifest = "\
+[workspace]\n\
+members = [\"a\"]\n\
+[workspace.dependencies]\n\
+oicp-types = { path = \"oicp-types\" }\n\
+sovereign-contracts = { path = \"sovereign/crates/sovereign-contracts\" }\n\
+# external — no path, must be skipped\n\
+serde = { version = \"1\", features = [\"derive\"] }\n\
+[workspace.lints.clippy]\n\
+too_many_arguments = \"allow\"\n";
+        let map = parse_workspace_internal_crates(manifest);
+        assert_eq!(
+            map.get("oicp-types").map(String::as_str),
+            Some("oicp-types")
+        );
+        assert_eq!(
+            map.get("sovereign-contracts").map(String::as_str),
+            Some("sovereign/crates/sovereign-contracts")
+        );
+        // The external dep and the lint key are not internal crates.
+        assert!(!map.contains_key("serde"));
+        assert!(!map.contains_key("too_many_arguments"));
+    }
+
+    #[test]
+    fn extracts_internal_deps_across_sections_and_flags_a_breach() {
+        let internal: HashMap<String, String> = [
+            ("sovereign-contracts", "x"),
+            ("sovereign-core", "y"),
+            ("oicp-types", "z"),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+
+        let cargo = "\
+[package]\n\
+name = \"sovereign-tools-base\"\n\
+[dependencies]\n\
+sovereign-contracts = { workspace = true }\n\
+serde = { workspace = true }\n\
+[build-dependencies]\n\
+sovereign-core = { workspace = true }\n\
+[dev-dependencies]\n\
+tempfile = { workspace = true }\n";
+        let deps = parse_cargo_internal_deps(cargo, &internal);
+        // Only the in-repo crates are picked up (serde/tempfile are external).
+        assert!(deps.contains("sovereign-contracts"));
+        assert!(deps.contains("sovereign-core"));
+        assert!(!deps.contains("serde"));
+        assert!(!deps.contains("tempfile"));
+
+        // The package budget forbids sovereign-core (a build-dep breach counts).
+        let pkg_union: BTreeSet<&str> = PACKAGE_SET.iter().chain(SHARED_LEAVES).copied().collect();
+        let breaches: Vec<&String> = deps
+            .iter()
+            .filter(|d| !pkg_union.contains(d.as_str()))
+            .collect();
+        assert_eq!(breaches, vec![&"sovereign-core".to_string()]);
+    }
 }
