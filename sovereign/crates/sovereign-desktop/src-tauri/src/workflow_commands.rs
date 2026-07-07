@@ -252,7 +252,7 @@ impl From<WorkflowProgress> for WorkflowRunEvent {
 #[tauri::command]
 pub async fn workflow_run(
     app: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     name_or_path: String,
     params: BTreeMap<String, String>,
 ) -> Result<WorkflowRunHandle, String> {
