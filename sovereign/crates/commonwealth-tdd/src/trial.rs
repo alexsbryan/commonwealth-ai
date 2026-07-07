@@ -637,13 +637,34 @@ async fn try_candidate(
             content.push_str(&cont.content);
         }
     }
-    let edits = parse_response_edits(&content);
+    let mut edits = parse_response_edits(&content);
+    if edits.is_empty() {
+        // Re-sample once at a nudged temperature. A parse-failed
+        // candidate has already burned its slot; when decode wedges
+        // (instant stops after fences — J-arm receipts show whole
+        // rounds lost this way even WITH continuation), asking the
+        // same wedged context to continue returns another instant
+        // stop. A fresh draw at a different temperature is a new
+        // sample from a hopefully-unwedged state. One attempt.
+        let nudged = if temperature <= 0.6 {
+            temperature + 0.3
+        } else {
+            temperature - 0.3
+        };
+        if let Ok(r2) = backend
+            .complete(&model, messages.clone(), nudged, emit_max_tokens)
+            .await
+        {
+            content = r2.content;
+            edits = parse_response_edits(&content);
+        }
+    }
     if edits.is_empty() {
         return CandidateOutcome {
             temp: temperature,
             edits: vec![],
             workdir: candidate_workdir,
-            outcome: Err("parse: no action+block found".into()),
+            outcome: Err("parse: no action+block found (after continuation + resample)".into()),
             // Keep the raw content: a parse failure is only
             // diagnosable from what the model actually said.
             body: content,
@@ -690,7 +711,6 @@ async fn try_candidate(
         }
         Ok(())
     }
-    let mut edits = edits;
     let mut repaired = false;
     if let Err(first_err) = apply_all(
         &ctx,
@@ -902,6 +922,12 @@ struct ErrorFeedback {
     /// named _rpn.py — nothing ever told the model its target was
     /// flipping nothing.
     tie_targets: Vec<String>,
+    /// Targets of candidates that applied cleanly but made things
+    /// WORSE than the base ("shape (3p→1p)"). The 5.1 fixation loop
+    /// was mostly these — whole-file rewrites of a working module
+    /// that regressed passing tests, retried round after round with
+    /// no signal that they were destructive.
+    regressed_targets: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -924,6 +950,7 @@ impl ErrorFeedback {
         use std::collections::BTreeMap;
         let mut by_class: BTreeMap<&'static str, (usize, Option<String>)> = BTreeMap::new();
         let mut tie_targets: Vec<String> = Vec::new();
+        let mut regressed_targets: Vec<String> = Vec::new();
         for c in candidates {
             match &c.outcome {
                 Err(msg) => {
@@ -945,6 +972,16 @@ impl ErrorFeedback {
                         if !tie_targets.contains(&shape) {
                             tie_targets.push(shape);
                         }
+                    } else if t.parsed.passed < base.passed {
+                        let label = format!(
+                            "{} ({}p→{}p)",
+                            c.shape_summary(),
+                            base.passed,
+                            t.parsed.passed
+                        );
+                        if !regressed_targets.contains(&label) {
+                            regressed_targets.push(label);
+                        }
                     }
                 }
             }
@@ -960,11 +997,12 @@ impl ErrorFeedback {
         Self {
             buckets,
             tie_targets,
+            regressed_targets,
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.buckets.is_empty() && self.tie_targets.is_empty()
+        self.buckets.is_empty() && self.tie_targets.is_empty() && self.regressed_targets.is_empty()
     }
 
     fn render(&self, total_candidates: usize) -> String {
@@ -996,6 +1034,15 @@ impl ErrorFeedback {
             s.push_str(&format!(
                 "- These edits applied cleanly but flipped NO failing test (counts unchanged, so they were discarded): {}. Re-read the failing test output above — the actual offender may be a different file or function than the one you keep editing.\n\n",
                 self.tie_targets.join(", ")
+            ));
+        }
+        if !self.regressed_targets.is_empty() {
+            if s.is_empty() {
+                s.push_str("## What failed last round\n\n");
+            }
+            s.push_str(&format!(
+                "- These edits made things WORSE and were discarded: {}. They broke tests that were passing — do NOT rewrite whole working modules; make the smallest change that flips a failing test while keeping everything else intact.\n\n",
+                self.regressed_targets.join(", ")
             ));
         }
         s
