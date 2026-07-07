@@ -1166,22 +1166,23 @@
     }
   }
 
-  /** PR6 — abort the in-flight stream. Calls the Tauri command
-   *  which cancels the session's cancel-token; the sampler breaks,
-   *  the stream closes, message-complete fires naturally, and
-   *  chat.machine transitions back to idle. No explicit
-   *  chat.machine event — the existing complete-path handles it. */
+  /** PR6 / #25 — abort the in-flight stream. Optimistic: return the UI to
+   *  idle NOW rather than waiting on `message-complete`. The backend cancel
+   *  token only takes effect at the synthesis checkpoint, so on a slower
+   *  model the terminal can be 20-30s out even after the token is cancelled
+   *  (the pre-synthesis classify/retrieve and post-synthesis grounding-gate
+   *  phases don't poll the token) — waiting on it wedged the Stop button.
+   *  `CANCELLED` snaps chat.machine to idle immediately (works even before
+   *  `activeConversationId` resolves on a first turn); the Tauri cancel is
+   *  fired best-effort so the backend also stops as soon as it reaches a
+   *  checkpoint, and its late terminal lands in `idle` (ignored). */
   async function handleStop() {
+    send({ type: "CANCELLED" });
     const convoId = activeConversationId;
     if (!convoId) return;
-    try {
-      await cancelStream(convoId);
-    } catch (e) {
+    cancelStream(convoId).catch((e) => {
       console.warn("cancelStream failed:", e);
-      // Belt-and-braces: tell chat.machine to bail to idle so the
-      // UI recovers even if the Tauri call errored.
-      send({ type: "MESSAGE_ERROR", error: "cancelled" });
-    }
+    });
   }
 
   /** PR3 — next-step offer click. Mirrors `handleSend`'s streaming
