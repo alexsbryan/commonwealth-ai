@@ -30,6 +30,7 @@
 pub mod capability_request;
 pub mod checkpoint;
 pub mod decision_log;
+pub mod http_tester;
 /// JSON→TOML conversion helpers now live in the shared contract crate so both
 /// the recipe-author tools and the workflow-host author tools use one
 /// implementation; re-exported here at the old path for zero importer churn.
@@ -78,6 +79,7 @@ pub(crate) fn home_test_lock() -> std::sync::MutexGuard<'static, ()> {
 pub use capability_request::CapabilityRequestTool;
 pub use checkpoint::CheckpointTool;
 pub use decision_log::DecisionLogTool;
+pub use http_tester::HttpRecipeTester;
 pub use probe_url::{detect_pagination_hint, PaginationHint, ProbeUrlTool};
 pub use project::{
     maintainer_inbox_dir, projects_root_dir, ArtifactKind, CheckpointMeta, DecisionFrontier,
