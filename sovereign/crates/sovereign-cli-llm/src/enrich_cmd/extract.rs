@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
     checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
-    ChapterSelection, Phase1Output, Phase1Progress, PhaseCache, PhaseFailureKind, PhaseRunner,
+    ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind, PhaseRunner,
     PipelineRegistry, RetryMode, RunOutputWriter,
 };
 
@@ -141,7 +141,7 @@ async fn cmd_finalize(cfg: &EnrichConfig, checkpoint_path: &std::path::Path) -> 
     // Update the cache — finalize is the canonical "promote
     // checkpoint to authoritative state" pass, so cache semantics
     // mirror a `--full` run.
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     if let Err(e) = cache.write(PipelinePhase::Questions, &output) {
         eprintln!("error: updating cache: {e}");
         return 1;
@@ -214,6 +214,11 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // Negotiate structured-output mode against the daemon's advertised
+    // OICP features before the first request (OICP v0.4). No-op for a
+    // Sovereign daemon (advertises constraint:json_schema); matters
+    // when `base_url` points at another OICP host.
+    let client = client.discover_capabilities().await;
     // Phase D2 — grab the cumulative token ledger before consuming
     // the client into closures. The Arc<TokenUsageLedger> is shared
     // with the closures, so each chat call bumps it and the flusher
@@ -221,7 +226,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     let usage_ledger = client.usage_ledger();
     let (embed, chat, chat_with_tokens) = client.into_closures_with_tokens();
 
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
     let runner = PhaseRunner::new(
         pipeline,
@@ -901,7 +906,7 @@ pub async fn run_with_closures_for_test(
     let cfg = EnrichConfig::require(corpus_id).map_err(|e| e.to_string())?;
     let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg)
         .ok_or_else(|| format!("unknown pipeline: {}", cfg.pipeline_id))?;
-    let cache = PhaseCache::new(paths::cache_dir(corpus_id));
+    let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(corpus_id));
     let runner = PhaseRunner::new(
         pipeline,

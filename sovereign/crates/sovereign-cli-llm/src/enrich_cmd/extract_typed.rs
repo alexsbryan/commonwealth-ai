@@ -52,7 +52,7 @@ use corpus_engine::enrichment::pipeline::types::{
     SectionClassificationsFile, DISCOURSE_ROUTING_THRESHOLD,
 };
 use corpus_engine::enrichment::pipeline::PipelinePhase;
-use corpus_engine::enrichment::pipeline::{PhaseCache, RunOutputWriter};
+use corpus_engine::enrichment::pipeline::RunOutputWriter;
 use sovereign_tools::typed_call::{
     TYPED_BUDGET_INITIAL as TYPED_CALL_BUDGET_INITIAL,
     TYPED_BUDGET_RETRY as TYPED_CALL_BUDGET_RETRY,
@@ -367,7 +367,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
     // Load the existing Phase 1 cache. extract-typed mutates this in
     // place — every section we touch gets a `type_extension` attached
     // to its `section_extraction`.
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let mut phase1: Phase1Output = match cache.read::<Phase1Output>(PipelinePhase::Questions) {
         Ok(Some(o)) => o,
         Ok(None) => {

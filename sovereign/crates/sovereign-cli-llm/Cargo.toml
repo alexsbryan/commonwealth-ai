@@ -27,6 +27,9 @@ path = "src/main.rs"
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-inference = { workspace = true }
+# OICP feature-string constants (constraint:json_schema/json_object) for
+# discovery-driven StructuredOutputMode negotiation — see enrich_cmd/providers.rs.
+oicp-types = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 sovereign-workflow = { workspace = true }

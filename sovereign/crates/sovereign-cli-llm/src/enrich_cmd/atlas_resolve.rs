@@ -23,7 +23,7 @@ use corpus_engine::enrichment::atlas::{
     resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{
-    ExtractedQuestion, Phase1Output, PhaseCache, PipelinePhase, SectionExtraction,
+    ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
 };
 use corpus_engine::types::EmbedFn;
 
@@ -125,7 +125,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     }
 
     // Load the Phase 1 cache. No cache = nothing to resolve.
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let phase1: Phase1Output = match cache.read(PipelinePhase::Questions) {
         Ok(Some(p)) => p,
         Ok(None) => {
@@ -480,7 +480,7 @@ impl Tool for AtlasResolveTool {
         }
 
         // Load the Phase-1 cache (questions.json) and pull its section sketches.
-        let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+        let cache = cfg.phase_cache();
         let phase1: Phase1Output = cache
             .read(PipelinePhase::Questions)
             .map_err(|e| Error::Execution(format!("atlas_resolve: read Phase 1 cache: {e}")))?

@@ -12127,6 +12127,7 @@ dependencies = [
  "hex",
  "hostname",
  "libc",
+ "oicp-types",
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
@@ -12485,6 +12486,20 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-studio"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-recipe-author",
+ "sovereign-tools-base",
+ "sovereign-workflow",
+ "sovereign-workflow-host",
+ "tokio",
 ]
 
 [[package]]

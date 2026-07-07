@@ -56,7 +56,7 @@ pub use atlas::{
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
-pub use phase_cache::{PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
+pub use phase_cache::{CacheModelIdentity, PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};
 pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use registry::PipelineRegistry;
