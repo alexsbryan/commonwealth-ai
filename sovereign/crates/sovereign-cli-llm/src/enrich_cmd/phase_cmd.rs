@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{PhaseCache, PhaseRunner, RunOutputWriter};
+use corpus_engine::enrichment::pipeline::{PhaseRunner, RunOutputWriter};
 
 use super::config::EnrichConfig;
 use super::corpus_io::build_corpus;
@@ -86,7 +86,7 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
         }
     };
     let (embed, chat) = client.into_closures();
-    let cache = PhaseCache::new(paths::cache_dir(&corpus_id));
+    let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&corpus_id));
     let runner = Arc::new(PhaseRunner::new(
         pipeline,
