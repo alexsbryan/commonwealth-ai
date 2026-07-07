@@ -375,8 +375,31 @@ respective feature levels.
 - The v0.3 `CapabilityClaim`, request property fields, scheduling priority order,
   and the composed reference scorer (`score_with_adjustments`) are unchanged.
 - The `ProviderManifest` top-level shape gains only the additive `features` field.
-- The knowledge-search API (§6 of v0.3 / v0.2) is unchanged.
+- The knowledge-search response shape (§6 of v0.3 / v0.2) is unchanged. The
+  **request** gains two additive, back-compatible relaxations so a thin client
+  can search with text alone (see §6.1 below).
 - The privacy model (`ShardingPrivacy`, default `LocalOnly`) is unchanged.
+
+### 6.1 Thin-client knowledge search (v0.4)
+
+`KnowledgeSearchRequest.query_embedding` becomes **optional**
+(`#[serde(default)]`, empty = absent), and `query_text` accepts `query` as an
+alias. The host owns the embed model, so a client built against the manifest
+alone need not embed: when `query_embedding` is absent, the host MUST embed
+`query_text` with its advertised
+`knowledge.embed_model.query_instruction_prefix` (§4) before searching, so the
+query vector lands in the corpus's space. When `query_embedding` is present it
+is used as-is — mesh peers pre-embed to avoid re-embedding on every hop, and the
+host-filled vector fans out to peers unchanged. A request with neither an
+embedding nor query text is `400`; a host that cannot embed (no local inference)
+is `503`. This is what makes `search_endpoint` reachable by the same
+manifest-plus-HTTP client that runs the rest of the stack.
+
+`corpora_searched` in the response is informational: it MAY include
+mesh-federated corpora hosted by peers that are absent from this host's
+`knowledge.corpora`, and a host is NOT required to enumerate every searchable
+corpus in its manifest. Clients and conformance tooling therefore MUST NOT treat
+a searched corpus outside the advertised set as an error.
 
 See the implementation in `oicp-types/src/lib.rs`, the previous protocol version
 in [`oicp-v0.3.md`](./oicp-v0.3.md), and the extraction it enables in

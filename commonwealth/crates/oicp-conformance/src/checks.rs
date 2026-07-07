@@ -571,25 +571,31 @@ async fn check_knowledge_search(host: &Host, m: &ProviderManifest) -> Check {
     if !has_results {
         return Check::fail(id, Level::Feature, format!("no results/chunks array: {v}"));
     }
-    if let Some(searched) = v.get("corpora_searched").and_then(|x| x.as_array()) {
-        let known: Vec<&str> = k.corpora.iter().map(|c| c.id.as_str()).collect();
-        for c in searched {
-            if let Some(cid) = c.as_str() {
-                if !known.contains(&cid) {
-                    return Check::fail(
-                        id,
-                        Level::Feature,
-                        format!("searched corpus `{cid}` is not in the manifest"),
-                    );
-                }
+    // `corpora_searched` vs the advertised set: the spec does NOT require
+    // searched ⊆ advertised. A mesh-federated host legitimately searches
+    // peer-hosted corpora absent from its own manifest, and a host need
+    // not enumerate every local corpus. So the well-shaped result set is
+    // the contract; unadvertised searched corpora are reported as a note,
+    // never a failure (that would fail every real federated host).
+    let note = match v.get("corpora_searched").and_then(|x| x.as_array()) {
+        Some(searched) if !k.corpora.is_empty() => {
+            let known: Vec<&str> = k.corpora.iter().map(|c| c.id.as_str()).collect();
+            let extra = searched
+                .iter()
+                .filter_map(|c| c.as_str())
+                .filter(|cid| !known.contains(cid))
+                .count();
+            if extra > 0 {
+                format!(
+                    "well-shaped; {extra} searched corpus(es) not enumerated in the manifest (federation / partial advertisement)"
+                )
+            } else {
+                "well-shaped; all searched corpora are advertised".to_string()
             }
         }
-    }
-    Check::pass(
-        id,
-        Level::Feature,
-        "search returned a well-shaped result set",
-    )
+        _ => "search returned a well-shaped result set".to_string(),
+    };
+    Check::pass(id, Level::Feature, note)
 }
 
 async fn check_ingest_state_machine(host: &Host, m: &ProviderManifest, args: &Args) -> Check {
