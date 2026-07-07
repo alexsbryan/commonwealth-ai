@@ -118,6 +118,13 @@ export const routingStore = {
   get narrationLog() {
     return _snapshot.context.narrationLog;
   },
+  /** Live token-count heartbeat during the gated synthesis hold, or
+   *  `null` when no synthesis is actively holding tokens. NarrationChip
+   *  renders this as a ticking "writing… N tokens" pulse so a long
+   *  grounded turn shows movement without leaking the held content. */
+  get synthesisProgress() {
+    return _snapshot.context.synthesisProgress;
+  },
   /** New-assistant-message-id produced by the most recent successful
    *  redirect. ChatView watches this to wire up the chat.machine
    *  placeholder before the first chunk arrives; after consuming it,

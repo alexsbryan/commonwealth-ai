@@ -52,6 +52,14 @@ export function applyNarration(
   incoming: NarrationEvent,
 ): NarrationEvent[] {
   const phase = incoming.phase;
+  // `synthesis_progress` frames are a live token-count heartbeat, not a
+  // log entry — they arrive throttled (~4/s) during the gated synthesis
+  // hold and would flood the chip stack. They land in a separate
+  // `synthesisProgress` context field via `applySynthesisProgress`; the
+  // log is left untouched here.
+  if (isSynthesisProgress(phase)) {
+    return log;
+  }
   if (
     typeof phase === "object" &&
     phase !== null &&
@@ -76,10 +84,57 @@ export function applyNarration(
   return [...log, incoming];
 }
 
+/** Narrowing guard for the `synthesis_progress` struct variant. */
+function isSynthesisProgress(
+  phase: NarrationEvent["phase"],
+): phase is { synthesis_progress: { tokens: number } } {
+  return (
+    typeof phase === "object" &&
+    phase !== null &&
+    "synthesis_progress" in phase
+  );
+}
+
+/** Live token-count heartbeat during a gated synthesis hold. */
+export interface SynthesisProgress {
+  tokens: number;
+  elapsedMs: number;
+}
+
+/**
+ * Pure reducer for the `synthesisProgress` heartbeat field. A
+ * `synthesis_progress` frame REPLACES the prior value (monotone token
+ * count ticking up); ANY other narration frame means synthesis has
+ * handed off to the next phase (grounding-verify, persist) or a new
+ * turn began — clear the heartbeat so the normal chip stack takes over.
+ *
+ * Exported for unit tests; the FSM consumes it through the
+ * `TURN_NARRATION_EMITTED` assign action.
+ */
+export function applySynthesisProgress(
+  prev: SynthesisProgress | null,
+  incoming: NarrationEvent,
+): SynthesisProgress | null {
+  const phase = incoming.phase;
+  if (isSynthesisProgress(phase)) {
+    return {
+      tokens: phase.synthesis_progress.tokens,
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  return null;
+}
+
 export interface RoutingContext {
   proposed: InterpretationProposedPayload | null;
   clarification: ClarificationRequestPayload | null;
   narrationLog: NarrationEvent[];
+  /** Live token-count heartbeat during the gated synthesis hold. Set
+   *  by throttled `synthesis_progress` frames (REPLACE, not append —
+   *  see `applySynthesisProgress`), cleared when the next distinct
+   *  narration phase arrives or a new turn starts. `null` when no
+   *  synthesis is actively holding tokens. */
+  synthesisProgress: SynthesisProgress | null;
   /** Set by submitRedirect's onDone to the `message_id` of the new
    *  assistant bubble the runtime just started streaming into.
    *  ChatView watches this and, on change, dispatches
@@ -181,6 +236,7 @@ export const routingMachine = setup({
     proposed: null,
     clarification: null,
     narrationLog: [],
+    synthesisProgress: null,
     lastRedirectedMessageId: null,
     lastClarifiedMessageId: null,
   },
@@ -335,10 +391,18 @@ export const routingMachine = setup({
           actions: assign({
             narrationLog: ({ context, event }) =>
               applyNarration(context.narrationLog, event.payload.event),
+            synthesisProgress: ({ context, event }) =>
+              applySynthesisProgress(
+                context.synthesisProgress,
+                event.payload.event,
+              ),
           }),
         },
         CLEAR_NARRATION: {
-          actions: assign({ narrationLog: () => [] }),
+          actions: assign({
+            narrationLog: () => [],
+            synthesisProgress: () => null,
+          }),
         },
       },
     },
