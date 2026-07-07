@@ -2164,6 +2164,15 @@ impl Runtime {
             tracing::info!("runtime: degenerate (contentless) message — returning clarification");
             return Err(Error::InvalidInput(DEGENERATE_MESSAGE_HINT.to_string()));
         }
+        // Reserve the turn's cancel token NOW, before the multi-second
+        // build-context + classification + retrieval preparing window. A
+        // `cancel_stream` that arrives during that window (Stop clicked the
+        // instant the button appears, common on a slow model) trips this
+        // token via `cancel_preparing`; `sessions.begin` below ADOPTS it, so
+        // the cancel carries through to synthesis. Without this the cancel
+        // hit only the previous (stale) session and this turn ran to
+        // completion (2026-07-07 slow-model race).
+        let _ = self.sessions.reserve_cancel(conversation_id);
         // 1. Build context.
         let principal = self
             .corpus_principal
