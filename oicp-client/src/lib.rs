@@ -313,21 +313,28 @@ impl RemoteApiProvider {
         self.api_key.as_ref().map(|k| format!("Bearer {k}"))
     }
 
-    /// Daemon root + warmup path. The route is mounted at the daemon
-    /// root (not under `/v1`), so we strip a `/v1` suffix from
-    /// `self.endpoint` if present. Two endpoint shapes appear in the
-    /// codebase: callers like `chat_cmd/bootstrap` pass
-    /// `http://host:9741/v1`; peer-inference callers pass
-    /// `http://peer:9741`. Both resolve to the same warmup URL here.
+    /// The daemon root: `self.endpoint` with any `/v1` suffix stripped. Routes
+    /// mounted at the daemon root (not under `/v1`) — warmup and the OICP
+    /// capabilities manifest — resolve from here. Two endpoint shapes appear in
+    /// the codebase: callers like `chat_cmd/bootstrap` pass
+    /// `http://host:9741/v1`; peer-inference callers pass `http://peer:9741`.
+    /// Both resolve to the same root here.
+    fn daemon_root(&self) -> &str {
+        self.endpoint.strip_suffix("/v1").unwrap_or(&self.endpoint)
+    }
+
     fn warmup_url(&self) -> String {
-        let base = self.endpoint.strip_suffix("/v1").unwrap_or(&self.endpoint);
-        format!("{base}/internal/inference/warmup")
+        format!("{}/internal/inference/warmup", self.daemon_root())
     }
 
     /// Fetch the OICP capabilities manifest from a provider.
     /// Returns None if the provider doesn't support OICP (404 or parse failure).
     pub async fn fetch_oicp_manifest(&self) -> Option<ProviderManifest> {
-        let url = format!("{}/oicp/v1/capabilities", self.endpoint);
+        // `/oicp/v1/capabilities` is mounted at the daemon root, NOT under
+        // `/v1` (same as warmup) — strip a `/v1` endpoint suffix so a caller
+        // holding the OpenAI `/v1` URL still reaches it. Without this, a
+        // `/v1`-shaped endpoint hit `…/v1/oicp/v1/capabilities` → 404 → None.
+        let url = format!("{}/oicp/v1/capabilities", self.daemon_root());
 
         let mut req = self.client.get(&url);
         if let Some(ref auth) = self.auth_header() {
@@ -1063,6 +1070,22 @@ mod tests {
         assert_eq!(
             provider.warmup_url(),
             "http://peer:9741/internal/inference/warmup",
+        );
+    }
+
+    #[test]
+    fn capabilities_url_resolves_at_daemon_root_for_both_endpoint_shapes() {
+        // `/oicp/v1/capabilities` is mounted at the daemon root, so a `/v1`
+        // endpoint (chat-bootstrap shape) must strip it — otherwise the fetch
+        // hits `…/v1/oicp/v1/capabilities` (404) and manifest-driven context
+        // silently falls back to the hardcoded default.
+        let with_v1 = RemoteApiProvider::new("http://host:9741/v1", None, "m", 4096);
+        let bare = RemoteApiProvider::new("http://host:9741", None, "m", 4096);
+        assert_eq!(with_v1.daemon_root(), "http://host:9741");
+        assert_eq!(bare.daemon_root(), "http://host:9741");
+        assert_eq!(
+            format!("{}/oicp/v1/capabilities", with_v1.daemon_root()),
+            "http://host:9741/oicp/v1/capabilities"
         );
     }
 }
