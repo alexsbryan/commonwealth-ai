@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "oicp-conformance"
+description = "A self-contained conformance tester for OICP v0.4 hosts. Points at a --host URL and checks its manifest, inference, constraint, embed, knowledge, and ingest surfaces against the spec — the exact minimal dependency budget (oicp-types + serde/reqwest/tokio) a third party can lift to certify their own implementation."
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "oicp-conformance"
+path = "src/main.rs"
+
+# The dependency budget IS the point: only the wire types + serde/HTTP/async.
+# No clap (args are hand-rolled), no jsonschema crate (probe schemas are
+# hand-checked). A conforming third-party host can copy this crate wholesale.
+[dependencies]
+oicp-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

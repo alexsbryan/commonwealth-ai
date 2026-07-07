@@ -84,7 +84,7 @@ pub struct Worker {
     /// expose that path publicly.
     index_dir_root: PathBuf,
     /// Living-trigger runtime. The daemon installs one (a
-    /// `DaemonWorkflowRuntime` from `sovereign-workflow-host`); tests and the
+    /// `DaemonWorkflowRuntime` in `sovereign-cli-daemon`); tests and the
     /// desktop leave it `None`, so the trigger seam is inert. When set, a sweep
     /// that changes files and whose folder has a `run_on_changes` workflow
     /// dispatches it here (fire-and-forget). See [`WorkflowTriggerRuntime`].

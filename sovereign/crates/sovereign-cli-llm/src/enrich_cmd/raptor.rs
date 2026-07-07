@@ -340,6 +340,8 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         parsed.chat_model.clone(),
         parsed.embed_model.clone(),
         8192,
+        sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .embed_query_instruction(&parsed.embed_model),
     ));
 
     let store = match SqliteStateStore::open(&db_path) {

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-recipe-author"
+description = "The recipe-authoring tool bundle (write → validate → test → checkpoint) plus the RecipeProject model and its rusqlite project store. Talks to the daemon only through the contract seams (RecipeNotes, RecipeTester) — carries no corpus-engine or llama.cpp dependency, so it ships with the extractable studio package."
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+# The dependency budget IS the boundary: the contract vocabulary
+# (Tool/StepOutput/Error, recipe::{schema,notes,testing,paths,json_to_toml}) plus
+# ordinary async/HTTP/serde/sqlite leaves. The note store and the recipe test
+# harness are reached through injected trait objects (RecipeNotes, RecipeTester),
+# whose corpus-engine-backed adapters live monolith-side in sovereign-tools.
+[dependencies]
+sovereign-contracts = { workspace = true }
+
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+toml = { workspace = true }
+rusqlite = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

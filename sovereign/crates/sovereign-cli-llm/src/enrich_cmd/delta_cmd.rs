@@ -47,7 +47,7 @@ use std::sync::Arc;
 use corpus_engine::enrichment::atlas::atoms_delta::{apply_atom_delta, AtomsDelta};
 use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
-use corpus_engine::enrichment::pipeline::{Phase1Output, PhaseCache, PipelinePhase};
+use corpus_engine::enrichment::pipeline::{Phase1Output, PipelinePhase};
 use corpus_engine::{CorpusEngine, EmbedFn};
 
 use super::atlas_resolve::{collect_section_extractions, resolve_into_dir, ResolvePhase};
@@ -285,7 +285,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     }
 
     // ── Step 4: load the subset sketches ───────────────────────
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let phase1: Phase1Output = match cache.read(PipelinePhase::Questions) {
         Ok(Some(p)) => p,
         Ok(None) => {

@@ -231,8 +231,20 @@ fn build_attach_provider(config: &DesktopConfig) -> Result<Arc<dyn InferenceProv
         context_size = ctx,
         "Attach mode: routing inference to the daemon over HTTP — no local weights loaded"
     );
+    // Behavior-preserving: the old `SplitInferenceProvider::new` derived the
+    // embed slot's query-instruction prefix from `DEFAULT_MANIFEST` internally;
+    // v0.4 threads it as an explicit constructor arg. Computed before the move
+    // of `embed_id` into arg 3.
+    let embed_query_instruction =
+        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_id);
     Ok(Arc::new(
-        sovereign_inference::remote::SplitInferenceProvider::new(&v1, chat_id, embed_id, ctx),
+        sovereign_inference::remote::SplitInferenceProvider::new(
+            &v1,
+            chat_id,
+            embed_id,
+            ctx,
+            embed_query_instruction,
+        ),
     ))
 }
 

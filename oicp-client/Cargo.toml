@@ -1,0 +1,25 @@
+[package]
+name = "oicp-client"
+description = "Open Inference Capabilities Protocol (OICP) — pure-HTTP client (OpenAI-compatible + OICP manifest routing)"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+# The contract vocabulary (InferenceProvider, CompletionRequest/Response,
+# Error/Result) and the OICP protocol types. These two are the entire
+# non-leaf dependency budget — the point of the crate.
+sovereign-contracts = { workspace = true }
+oicp-types = { workspace = true }
+
+async-trait = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = "0.1"
+tracing = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+
+[lints]
+workspace = true

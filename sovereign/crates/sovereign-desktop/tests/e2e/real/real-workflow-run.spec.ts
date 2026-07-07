@@ -61,9 +61,11 @@ test("real stack: run the notebook workflow over a folder from the desktop UI", 
   await expect(cta).toBeVisible();
   await expect(cta).toContainText(corpus);
 
-  // The handoff lands the user in chat over the freshly-built notebook.
+  // The handoff lands the user on the chat (Ask) surface — the same `.chat-view`
+  // signal realBootToChat waits on (the composer carries no testid; the app's
+  // canonical "we're in chat" marker is the view class).
   await cta.click();
-  await expect(page.getByTestId("chat-input")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".chat-view")).toBeVisible({ timeout: 30_000 });
 
   fs.rmSync(folder, { recursive: true, force: true });
 });

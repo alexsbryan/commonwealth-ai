@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
     atlas::SectionExtraction, AtlasCluster, ExemplarBank, Facet, NamedCluster, Phase1Output,
-    Phase2AtlasOutput, Phase3AtlasOutput, PhaseCache, PhaseFailure, PhaseFailureKind, PhaseRunner,
+    Phase2AtlasOutput, Phase3AtlasOutput, PhaseFailure, PhaseFailureKind, PhaseRunner,
     PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt,
 };
 
@@ -423,7 +423,7 @@ fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
     };
     let (embed, chat) = client.into_closures();
 
-    let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
+    let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
     Ok(PhaseRunner::new(
         pipeline,

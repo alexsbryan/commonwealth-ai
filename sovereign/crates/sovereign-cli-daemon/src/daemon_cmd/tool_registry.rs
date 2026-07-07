@@ -237,6 +237,20 @@ pub(super) async fn build_tool_registry(
     #[cfg(feature = "atos")]
     tools.register(Box::new(sovereign_tools::DesignSignalsExtractTool::new()));
 
+    // B:P9d — the corpus/atlas plane (corpus_store, corpus_search, atlas_gaps,
+    // atlas_tensions, + the document ExtractTool). `standard_registry` dropped
+    // these when the studio bundle carved out corpus-engine (B:P5); the daemon
+    // still links corpus-engine, so it registers them HERE to serve them over
+    // `/mcp`, letting a corpus-engine-free studio client (B:P9e) run the shipped
+    // notebook / summarize workflows remotely. Each is a bare unit struct that
+    // opens its corpus/atlas (or document) from disk at call time, so no engine
+    // handle is threaded in. `extract` resolves its `path` on THIS host's
+    // filesystem — correct for a loopback client, a clean "file not found" for a
+    // remote one (see `sovereign_tools::mcp_surface::MCP_TOOLS_ALWAYS`).
+    for tool in sovereign_tools::workflow_corpus_tools() {
+        tools.register(tool);
+    }
+
     // SOLVE — the daemon-hosted TDD solver (docs/specs/SOLVE_UX.md).
     // Same job table as the /v1/solve/jobs HTTP surface, so MCP
     // agents and curl sessions see the same jobs.

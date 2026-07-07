@@ -20,12 +20,44 @@ import { J_CHAT_CITATION } from "./manifest";
 journeyTest(J_CHAT_CITATION, async ({ page, run }) => {
   await realBootToChat(page);
 
+  // Best-effort glassbox check: a grounded turn holds its synthesis
+  // tokens behind the grounding gate, during which the runtime emits a
+  // `synthesis_progress` heartbeat the UI renders as a ticking "writing…
+  // N tokens" chip. Watch for it concurrently with the turn — it's a
+  // mid-turn transient (cleared the instant grounding-verify begins), so
+  // it must be observed while the turn is still in flight, not after.
+  // Note-and-skip if the synthesis window was too short to surface a
+  // frame (matches this file's model-nondeterminism posture).
+  const heartbeat = page.locator('[data-testid="synthesis-heartbeat"]');
+  let heartbeatText: string | null = null;
+  const heartbeatWatch = heartbeat
+    .waitFor({ state: "visible", timeout: 30_000 })
+    .then(async () => {
+      heartbeatText = (await heartbeat.textContent())?.trim() ?? "";
+    })
+    .catch(() => {
+      /* window too short to surface a frame — best-effort */
+    });
+
   // Grounded in the fixture corpus (the Meridian Lighthouse set), so
   // retrieval reliably returns chunks regardless of the chat model.
   const facts = await run.turn(
     "How tall is the Meridian Lighthouse, and what is its light signal?",
     { requireCitations: true },
   );
+
+  await heartbeatWatch;
+  if (heartbeatText !== null) {
+    expect(
+      heartbeatText,
+      "the synthesis heartbeat must show a running token COUNT, never the held content",
+    ).toMatch(/\d[\d,]*\s+tokens?/);
+    run.note(`synthesis heartbeat observed during gated hold: "${heartbeatText}"`);
+  } else {
+    run.note(
+      "synthesis heartbeat not observed (synthesis window under the first-frame threshold)",
+    );
+  }
   expect(
     facts.citations.length,
     "grounded turn must surface at least one retrieved chunk",

@@ -122,6 +122,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             },
             size_gb,
             claims,
+            fingerprint: None,
         });
     }
 
@@ -188,6 +189,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 },
                 size_gb,
                 claims,
+                fingerprint: None,
             });
         }
     }
@@ -244,6 +246,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 },
                 size_gb,
                 claims,
+                fingerprint: None,
             });
         }
     }
@@ -299,6 +302,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 },
                 size_gb,
                 claims: code_hint_claims,
+                fingerprint: None,
             });
         }
     }
@@ -354,6 +358,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             },
             size_gb,
             claims,
+            fingerprint: None,
         });
     }
 
@@ -377,6 +382,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         models,
         knowledge: None,
         federation: None,
+        features: Vec::new(),
     }
 }
 

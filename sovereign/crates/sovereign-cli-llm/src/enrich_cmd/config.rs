@@ -229,6 +229,28 @@ impl EnrichConfig {
     pub fn phase_overrides_snapshot(&self) -> BTreeMap<String, PhaseOverride> {
         self.phase_overrides.clone().unwrap_or_default()
     }
+
+    /// The phase cache for this corpus, stamped with the configured
+    /// model so a later run under a *different* model recomputes
+    /// rather than silently reusing the old model's phase outputs
+    /// (OICP v0.4 §6 — stale-on-model-swap). Every pipeline-I/O site
+    /// (cascade, extract, atlas resolve, delta, seed, single-phase)
+    /// MUST build its cache through this one constructor so reads and
+    /// writes carry the identical identity and agree — a bespoke
+    /// `PhaseCache::new(paths::cache_dir(..))` at one site while
+    /// another stamps would silently split the cache.
+    ///
+    /// The stamp keys on `chat_model` only; the OICP model
+    /// `fingerprint` (weight/quant/template identity) is left `None`
+    /// pending consistent cross-subcommand resolution — model-*name*
+    /// swaps are the dominant hazard and are fully covered. Per-phase
+    /// `chat_models` overrides are not reflected in the stamp (the
+    /// primary model keys the whole cache); swapping only an override
+    /// model is a documented gap.
+    pub fn phase_cache(&self) -> corpus_engine::enrichment::pipeline::PhaseCache {
+        corpus_engine::enrichment::pipeline::PhaseCache::new(paths::cache_dir(&self.corpus_id))
+            .with_model_identity(self.chat_model.clone(), None)
+    }
 }
 
 #[cfg(test)]

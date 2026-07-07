@@ -65,8 +65,8 @@ impl WatchedSubsystem {
         engine: Arc<CorpusEngine>,
         manager: Arc<LocalCorpusManager>,
         max_concurrent_sweeps: usize,
-        // The living-trigger runtime (a `DaemonWorkflowRuntime` from
-        // `sovereign-workflow-host`). `None` disables the trigger — the desktop's
+        // The living-trigger runtime (a `DaemonWorkflowRuntime` in
+        // `sovereign-cli-daemon`). `None` disables the trigger — the desktop's
         // embedded daemon passes `None` for v1; the CLI daemon passes `Some`.
         workflow_runtime: Option<Arc<dyn WorkflowTriggerRuntime>>,
     ) -> Self {

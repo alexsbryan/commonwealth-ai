@@ -1,0 +1,35 @@
+# Workflow demo — for each note in ./notes, read it via the reference MCP server
+# (read_memo) and produce a summary + action items via the local model.
+#
+#   sovereign mcp demo-server &                              # provides read_memo
+#   sovereign mcp add demo --url http://127.0.0.1:4319/mcp   # register it
+#   mkdir -p notes && printf 'Standup: shipped MCP. TODO: spec the substrate.' > notes/standup.md
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/notes-digest.toml
+#
+# It mixes an ecosystem-shaped MCP tool, a local model, and data-authored steps.
+# Swap `mcp:demo:read_memo` → `mcp:whisper:transcribe_audio` and `*.md` → `*.m4a`
+# and it's audio transcription — no code change.
+
+[workflow]
+name = "notes-digest"
+
+[source]
+type = "folder"
+path = "./notes"
+glob = "*.md"
+
+[[step]]
+id = "read"
+uses = "mcp:demo:read_memo"
+params = { path = "{item.path}" }
+
+[[step]]
+id = "digest"
+uses = "model:thoughtful"
+resources = { latency_class = "extended", privacy = "local_only" }
+prompt = """
+Summarize this note in two sentences, then list any action items as bullets.
+
+NOTE:
+{read.output}
+"""

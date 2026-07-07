@@ -2360,6 +2360,7 @@ dependencies = [
  "serde_json",
  "sevenz-rust2",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "streaming-iterator",
  "syn 2.0.117",
  "tar",
@@ -8832,6 +8833,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "oicp-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "oicp-conformance"
+version = "0.1.0"
+dependencies = [
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [
@@ -12026,6 +12054,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
+ "sovereign-workflow",
  "sovereign-workflow-host",
  "tempfile",
  "tokio",
@@ -12100,6 +12129,7 @@ dependencies = [
  "hex",
  "hostname",
  "libc",
+ "oicp-types",
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
@@ -12107,6 +12137,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-cli-shared",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-eval",
  "sovereign-inference",
@@ -12145,6 +12176,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-contracts"
+version = "0.1.18"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "dirs 5.0.1",
+ "futures",
+ "oicp-types",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml 0.8.2",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sovereign-core"
 version = "0.1.18"
 dependencies = [
@@ -12160,6 +12211,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "sovereign-store",
  "sovereign-tools",
  "tempfile",
@@ -12195,6 +12247,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-authoring-harness",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-inference",
  "sovereign-mesh",
@@ -12258,6 +12311,7 @@ dependencies = [
  "llama-cpp-sys-4",
  "llguidance",
  "minijinja",
+ "oicp-client",
  "rayon",
  "reqwest 0.12.28",
  "serde",
@@ -12362,6 +12416,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-recipe-author"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "uuid",
+]
+
+[[package]]
 name = "sovereign-server"
 version = "0.1.18"
 dependencies = [
@@ -12381,6 +12452,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-inference",
  "sovereign-store",
@@ -12410,11 +12482,26 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-core",
+ "sovereign-recipe-author",
  "tempfile",
  "tokio",
  "tokio-postgres",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-studio"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-recipe-author",
+ "sovereign-tools-base",
+ "sovereign-workflow",
+ "sovereign-workflow-host",
+ "tokio",
 ]
 
 [[package]]
@@ -12470,11 +12557,13 @@ dependencies = [
  "serde_yaml",
  "sha2 0.10.9",
  "sovereign-atos",
+ "sovereign-contracts",
  "sovereign-core",
+ "sovereign-recipe-author",
  "sovereign-store",
+ "sovereign-tools-base",
  "sovereign-work-atlas",
  "strsim",
- "syn 2.0.117",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12484,6 +12573,26 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "sovereign-tools-base"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "csv",
+ "dirs 5.0.1",
+ "futures",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-contracts",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]
@@ -12519,7 +12628,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-core",
+ "sovereign-contracts",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -12531,11 +12640,11 @@ name = "sovereign-workflow-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "oicp-client",
  "reqwest 0.12.28",
  "serde_json",
- "sovereign-core",
- "sovereign-inference",
- "sovereign-tools",
+ "sovereign-contracts",
+ "sovereign-tools-base",
  "sovereign-workflow",
  "tempfile",
  "tokio",

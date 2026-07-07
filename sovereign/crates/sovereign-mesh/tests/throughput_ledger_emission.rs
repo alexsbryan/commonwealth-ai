@@ -121,9 +121,11 @@ async fn capabilities_handler() -> impl IntoResponse {
                 4_000,
                 0.80,
             )],
+            fingerprint: None,
         }],
         knowledge: None,
         federation: None,
+        features: Vec::new(),
     })
 }
 

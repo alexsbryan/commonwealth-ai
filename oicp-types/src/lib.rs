@@ -1,22 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! OICP — Open Inference Capabilities Protocol v0.3.0
+//! OICP — Open Inference Capabilities Protocol v0.4.0
 //!
 //! Canonical types per the specification at
-//! `commonwealth/docs/oicp-v0.3.md`. Consumed by both the Sovereign
-//! and Commonwealth workspaces via path dependency.
+//! `commonwealth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively;
+//! `oicp-v0.3.md` remains the fallback path). Consumed by both the
+//! Sovereign and Commonwealth workspaces via path dependency.
 //!
 //! v0.3 replaces the v0.2 capability-profile vocabulary with
 //! specialization-aware routing: capability hints, latency classes,
 //! per-model claims. The protocol is intentionally small at launch —
 //! two standardized hints (`general`, `code`), three latency classes,
 //! and an explicit extension track (`x:<tag>`) for everything else.
+//!
+//! v0.4 makes a host's constraint machinery and knowledge plane
+//! discoverable enough that a client built only against "OICP manifest
+//! + OpenAI-compatible HTTP" can run the workflow / recipe-authoring
+//! stack against any conforming host: provider-level `features`
+//! advertisement (§2), `EmbedModelInfo.query_instruction_prefix` (§4),
+//! the ingest extension (§5), and model fingerprints (§6). Every v0.4
+//! field is serde-defaulted; an empty v0.4 value serializes identically
+//! to a v0.3 manifest.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// OICP specification version implemented by this module.
-pub const OICP_VERSION: &str = "0.3.0";
+pub const OICP_VERSION: &str = "0.4.0";
 
 // -----------------------------------------------------------------
 // Internal model-metadata vocabulary
@@ -511,6 +521,77 @@ pub enum ShardingPrivacy {
 }
 
 // -----------------------------------------------------------------
+// v0.4 §2.1 — Feature advertisement vocabulary
+// -----------------------------------------------------------------
+
+/// Registered feature strings for [`ProviderManifest::features`] (v0.4
+/// §2.1). A host advertises the request-level capabilities it honours
+/// so a decoupled client can negotiate (§3) instead of guessing.
+/// Extension features carry the `x:` prefix; unknown features are
+/// preserved verbatim and treated as absent by clients.
+pub mod features {
+    /// `response_format: {type: "json_schema"}` is grammar-enforced —
+    /// output is guaranteed to validate against the supplied schema.
+    pub const CONSTRAINT_JSON_SCHEMA: &str = "constraint:json_schema";
+    /// `response_format: {type: "json_object"}` guarantees syntactically
+    /// valid JSON (no schema-conformance guarantee).
+    pub const CONSTRAINT_JSON_OBJECT: &str = "constraint:json_object";
+    /// The `lark_grammar` body field is honoured; output is guaranteed
+    /// to be in the grammar's language. More expressive than JSON Schema.
+    pub const CONSTRAINT_LARK: &str = "constraint:lark";
+    /// The `url_allowlist` sampler constraint is honoured.
+    pub const CONSTRAINT_ALLOWLIST_URL: &str = "constraint:allowlist:url";
+    /// The `evidence_id_allowlist` sampler constraint is honoured.
+    pub const CONSTRAINT_ALLOWLIST_EVIDENCE_ID: &str = "constraint:allowlist:evidence_id";
+    /// The `cmd_prefix` / `assistant_prefix` sampler constraints are honoured.
+    pub const CONSTRAINT_ALLOWLIST_CMD_PREFIX: &str = "constraint:allowlist:cmd_prefix";
+    /// The `think_budget` body field (a reasoning-token cap) is honoured.
+    pub const THINK_BUDGET: &str = "think_budget";
+    /// The `oicp` request envelope ([`InferenceRequirements`]) is
+    /// consumed for routing.
+    pub const OICP_REQUEST_PROPERTIES: &str = "oicp:request_properties";
+    /// The §5 ingest extension (install + progress) is mounted; MUST
+    /// co-occur with a populated `knowledge.ingest`.
+    pub const INGEST_V1: &str = "ingest:v1";
+    /// The §5.4 recipe-test endpoint is mounted; MUST co-occur with
+    /// `knowledge.ingest.test_endpoint`.
+    pub const INGEST_RECIPE_TEST: &str = "ingest:recipe_test";
+    /// §6 fingerprints are populated on manifest models and echoed in
+    /// response metadata.
+    pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
+
+    /// Extension-feature prefix (§2.1). A host MAY advertise
+    /// `x:`-prefixed features not registered in this crate build.
+    pub const EXTENSION_PREFIX: &str = "x:";
+
+    /// Every feature this crate build knows how to name. Grows by spec
+    /// revision; a host MAY advertise `x:`-prefixed features not listed.
+    pub const REGISTERED: &[&str] = &[
+        CONSTRAINT_JSON_SCHEMA,
+        CONSTRAINT_JSON_OBJECT,
+        CONSTRAINT_LARK,
+        CONSTRAINT_ALLOWLIST_URL,
+        CONSTRAINT_ALLOWLIST_EVIDENCE_ID,
+        CONSTRAINT_ALLOWLIST_CMD_PREFIX,
+        THINK_BUDGET,
+        OICP_REQUEST_PROPERTIES,
+        INGEST_V1,
+        INGEST_RECIPE_TEST,
+        MODEL_FINGERPRINT,
+    ];
+
+    /// True iff `f` is a registered feature string or a well-formed
+    /// `x:`-prefixed extension feature (non-empty tag). This is the
+    /// validity predicate the conformance suite's `manifest.features`
+    /// check applies.
+    pub fn is_valid(f: &str) -> bool {
+        REGISTERED.contains(&f)
+            || f.strip_prefix(EXTENSION_PREFIX)
+                .is_some_and(|tag| !tag.is_empty())
+    }
+}
+
+// -----------------------------------------------------------------
 // Section 4 — Provider Manifest Schema
 // -----------------------------------------------------------------
 
@@ -525,6 +606,12 @@ pub struct ProviderManifest {
     pub knowledge: Option<KnowledgeManifest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub federation: Option<FederationManifest>,
+    /// v0.4 §2: request-level capabilities this host honours. Empty
+    /// (the serde default and the absence-on-the-wire shape) means
+    /// "v0.3 host" — the client assumes only baseline OpenAI-compat.
+    /// See the [`features`] module for registered strings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
 }
 
 impl ProviderManifest {
@@ -535,7 +622,13 @@ impl ProviderManifest {
             models,
             knowledge: None,
             federation: None,
+            features: Vec::new(),
         }
+    }
+
+    /// True iff this manifest advertises feature `f` (§2).
+    pub fn has_feature(&self, f: &str) -> bool {
+        self.features.iter().any(|x| x == f)
     }
 }
 
@@ -584,6 +677,12 @@ pub struct ProviderModel {
     /// model serving both fast short-context and normal long-context
     /// work).
     pub claims: Vec<CapabilityClaim>,
+    /// v0.4 §6: opaque fingerprint that MUST change when the served
+    /// weights, quantization, or chat template change. Lets a client
+    /// key model-dependent caches on `(id, fingerprint)`. Gated by the
+    /// `model_fingerprint` feature; absent on v0.3 hosts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -628,7 +727,10 @@ pub enum NormalizationStrategy {
 /// Embedding model identity and output shape.
 /// Two nodes are compatible for collaborative ingestion iff their
 /// `EmbedModelInfo` values are equal (exact match required — cosine
-/// similarity across different embedding spaces is meaningless).
+/// similarity across different embedding spaces is meaningless). The
+/// v0.4 `query_instruction_prefix` is part of that equality: it changes
+/// the query-side embedding space, so two nodes with different prefixes
+/// are incompatible even when the other four fields match.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EmbedModelInfo {
     /// Model identifier, e.g. `"qwen3-embedding-0.6b"`.
@@ -637,6 +739,13 @@ pub struct EmbedModelInfo {
     pub dimensions: usize,
     pub pooling: PoolingStrategy,
     pub normalization: NormalizationStrategy,
+    /// v0.4 §4: instruction prefix prepended to *query* text (not
+    /// document text) before embedding. Empty string = no prefix (also
+    /// the v0.3-on-the-wire shape via serde default). A client
+    /// reconstructing a query embedding for federated search MUST
+    /// prepend this or it produces a vector in a different space.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub query_instruction_prefix: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -648,6 +757,26 @@ pub struct KnowledgeManifest {
     /// collaborative ingestion until this is populated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embed_model: Option<EmbedModelInfo>,
+    /// v0.4 §5: corpus-ingest endpoints this host exposes. `None` means
+    /// the host does not offer an OICP ingest surface. When present,
+    /// the manifest MUST also advertise the `ingest:v1` feature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingest: Option<IngestEndpoints>,
+}
+
+/// v0.4 §5: the corpus-ingest endpoints advertised in
+/// [`KnowledgeManifest::ingest`]. Values are paths relative to the
+/// manifest's origin (the same convention as `search_endpoint`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestEndpoints {
+    /// `POST` — install a corpus by recipe id. See [`CorpusInstallRequest`].
+    pub install_endpoint: String,
+    /// `GET` — poll ingest progress. See [`CorpusProgressResponse`].
+    pub progress_endpoint: String,
+    /// `POST` — optional dry-run recipe test (§5.4). Present iff the
+    /// host advertises the `ingest:recipe_test` feature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -690,6 +819,13 @@ pub struct OicpResponseMeta {
     pub match_quality: Option<MatchQuality>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    /// v0.4 §6: fingerprint of the concrete model that produced this
+    /// response — the same token as the resolved model's
+    /// [`ProviderModel::fingerprint`]. Lets a client key model-dependent
+    /// caches correctly across a model swap. Gated by the
+    /// `model_fingerprint` feature; absent on v0.3 hosts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -707,7 +843,18 @@ pub enum MatchQuality {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeSearchRequest {
+    /// Pre-computed query embedding. OPTIONAL as of v0.4: when empty,
+    /// the HOST embeds `query_text` with its advertised
+    /// [`EmbedModelInfo::query_instruction_prefix`] — the OICP contract
+    /// is thin-client (the host owns the embed model), so a client need
+    /// only send text. Mesh peers still pre-embed and send this to
+    /// avoid re-embedding on every hop; when present it is used as-is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub query_embedding: Vec<f32>,
+    /// The query text. `query` is accepted as an alias — it is the
+    /// natural OICP thin-client field name; `query_text` is retained
+    /// for the mesh-internal shape.
+    #[serde(default, alias = "query")]
     pub query_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corpora: Option<Vec<String>>,
@@ -758,6 +905,117 @@ pub struct KnowledgeResult {
     /// extractor didn't tag chunks with a document id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_doc_id: Option<String>,
+}
+
+// -----------------------------------------------------------------
+// Section 7 — Ingest Extension (v0.4 §5)
+// -----------------------------------------------------------------
+
+/// `POST {install_endpoint}` — install a corpus by recipe id (§5.1).
+/// Idempotent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusInstallRequest {
+    pub corpus_id: String,
+    /// Recipe `[parameters]` values, keyed by parameter name. Empty map
+    /// when the recipe takes no parameters.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parameters: BTreeMap<String, serde_json::Value>,
+}
+
+/// Response to [`CorpusInstallRequest`] (§5.1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusInstallResponse {
+    pub corpus_id: String,
+    /// `true` — a fresh ingest job started. `false` — the corpus is
+    /// already installed or an ingest for it is already running.
+    pub spawned: bool,
+}
+
+/// Coarse ingest phase (§5.2). A protocol type — deliberately does not
+/// embed any implementation's internal progress enum, so a host may
+/// implement ingest without linking the reference engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IngestPhase {
+    Pending,
+    Downloading,
+    Embedding,
+    Indexing,
+    Optimizing,
+    Enriching,
+    Complete,
+    Failed,
+}
+
+impl IngestPhase {
+    /// True for `Complete` and `Failed` — the terminal phases of the
+    /// §5.3 poll state machine.
+    pub fn is_terminal(self) -> bool {
+        matches!(self, IngestPhase::Complete | IngestPhase::Failed)
+    }
+}
+
+/// Per-corpus ingest progress (§5.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusIngestProgress {
+    pub phase: IngestPhase,
+    /// Best-effort completion fraction in `[0,1]`; absent when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fraction: Option<f32>,
+    /// Human-readable detail; the error message when `phase = Failed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// `GET {progress_endpoint}` response (§5.2). Keyed by `corpus_id`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CorpusProgressResponse {
+    #[serde(default)]
+    pub progress: BTreeMap<String, CorpusIngestProgress>,
+}
+
+/// `POST {test_endpoint}` — dry-run a recipe over a small sample (§5.4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTestRequest {
+    /// The full recipe TOML source.
+    pub recipe_toml: String,
+    #[serde(default)]
+    pub options: RecipeTestOptions,
+}
+
+/// Options for [`RecipeTestRequest`] (§5.4).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RecipeTestOptions {
+    /// Cap the number of documents pulled per stage; `None` = host default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_limit: Option<u32>,
+    /// Skip any network acquisition (test extract/chunk over cached input).
+    #[serde(default)]
+    pub offline: bool,
+}
+
+/// Per-stage diagnostics from a recipe test (§5.4). A protocol type —
+/// no implementation internals on the wire.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeStageReport {
+    /// Stage name, e.g. `"acquire"`, `"extract"`, `"chunk"`.
+    pub name: String,
+    pub docs_in: u32,
+    pub docs_out: u32,
+    /// Things the stage expected but did not find (e.g. missed sections).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub misses: Vec<String>,
+    /// A few sample outputs, for the author to eyeball.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sample: Vec<String>,
+}
+
+/// Response to [`RecipeTestRequest`] (§5.4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTestReport {
+    pub stages: Vec<RecipeStageReport>,
+    /// `true` iff every stage produced output (a usable recipe).
+    pub ok: bool,
 }
 
 // -----------------------------------------------------------------
@@ -1549,7 +1807,145 @@ mod tests {
 
     #[test]
     fn version_constant_matches_spec() {
-        assert_eq!(OICP_VERSION, "0.3.0");
+        assert_eq!(OICP_VERSION, "0.4.0");
+    }
+
+    // ───── v0.4 back-compat + new-surface round-trips ─────────
+
+    #[test]
+    fn v03_manifest_json_deserialises_into_v04_with_defaults() {
+        // A manifest emitted by a v0.3 host carries none of the v0.4
+        // fields. It MUST deserialise cleanly with empty/None defaults
+        // (§8) — this is the whole back-compat contract.
+        let v03 = r#"{
+            "oicp_version": "0.3.0",
+            "models": [{
+                "id": "qwen3-9b",
+                "context_tokens": 16384,
+                "status": {"available": true, "loaded": true},
+                "claims": []
+            }],
+            "knowledge": {
+                "corpora": [],
+                "search_endpoint": "/v1/knowledge/search",
+                "embed_model": {
+                    "model_id": "qwen3-embedding-0.6b",
+                    "dimensions": 1024,
+                    "pooling": "last",
+                    "normalization": "server"
+                }
+            }
+        }"#;
+        let m: ProviderManifest = serde_json::from_str(v03).expect("deserialise v0.3");
+        assert!(m.features.is_empty(), "no features on a v0.3 manifest");
+        assert!(m.models[0].fingerprint.is_none());
+        let k = m.knowledge.as_ref().unwrap();
+        assert!(k.ingest.is_none(), "no ingest surface on a v0.3 host");
+        assert_eq!(
+            k.embed_model.as_ref().unwrap().query_instruction_prefix, "",
+            "absent prefix defaults to empty"
+        );
+    }
+
+    #[test]
+    fn empty_v04_manifest_serialises_to_v03_shape() {
+        // An empty v0.4 manifest must serialise byte-identically to a
+        // v0.3 manifest: none of the new fields appear on the wire when
+        // empty (skip_serializing_if). This is what keeps v0.3 clients
+        // from ever seeing v0.4 fields.
+        let m = ProviderManifest::new(vec![]);
+        let v = serde_json::to_value(&m).unwrap();
+        assert!(v.get("features").is_none(), "empty features omitted");
+        let obj = v.as_object().unwrap();
+        // Exactly the v0.3 always-present keys (oicp_version + models);
+        // provider/knowledge/federation are None → omitted.
+        assert_eq!(obj.len(), 2, "only oicp_version + models on the wire");
+    }
+
+    #[test]
+    fn embed_model_equality_distinguishes_query_prefix() {
+        // The prefix is part of the bit-compat equality (§4): two nodes
+        // that differ only in the query prefix are NOT compatible.
+        let base = EmbedModelInfo {
+            model_id: "qwen3-embedding-0.6b".into(),
+            dimensions: 1024,
+            pooling: PoolingStrategy::Last,
+            normalization: NormalizationStrategy::Server,
+            query_instruction_prefix: String::new(),
+        };
+        let prefixed = EmbedModelInfo {
+            query_instruction_prefix: "Represent this query: ".into(),
+            ..base.clone()
+        };
+        assert_ne!(base, prefixed, "prefix difference breaks compatibility");
+        assert_eq!(base, base.clone());
+    }
+
+    #[test]
+    fn features_validity_predicate() {
+        assert!(features::is_valid(features::CONSTRAINT_JSON_SCHEMA));
+        assert!(features::is_valid(features::INGEST_V1));
+        assert!(features::is_valid("x:prose"), "well-formed extension");
+        assert!(!features::is_valid("x:"), "empty extension tag is invalid");
+        assert!(!features::is_valid("bogus"), "unregistered bare feature");
+    }
+
+    #[test]
+    fn ingest_phase_terminality() {
+        assert!(IngestPhase::Complete.is_terminal());
+        assert!(IngestPhase::Failed.is_terminal());
+        assert!(!IngestPhase::Embedding.is_terminal());
+        assert!(!IngestPhase::Pending.is_terminal());
+    }
+
+    #[test]
+    fn ingest_dtos_round_trip() {
+        let mut params = BTreeMap::new();
+        params.insert("year".to_string(), serde_json::json!(2026));
+        let req = CorpusInstallRequest {
+            corpus_id: "acme-emails".into(),
+            parameters: params,
+        };
+        let back: CorpusInstallRequest =
+            serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
+        assert_eq!(back.corpus_id, "acme-emails");
+        assert_eq!(back.parameters["year"], serde_json::json!(2026));
+
+        // An install request with no parameters omits the map on the wire.
+        let bare = CorpusInstallRequest {
+            corpus_id: "x".into(),
+            parameters: BTreeMap::new(),
+        };
+        let v = serde_json::to_value(&bare).unwrap();
+        assert!(v.get("parameters").is_none(), "empty parameters omitted");
+
+        let prog = CorpusProgressResponse {
+            progress: BTreeMap::from([(
+                "acme-emails".to_string(),
+                CorpusIngestProgress {
+                    phase: IngestPhase::Embedding,
+                    fraction: Some(0.4),
+                    detail: None,
+                },
+            )]),
+        };
+        let back: CorpusProgressResponse =
+            serde_json::from_str(&serde_json::to_string(&prog).unwrap()).unwrap();
+        assert_eq!(back.progress["acme-emails"].phase, IngestPhase::Embedding);
+    }
+
+    #[test]
+    fn ingest_endpoints_test_endpoint_optional() {
+        let e = IngestEndpoints {
+            install_endpoint: "/oicp/v1/corpus/install".into(),
+            progress_endpoint: "/oicp/v1/corpus/progress".into(),
+            test_endpoint: None,
+        };
+        let v = serde_json::to_value(&e).unwrap();
+        assert!(
+            v.get("test_endpoint").is_none(),
+            "absent recipe-test endpoint omitted"
+        );
     }
 
     #[test]
@@ -1826,6 +2222,7 @@ mod tests {
                     0.6,
                 ),
             ],
+            fingerprint: None,
         };
         let manifest = ProviderManifest::new(vec![model]);
         let json = serde_json::to_string(&manifest).unwrap();
@@ -2522,6 +2919,7 @@ mod tests {
                 4_000,
                 affinity,
             )],
+            fingerprint: None,
         }
     }
 
@@ -2536,6 +2934,7 @@ mod tests {
             ],
             knowledge: None,
             federation: None,
+            features: Vec::new(),
         };
         let req = InferenceRequirements {
             oicp_version: OICP_VERSION.to_string(),
@@ -2549,5 +2948,41 @@ mod tests {
         let best = best_claim_for_request(&manifest, &req).unwrap();
         // Specialist at exact-hint 0.95 beats generalist's 0.5-fallback path.
         assert_eq!(best.model_id, "coder");
+    }
+
+    #[test]
+    fn knowledge_search_thin_client_shape_deserializes() {
+        // OICP v0.4 §6.1: a thin client sends only `query` — no embedding,
+        // and the OICP field name `query` (not `query_text`).
+        let req: KnowledgeSearchRequest =
+            serde_json::from_value(serde_json::json!({"query": "stoic virtue", "limit": 3})).unwrap();
+        assert_eq!(req.query_text, "stoic virtue");
+        assert!(req.query_embedding.is_empty(), "host embeds when absent");
+        assert_eq!(req.effective_limit(), 3);
+    }
+
+    #[test]
+    fn knowledge_search_mesh_shape_still_deserializes() {
+        // The mesh-internal shape (pre-embedded, `query_text`) is unchanged.
+        let req: KnowledgeSearchRequest = serde_json::from_value(serde_json::json!({
+            "query_embedding": [0.1, 0.2, 0.3],
+            "query_text": "stoic virtue",
+        }))
+        .unwrap();
+        assert_eq!(req.query_embedding, vec![0.1, 0.2, 0.3]);
+        assert_eq!(req.query_text, "stoic virtue");
+    }
+
+    #[test]
+    fn knowledge_search_empty_embedding_omitted_from_wire() {
+        // An absent embedding must not serialize as `query_embedding: []`.
+        let req = KnowledgeSearchRequest {
+            query_embedding: Vec::new(),
+            query_text: "q".into(),
+            corpora: None,
+            limit: None,
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        assert!(v.get("query_embedding").is_none());
     }
 }

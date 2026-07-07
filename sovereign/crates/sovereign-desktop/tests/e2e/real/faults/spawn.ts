@@ -124,6 +124,10 @@ export interface SpawnOpts {
    *  this at a script that exits 1). */
   cliPath?: string;
   profile?: ProfileOpts;
+  /** Extra env vars merged into (and overriding) the spawn env — e.g.
+   *  `SOVEREIGN_FORCE_LOCAL=1` so a first-launch app boots its own wizard
+   *  instead of attaching to a daemon the harness happens to be running. */
+  env?: Record<string, string>;
 }
 
 export async function spawnDesktop(opts: SpawnOpts): Promise<DesktopInstance> {
@@ -140,6 +144,7 @@ export async function spawnDesktop(opts: SpawnOpts): Promise<DesktopInstance> {
     RUST_LOG:
       process.env.RUST_LOG ??
       "sovereign_desktop=info,sovereign_inference=info,sovereign_core=info",
+    ...(opts.env ?? {}),
   };
   if (opts.supervisor) {
     env.SOVEREIGN_USE_SUPERVISOR = "1";

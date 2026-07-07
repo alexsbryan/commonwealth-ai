@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# A corpus ingest stage authored entirely as a workflow: read each document,
+# chunk it with the real corpus chunker, embed every chunk via the daemon, and
+# STORE the (chunk, embedding) pairs into a searchable corpus index — the same
+# LanceDB schema `sovereign corpus` and retrieval read back.
+#
+# This is corpus ingest's read → chunk → embed → store stages expressed as data,
+# composed from three injected tools + the daemon's embed slot. No bespoke runner.
+#
+# Run (needs the daemon up with an embedding model loaded):
+#   mkdir -p corpus
+#   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/ingest.toml --concurrency 4
+#
+# Result: a corpus `secret-agent` under ~/.sovereign/indexes/, searchable.
+# Re-running is idempotent: unchanged files are served from the workflow cache,
+# and the store step replaces each document's rows rather than duplicating them.
+
+[workflow]
+name = "ingest"
+
+[source]
+type = "folder"
+path = "corpus"
+glob = "*.txt"
+
+# 1 -> N : the real corpus chunker, a collection of {text, index}.
+[[step]]
+id = "chunk"
+uses = "tool:chunk"
+params = { path = "{item.path}" }
+
+# map : embed every chunk via the daemon's embed slot.
+[[step]]
+id = "embed"
+uses = "embed:default"
+for_each = "chunk"
+input = "{element.text}"
+
+# store : pair the chunk + embed collections by position (no Runner primitive
+# needed — store takes both whole collections) and write them into a searchable
+# corpus index. Idempotent per source document.
+[[step]]
+id = "store"
+uses = "tool:corpus_store"
+params = { corpus = "secret-agent", chunks = "{chunk.output}", embeddings = "{embed.output}", title = "{item.stem}", source_doc_id = "{item.path}" }

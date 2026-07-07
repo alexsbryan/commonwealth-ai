@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     # Wire-protocol types — bottom of the dep graph.
+    "oicp-client",
     "oicp-types",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
@@ -22,17 +23,24 @@ members = [
     "corpus-engine-archaeology",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
+    "sovereign/crates/sovereign-contracts",
     "sovereign/crates/sovereign-core",
     "sovereign/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-tools",
+    "studio/crates/sovereign-tools-base",
+    "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
     # local-model steps; the general form of corpus-ingest/enrichment/agent).
-    "sovereign/crates/sovereign-workflow",
+    "studio/crates/sovereign-workflow",
     # Daemon-runnable workflow host — the registry assembly + in-process runner +
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
-    "sovereign/crates/sovereign-workflow-host",
+    "studio/crates/sovereign-workflow-host",
+    # Headless studio CLI — authors + tests recipes and runs workflows against any
+    # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
+    # no sovereign-core). The proof the studio package is independently usable.
+    "studio/crates/sovereign-studio",
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
@@ -68,6 +76,9 @@ members = [
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
+    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
+    # liftable by any third party certifying their own host.
+    "commonwealth/crates/oicp-conformance",
 ]
 
 [workspace.package]
@@ -107,18 +118,23 @@ field_reassign_with_default = "allow"
 
 [workspace.dependencies]
 # ── Internal crates (paths are relative to the workspace root) ──────────
+oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
+sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
-sovereign-workflow = { path = "sovereign/crates/sovereign-workflow" }
-sovereign-workflow-host = { path = "sovereign/crates/sovereign-workflow-host" }
+sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
+sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
+sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
+sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
+sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }

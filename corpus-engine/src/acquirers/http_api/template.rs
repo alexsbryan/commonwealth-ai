@@ -13,19 +13,9 @@
 //! without standing up a fake HTTP server.
 
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
-
-use regex::Regex;
 
 use crate::error::{Error, Result};
 use crate::recipe::ResolvedParameters;
-
-/// Lazily-compiled placeholder regex. `{name}` where `name` is a
-/// standard identifier; nested or escaped braces are out of scope.
-fn placeholder_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}").unwrap())
-}
 
 /// Render a string template by substituting every `{name}` against
 /// `bindings`, with the special `{base_url}` resolving to the
@@ -33,41 +23,19 @@ fn placeholder_re() -> &'static Regex {
 /// recipe-level error listing all unresolved names — far easier to
 /// debug than failing on the first miss only to hit another on
 /// retry.
+///
+/// The substitution logic lives in
+/// [`sovereign_contracts::recipe::url_template::render_template`] (shared with
+/// the recipe-author `probe_url` tool so there is one implementation); this
+/// wrapper maps its `String` error into the engine's `Error::Recipe`, keeping
+/// the signature — and thus every caller — unchanged.
 pub fn render_template(
     template: &str,
     base_url: &str,
     bindings: &BTreeMap<String, String>,
 ) -> Result<String> {
-    let mut missing: Vec<String> = Vec::new();
-    let result = placeholder_re().replace_all(template, |caps: &regex::Captures| {
-        let name = &caps[1];
-        if name == "base_url" {
-            return base_url.to_string();
-        }
-        match bindings.get(name) {
-            Some(v) => v.clone(),
-            None => {
-                missing.push(name.to_string());
-                String::new()
-            }
-        }
-    });
-    if !missing.is_empty() {
-        // Dedup so the same placeholder named twice doesn't appear
-        // twice in the error.
-        missing.sort();
-        missing.dedup();
-        return Err(Error::Recipe(format!(
-            "URL template `{}` references undeclared placeholder(s): {}",
-            template,
-            missing
-                .iter()
-                .map(|n| format!("{{{n}}}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-        )));
-    }
-    Ok(result.to_string())
+    sovereign_contracts::recipe::url_template::render_template(template, base_url, bindings)
+        .map_err(Error::Recipe)
 }
 
 /// Expand a `for_each` declaration into one binding map per

@@ -991,11 +991,22 @@ pub(super) async fn advertise_embed_model(
                 .as_ref()
                 .map(|q| q.normalize)
                 .unwrap_or(NormalizationStrategy::Application);
+            // Query-side instruction prefix (OICP v0.4 §4). Part of
+            // the embed bit-compat identity: Qwen3-Embedding prepends a
+            // "represent this query" instruction to *query* text before
+            // embedding, so a peer reconstructing a query embedding must
+            // use the same prefix or land in a different space. Resolved
+            // from the same manifest that drives pooling/normalisation
+            // above, keeping the slot loader and mesh advertiser on one
+            // source of truth.
+            let query_instruction_prefix = sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .embed_query_instruction(&model_id);
             let embed_info = EmbedModelInfo {
                 model_id: model_id.clone(),
                 dimensions: probe_vec.len(),
                 pooling,
                 normalization,
+                query_instruction_prefix,
             };
             tracing::info!(
                 model_id = %embed_info.model_id,
@@ -1271,9 +1282,12 @@ pub(super) async fn setup_watched_folders(
             // steps use the already-loaded slots.
             let trigger_runtime: Option<
                 Arc<dyn sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime>,
-            > = Some(Arc::new(sovereign_workflow_host::DaemonWorkflowRuntime::new(
-                format!("http://127.0.0.1:{}", config.daemon.client_port),
-            )));
+            > = Some(Arc::new(
+                super::workflow_trigger::DaemonWorkflowRuntime::new(format!(
+                    "http://127.0.0.1:{}",
+                    config.daemon.client_port
+                )),
+            ));
             Some(
                 sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
                     Arc::clone(&daemon),

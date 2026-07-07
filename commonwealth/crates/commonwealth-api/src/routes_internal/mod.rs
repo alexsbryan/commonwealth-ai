@@ -38,6 +38,9 @@ pub use corpus_ingest::{
     CorpusStatusResponse, ExpandRequest, InstallRequest, InstallResponse, PauseResponse,
     ProgressSnapshotResponse,
 };
+// Crate-internal: the OICP ingest routes (`routes_oicp_ingest`) reuse the
+// same progress→fraction projection so the two surfaces can't diverge.
+pub(crate) use corpus_ingest::progress_fraction;
 pub use corpus_queue::{
     corpus_complete_unit, corpus_heartbeat, corpus_ingest_partition, corpus_next_unit,
     CompleteUnitRequest, CompleteUnitResponse, HeartbeatRequest, HeartbeatResponseBody,

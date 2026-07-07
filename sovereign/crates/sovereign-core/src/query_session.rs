@@ -96,6 +96,21 @@ pub const SESSION_RETENTION: Duration = Duration::from_secs(30);
 #[derive(Debug)]
 pub struct SessionStore {
     sessions: DashMap<SessionId, QuerySession>,
+    /// Cancel tokens reserved for turns that have STARTED but not yet
+    /// reached `begin` — the "preparing" window (build-context +
+    /// classification + retrieval), which on a slow model is several
+    /// seconds long. Keyed by conversation so a `cancel_stream` that
+    /// arrives during preparing (before the turn's session exists)
+    /// still cancels the right token: `reserve_cancel` mints it at the
+    /// top of the turn, `begin` ADOPTS it into the session, and
+    /// `cancel_preparing` trips it in place. Without this, a
+    /// preparing-phase cancel hit only the *previous* (stale) session
+    /// via `latest_for_conversation`, and the real turn began later
+    /// with a fresh, uncancelled token — the turn ran to completion.
+    /// (Confirmed 2026-07-07: on a 4B, classification delayed `begin`
+    /// ~5s past the Stop click; the synth token read `cancelled=false`
+    /// throughout.)
+    preparing_cancels: DashMap<ConversationRef, CancellationToken>,
     /// Minimum elapsed time before a `try_emit_narration` call will
     /// be allowed through. Defaults to [`NARRATION_MIN_ELAPSED`].
     /// Tests override via [`SessionStore::with_narration_min_elapsed`]
@@ -114,6 +129,7 @@ impl SessionStore {
     pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
+            preparing_cancels: DashMap::new(),
             narration_min_elapsed: NARRATION_MIN_ELAPSED,
         }
     }
@@ -128,9 +144,39 @@ impl SessionStore {
         self
     }
 
+    /// Reserve a cancel token for a turn that is STARTING but hasn't
+    /// classified yet, so a cancel during the preparing window lands on
+    /// the right turn. Call once at the top of the turn; `begin` adopts
+    /// the token. Overwrites any prior reservation for the conversation
+    /// (turns are serialized per conversation, so a new turn supersedes
+    /// an abandoned one). The returned token is the same handle `begin`
+    /// will thread into synthesis.
+    pub fn reserve_cancel(&self, conversation_id: &str) -> CancellationToken {
+        let cancel = CancellationToken::new();
+        self.preparing_cancels
+            .insert(conversation_id.to_string(), cancel.clone());
+        cancel
+    }
+
+    /// Trip the reserved preparing-token for a conversation, if any.
+    /// Leaves the entry in place so `begin` still adopts it (already
+    /// cancelled → the turn starts cancelled and its synthesis loop
+    /// breaks on the first poll). Returns whether a reservation existed.
+    pub fn cancel_preparing(&self, conversation_id: &str) -> bool {
+        if let Some(entry) = self.preparing_cancels.get(conversation_id) {
+            entry.value().cancel();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Create and register a fresh session. Returns the id + the
     /// cancel-token handle so the caller can pass both into the
-    /// dispatcher without re-fetching.
+    /// dispatcher without re-fetching. If the turn reserved a
+    /// preparing-token (`reserve_cancel`), ADOPT it so a cancel that
+    /// arrived during preparing carries through to this session's
+    /// synthesis; otherwise mint a fresh one.
     pub fn begin(
         &self,
         conversation_id: ConversationRef,
@@ -140,7 +186,11 @@ impl SessionStore {
         policy: RoutingPolicy,
     ) -> (SessionId, CancellationToken) {
         let id = Uuid::new_v4().to_string();
-        let cancel = CancellationToken::new();
+        let cancel = self
+            .preparing_cancels
+            .remove(&conversation_id)
+            .map(|(_, token)| token)
+            .unwrap_or_default();
         let session = QuerySession {
             id: id.clone(),
             conversation_id,
@@ -265,6 +315,17 @@ impl SessionStore {
             }
         }
         best
+    }
+
+    /// The conversation ids of all live sessions. Used by the desktop's
+    /// `cancel_stream` to make a lookup miss legible (a cancel that finds no
+    /// session is a no-op; logging the live inventory shows whether it's an
+    /// id mismatch vs. an already-finished turn).
+    pub fn conversation_ids(&self) -> Vec<String> {
+        self.sessions
+            .iter()
+            .map(|e| e.conversation_id.clone())
+            .collect()
     }
 }
 
