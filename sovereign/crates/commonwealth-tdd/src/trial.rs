@@ -176,7 +176,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
         // restart candidate, so the message it generates is grounded
         // in the original code, not the partial-fit winner.
         let pristine_listing = render_source_files(&pristine_baseline, &source_files);
-        let feedback_block = last_round_feedback.render(config.candidates_per_round);
+        let feedback_block = last_round_feedback.render_with_ties(config.candidates_per_round);
         let regular_messages = vec![
             system_message(),
             user_message(
@@ -385,7 +385,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
         // On clean rounds this is empty (no errored candidates → no
         // feedback block). On stall rounds it gives the model
         // actionable signal to avoid the same shape of failure.
-        last_round_feedback = ErrorFeedback::from_candidates(&candidates);
+        last_round_feedback = ErrorFeedback::from_candidates(&candidates, &current);
     }
     // rounds_completed = every round that pushed a trajectory entry,
     // INCLUDING the one we broke out on (Reached / Stalled both push
@@ -895,6 +895,13 @@ fn user_message(
 #[derive(Debug, Clone, Default)]
 struct ErrorFeedback {
     buckets: Vec<ErrorBucket>,
+    /// Targets of candidates that applied cleanly but flipped no
+    /// failing test (outcome identical to the base). Silence here
+    /// bred fixation: 3.3 I-arm receipts show _lexer.py (21 lines,
+    /// innocent) rewritten five times while the failing assertion
+    /// named _rpn.py — nothing ever told the model its target was
+    /// flipping nothing.
+    tie_targets: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -911,20 +918,35 @@ struct ErrorBucket {
 
 impl ErrorFeedback {
     /// Build feedback from the previous round's candidate outcomes.
-    /// Returns an empty `ErrorFeedback` if no candidate errored.
-    fn from_candidates(candidates: &[CandidateOutcome]) -> Self {
+    /// Returns an empty `ErrorFeedback` if no candidate errored or
+    /// tied.
+    fn from_candidates(candidates: &[CandidateOutcome], base: &TestSummary) -> Self {
         use std::collections::BTreeMap;
         let mut by_class: BTreeMap<&'static str, (usize, Option<String>)> = BTreeMap::new();
+        let mut tie_targets: Vec<String> = Vec::new();
         for c in candidates {
-            let Err(ref msg) = c.outcome else { continue };
-            let class = classify_error(msg);
-            let entry = by_class.entry(class).or_insert((0, None));
-            entry.0 += 1;
-            // Keep the first non-empty sample. Later candidates'
-            // errors are usually variants of the same shape so the
-            // first is representative.
-            if entry.1.is_none() && !msg.trim().is_empty() {
-                entry.1 = Some(msg.clone());
+            match &c.outcome {
+                Err(msg) => {
+                    let class = classify_error(msg);
+                    let entry = by_class.entry(class).or_insert((0, None));
+                    entry.0 += 1;
+                    // Keep the first non-empty sample. Later candidates'
+                    // errors are usually variants of the same shape so the
+                    // first is representative.
+                    if entry.1.is_none() && !msg.trim().is_empty() {
+                        entry.1 = Some(msg.clone());
+                    }
+                }
+                Ok(t) => {
+                    if (t.parsed.passed, t.parsed.failed) == (base.passed, base.failed)
+                        && t.parsed.total > 0
+                    {
+                        let shape = c.shape_summary();
+                        if !tie_targets.contains(&shape) {
+                            tie_targets.push(shape);
+                        }
+                    }
+                }
             }
         }
         let buckets = by_class
@@ -935,11 +957,14 @@ impl ErrorFeedback {
                 sample: sample.unwrap_or_else(|| String::from("(no detail)")),
             })
             .collect();
-        Self { buckets }
+        Self {
+            buckets,
+            tie_targets,
+        }
     }
 
     fn is_empty(&self) -> bool {
-        self.buckets.is_empty()
+        self.buckets.is_empty() && self.tie_targets.is_empty()
     }
 
     fn render(&self, total_candidates: usize) -> String {
@@ -959,6 +984,20 @@ impl ErrorFeedback {
         s.push_str(
             "\nRead the error text carefully — re-emitting the same shape will hit the same rejection. Fix what the error names.\n\n",
         );
+        s
+    }
+
+    fn render_with_ties(&self, total_candidates: usize) -> String {
+        let mut s = self.render(total_candidates);
+        if !self.tie_targets.is_empty() {
+            if s.is_empty() {
+                s.push_str("## What failed last round\n\n");
+            }
+            s.push_str(&format!(
+                "- These edits applied cleanly but flipped NO failing test (counts unchanged, so they were discarded): {}. Re-read the failing test output above — the actual offender may be a different file or function than the one you keep editing.\n\n",
+                self.tie_targets.join(", ")
+            ));
+        }
         s
     }
 }
@@ -1200,7 +1239,7 @@ mod tests {
             errored("parse", "no action+block found"),
             errored("apply", "syntax error at line 3"),
         ];
-        let fb = ErrorFeedback::from_candidates(&cands);
+        let fb = ErrorFeedback::from_candidates(&cands, &TestSummary::default());
         assert_eq!(fb.buckets.len(), 2);
         // BTreeMap orders alphabetically — apply, parse
         assert_eq!(fb.buckets[0].class, "apply");
@@ -1211,7 +1250,7 @@ mod tests {
 
     #[test]
     fn error_feedback_is_empty_when_no_candidate_errored() {
-        let fb = ErrorFeedback::from_candidates(&[]);
+        let fb = ErrorFeedback::from_candidates(&[], &TestSummary::default());
         assert!(fb.is_empty());
         assert_eq!(fb.render(4), String::new());
     }
@@ -1219,7 +1258,7 @@ mod tests {
     #[test]
     fn error_feedback_render_surfaces_sample_and_count() {
         let cands = vec![errored("parse", "no action+block found")];
-        let fb = ErrorFeedback::from_candidates(&cands);
+        let fb = ErrorFeedback::from_candidates(&cands, &TestSummary::default());
         let r = fb.render(4);
         assert!(r.contains("What failed last round"));
         assert!(r.contains("`parse` failed 1 of 4"));
