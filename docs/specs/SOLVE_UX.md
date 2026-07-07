@@ -125,9 +125,9 @@ API.
 
 ### CLI (thin, phase 2)
 
-`sovereign solve fix|pin|split <workdir> [--goal "…"] [--watch]` —
-wraps the jobs API, `--watch` tails the SSE stream. For humans in a
-terminal; agents use MCP/HTTP.
+`sovereign solve <workdir> "goal…" [--verb fix|pin|split] [--watch]`
+— verbless by default like the API; wraps the jobs surface, `--watch`
+tails the SSE stream. For humans in a terminal; agents use MCP/HTTP.
 
 ### Safety (unchanged, restated)
 
