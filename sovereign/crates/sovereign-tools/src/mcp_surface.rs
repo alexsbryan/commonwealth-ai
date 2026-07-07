@@ -111,6 +111,25 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "declare_scope",
     "release_scope",
     "work_in_flight",
+    // Corpus / atlas plane (B:P9d). These operate on the HOST's corpora and
+    // structural atlas — `corpus_search`/`corpus_store` read/write the local
+    // LanceDB corpus, `atlas_gaps`/`atlas_tensions` query the structural atlas,
+    // and `extract` pulls text out of a document. `standard_registry` dropped
+    // them when the studio bundle carved out corpus-engine (B:P5); the daemon
+    // still links it and registers them (see the daemon's `build_tool_registry`),
+    // so a corpus-engine-free studio client reaches them here over MCP — which is
+    // what lets it run the shipped `notebook` / `summarize` workflows.
+    //
+    // Caveat for `extract`: its `path` argument resolves on THIS host's
+    // filesystem, so it is correct for a loopback / same-box client (the studio
+    // bin's primary mode) and returns a clean "file not found" for a remote
+    // client whose local paths the daemon can't see — a clear error, never a
+    // silent mis-read.
+    "corpus_store",
+    "corpus_search",
+    "atlas_gaps",
+    "atlas_tensions",
+    "extract",
 ];
 
 /// MCP tools that should only appear when a spec exists in the
