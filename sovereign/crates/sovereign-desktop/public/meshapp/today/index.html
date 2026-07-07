@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Today — current events, on your machine</title>
+    <link rel="stylesheet" href="../_sdk/meshapp.css" />
+    <style>
+      /* Readability layer over the shared _sdk sheet — composed from its
+         tokens (--ink*, --accent*, --border*, --font-sans), never
+         fighting them. The measure is the design: 66ch body text,
+         generous leading, one visual voice per content unit. */
+      .day { margin: 2.4rem 0 0; }
+      .day h2 {
+        margin: 0 0 0.2rem; font-size: 19px; font-weight: 600;
+        letter-spacing: -0.01em; color: var(--ink);
+        padding-bottom: 0.45rem; border-bottom: 1px solid var(--border-mid);
+      }
+      .sect {
+        margin: 1.5rem 0 0.65rem; font-size: 11.5px; font-weight: 600;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--accent-light);
+      }
+      .evt { margin: 0 0 1.15rem; max-width: 66ch; }
+      .evt .kicker {
+        font-size: 12px; color: var(--lavender-light); margin-bottom: 3px;
+        letter-spacing: 0.01em;
+      }
+      .evt p {
+        margin: 0; font-size: 15px; line-height: 1.7; color: var(--ink);
+      }
+      .evt .srcs {
+        margin-top: 3px; font-size: 11.5px; color: var(--ink-muted);
+        font-family: var(--font-mono);
+      }
+      .dig { margin: 1.6rem 0 0.4rem; padding-top: 0.9rem; border-top: 1px dashed var(--border-mid); }
+      .dig-label {
+        font-size: 11.5px; font-weight: 600; letter-spacing: 0.14em;
+        text-transform: uppercase; color: var(--ink-muted); margin-bottom: 0.5rem;
+      }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+      .chips button, #p-actions button {
+        font-size: 12.5px; padding: 0.22rem 0.7rem; border-radius: 999px;
+        cursor: pointer; background: var(--lavender-dim); color: var(--lavender-light);
+        border: 1px solid var(--border-bright); font-family: var(--font-sans);
+      }
+      .chips button:hover, #p-actions button:hover { background: var(--accent-dim); color: var(--accent-light); }
+      #panel {
+        position: sticky; bottom: 12px; margin-top: 1.4rem;
+        background: var(--bg-elevated); border: 1px solid var(--border-bright);
+        border-radius: var(--radius-lg); padding: 0.9rem 1.1rem;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+      }
+      #panel .label { font-size: 15px; font-weight: 600; color: var(--ink); }
+      #panel .meta { max-width: 64ch; font-size: 13px; line-height: 1.6; margin: 0.35rem 0 0.6rem; }
+      #p-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+      #p-actions a { text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Today</h1>
+      <p class="sub">
+        Wikipedia's Current Events portal, living on this machine — refreshed
+        daily by the newsworthy watcher, never fetched at read time.
+        <span class="src" id="freshness"></span>
+      </p>
+
+      <section id="loading">Reading the feed from your corpus…</section>
+      <section id="app" hidden>
+        <div id="feed"></div>
+        <div id="panel" class="card" hidden>
+          <div class="label" id="p-title"></div>
+          <div class="meta" id="p-body"></div>
+          <div class="chips" id="p-actions"></div>
+        </div>
+      </section>
+      <section id="error" hidden></section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

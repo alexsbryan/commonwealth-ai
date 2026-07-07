@@ -60,9 +60,11 @@ pub enum Polarity {
     /// goals encoded as tests, bug fixes, anything where "more
     /// tests passing" is the gradient.
     MaximizePassing,
-    /// Accept when exactly one new failing test appeared and no
-    /// previously-passing test regressed. The Red polarity — we
-    /// want a discriminating test, not a fix.
+    /// Accept when at least one new test appeared, EVERY new test
+    /// fails, and no previously-passing test regressed. The Red
+    /// polarity — we want discriminating test(s), not a fix. A
+    /// multi-case pin (2-4 focused cases in one file) is accepted;
+    /// a candidate whose new tests include a vacuous pass is not.
     GenerateOneFailing {
         /// Optional hint at the test name the model should add.
         /// The loop doesn't enforce a match — just surfaces it in
@@ -104,6 +106,15 @@ impl Default for TrialConfig {
         }
     }
 }
+
+// ── round observer ──────────────────────────────────────────────────
+
+/// Callback invoked by [`run_trial_observed`](crate::trial::run_trial_observed)
+/// once per completed round, with the same [`RoundSummary`] that
+/// lands in the trajectory. Lets a job host stream rounds live
+/// (SSE, progress UI) without the engine knowing about transports.
+/// Must be cheap and non-blocking — it runs inline between rounds.
+pub type RoundObserver = std::sync::Arc<dyn Fn(&RoundSummary) + Send + Sync>;
 
 // ── response envelope ───────────────────────────────────────────────
 

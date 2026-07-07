@@ -394,24 +394,30 @@ fn strip_wikitext(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
 
     // Pass 1: drop {{templates}} via paren-matching. Naive nesting
-    // tracker handles {{a|{{b}}|c}} correctly.
+    // tracker handles {{a|{{b}}|c}} correctly. Walk CHARS, not bytes:
+    // the original byte-walk pushed `byte as char`, which re-encoded
+    // every multibyte UTF-8 character as Latin-1 code points ("ó" →
+    // "Ã³", "–" → "â€“") — corrupting every ingested article body
+    // (pinned by `strip_wikitext_preserves_multibyte_utf8`). The braces
+    // being matched are ASCII, so a char walk is equivalent for the
+    // nesting logic and correct for the content.
     let mut depth = 0;
     let mut buf1 = String::with_capacity(input.len());
-    let bytes = input.as_bytes();
+    let cs: Vec<char> = input.chars().collect();
     let mut i = 0;
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'{' && bytes[i + 1] == b'{' {
+    while i < cs.len() {
+        if i + 1 < cs.len() && cs[i] == '{' && cs[i + 1] == '{' {
             depth += 1;
             i += 2;
             continue;
         }
-        if i + 1 < bytes.len() && bytes[i] == b'}' && bytes[i + 1] == b'}' && depth > 0 {
+        if i + 1 < cs.len() && cs[i] == '}' && cs[i + 1] == '}' && depth > 0 {
             depth -= 1;
             i += 2;
             continue;
         }
         if depth == 0 {
-            buf1.push(bytes[i] as char);
+            buf1.push(cs[i]);
         }
         i += 1;
     }
@@ -613,6 +619,23 @@ fn strip_html_tags(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Root-cause pin for the newsworthy mojibake (found live 2026-07-07):
+    /// Pass 1 of `strip_wikitext` walked BYTES and pushed `byte as char`,
+    /// so every multibyte UTF-8 char was re-encoded as two Latin-1 code
+    /// points — "ó" became "Ã³", "–" became "â€“" — in every ingested
+    /// article body (links metadata never passes through here, which is
+    /// why chip titles stayed clean while content corrupted).
+    #[test]
+    fn strip_wikitext_preserves_multibyte_utf8() {
+        let input = "Unión Eléctrica reported the 2022–2026 outages {{Infobox|x=1}} in Poznań.";
+        let out = strip_wikitext(input);
+        assert!(out.contains("Unión Eléctrica"), "got: {out}");
+        assert!(out.contains("2022–2026"), "got: {out}");
+        assert!(out.contains("Poznań"), "got: {out}");
+        assert!(!out.contains("Infobox"), "template must still drop: {out}");
+        assert!(!out.contains("Ã"), "double-encode marker present: {out}");
+    }
     use std::io::Write;
 
     #[test]

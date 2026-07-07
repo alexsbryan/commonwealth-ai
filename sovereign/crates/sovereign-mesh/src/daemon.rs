@@ -163,6 +163,12 @@ pub struct EmbeddedDaemon {
     /// reading surface won't be reachable — the chat UI still works
     /// (citation popovers fall back to the legacy path).
     reading_http_router: RwLock<Option<axum::Router>>,
+    /// Solve-job HTTP router (`/v1/solve/jobs*`) — the daemon-hosted
+    /// TDD solver surface. Built by the CLI daemon bootstrap (which
+    /// owns the job table and the `commonwealth-tdd` dependency) and
+    /// installed before `start_daemon`. `None` means no solve
+    /// surface — the routes 404.
+    solve_http_router: RwLock<Option<axum::Router>>,
     /// In-memory copy of the `SetupConfig` the daemon booted with.
     /// `admin_http::reload` diffs this against the file on disk so it
     /// knows which fields actually changed. Updated in place after a
@@ -295,6 +301,7 @@ impl EmbeddedDaemon {
             knowledge_view_http_router: RwLock::new(None),
             corpus_watch_http_router: RwLock::new(None),
             reading_http_router: RwLock::new(None),
+            solve_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -329,6 +336,7 @@ impl EmbeddedDaemon {
             knowledge_view_http_router: RwLock::new(None),
             corpus_watch_http_router: RwLock::new(None),
             reading_http_router: RwLock::new(None),
+            solve_http_router: RwLock::new(None),
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
@@ -416,6 +424,15 @@ impl EmbeddedDaemon {
     /// hands it here before `start_daemon`. Loopback-guarded.
     pub async fn install_reading_http_router(&self, router: axum::Router) {
         *self.reading_http_router.write().await = Some(router);
+    }
+
+    /// Install the solve-job HTTP router (`/v1/solve/jobs*`). Same
+    /// lifecycle as the other `install_*_http_router` setters: the
+    /// CLI daemon bootstrap builds the router around its job table
+    /// and hands it here before `start_daemon`. Loopback-guarded by
+    /// the builder.
+    pub async fn install_solve_http_router(&self, router: axum::Router) {
+        *self.solve_http_router.write().await = Some(router);
     }
 
     /// Record the `SetupConfig` this daemon booted with. The admin
@@ -2141,6 +2158,7 @@ impl EmbeddedDaemon {
         let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
         let corpus_watch_http = self.corpus_watch_http_router.read().await.clone();
         let reading_http = self.reading_http_router.read().await.clone();
+        let solve_http = self.solve_http_router.read().await.clone();
 
         // Spawn the API servers in the background.
         let app_state_clone = app_state.clone();
@@ -2185,6 +2203,9 @@ impl EmbeddedDaemon {
             }
             if let Some(reading_http_router) = reading_http {
                 client_router = client_router.merge(reading_http_router);
+            }
+            if let Some(solve_http_router) = solve_http {
+                client_router = client_router.merge(solve_http_router);
             }
             let internal_router = commonwealth_api::server::internal_router(app_state_clone);
 

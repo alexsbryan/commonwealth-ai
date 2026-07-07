@@ -22,8 +22,8 @@
 //!
 //! - `MaximizePassing` — accept when `passed` strictly increases.
 //!   Covers everything that was Green / Refactor / MultiFile.
-//! - `GenerateOneFailing` — accept when exactly one new failing
-//!   test appeared. The Red polarity.
+//! - `GenerateOneFailing` — accept when ≥1 new tests appeared and
+//!   all of them fail. The Red polarity.
 //!
 //! Per-task convenience wrappers materialize structural goals as
 //! tests and supply move-shape guidance in the prompt:
@@ -45,9 +45,9 @@ pub use backend::{
     BackendError, ChatBackend, ChatResponse, DeterministicChatBackend, ReqwestChatBackend,
 };
 pub use shared::{EditAction, Language, ParsedResponse, TestParseResult, TestRunResult};
-pub use trial::run_trial;
+pub use trial::{run_trial, run_trial_observed};
 pub use types::{
-    CandidateDetail, Polarity, RoundSummary, TestSummary, Trial, TrialConfig, TrialResult,
-    TrialStatus,
+    CandidateDetail, Polarity, RoundObserver, RoundSummary, TestSummary, Trial, TrialConfig,
+    TrialResult, TrialStatus,
 };
 pub use workdir::{DirtyWorkdir, Workdir};

@@ -26,6 +26,7 @@ export function connect(corpus) {
     capabilities: () => m.capabilities(),
     readCorpus: (atomIds) => m.readCorpus(corpus, atomIds),
     readChunk: (chunkId) => m.readChunk(corpus, String(chunkId)),
+    documentFeed: (limitDocs) => m.documentFeed(corpus, limitDocs),
     // graph-explorer family
     graph: (nodeType, limit) => m.graph(corpus, nodeType, limit),
     subgraph: (nodeType, limit) => m.subgraph(corpus, nodeType, limit),

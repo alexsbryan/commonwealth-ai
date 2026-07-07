@@ -35,6 +35,8 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 mod bootstrap;
 mod build;
 mod lifecycle;
+mod solve_http;
+mod solve_tools;
 // Liveness probe for the pidfile-managed (manual) daemon — consumed by
 // `install-service`'s double-start guard and doctor's supervision check.
 pub(crate) use lifecycle::read_daemon_pid;
@@ -573,6 +575,15 @@ async fn run_daemon(args: &[String]) -> i32 {
         chunk_entity_extractor,
     );
 
+    // ── Solve job table ───────────────────────────────────────────
+    // Shared between the /v1/solve/jobs HTTP router (installed in
+    // install_http_and_mcp below) and the solve/solve_status/
+    // solve_cancel MCP tools (registered in build_tool_registry) —
+    // an MCP agent and a curl session see the same jobs. The solver
+    // calls back into this daemon's own /v1/chat/completions over
+    // loopback.
+    let solve_jobs = Arc::new(solve_http::SolveJobs::new(config.daemon.client_port));
+
     // ── Tool registry (code intelligence + notes) ─────────────────
     // The embedded daemon serves /mcp for all locally-indexed corpora
     // under data_dir/indexes/. Tools return helpful errors when no
@@ -594,6 +605,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         work_atlas_repo_root.clone(),
         work_atlas_repo_id.clone(),
         work_atlas_branch.clone(),
+        Arc::clone(&solve_jobs),
     )
     .await;
 
@@ -668,6 +680,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         tools,
         Arc::clone(&notes_store),
         &config,
+        Arc::clone(&solve_jobs),
     )
     .await;
 
