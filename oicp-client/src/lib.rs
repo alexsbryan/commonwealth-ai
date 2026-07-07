@@ -350,6 +350,26 @@ impl RemoteApiProvider {
     }
 }
 
+/// Fetch the OICP capabilities manifest from a daemon at `endpoint`, which may
+/// be either the daemon root (`http://host:9741`) or the OpenAI `/v1` shape
+/// (`http://host:9741/v1`) — both resolve, since the manifest lives at the
+/// daemon root (see [`RemoteApiProvider::daemon_root`]). `bearer` is the
+/// optional auth token for a non-loopback host.
+///
+/// Returns `None` on a v0.3 host (no `/oicp/v1/capabilities`) or any transport
+/// or parse failure. Callers treat `None` as "degrade to v0.3 client defaults"
+/// — never a hard error. This is the ergonomic entry a package uses to source
+/// context length + the embed query-instruction prefix from the host's own
+/// manifest (v0.4 §7 context discoverability, §4 embed completeness) rather
+/// than compiling those values in.
+pub async fn fetch_manifest(endpoint: &str, bearer: Option<String>) -> Option<ProviderManifest> {
+    // A throwaway provider carries no model/context — `fetch_oicp_manifest`
+    // only reads the endpoint, HTTP client, and auth header.
+    RemoteApiProvider::new(endpoint, bearer, "", 0)
+        .fetch_oicp_manifest()
+        .await
+}
+
 // ─── OpenAI Response Types ───────────────────────────────────
 
 #[derive(Deserialize)]
@@ -927,6 +947,19 @@ impl InferenceProvider for SplitInferenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn fetch_manifest_degrades_to_none_on_unreachable_host() {
+        // Contract: a v0.3 host (or any transport failure) yields None so the
+        // caller falls back to v0.3 defaults rather than hard-erroring. Port 1
+        // is reserved/unbound, so this never touches a real daemon.
+        let m = fetch_manifest("http://127.0.0.1:1", None).await;
+        assert!(m.is_none());
+        // Same for the `/v1`-shaped endpoint — `daemon_root` strips the suffix
+        // before joining `/oicp/v1/capabilities`, then still can't connect.
+        let m = fetch_manifest("http://127.0.0.1:1/v1", None).await;
+        assert!(m.is_none());
+    }
 
     #[test]
     fn build_request_basic() {
