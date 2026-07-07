@@ -37,7 +37,7 @@ const ARTICLE_BODY: &str = include_str!("fixtures/article_kyiv.json");
 async fn single_node_tick_indexes_portal_and_tracks_links() {
     let env = TestEnv::new("self_only").await;
 
-    let report = env.watcher.tick(env.now).await.expect("tick OK");
+    let report = env.watcher.tick(env.now, false).await.expect("tick OK");
     assert!(report.role_leader, "single-node watcher must be leader");
     assert!(report.portal_ingested, "first tick must ingest portal page");
     // Bullet chunker emits one chunk per `*` line.
@@ -77,7 +77,7 @@ async fn first_tick_fetches_pending_articles_into_parent() {
     // Step A populates the tracked set with PendingFetch entries.
     // Step B then runs in the same tick, picks them up, and
     // fetches into the parent `wikipedia` corpus.
-    let r1 = env.watcher.tick(env.now).await.unwrap();
+    let r1 = env.watcher.tick(env.now, false).await.unwrap();
     assert!(r1.fetched > 0, "first tick must fetch pending articles");
 
     let wiki_idx = CorpusIndex::open(&env.idx_dir.join("wikipedia"))
@@ -111,13 +111,13 @@ async fn subsequent_tick_refreshes_when_revision_diverged() {
     // First tick: populate + initial-fetch. After this all tracked
     // entries are `Present` with `last_known_rev_id = 1297999000`
     // (the article fixture's revid).
-    let _ = env.watcher.tick(env.now).await.unwrap();
+    let _ = env.watcher.tick(env.now, false).await.unwrap();
 
     // Second tick: stub batch_revisions returns 1000 (different),
     // so each Present entry routes to the refresh path.
     let r2 = env
         .watcher
-        .tick(env.now + chrono::Duration::hours(25))
+        .tick(env.now + chrono::Duration::hours(25), false)
         .await
         .unwrap();
     assert!(
@@ -135,7 +135,7 @@ async fn subsequent_tick_refreshes_when_revision_diverged() {
 async fn portal_marker_short_circuits_when_revid_unchanged() {
     let env = TestEnv::new("idempotent").await;
 
-    let r1 = env.watcher.tick(env.now).await.unwrap();
+    let r1 = env.watcher.tick(env.now, false).await.unwrap();
     assert!(r1.portal_ingested);
     let portal_chunks_after_first = CorpusIndex::open(&env.idx_dir.join("wikipedia-newsworthy"))
         .await
@@ -147,7 +147,7 @@ async fn portal_marker_short_circuits_when_revid_unchanged() {
     // Second tick on the same day with the same revid — no portal
     // ingest should happen. (Article fetches still happen for any
     // PendingFetch tracked rows, that's separate.)
-    let r2 = env.watcher.tick(env.now).await.unwrap();
+    let r2 = env.watcher.tick(env.now, false).await.unwrap();
     assert!(
         !r2.portal_ingested,
         "second tick at same date+revid must short-circuit"

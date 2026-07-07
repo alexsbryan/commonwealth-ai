@@ -15,12 +15,17 @@
 pub mod bdd;
 pub mod framework;
 pub mod make_passing;
+pub mod solve;
 pub mod split_file;
 pub mod structural;
 pub mod write_failing_test;
 
-pub use bdd::{bdd_cycle, BddCycleArgs, BddCycleResult, ReviewMode};
+pub use bdd::{
+    bdd_cycle, bdd_cycle_observed, BddCycleArgs, BddCycleResult, BddRoundObserver, BddStage,
+    ReviewMode,
+};
 pub use framework::{detect_framework, Framework};
 pub use make_passing::make_failing_tests_pass;
+pub use solve::{solve, SolveArgs, SolveOutcome, SolvePath, SolveRoundObserver, SolveStage, SolveVerb};
 pub use split_file::split_file;
 pub use write_failing_test::write_failing_test;

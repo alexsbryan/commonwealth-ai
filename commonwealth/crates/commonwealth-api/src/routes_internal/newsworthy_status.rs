@@ -108,7 +108,12 @@ pub async fn newsworthy_tick(
             StatusCode::SERVICE_UNAVAILABLE,
             Json(NewsworthyTickResponse {
                 queued: false,
-                reason: Some("watcher not running on this daemon — no corpus engine wired".into()),
+                reason: Some(
+                    "watcher not running on this daemon — either \
+                     [daemon].freshness_watchers_enabled = false in config.toml, \
+                     or no corpus engine is wired"
+                        .into(),
+                ),
             }),
         );
     };

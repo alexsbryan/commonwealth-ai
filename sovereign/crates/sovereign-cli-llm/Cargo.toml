@@ -57,7 +57,9 @@ toml = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-reqwest = { workspace = true }
+# `stream` on top of the workspace features: `solve --watch` reads
+# the daemon's SSE round events via `bytes_stream()`.
+reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"

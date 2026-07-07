@@ -98,6 +98,25 @@ path = "daemon reload"
 binary = "daemon"
 visibility = "public"
 
+# solve — daemon-hosted TDD solver (docs/specs/SOLVE_UX.md): give the daemon
+# a coding goal, watch rounds land, review with git diff.
+[[command]]
+path = "solve"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+flags = [
+  { name = "--watch" },
+  { name = "--verb", takes_value = true },
+  { name = "--max-lines", takes_value = true },
+  { name = "--test-command", takes_value = true },
+  { name = "--model", takes_value = true },
+  { name = "--force" },
+  { name = "--daemon", takes_value = true },
+  { name = "--status", takes_value = true },
+  { name = "--cancel", takes_value = true },
+]
+
 # chat — the core local-inference loop.
 [[command]]
 path = "chat ask"

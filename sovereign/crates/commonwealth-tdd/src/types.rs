@@ -60,9 +60,11 @@ pub enum Polarity {
     /// goals encoded as tests, bug fixes, anything where "more
     /// tests passing" is the gradient.
     MaximizePassing,
-    /// Accept when exactly one new failing test appeared and no
-    /// previously-passing test regressed. The Red polarity — we
-    /// want a discriminating test, not a fix.
+    /// Accept when at least one new test appeared, EVERY new test
+    /// fails, and no previously-passing test regressed. The Red
+    /// polarity — we want discriminating test(s), not a fix. A
+    /// multi-case pin (2-4 focused cases in one file) is accepted;
+    /// a candidate whose new tests include a vacuous pass is not.
     GenerateOneFailing {
         /// Optional hint at the test name the model should add.
         /// The loop doesn't enforce a match — just surfaces it in
@@ -88,16 +90,31 @@ impl Default for TrialConfig {
         // values. The solver loop's median 20/20 on the 4.2-mini-
         // evaluator was measured at these settings.
         Self {
-            candidates_per_round: 4,
+            // 6 candidates: the primary is a ~3B-active MoE — decode
+            // is cheap, so widen the sample per round (operator
+            // philosophy: more faster trials; 2026-07-06 receipts put
+            // per-candidate p(compiling Rust fn) ≈ 0.2-0.35, so 6
+            // samples/round ≈ 0.77-0.92 round-level hit rate vs
+            // 0.59-0.82 at 4).
+            candidates_per_round: 6,
             rounds_per_trial: 6,
             max_stall_rounds: 3,
-            emit_max_tokens: 2500,
+            emit_max_tokens: 4000,
             candidate_test_timeout: Duration::from_secs(60),
             temp_ladder_default: vec![0.2, 0.4, 0.7, 0.9],
             temp_ladder_wide: vec![0.3, 0.6, 0.9, 1.1],
         }
     }
 }
+
+// ── round observer ──────────────────────────────────────────────────
+
+/// Callback invoked by [`run_trial_observed`](crate::trial::run_trial_observed)
+/// once per completed round, with the same [`RoundSummary`] that
+/// lands in the trajectory. Lets a job host stream rounds live
+/// (SSE, progress UI) without the engine knowing about transports.
+/// Must be cheap and non-blocking — it runs inline between rounds.
+pub type RoundObserver = std::sync::Arc<dyn Fn(&RoundSummary) + Send + Sync>;
 
 // ── response envelope ───────────────────────────────────────────────
 
@@ -158,4 +175,37 @@ pub struct RoundSummary {
     pub winner: Option<String>,
     pub passing_after: u32,
     pub failed_after: u32,
+    /// Per-candidate receipts: why each candidate landed where it
+    /// did. The labels above stay terse for prompt-side history;
+    /// this carries the diagnostic detail (error class + message,
+    /// emission size, response tail) for post-run analysis.
+    #[serde(default)]
+    pub details: Vec<CandidateDetail>,
+}
+
+/// Diagnostic receipt for one candidate in one round. Persisted in
+/// the trajectory so a stalled trial can be diagnosed from artifacts
+/// alone — without re-running the trial under a debugger.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateDetail {
+    /// Edit shape (`rewrite <fn>` / `patch a-b` / `<parse-failed>` …).
+    pub shape: String,
+    pub temp: f32,
+    /// `NNp/MMf` on a run that reached tests, else `err:<class>`
+    /// where class ∈ {backend, parse, apply, snapshot}.
+    pub outcome: String,
+    /// Full error message (capped) when the candidate errored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Char length of the model's emitted source body (0 when the
+    /// response never parsed).
+    pub body_chars: usize,
+    /// Last ~200 chars of the emitted body — enough to spot
+    /// truncation, reasoning-leak-into-code, and fence problems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_tail: Option<String>,
+    /// True when the applied edit came from the pointed repair turn
+    /// (first apply rejected, one follow-up call fixed it).
+    #[serde(default)]
+    pub repaired: bool,
 }

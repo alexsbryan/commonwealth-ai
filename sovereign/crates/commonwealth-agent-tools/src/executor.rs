@@ -618,8 +618,64 @@ pub fn function_at_range(content: &str, start_line: usize, end_line: usize) -> O
 /// Decorator lines (`@foo`) immediately preceding the def at the
 /// same indent are included in the range.
 ///
+/// Falls back to parser-grade Rust spans via `syn` (already this
+/// crate's syntax-check dependency), then to the keyword-introduced
+/// brace-function family (`fn`/`func`/`function` — Rust, Go, JS/TS)
+/// textually. Without these, `replace_function` was structurally
+/// impossible against every brace language ("no function or class
+/// named X", 2026-07-06 baseline: 9/12 candidates on
+/// 2.2-group-anagrams died to it while the stub sat in plain sight).
+///
 /// Returns None if no matching definition is found.
 pub fn find_function_bounds(content: &str, name: &str) -> Option<(usize, usize)> {
+    find_function_bounds_indented(content, name)
+        .or_else(|| find_function_bounds_syn_rust(content, name))
+        .or_else(|| find_function_bounds_braced(content, name))
+}
+
+/// Parser-grade bounds for Rust: `syn::parse_file` + span lookup
+/// (proc-macro2 `span-locations` is enabled crate-wide for the
+/// syntax validator). Finds free functions at any module depth and
+/// methods inside `impl` blocks; the item span includes outer
+/// attributes and doc comments. Returns 0-indexed half-open lines.
+/// None when the content isn't parseable Rust — the textual family
+/// finder below then gets its chance.
+fn find_function_bounds_syn_rust(content: &str, name: &str) -> Option<(usize, usize)> {
+    use syn::spanned::Spanned;
+    fn scan(items: &[syn::Item], name: &str) -> Option<(usize, usize)> {
+        for item in items {
+            match item {
+                syn::Item::Fn(f) if f.sig.ident == name => {
+                    let sp = f.span();
+                    return Some((sp.start().line.saturating_sub(1), sp.end().line));
+                }
+                syn::Item::Impl(im) => {
+                    for ii in &im.items {
+                        if let syn::ImplItem::Fn(f) = ii {
+                            if f.sig.ident == name {
+                                let sp = f.span();
+                                return Some((sp.start().line.saturating_sub(1), sp.end().line));
+                            }
+                        }
+                    }
+                }
+                syn::Item::Mod(m) => {
+                    if let Some((_, inner)) = &m.content {
+                        if let Some(b) = scan(inner, name) {
+                            return Some(b);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+    let file = syn::parse_file(content).ok()?;
+    scan(&file.items, name)
+}
+
+fn find_function_bounds_indented(content: &str, name: &str) -> Option<(usize, usize)> {
     let lines: Vec<&str> = content.lines().collect();
     let patterns = [
         format!("def {}(", name),
@@ -664,6 +720,90 @@ pub fn find_function_bounds(content: &str, name: &str) -> Option<(usize, usize)>
             end += 1;
         }
         return Some((start, end));
+    }
+    None
+}
+
+/// Brace-language variant of the bounds finder, covering the family
+/// of KEYWORD-INTRODUCED brace-delimited functions: `fn NAME` (Rust),
+/// `func NAME` (Go), `function NAME` (JS/TS) — with any qualifier
+/// prefix (`pub`, `pub(crate) async`, `export default`, …). Walks
+/// BACK over contiguous attribute/doc lines (`#[attr]`, `///`,
+/// `@decorator`) at the same indent — deliberately NOT plain `//`
+/// comments, which would swallow unrelated file headers — then walks
+/// FORWARD balancing `{`/`}` from the signature until the body
+/// closes. Brace counting is textual (string/char literals holding
+/// braces can skew it) — same fidelity class as the indent walker's
+/// comment heuristics; fine for whole-function replacement.
+fn find_function_bounds_braced(content: &str, name: &str) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = content.lines().collect();
+    let sig_markers: Vec<String> = ["fn", "func", "function"]
+        .iter()
+        .flat_map(|kw| [format!("{kw} {name}("), format!("{kw} {name}<")])
+        .collect();
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        let Some(pos) = sig_markers.iter().find_map(|m| trimmed.find(m.as_str())) else {
+            continue;
+        };
+        // `fn` must start the line or follow qualifier keywords —
+        // reject mid-expression matches like `let f = fn name(…)`
+        // shapes or a call `some_fn name(` (not real Rust, but keep
+        // the guard cheap: everything before the marker must be
+        // alphanumeric keywords/parens/whitespace).
+        let prefix = &trimmed[..pos];
+        if !prefix
+            .chars()
+            .all(|c| c.is_alphanumeric() || c.is_whitespace() || c == '(' || c == ')' || c == '_')
+        {
+            continue;
+        }
+        let indent = line.len() - trimmed.len();
+        // Walk back over attributes and doc comments at the same indent.
+        let mut start = i;
+        while start > 0 {
+            let prev = lines[start - 1];
+            let prev_trim = prev.trim_start();
+            let prev_indent = prev.len() - prev_trim.len();
+            let is_attr = prev_trim.starts_with("#[")
+                || prev_trim.starts_with("///")
+                || prev_trim.starts_with('@');
+            if !is_attr || prev_indent != indent {
+                break;
+            }
+            start -= 1;
+        }
+        // Walk forward balancing braces from the signature line. The
+        // signature may span lines before its opening `{`.
+        let mut depth: i64 = 0;
+        let mut opened = false;
+        let mut end = i;
+        'scan: while end < lines.len() {
+            for ch in lines[end].chars() {
+                match ch {
+                    '{' => {
+                        depth += 1;
+                        opened = true;
+                    }
+                    '}' => {
+                        depth -= 1;
+                        if opened && depth == 0 {
+                            end += 1;
+                            break 'scan;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            end += 1;
+        }
+        if !opened {
+            return None;
+        }
+        return Some((start, end.min(lines.len())));
     }
     None
 }
@@ -1429,6 +1569,63 @@ mod tests {
         let new_lines = ["x", "y"];
         let suffix = ["b"];
         assert!(dedup_patch_boundary(&prefix, &new_lines, &suffix).is_none());
+    }
+
+    // ── find_function_bounds: brace-language family ──────────────
+
+    #[test]
+    fn bounds_rust_pub_fn_with_header_not_swallowed() {
+        // The 2.2-group-anagrams scaffold shape: SPDX header line
+        // directly above the fn. The header must NOT be inside the
+        // replacement range.
+        let src = "// SPDX-License-Identifier: AGPL-3.0-or-later\npub fn group_anagrams(strs: Vec<String>) -> Vec<Vec<String>> {\n    let _ = strs;\n    todo!()\n}\n";
+        let (start, end) = find_function_bounds(src, "group_anagrams").unwrap();
+        assert_eq!((start, end), (1, 5));
+    }
+
+    #[test]
+    fn bounds_rust_attrs_and_docs_included_nested_braces() {
+        let src = "fn other() {}\n\n/// Doc line.\n#[inline]\npub fn target<T>(x: T) -> T {\n    if true {\n        return x;\n    }\n    x\n}\nfn after() {}\n";
+        let (start, end) = find_function_bounds(src, "target").unwrap();
+        assert_eq!((start, end), (2, 10));
+    }
+
+    #[test]
+    fn bounds_rust_impl_method() {
+        let src = "struct S;\nimpl S {\n    pub fn method(&self) -> u8 {\n        1\n    }\n}\n";
+        let (start, end) = find_function_bounds(src, "method").unwrap();
+        assert_eq!((start, end), (2, 5));
+    }
+
+    #[test]
+    fn bounds_go_func_via_textual_family() {
+        let src = "package main\n\nfunc helper() {}\n\nfunc Target(x int) int {\n\tif x > 0 {\n\t\treturn x\n\t}\n\treturn -x\n}\n";
+        let (start, end) = find_function_bounds(src, "Target").unwrap();
+        assert_eq!((start, end), (4, 10));
+    }
+
+    #[test]
+    fn bounds_ts_exported_function_via_textual_family() {
+        let src = "const other = 1;\nexport async function target(x: number): Promise<number> {\n  return x;\n}\n";
+        let (start, end) = find_function_bounds(src, "target").unwrap();
+        assert_eq!((start, end), (1, 4));
+    }
+
+    #[test]
+    fn bounds_braced_none_when_absent_or_commented() {
+        let src = "// fn ghost() {}\npub fn real() {}\n";
+        assert!(find_function_bounds(src, "ghost").is_none());
+        assert!(find_function_bounds(src, "missing").is_none());
+    }
+
+    #[test]
+    fn bounds_python_still_uses_indent_walker() {
+        let src = "def target(x):\n    return x\n\ndef after():\n    pass\n";
+        let (start, end) = find_function_bounds(src, "target").unwrap();
+        // The indent walker includes the trailing blank line —
+        // long-standing behavior, pinned here as the Python path's
+        // regression guard.
+        assert_eq!((start, end), (0, 3));
     }
 
     #[test]

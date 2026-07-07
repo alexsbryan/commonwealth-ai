@@ -34,6 +34,7 @@
     corpusStats: (corpusId) => invoke("meshapp_corpus_stats", { corpusId }),
     timeline: (corpusId) => invoke("meshapp_timeline", { corpusId }),
     readChunk: (corpusId, chunkId) => invoke("meshapp_read_chunk", { corpusId, chunkId }),
+    documentFeed: (corpusId, limitDocs) => invoke("meshapp_document_feed", { corpusId, limitDocs }),
     wrappedArtifact: (corpusId) => invoke("meshapp_wrapped_artifact", { corpusId }),
     openOuterWork: (corpusId) => invoke("meshapp_open_outer_work", { corpusId }),
   };

@@ -520,6 +520,36 @@ fn rescope_outgoing_links_for_bullet(
     let mut meta = section_metadata.clone()?;
     let bullet_targets = crate::chunkers::portal_event_bullet::extract_bullet_links(bullet_text);
 
+    // Production reality check (2026-07-07, found by ingesting a real
+    // portal day): the `wikipedia_api_article` extractor FLATTENS
+    // `[[Target|Display]]` to display text and strips leading `*`
+    // markers before the chunker runs, so on the live path
+    // `bullet_text` carries no wikilink markup and `bullet_targets`
+    // is empty. Filtering section links against an empty set zeroed
+    // `outbound_links` on every real chunk while the wikitext-fixture
+    // tests stayed green. Until bullet-grain markup survives
+    // extraction (tracked follow-up), fall back to SECTION-scoped
+    // links — over-attribution beats none.
+    if bullet_targets.is_empty() {
+        let object = meta.as_object_mut()?;
+        let section_targets: Vec<serde_json::Value> = object
+            .get("outgoing_links")
+            .and_then(|v| v.as_array())
+            .map(|links| {
+                links
+                    .iter()
+                    .filter_map(|l| l.get("target_title").and_then(|v| v.as_str()))
+                    .map(|s| serde_json::Value::String(s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        object.insert(
+            "outbound_links".to_string(),
+            serde_json::Value::Array(section_targets),
+        );
+        return Some(meta);
+    }
+
     let object = meta.as_object_mut()?;
     let bullet_target_set: std::collections::HashSet<&str> =
         bullet_targets.iter().map(String::as_str).collect();
@@ -561,6 +591,55 @@ fn rescope_outgoing_links_for_bullet(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn rescope_falls_back_to_section_links_when_bullet_has_no_markup() {
+        // The production extractor strips [[..]] markup before chunking,
+        // so bullet_text carries plain prose. Section outgoing_links
+        // must survive as outbound_links instead of filtering to [].
+        let section_meta = Some(serde_json::json!({
+            "outgoing_links": [
+                {"target_title": "Gaza war"},
+                {"target_title": "Benjamin Netanyahu"}
+            ]
+        }));
+        let meta = rescope_outgoing_links_for_bullet(
+            &section_meta,
+            "Israeli prime minister Benjamin Netanyahu says reconstruction waits.",
+        )
+        .expect("meta");
+        let links: Vec<&str> = meta["outbound_links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(links, vec!["Gaza war", "Benjamin Netanyahu"]);
+    }
+
+    #[test]
+    fn rescope_stays_bullet_scoped_when_markup_present() {
+        let section_meta = Some(serde_json::json!({
+            "outgoing_links": [
+                {"target_title": "Kyiv"},
+                {"target_title": "Elsewhere"}
+            ]
+        }));
+        let meta = rescope_outgoing_links_for_bullet(
+            &section_meta,
+            "At least 12 killed in [[Kyiv]].",
+        )
+        .expect("meta");
+        let flat: Vec<&str> = meta["outbound_links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(flat, vec!["Kyiv"]);
+        let filtered = meta["outgoing_links"].as_array().unwrap();
+        assert_eq!(filtered.len(), 1, "section links narrowed to the bullet's");
+    }
     use super::*;
     use crate::index::CorpusIndex;
     use crate::recipe::{ChunkerConfig, ExtractorConfig};

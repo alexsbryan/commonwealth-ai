@@ -73,6 +73,198 @@ walk down the list and ask "does this change satisfy criterion N?".
 
 ---
 
+## 2026-07-06 — run-measure-improve loop, iteration 1 (search runner, full battery)
+
+Mission (operator): drive the battery to consistent perfect scores by
+improving the HARNESS around the open-weight model — "the model IS
+capable of the presented tasks but often only with the right context
+and system around it." Methodology imported from the chaos-QA loop
+(`sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md`):
+instrument first, receipts before diagnosis, class fixes only,
+paired replay validation.
+
+**Instrument (committed `bda56ec7`):** per-candidate receipts. Trial
+trajectory labels now carry the failure class (`err:parse` /
+`err:apply` / `err:backend` / `err:snapshot`), and `RoundSummary`
+gains `details[]` (full error capped 600ch, body_chars, 200-char
+body_tail) persisted into `requests.jsonl`. Before this, a stalled
+trial was 12 bare `err`s — undiagnosable from artifacts.
+
+**Classes found + fixed this iteration (each generalizes; per the
+operator: never target the problem/language under test brittle-y):**
+
+1. **NoBaseline scaffolds (fixed `6f3619b5`).** 1.1/1.2/1.3 shipped
+   zero scaffold smoke tests → the TDD Machine died in 227ms
+   ("test_command produced no test results") — a structural 0
+   indistinguishable from failure (same invisible-zero family as the
+   2026-06-08 `[lints]` bug). Authored 3 smoke tests each, encoding
+   ONLY the prompts' own worked examples, per the 8/11-problem
+   convention. All three problems went 0 → 9/9 (3/3 trials each).
+   DEEPER generalization queued: solver-side fallback (no tests →
+   `GenerateOneFailing` Red polarity) so future problems never need
+   hand-authored smoke tests.
+
+2. **`replace_function` was Python-only (fixed `2e4be993`).**
+   `find_function_bounds` knew `def`/`class` + indent walking. Every
+   `rewrite <fn>` against a brace language died with "no function or
+   class named X found" — with the stub in plain sight. Receipts:
+   9/12 candidates on 2.2 and 10/12 on 3.2-lights-out (Rust) died to
+   exactly this; the model's PREFERRED move (function-granular
+   rewrite — the right-sized emission) was structurally rejected,
+   forcing it into whole-file writes, which is where its Rust
+   fluency actually breaks. Fix: layered finder — indent walker
+   (unchanged, Python), syn span lookup (Rust — existing dependency,
+   parser-grade, attrs included), textual keyword-introduced
+   brace-function family `fn`/`func`/`function` (Go/TS + fallback).
+   7 pinning tests.
+
+3. **Reasoning-leak-into-code (OPEN — next lever).** Controlled
+   probe (solver's exact round-0 prompt, 4 calls): 0/4 Rust
+   whole-file emissions compile; thinking surfaces INSIDE the source
+   block ("// Wait, I made an error in the Gaussian elimination
+   swap…"). NOT truncation (1821–2214 toks < 2500 cap, fences
+   closed). The trial system prompt forbids commentary outside the
+   fenced blocks — the model has no sanctioned thinking channel (the
+   same flaw CI_GATE_HANDOFF flagged for pi). Candidate fixes:
+   sanctioned pre-block thinking (prose outside fences is already
+   structurally ignored by the parser), and/or a pointed
+   syntax-repair turn on syn rejection (small models fix pointed
+   errors well). ALSO: `prompt.md`'s "How to deliver" tail
+   (write-tool + "do NOT paste the solution into chat") contradicts
+   the search runner's paste-code contract — delivery instructions
+   belong to the runner, not the problem statement.
+
+**A-arm baseline (pre-fix binary, `target/agent-bench/baseline-2026-07-06/`):**
+1.1/1.2/1.3/2.1 = 9/9 ×3 each (post smoke-test fix); 2.2 = 0/8/6
+(variance = whether the model recovered from the broken finder by
+switching shapes); 3.2-rust = 0 ×3 (10/12 finder + 2/12 backend).
+**Everything from 3.2-python onward is VOID — the daemon was
+jetsam-killed mid-run** (all candidates `err:backend` transport;
+log cuts mid-inference-setup, no error line; auto-restarted ~08:17).
+3.3's "1/9 completed" ×3 is void too. Known §E class.
+
+**B-arm (fixed binary, fresh daemon, `target/agent-bench/barm-2026-07-06/`):**
+full battery ×3 trials, running as of this entry — the paired replay
+for fixes 1+2 and the first honest full-battery measurement.
+
+**Arms B–E and iterations 2–6 (same day).** Full trial log in
+`target/agent-bench/{baseline,barm,darm,earm}-2026-07-06/`.
+
+B-arm (finder+smoke fixes): grand 69/99. Tier-1 ×4 + 3.2-py all 9/9;
+2.2 = 8/9 ×3 (judge anchor); 3.2-rust 9/0/0 (emission variance);
+3.3 2/9 ×3 (goal outside fitness signal);
+4.1 6/9 ×3 (judge parser bug); 4.2 8/6/9; 5.1 0 ×3 (single-file
+tunnel vision).
+
+Iterations 2–6, all committed, each receipt-anchored + family-level:
+- d961369a header inference (~ labels) + delivery-section strip
+- 3209399b pointed syntax-repair turn (+r labels)
+- a6e6a15a 3.3 structural red test (goal INTO the fitness signal)
+- 23a7b937 multi-file addressing (render all sources; cross-file
+  rewrite resolution; write_file{path})
+- 5e99ea82 judge anchor accepts numeric strings ("3") — 4.1's whole
+  3-point gap
+- 5e97447f 600s queue-aware backend timeout (K parallel candidates
+  serialize on one local slot; 180s killed the tail = fake
+  err:backend ~25% tax) + minimal-change repair prompt
+- 41dd1375/7a4e4723 sanctioned thinking channel (leak-into-code was
+  the mangle source; prose outside fences is already ignored; LAST
+  source block wins = existing parser behavior)
+- 62454754 transactional multi-edit candidates (split goals are
+  impossible as single edits under strict-improvement gating)
+
+D-arm (through multi-file addressing): 3.2-rust 0/8/0 (repair
+converts some; emission variance remains — thinking channel is the
+E-arm lever); 3.2-py 9/9/8; 3.3 2/9 ×3 (needs transactions — E-arm);
+5.1 **8/7/2 from 0/0/0** — multi-file addressing validated live.
+
+Gotchas learned: --problems is PREFIX-matched (3.2-lights-out pulls
+the -python sibling too); bench wall cap kills the runner mid-flight
+and DROPS the trajectory receipts (instrument gap, open); detached
+launcher sentinels must be rm'd before relaunch or monitors read the
+stale kill's rc=-15.
+
+Certification plan when the hard bank pins: full battery ×3 with
+--judge-trials 3 (majority vote — 2.2's dropped point is single-judge
+anchor noise; CI passes 1).
+
+**Iterations 7-14 (late 2026-07-06, arms E→J; operator pivot: master
+PYTHON first, Rust parked as language adaptation):**
+
+- c97f528a bounded thinking (5 lines) + emit 2500→4000 (unbounded
+  channel ballooned emissions and re-truncated — chaos
+  length-governance lesson).
+- b654a40b K=4→6 candidates + decomposition hint (operator
+  correction: the 35B-A3B MoE decodes ~3B-cheap — widen sampling on
+  the existing slot; a 9B dense coder would be SLOWER + memory-risky).
+- 36876410 spontaneous-EOS continuation (dangling action fence → one
+  completion call; chaos b1f09a19 transplant). c09fe512 extends to
+  plan-only EOS (stops before the FIRST fence).
+- 8fd8ed9f **gradient ladders** (operator principle: the SYSTEM owes
+  a decomposition before any capability conclusion): 3.3's <=30-line
+  cliff → <=80/60/45/30 rung tests; I-arm receipt: round-0 full
+  3-file split transaction won (6p→9p, behavior 6/6, calc.py 97→27),
+  score 2/9→4/9, residual = one 40-line file + target fixation.
+- b3843907 acceptance contract stated operationally (ties are
+  discarded; make the complete change in this response).
+- db81d829 outcome-diversity stall (2 dry rounds exit early;
+  gradient stalls keep runway) + protocol: diagnosis arms --trials 1.
+- c772bd9c tie feedback (cleanly-applied edits that flipped nothing
+  are NAMED next round — anti-fixation; _lexer.py rewritten 5x while
+  the assertion said _rpn.py).
+- df069016 one 3s transport retry (I-arm 5.1 r4: a wedged daemon
+  moment wiped 6 candidates + their continuations).
+
+Python bank state: 4.1 PINNED 9/9x3 (G); 4.2 9/9,9/9 + one wall-cap
+timeout (H); 3.2-py 9/9/8; 3.3 4/9 (ladder climbing, tie-feedback
+J-arm read pending); 5.1 witness 18/24=75% but strict buckets floor
+dim_a to 1 (certification question) + residual fixation/EOS tails.
+J-arm (3.3+5.1, --trials 1) running at handoff time. After J:
+certification candidate = Python bank x3 with --judge-trials 3.
+
+**GENERALIZATION PROTOCOL (operator, 2026-07-07): reaching 45/45 on
+the training bank must trigger an overfit challenge.** Three axes:
+(1) HOLDOUT battery — new problems in the same format, derived
+mechanically from external canonical sources (Exercism/MBPP-shaped),
+same class spectrum. Holdout receipts are READ-ONLY: no harness
+change may cite them as motivation (the chaos-QA frozen-rubric
+discipline); first-run score = the generalization number;
+training-minus-holdout delta = the tracked overfit measure.
+(2) Cross-model — same battery on a different zoo model
+(Darwin-36B / 4B) separates 'harness helps small models' from
+'harness fits this Qwen'. (3) Cross-language — the parked Rust plus
+roadmap Go/TS problems exercise the family-generality claims
+(bounds finder, validators, edit inference) that Python mastery
+never touches. Holdout problems live under problems/ with ids
+prefixed `h.` and are EXCLUDED from iteration arms by convention.
+
+**CERTIFICATION + GENERALIZATION GATE (2026-07-07, arms M/N):**
+Python-bank certification (x3 trials, judge-trials 3, report
+marm-2026-07-07): **35/45 median** — 3.2-py 9 (9/8/9), 3.3 4 (4/3/9
+— FIRST 9 ever), 4.1 9 (9/9/9 perfect), 4.2 9 (6/9/9), 5.1 4 (4/9/1
+— FIRST 9 ever). Every problem has demonstrated 9/9; the gap to
+45/45 is per-trial consistency on 3.3 (transaction-landing ~50%) and
+5.1 (fixation variance).
+
+**HOLDOUT first-read (x1, judge-trials 3, report narm-2026-07-07):
+34/36 (94%)** — h.1 8/9, h.2 9/9, h.3 8/9 (the LADDER class on
+never-seen material), h.4 9/9. Holdout OUTSCORED the training
+median: no overfit signal; the class-level fixes generalize.
+Receipts remain READ-ONLY per protocol.
+
+Remaining to 45/45: 3.3/5.1 consistency (regression feedback + EOS
+drip levers landed late, untested at trials>=2 there). Remaining to
+99/99: 2.2 judge point, Rust lights-out emission variance under the
+full current stack, then cross-model + Go/TS gates.
+
+**Operator ground rules recorded:** (a) fixes must generalize to
+categories/families, never the problem or language under test;
+(b) leverage existing tools/libraries first (syn over hand-rolled;
+tree-sitter is the designated escalation for parser-grade Go/TS
+spans if receipts demand).
+
+---
+
 ## 2026-05-21 night — PR 2 role layer + multi-language primitives
 
 Built on top of PR 1 (`commonwealth-agent-tools` canonical crate +

@@ -8,13 +8,25 @@
 use std::path::{Path, PathBuf};
 
 pub fn discover_source_file(workdir: &Path) -> Option<String> {
+    discover_source_files(workdir).into_iter().next()
+}
+
+/// All source files under the workdir (same walk/skip rules as
+/// [`discover_source_file`]), shallowest-first then lexicographic.
+/// Multi-file problems (packages with several modules) need every
+/// file visible and addressable — a single discovered file makes
+/// edits against the others structurally impossible (5.1-minilang
+/// B-arm receipts, 2026-07-06: every `rewrite evaluate_ast` died
+/// with "not found in minilang/__init__.py" while evaluator.py sat
+/// unrendered).
+pub fn discover_source_files(workdir: &Path) -> Vec<String> {
     let exts = [".py", ".rs", ".ts", ".tsx", ".go"];
     let mut hits: Vec<PathBuf> = Vec::new();
     walk_for_sources(workdir, workdir, 0, &exts, &mut hits);
     hits.sort_by_key(|p| (p.components().count(), p.clone()));
     hits.into_iter()
-        .next()
         .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 fn walk_for_sources(root: &Path, dir: &Path, depth: usize, exts: &[&str], out: &mut Vec<PathBuf>) {
@@ -121,5 +133,22 @@ mod tests {
         std::fs::write(tmp.path().join("src/lib.rs"), "pub fn x() {}\n").unwrap();
         let f = discover_source_file(tmp.path()).unwrap();
         assert_eq!(f, "src/lib.rs");
+    }
+}
+
+#[cfg(test)]
+mod multi_file_tests {
+    use super::*;
+
+    #[test]
+    fn discover_source_files_returns_all_shallowest_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("minilang")).unwrap();
+        std::fs::write(tmp.path().join("minilang/__init__.py"), "x = 1\n").unwrap();
+        std::fs::write(tmp.path().join("minilang/evaluator.py"), "def evaluate_ast():\n    pass\n").unwrap();
+        std::fs::write(tmp.path().join("minilang/tokenizer.py"), "def tokenize():\n    pass\n").unwrap();
+        let files = discover_source_files(tmp.path());
+        assert_eq!(files.len(), 3);
+        assert!(files.contains(&"minilang/evaluator.py".to_string()));
     }
 }
