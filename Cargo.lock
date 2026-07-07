@@ -8849,6 +8849,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oicp-conformance"
+version = "0.1.0"
+dependencies = [
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "oicp-types"
 version = "0.1.0"
 dependencies = [

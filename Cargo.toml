@@ -72,6 +72,9 @@ members = [
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
+    # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
+    # liftable by any third party certifying their own host.
+    "commonwealth/crates/oicp-conformance",
 ]
 
 [workspace.package]
