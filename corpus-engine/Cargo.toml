@@ -88,7 +88,7 @@ mailparse = { workspace = true }
 # Compression
 flate2 = "1"
 bzip2 = "0.5"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # 7z used by the Internet Archive Stack Exchange dump (one .7z per
 # community). Default features are heavier than we need (aes256, ppmd,
 # encoder) — disable them; SE archives are LZMA2 (decoder always
