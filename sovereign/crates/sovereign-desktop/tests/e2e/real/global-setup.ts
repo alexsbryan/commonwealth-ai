@@ -45,6 +45,17 @@ const FIXTURE_CORPUS_DIR = path.join(__dirname, "fixtures/corpus");
 const FIXTURE_ATTACH_DOC = path.join(__dirname, "fixtures/attach/expedition-notes.txt");
 const FIXTURE_DISPLAY_NAME = "E2E Fixture Corpus";
 const BRIDGE = "http://127.0.0.1:9745";
+const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
+
+// Managed-daemon mode: the harness starts its OWN fixture-scoped daemon on the
+// test-profile HOME, so the daemon's index dir IS the desktop's read path
+// (`list_corpora`/`read_get_chunk` resolve locally) AND retrieval is scoped to
+// the single fixture corpus. It loads the small chat/embed models the journeys
+// are tuned for (the 2B, not the operator's heavy primary). This is the
+// deterministic environment the journey suite assumes ("installs exactly the
+// fixture corpus"); attach-to-the-dev-daemon can't provide it (many corpora +
+// a different, MTP model whose cancellation timing the journeys aren't tuned to).
+const MANAGED_DAEMON = process.env.SOVEREIGN_REAL_MANAGED_DAEMON === "1";
 
 // Fast profile: smallest viable chat model + the standard embedder.
 // Phase 3 bench replays override with the production primary so score
@@ -226,7 +237,37 @@ function bakeProfile(): void {
   // fails without this. Mirror the HOST's real config — same machine, so its
   // model ids match the daemon's loaded slots. Default (non-attach) mode loads
   // its own model from desktop.toml and doesn't need this.
-  if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
+  if (MANAGED_DAEMON) {
+    // The harness owns the daemon: this file is BOTH the daemon's config (which
+    // models to load, where its data lives) and the desktop's attach SetupConfig.
+    // Small models + the test HOME's data dir → a fixture-scoped daemon whose
+    // index dir is the desktop's read path. The desktop still derives its routed
+    // model stems from desktop.toml (also the 2B), so the ids line up.
+    const daemonConfig = [
+      `mcp_servers = []`,
+      ``,
+      `[models]`,
+      `primary = ${JSON.stringify(chatModel)}`,
+      `fast = ${JSON.stringify(chatModel)}`,
+      `embed = ${JSON.stringify(embedModel)}`,
+      `context_size = 32768`,
+      ``,
+      `[daemon]`,
+      `client_port = 9741`,
+      `internal_port = 9742`,
+      `autostart = false`,
+      `client_bind = "127.0.0.1"`,
+      ``,
+      `[data]`,
+      `dir = ${JSON.stringify(sovDir)}`,
+      ``,
+      `[iroh]`,
+      `enabled = false`,
+      ``,
+    ].join("\n");
+    fs.writeFileSync(path.join(sovDir, "config.toml"), daemonConfig);
+    console.log("[real-setup] managed-daemon: wrote fixture-scoped daemon config (small models, test HOME)");
+  } else if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
     const realConfig = path.join(os.homedir(), ".sovereign", "config.toml");
     if (fs.existsSync(realConfig)) {
       fs.copyFileSync(realConfig, path.join(sovDir, "config.toml"));
@@ -248,6 +289,40 @@ function bakeProfile(): void {
   for (const d of configDirs) fs.writeFileSync(path.join(d, "desktop.toml"), desktopToml);
 }
 
+/** Start the harness-owned daemon (HOME = test profile) and wait until it serves
+ *  `/v1/models`. `daemon start` blocks until the daemon reports ready, but we
+ *  re-probe the client port so a mis-started daemon fails here, loudly, rather
+ *  than as a confusing mid-journey inference error. Stopped in global-teardown. */
+async function startManagedDaemon(): Promise<void> {
+  console.log("[real-setup] managed-daemon: starting fixture-scoped daemon (HOME=test profile)…");
+  const env = {
+    ...process.env,
+    HOME,
+    XDG_CONFIG_HOME: path.join(HOME, ".config"),
+    XDG_DATA_HOME: path.join(HOME, ".local/share"),
+    XDG_CACHE_HOME: path.join(HOME, ".cache"),
+  };
+  execSync(`${JSON.stringify(DAEMON_BIN)} daemon start`, {
+    env,
+    stdio: "inherit",
+    timeout: 5 * 60 * 1000,
+  });
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetchJson("http://127.0.0.1:9741/v1/models");
+      if (Array.isArray((r as { data?: unknown }).data)) {
+        console.log("[real-setup] managed-daemon: ready on :9741");
+        return;
+      }
+    } catch {
+      /* not up yet */
+    }
+    await new Promise((res) => setTimeout(res, 1000));
+  }
+  throw new Error("managed-daemon: not serving /v1/models on :9741 within 60s of `daemon start`");
+}
+
 export default async function globalSetup(): Promise<void> {
   fs.mkdirSync(RESULTS, { recursive: true });
   fs.rmSync(LEDGER_REAL, { force: true });
@@ -255,7 +330,13 @@ export default async function globalSetup(): Promise<void> {
   // ── Guard: a daemon on :9741 flips the app into Attach mode against
   // real (non-hermetic) knowledge/inference state. Refuse by default.
   if (await portInUse(9741)) {
-    if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
+    if (MANAGED_DAEMON) {
+      throw new Error(
+        "real-mode setup: MANAGED_DAEMON needs :9741 free to start its own " +
+          "fixture-scoped daemon, but something is already listening there. " +
+          "Stop it (`sovereign daemon stop`) first.",
+      );
+    } else if (process.env.SOVEREIGN_REAL_ALLOW_ATTACH === "1") {
       console.warn(
         "[real-setup] :9741 is occupied — proceeding in ATTACH mode " +
           "(SOVEREIGN_REAL_ALLOW_ATTACH=1). Knowledge/inference state is the " +
@@ -284,6 +365,13 @@ export default async function globalSetup(): Promise<void> {
   });
 
   bakeProfile();
+
+  // ── Managed daemon: start the harness-owned fixture-scoped daemon before the
+  // desktop boots, so the app Attaches to it and the fixture ingest lands in the
+  // shared (test-HOME) index dir. ──
+  if (MANAGED_DAEMON) {
+    await startManagedDaemon();
+  }
 
   // ── Launch ──
   const env: NodeJS.ProcessEnv = {
