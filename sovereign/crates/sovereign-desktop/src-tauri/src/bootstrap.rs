@@ -129,7 +129,14 @@ pub async fn detect() -> BootstrapMode {
     let port = cfg.as_ref().map(|c| c.daemon.client_port).unwrap_or(9741);
     let internal_port = cfg.as_ref().map(|c| c.daemon.internal_port).unwrap_or(9742);
 
-    if is_daemon_live(port).await {
+    // Force embedded Local bootstrap even when a daemon is live on the client
+    // port. Real users who want their desktop to run its own weights while a
+    // daemon is up set this; the first-launch real-mode journey needs it so the
+    // setup wizard actually renders (the Attach short-circuit below would
+    // otherwise skip straight past onboarding to the running daemon).
+    let force_local = std::env::var("SOVEREIGN_FORCE_LOCAL").is_ok_and(|v| v == "1");
+
+    if !force_local && is_daemon_live(port).await {
         tracing::info!(
             target: "bootstrap",
             port,
