@@ -287,12 +287,6 @@ pub async fn run_workflow_in_process(
     no_cache: bool,
     params: BTreeMap<String, String>,
     extra_tools: Vec<Box<dyn Tool>>,
-    // The embed slot's query-instruction prefix, resolved by the caller from the
-    // discovered embed-model id. Injected (not read from a bundled manifest here)
-    // so this bundle carries no sovereign-core dependency; the CLI and daemon
-    // pass a `ModelsManifest`-backed closure. (B:P9a switches callers to source
-    // it from the OICP capabilities manifest.)
-    embed_query_instruction_for: impl Fn(&str) -> String,
 ) -> std::result::Result<RunReport, String> {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
     let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
@@ -310,18 +304,35 @@ pub async fn run_workflow_in_process(
         }
         let chat = models.chat.clone().unwrap_or_default();
         let embed = models.embed.clone().unwrap_or_default();
-        tracing::info!(daemon, chat = %chat, embed = %embed, "workflow-host: daemon inference");
-        // Behavior-preserving: the embed slot's query-instruction prefix, which
-        // the old constructor derived from `DEFAULT_MANIFEST` internally — now
-        // supplied by the caller. Computed before `embed` is moved into arg 3.
-        let embed_query_instruction = embed_query_instruction_for(&embed);
-        Some(Arc::new(SplitInferenceProvider::new(
-            &v1,
-            chat,
-            embed,
-            8192,
-            embed_query_instruction,
-        )))
+        // B:P9a — source the chat slot's context window AND the embed slot's
+        // query-instruction prefix from the host's own OICP capabilities
+        // manifest (v0.4 §7 / §4) rather than a hardcoded 8192 + a caller-
+        // injected `DEFAULT_MANIFEST` closure. This is what lets the bundle
+        // stay free of `sovereign-core`: the host is the single source of
+        // truth. On a v0.3 host (no manifest) we fall back to the historical
+        // 8192 + an empty prefix — the documented degrade path.
+        let provider = match oicp_client::fetch_manifest(daemon, None).await {
+            Some(manifest) => {
+                tracing::info!(
+                    daemon,
+                    chat = %chat,
+                    embed = %embed,
+                    context = manifest.models.iter().find(|m| m.id == chat).map(|m| m.context_tokens).unwrap_or(0),
+                    "workflow-host: daemon inference (context + embed prefix from OICP manifest)"
+                );
+                SplitInferenceProvider::from_manifest(&v1, &manifest, chat, embed)
+            }
+            None => {
+                tracing::info!(
+                    daemon,
+                    chat = %chat,
+                    embed = %embed,
+                    "workflow-host: daemon inference (v0.3 host — no OICP manifest, using 8192/no-prefix defaults)"
+                );
+                SplitInferenceProvider::new(&v1, chat, embed, 8192, String::new())
+            }
+        };
+        Some(Arc::new(provider))
     } else {
         None
     };

@@ -113,19 +113,29 @@ pub async fn build_session_with_skills(
     eprintln!("Chat model:  {chat_model}");
     eprintln!("Embed model: {embed_model}");
 
-    let inference: Arc<dyn InferenceProvider> = Arc::new(SplitInferenceProvider::new(
-        &v1,
-        chat_model,
-        embed_model.clone(),
-        // Matches the RemoteApiProvider default from the desktop
-        // Attach path. `Runtime` consumers read this via
-        // `capabilities().max_context_tokens`; for today's models
-        // this is approximate but non-blocking.
-        8192,
-        // Behavior-preserving: the embed slot's query-instruction prefix, which
-        // the old constructor derived from `DEFAULT_MANIFEST` internally.
-        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
-    ));
+    // B:P9a — prefer the daemon's own OICP capabilities manifest for the chat
+    // slot's context window (v0.4 §7) and the embed slot's query-instruction
+    // prefix (§4), so `Runtime`'s budget-aware compaction sees the host's REAL
+    // window (e.g. 32768) instead of the historical 8192 approximation. On a
+    // v0.3 host that doesn't serve `/oicp/v1/capabilities`, fall back to 8192 +
+    // the `DEFAULT_MANIFEST`-derived prefix (the prior behavior, bit-identical).
+    let inference: Arc<dyn InferenceProvider> =
+        Arc::new(match sovereign_inference::remote::fetch_manifest(&base, None).await {
+            Some(manifest) => SplitInferenceProvider::from_manifest(
+                &v1,
+                &manifest,
+                chat_model,
+                embed_model.clone(),
+            ),
+            None => SplitInferenceProvider::new(
+                &v1,
+                chat_model,
+                embed_model.clone(),
+                8192,
+                sovereign_core::models_manifest::DEFAULT_MANIFEST
+                    .embed_query_instruction(&embed_model),
+            ),
+        });
 
     // 3. Open the state store. Creating the data dir on the fly is
     //    safe — mirrors the desktop's behaviour and means a first

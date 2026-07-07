@@ -156,18 +156,15 @@ async fn run_trigger(
     );
     // Preserve the pre-extraction tool surface: `standard_registry` no longer
     // carries the corpus/atlas tools, so inject them here (the daemon links
-    // sovereign-tools). The embed-slot query-instruction prefix comes from the
-    // bundled `ModelsManifest` — the host bundle takes it as a closure so it
-    // needs no sovereign-core dep.
+    // sovereign-tools).
     // The daemon trigger historically passed no `extra_tools`, relying on the old
     // 16-tool `standard_registry`; the corpus/atlas tools are restored here (the
     // CLI's enrichment-authoring tools were never in the trigger path).
+    // B:P9a: the embed-slot query-instruction prefix + chat context window are
+    // now sourced by the runner from the daemon's own OICP manifest (loopback,
+    // same box), so no `DEFAULT_MANIFEST` closure is threaded through here.
     let extra = sovereign_tools::workflow_corpus_tools();
-    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra, |id| {
-        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(id)
-    })
-    .await
-    {
+    match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra).await {
         Ok(report) => tracing::info!(
             corpus,
             workflow = %origin,
