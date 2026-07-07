@@ -13,7 +13,9 @@ test("inner-work witness turn captures provenance; Ctrl+/ panel renders it", asy
   test.setTimeout(240_000);
   await realBootToChat(page);
 
-  await page.getByRole("button", { name: "Inner Work" }).click();
+  // The inner-work rail item was renamed "Reflect" in the UX-coherence refactor
+  // (nav-reflect); it still opens the same inner-work witness surface.
+  await page.getByTestId("nav-reflect").click();
   const entry = page.locator('textarea[aria-label^="Inner work entry"]');
   await entry.waitFor({ state: "visible", timeout: 30_000 });
 
