@@ -29,6 +29,7 @@ sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }

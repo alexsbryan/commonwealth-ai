@@ -132,3 +132,26 @@ pub use recipe_author::{
 };
 pub use sovereign_core;
 pub use wikipedia_fetch::WikipediaFetchTool;
+
+/// The corpus/atlas-backed workflow tools that intentionally do NOT live in
+/// `sovereign-tools-base` — each drags corpus-engine/LanceDB, which is exactly
+/// what the base bundle exists to avoid. `sovereign-workflow-host`'s
+/// `standard_registry` therefore registers only the pure tools; every call site
+/// that runs workflows and wants the *full* surface (the CLI `workflow run` /
+/// `corpus ingest`, the desktop run/ingest commands, the daemon living-trigger)
+/// injects these through the runner's `extra_tools` slot.
+///
+/// Kept here — beside the tools themselves — so "which five" is stated once
+/// rather than re-listed (and drifting) at each injection site. Registration
+/// order is irrelevant: the registry keys on tool id and these ids are distinct
+/// from the base set, so injecting them via `extra_tools` reproduces exactly the
+/// pre-extraction 16-tool registry.
+pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
+    vec![
+        Box::new(extract::ExtractTool),
+        Box::new(corpus_store::CorpusStoreTool),
+        Box::new(corpus_search::CorpusSearchTool),
+        Box::new(atlas_phase::gaps::AtlasGapsTool),
+        Box::new(atlas_phase::tensions::AtlasTensionsTool),
+    ]
+}

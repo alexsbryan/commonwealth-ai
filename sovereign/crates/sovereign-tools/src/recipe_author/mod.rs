@@ -30,7 +30,13 @@
 pub mod capability_request;
 pub mod checkpoint;
 pub mod decision_log;
-pub mod json_to_toml;
+/// JSON→TOML conversion helpers now live in the shared contract crate so both
+/// the recipe-author tools and the workflow-host author tools use one
+/// implementation; re-exported here at the old path for zero importer churn.
+pub use sovereign_contracts::recipe::json_to_toml;
+/// Path-safety sandbox check, relocated to the shared contract crate; the
+/// recipe root helpers below still wrap it.
+pub use sovereign_contracts::recipe::paths::assert_under_root;
 pub mod probe_url;
 pub mod project;
 pub mod read;
@@ -114,42 +120,6 @@ pub fn local_recipes_dir() -> Result<PathBuf> {
 /// [`assert_under_root`] directly.
 pub fn assert_under_local_recipes(path: &std::path::Path) -> Result<PathBuf> {
     assert_under_root(path, &local_recipes_dir()?)
-}
-
-/// Same check as [`assert_under_local_recipes`] but with the root
-/// passed explicitly. Used by the production helper above and by
-/// tests that want isolation without thrashing process-global
-/// `HOME`.
-pub fn assert_under_root(path: &std::path::Path, root: &std::path::Path) -> Result<PathBuf> {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        // Relative paths resolve under the local recipes dir for
-        // ergonomics: the LLM can pass `sec-investigation/recipe.toml`
-        // and we normalise to `<root>/sec-investigation/recipe.toml`.
-        root.join(path)
-    };
-    // We can't `canonicalize` — the file may not exist yet (write
-    // tool path). Walk components manually to reject `..` traversal.
-    if absolute
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err(Error::InvalidInput(format!(
-            "path `{}` contains `..`; recipe-author tools refuse \
-             traversal segments",
-            absolute.display()
-        )));
-    }
-    if !absolute.starts_with(root) {
-        return Err(Error::InvalidInput(format!(
-            "path `{}` is outside the local recipes directory `{}`. \
-             Recipe-author tools are scoped to ~/.sovereign/recipes/",
-            absolute.display(),
-            root.display(),
-        )));
-    }
-    Ok(absolute)
 }
 
 /// Resolve a recipes-dir override or fall back to the

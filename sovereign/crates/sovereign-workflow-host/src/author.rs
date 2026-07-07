@@ -17,12 +17,12 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
-use sovereign_tools::recipe_author::json_to_toml::{
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::recipe::json_to_toml::{
     json_to_toml, sanitize_for_toml, toml_value_to_string,
 };
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 use sovereign_workflow::Workflow;
 
 use crate::author_schema::workflow_json_schema;
@@ -84,7 +84,7 @@ pub fn resolve_workflow_path(input: &str, override_dir: Option<&PathBuf>) -> Res
         Some(p) => p.clone(),
         None => workflows_dir(),
     };
-    sovereign_tools::recipe_author::assert_under_root(&candidate, &root)
+    sovereign_contracts::recipe::paths::assert_under_root(&candidate, &root)
 }
 
 /// The workflow-author tool bundle — register these on the runtime alongside the

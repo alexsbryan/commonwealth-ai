@@ -25,9 +25,9 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::oicp::KnowledgeManifest;
-use sovereign_core::traits::{CorpusInstaller, InstallOutcome};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::oicp::KnowledgeManifest;
+use sovereign_contracts::traits::{CorpusInstaller, InstallOutcome};
 
 /// The daemon's internal port on loopback — same target `corpus install` uses
 /// (`sovereign-cli-llm/.../inventory.rs`).
@@ -247,7 +247,7 @@ impl CorpusInstaller for HttpCorpusInstaller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::oicp::{EmbedModelInfo, IngestEndpoints};
+    use sovereign_contracts::oicp::{EmbedModelInfo, IngestEndpoints};
 
     fn manifest_with_ingest() -> KnowledgeManifest {
         KnowledgeManifest {
@@ -268,7 +268,10 @@ mod tests {
             HttpCorpusInstaller::from_manifest("http://peer:9741/", &manifest_with_ingest(), None)
                 .expect("ingest advertised");
         assert_eq!(inst.install_url, "http://peer:9741/oicp/v1/corpus/install");
-        assert_eq!(inst.progress_url, "http://peer:9741/oicp/v1/corpus/progress");
+        assert_eq!(
+            inst.progress_url,
+            "http://peer:9741/oicp/v1/corpus/progress"
+        );
     }
 
     #[test]

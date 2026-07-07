@@ -1276,9 +1276,12 @@ pub(super) async fn setup_watched_folders(
             // steps use the already-loaded slots.
             let trigger_runtime: Option<
                 Arc<dyn sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime>,
-            > = Some(Arc::new(sovereign_workflow_host::DaemonWorkflowRuntime::new(
-                format!("http://127.0.0.1:{}", config.daemon.client_port),
-            )));
+            > = Some(Arc::new(
+                super::workflow_trigger::DaemonWorkflowRuntime::new(format!(
+                    "http://127.0.0.1:{}",
+                    config.daemon.client_port
+                )),
+            ));
             Some(
                 sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
                     Arc::clone(&daemon),

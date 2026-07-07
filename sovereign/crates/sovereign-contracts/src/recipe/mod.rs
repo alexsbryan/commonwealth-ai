@@ -10,7 +10,9 @@
 //! contract rather than a coincidence, and lets the package compute them
 //! locally instead of shipping whole documents over MCP.
 
+pub mod json_to_toml;
 pub mod notes;
+pub mod paths;
 pub mod registry;
 pub mod schema;
 pub mod sections;
