@@ -272,6 +272,18 @@ pub enum NarrationPhase {
         ok: bool,
         result_summary: String,
     },
+
+    // ── Live synthesis heartbeat ──────────────────────────────
+    /// The grounding gate holds every token until the drafted answer
+    /// is verified, so on a slow model there's a long window where the
+    /// answer is forming but nothing streams. This heartbeat carries
+    /// the running token COUNT (never the held content) so the desktop
+    /// can show the answer growing — "writing… 142 tokens" ticking up.
+    /// Emitted repeatedly (throttled ~250ms) via `emit_turn_narration`
+    /// directly — it bypasses the cap/suppression like the tool frames,
+    /// and the desktop REPLACES rather than appends it (one live chip,
+    /// not a log entry). Cleared when the turn's terminal arrives.
+    SynthesisProgress { tokens: u32 },
 }
 
 /// One narration entry emitted in the model's voice during a long

@@ -3,7 +3,11 @@
 // DOM, no Svelte, no singleton. Mirrors approval.machine.test.ts.
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { applyNarration, routingMachine } from "./routing.machine";
+import {
+  applyNarration,
+  applySynthesisProgress,
+  routingMachine,
+} from "./routing.machine";
 import type {
   ClarificationRequestPayload,
   InterpretationProposedPayload,
@@ -407,6 +411,64 @@ describe("applyNarration — tool-invocation pairing", () => {
     const snapshot = [...original];
     applyNarration(original, toolComplete("c1"));
     expect(original).toEqual(snapshot);
+  });
+
+  it("does NOT append synthesis_progress heartbeat frames to the log", () => {
+    // The heartbeat is a separate ticking field, not a stacked chip —
+    // otherwise a 20s hold at ~4 frames/s floods the narration stack.
+    const start: NarrationEvent = {
+      phase: "primary_synthesis_start",
+      text: "Writing your answer…",
+      elapsed_ms: 5_000,
+    };
+    const hb: NarrationEvent = {
+      phase: { synthesis_progress: { tokens: 42 } },
+      text: "",
+      elapsed_ms: 5_250,
+    };
+    const log = applyNarration([start], hb);
+    expect(log).toHaveLength(1);
+    expect(log[0].phase).toBe("primary_synthesis_start");
+  });
+});
+
+describe("applySynthesisProgress — heartbeat reducer", () => {
+  function heartbeat(tokens: number, elapsed: number): NarrationEvent {
+    return {
+      phase: { synthesis_progress: { tokens } },
+      text: "",
+      elapsed_ms: elapsed,
+    };
+  }
+
+  it("sets the ticker from a synthesis_progress frame", () => {
+    const next = applySynthesisProgress(null, heartbeat(12, 5_250));
+    expect(next).toEqual({ tokens: 12, elapsedMs: 5_250 });
+  });
+
+  it("REPLACES the prior value as the count ticks up", () => {
+    const first = applySynthesisProgress(null, heartbeat(12, 5_250));
+    const second = applySynthesisProgress(first, heartbeat(58, 5_500));
+    expect(second).toEqual({ tokens: 58, elapsedMs: 5_500 });
+  });
+
+  it("clears the ticker when a non-heartbeat phase hands off (grounding-verify)", () => {
+    const active = applySynthesisProgress(null, heartbeat(140, 7_000));
+    const handoff: NarrationEvent = {
+      phase: "grounding_verify_start",
+      text: "Checking every claim against your sources…",
+      elapsed_ms: 7_200,
+    };
+    expect(applySynthesisProgress(active, handoff)).toBeNull();
+  });
+
+  it("stays null for an unrelated phase when no synthesis is active", () => {
+    const retrieval: NarrationEvent = {
+      phase: "retrieval_start",
+      text: "Searching your knowledge…",
+      elapsed_ms: 100,
+    };
+    expect(applySynthesisProgress(null, retrieval)).toBeNull();
   });
 });
 

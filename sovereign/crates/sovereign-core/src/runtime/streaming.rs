@@ -61,6 +61,11 @@ async fn run_synthesis_stream(
     full_text: &mut String,
     had_retrieved_chunks: bool,
     gate_on: bool,
+    // In gate mode, a throttled sink for the running held-token COUNT — the
+    // caller pumps it into a `SynthesisProgress` heartbeat so the user sees
+    // the answer forming behind the gate. `None` on ungated/naked paths (they
+    // stream tokens live, so there's nothing to bridge).
+    progress_tx: Option<&tokio::sync::mpsc::Sender<u32>>,
     log_tag: &'static str,
 ) -> Option<SynthStreamOutcome> {
     let mut observed_finish: Option<crate::types::FinishReason> = None;
@@ -68,6 +73,11 @@ async fn run_synthesis_stream(
     let mut head = String::new();
     let mut head_flushed = false;
     let mut retried = false;
+    // Heartbeat throttle: emit at most ~4×/sec so a fast slot doesn't flood
+    // the narration channel, and count tokens (frames) held so far.
+    let mut held_tokens: u32 = 0;
+    let mut last_heartbeat = std::time::Instant::now();
+    const HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 
     'synth: loop {
         loop {
@@ -102,6 +112,20 @@ async fn run_synthesis_stream(
                         // a refusal extracts as NO_CLAIM and releases
                         // ungated.
                         full_text.push_str(&chunk);
+                        // Heartbeat: the token stays HELD, but its count goes
+                        // out so the desktop can show the answer growing.
+                        // Fire the FIRST frame immediately — feedback should
+                        // appear the moment synthesis starts holding, not
+                        // 250ms in — then throttle subsequent frames.
+                        if let Some(ptx) = progress_tx {
+                            held_tokens += 1;
+                            if held_tokens == 1
+                                || last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL
+                            {
+                                let _ = ptx.try_send(held_tokens);
+                                last_heartbeat = std::time::Instant::now();
+                            }
+                        }
                     } else if head_flushed {
                         full_text.push_str(&chunk);
                         if tx.send(Ok(chunk)).await.is_err() {
@@ -779,6 +803,7 @@ impl Runtime {
                 &mut full_text,
                 false, // had_retrieved_chunks — naked has no evidence
                 false, // gate_on — no grounding gate
+                None,  // no heartbeat — naked streams tokens live
                 "naked",
             )
             .await;
@@ -1154,6 +1179,41 @@ impl Runtime {
                 }
             }
 
+            // Delightful waiting UX: the gate holds every token, so bridge the
+            // silent stretch with a live token-count heartbeat. A throttled
+            // channel carries the running count out of `run_synthesis_stream`;
+            // this reader turns each into a `SynthesisProgress` chip the
+            // desktop shows ticking up. Gate mode only — an ungated turn
+            // already streams tokens the user can watch. The reader ends when
+            // the channel closes (`hb_tx` dropped after synthesis).
+            let hb_tx = if gate_on {
+                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<u32>(4);
+                let hb_events = collab_routing_events.clone();
+                let hb_sid = collab_session_id.clone();
+                let hb_cid = conversation_id_owned.clone();
+                tokio::spawn(async move {
+                    let (Some(events), Some(sid)) = (hb_events, hb_sid) else {
+                        return;
+                    };
+                    while let Some(tokens) = rx_hb.recv().await {
+                        events
+                            .emit_turn_narration(TurnNarration {
+                                session_id: sid.clone(),
+                                conversation_id: hb_cid.clone(),
+                                event: NarrationEvent {
+                                    phase: NarrationPhase::SynthesisProgress { tokens },
+                                    text: String::new(),
+                                    elapsed_ms: started.elapsed().as_millis() as u64,
+                                },
+                            })
+                            .await;
+                    }
+                });
+                Some(tx_hb)
+            } else {
+                None
+            };
+
             // Refusal-retry + token forwarding live in the shared
             // `run_synthesis_stream` (mirrored by the DeepQuery spawn).
             // `None` => the turn must abort (tx dropped or Finish::Error
@@ -1168,12 +1228,14 @@ impl Runtime {
                 &mut full_text,
                 had_retrieved_chunks,
                 gate_on,
+                hb_tx.as_ref(),
                 "kq-stream",
             )
             .await
             else {
                 return;
             };
+            drop(hb_tx); // close the heartbeat channel → the reader task ends
             let model_id = synth.model_id;
             let observed_finish = synth.observed_finish;
             let observed_completion_tokens = synth.observed_completion_tokens;
@@ -1918,6 +1980,37 @@ impl Runtime {
             };
 
             // Refusal-retry + token forwarding live in the shared
+            // Token-count heartbeat during the gated hold (mirrors the
+            // KnowledgeQuery spawn). Reader ends when `hb_tx` drops.
+            let hb_tx = if deep_gate_on {
+                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<u32>(4);
+                let hb_events = routing_events_for_spawn.clone();
+                let hb_sid = session_id_for_spawn.clone();
+                let hb_cid = conversation_id_owned.clone();
+                tokio::spawn(async move {
+                    let (Some(events), Some(sid)) = (hb_events, hb_sid) else {
+                        return;
+                    };
+                    while let Some(tokens) = rx_hb.recv().await {
+                        events
+                            .emit_turn_narration(TurnNarration {
+                                session_id: sid.clone(),
+                                conversation_id: hb_cid.clone(),
+                                event: NarrationEvent {
+                                    phase: NarrationPhase::SynthesisProgress { tokens },
+                                    text: String::new(),
+                                    elapsed_ms: started.elapsed().as_millis() as u64,
+                                },
+                            })
+                            .await;
+                    }
+                });
+                Some(tx_hb)
+            } else {
+                None
+            };
+
+            // Refusal-retry + token forwarding live in the shared
             // `run_synthesis_stream` (mirrored by the KnowledgeQuery spawn).
             // `None` => the turn must abort (tx dropped or Finish::Error
             // already forwarded).
@@ -1931,12 +2024,14 @@ impl Runtime {
                 &mut full_text,
                 had_retrieved_chunks,
                 deep_gate_on,
+                hb_tx.as_ref(),
                 "deep-stream",
             )
             .await
             else {
                 return;
             };
+            drop(hb_tx); // close the heartbeat channel → the reader task ends
             let model_id = synth.model_id;
             let observed_finish = synth.observed_finish;
             let observed_completion_tokens = synth.observed_completion_tokens;
