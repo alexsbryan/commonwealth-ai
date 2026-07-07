@@ -189,6 +189,18 @@ pub fn uses_embed(wf: &Workflow) -> bool {
         .any(|s| matches!(StepKind::parse(&s.uses), Ok(StepKind::Embed { .. })))
 }
 
+/// Whether the workflow has a `recipe:` step (so the corpus installer is worth
+/// sourcing from the host's advertised ingest endpoints). Classified via the
+/// typed `StepKind::resources()` — a `recipe:` stage declares
+/// [`ResourceNeed::Install`].
+pub fn uses_recipe(wf: &Workflow) -> bool {
+    wf.steps.iter().any(|s| {
+        StepKind::parse(&s.uses)
+            .map(|k| k.resources() == ResourceNeed::Install)
+            .unwrap_or(false)
+    })
+}
+
 /// `~/.sovereign/workflow-cache` — alongside the canonical config.
 pub fn cache_dir() -> std::path::PathBuf {
     sovereign_contracts::setup_config::SetupConfig::default_path()
@@ -289,6 +301,18 @@ pub async fn run_workflow_in_process(
     extra_tools: Vec<Box<dyn Tool>>,
 ) -> std::result::Result<RunReport, String> {
     let v1 = format!("{}/v1", daemon.trim_end_matches('/'));
+
+    // Fetch the host's OICP capabilities manifest ONCE — both the inference
+    // provider (context window + embed prefix, B:P9a) and the corpus installer
+    // (advertised ingest endpoints, B:P9c) source their config from it. Skip
+    // the round-trip for a fully-offline workflow (no `model:`/`embed:`/`recipe:`
+    // step), which needs neither the daemon's inference nor its ingest surface.
+    let manifest = if needs_inference(wf) || uses_recipe(wf) {
+        oicp_client::fetch_manifest(daemon, None).await
+    } else {
+        None
+    };
+
     let inference: Option<Arc<dyn InferenceProvider>> = if needs_inference(wf) {
         let models = discover_models(&v1).await.map_err(|e| {
             format!(
@@ -311,7 +335,7 @@ pub async fn run_workflow_in_process(
         // stay free of `sovereign-core`: the host is the single source of
         // truth. On a v0.3 host (no manifest) we fall back to the historical
         // 8192 + an empty prefix — the documented degrade path.
-        let provider = match oicp_client::fetch_manifest(daemon, None).await {
+        let provider = match &manifest {
             Some(manifest) => {
                 tracing::info!(
                     daemon,
@@ -320,7 +344,7 @@ pub async fn run_workflow_in_process(
                     context = manifest.models.iter().find(|m| m.id == chat).map(|m| m.context_tokens).unwrap_or(0),
                     "workflow-host: daemon inference (context + embed prefix from OICP manifest)"
                 );
-                SplitInferenceProvider::from_manifest(&v1, &manifest, chat, embed)
+                SplitInferenceProvider::from_manifest(&v1, manifest, chat, embed)
             }
             None => {
                 tracing::info!(
@@ -337,10 +361,32 @@ pub async fn run_workflow_in_process(
         None
     };
 
-    // Attach the corpus installer so `recipe:` stages can run. It targets the
-    // daemon's loopback install endpoint — the same path `corpus install` uses, so
-    // both CLI runs and daemon-triggered runs delegate to it (no mesh refactor).
-    let installer: Arc<dyn CorpusInstaller> = Arc::new(HttpCorpusInstaller::new());
+    // Attach the corpus installer so `recipe:` stages can run.
+    // B:P9c — prefer the ingest endpoints the host advertises in its
+    // `knowledge.ingest` (v0.4 §5): a package that talks only OICP installs
+    // corpora over the protocol surface, not the internal :9742 route. Fall
+    // back to `HttpCorpusInstaller::new()` (the loopback :9742 internal path)
+    // for a v0.3 host, or one that serves a manifest without an ingest advert.
+    let installer: Arc<dyn CorpusInstaller> = match manifest
+        .as_ref()
+        .and_then(|m| m.knowledge.as_ref())
+        .and_then(|k| HttpCorpusInstaller::from_manifest(daemon, k, None))
+    {
+        Some(inst) => {
+            tracing::info!(
+                daemon,
+                "workflow-host: corpus installer → advertised OICP ingest endpoints"
+            );
+            Arc::new(inst)
+        }
+        None => {
+            tracing::info!(
+                daemon,
+                "workflow-host: corpus installer → loopback :9742 (v0.3 host / no ingest advert)"
+            );
+            Arc::new(HttpCorpusInstaller::new())
+        }
+    };
     run_workflow_with_provider(
         wf,
         inference,
