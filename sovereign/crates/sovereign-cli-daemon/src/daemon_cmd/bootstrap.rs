@@ -1016,13 +1016,14 @@ pub(super) async fn advertise_embed_model(
     }
 }
 
-/// Install the MCP surface, the mesh/admin/reading HTTP routers, the provider
-/// factory, and the setup config onto the daemon.
+/// Install the MCP surface, the mesh/admin/reading/solve HTTP routers, the
+/// provider factory, and the setup config onto the daemon.
 pub(super) async fn install_http_and_mcp(
     daemon: Arc<EmbeddedDaemon>,
     tools: ToolRegistry,
     notes_store: Arc<NoteStore>,
     config: &SetupConfig,
+    solve_jobs: Arc<super::solve_http::SolveJobs>,
 ) {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
     daemon
@@ -1053,6 +1054,11 @@ pub(super) async fn install_http_and_mcp(
         .install_reading_http_router(sovereign_mesh::reading_http::reading_router(Arc::clone(
             &daemon,
         )))
+        .await;
+    // Solve-job surface — `/v1/solve/jobs*` (docs/specs/SOLVE_UX.md).
+    // Loopback-only: the solver executes workdir test commands.
+    daemon
+        .install_solve_http_router(super::solve_http::solve_router(solve_jobs))
         .await;
     daemon
         .set_provider_factory(Arc::new(LlamaCppFactory {

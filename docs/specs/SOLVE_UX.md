@@ -1,6 +1,17 @@
 # SOLVE — give the daemon a coding goal, get a green tree back
 
-Status: designed 2026-07-07, not started.
+Status: built + live-verified 2026-07-07, both paths. Daemon job
+host in `sovereign-cli-daemon/src/daemon_cmd/solve_http.rs` (+ MCP
+tools in `solve_tools.rs`, CLI in `sovereign-cli-llm/src/solve_cmd.rs`,
+composition in `commonwealth-tdd/src/tasks/solve.rs`). Fix path:
+failing tests → reached with a minimal diff, rounds streamed live.
+Pin-then-green path: no tests → synthesized failing tests → reached
+(one round per stage live). Two engine fixes made the second path
+real: `GenerateOneFailing` accepts ≥1 new tests when ALL fail
+(was exactly-one — live receipts showed the model idiomatically pins
+with 2-4 cases), and the test parsers count collection/compile
+errors as failing entries so an import-failing pin test is visible
+to both stages' fitness.
 
 ## The promise
 

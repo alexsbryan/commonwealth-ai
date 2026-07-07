@@ -8,7 +8,7 @@
 //! predicate flips with [`Polarity`]:
 //!
 //! - `MaximizePassing` — `after.passed > before.passed`. Default.
-//! - `GenerateOneFailing` — exactly one new failure, no
+//! - `GenerateOneFailing` — ≥1 new tests, ALL of them failing, no
 //!   previously-passing regressed. Red.
 //!
 //! Validated 2026-05-24 against the role-loop runner (median 20/20
@@ -31,9 +31,24 @@ use crate::shared::{
     render_with_line_numbers, run_tests,
     snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
 };
-use crate::types::{Polarity, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus};
+use crate::types::{
+    Polarity, RoundObserver, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus,
+};
 
 pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResult {
+    run_trial_observed(trial, backend, None).await
+}
+
+/// [`run_trial`] with an optional per-round observer. The observer
+/// fires after every round — improved or not — with the entry just
+/// pushed to the trajectory. This is the engine's ONLY concession
+/// to live progress; everything else about the loop is identical
+/// to the unobserved path.
+pub async fn run_trial_observed(
+    trial: Trial,
+    backend: Arc<dyn ChatBackend>,
+    observer: Option<RoundObserver>,
+) -> TrialResult {
     let _started = Instant::now();
     let base_workdir = trial.workdir.path().to_path_buf();
     let polarity = trial.polarity.clone();
@@ -286,8 +301,8 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 is_strict_improvement(&current, &after, &polarity)
             })
             // Tie-break: under MaximizePassing prefer most passes;
-            // under GenerateOneFailing all valid candidates are
-            // equally "exactly one new failure" so we take the first.
+            // under GenerateOneFailing every valid candidate has the
+            // same passed count so the first valid one wins.
             .max_by_key(|c| c.summary().passed);
 
         if let Some(w) = winner {
@@ -328,6 +343,9 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 failed_after: current.failed,
                 details: candidate_details,
             });
+            if let Some(obs) = &observer {
+                obs(trajectory.last().expect("round just pushed"));
+            }
             // Polarity-aware terminal check after winning.
             if reached_terminal(&current, &polarity) {
                 status = Some(TrialStatus::Reached);
@@ -353,6 +371,9 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
                 failed_after: current.failed,
                 details: candidate_details,
             });
+            if let Some(obs) = &observer {
+                obs(trajectory.last().expect("round just pushed"));
+            }
             let round_has_novelty = candidates.iter().any(|c| match &c.outcome {
                 Ok(t) => {
                     t.parsed.total > 0
@@ -421,10 +442,20 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
 fn is_strict_improvement(before: &TestSummary, after: &TestSummary, polarity: &Polarity) -> bool {
     match polarity {
         Polarity::MaximizePassing => after.passed > before.passed,
+        // At least one NEW test, every new test failing, existing
+        // outcomes untouched. Generalized from "exactly one new
+        // failure" on 2026-07-07: the live SOLVE pin path showed the
+        // model idiomatically pins a behavior with 2-4 focused cases,
+        // and the exactly-one gate discarded every one of them (job
+        // 419d4d3f receipts: 0p/2f..0p/4f rejected three rounds
+        // straight). All-new-tests-failing keeps the discrimination
+        // guarantee — nothing vacuously passing sneaks in — and a
+        // multi-case pin hands the green stage a gradient instead of
+        // a cliff (the split_file ladder lesson).
         Polarity::GenerateOneFailing { .. } => {
-            after.failed == before.failed.saturating_add(1)
-                && after.passed == before.passed
-                && after.total == before.total.saturating_add(1)
+            let new_tests = after.total.saturating_sub(before.total);
+            let new_failures = after.failed.saturating_sub(before.failed);
+            new_tests >= 1 && new_failures == new_tests && after.passed == before.passed
         }
     }
 }
@@ -433,8 +464,8 @@ fn reached_terminal(current: &TestSummary, polarity: &Polarity) -> bool {
     match polarity {
         Polarity::MaximizePassing => current.total > 0 && current.passed >= current.total,
         // For GenerateOneFailing, the FIRST strict-improvement
-        // already IS the terminal state — we wanted exactly one new
-        // failure and we got it.
+        // already IS the terminal state — the new failing test(s)
+        // exist, the goal is pinned.
         Polarity::GenerateOneFailing { .. } => current.failed > 0,
     }
 }
@@ -1132,7 +1163,7 @@ fn render_polarity_block(polarity: &Polarity, current: &TestSummary) -> String {
                 .map(|n| format!(" Hint: name the test `{n}` if you can.\n"))
                 .unwrap_or_default();
             format!(
-                "Generate ONE failing test. Currently {passed}/{total}. Your edit must add exactly one new failing test (an assertion-style failure on the unchanged code) without breaking any currently-passing test.{hint}",
+                "Add a new failing test. Currently {passed}/{total}. Rules: every test you add must FAIL on the current code. Do not touch existing tests. Failing at import counts as failing.{hint}",
                 passed = current.passed,
                 total = current.total,
             )
@@ -1171,20 +1202,29 @@ mod tests {
     }
 
     #[test]
-    fn generate_one_failing_requires_exactly_one_new_failure() {
+    fn generate_one_failing_accepts_all_new_tests_failing() {
         let p = Polarity::GenerateOneFailing {
             test_name_hint: None,
         };
         let before = summary(3, 0, 3);
-        // Exactly one new failure, no passes lost.
+        // One new failure, no passes lost — the classic Red win.
         let win = summary(3, 1, 4);
         assert!(is_strict_improvement(&before, &win, &p));
-        // Two new failures — too many. Reject.
-        let too_many = summary(3, 2, 5);
-        assert!(!is_strict_improvement(&before, &too_many, &p));
-        // One new failure but a passing test regressed.
+        // Several new tests, ALL failing — the idiomatic multi-case
+        // pin (live SOLVE receipts 2026-07-07). Accept.
+        let multi = summary(3, 3, 6);
+        assert!(is_strict_improvement(&before, &multi, &p));
+        // New failure but a passing test regressed. Reject.
         let regressed = summary(2, 2, 4);
         assert!(!is_strict_improvement(&before, &regressed, &p));
+        // New tests where one vacuously PASSES — not discriminating.
+        // (passed moved 3→4, so the pin isn't all-failing.) Reject.
+        let vacuous = summary(4, 1, 5);
+        assert!(!is_strict_improvement(&before, &vacuous, &p));
+        // No new tests at all — flipping an existing test to failing
+        // is breakage, not a pin. Reject.
+        let flipped = summary(2, 1, 3);
+        assert!(!is_strict_improvement(&before, &flipped, &p));
     }
 
     #[test]

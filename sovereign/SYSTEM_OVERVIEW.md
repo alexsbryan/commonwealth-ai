@@ -1063,9 +1063,24 @@ first tools.
 
 `sovereign/crates/commonwealth-tdd/` — unified solver loop for any
 TDD-shaped workflow. One function `run_trial(Trial) → TrialResult`
-with `Polarity::{MaximizePassing, GenerateOneFailing}`. Transports
-HTTP (`POST /v1/solve`) + MCP (`tdd_solve`) live in
-`sovereign-server`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
+with `Polarity::{MaximizePassing, GenerateOneFailing}`
+(`run_trial_observed` adds a per-round observer for live progress).
+`tasks::solve` is the verbless goal entry: failing tests → fix;
+none → pin-then-green via `bdd_cycle`; explicit verbs `fix` / `pin`
+/ `split`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
+
+**SOLVE surface** (`docs/specs/SOLVE_UX.md`) — the daemon hosts the
+solver as an async job API on `:9741`: `POST /v1/solve/jobs` (202 +
+detected framework/test-command/model), `GET .../{id}` (state +
+rounds + result), `GET .../{id}/events` (SSE round/done), `DELETE`
+(cancel). Loopback-only; 1 job per workdir, 2 global; backend = the
+daemon's own `/v1/chat/completions`. Job host:
+`sovereign-cli-daemon/src/daemon_cmd/solve_http.rs`; MCP tools
+`solve` / `solve_status` / `solve_cancel` in `solve_tools.rs`; CLI
+`sovereign solve <workdir> "goal" [--watch]`
+(`sovereign-cli-llm/src/solve_cmd.rs`). The synchronous
+`POST /v1/solve` + `tdd_solve` MCP in `sovereign-server` stay for
+back-compat. User guide: `docs/SOLVER_FOR_PI_USERS.md`.
 
 ---
 

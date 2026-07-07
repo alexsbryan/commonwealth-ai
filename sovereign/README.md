@@ -34,7 +34,7 @@ curl http://localhost:9741/v1/models      # confirm it's alive
 
 ## Three ways in
 
-The desktop app — Tauri and Svelte — gives you chat, knowledge bases, model setup, and a guided first run, built with `npm install && cargo tauri dev` in `crates/sovereign-desktop`. The CLI does everything the desktop does and adds `setup`, `mesh`, `corpus`, and `doctor`; every command takes `--help`, and the build is below. The server exposes the same runtime over REST and WebSocket for your own frontends — its [endpoints](docs/CLI_REFERENCE.md#http-endpoints) are in the CLI reference.
+The desktop app — Tauri and Svelte — gives you chat, knowledge bases, model setup, and a guided first run, built with `npm install && cargo tauri dev` in `crates/sovereign-desktop`. The CLI does everything the desktop does and adds `setup`, `mesh`, `corpus`, `doctor`, and `solve` — hand the daemon a coding goal and it makes the goal test-shaped, then iterates your repo to green ([solver guide](docs/SOLVER_FOR_PI_USERS.md)); every command takes `--help`, and the build is below. The server exposes the same runtime over REST and WebSocket for your own frontends — its [endpoints](docs/CLI_REFERENCE.md#http-endpoints) are in the CLI reference.
 
 ## For your code (developer build)
 

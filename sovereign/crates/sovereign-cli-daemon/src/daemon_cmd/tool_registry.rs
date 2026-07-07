@@ -27,6 +27,7 @@ pub(super) async fn build_tool_registry(
     work_atlas_repo_root: Option<PathBuf>,
     work_atlas_repo_id: Option<String>,
     work_atlas_branch: Option<String>,
+    solve_jobs: Arc<super::solve_http::SolveJobs>,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -235,6 +236,17 @@ pub(super) async fn build_tool_registry(
     // doesn't know which project the caller means. ATOS-gated.
     #[cfg(feature = "atos")]
     tools.register(Box::new(sovereign_tools::DesignSignalsExtractTool::new()));
+
+    // SOLVE — the daemon-hosted TDD solver (docs/specs/SOLVE_UX.md).
+    // Same job table as the /v1/solve/jobs HTTP surface, so MCP
+    // agents and curl sessions see the same jobs.
+    tools.register(Box::new(super::solve_tools::SolveTool(Arc::clone(
+        &solve_jobs,
+    ))));
+    tools.register(Box::new(super::solve_tools::SolveStatusTool(Arc::clone(
+        &solve_jobs,
+    ))));
+    tools.register(Box::new(super::solve_tools::SolveCancelTool(solve_jobs)));
 
     tools
 }

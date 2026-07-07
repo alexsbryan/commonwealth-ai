@@ -43,6 +43,7 @@ mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod router_cache_cmd;
 mod search_gym_cmd;
+mod solve_cmd;
 mod voice_eval;
 mod worker_pod_provider;
 mod workflow_cmd;
@@ -110,6 +111,7 @@ async fn async_main() {
         "proxy" => proxy_cmd::run_proxy(rest).await,
         "portfolio" => portfolio_cmd::run_portfolio(rest).await,
         "claim" => claim_cmd::run(rest).await,
+        "solve" => solve_cmd::run(rest).await,
         "eval" => eval_cmd::run_eval(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,
         "reading-diag" => reading_diag_cmd::run(rest).await,
