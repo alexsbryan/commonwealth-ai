@@ -209,7 +209,7 @@ test.describe("onboarding · happy path", () => {
 
     // Welcome screen renders the three-line script + Begin button.
     await expect(page.locator(".line-primary")).toContainText(
-      "This is Sovereign.",
+      "This is svrnmesh.",
     );
     await expect(page.locator(".begin-btn")).toBeVisible();
 
