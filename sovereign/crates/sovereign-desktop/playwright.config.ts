@@ -13,8 +13,18 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup-ledger.mjs",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // One retry everywhere. This mocked suite runs `fullyParallel` against a
+  // single Vite dev server, so at high local worker counts a few
+  // animation/timeout-sensitive specs (inner-work witness fade-in, the
+  // knowledge-layer chip dispatch) occasionally time out under transient
+  // contention — they pass solo. A retry self-heals those without masking a
+  // real regression (a consistent failure still fails every attempt), matching
+  // the reliability posture CI already runs with.
+  retries: 1,
+  // Cap local parallelism below the 50%-of-cores default: that default is what
+  // saturates the shared dev server on high-core dev boxes and drives the
+  // flakes above. CI stays at 2.
+  workers: process.env.CI ? 2 : 4,
   reporter: process.env.CI ? "github" : "list",
   timeout: 30_000,
   expect: { timeout: 5_000 },
