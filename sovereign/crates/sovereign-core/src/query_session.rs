@@ -266,6 +266,17 @@ impl SessionStore {
         }
         best
     }
+
+    /// The conversation ids of all live sessions. Used by the desktop's
+    /// `cancel_stream` to make a lookup miss legible (a cancel that finds no
+    /// session is a no-op; logging the live inventory shows whether it's an
+    /// id mismatch vs. an already-finished turn).
+    pub fn conversation_ids(&self) -> Vec<String> {
+        self.sessions
+            .iter()
+            .map(|e| e.conversation_id.clone())
+            .collect()
+    }
 }
 
 /// Handy alias — most callers hold `Arc<SessionStore>`.

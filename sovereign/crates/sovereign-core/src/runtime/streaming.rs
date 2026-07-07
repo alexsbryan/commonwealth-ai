@@ -2631,7 +2631,12 @@ impl Runtime {
         if matches!(intent, Intent::GenerativeQuery) {
             tracing::info!(intent = ?intent, "runtime: dispatching GenerativeQuery to streaming");
             return self
-                .handle_generative_query_stream(message, conversation_id, &context)
+                .handle_generative_query_stream(
+                    message,
+                    conversation_id,
+                    &context,
+                    cancel_token,
+                )
                 .await;
         }
 

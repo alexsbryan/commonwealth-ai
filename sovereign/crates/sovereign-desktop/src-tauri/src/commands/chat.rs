@@ -572,9 +572,16 @@ pub async fn cancel_stream(
         );
         session.cancel.cancel();
     } else {
-        tracing::debug!(
+        // A miss means the backend cancel is a no-op (the turn runs to natural
+        // completion). This is expected when the stream already finished, but on a
+        // slow model it can also mean the FE cancelled during `preparing` — before
+        // the turn's session was registered — so log the live inventory at info to
+        // keep the id/timing mismatch legible. The desktop UI no longer depends on
+        // this succeeding: `handleStop` recovers the UI optimistically regardless.
+        tracing::info!(
             conversation_id,
-            "cancel_stream: no live session (stream may have already finished)"
+            live_sessions = ?runtime.sessions.conversation_ids(),
+            "cancel_stream: no live session — cancel is a no-op (already finished, or FE raced session registration)"
         );
     }
     Ok(())
