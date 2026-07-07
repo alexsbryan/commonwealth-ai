@@ -28,11 +28,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
+use crate::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes, ScopeFilter};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use super::project::{CheckpointMeta, DecisionFrontier, RecipeProject};
 
@@ -461,16 +461,15 @@ pub async fn restore_checkpoint(
 mod tests {
     use super::super::ArtifactKind;
     use super::*;
-    // Tests exercise the tools against a real `NoteStore`, wrapped in the
-    // monolith adapter so it satisfies the `RecipeNotes` contract.
-    use crate::recipe_notes_adapter::NoteStoreRecipeNotes;
-    use corpus_engine_notes::NoteStore;
-    use sovereign_store::recipe_project_store::RecipeProjectStore;
+    // Tests exercise the tools against the in-memory `RecipeNotes` stub (the
+    // real store adapter is covered by the sovereign-tools integration test).
+    use crate::recipe_project_store::RecipeProjectStore;
+    use crate::test_support::InMemoryRecipeNotes;
 
     // The crate-wide HOME mutex lives in `recipe_author::home_test_lock`
     // — one lock for every test module that sets `HOME` (a module-local
     // mutex cannot exclude siblings). See its doc comment.
-    pub(super) use crate::recipe_author::home_test_lock;
+    pub(super) use crate::home_test_lock;
 
     async fn fresh_project(
         recipes_dir: &Path,
@@ -481,9 +480,7 @@ mod tests {
         tempfile::TempDir,
     ) {
         let dir = tempfile::tempdir().unwrap();
-        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
-            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
-        )));
+        let notes: Arc<dyn RecipeNotes> = Arc::new(InMemoryRecipeNotes::new());
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         // Per-test HOME so `RecipeProject::new` writes its sidecar dir
         // into the tempdir rather than the user's real home. Caller
@@ -590,9 +587,7 @@ mod tests {
         .unwrap();
 
         let dir = tempfile::tempdir().unwrap();
-        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
-            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
-        )));
+        let notes: Arc<dyn RecipeNotes> = Arc::new(InMemoryRecipeNotes::new());
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         std::env::set_var("HOME", dir.path());
         let project = RecipeProject::new_with_kind(

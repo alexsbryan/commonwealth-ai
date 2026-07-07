@@ -9,9 +9,9 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 
-use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use super::resolve_recipe_path;
 
@@ -85,7 +85,7 @@ impl Tool for RecipeReadTool {
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
-            sovereign_core::error::Error::InvalidInput(
+            sovereign_contracts::error::Error::InvalidInput(
                 "RecipeReadTool requires a `path` parameter".into(),
             )
         })?;
@@ -95,7 +95,7 @@ impl Tool for RecipeReadTool {
             Ok(s) => (true, s),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
             Err(e) => {
-                return Err(sovereign_core::error::Error::InvalidInput(format!(
+                return Err(sovereign_contracts::error::Error::InvalidInput(format!(
                     "failed to read {}: {e}",
                     resolved.display()
                 )))

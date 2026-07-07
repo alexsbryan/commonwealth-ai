@@ -35,10 +35,10 @@ use async_trait::async_trait;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::url_template::render_template;
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 const MAX_BODY_BYTES: usize = 4096;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);

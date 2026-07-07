@@ -12402,6 +12402,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-recipe-author"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "uuid",
+]
+
+[[package]]
 name = "sovereign-server"
 version = "0.1.18"
 dependencies = [
@@ -12451,6 +12468,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-core",
+ "sovereign-recipe-author",
  "tempfile",
  "tokio",
  "tokio-postgres",
@@ -12513,6 +12531,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-recipe-author",
  "sovereign-store",
  "sovereign-tools-base",
  "sovereign-work-atlas",

@@ -52,11 +52,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use super::project::{maintainer_inbox_dir, RecipeProject};
 
@@ -399,8 +399,7 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recipe_notes_adapter::NoteStoreRecipeNotes;
-    use corpus_engine_notes::NoteStore;
+    use crate::test_support::InMemoryRecipeNotes;
     use sovereign_contracts::recipe::notes::ScopeFilter;
 
     // HOME is process-global: hold the CRATE-WIDE lock
@@ -416,11 +415,9 @@ mod tests {
         tempfile::TempDir,
         std::sync::MutexGuard<'static, ()>,
     ) {
-        let guard = crate::recipe_author::home_test_lock();
+        let guard = crate::home_test_lock();
         let dir = tempfile::tempdir().unwrap();
-        let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
-            NoteStore::open(&dir.path().join("notes.db")).unwrap(),
-        )));
+        let notes: Arc<dyn RecipeNotes> = Arc::new(InMemoryRecipeNotes::new());
         let features = Arc::new(RecipeProjectStore::open(&dir.path().join("features.db")).unwrap());
         std::env::set_var("HOME", dir.path());
         let project = RecipeProject::new(

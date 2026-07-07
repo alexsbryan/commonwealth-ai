@@ -17,10 +17,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::testing::{RecipeTestOutcome, RecipeTestParams, RecipeTester};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::*;
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::*;
 
 use super::resolve_recipe_path;
 
@@ -315,73 +315,11 @@ fn json_to_toml(v: &serde_json::Value) -> Option<toml::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
 
-    fn tester() -> Arc<dyn RecipeTester> {
-        Arc::new(CorpusEngineRecipeTester::new())
-    }
-
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-        }
-    }
-
-    fn make_root(home: &std::path::Path) -> PathBuf {
-        let recipes = home.join(".sovereign/recipes");
-        std::fs::create_dir_all(&recipes).unwrap();
-        recipes
-    }
-
-    #[tokio::test]
-    async fn validation_only_run_returns_passed_for_clean_recipe() {
-        let home = tempfile::tempdir().unwrap();
-        let root = make_root(home.path());
-        let dir = root.join("clean");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("recipe.toml"),
-            r#"
-[corpus]
-id = "clean"
-name = "clean"
-license = "MIT"
-
-[acquire]
-type = "bulk_download"
-url = "https://example.com/data.zip"
-
-[extract]
-type = "plaintext"
-
-[chunk]
-type = "sentence"
-"#,
-        )
-        .unwrap();
-
-        // sample_size = 0 = validation-only path through test_recipe.
-        let tool = RecipeTestTool::with_recipes_dir(tester(), root);
-        let out = tool
-            .execute(
-                &serde_json::json!({"path": "clean", "sample_size": 0, "offline": true}),
-                &ctx(),
-            )
-            .await
-            .unwrap();
-        match out {
-            StepOutput::Json(v) => {
-                assert_eq!(v["passed"], true, "got: {v}");
-                assert_eq!(v["validation"]["errors"].as_array().unwrap().len(), 0);
-            }
-            other => panic!("expected Json, got {other:?}"),
-        }
-    }
+    // The tool tests that drive the injected `RecipeTester` (which is backed by
+    // corpus-engine) live in `sovereign-tools/tests/recipe_author_tools.rs` — they
+    // need the real `CorpusEngineRecipeTester`, which this package deliberately
+    // does not depend on. What stays here is the private-helper test below.
 
     #[test]
     fn json_to_toml_handles_arrays_of_strings() {

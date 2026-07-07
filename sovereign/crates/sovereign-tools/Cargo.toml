@@ -10,6 +10,11 @@ sovereign-core = { workspace = true }
 # registry consts from the contract crate directly, so it needs no corpus-engine
 # dependency — the seam that lets the authoring stack extract (B:P6).
 sovereign-contracts = { workspace = true }
+# The recipe-authoring tool bundle now lives in this extractable package;
+# re-exported as `sovereign_tools::recipe_author`. The corpus-engine-backed
+# adapters that satisfy its seams (recipe_notes_adapter, recipe_tester_adapter)
+# stay here.
+sovereign-recipe-author = { workspace = true }
 # The 11 pure workflow tools (shell, web, chunk, section, file/json/csv/zip/
 # vector, MCP client) were extracted here; re-exported at their old paths
 # (`sovereign_tools::{shell, web, mcp, rag::chunk, ...}`).
