@@ -13,7 +13,7 @@
 #
 # Run (daemon up; the corpus extract+cluster'd so cache/questions.json +
 # cache/atlas-clusters.json exist):
-#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/atlas-name.toml --no-cache
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/atlas-name.toml --no-cache
 #   # -> out/<corpus>.named-clusters.json  (diff against cache/atlas-named-clusters.json)
 
 [workflow]

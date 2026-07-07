@@ -23,7 +23,7 @@
 # finds chapters (a heading-less file becomes one section, which is fine):
 #   mkdir -p corpus
 #   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
-#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache
 #   # -> out/<doc>.questions.json per source document (a Phase1Output-shaped file)
 
 [workflow]

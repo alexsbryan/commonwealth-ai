@@ -57,33 +57,21 @@ pub use installer::HttpCorpusInstaller;
 
 /// Shipped starter workflows, embedded at compile time.
 pub const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
-    (
-        "notebook",
-        include_str!("../../sovereign-workflow/recipes/notebook.toml"),
-    ),
-    (
-        "summarize",
-        include_str!("../../sovereign-workflow/recipes/summarize.toml"),
-    ),
-    (
-        "web-digest",
-        include_str!("../../sovereign-workflow/recipes/web-digest.toml"),
-    ),
+    ("notebook", include_str!("../recipes/notebook.toml")),
+    ("summarize", include_str!("../recipes/summarize.toml")),
+    ("web-digest", include_str!("../recipes/web-digest.toml")),
     (
         "meeting-to-done",
-        include_str!("../../sovereign-workflow/recipes/meeting-to-done.toml"),
+        include_str!("../recipes/meeting-to-done.toml"),
     ),
-    (
-        "genome",
-        include_str!("../../sovereign-workflow/recipes/genome.toml"),
-    ),
+    ("genome", include_str!("../recipes/genome.toml")),
     (
         "movie-catalog",
-        include_str!("../../sovereign-workflow/recipes/movie-catalog.toml"),
+        include_str!("../recipes/movie-catalog.toml"),
     ),
     (
         "recommend-personal",
-        include_str!("../../sovereign-workflow/recipes/recommend-personal.toml"),
+        include_str!("../recipes/recommend-personal.toml"),
     ),
 ];
 

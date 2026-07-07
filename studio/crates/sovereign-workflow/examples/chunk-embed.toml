@@ -14,7 +14,7 @@
 #   # Drop any .txt in. To follow the chunker's own tuning corpus, use Conrad's
 #   # *The Secret Agent* (Project Gutenberg #974):
 #   #   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
-#   sovereign workflow run sovereign/crates/sovereign-workflow/examples/chunk-embed.toml --concurrency 4
+#   sovereign workflow run studio/crates/sovereign-workflow/examples/chunk-embed.toml --concurrency 4
 #
 # Re-running is a free resume: an unchanged file's chunks are served from the
 # content cache; edit one file and only its chunks re-embed.
