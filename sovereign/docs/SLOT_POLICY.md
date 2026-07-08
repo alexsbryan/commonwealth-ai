@@ -235,11 +235,77 @@ Until the rationalization plan completes:
 
 ## 10. Known debts against this policy
 
-Tracked in the rationalization plan (`~/.claude/plans/
-steady-braiding-river.md`). Highlights: sixty-odd `Speed` literals
-predating the request contract; three divergent Speed↔latency maps;
-`model_id:"primary"` pins in grounding; `oicp: None` on most internal
-calls (invisible to the scheduler); `score.rs` fast-judge defaults;
-contradiction detection on the fast slot; FastShort near-miss
-budgets; the dormant `commonwealth` tier router; `role.rs::Tier` as
-an unwired vocabulary.
+The rationalization that produced this policy (P1–P4) already closed
+the structural problems it set out to fix: the ~60 free-hand `Speed`
+literals now route through the `Workload` resolver (§9), the three
+divergent Speed↔latency maps collapsed to `speed_to_latency` /
+`latency_to_speed`, the `Speed::Medium` construction tier is retired,
+and the grounding `model_id:"primary"` pins are gone (judges route
+through the OICP envelope). What remains below is the residual — a
+handful of *deliberate, scoped* deferrals, not oversights.
+
+Every one is marked in code with a greppable comment stating the
+current value, the mandated value, why it was preserved, and the
+phase that owns the fix. Find them all with:
+
+    grep -rn "POLICY-DEBT(" sovereign/
+
+### Deferred phases (what a marker's "owning phase" means)
+
+These are **not scheduled**. This project will not be revisited for a
+while, so treat the markers as "safe to build near, but read the
+marker before extending the site." New call sites must use the
+`Workload` resolver (§9) and inherit correct defaults — the markers
+only record where *existing* sites override back.
+
+- **P5 — gray-zone re-adjudication.** Sites whose historical
+  slot or `think_budget` differs from the mandated bundle and where a
+  flip could change generation, so it needs a measured decision, not
+  a mechanical swap. ("F5" is this finding in the 2026-07-08 audit;
+  **P5-5b** is specifically the Fast-vs-primary judge-agreement
+  measurement that gates the eval-judge flips below.)
+- **P6 — defaults hardening.** The `Speed` derive default and a
+  no-envelope burn-down: counting and eliminating call sites still
+  sending `oicp: None` (invisible to the scheduler).
+- **P7 — vocabulary collapse.** Fold `role.rs::Tier` into the
+  `Workload` vocabulary and retire the `preferred_speed` shadow once
+  it no longer rides on the request path.
+
+### The residual markers, by kind
+
+- **Think-budget neutrality — 9** (`memory.rs`, `pipeline/curator.rs`,
+  `document.rs`, `raptor_atlas.rs`, `document_asset.rs` ×4,
+  `corpus/mod.rs`). Each kept its historical `think_budget` (`None`
+  vs `Some(0)`) instead of the bundle value, to keep the P1 migration
+  generation-neutral. The two are equivalent at schema-constrained
+  sites (no think block can precede forced JSON). Leaf knobs; they do
+  not compound. Owned by P5.
+- **Honest-budget forfeit — 4** (`document_operation.rs` 1024,
+  `document_asset.rs` 768, `code/read_note_digest.rs` 800,
+  `corpus/mod.rs` 4096). `max_output` exceeds the 512 fast-batch cap
+  because the work genuinely needs the room, so the site forfeits the
+  batched FastShort claim (§4.5). This is a correct trade-off, not an
+  error; `corpus/mod.rs` notes the cap stops being load-bearing once
+  grammar-constrained decode guarantees a valid array close.
+- **Eval judges on the Fast slot — 2** (`eval_cmd/score.rs`). Judge-
+  class work (should be Normal/primary) runs Fast in the eval
+  harness. `SOVEREIGN_JUDGE_MODEL` forces primary when set; the
+  default flip is gated on **P5-5b** measuring judge agreement first,
+  so eval baselines don't shift silently.
+- **Architectural non-migration — 1** (`typed_call.rs`). A generic
+  helper whose speed / think_budget / temperature are caller-set
+  `pub` fields read at runtime; a static `Workload` can't reproduce a
+  per-call Fast override, so it deliberately stays off the resolver.
+  Anyone extending the `Workload` model should know this opt-out
+  exists. Owned by P7.
+
+### Resolved after this policy shipped
+
+- **2026-07-08 — memory-integrity guards flipped to primary.**
+  Temporal-tension classification and contradiction detection in
+  `memory.rs` previously ran on the Fast slot as a P1-neutrality
+  holdover. They guard the durable memory store from corruption, are
+  background tasks where latency buys nothing, and their
+  `think_budget` already matched the ExtractDurable bundle — so they
+  were moved to their mandated ExtractDurable (primary) class. The
+  flip changed only the slot, not the generation.

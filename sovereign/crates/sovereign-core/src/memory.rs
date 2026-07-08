@@ -647,12 +647,15 @@ Reply with a JSON array, one entry per memory, in the original order:\n\
         }
     });
 
-    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): temporal-tension
-    // classification protects the durable memory store, so the policy
-    // class is ExtractDurable (normal/primary). It runs Fast today;
-    // this is a background task where latency buys nothing. Kept as-is
-    // for P1 routing-neutrality — re-adjudicated in P5 (F5 gray-zone).
-    let mut request = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+    // Temporal-tension classification guards the durable memory store,
+    // so it declares the ExtractDurable workload (Normal latency →
+    // primary slot). It formerly ran on the Fast slot as a P1-neutrality
+    // holdover; flipped to the mandated class (2026-07-08) because it is
+    // a background task — latency buys nothing — and a corruption guard
+    // deserves the stronger model. LocalOnly: internal machinery, never
+    // offloaded. think_budget stays None (the bundle default), so the
+    // only change is the slot, not the generation.
+    let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, &prompt);
     request.structured_output = Some(schema);
     request.max_tokens = Some(512);
 
@@ -756,35 +759,20 @@ pub async fn detect_contradictions(
         new_memory.content,
     );
 
-    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): contradiction
-    // detection guards the durable memory store from corruption — the
-    // policy class is ExtractDurable (normal/primary), not Fast. It is a
-    // background task; latency buys nothing. Kept as-is for P1
-    // routing-neutrality — re-adjudicated in P5 (F5 gray-zone).
-    let request = CompletionRequest {
-        prompt,
-        system_message: Some(
-            "Identify contradictions. Respond with a JSON array of numbers only.".to_string(),
-        ),
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(50),
-        temperature: Some(0.0),
-        structured_output: None,
-        think_budget: None,
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // Contradiction detection guards the durable memory store from
+    // corruption, so it declares the ExtractDurable workload (Normal
+    // latency → primary slot). It formerly ran on the Fast slot as a
+    // P1-neutrality holdover; flipped to the mandated class (2026-07-08)
+    // because it is a background task — latency buys nothing — and a
+    // corruption guard deserves the stronger model. LocalOnly: internal
+    // machinery, never offloaded. The ExtractDurable bundle's
+    // think_budget is None, matching the prior value, so the flip
+    // changes the slot, not the generation.
+    let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt);
+    request.system_message =
+        Some("Identify contradictions. Respond with a JSON array of numbers only.".to_string());
+    request.max_tokens = Some(50);
+    request.temperature = Some(0.0);
 
     let response = inference.complete(&request).await?;
 
