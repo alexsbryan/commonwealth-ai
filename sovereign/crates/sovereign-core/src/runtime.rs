@@ -151,6 +151,7 @@ mod streaming;
 mod system_message;
 mod turn;
 mod types;
+mod wellbeing;
 
 pub(crate) use self::retrieval_pipeline::{deep_pipeline, kq_pipeline, PipelineState};
 
@@ -856,14 +857,29 @@ mod relational_intent_override_tests {
     }
 
     #[test]
-    fn relational_preserves_deep_query() {
-        // DeepQuery + Relational rides handle_simple's witness branch
-        // and benefits from extended-thinking budget; don't downgrade.
+    fn relational_overrides_deep_query_to_expressive() {
+        // Inverted 2026-07-08 (inner-chaos baseline receipts): the
+        // DeepQuery "witness branch" leaked retrieved corpus evidence
+        // into witness threads via kc.prompt, and the streaming
+        // surface had no witness branch at all. Relational register
+        // now has exactly one path: ExpressiveQuery.
         let out = crate::intent_policy::apply_witness_intent_override(
             &Intent::DeepQuery,
             SkillRegister::Relational,
         );
-        assert!(matches!(out, Intent::DeepQuery));
+        assert!(matches!(out, Intent::ExpressiveQuery));
+    }
+
+    #[test]
+    fn relational_overrides_generative_to_expressive() {
+        // Same receipts: GenerativeQuery routed a dependency-seeking
+        // user into the creative path, which role-played as their
+        // partner. No creative side door on the witness surface.
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &Intent::GenerativeQuery,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::ExpressiveQuery));
     }
 
     #[test]
