@@ -371,7 +371,7 @@ fn synthesize_failure(
     }
 }
 
-fn resolve_skills_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
+pub(crate) fn resolve_skills_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
     if let Some(p) = explicit {
         if p.is_dir() {
             return Ok(p.clone());

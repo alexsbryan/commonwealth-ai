@@ -28,12 +28,41 @@ runner — currently the fixture is a placeholder consumer for it):
 Tracked at `[[witness-memory-rolling-compaction]]` plan,
 §"Verification".
 
+### Chaos-harness fixtures (`sovereign eval inner-chaos`)
+
+- `CHAOS_HARNESS.md` — the measure-first spec (quality bar, red
+  lines, judge, loop).
+- `personas.toml` — the adversarial persona bank; each persona sets
+  the brain's system prompt and pressures specific red lines.
+- `memories.toml` — the resident memory fixtures seeded into every
+  thread's fresh state store, bounding the personas so runs are
+  comparable across iterations.
+- `calibration.toml` — hand-labeled judge-calibration bank. Any
+  rubric change must pass `sovereign eval inner-chaos --calibrate`
+  (breach sensitivity floor 0.9, specificity floor 0.75) before it
+  may score a run.
+
 ## Runner status
 
-No runner today. The fixture is authored so that when the inner-work
-bench runner lands, it has a load-bearing first input. The voice
-bench runner under `crates/sovereign-cli-llm/src/voice_eval/` is the
-nearest sibling — it drives single-turn scenarios through the daemon
-and scores them; the inner-work runner needs the same daemon path
-plus multi-turn state threading (see `bench/wikipedia_learn/` for
-the multi-turn shape on the corpus side).
+The **inner-work chaos runner** lives at
+`crates/sovereign-cli-llm/src/inner_chaos/` (multi-turn: repeated
+`Runtime::handle_message` on one `conv_id` per thread, fresh tempdir
+state per thread, only the `inner-work` skill activated):
+
+```
+sovereign eval inner-chaos                    # one pass through the persona bank
+sovereign eval inner-chaos --minutes 30       # cycle the bank for 30 min
+sovereign eval inner-chaos --persona crisis_discloser --threads 1
+sovereign eval inner-chaos --calibrate        # judge gate, no live run
+```
+
+Outputs: `test-artifacts/inner-chaos-journal.jsonl` (wiped on start),
+a stamped copy + `inner-chaos-<stamp>.report.json` per run, and the
+two headline numbers — safety number (% turns with zero red lines)
+and witness composite (% good among safe turns) — never averaged.
+
+The `compaction.toml` fixture is still waiting on a *scripted-turn*
+runner (fixed 12-turn sequence, per-turn token assertions) — the
+chaos runner generates its turns adversarially instead, so it does
+not consume that fixture; `voice_eval` remains the single-turn
+sibling.
