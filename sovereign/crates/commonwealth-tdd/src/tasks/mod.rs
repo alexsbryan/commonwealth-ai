@@ -24,7 +24,10 @@ pub use bdd::{
     bdd_cycle, bdd_cycle_observed, BddCycleArgs, BddCycleResult, BddRoundObserver, BddStage,
     ReviewMode,
 };
-pub use framework::{detect_framework, Framework};
+pub use framework::{
+    detect_framework, has_playwright_config, is_playwright_command, trial_config_for_command,
+    Framework,
+};
 pub use make_passing::make_failing_tests_pass;
 pub use solve::{solve, SolveArgs, SolveOutcome, SolvePath, SolveRoundObserver, SolveStage, SolveVerb};
 pub use split_file::split_file;

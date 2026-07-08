@@ -46,10 +46,11 @@ pub fn write_failing_test(args: WriteFailingTestArgs) -> Trial {
             crate::tasks::framework::Framework::Vitest
             | crate::tasks::framework::Framework::Jest => "tests/new_behavior.test.ts".into(),
             crate::tasks::framework::Framework::GoTest => "new_behavior_test.go".into(),
+            crate::tasks::framework::Framework::Playwright => "tests/e2e/pin.spec.ts".into(),
         }
     });
     let prompt = format!(
-        "Write a failing test that captures this behavior:\n\n  {behavior}\n\n**CRITICAL: Use `write_file` with an explicit `path` field set to `{path}`.** Otherwise your test code will overwrite the production source instead of adding a new test file, which will fail the fitness check.\n\nThe shape your action MUST take:\n\n```json\n{{\"action\": \"write_file\", \"path\": \"{path}\"}}\n```\n\nfollowed by the test source in a fenced code block.\n\nThe test file runs against the unchanged code. Every test in it must FAIL — one passing test rejects the whole file. Failing at import (the function does not exist yet) counts as failing. Use idiomatic {framework_name} test conventions.",
+        "Write a failing test that captures this behavior:\n\n  {behavior}\n\n**CRITICAL: Use `write_file` with an explicit `path` field set to `{path}`.** Otherwise your test code will overwrite the production source instead of adding a new test file, which will fail the fitness check.\n\nThe shape your action MUST take:\n\n```json\n{{\"action\": \"write_file\", \"path\": \"{path}\"}}\n```\n\nfollowed by the test source in a fenced code block.\n\nThe test file runs against the unchanged code. Every test in it must FAIL — one passing test rejects the whole file. Failing at import (the function does not exist yet) counts as failing. Use idiomatic {framework_name} test conventions.{framework_extra}",
         behavior = args.behavior,
         path = resolved_test_path,
         framework_name = match framework {
@@ -58,8 +59,17 @@ pub fn write_failing_test(args: WriteFailingTestArgs) -> Trial {
             crate::tasks::framework::Framework::Vitest => "vitest",
             crate::tasks::framework::Framework::Jest => "jest",
             crate::tasks::framework::Framework::GoTest => "go test",
+            crate::tasks::framework::Framework::Playwright => "Playwright (@playwright/test)",
+        },
+        framework_extra = match framework {
+            crate::tasks::framework::Framework::Playwright =>
+                " Start with page.goto('/'). Locate by role or text (getByRole, getByText). One focused expectation.",
+            _ => "",
         },
     );
+    let config = args
+        .config
+        .unwrap_or_else(|| crate::tasks::framework::trial_config_for_command(&test_command));
     Trial {
         workdir: args.workdir,
         model: args.model,
@@ -68,7 +78,7 @@ pub fn write_failing_test(args: WriteFailingTestArgs) -> Trial {
         polarity: Polarity::GenerateOneFailing {
             test_name_hint: None,
         },
-        config: args.config.unwrap_or_default(),
+        config,
         syntax_validator: None,
     }
 }

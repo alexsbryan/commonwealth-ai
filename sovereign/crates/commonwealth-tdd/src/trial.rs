@@ -233,6 +233,7 @@ pub async fn run_trial_observed(
             &config.temp_ladder_default
         };
 
+        let mut candidates: Vec<CandidateOutcome> = Vec::with_capacity(config.candidates_per_round);
         let mut join_set: JoinSet<CandidateOutcome> = JoinSet::new();
         for i in 0..config.candidates_per_round {
             let temp = temp_ladder[i % temp_ladder.len()];
@@ -260,7 +261,7 @@ pub async fn run_trial_observed(
             let timeout = config.candidate_test_timeout;
             let max_tokens = config.emit_max_tokens;
             let validator = syntax_validator.clone();
-            join_set.spawn(async move {
+            let fut = async move {
                 try_candidate(
                     backend,
                     candidate_workdir,
@@ -276,9 +277,15 @@ pub async fn run_trial_observed(
                     max_tokens,
                 )
                 .await
-            });
+            };
+            if config.serial_candidates {
+                // One candidate at a time — for test commands whose
+                // runs can't overlap (Playwright webServer port).
+                candidates.push(fut.await);
+            } else {
+                join_set.spawn(fut);
+            }
         }
-        let mut candidates: Vec<CandidateOutcome> = Vec::with_capacity(config.candidates_per_round);
         while let Some(j) = join_set.join_next().await {
             if let Ok(c) = j {
                 candidates.push(c);

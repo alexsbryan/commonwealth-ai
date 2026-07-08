@@ -33,13 +33,16 @@ pub fn make_failing_tests_pass(args: MakePassingArgs) -> Trial {
         "Make all currently-failing tests pass without regressing any currently-passing test."
             .to_string()
     });
+    let config = args
+        .config
+        .unwrap_or_else(|| crate::tasks::framework::trial_config_for_command(&test_command));
     Trial {
         workdir: args.workdir,
         model: args.model,
         prompt,
         test_command,
         polarity: Polarity::MaximizePassing,
-        config: args.config.unwrap_or_default(),
+        config,
         syntax_validator: None,
     }
 }

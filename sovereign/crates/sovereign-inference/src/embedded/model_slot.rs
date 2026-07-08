@@ -262,7 +262,7 @@ impl SlotContext {
         // serving) state. If `build_target_ctx_for_slot` fails the
         // slot is wedged anyway, but at least the error is loud and
         // diagnosable rather than silent.
-        let new_target = build_target_ctx_for_slot(&self._model, rebuild).map_err(|e| {
+        let new_target = build_target_ctx_for_slot(&self._model, rebuild, &model_id).map_err(|e| {
             Error::Inference(format!(
                 "demote_to_single_token: failed to rebuild target ctx: {e}"
             ))
@@ -324,6 +324,7 @@ impl SlotContext {
 fn build_target_ctx_for_slot(
     model: &Arc<LlamaModel>,
     params: &MtpRebuildParams,
+    model_id: &str,
 ) -> Result<crate::llama::cpp::context::LlamaContext<'static>> {
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(params.context_size))
@@ -337,12 +338,14 @@ fn build_target_ctx_for_slot(
     // whether the slot was originally an MTP candidate, but it is
     // never propagated into a fallback SingleToken ctx.
     let _ = params.n_rs_seq;
-    unsafe {
+    let mut ctx = unsafe {
         let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model));
         model_ref
             .new_context(&params.backend, ctx_params)
-            .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))
-    }
+            .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))?
+    };
+    super::control_vector::maybe_apply(&mut ctx, model_id, model.n_embd(), model.n_layer());
+    Ok(ctx)
 }
 
 /// Probe the speculative path with a 1-token synthetic prefill.
@@ -912,7 +915,7 @@ impl ModelSlot {
             // experiment.
         };
 
-        let (ctx, used_gpu) = match if wants_gpu {
+        let (mut ctx, used_gpu) = match if wants_gpu {
             unsafe {
                 let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                 model_ref
@@ -946,6 +949,13 @@ impl ModelSlot {
         } else {
             embed_compute_backend_label()
         };
+
+        // Operator-gated control-vector steering (SOVEREIGN_CVEC*). No-op
+        // unless configured. Applied here so both the SingleToken path and
+        // the speculative target (the ctx moves into the upgrade below and
+        // keeps its adapter state) are steered; the MTP-failure rebuild
+        // reapplies inside `build_target_ctx_for_slot`.
+        super::control_vector::maybe_apply(&mut ctx, &model_id, model.n_embd(), model.n_layer());
 
         // **Speculative-mode upgrade — probed at construction.**
         //
@@ -1029,7 +1039,7 @@ impl ModelSlot {
                          common_speculative_init.)"
                     );
                     let fresh =
-                        build_target_ctx_for_slot(&model, &rebuild_params).map_err(|e| {
+                        build_target_ctx_for_slot(&model, &rebuild_params, &model_id).map_err(|e| {
                             Error::Inference(format!(
                                 "Failed to rebuild target ctx after MTP upgrade failure: {e}"
                             ))

@@ -88,7 +88,9 @@ fn worst_source_file_lines(
     let exts: &[&str] = match framework {
         Framework::Pytest => &["py"],
         Framework::Cargo => &["rs"],
-        Framework::Vitest | Framework::Jest => &["ts", "tsx", "js", "jsx"],
+        Framework::Vitest | Framework::Jest | Framework::Playwright => {
+            &["ts", "tsx", "js", "jsx"]
+        }
         Framework::GoTest => &["go"],
     };
     fn walk(dir: &Path, exts: &[&str], worst: &mut usize) {

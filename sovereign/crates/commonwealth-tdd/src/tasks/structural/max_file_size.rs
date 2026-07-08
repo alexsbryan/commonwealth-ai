@@ -74,6 +74,12 @@ pub fn render_ladder(framework: Framework, rungs: &[usize]) -> (PathBuf, String)
             PathBuf::from("max_file_size_test.go"),
             gotest_template(rungs),
         ),
+        // Playwright runs plain node tests fine — the walker needs
+        // no browser. Same TS body as vitest with the import swapped.
+        Framework::Playwright => (
+            PathBuf::from("tests/e2e/max_file_size.spec.ts"),
+            js_template(rungs, "import { test, expect } from '@playwright/test';\nimport { readdirSync, statSync, readFileSync } from 'node:fs';\nimport { join } from 'node:path';"),
+        ),
     }
 }
 

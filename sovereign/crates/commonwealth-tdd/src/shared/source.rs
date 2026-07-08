@@ -23,6 +23,16 @@ pub fn discover_source_files(workdir: &Path) -> Vec<String> {
     let exts = [".py", ".rs", ".ts", ".tsx", ".go"];
     let mut hits: Vec<PathBuf> = Vec::new();
     walk_for_sources(workdir, workdir, 0, &exts, &mut hits);
+    // Tool configs are infrastructure, not source. They sort FIRST
+    // (fewest path components), so without this filter a webapp's
+    // `playwright.config.ts` becomes the file the prompt points the
+    // model at — and candidates "fix" the test runner instead of the
+    // app (live receipts, job 09777dfe, 2026-07-07).
+    hits.retain(|p| {
+        p.file_name()
+            .map(|n| !n.to_string_lossy().contains(".config."))
+            .unwrap_or(true)
+    });
     hits.sort_by_key(|p| (p.components().count(), p.clone()));
     hits.into_iter()
         .map(|p| p.to_string_lossy().into_owned())
@@ -150,5 +160,16 @@ mod multi_file_tests {
         let files = discover_source_files(tmp.path());
         assert_eq!(files.len(), 3);
         assert!(files.contains(&"minilang/evaluator.py".to_string()));
+    }
+
+    #[test]
+    fn tool_configs_are_not_source_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("playwright.config.ts"), "export default {}").unwrap();
+        std::fs::write(tmp.path().join("vite.config.ts"), "export default {}").unwrap();
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/main.ts"), "export {}\n").unwrap();
+        let files = discover_source_files(tmp.path());
+        assert_eq!(files, vec!["src/main.ts".to_string()]);
     }
 }

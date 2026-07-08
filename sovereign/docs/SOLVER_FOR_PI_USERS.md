@@ -75,6 +75,22 @@ sovereign solve <repo> "goal" --test-command "pytest -q tests/"
 sovereign solve <repo> "goal" --model commonwealth/fast
 ```
 
+## Web apps too (Playwright)
+
+Same call. If your repo has a `playwright.config.ts`, the solver runs
+your e2e suite in a real browser — your config's `webServer` block
+starts the app, retries are forced off so flake reads as failing, and
+the model steers by Playwright's text snapshot of the page at each
+failure. No tests yet? It writes the one failing spec that pins your
+goal (`page.goto('/')`, role/text locators), then makes it pass.
+
+```bash
+sovereign solve /path/to/webapp "clicking Save shows a confirmation toast" --watch
+```
+
+If the project also has a unit framework, unit stays the default —
+add `--suite e2e` to aim at the browser tests.
+
 ## From an agent (pi, Claude, anything MCP-capable)
 
 The daemon's MCP surface (`http://127.0.0.1:9741/mcp`) exposes the
