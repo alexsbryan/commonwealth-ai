@@ -222,13 +222,25 @@ struct FailedClaim {
 /// fabricated specific anyway. The failed claim is preserved in the gate's
 /// glassbox `meta` / trace, not in the user-facing text — observability without
 /// leakage.
+///
+/// Wording is a SELF-SCOPED epistemic hedge ("I couldn't confirm …"), NOT a
+/// universal claim about the sources ("none of them cover it"). Measured
+/// 2026-07-08 (8h chaos run, class-A "evidence-denial"): the gate's short
+/// citation path abstains far more often than the evidence warrants (single-digit
+/// answers filtered, verbatim quote-match misses), so the abstention frequently
+/// fires when the answer IS in the passages. A universal negative is then a FALSE
+/// statement about the sources — the trust rubric scores it as confabulation, and
+/// it reads to the user as the app denying its own evidence. An assistant-scoped
+/// "I couldn't verify this against them" is honest in BOTH the true-miss and the
+/// mis-abstain case (it claims only the assistant's confidence, never the
+/// sources' content), and the calibrated judge's decline-shape override already
+/// treats it as an honest limitation rather than a fabrication.
 pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {
     format!(
-        "I looked through the {chunks_checked} passages your sources turned up for \
-         this, but none of them actually cover it — so I'd rather not guess at an \
-         answer that isn't there. If you think it's in your sources, try rephrasing \
-         with the specific names or terms involved and I'll take another look; \
-         otherwise it may just not be recorded there."
+        "I couldn't confirm an answer to this against the {chunks_checked} passages \
+         your sources turned up — so rather than guess at something I can't verify \
+         from them, I'd flag that instead. If you think it's there, try rephrasing \
+         with the specific names or terms involved and I'll take another look."
     )
 }
 
@@ -861,8 +873,10 @@ fn answer_declines(text: &str) -> bool {
         "i'm not certain",
         "i do not have information",
         "i don't have information",
-        "none of them actually cover it", // grounded_abstention prose
-        "i'd rather not guess",           // grounded_abstention prose
+        "couldn't confirm an answer",     // grounded_abstention prose (current)
+        "could not confirm an answer",    // grounded_abstention prose (current)
+        "none of them actually cover it", // grounded_abstention prose (legacy, still in-the-wild)
+        "i'd rather not guess",           // grounded_abstention prose (legacy)
         "do not contain",
         "does not contain",
         "not recorded there",
@@ -1545,10 +1559,16 @@ mod tests {
         // grounded_abstention was rewritten (2026-06-17) to stop restating the
         // rejected claim verbatim (it leaked the fabrication + read as "answered"
         // to the primary judge), then re-toned (2026-06-30) to drop the abrupt
-        // "so I'm not going to state one" lecture for a warm, helpful refusal.
-        // The action is the invariant; the wording is graceful, not brusque.
-        assert!(outcome.text.starts_with("I looked through the"));
+        // "so I'm not going to state one" lecture for a warm, helpful refusal,
+        // then re-scoped (2026-07-08) from a universal negative about the sources
+        // ("none of them cover it") to a self-scoped hedge ("I couldn't confirm")
+        // so a mis-abstain isn't a FALSE claim about the sources. The action is
+        // the invariant; the wording is graceful and source-honest.
+        assert!(outcome.text.starts_with("I couldn't confirm"));
         assert!(!outcome.text.contains("not going to state"));
+        // Must NOT assert a universal negative about the sources' content.
+        assert!(!outcome.text.contains("none of them"));
+        assert!(!outcome.text.contains("not recorded there"));
     }
 
     /// Supported claims release unchanged under verify-only.
