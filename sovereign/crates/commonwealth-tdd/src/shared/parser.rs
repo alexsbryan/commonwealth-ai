@@ -162,10 +162,17 @@ pub fn parse_go_test_json(stdout: &str) -> TestParseResult {
     }
 }
 
+/// Parses the TypeScript-ecosystem reporters: vitest default, jest
+/// default, AND Playwright's line reporter. One parser because the
+/// dispatch key is [`Language`] (from the source file's extension),
+/// which can't tell a vitest project from a Playwright one — the
+/// output shapes are disjoint enough to coexist.
 pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
     let mut passed: u32 = 0;
     let mut failed: u32 = 0;
+    let mut errors: u32 = 0;
     let mut suite_failures: u32 = 0;
+    let mut playwright_fatal = false;
     let mut failed_names: Vec<String> = Vec::new();
     for line in stdout.lines() {
         let trimmed = line.trim();
@@ -177,19 +184,71 @@ pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
         } else if trimmed.starts_with("Tests") {
             passed = count_number_before_token(trimmed, "passed");
             failed = count_number_before_token(trimmed, "failed");
+        } else if let Some((n, kind)) = playwright_summary(trimmed) {
+            // Playwright line-reporter summary: bare `3 passed (4.2s)`
+            // / `1 failed` / `2 errors` lines.
+            match kind {
+                "passed" => passed = n,
+                "failed" => failed = n,
+                "errors" => errors = n,
+                _ => {}
+            }
+        }
+        // Playwright numbered failure header:
+        //   `1) [chromium] › tests/x.spec.ts:9:5 › title ─────`
+        if let Some(name) = playwright_failure_name(trimmed) {
+            failed_names.push(name);
         }
         if let Some(name) = trimmed.strip_prefix("✗ ") {
             failed_names.push(name.to_string());
         } else if let Some(name) = trimmed.strip_prefix("× ") {
             failed_names.push(name.to_string());
+        } else if let Some(name) = trimmed.strip_prefix("✘ ") {
+            failed_names.push(name.to_string());
+        }
+        // Playwright fatals that abort before any test: a dead
+        // webServer, or an Error in a run that demonstrably was
+        // Playwright ("›" separators / spec paths present overall).
+        if trimmed.contains("Process from config.webServer") {
+            playwright_fatal = true;
         }
     }
-    // Suites failed but zero tests were counted → the file(s) broke
-    // before running (import of a not-yet-written function, syntax
-    // error). Surface each broken suite as one failing entry.
-    if passed == 0 && failed == 0 && suite_failures > 0 {
-        failed = suite_failures;
-        failed_names.push("<suite error>".to_string());
+    // "Error" bare on purpose: fatals arrive as `Error:`, but also
+    // `SyntaxError [Error]:` (broken config) and friends. Safe at
+    // this width because the branch below only fires when ZERO
+    // counts parsed and the output is demonstrably a Playwright run.
+    if !playwright_fatal
+        && stdout.contains("Error")
+        && !stdout.contains("No tests found")
+        && (stdout.contains(".spec.ts") || stdout.contains("[chromium]") || stdout.contains("playwright"))
+        && passed == 0
+        && failed == 0
+        && errors == 0
+    {
+        playwright_fatal = true;
+    }
+    failed_names.dedup();
+    // Ran-and-broke fold (same rule as pytest/cargo): suites or the
+    // whole run broke before tests executed → failing entries, so
+    // the loop has a gradient. "No tests found" stays 0/0/0 — that
+    // is the NoBaseline signal the fix→pin fallthrough steers by.
+    if passed == 0 && failed == 0 {
+        if suite_failures > 0 {
+            failed = suite_failures;
+            failed_names.push("<suite error>".to_string());
+        } else if errors > 0 {
+            failed = errors;
+            failed_names.push("<suite error>".to_string());
+        } else if playwright_fatal {
+            failed = 1;
+            failed_names.push("<suite error>".to_string());
+        }
+    } else {
+        // Tests ran; global errors still count alongside them.
+        failed = failed.saturating_add(errors);
+        if errors > 0 {
+            failed_names.push("<suite error>".to_string());
+        }
     }
     let total = passed.saturating_add(failed);
     TestParseResult {
@@ -198,6 +257,41 @@ pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
         total,
         failed_names,
     }
+}
+
+/// `"3 passed (4.2s)"` → `Some((3, "passed"))`. The Playwright line
+/// reporter's summary shape: a bare count, an outcome word, and
+/// nothing after except an optional `(duration)`. The trailing check
+/// keeps prose like "3 passed the review" from registering.
+fn playwright_summary(line: &str) -> Option<(u32, &'static str)> {
+    let mut words = line.split_whitespace();
+    let n: u32 = words.next()?.parse().ok()?;
+    let kind = match words.next()? {
+        "passed" => "passed",
+        "failed" => "failed",
+        "error" | "errors" => "errors",
+        "flaky" | "skipped" | "interrupted" => "ignored",
+        _ => return None,
+    };
+    match words.next() {
+        None => Some((n, kind)),
+        Some(next) if next.starts_with('(') => Some((n, kind)),
+        Some(_) => None,
+    }
+}
+
+/// Playwright failure listing names, both shapes:
+///   `✘ [chromium] › tests/x.spec.ts:9:5 › title` (handled by ✘ strip)
+///   `1) [chromium] › tests/x.spec.ts:9:5 › title ─────`
+fn playwright_failure_name(line: &str) -> Option<String> {
+    let (digits, rest) = line.split_once(") ")?;
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if !rest.contains(" › ") {
+        return None;
+    }
+    Some(rest.trim_end_matches(['─', ' ']).to_string())
 }
 
 fn count_number_before_token(s: &str, token: &str) -> u32 {
@@ -452,6 +546,76 @@ mod tests {
         assert_eq!(r.passed, 3);
         assert_eq!(r.failed, 1);
         assert_eq!(r.total, 4);
+    }
+
+    // ── playwright line reporter (SOLVE_PLAYWRIGHT) ────────────────
+
+    #[test]
+    fn playwright_line_summary_counts() {
+        let out = "Running 4 tests using 1 worker\n\n  1) [chromium] › tests/save.spec.ts:9:5 › save shows toast ─────\n\n    Error: expect(locator).toBeVisible() failed\n\n  1 failed\n    [chromium] › tests/save.spec.ts:9:5 › save shows toast\n  3 passed (4.2s)\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 3);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 4);
+        assert!(
+            r.failed_names
+                .iter()
+                .any(|n| n.contains("save.spec.ts:9:5 › save shows toast")),
+            "{:?}",
+            r.failed_names
+        );
+    }
+
+    #[test]
+    fn playwright_all_passing() {
+        let out = "Running 3 tests using 1 worker\n\n  3 passed (2.1s)\n";
+        let r = parse_vitest_default(out);
+        assert_eq!((r.passed, r.failed, r.total), (3, 0, 3));
+    }
+
+    #[test]
+    fn playwright_webserver_death_counts_as_suite_error() {
+        let out = "Error: Process from config.webServer was not able to start. Exit code: 1\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<suite error>"]);
+    }
+
+    #[test]
+    fn playwright_no_tests_found_stays_invisible() {
+        // NoBaseline signal — the fix→pin fallthrough depends on it.
+        let out = "Error: No tests found\n";
+        let r = parse_vitest_default(out);
+        assert_eq!((r.passed, r.failed, r.total), (0, 0, 0));
+    }
+
+    #[test]
+    fn playwright_spec_load_error_counts_as_suite_error() {
+        let out = "Error: tests/pin.spec.ts: Unexpected token (3:7)\n\n  1 error\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<suite error>"]);
+    }
+
+    #[test]
+    fn playwright_broken_config_counts_as_suite_error() {
+        // Real shape from a live run (job 09777dfe): babel reports
+        // `SyntaxError [Error]:` — no bare `Error:` substring, no
+        // summary counts at all.
+        let out = "SyntaxError [Error]: /app/playwright.config.ts: Missing semicolon. (14:6)\n    at constructor (/app/node_modules/playwright/lib/transform/babelBundle.js:14617:23)\n";
+        let r = parse_vitest_default(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.failed_names, vec!["<suite error>"]);
+    }
+
+    #[test]
+    fn playwright_prose_numbers_do_not_register() {
+        let out = "✓ 1 [chromium] › tests/x.spec.ts:3:1 › 3 passed the review checks\n";
+        let r = parse_vitest_default(out);
+        assert_eq!((r.passed, r.failed, r.total), (0, 0, 0));
     }
 
     #[test]

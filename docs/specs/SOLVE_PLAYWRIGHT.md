@@ -1,7 +1,19 @@
 # SOLVE × Playwright — UI goals through the same two fields
 
-Status: designed 2026-07-07, not started. Extends `SOLVE_UX.md`
-(built + live-verified); no changes to its contract.
+Status: built + live-verified 2026-07-07, both done-means paths, on
+the committed demo app (`sovereign/bench/web-demo`). Fix path: the
+planted toast bug → reached in 2 rounds, detected line byte-for-byte
+`playwright · CI=1 npx playwright test --reporter=line --retries=0
+--workers=1`. Pin path: "the Clear button empties the note field" →
+failing `tests/e2e/pin.spec.ts` (goto + role locators) → handler
+implemented → 2/2 passing, one round per stage. Implementation
+notes beyond the spec, from live receipts: candidates run SERIALLY
+for Playwright (parallel runs collide on the webServer port);
+`node_modules` is shared into candidate snapshots by symlink;
+`*.config.*` files are excluded from source discovery (candidates
+were "fixing" the test runner config); `CI=1` in the default command
+forces a fresh webServer per run so a user's running dev server is
+never silently reused.
 
 ## The promise, unchanged
 

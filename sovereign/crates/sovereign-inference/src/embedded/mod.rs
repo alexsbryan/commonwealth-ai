@@ -4,6 +4,7 @@
 //! re-exported flat so `crate::embedded::<Item>` paths are unchanged.
 #![allow(unused_imports)]
 
+mod control_vector;
 mod embed_only;
 mod embed_slot;
 mod engine;

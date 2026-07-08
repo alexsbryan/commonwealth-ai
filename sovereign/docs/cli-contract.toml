@@ -109,6 +109,7 @@ flags = [
   { name = "--watch" },
   { name = "--verb", takes_value = true },
   { name = "--max-lines", takes_value = true },
+  { name = "--suite", takes_value = true },
   { name = "--test-command", takes_value = true },
   { name = "--model", takes_value = true },
   { name = "--force" },

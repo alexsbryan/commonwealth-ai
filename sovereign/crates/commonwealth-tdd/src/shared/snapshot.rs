@@ -22,7 +22,12 @@ pub fn snapshot_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     if dst.exists() {
         for entry in std::fs::read_dir(dst)? {
             let entry = entry?;
-            if entry.file_name() == ".git" {
+            // `node_modules` is preserved like `.git`: it is
+            // heavyweight immutable infrastructure, not source. On
+            // winner-promote (candidate → canonical workdir) wiping
+            // it would leave the project unrunnable — and the
+            // candidate side only carries a symlink to it anyway.
+            if entry.file_name() == ".git" || entry.file_name() == "node_modules" {
                 continue;
             }
             let p = entry.path();
@@ -36,7 +41,35 @@ pub fn snapshot_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     } else {
         std::fs::create_dir_all(dst)?;
     }
-    copy_dir_filtered(src, dst)
+    copy_dir_filtered(src, dst)?;
+    share_node_modules(src, dst)
+}
+
+/// JS test commands need the dependency tree, but copying a
+/// `node_modules` (hundreds of MB with browsers' drivers) per
+/// candidate is prohibitive — so a fresh snapshot gets a SYMLINK to
+/// the source's real dir instead. Canonicalized first, so a
+/// candidate whose own `node_modules` is already a symlink (every
+/// candidate) hands the next hop the real directory, never a chain.
+/// Tests only read the tree; runtime caches inside it (vite's
+/// `.vite`) are dependency-keyed, and Playwright trials run
+/// candidates serially, so sharing is safe.
+#[cfg(unix)]
+fn share_node_modules(src: &Path, dst: &Path) -> std::io::Result<()> {
+    let nm_src = src.join("node_modules");
+    let nm_dst = dst.join("node_modules");
+    // symlink_metadata, not exists(): an existing-but-dangling
+    // symlink must count as present, or symlink() errors on it.
+    if !nm_src.is_dir() || nm_dst.symlink_metadata().is_ok() {
+        return Ok(());
+    }
+    let real = std::fs::canonicalize(&nm_src)?;
+    std::os::unix::fs::symlink(real, nm_dst)
+}
+
+#[cfg(not(unix))]
+fn share_node_modules(_src: &Path, _dst: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn copy_dir_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -126,5 +159,49 @@ mod tests {
         snapshot_dir(src.path(), &dst).unwrap();
         assert!(dst.join("a.py").exists());
         assert!(!dst.join("target").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn node_modules_is_shared_by_symlink_not_copied() {
+        let src = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(src.path().join("node_modules/vite")).unwrap();
+        std::fs::write(src.path().join("node_modules/vite/pkg.js"), "x").unwrap();
+        std::fs::write(src.path().join("app.ts"), "export {}\n").unwrap();
+        let dst_parent = tempfile::tempdir().unwrap();
+        let dst = dst_parent.path().join("snap");
+        snapshot_dir(src.path(), &dst).unwrap();
+        let nm = dst.join("node_modules");
+        assert!(nm.symlink_metadata().unwrap().file_type().is_symlink());
+        // Deps resolve through the link.
+        assert!(nm.join("vite/pkg.js").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn promote_preserves_dst_real_node_modules_and_never_chains() {
+        // Candidate (src, with a symlinked node_modules) promotes
+        // onto the canonical workdir (dst, with the REAL dir). The
+        // real dir must survive and stay a real dir.
+        let base = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(base.path().join("node_modules/vite")).unwrap();
+        std::fs::write(base.path().join("main.ts"), "old\n").unwrap();
+
+        let candidate = tempfile::tempdir().unwrap();
+        std::fs::write(candidate.path().join("main.ts"), "new\n").unwrap();
+        std::os::unix::fs::symlink(
+            base.path().join("node_modules"),
+            candidate.path().join("node_modules"),
+        )
+        .unwrap();
+
+        snapshot_dir(candidate.path(), base.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(base.path().join("main.ts")).unwrap(),
+            "new\n"
+        );
+        let meta = base.path().join("node_modules").symlink_metadata().unwrap();
+        assert!(meta.file_type().is_dir(), "real dir survived, no symlink chain");
+        assert!(base.path().join("node_modules/vite").exists());
     }
 }

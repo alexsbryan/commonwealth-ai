@@ -28,6 +28,8 @@ OPTIONS:
   --verb <v>            fix | pin | split — only when the default
                         inference isn't what you meant
   --max-lines <n>       with --verb split: per-file line budget
+  --suite <s>           unit | e2e — steer to the browser (Playwright)
+                        suite when the project has both
   --test-command <cmd>  override the auto-detected test command
   --model <id>          override the daemon's primary model
   --force               solve on a dirty tree (uncommitted changes)
@@ -38,12 +40,20 @@ EXIT CODE: 0 on reached/improved, 1 on stalled/no_baseline/errored,
 130 on cancelled.
 "#;
 
+/// Mirror of `commonwealth-tdd`'s Playwright default command (the
+/// CLI is a thin HTTP client and doesn't link the engine crate).
+/// If they drift the daemon still profiles correctly — it keys off
+/// the `playwright test` substring, present in both.
+const PLAYWRIGHT_TEST_COMMAND: &str =
+    "CI=1 npx playwright test --reporter=line --retries=0 --workers=1";
+
 struct Args {
     workdir: Option<String>,
     goal: Option<String>,
     watch: bool,
     verb: Option<String>,
     max_lines: Option<u64>,
+    suite: Option<String>,
     test_command: Option<String>,
     model: Option<String>,
     force: bool,
@@ -59,6 +69,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         watch: false,
         verb: None,
         max_lines: None,
+        suite: None,
         test_command: None,
         model: None,
         force: false,
@@ -91,6 +102,10 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--max-lines" => {
                 let v = take_value(args, i, "--max-lines")?;
                 out.max_lines = Some(v.parse().map_err(|_| "--max-lines needs a number")?);
+                i += 2;
+            }
+            "--suite" => {
+                out.suite = Some(take_value(args, i, "--suite")?);
                 i += 2;
             }
             "--test-command" => {
@@ -172,6 +187,20 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
+    // --suite translates to a test_command — the wire stays two
+    // fields plus the same optional overrides for everyone.
+    let test_command = match (parsed.suite.as_deref(), parsed.test_command.clone()) {
+        (Some(_), Some(_)) => {
+            eprintln!("error: pass one of --suite or --test-command, not both");
+            return 2;
+        }
+        (Some("e2e"), None) => Some(PLAYWRIGHT_TEST_COMMAND.to_string()),
+        (Some("unit"), None) | (None, _) => parsed.test_command.clone(),
+        (Some(other), None) => {
+            eprintln!("error: --suite {other:?} — valid: unit, e2e");
+            return 2;
+        }
+    };
     let mut body = serde_json::json!({
         "workdir": workdir,
         "goal": goal,
@@ -179,7 +208,7 @@ pub async fn run(args: &[String]) -> i32 {
     });
     for (key, v) in [
         ("verb", parsed.verb.clone().map(Value::from)),
-        ("test_command", parsed.test_command.clone().map(Value::from)),
+        ("test_command", test_command.map(Value::from)),
         ("model", parsed.model.clone().map(Value::from)),
         ("max_lines", parsed.max_lines.map(Value::from)),
     ] {
@@ -228,6 +257,9 @@ pub async fn run(args: &[String]) -> i32 {
         d["test_command"].as_str().unwrap_or("?"),
         d["model"].as_str().unwrap_or("?"),
     );
+    if d["also_detected"].as_str() == Some("playwright") {
+        println!("  note: playwright config present — unit suite is the default; pass --suite e2e for the browser tests");
+    }
 
     if !parsed.watch {
         println!(
@@ -428,6 +460,13 @@ mod tests {
     #[test]
     fn unknown_flag_is_an_error() {
         assert!(parse_args(&s(&["/repo", "goal", "--frobnicate"])).is_err());
+    }
+
+    #[test]
+    fn parses_suite_flag() {
+        let a = parse_args(&s(&["/repo", "save shows a toast", "--suite", "e2e"])).unwrap();
+        assert_eq!(a.suite.as_deref(), Some("e2e"));
+        assert!(a.test_command.is_none());
     }
 
     #[test]

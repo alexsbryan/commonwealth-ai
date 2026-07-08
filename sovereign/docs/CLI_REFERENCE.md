@@ -350,6 +350,7 @@ Submits to `POST /v1/solve/jobs` on the daemon and prints the job id plus what w
 | `--watch` | Stream rounds live until the job finishes |
 | `--verb <fix\|pin\|split>` | Path override when the default inference isn't what you meant: `fix` = only drive existing failing tests green; `pin` = only write the failing test; `split` = shrink oversized files |
 | `--max-lines <n>` | With `--verb split`: the per-file line budget |
+| `--suite <unit\|e2e>` | Steer to the browser (Playwright) suite when the project has both — unit stays the default |
 | `--test-command <cmd>` | Override the auto-detected test command |
 | `--model <id>` | Override the daemon's primary model |
 | `--force` | Solve on a dirty tree (uncommitted changes) |
@@ -358,6 +359,8 @@ Submits to `POST /v1/solve/jobs` on the daemon and prints the job id plus what w
 | `--cancel <job_id>` | Cancel a running job |
 
 The workdir must be a git repository with a clean tree (or `--force`); the daemon refuses system paths outright, allows one running job per workdir and two globally, and never edits outside the workdir. Exit code: 0 on `reached`/`improved`, 1 on `stalled`/`no_baseline`/`errored`, 130 on cancel.
+
+Web apps work through the same two fields (spec: [`docs/specs/SOLVE_PLAYWRIGHT.md`](../../docs/specs/SOLVE_PLAYWRIGHT.md)): a `playwright.config.{ts,js}` detects as the `playwright` framework with default command `CI=1 npx playwright test --reporter=line --retries=0 --workers=1` — retries off so flake reads as failing, `CI=1` so every candidate gets a fresh `webServer` instead of silently reusing a running dev server. Browser trials sample 3 candidates serially with a 300s per-run budget. Failure feedback includes Playwright's aria snapshot of the page (`error-context.md`) so the model reads the UI as text. When a project has both a unit framework and Playwright, unit stays the default and the job's `detected` says so — steer with `--suite e2e`.
 
 The same engine is exposed to agents as the `solve` / `solve_status` / `solve_cancel` MCP tools on the daemon's `/mcp` surface, and raw over HTTP: `POST /v1/solve/jobs`, `GET /v1/solve/jobs/{id}`, `GET /v1/solve/jobs/{id}/events` (SSE), `DELETE /v1/solve/jobs/{id}`.
 

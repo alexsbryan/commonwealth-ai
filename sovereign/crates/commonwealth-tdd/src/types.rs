@@ -82,6 +82,12 @@ pub struct TrialConfig {
     pub candidate_test_timeout: Duration,
     pub temp_ladder_default: Vec<f32>,
     pub temp_ladder_wide: Vec<f32>,
+    /// Run each round's candidates one at a time instead of in
+    /// parallel. For test commands whose runs can't overlap —
+    /// Playwright suites start a webServer on a fixed port, so
+    /// parallel candidates would collide on the bind (or silently
+    /// share one server and test the wrong tree).
+    pub serial_candidates: bool,
 }
 
 impl Default for TrialConfig {
@@ -103,6 +109,7 @@ impl Default for TrialConfig {
             candidate_test_timeout: Duration::from_secs(60),
             temp_ladder_default: vec![0.2, 0.4, 0.7, 0.9],
             temp_ladder_wide: vec![0.3, 0.6, 0.9, 1.1],
+            serial_candidates: false,
         }
     }
 }

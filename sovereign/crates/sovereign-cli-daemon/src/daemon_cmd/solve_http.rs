@@ -34,7 +34,7 @@ use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-use commonwealth_tdd::tasks::framework::{detect_framework, Framework};
+use commonwealth_tdd::tasks::framework::{detect_framework, has_playwright_config, Framework};
 use commonwealth_tdd::tasks::solve::{
     solve, SolveArgs, SolveOutcome, SolveRoundObserver, SolveVerb,
 };
@@ -88,6 +88,11 @@ pub struct Detected {
     pub framework: &'static str,
     pub test_command: String,
     pub model: String,
+    /// Set to "playwright" when a unit framework is the default but
+    /// a Playwright config is also present — the caller steers to
+    /// the e2e suite explicitly (`--suite e2e` / `test_command`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub also_detected: Option<&'static str>,
 }
 
 /// One SSE / ring event. `seq` is per-job monotonic so a client can
@@ -345,6 +350,7 @@ fn framework_label(f: Framework) -> &'static str {
         Framework::Vitest => "vitest",
         Framework::Jest => "jest",
         Framework::GoTest => "go-test",
+        Framework::Playwright => "playwright",
     }
 }
 
@@ -402,6 +408,9 @@ impl SolveJobs {
                 .clone()
                 .unwrap_or_else(|| framework.default_test_command().to_string()),
             model: req.model.clone().unwrap_or_else(|| DEFAULT_MODEL.into()),
+            also_detected: (framework != Framework::Playwright
+                && has_playwright_config(&canonical))
+            .then_some("playwright"),
         };
 
         let job = {
