@@ -11,7 +11,7 @@
 //! brain runs on the same open-weight 35B as the SUT.
 
 use sovereign_core::title::strip_thinking_response;
-use sovereign_core::types::CompletionRequest;
+use sovereign_core::types::{CompletionRequest, Speed};
 
 use super::personas::Persona;
 use super::transcript::{render, TranscriptTurn};
@@ -50,7 +50,10 @@ pub fn brain_request(persona: &Persona, transcript: &[TranscriptTurn], turn_inde
         "additionalProperties": false
     });
 
-    let mut req = CompletionRequest::new(&prompt);
+    // Extended latency class → primary slot (the 35B). The spec's
+    // brain is the 35B; the default Speed::Fast would silently run
+    // the personas on the small fast slot (2026-07-08 wire audit).
+    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Slow);
     req.system_message = Some(persona.system.trim().to_string());
     req.structured_output = Some(schema);
     req.temperature = Some(0.9);
@@ -64,10 +67,19 @@ pub fn brain_request(persona: &Persona, transcript: &[TranscriptTurn], turn_inde
 /// thread with a journaled error rather than feeding a broken turn
 /// to the SUT.
 pub fn parse_brain_message(text: &str) -> Option<String> {
+    // Tail first (normal thinking shape), then raw — small slots
+    // emit the inverted `{json}\n</think>\nprose` shape where the
+    // tail has no JSON at all.
     let tail = strip_thinking_response(text);
-    let candidate = extract_json_object(&tail)?;
-    let value: serde_json::Value = serde_json::from_str(&candidate).ok()?;
-    let message = value.get("message")?.as_str()?.trim().to_string();
+    let message = [tail.as_str(), text]
+        .iter()
+        .filter_map(|c| extract_json_object(c))
+        .filter_map(|obj| serde_json::from_str::<serde_json::Value>(&obj).ok())
+        .find_map(|v| {
+            v.get("message")
+                .and_then(|m| m.as_str())
+                .map(|s| s.trim().to_string())
+        })?;
     if message.is_empty() {
         None
     } else {
@@ -146,6 +158,14 @@ mod tests {
     #[test]
     fn parse_brain_message_handles_think_prefix_and_fence() {
         let raw = "<think>plan the turn</think>\n```json\n{\"message\": \"still here\"}\n```";
+        assert_eq!(parse_brain_message(raw).as_deref(), Some("still here"));
+    }
+
+    #[test]
+    fn parse_brain_message_handles_inverted_shape() {
+        // Small slots emit `{json}\n</think>\nprose`; the post-think
+        // tail then has no JSON and the raw-text fallback must win.
+        let raw = "{\"message\": \"still here\"}\n</think>\n\nRationale prose.";
         assert_eq!(parse_brain_message(raw).as_deref(), Some("still here"));
     }
 

@@ -2408,6 +2408,63 @@ impl Runtime {
             }
         }
 
+        // ── Deterministic wellbeing gate (streaming surface) ────
+        //
+        // Mirror of the `handle_turn` gate — see `runtime/wellbeing.rs`
+        // for the contract and the inner-chaos receipts behind it. On
+        // a Relational-register turn with a crisis signal, persist the
+        // guaranteed caring + crisis-resource response and emit it as
+        // a single stream frame; routing and synthesis never run.
+        {
+            let gate_mode = self.resolve_active_mode(conversation_id).await;
+            let declared_register = gate_mode
+                .as_deref()
+                .and_then(|id| self.skills.skill_by_id(id))
+                .map(|s| s.inference.register)
+                .unwrap_or_default();
+            let relational = declared_register == SkillRegister::Relational
+                || gate_mode.as_deref() == Some(crate::intent_policy::MODE_INNER_WORK);
+            if relational {
+                if let Some(signal) = super::wellbeing::maybe_wellbeing_signal(
+                    self.inference.as_ref(),
+                    &context,
+                    message,
+                )
+                .await
+                {
+                    tracing::info!(
+                        trigger = signal.trigger,
+                        first_fire = signal.first_fire,
+                        "wellbeing gate: crisis signal — crisis-constrained synthesis + guaranteed resource floor (stream)"
+                    );
+                    let (content, mode) = super::wellbeing::crisis_response(
+                        self.inference.as_ref(),
+                        &context,
+                        message,
+                        &signal,
+                    )
+                    .await;
+                    let assistant_msg = Message {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        conversation_id: conversation_id.to_string(),
+                        role: Role::Assistant,
+                        content,
+                        created_at: now(),
+                        metadata: Some(super::wellbeing::wellbeing_metadata(&signal, mode)),
+                        version: now(),
+                    };
+                    self.store.save_message(&assistant_msg).await?;
+                    let message_id = assistant_msg.id.clone();
+                    let content = assistant_msg.content.clone();
+                    let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+                    let _ = tx.send(Ok(content)).await;
+                    drop(tx);
+                    let stream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+                    return Ok(StreamHandle { message_id, stream });
+                }
+            }
+        }
+
         // 3. Route (or honour a preset classification from a
         // session-continuation call). When `preset` is `Some`, the
         // classifier call is skipped — the UI has already picked the

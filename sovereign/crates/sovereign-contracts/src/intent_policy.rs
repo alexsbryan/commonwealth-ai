@@ -234,19 +234,29 @@ pub fn policy_for(
 ///
 /// Behavior pinned by the routing benches:
 /// - Non-Relational register: returns intent unchanged.
-/// - Relational + ExpressiveQuery / DeepQuery / Continuation:
-///   returns intent unchanged (already on the witness path).
-/// - Relational + anything else (KnowledgeQuery, MetalingualQuery,
-///   ComparisonQuery, …): forces ExpressiveQuery so the witness
-///   handler takes over.
+/// - Relational + ExpressiveQuery / Continuation: returns intent
+///   unchanged (Expressive IS the witness path; Continuation carries
+///   a task_id whose resume contract re-classification would break).
+/// - Relational + anything else — including DeepQuery and
+///   GenerativeQuery — forces ExpressiveQuery so the ONE canonical
+///   witness handler takes over.
+///
+/// DeepQuery and GenerativeQuery were exempt until 2026-07-08. The
+/// inner-chaos baseline receipts killed both exemptions: DeepQuery's
+/// "witness branch" in `handle_simple` swapped the system message but
+/// shipped `kc.prompt` WITH retrieved corpus evidence (house-rules
+/// chunks and another corpus's journal entry surfaced verbatim into
+/// witness threads — the retrieval_leak/privacy_leak red lines), and
+/// the streaming surface had no witness branch at all; GenerativeQuery
+/// routed a dependency-seeking user into the creative path, which
+/// wrote romantic fiction role-playing as their partner. One witness
+/// path, no side doors.
 pub fn apply_witness_intent_override(intent: &Intent, register: SkillRegister) -> Intent {
     if register != SkillRegister::Relational {
         return intent.clone();
     }
     match intent {
-        // GenerativeQuery is its own no-retrieval creative path — don't force it
-        // onto the emotive witness path just because a relational skill is active.
-        Intent::ExpressiveQuery | Intent::DeepQuery | Intent::GenerativeQuery => intent.clone(),
+        Intent::ExpressiveQuery => intent.clone(),
         Intent::Continuation { .. } => intent.clone(),
         other => {
             tracing::info!(

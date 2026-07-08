@@ -197,6 +197,66 @@ impl Runtime {
             "runtime: context built"
         );
 
+        // ── Deterministic wellbeing gate (pre-routing) ──────────
+        //
+        // On the Relational (witness) surface, a crisis signal must
+        // produce a guaranteed caring + crisis-resource response —
+        // BEFORE routing, retrieval, or any model synthesis can get
+        // a say. `context.turn_register()` isn't populated yet (the
+        // intent policy binds after routing), so derive the declared
+        // register from the active mode the same way the policy
+        // build below does. See `runtime/wellbeing.rs` for the
+        // receipts that justify this gate.
+        {
+            let early_mode = self.resolve_active_mode(conversation_id).await;
+            let declared_register = early_mode
+                .as_deref()
+                .and_then(|id| self.skills.skill_by_id(id))
+                .map(|s| s.inference.register)
+                .unwrap_or_default();
+            let relational = declared_register == SkillRegister::Relational
+                || early_mode.as_deref() == Some(crate::intent_policy::MODE_INNER_WORK);
+            if relational {
+                if let Some(signal) = super::wellbeing::maybe_wellbeing_signal(
+                    self.inference.as_ref(),
+                    &context,
+                    message,
+                )
+                .await
+                {
+                    tracing::info!(
+                        trigger = signal.trigger,
+                        first_fire = signal.first_fire,
+                        "wellbeing gate: crisis signal — crisis-constrained synthesis + guaranteed resource floor"
+                    );
+                    let (content, mode) = super::wellbeing::crisis_response(
+                        self.inference.as_ref(),
+                        &context,
+                        message,
+                        &signal,
+                    )
+                    .await;
+                    let assistant_msg = Message {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        conversation_id: conversation_id.to_string(),
+                        role: Role::Assistant,
+                        content,
+                        created_at: now(),
+                        metadata: Some(super::wellbeing::wellbeing_metadata(&signal, mode)),
+                        version: now(),
+                    };
+                    self.store.save_message(&assistant_msg).await?;
+                    let mut metrics = RuntimeMetrics::default();
+                    metrics.total_turn_ms = Some(turn_start.elapsed().as_millis() as u64);
+                    return Ok(Response {
+                        message: assistant_msg,
+                        task: None,
+                        metrics: Some(metrics),
+                    });
+                }
+            }
+        }
+
         // Iter5: per-stage timing. We accumulate millisecond costs
         // upstream of dispatch and then attach them to the response
         // metrics if the handler populated metrics (witness paths
