@@ -112,7 +112,43 @@ fn strip_tool_code_blocks(s: &str) -> String {
         out
     }
     let s = pass(s, "<tool_code", "</tool_code>");
-    pass(&s, "<tool_call", "</tool_call>")
+    let s = pass(&s, "<tool_call", "</tool_call>");
+    strip_fenced_tool_blocks(&s)
+}
+
+/// Strip markdown-fenced tool-call blocks — the same reflex as the `<tool_call>`
+/// envelope but wearing a code-fence, observed 2026-07-08 (8h chaos run, folder
+/// corpus): the model emitted ```` ```tool_call:knowledge_lookup ```` as the
+/// answer. A fence whose info-string begins `tool_call`/`tool_code` is never
+/// legitimate answer content — it is a tool-invocation envelope. Remove the whole
+/// fenced span; if the closing fence is missing (abandoned mid-emit), drop from
+/// the open fence to end. Ordinary code fences (```rust, ```python, bare ```) are
+/// untouched — only the tool-envelope info-strings match.
+fn strip_fenced_tool_blocks(s: &str) -> String {
+    fn is_tool_fence(line: &str) -> bool {
+        let t = line.trim_start();
+        let Some(info) = t.strip_prefix("```") else {
+            return false;
+        };
+        let info = info.trim_start().to_lowercase();
+        info.starts_with("tool_call") || info.starts_with("tool_code")
+    }
+    let mut out: Vec<&str> = Vec::new();
+    let mut lines = s.lines().peekable();
+    while let Some(line) = lines.next() {
+        if is_tool_fence(line) {
+            // Consume through the closing fence (a line that is just ```), or to
+            // end if the block was never closed.
+            for inner in lines.by_ref() {
+                if inner.trim() == "```" {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(line);
+    }
+    out.join("\n")
 }
 
 /// Strip BARE tool-invocation lines — the envelope-less reflex (observed
@@ -253,7 +289,41 @@ pub fn looks_like_phantom_tool_call(text: &str) -> bool {
         "<tool_call",
         "<tool_code",
     ];
-    t.len() < 400 && MARKERS.iter().any(|m| t.contains(m))
+    if t.len() < 400 && MARKERS.iter().any(|m| t.contains(m)) {
+        return true;
+    }
+    // Whole-answer tool-PLANNING that leaked instead of an answer — observed
+    // 2026-07-08 (8h chaos run, unindexed folder corpus / needs-rebuild KB): the
+    // model narrated its intended retrieval ("I need to search … Let me use
+    // `knowledge_lookup` …", "search corpus:<id>") rather than answering. THREE
+    // signals must all hold, so a real answer is never caught:
+    //   (a) FIRST-PERSON future intent — the model announcing its OWN next action
+    //       ("I need to", "Let me", "I'll"), not describing HOW to a user;
+    //   (b) it names a specific internal RETRIEVAL tool the chat cannot run;
+    //   (c) it carries NO grounding citation (`[Source:]` / "Grounded in the
+    //       source") — a real answer that merely mentions such an identifier in
+    //       an instructional `code` block or cites a source is exempt.
+    // Length-guarded on top of that.
+    let low = t.to_lowercase();
+    const PHANTOM_RETRIEVAL: &[&str] = &[
+        "knowledge_lookup",
+        "claim_search",
+        "search corpus:",
+        "lookup corpus:",
+    ];
+    const FIRST_PERSON_INTENT: &[&str] = &[
+        "i need to ",
+        "i'll ",
+        "i will ",
+        "let me ",
+        "i'm going to ",
+        "i am going to ",
+    ];
+    t.len() < 700
+        && !low.contains("grounded in the source")
+        && !low.contains("[source:")
+        && PHANTOM_RETRIEVAL.iter().any(|m| low.contains(m))
+        && FIRST_PERSON_INTENT.iter().any(|m| low.contains(m))
 }
 
 /// Present a model answer for the user: strip phantom tool-call envelopes the
@@ -828,6 +898,64 @@ mod tests {
         assert_eq!(present_answer(real), real);
         let mentions = "Use the code_search tool in the CLI to find it.";
         assert_eq!(present_answer(mentions), mentions);
+    }
+
+    #[test]
+    fn fenced_tool_call_block_is_stripped() {
+        // 2026-07-08 (8h chaos run): the model emitted a markdown-fenced
+        // ```tool_call:knowledge_lookup``` block — the fence disguised the same
+        // reflex as the <tool_call> envelope, so it slipped past both strippers.
+        assert_eq!(
+            strip_fenced_tool_blocks("Here:\n```tool_call:knowledge_lookup\nquery: x\n```\ndone"),
+            "Here:\ndone"
+        );
+        // Unterminated fence → drop to end.
+        assert_eq!(
+            strip_fenced_tool_blocks("ok\n```tool_call\nknowledge_lookup(query=\"x\")"),
+            "ok"
+        );
+        // Ordinary code fences are untouched.
+        let rust = "See:\n```rust\nlet x = 1;\n```\nend";
+        assert_eq!(strip_fenced_tool_blocks(rust), rust);
+    }
+
+    #[test]
+    fn present_answer_falls_back_on_leaked_retrieval_plan() {
+        // The whole answer is the model narrating its intended retrieval instead
+        // of answering — no grounding, names a phantom tool the chat can't run.
+        // Observed 2026-07-08 on an unindexed folder corpus (step 275/332/746).
+        assert_eq!(
+            present_answer(
+                "search corpus:folder-corpus-2918e9ebc0b5 I don't have direct access to \
+                 that folder. Let me search my knowledge corpus for this identifier."
+            ),
+            TOOL_FALLBACK
+        );
+        assert_eq!(
+            present_answer(
+                "To identify the most important material, I need to inspect its contents. \
+                 I will use `knowledge_lookup` to find references to this corpus folder."
+            ),
+            TOOL_FALLBACK
+        );
+        assert_eq!(
+            present_answer(
+                "I need to search the local knowledge corpus. Let me use the claim_search \
+                 tool first, and if that doesn't work I'll try a more general approach."
+            ),
+            TOOL_FALLBACK
+        );
+    }
+
+    #[test]
+    fn grounded_answer_naming_a_tool_survives_the_plan_guard() {
+        // A REAL answer that cites a source is never a phantom, even if it mentions
+        // a retrieval identifier — the no-citation guard protects it.
+        let grounded = "The lookup path is `knowledge_lookup` [Source: retrieval.rs].";
+        assert_eq!(present_answer(grounded), grounded);
+        let grounded2 = "It searches the corpus first. Grounded in the source: \
+                         \"knowledge_lookup runs before synthesis\".";
+        assert_eq!(present_answer(grounded2), grounded2);
     }
 
     #[test]

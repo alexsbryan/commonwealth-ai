@@ -864,12 +864,15 @@ impl ModelSlot {
                 // window. (EmbedSlot keeps its own n_seq_max=16 — it
                 // genuinely batches.)
                 // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
-                // n_batch = context_size so the full context window is available
-                // for prompt processing. llama.cpp automatically splits the batch
-                // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
-                // memory pressure is unchanged — only the Rust-side assertion limit
-                // is relaxed.
-                .with_n_batch(context_size)
+                // n_batch must cover the full context window so the whole prompt is
+                // decodable. llama pads n_ctx up to a 256-multiple, so n_batch is
+                // rounded the same way (ctx_n_batch) — leaving it at the un-padded
+                // context_size lets a prompt in the padding gap trip the
+                // GGML_ASSERT(n_tokens_all <= n_batch) daemon-abort. llama.cpp still
+                // splits the batch into n_ubatch=512 micro-batches for kernel calls,
+                // so memory pressure is unchanged — only the Rust-side assertion
+                // limit moves.
+                .with_n_batch(ctx_n_batch(context_size))
                 .with_n_ubatch(512);
             if is_mtp_model {
                 // Only the target context type stays Default here; the
@@ -982,7 +985,9 @@ impl ModelSlot {
             backend: Arc::clone(backend),
             context_size,
             n_threads: n_threads as i32,
-            n_batch: context_size,
+            // Cover the padded n_ctx — see ctx_n_batch (a prompt in the
+            // n_ctx padding gap otherwise SIGABRTs the daemon in decode).
+            n_batch: ctx_n_batch(context_size),
             n_ubatch: 512,
             n_rs_seq: if is_mtp_model {
                 Some(mtp_n_rs_seq)
@@ -996,7 +1001,7 @@ impl ModelSlot {
                 .with_n_ctx(NonZeroU32::new(context_size))
                 .with_ctx_type(LlamaContextType::Mtp)
                 .with_n_rs_seq(mtp_n_rs_seq)
-                .with_n_batch(context_size)
+                .with_n_batch(ctx_n_batch(context_size))
                 .with_n_ubatch(512)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
@@ -1156,7 +1161,8 @@ impl ModelSlot {
                 // Error -1: n_tokens == 0" the moment a batch carries
                 // a second sequence — forensic trace 2026-05-18.
                 .with_n_seq_max(n_seq_max)
-                .with_n_batch(context_size)
+                // Cover the padded n_ctx — see ctx_n_batch.
+                .with_n_batch(ctx_n_batch(context_size))
                 .with_n_ubatch(n_ubatch)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
@@ -1465,7 +1471,14 @@ impl ModelSlot {
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
+        // Admit against min(n_ctx, n_batch): a prompt longer than n_batch
+        // cannot be decoded (GGML_ASSERT n_tokens_all <= n_batch aborts the
+        // daemon). ctx_n_batch keeps n_batch >= n_ctx so this normally
+        // resolves to n_ctx; the min is a belt-and-suspenders guard that
+        // demotes an over-long prompt to a graceful "prompt too long" error
+        // instead of a SIGABRT if that invariant ever regresses.
+        let admit_ctx = n_ctx.min(n_batch);
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), admit_ctx)?;
 
         // **Prefix caching.** Compute the longest common prefix
         // between what's currently in the KV cache (cached_tokens)
@@ -2278,7 +2291,18 @@ impl ModelSlot {
         // that's itself within the draft window of n_ctx makes
         // clamp_max_tokens error, which the outer quarantine demotes to
         // SingleToken — the correct fallback for a near-full context).
-        let mtp_ctx = n_ctx.saturating_sub(n_draft_max as usize + 1);
+        // Admit against min(n_ctx, n_batch): the prefill below decodes the
+        // whole prompt as a SINGLE batch (MTP needs logits on every position
+        // for pre-norm extraction), so a prompt longer than n_batch trips
+        // GGML_ASSERT(n_tokens_all <= n_batch) inside llama_decode and
+        // aborts the daemon. ctx_n_batch keeps n_batch >= n_ctx so this
+        // normally resolves to n_ctx; the min is a regression guard — an
+        // over-long prompt then errors from clamp_max_tokens and the outer
+        // quarantine demotes to SingleToken rather than SIGABRT-ing.
+        let n_batch_max = target_ctx.n_batch() as usize;
+        let mtp_ctx = n_ctx
+            .min(n_batch_max)
+            .saturating_sub(n_draft_max as usize + 1);
         let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), mtp_ctx)?;
 
         // Prefill: decode the entire prompt as one batch with
@@ -2292,7 +2316,6 @@ impl ModelSlot {
         // ModelSlot::load), so this prefill decode will compute and
         // store the pre-norm hidden state that `session.process` reads
         // back below.
-        let n_batch_max = target_ctx.n_batch() as usize;
         let prefill_capacity = tokens.len().max(n_batch_max);
         let mut prefill = LlamaBatch::new(prefill_capacity, 1);
         for (i, &tok) in tokens.iter().enumerate() {

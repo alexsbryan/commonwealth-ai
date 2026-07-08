@@ -145,6 +145,33 @@ pub(crate) fn clamp_max_tokens(
     Ok(resolved)
 }
 
+/// The `n_batch` an `LlamaContext` must be built with so that any prompt
+/// admitted against its runtime `n_ctx` is actually decodable.
+///
+/// llama.cpp pads the requested `n_ctx` **upward** at context
+/// construction (to the nearest multiple of 256), so the runtime
+/// `ctx.n_ctx()` can exceed the configured `context_size` by up to 255
+/// tokens. `clamp_max_tokens` admits prompts against that padded ceiling,
+/// but the decode path caps each batch at `cparams.n_batch`. If `n_batch`
+/// is left at the *un-padded* `context_size`, a prompt whose length lands
+/// in the `(context_size, padded_n_ctx]` gap is admitted yet trips
+/// `GGML_ASSERT(n_tokens_all <= cparams.n_batch)` inside `llama_decode` —
+/// which calls `abort()` and **SIGABRTs the entire daemon**, not just the
+/// request. Observed 2026-07-08: a 16090-token judge prompt on a
+/// `context_size=16000` slot whose runtime `n_ctx` had padded to 16124
+/// killed the unsupervised daemon mid-run (`ggml_abort` →
+/// `ModelSlot::generate_sync_mtp`).
+///
+/// Rounding `n_batch` up to the same 256-multiple guarantees
+/// `n_batch >= padded_n_ctx`, so "admittable" always implies "decodable"
+/// on every path (MTP prefill, SingleToken, continuous-batched). The cost
+/// is a few extra logit-buffer rows (n_ubatch=512 still governs the actual
+/// kernel tiling, so compute/KV memory is unchanged — only the Rust-side
+/// batch-length assertion limit moves).
+pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
+    context_size.next_multiple_of(256)
+}
+
 pub(crate) fn format_prompt(
     model: &LlamaModel,
     model_id: &str,

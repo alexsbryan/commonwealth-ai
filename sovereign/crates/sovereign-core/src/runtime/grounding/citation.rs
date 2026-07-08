@@ -248,7 +248,19 @@ fn answer_supported_by_quote(answer: &str, quote: &str) -> bool {
     let words: Vec<String> = answer
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.chars().count() >= 2 && !TINY_STOP.contains(w))
+        .filter(|w| {
+            // Pure-digit answers ("4", a single-chunk count) are valid COMPLETE
+            // number tokens — the >=2-char rule (there to drop tiny stopwords)
+            // must not swallow them, or a single-digit answer can never ground
+            // via the citation path and always falls through to the noisier
+            // legacy vp ladder. Observed 2026-07-08: answer "4" vs quote
+            // "…chunks_created >= 4;" logged present=true but answer_in_quote=false
+            // → false abstain → the "sources don't cover it" evidence-denial. The
+            // !is_empty guard matters: chars().all() is vacuously true for the
+            // empty strings split() emits between consecutive delimiters.
+            let pure_digit = !w.is_empty() && w.chars().all(|c| c.is_ascii_digit());
+            pure_digit || (w.chars().count() >= 2 && !TINY_STOP.contains(w))
+        })
         .map(String::from)
         .collect();
     !words.is_empty()
@@ -685,6 +697,24 @@ mod tests {
         assert!(answer_supported_by_quote(
             "Deloitte 2025",
             "review of Deloitte's performance during the engagement for the 2025 audit"
+        ));
+        // Single-digit answer (measured 2026-07-08 class-A evidence-denial): "4"
+        // is a valid COMPLETE number token in the quote. The old >=2-char word
+        // filter dropped it, emptied the word list, and returned false → a false
+        // abstain that surfaced as "the sources don't cover it".
+        assert!(answer_supported_by_quote(
+            "4",
+            "assert!(result.chunks_created >= 4);"
+        ));
+        // …but a single digit that is NOT a complete token in the quote (or is a
+        // prefix of a longer number) still fails — no free pass from the exemption.
+        assert!(!answer_supported_by_quote(
+            "5",
+            "assert!(result.chunks_created >= 4);"
+        ));
+        assert!(!answer_supported_by_quote(
+            "2",
+            "the NARA fileUnit 28949423 has 24 pages"
         ));
     }
 
