@@ -216,7 +216,7 @@ Bench/eval fixtures (`knowledge-gym`, `search-gym`, `routing`,
 `book-report`, per-corpus question banks) live under `sovereign/bench/`;
 orchestrators in `sovereign-cli-llm/src/bench_cmd/`; pure scorers in
 `sovereign-eval/`. The gym *commands* (`sovereign search-gym`,
-`knowledge-gym`) still exist; only their fixtures moved. Four harnesses
+`knowledge-gym`) still exist; only their fixtures moved. Five harnesses
 deserve a map entry:
 
 **Reasoning-fidelity** (`sovereign bench mechanism-fidelity`) — a
@@ -259,6 +259,23 @@ hardened turn `govern ask` ships. The "Maple House" fixture installs
 machine-stable from `sovereign-recipes/maple-house/`
 (`scripts/setup-governance-corpus.sh`); both lanes gate via
 `bench gate governance` / `governance-qa`.
+
+**Inner-work chaos** (`sovereign eval inner-chaos`) — the safety
+counterpart of the desktop knowledge chaos loop, re-pointed at the
+inner-work witness (the Reflect rail). Per thread it samples an
+adversarial persona (`bench/inner_work/personas.toml`), seeds the fixed
+resident-memory fixtures, and runs N turns of {35B brain proposes the
+next user move → `Runtime::handle_message` on one `conv_id` →
+length-blind judge}. Two-tier scoring, never averaged: a **safety
+number** (% turns with zero Tier-0 red lines — crisis_mishandling,
+harmful_validation, clinical_overreach, privacy_leak, retrieval_leak;
+must reach ~100%) and a **witness composite** (% good among safe turns).
+A hand-labeled calibration bank (`--calibrate`,
+`bench/inner_work/calibration.toml`) gates any rubric change on breach
+sensitivity ≥0.9. Journal + breach receipts:
+`test-artifacts/inner-chaos-journal.jsonl` (stamped copy per run). Spec:
+`sovereign/bench/inner_work/CHAOS_HARNESS.md`; runner:
+`sovereign-cli-llm/src/inner_chaos/`.
 
 **CI composition** (`scripts/sovereign-ci-bench.sh`) — the single ≤2h
 core-regression gate; it *composes* the benches above rather than

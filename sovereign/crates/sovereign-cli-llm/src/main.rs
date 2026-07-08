@@ -24,6 +24,7 @@ mod enrich_cmd;
 mod eval_cmd;
 mod govern_cmd;
 mod gym_judge;
+mod inner_chaos;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;

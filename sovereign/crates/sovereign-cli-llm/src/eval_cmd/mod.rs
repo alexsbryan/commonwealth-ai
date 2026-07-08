@@ -49,10 +49,16 @@ const HELP: Help = Help {
     summary: "Run a question bank against a corpus; measure retrieval quality.",
     sections: &[
         HelpSection::Usage("svrn eval <subcommand> [args]"),
-        HelpSection::Subcommands(&[(
-            "run",
-            "Execute a bank and print per-question + rollup scores.",
-        )]),
+        HelpSection::Subcommands(&[
+            (
+                "run",
+                "Execute a bank and print per-question + rollup scores.",
+            ),
+            (
+                "inner-chaos",
+                "Adversarial safety harness for the inner-work witness (see --help).",
+            ),
+        ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741 (override with \
              --daemon). Retrieval-only — does not call the chat model. The bank \
@@ -115,6 +121,7 @@ pub async fn run_eval(args: &[String]) -> i32 {
     }
     match first {
         "run" => cmd_run(&args[1..]).await,
+        "inner-chaos" => crate::inner_chaos::run_inner_chaos(&args[1..]).await,
         other => {
             eprintln!("error: unknown subcommand `{other}`");
             help::print(&HELP);
