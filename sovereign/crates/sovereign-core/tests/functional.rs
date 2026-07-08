@@ -1679,15 +1679,28 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
         .clone()
         .expect("summarize_dropped_history must call inference.complete exactly once");
 
-    // CRITICAL: removing this `Speed::Fast` would let chat content
-    // leak over the mesh on a local_only conversation. The
-    // `MeshInferenceProvider` only forwards `Speed::Slow` (see
-    // peer_inference.rs); Fast stays local. Defence in depth per
-    // ARCH §7.4.
+    // Compression runs on the fast slot — it's a cheap background
+    // summary and the small model suffices. NOTE (post-OICP-refactor):
+    // the fast slot is NOT what keeps this local anymore. Privacy is
+    // now carried by the LocalOnly envelope — `offload_eligible`
+    // forwards a turn only when `sharding == MeshAllowed && latency !=
+    // Fast` (see sovereign-mesh/oicp_select.rs), so a LocalOnly turn
+    // never crosses the mesh regardless of speed. Both are asserted:
+    // the slot for cost, the posture for the local-only guarantee
+    // (ARCH §7.4 defence-in-depth).
     assert!(
         matches!(captured.preferred_speed, Speed::Fast),
-        "summarize_dropped_history must use Speed::Fast to stay local-only, got {:?}",
+        "summarize_dropped_history must use the fast slot, got {:?}",
         captured.preferred_speed
+    );
+    assert_eq!(
+        captured
+            .oicp
+            .as_ref()
+            .expect("compression must carry a Workload envelope")
+            .sharding(),
+        sovereign_core::oicp::ShardingPrivacy::LocalOnly,
+        "summarize_dropped_history must stay LocalOnly — dropped chat content must never offload",
     );
     // Sanity: structured_output must be set so the parse path
     // remains deterministic. (If a future refactor swaps in a
@@ -1696,4 +1709,147 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
         captured.structured_output.is_some(),
         "summarize_dropped_history must request structured output"
     );
+}
+
+/// The two durable-memory-integrity guards — temporal-tension
+/// classification and contradiction detection — must run on the
+/// PRIMARY slot (they defend the durable store from corruption and a
+/// stronger model is worth it on a background task where latency buys
+/// nothing) YET must never leave the node (they read user-derived
+/// memory content). Post-OICP-refactor those two requirements are
+/// independent knobs: the ExtractDurable envelope makes them
+/// primary-class (`Speed::Slow` shadow) while its LocalOnly posture
+/// keeps `offload_eligible` false. This pins BOTH — a regression that
+/// reverted the class to Fast, OR one that opened the posture to
+/// MeshAllowed (leaking memory content over the mesh), fails here.
+/// Sibling of `summarize_dropped_history_uses_fast_slot_only`, which
+/// pins the *opposite* choice for the cheap compression path.
+#[tokio::test]
+async fn memory_integrity_guards_route_primary_and_stay_local() {
+    use async_trait::async_trait;
+    use futures::Stream;
+    use sovereign_core::error::{Error as CoreError, Result as CoreResult};
+    use sovereign_core::oicp::ShardingPrivacy;
+    use std::pin::Pin;
+    use std::sync::Mutex;
+
+    struct CapturingProvider {
+        captured: Mutex<Option<CompletionRequest>>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for CapturingProvider {
+        async fn complete(&self, request: &CompletionRequest) -> CoreResult<CompletionResponse> {
+            *self.captured.lock().unwrap() = Some(request.clone());
+            // Empty JSON array satisfies both guards' parse paths
+            // (tension classifications / contradiction indices) → each
+            // returns Ok with no findings. The test inspects the
+            // captured request, not the response.
+            Ok(CompletionResponse {
+                text: "[]".to_string(),
+                tokens_used: 1,
+                prompt_tokens: 0,
+                model_id: "capturing".to_string(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+            Err(CoreError::NotImplemented("capturing".to_string()))
+        }
+
+        async fn embed(&self, _text: &str) -> CoreResult<Vec<f32>> {
+            Err(CoreError::NotImplemented("capturing".to_string()))
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 2048,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    fn assert_primary_and_local(captured: &Mutex<Option<CompletionRequest>>, which: &str) {
+        let req = captured
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| panic!("{which} must call inference.complete exactly once"));
+        // Primary slot: the ExtractDurable bundle maps Normal latency →
+        // the Slow shadow, which the local slot picker routes to primary.
+        assert!(
+            matches!(req.preferred_speed, Speed::Slow),
+            "{which} must route to the primary slot (Speed::Slow), got {:?}",
+            req.preferred_speed
+        );
+        // Local-only: user-derived memory content must never offload.
+        // Under `offload_eligible` this is the load-bearing guarantee —
+        // Slow speed alone would offload if the posture were MeshAllowed.
+        assert_eq!(
+            req.oicp
+                .as_ref()
+                .unwrap_or_else(|| panic!("{which} must carry a Workload envelope"))
+                .sharding(),
+            ShardingPrivacy::LocalOnly,
+            "{which} must stay LocalOnly — memory content must never cross the mesh",
+        );
+    }
+
+    let existing = Memory {
+        id: "m1".to_string(),
+        content: "The user's cat is named Whiskers.".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0, // ≥ RELATIONAL_DIRECT_THRESHOLD (0.85) so it's a candidate
+        created_at: 0,
+        last_used: 0,
+        version: 0,
+        deleted_at: None,
+        source_conversation_id: None,
+        source_skill_id: None,
+        ..Default::default()
+    };
+
+    // Guard 1 — temporal-tension classification.
+    let p1 = CapturingProvider {
+        captured: Mutex::new(None),
+    };
+    sovereign_core::memory::detect_temporal_tensions(
+        &p1,
+        "The user's cat is named Mittens.",
+        std::slice::from_ref(&existing),
+    )
+    .await
+    .expect("detect_temporal_tensions should complete");
+    assert_primary_and_local(&p1.captured, "detect_temporal_tensions");
+
+    // Guard 2 — contradiction detection.
+    let new_mem = Memory {
+        id: "m2".to_string(),
+        content: "The user's cat is named Mittens.".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: 1,
+        last_used: 1,
+        version: 0,
+        deleted_at: None,
+        source_conversation_id: None,
+        source_skill_id: None,
+        ..Default::default()
+    };
+    let p2 = CapturingProvider {
+        captured: Mutex::new(None),
+    };
+    sovereign_core::memory::detect_contradictions(&p2, &new_mem, std::slice::from_ref(&existing))
+        .await
+        .expect("detect_contradictions should complete");
+    assert_primary_and_local(&p2.captured, "detect_contradictions");
 }
