@@ -100,7 +100,12 @@ pub(crate) fn synthesize_default_claims(
 /// honours. The embedded sampler enforces JSON-Schema and Lark grammars
 /// and the sampler allow-lists, consumes the `oicp` request envelope,
 /// honours `think_budget`, and stamps model fingerprints — the full set.
-const EMBEDDED_FEATURES: &[&str] = &[
+/// Exposed `pub` so the mesh gossip manifest (`oicp_synthesis::
+/// build_self_manifest`) advertises the identical set instead of
+/// re-deriving it — one source of truth for "what the embedded path can
+/// do", reachable over the existing `sovereign-mesh → commonwealth-api`
+/// cargo edge (SLOT_POLICY §6).
+pub const EMBEDDED_FEATURES: &[&str] = &[
     features::CONSTRAINT_JSON_SCHEMA,
     features::CONSTRAINT_JSON_OBJECT,
     features::CONSTRAINT_LARK,
@@ -109,6 +114,9 @@ const EMBEDDED_FEATURES: &[&str] = &[
     features::CONSTRAINT_ALLOWLIST_CMD_PREFIX,
     features::THINK_BUDGET,
     features::OICP_REQUEST_PROPERTIES,
+    // Commonwealth-local: the embedded path answers the forced-choice
+    // sentinel with a one-pass calibrated distribution (see model_slot).
+    features::X_FORCED_CHOICE,
 ];
 
 /// Conservative feature set for the standalone-Commonwealth orchestrator

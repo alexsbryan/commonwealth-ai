@@ -18,7 +18,8 @@
 use crate::error::Result;
 use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, InformationRequest, InformationRequestKind, Speed};
+use crate::slot_policy::Workload;
+use crate::types::{CompletionRequest, InformationRequest, InformationRequestKind};
 
 /// Hard caps on the inputs we feed the gap-assessment prompt. The
 /// gap-checker doesn't need the full answer or evidence — it just
@@ -120,34 +121,16 @@ pub async fn identify_gap(
         "required": ["has_gap"]
     });
 
-    let response = inference
-        .complete(&CompletionRequest {
-            prompt,
-            system_message: Some(
-                "You audit research answers for missing evidence. Output only \
-                 the requested JSON object — no thinking, no preface."
-                    .to_string(),
-            ),
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(GAP_MAX_TOKENS),
-            temperature: Some(0.0),
-            think_budget: Some(0),
-            structured_output: Some(schema),
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        })
-        .await?;
+    // SLOT_POLICY §3 Housekeep: gap-audit of a research answer.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_system(
+            "You audit research answers for missing evidence. Output only \
+             the requested JSON object — no thinking, no preface.",
+        )
+        .with_output_budget(GAP_MAX_TOKENS as u32);
+    request.temperature = Some(0.0);
+    request.structured_output = Some(schema);
+    let response = inference.complete(&request).await?;
 
     Ok(parse_gap_response(&response.text))
 }

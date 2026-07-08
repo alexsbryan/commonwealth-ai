@@ -30,6 +30,7 @@ use crate::error::Result;
 use crate::skills::SkillRegister;
 use crate::title::strip_thinking_response;
 use crate::traits::InferenceProvider;
+use crate::slot_policy::Workload;
 use crate::types::{CompletionRequest, Speed};
 
 /// What the Presenter returns. The text is the user-visible reply
@@ -523,7 +524,10 @@ pub fn present_request(
     // contract on a smaller model that couldn't hold it. Slow here
     // means the same Primary slot the Drafter just used — already
     // warm, KV-cache hot.
-    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Slow);
+    // SLOT_POLICY §3 Synthesize: the Presenter is the user-visible
+    // streaming surface. Bundle latency=Normal → shadow Speed::Slow
+    // (Primary), unchanged from the prior explicit Slow.
+    let mut req = CompletionRequest::for_workload(Workload::Synthesize, prompt);
     req.system_message = Some(system.to_string());
     // iter2 hard cap retained: 320 tokens (~1000 chars) so a
     // Presenter failure can't run away. The cap is even more

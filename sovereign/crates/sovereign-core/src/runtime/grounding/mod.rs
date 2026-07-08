@@ -360,7 +360,13 @@ pub(crate) async fn gate_answer(
     if config::citation_grounding_enabled() && (entity_anchored || config::citation_broad_enabled())
     {
         if let citation::CitationOutcome::Grounded { answer, quote } =
-            citation::citation_grounded_answer(&**inference, question, chunks).await
+            citation::citation_grounded_answer(
+                &**inference,
+                question,
+                chunks,
+                crate::slot_policy::posture_of(base_request),
+            )
+            .await
         {
             dbg(&format!(
                 "citation: GROUNDED → release (answer={:?} quote_chars={})",
@@ -452,6 +458,7 @@ pub(crate) async fn gate_answer(
         chunks,
         entity_anchored,
         evidence.searcher.as_ref(),
+        crate::slot_policy::posture_of(base_request),
     )
     .await
     {
@@ -564,6 +571,7 @@ pub(crate) async fn gate_answer(
                                 chunks,
                                 entity_anchored,
                                 evidence.searcher.as_ref(),
+                                crate::slot_policy::posture_of(base_request),
                             )
                             .await
                             {
@@ -939,7 +947,15 @@ async fn short_specifics_guard(
         // Small budget floored at 3 so even a terse citation answer ("David Hart")
         // gets a real check; scales modestly on longer short answers.
         let specifics =
-            scan_unsupported_specifics(inference, question, released, chunks, budget).await?;
+            scan_unsupported_specifics(
+                inference,
+                question,
+                released,
+                chunks,
+                budget,
+                crate::slot_policy::posture_of(base_request),
+            )
+            .await?;
         if specifics.is_empty() {
             return None; // clean — release unchanged
         }
@@ -983,7 +999,16 @@ async fn short_specifics_guard(
     // Re-scan the rewrite. Still fabricating → abstain; clean → release the
     // corrected answer. A re-scan judge failure falls open to keep the rewrite
     // (written under the corrective note, no worse than the flagged draft).
-    match scan_unsupported_specifics(inference, question, &second, chunks, budget).await {
+    match scan_unsupported_specifics(
+        inference,
+        question,
+        &second,
+        chunks,
+        budget,
+        crate::slot_policy::posture_of(base_request),
+    )
+    .await
+    {
         Some(v) if !v.is_empty() => {
             tracing::info!(
                 target: "grounding_gate",
@@ -1041,6 +1066,9 @@ async fn gate_longform(
     let chunks: &[String] = &evidence.chunks;
     let per_claim_chunks = profile.max_chunks;
     let min_claims = profile.max_claims;
+    // Session posture for the judge envelopes, resolved once from the
+    // synthesis turn's request; the audit closure captures it by copy.
+    let posture = crate::slot_policy::posture_of(base_request);
     let audit = |text: String| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
@@ -1049,7 +1077,7 @@ async fn gate_longform(
             // Budget scales with THIS text's length — audited afresh for the
             // draft and again for the (possibly different-length) rewrite.
             let budget = claim_budget(text.chars().count(), min_claims);
-            let claims = extract_claim_list(&inference, question, &text, budget).await?;
+            let claims = extract_claim_list(&inference, question, &text, budget, posture).await?;
             let mut failed: Vec<FailedClaim> = Vec::new();
             // Evidence + labels, lowercased once, for the deterministic
             // in-world attribution veto below.
@@ -1115,7 +1143,7 @@ async fn gate_longform(
                         .cloned(),
                 );
                 let cap = per_claim_chunks + extra.len();
-                match claim_violation_joint(&inference, claim, &judged, cap).await {
+                match claim_violation_joint(&inference, claim, &judged, cap, posture).await {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
                         if vp >= tau {
@@ -1138,7 +1166,8 @@ async fn gate_longform(
             // specific gets its grounding passage back, so the rewrite keeps it.
             if specifics_scan_enabled() {
                 if let Some(specifics) =
-                    scan_unsupported_specifics(&inference, question, &text, chunks, budget).await
+                    scan_unsupported_specifics(&inference, question, &text, chunks, budget, posture)
+                        .await
                 {
                     for spec in specifics {
                         // Citations are validated by the deterministic snap pass
@@ -1360,6 +1389,25 @@ mod tests {
             &self,
             request: &crate::types::CompletionRequest,
         ) -> Result<CompletionResponse> {
+            // P4-D contract: every judge call routed through this mock must
+            // carry the OICP Judge envelope and NOT the old
+            // `model_id: "primary"` pin (a latent privacy hole). This is the
+            // capture-stub assertion — it fires on the real gate paths the
+            // tests below drive (claim extraction + forced-choice support).
+            assert!(
+                request.model_id.is_none(),
+                "P4-D: judge request must not pin model_id; got {:?}",
+                request.model_id
+            );
+            let judge_oicp = request
+                .oicp
+                .as_ref()
+                .expect("P4-D: judge request must carry an OICP Judge envelope");
+            assert_eq!(
+                judge_oicp.effective_latency_class(),
+                crate::oicp::LatencyClass::Normal,
+                "P4-D: Judge envelope latency class"
+            );
             let text = if request
                 .structured_output
                 .as_ref()

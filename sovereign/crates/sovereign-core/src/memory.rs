@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::skills::{MergedMemoryConfig, SkillRegister};
+use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, MemoryScope, StateStore};
 use crate::types::*;
 
@@ -207,31 +208,20 @@ pub async fn compress_working_memory(
         recent.join("\n")
     );
 
-    let request = CompletionRequest {
-        prompt,
-        system_message: Some(
-            "Extract the user's goal and key facts from the conversation. Respond with JSON only."
-                .to_string(),
-        ),
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(200),
-        temperature: Some(0.1),
-        structured_output: None,
-        think_budget: None,
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: working-memory compression is advisory
+    // context, not durable truth. Bundle supplies latency=Fast (shadow
+    // Speed::Fast — pinned by `summarize_dropped_history_uses_fast_slot_only`).
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_system(
+            "Extract the user's goal and key facts from the conversation. Respond with JSON only.",
+        )
+        .with_output_budget(200);
+    request.temperature = Some(0.1);
+    // POLICY-DEBT(SLOT_POLICY §3 Housekeep): the Housekeep bundle sets
+    // think_budget=0, but this site historically left it at the config
+    // default (None) and is NOT schema-constrained, so 0 could change
+    // generation. Preserve None for P1 neutrality; P5 confirms the 0.
+    request.think_budget = None;
 
     let response = inference.complete(&request).await?;
     let result = parse_working_memory(&response.text, previous);
@@ -657,6 +647,11 @@ Reply with a JSON array, one entry per memory, in the original order:\n\
         }
     });
 
+    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): temporal-tension
+    // classification protects the durable memory store, so the policy
+    // class is ExtractDurable (normal/primary). It runs Fast today;
+    // this is a background task where latency buys nothing. Kept as-is
+    // for P1 routing-neutrality — re-adjudicated in P5 (F5 gray-zone).
     let mut request = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
     request.structured_output = Some(schema);
     request.max_tokens = Some(512);
@@ -761,6 +756,11 @@ pub async fn detect_contradictions(
         new_memory.content,
     );
 
+    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): contradiction
+    // detection guards the durable memory store from corruption — the
+    // policy class is ExtractDurable (normal/primary), not Fast. It is a
+    // background task; latency buys nothing. Kept as-is for P1
+    // routing-neutrality — re-adjudicated in P5 (F5 gray-zone).
     let request = CompletionRequest {
         prompt,
         system_message: Some(

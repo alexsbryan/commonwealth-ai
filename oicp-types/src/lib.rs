@@ -560,6 +560,18 @@ pub mod features {
     /// response metadata.
     pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
 
+    /// Extension (§4.3): a request may carry the forced-choice sentinel
+    /// (`structured_output: {"x_forced_choice": true, "enum": [...]}`) and
+    /// the host returns a calibrated next-token distribution over the
+    /// candidate labels in ONE forward pass instead of K sampling draws.
+    /// Deliberately an `x:` extension, NOT a `REGISTERED` string — it is a
+    /// Commonwealth-local capability pending a spec revision, so
+    /// `is_valid` admits it via the `x:` prefix without touching the
+    /// conformance registry. Advertised in `EMBEDDED_FEATURES`; the mesh
+    /// scheduler excludes peers that don't advertise it from forced-choice
+    /// dispatch (SLOT_POLICY §6).
+    pub const X_FORCED_CHOICE: &str = "x:forced_choice";
+
     /// Extension-feature prefix (§2.1). A host MAY advertise
     /// `x:`-prefixed features not registered in this crate build.
     pub const EXTENSION_PREFIX: &str = "x:";

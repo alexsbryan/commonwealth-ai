@@ -266,6 +266,11 @@ pub async fn score_facts_judge(
                  mention-in-context counts. Respond with JSON only."
                     .to_string(),
             ),
+            // POLICY-DEBT(SLOT_POLICY §3 Judge): a concept-coverage judge
+            // scores another output, so the policy class is Judge (Normal/
+            // primary). It runs Fast today; P5-5b measures Fast-vs-primary
+            // judge agreement on a fixture before flipping. SOVEREIGN_JUDGE_MODEL
+            // (below) already forces primary when set.
             preferred_speed: sovereign_core::types::Speed::Fast,
             max_tokens: Some(200),
             temperature: Some(0.0),
@@ -560,6 +565,10 @@ pub async fn score_sources_loose(
              on substance. Respond with JSON only."
                 .to_string(),
         ),
+        // POLICY-DEBT(SLOT_POLICY §3 Judge): a topical-coverage judge —
+        // policy class Judge (Normal/primary). Runs Fast today; P5-5b
+        // gates the flip on measured judge agreement. SOVEREIGN_JUDGE_MODEL
+        // forces primary when set.
         preferred_speed: sovereign_core::types::Speed::Fast,
         max_tokens: Some(800),
         temperature: Some(0.0),

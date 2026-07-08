@@ -382,7 +382,18 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         models,
         knowledge: None,
         federation: None,
-        features: Vec::new(),
+        // Advertise the embedded path's honoured features over gossip so
+        // peers can negotiate (§2.1) instead of guessing — previously
+        // `Vec::new()`, which left the whole mesh blind to feature
+        // support and forced the forced-choice scheduler filter to fail
+        // open. Single source of truth is commonwealth-api's
+        // `EMBEDDED_FEATURES` (mesh nodes run the embedded llama.cpp
+        // path); the HTTP `/oicp/v1/capabilities` route derives from the
+        // same const via `apply_v04_enrichment`.
+        features: commonwealth_api::routes_oicp::EMBEDDED_FEATURES
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     }
 }
 
@@ -611,6 +622,38 @@ mod self_manifest_tests {
             6,
             "expected fast + primary + 2 primary aliases + 2 fast aliases: {:#?}",
             manifest.models
+        );
+    }
+
+    #[test]
+    fn manifest_advertises_embedded_features_over_gossip() {
+        // SLOT_POLICY §6: the gossip manifest must carry the embedded
+        // path's honoured features (previously `Vec::new()`), so peers
+        // can negotiate `x:forced_choice` instead of the scheduler
+        // failing open. The list is the single-source-of-truth
+        // `EMBEDDED_FEATURES` const from commonwealth-api, shared with
+        // the HTTP `/oicp/v1/capabilities` route.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+        };
+        let manifest = build_self_manifest(&stub);
+        assert!(
+            manifest
+                .features
+                .iter()
+                .any(|f| f.as_str() == sovereign_core::oicp::features::X_FORCED_CHOICE),
+            "gossip manifest must advertise x:forced_choice: {:?}",
+            manifest.features
+        );
+        assert_eq!(
+            manifest.features,
+            commonwealth_api::routes_oicp::EMBEDDED_FEATURES
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            "gossip features must mirror commonwealth-api EMBEDDED_FEATURES"
         );
     }
 

@@ -182,12 +182,13 @@ impl Step for ModelStep {
 /// OICP latency class → the legacy `Speed` slot, for the `preferred_speed` field
 /// any pre-OICP consumer still reads. The OICP envelope is the primary routing
 /// signal; this just keeps the request struct internally coherent.
+///
+/// Delegates to the canonical map (SLOT_POLICY §8). `Normal` now yields
+/// `Slow`, not `Medium` (Medium is a deprecated alias); wire-neutral —
+/// the envelope, not this shadow, drives routing, and `Medium`/`Slow`
+/// hit the same primary slot in-process.
 fn speed_for(latency: LatencyClass) -> Speed {
-    match latency {
-        LatencyClass::Fast => Speed::Fast,
-        LatencyClass::Normal => Speed::Medium,
-        LatencyClass::Extended => Speed::Slow,
-    }
+    sovereign_contracts::slot_policy::latency_to_speed(latency)
 }
 
 fn latency_label(latency: LatencyClass) -> &'static str {

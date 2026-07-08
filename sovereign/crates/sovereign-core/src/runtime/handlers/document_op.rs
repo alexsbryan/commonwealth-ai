@@ -4,6 +4,7 @@
 //! itself is the response.
 
 use crate::error::Result;
+use crate::slot_policy::Workload;
 use crate::traits::*;
 
 use super::super::*;
@@ -87,8 +88,7 @@ impl Runtime {
         );
 
         // 2. Generate map/reduce prompts with a single focused inference call.
-        let prompt_request = CompletionRequest {
-            prompt: format!(
+        let prompt = format!(
                 "The user uploaded a document ({chunk_count} chunks, ~{word_count} words) and asked:\n\
                  \"{user_query}\"\n\n\
                  Write two prompts for a map-reduce analysis of this document.\n\n\
@@ -101,39 +101,25 @@ impl Runtime {
                  - Deduplicate and organize logically\n\n\
                  Respond in JSON only:\n\
                  {{\"map_prompt\": \"...\", \"reduce_prompt\": \"...\"}}"
-            ),
-            system_message: Some(
-                "You write analysis prompts. Output ONLY the JSON object, nothing else.".to_string()
-            ),
-            // Use the primary model for prompt generation — it's a one-time
-            // cost and the 0.6B fast model can't reliably produce JSON.
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(512),
-            temperature: Some(0.0),
-            think_budget: Some(0), // no thinking — just produce the JSON
-            structured_output: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "map_prompt": { "type": "string" },
-                    "reduce_prompt": { "type": "string" }
-                },
-                "required": ["map_prompt", "reduce_prompt"]
-            })),
-            // think_budget already set above
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-        };
+        );
+
+        // SLOT_POLICY §3 Synthesize: map/reduce prompt generation on the
+        // primary slot — the 0.6B fast model can't reliably produce this
+        // JSON, so it's a deliberate primary call. Schema-constrained, so
+        // think stays suppressed.
+        let mut prompt_request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            .with_system("You write analysis prompts. Output ONLY the JSON object, nothing else.")
+            .with_output_budget(512);
+        prompt_request.temperature = Some(0.0);
+        prompt_request.think_budget = Some(0); // no thinking — just produce the JSON
+        prompt_request.structured_output = Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "map_prompt": { "type": "string" },
+                "reduce_prompt": { "type": "string" }
+            },
+            "required": ["map_prompt", "reduce_prompt"]
+        }));
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
         let prompt_text = prompt_response.text.trim();

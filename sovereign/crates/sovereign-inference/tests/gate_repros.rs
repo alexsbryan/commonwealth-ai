@@ -126,9 +126,9 @@ fn shared_prefix() -> String {
 fn small_request(prompt: String) -> CompletionRequest {
     let mut r = CompletionRequest::new(&prompt);
     r.max_tokens = Some(8);
-    // CompletionRequest::new defaults to Speed::Medium; FastShort
-    // routing (pick_slot gate 2) requires Fast — without this the
-    // FastShort repro silently exercises the single-token slot.
+    // CompletionRequest::new defaults to Speed::Slow (primary);
+    // FastShort routing (pick_slot gate 2) requires Fast — without
+    // this the FastShort repro silently exercises the single-token slot.
     r.preferred_speed = Speed::Fast;
     r
 }

@@ -85,7 +85,8 @@ pub fn inference_to_batch_embed_fn(
 pub fn inference_to_inference_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_engine::InferenceFn {
-    use sovereign_core::types::{CompletionRequest, Speed};
+    use sovereign_core::slot_policy::Workload;
+    use sovereign_core::types::CompletionRequest;
     Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
         let inf = Arc::clone(&inference);
         // Schema (when the caller passes one) gates llama-cpp's
@@ -96,28 +97,28 @@ pub fn inference_to_inference_fn(
         // the legacy free-form path. Owned clone is required since
         // the future moves the request.
         let structured_output = schema.cloned();
-        let request = CompletionRequest {
-            prompt: prompt.to_string(),
-            system_message: None,
-            preferred_speed: Speed::Fast, // fast model — structured extraction doesn't need 27B
-            max_tokens: Some(4096), // dropped 2026-05-29 (evening): once grammar-constrained decoding lands via `structured_output`, the cap stops being load-bearing for JSON validity — the schema guarantees valid array close at any token count. Bigger cap (8192) just gives a rambling model more rope: observed 286s batches generating 10358 tokens after grammar lit up, dragging mean latency to 110s/batch. 4096 caps wall clock at ~80s/batch worst case while still fitting most observed valid bodies; over-cap batches end with a smaller-but-valid entity list (acceptable recall hit vs the throughput win).
-            temperature: Some(0.1), // low temperature for consistent JSON output
-            think_budget: Some(0),  // suppress thinking — hurts JSON, wastes tokens
-            structured_output,
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 EnrichBulk: high-volume corpus claim/relationship
+        // extraction where fast-class throughput is existential (the primary
+        // model at ~1 min/chunk makes enrichment impractical on large
+        // corpora) and quality is bench-validated per recipe.
+        let mut request = CompletionRequest::for_workload(Workload::EnrichBulk, prompt)
+            // POLICY-DEBT(SLOT_POLICY §4.5 EnrichBulk): 4096 > 512 forfeits
+            // the batched FastShort claim; kept — dropped 2026-05-29
+            // (evening): once grammar-constrained decoding lands via
+            // `structured_output`, the cap stops being load-bearing for JSON
+            // validity — the schema guarantees valid array close at any token
+            // count. Bigger cap (8192) just gives a rambling model more rope:
+            // observed 286s batches generating 10358 tokens after grammar lit
+            // up, dragging mean latency to 110s/batch. 4096 caps wall clock at
+            // ~80s/batch worst case while still fitting most observed valid
+            // bodies; over-cap batches end with a smaller-but-valid entity
+            // list (acceptable recall hit vs the throughput win).
+            .with_output_budget(4096);
+        request.temperature = Some(0.1); // low temperature for consistent JSON output
+        request.structured_output = structured_output;
+        // POLICY-DEBT(SLOT_POLICY §3 EnrichBulk): Some(0) preserved for P1
+        // neutrality (bundle is None); P5 confirms.
+        request.think_budget = Some(0); // suppress thinking — hurts JSON, wastes tokens
         Box::pin(async move {
             let resp = inf
                 .complete(&request)

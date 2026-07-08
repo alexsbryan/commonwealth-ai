@@ -32,6 +32,7 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
@@ -325,28 +326,16 @@ async fn summarize_via_fast_slot(provider: &dyn InferenceProvider, raw: &str) ->
                   Reference notes by id via [note:<id>] so the agent can expand what it \
                   needs. Do not invent facts — stay strictly grounded in the input. \
                   Target 300–600 words total.";
-    let request = CompletionRequest {
-        prompt: raw.to_string(),
-        system_message: Some(system.to_string()),
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(800),
-        temperature: Some(0.1),
-        structured_output: None,
-        think_budget: Some(0),
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: note-digest summarization — advisory
+    // turn-loop context (a compact digest the agent expands on demand),
+    // not durable truth. Housekeep's Some(0) think budget matches this
+    // site verbatim.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, raw.to_string())
+        .with_system(system)
+        // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 800 > 512 forfeits the
+        // batched FastShort claim; the 300–600-word digest target needs it.
+        .with_output_budget(800);
+    request.temperature = Some(0.1);
     let response = provider.complete(&request).await.map_err(|e| Error::Tool {
         tool_id: "read_note_digest".into(),
         message: e.to_string(),

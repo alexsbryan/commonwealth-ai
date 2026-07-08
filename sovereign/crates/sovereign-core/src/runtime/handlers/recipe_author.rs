@@ -33,6 +33,7 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 
 use super::super::*;
+use crate::slot_policy::Workload;
 
 use crate::tool_loop::{format_step_output, parse_assistant_text, tool_schemas_for};
 
@@ -190,28 +191,21 @@ impl Runtime {
                 } else {
                     serde_json::json!("auto")
                 };
-                let request = CompletionRequest {
-                    prompt: transcript.clone(),
-                    system_message: Some(system_prompt.clone()),
-                    preferred_speed: Speed::Slow,
-                    max_tokens: Some(ITERATION_MAX_TOKENS),
-                    temperature: Some(0.0),
-                    think_budget: Some(0),
-                    structured_output: None,
-                    top_k: None,
-                    top_p: None,
-                    oicp: None,
-                    tools: Some(tool_schemas.clone()),
-                    tool_choice: Some(tool_choice_value),
-                    model_id: None,
-                    enable_thinking: Some(false),
-                    sampling_mode: Some(SamplingMode::Instruct),
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: lark_grammar_for_loop.clone(),
-                };
+                // SLOT_POLICY §3 Passthrough: recipe-author agentic tool
+                // loop. Tools present → must serve on the primary slot
+                // (Fast has no tools template); Passthrough shadow =
+                // Speed::Slow, unchanged.
+                let mut request =
+                    CompletionRequest::for_workload(Workload::Passthrough, transcript.clone())
+                        .with_system(&system_prompt);
+                request.max_tokens = Some(ITERATION_MAX_TOKENS);
+                request.temperature = Some(0.0);
+                request.think_budget = Some(0);
+                request.tools = Some(tool_schemas.clone());
+                request.tool_choice = Some(tool_choice_value);
+                request.enable_thinking = Some(false);
+                request.sampling_mode = Some(SamplingMode::Instruct);
+                request.lark_grammar = lark_grammar_for_loop.clone();
 
                 let response = match inference.complete(&request).await {
                     Ok(r) => r,

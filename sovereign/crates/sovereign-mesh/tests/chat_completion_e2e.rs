@@ -91,7 +91,7 @@ struct StreamQuery {
     stream: Option<bool>,
 }
 
-async fn capabilities_handler() -> impl IntoResponse {
+fn two_slot_manifest(features: Vec<String>) -> ProviderManifest {
     // Two slots, same shape as `build_self_manifest` produces on a
     // real high-profile Founder after the multi-slot change:
     // Qwen3.5-9B (5.5 GB, score ~0.75 on DeepQuery) and
@@ -102,7 +102,7 @@ async fn capabilities_handler() -> impl IntoResponse {
     // (smaller size_gb) promotes the 9B. The v0.3 wire tests below
     // use a different scoring assumption; the key assertion is that
     // routing reaches the peer at all, not which slot it lands on.
-    let manifest = ProviderManifest {
+    ProviderManifest {
         oicp_version: OICP_VERSION.into(),
         provider: None,
         models: vec![
@@ -158,9 +158,19 @@ async fn capabilities_handler() -> impl IntoResponse {
         ],
         knowledge: None,
         federation: None,
-        features: Vec::new(),
-    };
-    Json(manifest)
+        features,
+    }
+}
+
+async fn capabilities_handler() -> impl IntoResponse {
+    Json(two_slot_manifest(Vec::new()))
+}
+
+/// Capabilities of a peer that DOES advertise the forced-choice feature.
+async fn capabilities_handler_fc() -> impl IntoResponse {
+    Json(two_slot_manifest(vec![
+        sovereign_core::oicp::features::X_FORCED_CHOICE.to_string(),
+    ]))
 }
 
 async fn chat_completions_handler(
@@ -212,6 +222,22 @@ async fn spawn_mock_peer() -> SocketAddr {
     addr
 }
 
+/// Like `spawn_mock_peer` but the capabilities endpoint advertises the
+/// `x:forced_choice` feature — used by the forced-choice scheduler-filter
+/// tests to distinguish an eligible peer from an excluded one.
+async fn spawn_mock_peer_fc() -> SocketAddr {
+    let app = Router::new()
+        .route("/oicp/v1/capabilities", get(capabilities_handler_fc))
+        .route("/v1/chat/completions", post(chat_completions_handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    addr
+}
+
 // ── The test ────────────────────────────────────────────────
 
 #[tokio::test]
@@ -254,8 +280,13 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         .with_hint(CapabilityHint::general())
         .with_latency_class(LatencyClass::Extended)
         .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    // The OICP envelope (MeshAllowed + Extended latency) is what
+    // makes this offload-eligible per SLOT_POLICY §5. The Speed
+    // literal is a derived shadow and no longer gates routing — see
+    // `mesh_allowed_normal_latency_routes_to_peer_without_speed_signal`
+    // below, which routes to a peer on a Fast-speed request.
     let request = CompletionRequest::new("Is free will compatible with determinism?")
-        .with_speed(Speed::Slow) // Only Speed::Slow ever routes to peers.
+        .with_speed(Speed::Slow)
         .with_oicp(envelope);
 
     // 6. Exercise the full path.
@@ -532,6 +563,249 @@ async fn local_only_sharding_never_routes_to_peer() {
             );
         }
     }
+}
+
+/// SLOT_POLICY §5 headline — the OICP envelope decides offload, not
+/// the `Speed` shadow. A `MeshAllowed` + `Normal`-latency request on
+/// a **`Speed::Fast`** turn (no `Speed::Slow` signal at all) must
+/// route to the peer. Under the old gate the `preferred_speed != Slow`
+/// check bailed this to local before the envelope was ever consulted;
+/// now `offload_eligible` (MeshAllowed && latency != Fast) admits it.
+#[tokio::test]
+async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = local_byom();
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    // Normal latency is an EXACT class match for the mock peer's
+    // Normal-latency claims, so the peer scores at least as well as
+    // in `joiner_streams_through_mesh_and_attributes_peer` (which
+    // uses adjacent-class Extended and still routes).
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Normal)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let request = CompletionRequest::new("summarize this thread")
+        .with_speed(Speed::Fast) // deliberately NOT Slow — the envelope decides.
+        .with_oicp(envelope);
+
+    let (mut stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("MeshAllowed + non-Fast latency must route to the peer regardless of Speed");
+    assert!(
+        model_id.contains("@ peer Founder"),
+        "envelope-eligible request should route to peer; got {model_id:?}"
+    );
+
+    let mut collected = String::new();
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.expect("stream chunk should be Ok"));
+    }
+    assert_eq!(collected, PEER_RESPONSE_TEXT);
+}
+
+/// SLOT_POLICY §5 privacy gate — a `LocalOnly` request stays local
+/// no matter its latency class. This is the judge-shaped case: a
+/// Normal-latency grounding judge on a private turn must never cross
+/// the network. Distinct from `local_only_sharding_never_routes_to_peer`
+/// (which uses Extended latency) — proves the privacy gate is
+/// latency-independent.
+#[tokio::test]
+async fn local_only_judge_shaped_request_stays_local() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = local_byom();
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Normal)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::LocalOnly);
+    let request = CompletionRequest::new("grade this answer against the evidence")
+        .with_speed(Speed::Slow)
+        .with_oicp(envelope);
+
+    match wrapper.complete_stream_with_id(&request).await {
+        Ok(_) => panic!("LocalOnly must not route to a peer, even at Normal latency"),
+        Err(e) => {
+            let msg = format!("{e}");
+            assert!(
+                msg.contains("complete_stream"),
+                "expected the local stream path error; got {msg:?}"
+            );
+        }
+    }
+}
+
+/// SLOT_POLICY §5 latency gate — latency-`Fast` work never offloads,
+/// even on a `MeshAllowed` mesh and even carrying a `Speed::Slow`
+/// literal. The round-trip dominates the inference for router/title/
+/// compression-class turns, so `offload_eligible` fails them closed.
+#[tokio::test]
+async fn latency_fast_never_routes_even_when_mesh_allowed() {
+    let peer_addr = spawn_mock_peer().await;
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = local_byom();
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Fast)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let request = CompletionRequest::new("route: is this a question or a command?")
+        .with_speed(Speed::Slow) // even a Slow shadow cannot override latency Fast.
+        .with_oicp(envelope);
+
+    match wrapper.complete_stream_with_id(&request).await {
+        Ok(_) => panic!("latency Fast must stay local even when MeshAllowed"),
+        Err(e) => {
+            let msg = format!("{e}");
+            assert!(
+                msg.contains("complete_stream"),
+                "expected the local stream path error; got {msg:?}"
+            );
+        }
+    }
+}
+
+/// SLOT_POLICY §6 — a forced-choice sentinel must NOT route to a peer
+/// whose manifest lacks `x:forced_choice`: that peer would silently fall
+/// back to K-sampling, defeating the one-pass calibrated elicitation. The
+/// default mock peer advertises no features, so the scheduler filter
+/// excludes it and the request stays local (our stub errors there).
+#[tokio::test]
+async fn forced_choice_sentinel_excludes_peer_without_feature() {
+    let peer_addr = spawn_mock_peer().await; // advertises NO features
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = local_byom();
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Extended)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let mut request = CompletionRequest::new("pick one: A or B")
+        .with_speed(Speed::Slow)
+        .with_oicp(envelope);
+    request.max_tokens = Some(1);
+    request.structured_output = Some(serde_json::json!({
+        "type": "string",
+        "enum": ["A", "B"],
+        "x_forced_choice": true,
+    }));
+
+    match wrapper.complete_stream_with_id(&request).await {
+        Ok(_) => panic!("forced-choice sentinel must not route to a peer lacking x:forced_choice"),
+        Err(e) => {
+            let msg = format!("{e}");
+            assert!(
+                msg.contains("complete_stream"),
+                "expected the local stream path error; got {msg:?}"
+            );
+        }
+    }
+}
+
+/// SLOT_POLICY §6 — the same sentinel DOES route to a peer that
+/// advertises `x:forced_choice`. Confirms the filter excludes on absence,
+/// not on the sentinel's presence.
+#[tokio::test]
+async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
+    let peer_addr = spawn_mock_peer_fc().await; // advertises x:forced_choice
+    let base_url = format!("http://{}/v1", peer_addr);
+
+    let peers = vec![PeerInferenceEndpoint {
+        node_id: NodeId::from_u128(42),
+        name: "Founder".into(),
+        base_urls: vec![base_url],
+        system_ram_gb: 64,
+        benchmark: None,
+        current_in_flight: None,
+        inference_availability: None,
+        transport: None,
+    }];
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
+    let local: Arc<dyn InferenceProvider> = local_byom();
+    let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
+
+    let envelope = InferenceRequirements::new()
+        .with_hint(CapabilityHint::general())
+        .with_latency_class(LatencyClass::Extended)
+        .with_sharding(sovereign_core::oicp::ShardingPrivacy::MeshAllowed);
+    let mut request = CompletionRequest::new("pick one: A or B")
+        .with_speed(Speed::Slow)
+        .with_oicp(envelope);
+    request.max_tokens = Some(1);
+    request.structured_output = Some(serde_json::json!({
+        "type": "string",
+        "enum": ["A", "B"],
+        "x_forced_choice": true,
+    }));
+
+    let (mut stream, model_id) = wrapper
+        .complete_stream_with_id(&request)
+        .await
+        .expect("feature-advertising peer must receive the forced-choice sentinel");
+    assert!(
+        model_id.contains("@ peer Founder"),
+        "should route to the feature-advertising peer; got {model_id:?}"
+    );
+
+    let mut collected = String::new();
+    while let Some(chunk) = stream.next().await {
+        collected.push_str(&chunk.expect("stream chunk should be Ok"));
+    }
+    assert_eq!(collected, PEER_RESPONSE_TEXT);
 }
 
 // ── Explicit `model` field routing ─────────────────────────────

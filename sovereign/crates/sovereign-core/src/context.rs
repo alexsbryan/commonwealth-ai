@@ -2,6 +2,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
+use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, StateStore};
 use crate::types::*;
 
@@ -200,28 +201,11 @@ pub async fn summarize_dropped_history(
         "required": ["summary"],
     });
 
-    let request = CompletionRequest {
-        prompt,
-        system_message: None,
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(400),
-        temperature: Some(0.0),
-        think_budget: Some(0),
-        structured_output: Some(schema),
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: conversation-preamble summarization.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_output_budget(400);
+    request.temperature = Some(0.0);
+    request.structured_output = Some(schema);
 
     let response = inference.complete(&request).await?;
     let raw = response.text.trim();
@@ -366,28 +350,11 @@ pub async fn update_topic_context(
         "required": ["topic", "domain"],
     });
 
-    let request = CompletionRequest {
-        prompt,
-        system_message: None,
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(60),
-        temperature: Some(0.0),
-        think_budget: Some(0),
-        structured_output: Some(schema),
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: topic/domain extraction.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_output_budget(60);
+    request.temperature = Some(0.0);
+    request.structured_output = Some(schema);
 
     let response = inference.complete(&request).await?;
     let raw = response.text.trim();

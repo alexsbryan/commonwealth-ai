@@ -24,6 +24,7 @@ use std::sync::Arc;
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
+use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
@@ -1049,31 +1050,13 @@ impl DocumentAssetManager {
             doc_type = asset.document_type.label(),
         );
 
-        let response = self
-            .inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Fast,
-                max_tokens: Some(128),
-                temperature: Some(0.0),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            })
-            .await?;
+        // SLOT_POLICY §3 Route: operation classification consumed by
+        // parse_route_response (control flow), never shown to the user.
+        // Route's Some(0) think budget matches this site verbatim.
+        let mut req = CompletionRequest::for_workload(Workload::Route, prompt)
+            .with_output_budget(128);
+        req.temperature = Some(0.0);
+        let response = self.inference.complete(&req).await?;
 
         parse_route_response(&response.text, request)
     }
@@ -1217,7 +1200,7 @@ impl DocumentAssetManager {
             .complete(&CompletionRequest {
                 prompt,
                 system_message: None,
-                preferred_speed: Speed::Medium,
+                preferred_speed: Speed::Slow,
                 max_tokens: Some(1024),
                 temperature: Some(0.3),
                 think_budget: Some(0),
@@ -1387,31 +1370,15 @@ impl DocumentAssetManager {
              referencing specific content."
         );
 
-        let response = self
-            .inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(2048),
-                temperature: Some(0.5),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            })
-            .await?;
+        // SLOT_POLICY §3 Synthesize: full-document synthesis composed for
+        // the user (traces a focus across the text).
+        let mut req = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            .with_output_budget(2048);
+        req.temperature = Some(0.5);
+        // POLICY-DEBT(SLOT_POLICY §3 Synthesize): Some(0) preserved for P1
+        // neutrality (bundle is None); P5 confirms.
+        req.think_budget = Some(0);
+        let response = self.inference.complete(&req).await?;
 
         // Swap the prompt-trimmed `content` on each citation back out for
         // the full chunk content so the Tauri handler persists the real
@@ -1517,7 +1484,7 @@ impl DocumentAssetManager {
             .complete(&CompletionRequest {
                 prompt,
                 system_message: None,
-                preferred_speed: Speed::Medium,
+                preferred_speed: Speed::Slow,
                 max_tokens: Some(1024),
                 temperature: Some(0.3),
                 think_budget: Some(0),
@@ -1587,7 +1554,7 @@ impl DocumentAssetManager {
             .complete(&CompletionRequest {
                 prompt,
                 system_message: None,
-                preferred_speed: Speed::Medium,
+                preferred_speed: Speed::Slow,
                 max_tokens: Some(2048),
                 temperature: Some(0.3),
                 think_budget: Some(0),
@@ -1652,30 +1619,13 @@ async fn detect_document_type(
          Respond with exactly one word: Narrative, Argument, Evidence, Chronicle, or Technical."
     );
 
-    let response = inference
-        .complete(&CompletionRequest {
-            prompt,
-            system_message: None,
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(16),
-            temperature: Some(0.0),
-            think_budget: Some(0),
-            structured_output: None,
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        })
-        .await;
+    // SLOT_POLICY §3 Route: document-type classification consumed by
+    // control flow (DocumentTypeTag), never shown to the user. Route's
+    // Some(0) think budget matches this site verbatim.
+    let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+        .with_output_budget(16);
+    request.temperature = Some(0.0);
+    let response = inference.complete(&request).await;
 
     let detected = match response {
         Ok(r) => {
@@ -1789,30 +1739,19 @@ async fn build_skeleton(
                      entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
                 );
 
-                let response = inference
-                    .complete(&CompletionRequest {
-                        prompt,
-                        system_message: None,
-                        preferred_speed: Speed::Slow,
-                        max_tokens: Some(120),
-                        temperature: Some(0.1),
-                        think_budget: Some(0),
-                        structured_output: None,
-                        top_k: None,
-                        top_p: None,
-                        oicp: None,
-                        tools: None,
-                        tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-                        sampling_mode: None,
-                        assistant_prefix: None,
-                        cmd_prefix: None,
-                        url_allowlist: None,
-                        evidence_id_allowlist: None,
-                        lark_grammar: Some(lark_grammar),
-                    })
-                    .await;
+                // SLOT_POLICY §3 ExtractDurable: skeleton entity extraction
+                // written to the durable document skeleton; corruption
+                // outlives the session.
+                let mut request =
+                    CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+                        .with_output_budget(120);
+                request.temperature = Some(0.1);
+                // Grammar constraint preserved verbatim (see lark_grammar above).
+                request.lark_grammar = Some(lark_grammar);
+                // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved
+                // for P1 neutrality (bundle is None); P5 confirms.
+                request.think_budget = Some(0);
+                let response = inference.complete(&request).await;
                 let parsed = response
                     .ok()
                     .map(|resp| parse_lean_skeleton_batch(&resp.text, batch_start, batch.len()));
@@ -2100,30 +2039,15 @@ async fn extract_segments(
              Segment content:\n{body}\nJSON:",
             doc_type = doc_type.label(),
         );
-        let resp = inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(180),
-                temperature: Some(0.1),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            })
-            .await;
+        // SLOT_POLICY §3 ExtractDurable: segment naming (title/summary/
+        // function/entities) written to the durable skeleton.
+        let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+            .with_output_budget(180);
+        request.temperature = Some(0.1);
+        // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for
+        // P1 neutrality (bundle is None); P5 confirms.
+        request.think_budget = Some(0);
+        let resp = inference.complete(&request).await;
         let (title, summary, function, key_entities) = match resp {
             Ok(r) => parse_segment_naming(&r.text).unwrap_or_else(|| {
                 (
@@ -2525,30 +2449,15 @@ async fn classify_motifs(
         doc_type = doc_type.label(),
     );
 
-    let resp = inference
-        .complete(&CompletionRequest {
-            prompt,
-            system_message: None,
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(400),
-            temperature: Some(0.1),
-            think_budget: Some(0),
-            structured_output: None,
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        })
-        .await;
+    // SLOT_POLICY §3 ExtractDurable: recurring-motif classification written
+    // to the durable skeleton; corruption outlives the session.
+    let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+        .with_output_budget(400);
+    request.temperature = Some(0.1);
+    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for P1
+    // neutrality (bundle is None); P5 confirms.
+    request.think_budget = Some(0);
+    let resp = inference.complete(&request).await;
 
     let distinctive_set: std::collections::HashSet<String> = match resp {
         Ok(r) => parse_motif_classification(&r.text),
@@ -2851,30 +2760,15 @@ async fn extract_action_atoms(
             name = ent.name,
         );
 
-        let response = inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Fast,
-                max_tokens: Some(768),
-                temperature: Some(0.1),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            })
-            .await;
+        // SLOT_POLICY §3 Housekeep: per-entity action-atom extraction —
+        // advisory enrichment kept on the Fast slot (P1 neutrality).
+        // Housekeep's Some(0) think budget matches this site verbatim.
+        let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+            // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 768 > 512 forfeits the
+            // batched FastShort claim; the JSON action array needs the room.
+            .with_output_budget(768);
+        request.temperature = Some(0.1);
+        let response = inference.complete(&request).await;
 
         let text = match response {
             Ok(r) => r.text,
@@ -2962,29 +2856,14 @@ async fn generate_overview(
         doc_type = doc_type.label(),
     );
 
+    // SLOT_POLICY §3 Housekeep: one-paragraph document overview —
+    // advisory context, not durable truth. Housekeep's Some(0) think
+    // budget matches this site verbatim.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_output_budget(256);
+    request.temperature = Some(0.3);
     inference
-        .complete(&CompletionRequest {
-            prompt,
-            system_message: None,
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(256),
-            temperature: Some(0.3),
-            think_budget: Some(0),
-            structured_output: None,
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        })
+        .complete(&request)
         .await
         .map(|r| r.text)
         .unwrap_or_else(|_| "Overview not available.".to_string())

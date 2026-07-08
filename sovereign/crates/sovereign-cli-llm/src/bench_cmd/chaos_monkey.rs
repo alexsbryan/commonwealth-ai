@@ -827,7 +827,15 @@ async fn score_question(
             && visible.chars().count() <= 1_800
     {
         use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-        match assess_asserted_value(critic, &q.question, &visible, &chunk_texts).await {
+        match assess_asserted_value(
+            critic,
+            &q.question,
+            &visible,
+            &chunk_texts,
+            sovereign_core::oicp::ShardingPrivacy::LocalOnly,
+        )
+        .await
+        {
             AssertedValue::Grounded(v) => (Some(v), Some(true)),
             AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
             AssertedValue::NoValue => (None, None),
@@ -1184,7 +1192,15 @@ async fn score_answer(rest: &[String]) -> i32 {
     // cardinal sin); NoValue = nothing checkable asserted (a decline/discursive).
     use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
     let (value, grounded): (Option<String>, Option<bool>) =
-        match assess_asserted_value(critic.as_ref(), &question, &answer, &chunks).await {
+        match assess_asserted_value(
+            critic.as_ref(),
+            &question,
+            &answer,
+            &chunks,
+            sovereign_core::oicp::ShardingPrivacy::LocalOnly,
+        )
+        .await
+        {
             AssertedValue::Grounded(v) => (Some(v), Some(true)),
             AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
             AssertedValue::NoValue => (None, None),

@@ -34,6 +34,7 @@ use std::sync::Arc;
 
 use futures::stream::{self, StreamExt};
 use sovereign_core::error::Result;
+use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
@@ -693,28 +694,18 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 "#
     .to_string();
 
-    let req = CompletionRequest {
-        prompt,
-        system_message: None,
-        preferred_speed: Speed::Slow,
-        max_tokens: Some(500),
-        temperature: Some(0.2),
-        think_budget: Some(0),
-        structured_output: None,
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: Some(lark_grammar),
-    };
+    // SLOT_POLICY §3 ExtractDurable: RAPTOR cluster summary written to
+    // the durable atlas store; corruption outlives the session.
+    let mut req = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+        .with_output_budget(500);
+    req.temperature = Some(0.2);
+    // Grammar constraint preserved verbatim (see the lark_grammar above):
+    // enforces the JSON shape AND forbids the `\"` byte inside the summary
+    // field.
+    req.lark_grammar = Some(lark_grammar);
+    // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for P1
+    // neutrality (bundle is None); P5 confirms.
+    req.think_budget = Some(0);
 
     let resp = match inference.complete(&req).await {
         Ok(r) => r,

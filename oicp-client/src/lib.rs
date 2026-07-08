@@ -185,11 +185,13 @@ impl RemoteApiProvider {
         let oicp_val = if let Some(ref oicp) = request.oicp {
             serde_json::to_value(oicp).ok()
         } else {
-            let class = match request.preferred_speed {
-                Speed::Fast => sovereign_contracts::oicp::LatencyClass::Fast,
-                Speed::Medium => sovereign_contracts::oicp::LatencyClass::Normal,
-                Speed::Slow => sovereign_contracts::oicp::LatencyClass::Extended,
-            };
+            // Canonical Speed→LatencyClass map (SLOT_POLICY §8). Slow
+            // derives Normal, not Extended (rule 4.4). No routing effect
+            // on this path: the auto-derived envelope carries no privacy
+            // (effective LocalOnly, never scored against peers), and the
+            // daemon's local pick maps Normal and Extended to the same
+            // primary slot.
+            let class = sovereign_contracts::slot_policy::speed_to_latency(request.preferred_speed);
             let mut req =
                 sovereign_contracts::oicp::InferenceRequirements::new().with_latency_class(class);
             if let Some(n) = request.max_tokens {

@@ -234,7 +234,7 @@ pub(crate) fn speed_for_retrieval_intent(
         // synthesis prompt does the structuring work the primary
         // model would otherwise do.
         Intent::ComparisonQuery => Speed::Fast,
-        _ => Speed::Medium,
+        _ => Speed::Slow,
     }
 }
 
@@ -674,7 +674,7 @@ mod route_resolver_tests {
         );
         assert_eq!(
             speed_for_retrieval_intent(&Intent::KnowledgeQuery, true),
-            Speed::Medium
+            Speed::Slow
         );
     }
 

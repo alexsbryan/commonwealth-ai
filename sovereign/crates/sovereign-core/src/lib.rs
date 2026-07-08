@@ -38,7 +38,7 @@ pub mod tool_loop;
 // tool_result_cache}` path so every existing importer is unaffected.
 pub use sovereign_contracts::{
     error, health, intent_policy, mcp_config, observer, rebrand, registry, setup_config, skills,
-    tool_result_cache, traits, types,
+    slot_policy, tool_result_cache, traits, types,
 };
 
 // Re-export commonly used items at the crate root.

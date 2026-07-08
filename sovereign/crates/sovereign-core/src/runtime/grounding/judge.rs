@@ -6,6 +6,8 @@
 
 use std::sync::Arc;
 
+use crate::oicp::ShardingPrivacy;
+use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
@@ -34,6 +36,7 @@ pub(crate) struct GateVerdict {
 async fn forced_choice_ab(
     inference: &Arc<dyn InferenceProvider>,
     prompt: &str,
+    posture: ShardingPrivacy,
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
@@ -42,8 +45,15 @@ async fn forced_choice_ab(
         // grading its own single pass is self-confirmation bias"; the
         // 4B's support distributions are squashed — measured 0.42-0.76
         // on known fabrications vs the primary critic's 0.96-0.98).
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
+        // path instead of pinning `model_id: "primary"`. The pin was a
+        // latent privacy hole — `primary` is a mesh-advertised alias and
+        // `locate_named_model` load-balances named models across peers
+        // with no privacy check, so a pinned judge could cross the network
+        // on a LocalOnly turn. The Judge envelope carries the session's
+        // sharding posture, so offload happens only when the turn allows.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some(1),
         structured_output: Some(serde_json::json!({
             "type": "string", "enum": ["A", "B"], "x_forced_choice": true
@@ -84,6 +94,7 @@ pub(crate) async fn verify_grounding(
     chunks: &[String],
     entity_anchored: bool,
     searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
+    posture: ShardingPrivacy,
 ) -> Option<GateVerdict> {
     if answer.trim().is_empty() || chunks.is_empty() {
         return Some(GateVerdict {
@@ -136,8 +147,15 @@ pub(crate) async fn verify_grounding(
         system_message: Some(
             "You extract claims precisely. Reply with one sentence or NO_CLAIM.".into(),
         ),
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
+        // path instead of pinning `model_id: "primary"`. The pin was a
+        // latent privacy hole — `primary` is a mesh-advertised alias and
+        // `locate_named_model` load-balances named models across peers
+        // with no privacy check, so a pinned judge could cross the network
+        // on a LocalOnly turn. The Judge envelope carries the session's
+        // sharding posture, so offload happens only when the turn allows.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some(64),
         temperature: Some(0.0),
         think_budget: Some(0),
@@ -197,7 +215,7 @@ pub(crate) async fn verify_grounding(
     // the one invented token: it missed "Russian" in "the Russian embassy").
     if entity_anchored {
         use super::value_presence::{assess_asserted_value, AssertedValue};
-        match assess_asserted_value(&**inference, question, answer, chunks).await {
+        match assess_asserted_value(&**inference, question, answer, chunks, posture).await {
             AssertedValue::Grounded(value) => {
                 dbg(&format!(
                     "value-presence: {value:?} present in corpus → vp=0.0 (release best-effort)"
@@ -285,7 +303,7 @@ pub(crate) async fn verify_grounding(
              Answer with exactly one letter — A = the passage supports the claim, \
              B = it does not."
         );
-        if let Some((a, b)) = forced_choice_ab(inference, &prompt).await {
+        if let Some((a, b)) = forced_choice_ab(inference, &prompt, posture).await {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
             let effective = if is_extra && support < CLAIM_RESCUE_FLOOR {
@@ -333,6 +351,7 @@ pub(super) async fn extract_claim_list(
     question: &str,
     answer: &str,
     max_claims: usize,
+    posture: ShardingPrivacy,
 ) -> Option<Vec<String>> {
     let prompt = format!(
         "A user asked: {}\n\nAn assistant wrote this long answer:\n\"\"\"\n{}\n\"\"\"\n\n\
@@ -354,8 +373,15 @@ pub(super) async fn extract_claim_list(
         system_message: Some(format!(
             "You extract claims precisely. Reply with up to {max_claims} lines, or NO_CLAIM."
         )),
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
+        // path instead of pinning `model_id: "primary"`. The pin was a
+        // latent privacy hole — `primary` is a mesh-advertised alias and
+        // `locate_named_model` load-balances named models across peers
+        // with no privacy check, so a pinned judge could cross the network
+        // on a LocalOnly turn. The Judge envelope carries the session's
+        // sharding posture, so offload happens only when the turn allows.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some((max_claims * 48).max(160)),
         temperature: Some(0.0),
         think_budget: Some(0),
@@ -420,6 +446,7 @@ pub(super) async fn scan_unsupported_specifics(
     answer: &str,
     evidence_chunks: &[String],
     max_items: usize,
+    posture: ShardingPrivacy,
 ) -> Option<Vec<String>> {
     let evidence: String = evidence_chunks
         .iter()
@@ -464,8 +491,15 @@ pub(super) async fn scan_unsupported_specifics(
             "You audit an answer's specifics against evidence, precisely and \
              conservatively. Reply with up to {max_items} lines, or NONE."
         )),
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
+        // path instead of pinning `model_id: "primary"`. The pin was a
+        // latent privacy hole — `primary` is a mesh-advertised alias and
+        // `locate_named_model` load-balances named models across peers
+        // with no privacy check, so a pinned judge could cross the network
+        // on a LocalOnly turn. The Judge envelope carries the session's
+        // sharding posture, so offload happens only when the turn allows.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some((max_items * 40).max(160)),
         temperature: Some(0.0),
         think_budget: Some(0),
@@ -713,6 +747,7 @@ pub(super) async fn claim_violation_joint(
     claim: &str,
     chunks: &[String],
     n_chunks: usize,
+    posture: ShardingPrivacy,
 ) -> Option<f64> {
     let joined: String = chunks
         .iter()
@@ -730,7 +765,7 @@ pub(super) async fn claim_violation_joint(
          Answer with exactly one letter — A = the passages support the claim, \
          B = they do not."
     );
-    let (a, b) = forced_choice_ab(inference, &prompt).await?;
+    let (a, b) = forced_choice_ab(inference, &prompt, posture).await?;
     let denom = a + b;
     let support = if denom > 0.0 { a / denom } else { 0.0 };
     Some(1.0 - support)

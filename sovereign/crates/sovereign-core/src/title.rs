@@ -17,8 +17,9 @@
 //! assistant save.
 
 use crate::error::Result;
+use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, StateStore};
-use crate::types::{CompletionRequest, Message, Role, Speed};
+use crate::types::{CompletionRequest, Message, Role};
 
 /// Hard cap on the characters we include from a single message so the prompt
 /// stays small — title prompts run on the Fast slot and must be cheap.
@@ -88,43 +89,30 @@ pub async fn generate_title_from_messages(
          Assistant: {assistant_snippet}"
     );
 
-    let system_message = Some("Output only the title — a few words, nothing else.".to_string());
+    let system_message = "Output only the title — a few words, nothing else.";
 
-    let request = CompletionRequest {
-        prompt,
-        system_message,
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(TITLE_MAX_TOKENS),
-        temperature: Some(0.3),
-        think_budget: Some(0),
-        structured_output: None,
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        // Hard-off the reasoning scaffold: the distilled Fast model otherwise
-        // narrates its plan ("the user wants a title…") and that becomes the
-        // output. `enable_thinking(false)` renders the chat template without the
-        // think block — stronger than `think_budget: 0`, which only nudges the
-        // sampler and is widely ignored.
-        enable_thinking: Some(false),
-        sampling_mode: None,
-        // Prefill the assistant turn with "Title:" so the model physically
-        // continues a title instead of opening with a preamble ("the user
-        // wants me to…"). With the few-shot pairs above demonstrating that
-        // "Title:" is followed by a few clean words, the prefill leaves the
-        // model mid-pattern — the single most reliable way to stop a
-        // narration-happy distilled model. The rendered response is only the
-        // continuation (the prefix is part of the prompt), so it needs no
-        // stripping.
-        assistant_prefix: Some("Title:".to_string()),
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: title generation is advisory turn-loop
+    // hygiene. Bundle supplies latency=Fast + think=0; the honest
+    // 80-token budget is the FastShort gate.
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_system(system_message)
+        .with_output_budget(TITLE_MAX_TOKENS as u32);
+    request.temperature = Some(0.3);
+    // Hard-off the reasoning scaffold: the distilled Fast model otherwise
+    // narrates its plan ("the user wants a title…") and that becomes the
+    // output. `enable_thinking(false)` renders the chat template without the
+    // think block — stronger than `think_budget: 0`, which only nudges the
+    // sampler and is widely ignored.
+    request.enable_thinking = Some(false);
+    // Prefill the assistant turn with "Title:" so the model physically
+    // continues a title instead of opening with a preamble ("the user
+    // wants me to…"). With the few-shot pairs above demonstrating that
+    // "Title:" is followed by a few clean words, the prefill leaves the
+    // model mid-pattern — the single most reliable way to stop a
+    // narration-happy distilled model. The rendered response is only the
+    // continuation (the prefix is part of the prompt), so it needs no
+    // stripping.
+    request.assistant_prefix = Some("Title:".to_string());
 
     let response = inference.complete(&request).await?;
     let cleaned = sanitize_title(&response.text);

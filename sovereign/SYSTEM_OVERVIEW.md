@@ -1253,12 +1253,23 @@ deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 
 | Decision | Where | Mechanism |
 |---|---|---|
-| Joiner picks peer-vs-local for a turn | `sovereign-mesh/peer_inference.rs::select_peer` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability) |
+| Joiner decides a turn is offload-*eligible* | `sovereign-mesh/oicp_select.rs::offload_eligible` | SLOT_POLICY §5: `privacy == MeshAllowed && latency_class != Fast`. One predicate, shared by `select_peers_ranked` and `shared_primary_id`; replaced the old privacy-gate + `preferred_speed != Slow` pair (the Speed shadow no longer gates routing) |
+| Joiner picks peer-vs-local for an eligible turn | `sovereign-mesh/peer_inference.rs::select_peers_ranked` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability); forced-choice sentinels exclude peers not advertising `x:forced_choice` |
 | Hub picks a local model for a peer request | `commonwealth-api/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
-| Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | latency_class→Speed map + hint veto |
+| Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` | LocalOnly default; StreamSplit ≤500MB; warmed owned-overrides as last resort |
 | Collaborative ingest partitioning | `commonwealth-inference/scheduler/knowledge_assignment.rs` | `plan_collaborative_ingestion*`: embed-model-compatible peers, storage-proportional contiguous blocks, zero-storage peers skipped |
+
+**Slot policy is normative** in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md)
+(OICP-first rationalization, 2026-07-08): call sites declare a
+`slot_policy::Workload` requirement bundle rather than free-handing
+`Speed::` literals; the scheduler resolves those against every slot's
+advertised claims cluster-wide, and fast-vs-primary is an emergent
+scoring outcome (the local node is the degenerate one-node mesh).
+`Speed::Medium` is retired as a construction target (kept only for
+serde/metadata); the one canonical `latency↔Speed` map lives in
+`sovereign-contracts/slot_policy.rs`.
 
 The composed OICP scoring product lives ONCE in `oicp-types`
 (`score_with_adjustments` + `ScoreBreakdown`, Phase B of the

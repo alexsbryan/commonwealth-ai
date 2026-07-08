@@ -84,8 +84,12 @@ real head tensors degrade with one warn line. Escape hatch:
 - **Gemma 4 + Metal is unsupported** on llama-cpp-2 0.1.145 —
   ggml-metal lacks the matmul kernels and decode SIGSEGVs. CPU
   fallback via `SOVEREIGN_FORCE_CPU_CHAT=1`.
-- **Daemon doesn't auto-resolve `fast`/`primary` slot aliases** on
-  `/v1/chat/completions` — pass the actual model name from config.
+- **Slot aliases (`fast`, `primary`, `commonwealth/*`) resolve via
+  `slot_aliases::resolution_alias_keys`** — the daemon installs the
+  alias map at startup (`daemon.rs::start_daemon`,
+  `install_slot_aliases`) and the mesh manifest advertises the same
+  set (`SLOT_ALIAS_POLICY` parity test). Concrete gguf names also
+  work.
 - **`AppState::with_*` installers must run before `inner.clone()`**
   in `EmbeddedDaemon::start_daemon` — `Arc::get_mut` fails silently
   if `inner` is already shared, and chat returns 503 on every request.
@@ -411,6 +415,10 @@ the measurement. See `baselines/threads-marathon-graceful-v{14,15,16}-gliner.jso
 
 ## See also
 
+- [`SLOT_POLICY.md`](./SLOT_POLICY.md) — **which slot is the right
+  choice for a given call, and why** (workload classes, hard rules,
+  sanctioned exceptions). This file covers the mechanics; that one
+  covers the policy.
 - `commonwealth/docs/oicp-v0.3.md` — OICP wire-protocol spec.
 - `commonwealth/docs/routing-field-guide.md` — end-to-end
   `/v1/chat/completions` priority ladder (embedded vs standalone,

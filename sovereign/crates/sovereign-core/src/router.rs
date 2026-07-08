@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use crate::error::Result;
 use crate::router_embed::EmbedRouter;
 use crate::skills::SkillRegistry;
+use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, Router, StateStore};
 use crate::types::*;
 
@@ -989,30 +990,13 @@ Reply with JSON only:
 
     /// Call the fast model with a classification prompt.
     async fn classify_call(&self, prompt: String) -> Result<String> {
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(
-                "You are a message classifier. Respond with exactly one letter.".to_string(),
-            ),
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(5),
-            temperature: Some(0.0),
-            structured_output: None,
-            think_budget: Some(0), // suppress thinking — prevents Qwen <think> consuming the 5-token budget
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 Route: single-letter classify consumed by
+        // control flow. Bundle supplies latency=Fast + think=0; the
+        // honest 5-token budget is the FastShort gate.
+        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+            .with_system("You are a message classifier. Respond with exactly one letter.")
+            .with_output_budget(5);
+        request.temperature = Some(0.0);
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
         Ok(response.text)
@@ -1057,30 +1041,12 @@ Reply with JSON only:
             },
             "required": ["intent"],
         });
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(
-                "You are a message classifier. Respond with valid JSON only.".to_string(),
-            ),
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(max_tokens),
-            temperature: Some(0.0),
-            structured_output: Some(schema),
-            think_budget: Some(0),
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 Route: schema-constrained intent classify.
+        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+            .with_system("You are a message classifier. Respond with valid JSON only.")
+            .with_output_budget(max_tokens as u32);
+        request.temperature = Some(0.0);
+        request.structured_output = Some(schema);
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);
         Ok(response.text)
@@ -1100,30 +1066,12 @@ Reply with JSON only:
             },
             "required": ["tool"],
         });
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(
-                "You are a tool router. Respond with valid JSON only.".to_string(),
-            ),
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(64),
-            temperature: Some(0.0),
-            structured_output: Some(schema),
-            think_budget: Some(0),
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 Route: schema-constrained tool selection.
+        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+            .with_system("You are a tool router. Respond with valid JSON only.")
+            .with_output_budget(64);
+        request.temperature = Some(0.0);
+        request.structured_output = Some(schema);
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] tool_select raw output: {:?}", response.text);
         Ok(response.text)
