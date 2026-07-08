@@ -109,7 +109,7 @@ async fn main() {
     let request = CompletionRequest {
         prompt: args.prompt.clone(),
         system_message: None,
-        preferred_speed: sovereign_core::types::Speed::Medium,
+        preferred_speed: sovereign_core::types::Speed::Slow,
         max_tokens: Some(args.max_tokens),
         temperature: Some(args.temperature),
         structured_output: None,

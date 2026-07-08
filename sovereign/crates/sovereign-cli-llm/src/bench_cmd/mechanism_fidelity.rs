@@ -688,7 +688,7 @@ async fn elicit_logprob(
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         system_message: Some(system_prompt.to_string()),
-        preferred_speed: Speed::Medium,
+        preferred_speed: Speed::Slow,
         max_tokens: Some(1),
         structured_output: Some(schema),
         think_budget: Some(0),

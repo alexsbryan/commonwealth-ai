@@ -25,6 +25,8 @@
 //! Yundt"), not role-INFERENCE ("does the text state his first name is Karl?"),
 //! which is why it keeps competence a strict extractive check would lose.
 
+use crate::oicp::ShardingPrivacy;
+use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
@@ -64,8 +66,9 @@ pub async fn assess_asserted_value(
     question: &str,
     answer: &str,
     chunks: &[String],
+    posture: ShardingPrivacy,
 ) -> AssertedValue {
-    match extract_answer_value(inference, question, answer).await {
+    match extract_answer_value(inference, question, answer, posture).await {
         Some(value) => {
             if value_present_in_chunks(&value, chunks) {
                 AssertedValue::Grounded(value)
@@ -87,6 +90,7 @@ async fn extract_answer_value(
     inference: &dyn InferenceProvider,
     question: &str,
     answer: &str,
+    posture: ShardingPrivacy,
 ) -> Option<String> {
     let prompt = format!(
         "QUESTION: {q}\nANSWER: {a}\n\n\
@@ -101,8 +105,11 @@ async fn extract_answer_value(
     let req = CompletionRequest {
         prompt,
         system_message: Some("Extract only the answer's specific value, or NONE.".into()),
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: OICP envelope instead of a `model_id: "primary"`
+        // pin (a latent privacy hole — see judge.rs). Carries the session
+        // posture so the judge offloads only when the turn permits.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some(24),
         temperature: Some(0.0),
         think_budget: Some(0),

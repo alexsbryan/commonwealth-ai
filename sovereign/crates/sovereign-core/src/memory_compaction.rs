@@ -46,7 +46,8 @@ use tokio::sync::mpsc;
 
 use crate::error::Result;
 use crate::traits::{InferenceProvider, MemoryStore};
-use crate::types::{CompletionRequest, Memory, MemoryKind, Speed};
+use crate::slot_policy::Workload;
+use crate::types::{CompletionRequest, Memory, MemoryKind};
 
 // The operator-facing config knobs (`CompactionConfig`, `CompactionMode`,
 // `DEFAULT_SYNTHESIS_PROMPT`) were relocated to `sovereign-contracts` so
@@ -233,28 +234,13 @@ async fn run_pass(
         .join("\n");
     let prompt = config.synthesis_prompt.replace("{entries}", &entries);
 
-    let request = CompletionRequest {
-        prompt,
-        system_message: None,
-        preferred_speed: Speed::Fast,
-        max_tokens: Some(config.max_summary_chars.div_ceil(2)),
-        temperature: Some(0.3),
-        think_budget: Some(0),
-        structured_output: None,
-        top_k: None,
-        top_p: None,
-        oicp: None,
-        tools: None,
-        tool_choice: None,
-        model_id: None,
-        enable_thinking: Some(false),
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
-    };
+    // SLOT_POLICY §3 Housekeep: memory-fold synthesis (advisory).
+    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        .with_output_budget(config.max_summary_chars.div_ceil(2) as u32);
+    request.temperature = Some(0.3);
+    // Distilled Fast model narrates its plan without this; hard-off the
+    // reasoning scaffold so the fold text isn't a preamble.
+    request.enable_thinking = Some(false);
     let response = inference.complete(&request).await?;
     let mut summary_text = response.text.trim().to_string();
     if summary_text.is_empty() {

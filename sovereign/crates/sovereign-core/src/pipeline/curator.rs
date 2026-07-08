@@ -23,8 +23,9 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::skills::SkillRegister;
+use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Intent, RouterClassification, Speed};
+use crate::types::{CompletionRequest, Intent, RouterClassification};
 
 use super::prompts::CURATOR_SYSTEM;
 use super::stages::{CuratedPackage, DraftBudget, RetrievedChunk, SkeletonSection, Sufficiency};
@@ -125,10 +126,20 @@ pub fn curate_request(
         n = candidates.len(),
     );
 
-    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+    // SLOT_POLICY §3 Route: schema-constrained chunk selection consumed
+    // by the pipeline, not the user. The 2048-token budget deliberately
+    // forfeits FastShort (rule 4.5) — a CuratedPackage over many chunks
+    // needs the room, and schema-constrained decode keeps it on the
+    // Fast slot regardless (unchanged from the prior Speed::Fast).
+    let mut req = CompletionRequest::for_workload(Workload::Route, prompt).with_output_budget(2048);
+    // POLICY-DEBT(SLOT_POLICY §3 Route): the Route bundle sets
+    // think_budget=0, but curator historically left it at the config
+    // default (None). Schema-constrained decode makes the two
+    // equivalent here (no think block can precede the forced JSON), so
+    // this preserves P1 generation-neutrality; P5 confirms the 0.
+    req.think_budget = None;
     req.system_message = Some(CURATOR_SYSTEM.to_string());
     req.structured_output = Some(curator_schema(candidates.len()));
-    req.max_tokens = Some(2048);
     // Curator doesn't need exploratory sampling; tighten the
     // temperature so the JSON stays well-formed and the section
     // counts don't drift. Schema-constrained output already pins

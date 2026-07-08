@@ -20,7 +20,7 @@
 //! drift out of agreement about what "best" means.
 use sovereign_core::oicp::{
     self as oicp, score_with_adjustments, BenchmarkResult, CapabilityHint, InferenceRequirements,
-    LatencyClass, NodeLocality, NodeObservations, ScoreBreakdown,
+    LatencyClass, NodeLocality, NodeObservations, ScoreBreakdown, ShardingPrivacy,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -42,6 +42,32 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
     (a.score - b.score).abs() <= SCORE_TIE_EPSILON
         && a.size_gb == b.size_gb
         && a.model_id == b.model_id
+}
+
+/// SLOT_POLICY §5 — the offload gate. A request may cross the network
+/// to a peer slot iff BOTH conditions hold:
+///
+///   1. its privacy posture permits sharding (`MeshAllowed`), and
+///   2. its latency class tolerates a network hop (anything but
+///      `Fast`).
+///
+/// Latency-`Fast` work (routing, titling, compression, the memory
+/// housekeepers) never offloads: the peer round-trip dominates the
+/// inference, so a hop is a net loss even when a peer would score
+/// higher on capability. `LocalOnly` work never offloads by
+/// definition — that is the privacy contract. Both gates are
+/// necessary; neither alone is sufficient.
+///
+/// This is the single shared predicate behind both Joiner-side
+/// decisions — `select_peers_ranked` ("does any peer even get
+/// scored?") and `shared_primary_id` ("does the configured shared
+/// model apply?") — so the two can never drift out of agreement
+/// about what "offloadable" means. An envelope-less request carries
+/// no privacy or latency signal and is never passed here (the
+/// callers gate on envelope presence first).
+pub(crate) fn offload_eligible(req: &InferenceRequirements) -> bool {
+    req.sharding() == ShardingPrivacy::MeshAllowed
+        && req.effective_latency_class() != LatencyClass::Fast
 }
 
 /// RTT threshold below which a peer is classified as
@@ -180,10 +206,10 @@ fn pick_slot_v03(provider: &dyn InferenceProvider, req: &InferenceRequirements) 
     let fast = slot_matches_hint(Speed::Fast);
     let slow = slot_matches_hint(Speed::Slow);
 
-    let primary = match class {
-        LatencyClass::Fast => Speed::Fast,
-        LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
-    };
+    // Canonical LatencyClass→Speed resolve (SLOT_POLICY §8) — the
+    // serve-side primary-slot pick. Byte-identical to the prior inline
+    // map; consolidated so the mapping lives in exactly one module.
+    let primary = sovereign_core::slot_policy::latency_to_speed(class);
     let primary_available = matches!(
         (primary, &fast, &slow),
         (Speed::Fast, Some(_), _) | (Speed::Slow, _, Some(_))
@@ -632,5 +658,62 @@ mod tests {
             .with_context_tokens(8_000)
             .with_max_output_tokens(1_000);
         assert!(score_manifest_for_request(&m, &req).is_none());
+    }
+
+    // -----------------------------------------------------------
+    // SLOT_POLICY §5 — offload_eligible truth table
+    // -----------------------------------------------------------
+
+    /// The offload gate is the AND of two conditions: privacy
+    /// `MeshAllowed` and latency class != `Fast`. This table pins
+    /// every combination plus the two envelope defaults the
+    /// derivation accessors apply (`privacy` unset → `LocalOnly`;
+    /// `latency` unset → `Normal`).
+    #[test]
+    fn offload_eligible_truth_table() {
+        let mesh = ShardingPrivacy::MeshAllowed;
+        let local = ShardingPrivacy::LocalOnly;
+
+        // (privacy, latency, expected)
+        let cases: &[(ShardingPrivacy, LatencyClass, bool)] = &[
+            (mesh, LatencyClass::Fast, false), // latency gate closes it
+            (mesh, LatencyClass::Normal, true), // both gates open
+            (mesh, LatencyClass::Extended, true), // both gates open
+            (local, LatencyClass::Fast, false), // both gates closed
+            (local, LatencyClass::Normal, false), // privacy gate closes it
+            (local, LatencyClass::Extended, false), // privacy gate closes it
+        ];
+        for (privacy, latency, expected) in cases {
+            let req = InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(*latency)
+                .with_sharding(*privacy);
+            assert_eq!(
+                offload_eligible(&req),
+                *expected,
+                "privacy={privacy:?} latency={latency:?} should be {expected}"
+            );
+        }
+
+        // Default-privacy envelope (no `with_sharding`) resolves to
+        // LocalOnly → never offloadable even at Normal latency.
+        let default_privacy = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general())
+            .with_latency_class(LatencyClass::Normal);
+        assert!(
+            !offload_eligible(&default_privacy),
+            "envelope without explicit privacy defaults to LocalOnly → not offloadable"
+        );
+
+        // Default-latency envelope (no `with_latency_class`) resolves
+        // to Normal → offloadable when MeshAllowed (the hint-only /
+        // sizing-only case the §5 headline delta covers).
+        let default_latency = InferenceRequirements::new()
+            .with_hint(CapabilityHint::general())
+            .with_sharding(ShardingPrivacy::MeshAllowed);
+        assert!(
+            offload_eligible(&default_latency),
+            "MeshAllowed hint-only envelope defaults to Normal latency → offloadable"
+        );
     }
 }

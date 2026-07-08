@@ -7,6 +7,7 @@ use crate::context::format_history_as_prompt;
 use crate::error::{Error, Result};
 use crate::skills::SkillRegistry;
 use crate::traits::{InferenceProvider, Planner};
+use crate::slot_policy::Workload;
 use crate::types::*;
 
 /// LLM-based planner that uses the Primary inference slot to generate execution plans.
@@ -51,28 +52,13 @@ impl Planner for LlmPlanner {
                 ));
             }
 
-            let request = CompletionRequest {
-                prompt,
-                system_message: Some(PLAN_SYSTEM_PROMPT.to_string()),
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(1024),
-                temperature: Some(0.0),
-                structured_output: None,
-                think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            };
+            // SLOT_POLICY §3 Passthrough: agentic plan generation — the
+            // model reasoning about the task. Bundle latency=Normal →
+            // shadow Speed::Slow (Primary), unchanged.
+            let mut request = CompletionRequest::for_workload(Workload::Passthrough, prompt)
+                .with_system(PLAN_SYSTEM_PROMPT)
+                .with_output_budget(1024);
+            request.temperature = Some(0.0);
 
             let response = self.inference.complete(&request).await?;
             // Glassbox: the raw model output is the ground truth for *why*
@@ -152,28 +138,11 @@ impl Planner for LlmPlanner {
             original.goal,
         );
 
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(PLAN_SYSTEM_PROMPT.to_string()),
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(1024),
-            temperature: Some(0.0),
-            structured_output: None,
-            think_budget: None,
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 Passthrough: replan-after-failure reasoning.
+        let mut request = CompletionRequest::for_workload(Workload::Passthrough, prompt)
+            .with_system(PLAN_SYSTEM_PROMPT)
+            .with_output_budget(1024);
+        request.temperature = Some(0.0);
 
         let response = self.inference.complete(&request).await?;
 

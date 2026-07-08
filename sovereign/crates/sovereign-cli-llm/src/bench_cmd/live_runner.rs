@@ -655,7 +655,7 @@ pub async fn verify_grounding(
         system_message: Some(
             "You extract claims precisely. Reply with one sentence or NO_CLAIM.".into(),
         ),
-        preferred_speed: Speed::Medium,
+        preferred_speed: Speed::Slow,
         max_tokens: Some(64),
         temperature: Some(0.0),
         think_budget: Some(0),
@@ -730,7 +730,7 @@ async fn forced_choice_ab(
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
-        preferred_speed: Speed::Medium,
+        preferred_speed: Speed::Slow,
         max_tokens: Some(1),
         structured_output: Some(serde_json::json!({
             "type": "string", "enum": ["A", "B"], "x_forced_choice": true

@@ -26,6 +26,8 @@
 //! al., ALCE 2023) adapted to the grounded-or-abstain contract and to small
 //! local models: one constrained extraction, deterministic verification.
 
+use crate::oicp::ShardingPrivacy;
+use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
@@ -69,6 +71,7 @@ pub async fn citation_grounded_answer(
     inference: &dyn InferenceProvider,
     question: &str,
     chunks: &[String],
+    posture: ShardingPrivacy,
 ) -> CitationOutcome {
     let passages = build_passages(chunks);
     if passages.is_empty() {
@@ -95,8 +98,11 @@ pub async fn citation_grounded_answer(
              question, reply NONE."
                 .into(),
         ),
-        preferred_speed: Speed::Medium,
-        model_id: Some("primary".into()),
+        preferred_speed: Speed::Slow,
+        // SLOT_POLICY §7: OICP envelope instead of a `model_id: "primary"`
+        // pin (a latent privacy hole — see judge.rs). Carries the session
+        // posture so the judge offloads only when the turn permits.
+        oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some(256),
         temperature: Some(0.0),
         think_budget: Some(0),

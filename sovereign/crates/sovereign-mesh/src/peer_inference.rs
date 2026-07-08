@@ -45,7 +45,6 @@ use futures::Stream;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
     ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations, ProviderManifest,
-    ShardingPrivacy,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
@@ -881,7 +880,22 @@ impl MeshInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Vec<(PeerInferenceEndpoint, ModelCandidate)> {
+        // Glassbox: every stay-local decision below names its gate so
+        // the routing outcome is reconstructable from a debug log.
+        // `oicp_request_id` is the caller-declared tag (e.g. the
+        // workload resolver's `wl-<class>-<id>`), joinable against
+        // the adapter's `slot_selected` event on the serving node.
+        let oicp_request_id = request
+            .oicp
+            .as_ref()
+            .and_then(|o| o.request_id.as_deref())
+            .unwrap_or("");
         if !Self::has_routing_signal(request) {
+            tracing::debug!(
+                oicp_request_id = %oicp_request_id,
+                gate = "no_routing_signal",
+                "mesh-inference: staying local"
+            );
             return Vec::new();
         }
         // Operator override: short-circuit all outbound peer
@@ -893,21 +907,37 @@ impl MeshInferenceProvider {
         // a peer would strictly outscore the local manifest.
         if peer_inference_disabled() {
             tracing::debug!(
+                oicp_request_id = %oicp_request_id,
+                gate = "operator_disabled",
                 "mesh-inference: peer routing disabled via \
                  SOVEREIGN_DISABLE_PEER_INFERENCE — staying local"
             );
             return Vec::new();
         }
-        if let Some(oicp) = &request.oicp {
-            if oicp.sharding() == ShardingPrivacy::LocalOnly {
-                return Vec::new();
-            }
-        }
-        // Also: if this isn't a synthesis-class request, keep it
-        // local regardless of capabilities — Fast/Medium slots
-        // are latency-critical (router, compression, title gen)
-        // and peer round-trip costs dominate the inference time.
-        if request.preferred_speed != Speed::Slow {
+        // SLOT_POLICY §5 — the offload gate. A request crosses the
+        // network to a peer only when its envelope both permits
+        // sharding (`MeshAllowed`) and tolerates a hop (latency
+        // class != `Fast`). This single predicate replaces the two
+        // gates that used to live here — a privacy check and a
+        // `preferred_speed != Slow` check — which had drifted into
+        // an incoherent pair: the speed literal (a derived shadow of
+        // the latency class) was the real routing lever, while the
+        // OICP envelope the whole protocol exists to honour was only
+        // consulted for privacy. Now the envelope decides both.
+        // `has_routing_signal` above already proved the envelope is
+        // present; bind it defensively and bail if somehow absent.
+        let Some(req_oicp) = request.oicp.as_ref() else {
+            return Vec::new();
+        };
+        if !crate::oicp_select::offload_eligible(req_oicp) {
+            tracing::debug!(
+                oicp_request_id = %oicp_request_id,
+                gate = "not_offload_eligible",
+                sharding = ?req_oicp.sharding(),
+                latency = ?req_oicp.effective_latency_class(),
+                "mesh-inference: staying local (SLOT_POLICY §5: \
+                 offload iff MeshAllowed AND latency != Fast)"
+            );
             return Vec::new();
         }
 
@@ -917,9 +947,6 @@ impl MeshInferenceProvider {
         // v0.3 §7 operational adjustments so a hot local slot can
         // lose to an idle peer on load, and a reliable peer can
         // beat a failure-prone local.
-        let Some(req_oicp) = request.oicp.as_ref() else {
-            return Vec::new();
-        };
         // v0.3 §4.3 governance tap: record the requested hint if
         // it's an `x:*` extension. Standardized hints are skipped
         // inside the registry itself. No routing impact — this is
@@ -974,6 +1001,14 @@ impl MeshInferenceProvider {
 
         let peers = self.mesh.peer_inference_endpoints().await;
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
+        // Forced-choice sentinel (SLOT_POLICY §6): a request eliciting a
+        // calibrated one-pass distribution can only be honoured by a peer
+        // whose manifest advertises `x:forced_choice`. Compute the need
+        // once; the per-peer check below excludes non-advertising peers so
+        // the sentinel never crosses to a peer that would silently fall
+        // back to K-sampling. (Explicit `model_id` dispatch is honoured by
+        // name and never reaches this scorer, so it is not filtered here.)
+        let needs_forced_choice = request.forced_choice_candidates().is_some();
         let mut scored: Vec<(PeerInferenceEndpoint, ModelCandidate)> = Vec::new();
         for peer in peers {
             // Drop quarantined peers from the candidate set. They'll
@@ -993,6 +1028,20 @@ impl MeshInferenceProvider {
                 Some(m) => m,
                 None => continue,
             };
+            if needs_forced_choice
+                && !manifest
+                    .features
+                    .iter()
+                    .any(|f| f.as_str() == sovereign_core::oicp::features::X_FORCED_CHOICE)
+            {
+                tracing::debug!(
+                    oicp_request_id = %oicp_request_id,
+                    peer = %peer.name,
+                    "mesh-inference: excluding peer — forced_choice sentinel \
+                     but manifest does not advertise x:forced_choice"
+                );
+                continue;
+            }
             let mut raw = match score_manifest_for_request(&manifest, req_oicp) {
                 Some(c) => c,
                 None => continue,
@@ -1379,11 +1428,23 @@ impl MeshInferenceProvider {
     /// follow-up of "if peer failed, try local" has to be expressible
     /// in one return value so the caller can iterate without
     /// re-running `select_peer` (which is non-idempotent).
-    /// The shared-model id this request should route into, if any. Only a
-    /// primary (`Speed::Slow`) turn with no explicit `model_id` targets the
-    /// configured shared model; everything else routes as before.
+    /// The shared-model id this request should route into, if any.
+    /// SLOT_POLICY §5: only an offload-eligible turn — `MeshAllowed`
+    /// privacy AND a latency class that tolerates a hop (not `Fast`)
+    /// — with no explicit `model_id` targets the configured shared
+    /// model. An envelope-less, `LocalOnly`, or latency-`Fast`
+    /// request never does. This shares the exact predicate the
+    /// `select_peers_ranked` offload gate uses, so the shared-model
+    /// path and the general peer-scoring path can't disagree about
+    /// what "offloadable" means (the old code gated on the derived
+    /// `Speed::Slow` shadow instead, which was the same drift the
+    /// scoring gate carried).
     fn shared_primary_id(&self, request: &CompletionRequest) -> Option<String> {
-        if request.preferred_speed != Speed::Slow {
+        let offloadable = request
+            .oicp
+            .as_ref()
+            .is_some_and(crate::oicp_select::offload_eligible);
+        if !offloadable {
             return None;
         }
         self.shared_model_id.load_full().map(|s| (*s).clone())
@@ -1735,8 +1796,9 @@ impl InferenceProvider for MeshInferenceProvider {
             request
         };
         // Priority: when the caller names a specific model_id, that
-        // name is the routing signal — even when the request has no
-        // OICP envelope and no Speed::Slow signal. Silent
+        // name is the routing signal — even when the request carries
+        // no OICP envelope and would not otherwise be offload-eligible
+        // (SLOT_POLICY §5). Silent
         // substitution to the local primary slot was the bug here;
         // an explicit name must either be served by the node that
         // advertises it or fail loudly so the caller can react.

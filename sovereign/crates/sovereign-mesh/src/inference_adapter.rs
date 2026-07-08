@@ -345,22 +345,19 @@ impl SovereignInferenceAdapter {
         req.think_budget = resolve_think_budget(request);
         if let Some(oicp) = &request.oicp {
             // Translate the OICP `latency_class` into the slot picker's
-            // `preferred_speed`. Without this the class is dropped, the request
-            // defaults to `Speed::Medium`, and short/fast calls (code-intel
-            // enrich, atlas phase 1b/3/5/6) miss the FastShort continuous-batched
-            // companion — serializing on the mutex'd primary instead of batching
-            // across n_seq_max. (2026-06-27)
-            match &oicp.latency_class {
-                Some(sovereign_core::oicp::LatencyClass::Fast) => {
-                    req = req.with_speed(sovereign_core::types::Speed::Fast);
-                }
-                Some(sovereign_core::oicp::LatencyClass::Normal) => {
-                    req = req.with_speed(sovereign_core::types::Speed::Medium);
-                }
-                Some(sovereign_core::oicp::LatencyClass::Extended) => {
-                    req = req.with_speed(sovereign_core::types::Speed::Slow);
-                }
-                None => {}
+            // `preferred_speed` via the canonical `latency_to_speed`
+            // (SLOT_POLICY §8). Without this the class is dropped and
+            // short/fast calls (code-intel enrich, atlas phase 1b/3/5/6)
+            // miss the FastShort continuous-batched companion —
+            // serializing on the mutex'd primary instead of batching
+            // across n_seq_max. (2026-06-27) The former `Normal → Medium`
+            // special case is retired: the offload gate is now
+            // envelope-driven (§5: MeshAllowed && latency != Fast), so
+            // this map no longer needs Medium to keep inbound-wire
+            // requests single-hop — it only picks Fast vs primary. A
+            // latency-less envelope leaves the slot pick untouched.
+            if let Some(class) = oicp.latency_class {
+                req = req.with_speed(sovereign_core::slot_policy::latency_to_speed(class));
             }
             req = req.with_oicp(oicp.clone());
         }
@@ -514,6 +511,11 @@ impl SovereignInferenceAdapter {
             has_tools = req.tools.is_some(),
             model_id = req.model_id.as_deref().unwrap_or(""),
             structured_output = req.structured_output.is_some(),
+            oicp_request_id = req
+                .oicp
+                .as_ref()
+                .and_then(|o| o.request_id.as_deref())
+                .unwrap_or(""),
             "inference_adapter:slot_selected"
         );
         req.with_speed(speed)

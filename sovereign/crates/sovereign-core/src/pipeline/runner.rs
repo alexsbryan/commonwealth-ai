@@ -37,8 +37,9 @@ use crate::pipeline::stages::{CuratedPackage, Sufficiency};
 use crate::skills::SkillRegister;
 use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
+use crate::slot_policy::Workload;
 use crate::types::{
-    CompletionRequest, NarrationEvent, NarrationPhase, RouterClassification, Speed, StreamFrame,
+    CompletionRequest, NarrationEvent, NarrationPhase, RouterClassification, StreamFrame,
     TurnNarration,
 };
 
@@ -538,7 +539,10 @@ fn build_drafter_request(
         intent = classification.primary.intent,
     );
 
-    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Slow);
+    // SLOT_POLICY §3 Synthesize: the Drafter composes the user-facing
+    // draft. Bundle latency=Normal → shadow Speed::Slow (Primary slot),
+    // unchanged from the prior explicit Slow.
+    let mut req = CompletionRequest::for_workload(Workload::Synthesize, prompt);
     // iter8: the Drafter carries the witness contract again
     // (RELATIONAL_BASE_SYSTEM_PROMPT for Relational) so it
     // produces witness-voice prose, not retrieval-analytical

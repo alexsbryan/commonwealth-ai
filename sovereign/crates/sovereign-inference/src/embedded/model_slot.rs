@@ -531,23 +531,12 @@ pub(crate) struct GenerationOutcome {
 // the sentinel rides the existing HTTP plumbing untouched.
 
 /// Detect the forced-choice sentinel and return its candidate labels.
-/// `None` for ordinary requests (so every existing path is unaffected).
+/// Thin delegate to [`CompletionRequest::forced_choice_candidates`] — the
+/// detector was hoisted into sovereign-contracts so the mesh scheduler
+/// (which cannot see engine internals) and this local slot picker share
+/// one predicate. `None` for ordinary requests (every path unaffected).
 pub(crate) fn forced_choice_candidates(request: &CompletionRequest) -> Option<Vec<String>> {
-    let so = request.structured_output.as_ref()?;
-    if so.get("x_forced_choice").and_then(|v| v.as_bool()) != Some(true) {
-        return None;
-    }
-    let cands: Vec<String> = so
-        .get("enum")?
-        .as_array()?
-        .iter()
-        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-        .collect();
-    if cands.is_empty() {
-        None
-    } else {
-        Some(cands)
-    }
+    request.forced_choice_candidates()
 }
 
 /// Read the model's next-token distribution over `candidates` in one

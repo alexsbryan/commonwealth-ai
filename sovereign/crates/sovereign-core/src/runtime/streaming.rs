@@ -21,6 +21,7 @@ use crate::context::{build_context, format_history_as_prompt};
 use crate::error::{Error, Result};
 use crate::memory;
 use crate::skills::SkillRegister;
+use crate::slot_policy::Workload;
 
 use super::*;
 
@@ -767,14 +768,12 @@ impl Runtime {
         }
 
         // Raw request: the rendered transcript is the prompt; no tools,
-        // evidence, or grammar. `Speed::Slow` serves the loaded primary
-        // — the model the user chose to run naked.
-        let request = CompletionRequest {
-            prompt: format_history_as_prompt(&context, 24),
-            system_message: Some(system),
-            preferred_speed: Speed::Slow,
-            ..Default::default()
-        };
+        // evidence, or grammar. SLOT_POLICY §3 Passthrough — the model
+        // the user chose to run naked; latency=Normal → shadow Speed::Slow
+        // (Primary), unchanged from the prior explicit Slow.
+        let mut request =
+            CompletionRequest::for_workload(Workload::Passthrough, format_history_as_prompt(&context, 24));
+        request.system_message = Some(system);
 
         let message_id = uuid::Uuid::new_v4().to_string();
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);

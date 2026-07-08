@@ -855,6 +855,64 @@ mod pick_slot_tests {
         );
     }
 
+    // ── Forced-choice sentinel backstop (SLOT_POLICY §6) ──────────
+
+    fn forced_choice_req(speed: Speed, labels: &[&str]) -> CompletionRequest {
+        let mut r = req(speed, None);
+        // The sentinel shape: max_tokens=1, enum candidates, and the
+        // `x_forced_choice` marker. max_tokens=1 + Fast would satisfy
+        // the FastShort gate, which is exactly the trap the backstop
+        // guards against.
+        r.max_tokens = Some(1);
+        r.structured_output = Some(serde_json::json!({
+            "type": "string",
+            "enum": labels,
+            "x_forced_choice": true,
+        }));
+        r
+    }
+
+    #[test]
+    fn forced_choice_sentinel_routes_to_primary_beating_fast_short() {
+        // A Fast-labelled, max_tokens=1 sentinel would land on FastShort
+        // under the ordinary gates — but calibrated logprobs need the
+        // primary model, so the backstop (which precedes the FastShort
+        // gate) sends it to Primary.
+        let r = forced_choice_req(Speed::Fast, &["A", "B", "C"]);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Primary,
+            "forced-choice sentinel must beat the FastShort gate to reach Primary"
+        );
+    }
+
+    #[test]
+    fn forced_choice_sentinel_without_primary_falls_through_to_fast_short() {
+        // Primary-less host: the backstop is a no-op and the request
+        // falls through to the best available slot (FastShort here)
+        // rather than failing.
+        let r = forced_choice_req(Speed::Fast, &["yes", "no"]);
+        assert_eq!(
+            pick_slot(&r, false, false, true, None),
+            SlotTarget::FastShort,
+            "with no primary, the sentinel falls through to the normal gates"
+        );
+    }
+
+    #[test]
+    fn forced_choice_sentinel_with_empty_enum_is_not_special() {
+        // A malformed sentinel (empty candidate set) is NOT forced-choice
+        // — `forced_choice_candidates` returns None — so it routes by the
+        // ordinary gates (FastShort for a tiny Fast request), never
+        // hijacking Primary.
+        let r = forced_choice_req(Speed::Fast, &[]);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::FastShort,
+            "empty-enum sentinel is not treated as forced-choice"
+        );
+    }
+
     #[test]
     fn extras_match_wins_over_code_hint() {
         // Even a code-hinted request defers to an explicit extras

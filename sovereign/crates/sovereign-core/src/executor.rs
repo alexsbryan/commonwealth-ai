@@ -6,7 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 
 use crate::error::{Error, Result};
-use crate::oicp::LatencyClass;
 use crate::registry::ToolRegistry;
 use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, StateStore};
@@ -683,15 +682,13 @@ impl Executor {
 
                 // Attach OICP requirements from active skills. If
                 // skills haven't declared a latency class, derive one
-                // from the step's Speed so the scheduler ranks fast
-                // steps against fast claims and deep steps against
-                // extended claims.
+                // from the step's Speed via the canonical map
+                // (SLOT_POLICY §8). Slow now derives Normal, not
+                // Extended (rule 4.4 — Extended is declaration-only);
+                // deep steps therefore score 1.0 against peers' Normal
+                // primary claims instead of 0.8 adjacent.
                 let oicp_req = self.skills.inference_requirements();
-                let default_class = match speed {
-                    Speed::Fast => LatencyClass::Fast,
-                    Speed::Medium => LatencyClass::Normal,
-                    Speed::Slow => LatencyClass::Extended,
-                };
+                let default_class = crate::slot_policy::speed_to_latency(*speed);
                 let oicp = if oicp_req.capability_hint.is_none()
                     && oicp_req.latency_class.is_none()
                     && oicp_req.context_tokens.is_none()

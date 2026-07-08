@@ -48,6 +48,7 @@
 use std::collections::HashSet;
 
 use crate::runtime::retrieval_pipeline::{kq_pipeline, PipelineState};
+use crate::slot_policy::Workload;
 use crate::types::{CompletionRequest, Intent, Speed};
 
 use super::ConversationContext;
@@ -865,8 +866,12 @@ impl Runtime {
             // The gate's `forced_choice_ab` runs on primary for the same reason
             // (the fast slot's support distributions are squashed). One
             // prefill-dominated forced-choice per KQ is affordable for recall.
-            preferred_speed: Speed::Medium,
-            model_id: Some("primary".into()),
+            preferred_speed: Speed::Slow,
+            // SLOT_POLICY §7: OICP envelope instead of a `model_id:
+            // "primary"` pin (a latent privacy hole — see grounding/
+            // judge.rs). No `base_request` here, so posture comes from
+            // the session's skills exactly as `build_oicp` derives it.
+            oicp: Some(Workload::Judge.requirements(self.session_sharding())),
             max_tokens: Some(1),
             temperature: Some(0.0),
             think_budget: Some(0),
@@ -1021,29 +1026,26 @@ impl Runtime {
             world,
             message.chars().take(400).collect::<String>(),
         );
-        let req = CompletionRequest {
-            prompt,
-            system_message: Some("You write precise search queries.".into()),
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(160),
-            temperature: Some(0.0),
-            think_budget: Some(0),
-            enable_thinking: Some(false),
-            structured_output: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "queries": {
-                        "type": "array",
-                        "items": { "type": "string", "maxLength": 80 },
-                        "minItems": 1,
-                        "maxItems": 6
-                    }
-                },
-                "required": ["queries"],
-                "additionalProperties": false
-            })),
-            ..Default::default()
-        };
+        // SLOT_POLICY §3 Housekeep: alternative-query generation for
+        // re-retrieval — schema-constrained, consumed by the loop.
+        let mut req = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+            .with_system("You write precise search queries.")
+            .with_output_budget(160);
+        req.temperature = Some(0.0);
+        req.enable_thinking = Some(false);
+        req.structured_output = Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "queries": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 80 },
+                    "minItems": 1,
+                    "maxItems": 6
+                }
+            },
+            "required": ["queries"],
+            "additionalProperties": false
+        }));
         let resp = self.inference.complete(&req).await.ok()?;
         #[derive(serde::Deserialize)]
         struct Q {

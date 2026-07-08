@@ -16,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
@@ -132,30 +133,18 @@ impl DocumentOperationTool {
                     // Minimal prompt — every token of instruction prefix is
                     // prefill overhead multiplied by batch_count. No system
                     // message (saves ~50 tokens of template per call).
-                    CompletionRequest {
-                        prompt: format!(
+                    // SLOT_POLICY §3 Housekeep: document-op map phase —
+                    // advisory extraction feeding the reduce, not durable
+                    // truth. Housekeep's Some(0) think budget matches verbatim.
+                    let mut req = CompletionRequest::for_workload(
+                        Workload::Housekeep,
+                        format!(
                             "{map_prompt}\n\nPassage:\n{passage}\n\nExtract relevant info. If nothing relevant, respond: null",
                         ),
-                        system_message: None,
-                        preferred_speed: Speed::Fast,
-                        max_tokens: Some(384),
-                        temperature: Some(0.0),
-                        structured_output: None,
-                        think_budget: Some(0),
-                        top_k: None,
-                        top_p: None,
-                        oicp: None,
-            tools: None,
-            tool_choice: None,
-                                model_id: None,
-                                enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
-                    }
+                    )
+                    .with_output_budget(384);
+                    req.temperature = Some(0.0);
+                    req
                 })
                 .collect();
 
@@ -298,28 +287,14 @@ impl DocumentOperationTool {
              Merge into one passage. Deduplicate, organize, keep all details."
         );
 
-        let request = CompletionRequest {
-            prompt,
-            system_message: None,
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(1024),
-            temperature: Some(0.0),
-            structured_output: None,
-            think_budget: Some(0),
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        // SLOT_POLICY §3 Housekeep: intermediate reduce pass — advisory
+        // fan-in of extracted fragments, not the user-facing synthesis
+        // (that is reduce_final). Housekeep's Some(0) think budget matches.
+        let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+            // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 1024 > 512 forfeits the
+            // batched FastShort claim; the merge pass genuinely needs the room.
+            .with_output_budget(1024);
+        request.temperature = Some(0.0);
 
         let response = self.inference.complete(&request).await?;
         Ok(response.text)
@@ -335,32 +310,16 @@ impl DocumentOperationTool {
              Produce a comprehensive, well-organized final answer."
         );
 
-        let request = CompletionRequest {
-            prompt,
-            system_message: Some(
+        // SLOT_POLICY §3 Synthesize: final reduce — the user-facing
+        // synthesis; quality matters more than speed. Synthesize leaves
+        // think_budget None (thinking allowed for the final synthesis).
+        let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            .with_system(
                 "You are producing the final synthesis of a document analysis. \
-                 Be thorough, well-organized, and cite specific details."
-                    .to_string(),
-            ),
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(2048),
-            temperature: Some(0.3),
-            structured_output: None,
-            think_budget: None, // allow thinking for the final synthesis
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+                 Be thorough, well-organized, and cite specific details.",
+            )
+            .with_output_budget(2048);
+        request.temperature = Some(0.3);
 
         let response = self.inference.complete(&request).await?;
         Ok(response.text)
@@ -584,31 +543,15 @@ impl DocumentOperationTool {
 
             let prompt = format!("{map_prompt}\n\nDocument:\n{full_text}\n\nReturn JSON.");
 
-            let request = CompletionRequest {
-                prompt,
-                system_message: Some(format!(
+            // SLOT_POLICY §3 Synthesize: small-document single-pass
+            // synthesis composed for the user (no reduce needed).
+            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+                .with_system(&format!(
                     "You are processing the document \"{source}\". \
                      Follow the extraction instructions precisely."
-                )),
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(1024),
-                temperature: Some(0.3),
-                structured_output: None,
-                think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            };
+                ))
+                .with_output_budget(1024);
+            request.temperature = Some(0.3);
 
             self.inference.complete(&request).await?.text
         } else {

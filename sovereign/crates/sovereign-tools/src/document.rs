@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 
@@ -42,31 +43,22 @@ impl DocumentTool {
                 .collect::<Vec<_>>()
                 .join("\n\n---\n\n");
 
-            let request = CompletionRequest {
-                prompt: format!("{map_prompt}\n\n---\n\n{batch_text}"),
-                system_message: Some(format!(
-                    "You are processing section {} of a larger document. {map_prompt}",
-                    batch_idx + 1,
-                )),
-                preferred_speed: Speed::Fast,
-                max_tokens: Some(512),
-                temperature: Some(0.3),
-                structured_output: None,
-                think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            };
+            // SLOT_POLICY §3 Housekeep: document map-phase section
+            // summarize/analyze — advisory context feeding the reduce,
+            // not durable truth.
+            let mut request = CompletionRequest::for_workload(
+                Workload::Housekeep,
+                format!("{map_prompt}\n\n---\n\n{batch_text}"),
+            )
+            .with_system(&format!(
+                "You are processing section {} of a larger document. {map_prompt}",
+                batch_idx + 1,
+            ))
+            .with_output_budget(512);
+            request.temperature = Some(0.3);
+            // POLICY-DEBT(SLOT_POLICY §3 Housekeep): None preserved for P1
+            // neutrality (bundle is Some(0)); P5 confirms.
+            request.think_budget = None;
 
             let response = self.inference.complete(&request).await?;
             batch_summaries.push(response.text);
@@ -115,32 +107,18 @@ impl DocumentTool {
                 ),
             };
 
-                let request = CompletionRequest {
-                    prompt: reduce_prompt,
-                    system_message: Some(
-                        "You are synthesizing a final summary from section summaries. \
-                     Produce a coherent, comprehensive result."
-                            .to_string(),
-                    ),
-                    preferred_speed: Speed::Slow,
-                    max_tokens: Some(1024),
-                    temperature: Some(0.5),
-                    structured_output: None,
-                    think_budget: None,
-                    top_k: None,
-                    top_p: None,
-                    oicp: None,
-                    tools: None,
-                    tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
-                };
+                // SLOT_POLICY §3 Synthesize: final reduce composing a
+                // coherent document summary/analysis for the user.
+                let mut request = CompletionRequest::for_workload(
+                    Workload::Synthesize,
+                    reduce_prompt,
+                )
+                .with_system(
+                    "You are synthesizing a final summary from section summaries. \
+                     Produce a coherent, comprehensive result.",
+                )
+                .with_output_budget(1024);
+                request.temperature = Some(0.5);
 
                 let response = self.inference.complete(&request).await?;
                 return Ok(response.text);
@@ -319,30 +297,14 @@ impl DocumentTool {
                 _ => format!("Summarize the following document comprehensively.\n\n{full_text}"),
             };
 
-            let request = CompletionRequest {
-                prompt,
-                system_message: Some(format!(
+            // SLOT_POLICY §3 Synthesize: small-document direct
+            // summary/analysis composed for the user (no map-reduce).
+            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+                .with_system(&format!(
                     "You are processing the document \"{source}\". Provide a thorough {operation}."
-                )),
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(1024),
-                temperature: Some(0.5),
-                structured_output: None,
-                think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            };
+                ))
+                .with_output_budget(1024);
+            request.temperature = Some(0.5);
 
             let response = self.inference.complete(&request).await?;
             return Ok(StepOutput::Text(response.text));

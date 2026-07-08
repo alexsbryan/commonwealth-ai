@@ -509,6 +509,24 @@ pub(crate) fn pick_slot(
         return SlotTarget::Code;
     }
 
+    // Forced-choice sentinel backstop (SLOT_POLICY §6). A forced-choice
+    // request carries `max_tokens=1` and may be labelled `Speed::Fast`,
+    // which would satisfy the FastShort gate below — but the calibrated
+    // logprob elicitation reads the PRIMARY model's next-token
+    // distribution, not the small companion's, so it must land on
+    // Primary. This MUST precede the FastShort gate for exactly that
+    // reason. On a primary-less host it falls through to the normal
+    // gates (best-effort) rather than failing.
+    if request.forced_choice_candidates().is_some() && has_primary {
+        if request.preferred_speed == Speed::Fast {
+            tracing::warn!(
+                "forced_choice sentinel declared Speed::Fast — overriding to the \
+                 Primary slot for calibrated logprobs (SLOT_POLICY §6)"
+            );
+        }
+        return SlotTarget::Primary;
+    }
+
     // FastShort routing: when the FastShort companion slot is built
     // and the request fits its envelope (small output budget, fast
     // latency, prompt fits the per-seq KV slice), route there. The

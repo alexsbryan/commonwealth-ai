@@ -119,6 +119,16 @@ impl<'a> TypedLlmCall<'a> {
         for (attempt_idx, &budget) in self.budgets.iter().enumerate() {
             let attempt = attempt_idx + 1;
             let user = build_user(budget).await;
+            // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): NOT migrated to the
+            // `Workload` resolver in P1. `speed`/`think_budget`/`temperature`
+            // are caller-set `pub` struct fields (line 80/82/81) that this
+            // generic helper reads at runtime (`self.speed` below); binding one
+            // static `Workload` would remove that configurability and can't
+            // reproduce a Fast override. The default (Slow + Some(0)) is
+            // ExtractDurable-shaped and the sole live caller
+            // (`typed_extension::pass`) keeps that default. P5 owns the resolve:
+            // add a `Workload` field to `TypedLlmCall` (or split callers), then
+            // route via `for_workload`.
             let request = CompletionRequest {
                 prompt: user,
                 system_message: Some(self.system.to_string()),

@@ -227,7 +227,13 @@ impl CompletionRequest {
         Self {
             prompt: prompt.to_string(),
             system_message: None,
-            preferred_speed: Speed::Medium,
+            // SLOT_POLICY §8: the default primary shadow. `Speed::Medium`
+            // is retired as a construction target — it and `Slow` both
+            // resolve to the primary slot locally, so this is behaviourally
+            // identical, and it keeps the derived shadow out of the phantom
+            // tier. A raw `new()` carries no OICP envelope, so it is never
+            // offload-eligible (§5); this default only picks the local slot.
+            preferred_speed: Speed::Slow,
             max_tokens: None,
             temperature: None,
             structured_output: None,
@@ -253,6 +259,37 @@ impl CompletionRequest {
         self
     }
 
+    /// Detect the forced-choice sentinel and return its candidate labels.
+    /// A caller opts in by embedding `{"x_forced_choice": true, "enum":
+    /// [...]}` in `structured_output`; the embedded inference path then
+    /// answers with a calibrated one-pass distribution over the labels
+    /// instead of running the generation loop (advertised as the
+    /// `x:forced_choice` feature — [`oicp_types::features::X_FORCED_CHOICE`]).
+    /// Returns `None` for every ordinary request, so all existing paths
+    /// are unaffected.
+    ///
+    /// Note the sentinel JSON key is `x_forced_choice` (underscore),
+    /// deliberately distinct from the advertised feature string
+    /// `x:forced_choice` (colon). Hoisted here from the engine so the
+    /// mesh scheduler and the local slot picker share one detector.
+    pub fn forced_choice_candidates(&self) -> Option<Vec<String>> {
+        let so = self.structured_output.as_ref()?;
+        if so.get("x_forced_choice").and_then(|v| v.as_bool()) != Some(true) {
+            return None;
+        }
+        let cands: Vec<String> = so
+            .get("enum")?
+            .as_array()?
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+        if cands.is_empty() {
+            None
+        } else {
+            Some(cands)
+        }
+    }
+
     pub fn with_system(mut self, system: &str) -> Self {
         self.system_message = Some(system.to_string());
         self
@@ -260,6 +297,71 @@ impl CompletionRequest {
 
     pub fn with_oicp(mut self, requirements: oicp::InferenceRequirements) -> Self {
         self.oicp = Some(requirements);
+        self
+    }
+
+    /// Workload-resolver constructor (SLOT_POLICY §9.4). The call site
+    /// declares WHAT the call is ([`crate::slot_policy::Workload`]); the
+    /// scheduler resolves WHERE it runs. Attaches the OICP requirement
+    /// bundle, the derived `preferred_speed` shadow (§8 — via
+    /// `latency_to_speed`, never a literal), the class think budget, and
+    /// emits the glassbox `workload=` tracing event.
+    ///
+    /// Privacy: LocalOnly. Internal machinery uses this; it is provably
+    /// routing-neutral at the mesh privacy gate. Session-posture-aware
+    /// callers (grounding judges, EnrichBulk fan-out) use
+    /// [`Self::for_workload_shared`].
+    pub fn for_workload(workload: crate::slot_policy::Workload, prompt: impl Into<String>) -> Self {
+        Self::for_workload_shared(workload, prompt, oicp::ShardingPrivacy::LocalOnly)
+    }
+
+    /// [`Self::for_workload`] with an explicit privacy posture — the
+    /// only path by which internal work becomes mesh-offloadable.
+    /// Threading the session/operator posture (never hardcoding it) is
+    /// SLOT_POLICY §2.4.
+    pub fn for_workload_shared(
+        workload: crate::slot_policy::Workload,
+        prompt: impl Into<String>,
+        posture: oicp::ShardingPrivacy,
+    ) -> Self {
+        let bundle = workload.bundle();
+        let oicp = workload.requirements(posture);
+        tracing::debug!(
+            target: "slot_policy",
+            workload = workload.as_str(),
+            latency_class = ?bundle.latency,
+            privacy = ?posture,
+            request_id = oicp.request_id.as_deref().unwrap_or(""),
+            "workload request constructed"
+        );
+        let mut req = Self::new(&prompt.into());
+        // The ONE canonical shadow derivation (SLOT_POLICY §8).
+        req.preferred_speed = crate::slot_policy::latency_to_speed(bundle.latency);
+        req.think_budget = bundle.think_budget;
+        req.oicp = Some(oicp);
+        req
+    }
+
+    /// Honest output budget (SLOT_POLICY §2.3): sets `max_tokens` AND
+    /// the envelope's `max_output_tokens` together so the serving-side
+    /// shadow and the routing contract can't drift. `max_output_tokens`
+    /// is a hard routing gate (it selects FastShort vs FastLong);
+    /// setting only one is the drift bug this closes. Promoted from the
+    /// enrich-client pattern.
+    pub fn with_output_budget(mut self, tokens: u32) -> Self {
+        self.max_tokens = Some(tokens as usize);
+        self.oicp = Some(
+            self.oicp
+                .unwrap_or_default()
+                .with_max_output_tokens(tokens),
+        );
+        self
+    }
+
+    /// Honest context budget (SLOT_POLICY §2.3): sets the envelope's
+    /// `context_tokens` hard gate.
+    pub fn with_context_budget(mut self, tokens: u32) -> Self {
+        self.oicp = Some(self.oicp.unwrap_or_default().with_context_tokens(tokens));
         self
     }
 
@@ -285,7 +387,16 @@ impl CompletionRequest {
             think_budget: Some(0), // No thinking needed for yes/no
             top_k: None,
             top_p: None,
-            oicp: None,
+            // SLOT_POLICY §3 Route: a branch-condition check. One
+            // envelope here makes every `yes_no` call site
+            // scheduler-visible; the honest 5-token budget rides along
+            // as the FastShort hard gate. Speed stays Fast (the shadow
+            // Route would derive anyway).
+            oicp: Some(
+                crate::slot_policy::Workload::Route
+                    .requirements(oicp::ShardingPrivacy::LocalOnly)
+                    .with_max_output_tokens(5),
+            ),
             tools: None,
             tool_choice: None,
             model_id: None,
@@ -485,4 +596,62 @@ pub enum StreamFrame {
         usage: Option<StreamUsage>,
     },
     Error(String),
+}
+
+#[cfg(test)]
+mod workload_builder_tests {
+    use super::*;
+    use crate::oicp::{LatencyClass, ShardingPrivacy, OICP_VERSION};
+    use crate::slot_policy::Workload;
+
+    #[test]
+    fn for_workload_always_sets_oicp_version() {
+        // Pins the structural-422 invariant: an envelope missing
+        // `oicp_version` is rejected at the daemon's Json extractor.
+        for w in Workload::ALL {
+            let req = CompletionRequest::for_workload(w, "p");
+            let oicp = req.oicp.expect("workload envelope");
+            assert_eq!(oicp.oicp_version, OICP_VERSION, "{}", w.as_str());
+        }
+    }
+
+    #[test]
+    fn for_workload_defaults_to_local_only() {
+        let req = CompletionRequest::for_workload(Workload::Route, "p");
+        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::LocalOnly);
+    }
+
+    #[test]
+    fn for_workload_shared_threads_posture() {
+        let req = CompletionRequest::for_workload_shared(
+            Workload::Judge,
+            "p",
+            ShardingPrivacy::MeshAllowed,
+        );
+        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::MeshAllowed);
+    }
+
+    #[test]
+    fn for_workload_tags_request_id() {
+        let req = CompletionRequest::for_workload(Workload::Housekeep, "p");
+        let id = req.oicp.unwrap().request_id.expect("tag");
+        assert!(id.starts_with("wl-housekeep-"), "{id}");
+    }
+
+    #[test]
+    fn with_output_budget_sets_both_max_tokens_and_envelope() {
+        let req = CompletionRequest::for_workload(Workload::Route, "p").with_output_budget(5);
+        assert_eq!(req.max_tokens, Some(5));
+        assert_eq!(req.oicp.unwrap().max_output_tokens, Some(5));
+    }
+
+    #[test]
+    fn yes_no_carries_route_envelope_and_stays_fast() {
+        let yn = CompletionRequest::yes_no("is it?", "ctx");
+        assert_eq!(yn.preferred_speed, Speed::Fast);
+        let oicp = yn.oicp.expect("route envelope");
+        assert_eq!(oicp.effective_latency_class(), LatencyClass::Fast);
+        assert_eq!(oicp.max_output_tokens, Some(5));
+        assert_eq!(oicp.sharding(), ShardingPrivacy::LocalOnly);
+    }
 }

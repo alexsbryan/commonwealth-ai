@@ -16,10 +16,23 @@ pub type EntityInventory = std::collections::HashSet<String>;
 
 // ─── Inference Types ───────────────────────────────────────────
 
+/// The derived slot shadow of an OICP latency class (SLOT_POLICY §8).
+/// A request's true routing input is its `InferenceRequirements`
+/// envelope; `preferred_speed` is a legacy projection of that, written
+/// only by `slot_policy::latency_to_speed` (never a free-hand literal
+/// in new code).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Speed {
     #[default]
     Fast,
+    /// Retained ONLY for serde compatibility (stored `Plan`s embed the
+    /// PascalCase `"Medium"` string, and dropping the variant would
+    /// silently parse-fail them to empty) and for descriptive capability
+    /// metadata (`ProviderCapabilities::relative_speed`). It is NOT a
+    /// routing target: `latency_to_speed` never yields it, and
+    /// construction sites use `Fast` or `Slow` (SLOT_POLICY §8). At the
+    /// engine it is indistinguishable from `Slow` (both pick the primary
+    /// slot).
     Medium,
     Slow,
 }

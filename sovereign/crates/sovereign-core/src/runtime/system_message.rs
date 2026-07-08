@@ -93,6 +93,16 @@ impl Runtime {
 
         Some(out)
     }
+
+    /// The session's current sharding posture — `MeshAllowed` by default,
+    /// `LocalOnly` when an active skill (e.g. `inner-work`) has declared
+    /// it. Reads the exact source `build_oicp` reads (§8), so a caller
+    /// that builds its own envelope but has no `base_request` to derive
+    /// posture from — the evidence-loop forced-choice judge — routes with
+    /// the same privacy the synthesis turn would.
+    pub(crate) fn session_sharding(&self) -> crate::oicp::ShardingPrivacy {
+        self.skills.inference_requirements().sharding()
+    }
     /// Build a system message that includes memory context.
     pub(crate) fn build_system_message(&self, base: &str, context: &ConversationContext) -> String {
         // Invariant check: the Runtime is required to splice
