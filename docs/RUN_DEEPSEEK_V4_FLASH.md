@@ -1,5 +1,10 @@
 # Run DeepSeek-V4-Flash on the mesh
 
+> **PARKED (2026-07-09) — preserved as an honest record, not an active plan.** This
+> chased a hard way to run one specific model; the real goal (heterogeneous
+> distributed inference) never depended on it. Jump to **Verdict & durable learnings**
+> at the end for the why and what's reusable.
+
 This is the [Run a model bigger than your machine](./RUN_A_BIGGER_MODEL.md) path,
 made concrete for DeepSeek-V4-Flash across two boxes: a **Strix Halo (128 GB,
 Vulkan)** as host and **BeefyMac (64 GB, Metal)** as worker.
@@ -17,17 +22,19 @@ go. Each stage retires one risk before we spend on the next.
 
 ## Status
 
-_Last updated: 2026-07-08_
+_Last updated: 2026-07-09 —_ **PARKED.**
 
-- [~] **Stage 0 — does the arch execute on our backends?** (blocked on download)
-- [ ] **Stage 1 — solo Strix, quality + speed read**
-- [ ] **Stage 2 — pooled over LAN, measure tok/s** ← the decision gate
-- [ ] **Stage 3 — integrate into `sovereign daemon`**
-- [ ] **Stage 4 — distributed throughput probe** (build during Stage 2)
+**This exploration is parked** — not because it can't work, but because it's off-axis
+for the real goal. DeepSeek-V4-Flash was chosen as a convenient-sized, capable model;
+the actual objective is **demonstrating distributed inference across heterogeneous
+hardware** (Strix Halo + BeefyMac). Our *existing* ggml-RPC path already does that
+(Strix-Vulkan host ↔ Mac-Metal worker, validated at 4B), and a **Qwen-122B split over
+that same path** demonstrates it at scale with far less risk and zero bleeding edge.
+See "Verdict & durable learnings" at the end.
 
-**Right now:** the IQ3_XXS quant (~97 GB, 4 shards) is downloading to
-`sovereign/models/DeepSeek-V4-Flash-GGUF/UD-IQ3_XXS/`. Nothing else can start
-until it lands and we have a WIP llama.cpp build. Next action: Stage 0.
+Everything below is preserved as an honest, runnable record in case we ever want
+DeepSeek-V4-Flash for its own sake. Sunk cost was small: a ~15 GB partial download
+(cut, unused) and the design thinking — which survives as reusable architecture.
 
 ## The model
 
@@ -279,10 +286,119 @@ on gfx1151?"; (2) it runs **its own GGUF files** (`download_model.sh`, custom
 asymmetric quants), so our unsloth IQ3_XXS won't load — going this way costs a
 separate ~90 GB download. Maturity: days old, beta, single-author + GPT-5.5.
 
-**Decision (2026-07-08):** probe the llama.cpp Vulkan path first (no new download);
-fall back to ds4 only if Vulkan lacks the kernels or is too slow. Its make-or-break
-(ROCm on gfx1151) is independent of llama.cpp's (Vulkan V4 kernels), so a failure on
-one cleanly points to the other.
+**Decision (2026-07-09):** pivoted — ds4 is now the **primary** path; the
+llama.cpp/Vulkan stages above are the fallback if ds4-on-ROCm doesn't pan out.
+antirez tested this exact config (128 GB Strix, Radeon 8060S, gfx1151 — see the repo's
+`STRIXHALO.md`), and kyuz0 ships ds4 **prebuilt** for it, so the ROCm-on-gfx1151
+make-or-break is largely de-risked. The one real gate is unlocking GPU memory.
+*(Superseded the same day — see the Verdict at the end. This whole exploration was
+parked in favour of the Qwen-122B heterogeneous split; the path below stays valid if
+we ever want DeepSeek-V4-Flash as a fast local provider for its own sake.)*
+
+### Execution — the concrete path
+
+Uses kyuz0's purpose-built ds4 toolbox (`ds4`/`ds4-server`/`ds4-bench` prebuilt vs
+ROCm 7.2.4) — **no source build**. Steps tagged **[host]** run on the host (my shell
+is pinned inside the vulkan toolbox and can't manage sibling toolboxes or reboot).
+
+1. **[host] Unlock GPU memory — reboot-gated.** ROCm sees only ~62 GB of the 128 GB
+   by default; the ~81 GB model needs the full GTT aperture. Add to
+   `GRUB_CMDLINE_LINUX`:
+   `amd_iommu=off amdgpu.gttsize=126976 ttm.pages_limit=32505856 ttm.page_pool_size=32505856`,
+   then `sudo grub2-mkconfig -o /boot/grub2/grub.cfg` and reboot. Verify with
+   `rocminfo | grep -A2 gfx1151` → ~124 GB pool.
+2. **[host] Create + enter the ds4 toolbox** (this is also the cheap ROCm-viability
+   gate — if `rocminfo` sees gfx1151 here, the 81 GB download is safe):
+   ```sh
+   toolbox create ds4-rocm-7.2.4 \
+     --image docker.io/kyuz0/strix-halo-ds4-toolbox:rocm-7.2.4 \
+     -- --device /dev/dri --device /dev/kfd \
+     --group-add video --group-add render --group-add sudo --security-opt seccomp=unconfined
+   toolbox enter ds4-rocm-7.2.4
+   ```
+3. **Download the model (~81 GB, single file).** `~/ds4` is shared across toolboxes,
+   so this can run from any shell:
+   ```sh
+   HF_XET_HIGH_PERFORMANCE=1 hf download antirez/deepseek-v4-gguf \
+     DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf \
+     --local-dir ~/ds4
+   ```
+   `q2-imatrix` only — antirez warns the mixed IQ2/Q4 quant OOMs the ROCm path here.
+4. **Run ds4-server (port 8000):**
+   ```sh
+   ds4-server -m ~/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf \
+     --ctx 124000 --kv-disk-dir /tmp/ds4-kv --kv-disk-space-mb 8192
+   ```
+5. **Wire as the Route B sidecar:** point `MeshInferenceProvider` /
+   `worker_inference_proxy` at `http://localhost:8000/v1/chat/completions`. The WIP
+   llama.cpp binding bump (Route A) is moot on this path — ds4 *is* the external
+   engine, kept out of our shared binding by construction.
+
+## Verdict & durable learnings (2026-07-09)
+
+**Why this is parked.** The goal was always *demonstrating distributed inference
+across heterogeneous hardware* (Strix Halo + BeefyMac). DeepSeek-V4-Flash was picked
+only because it looked like a convenient size. Following it led off-axis: its
+llama.cpp support is a WIP branch (not in our binding); its best runner (ds4) is a
+*non-ggml* engine whose own distribution is homogeneous Mac↔Mac with cross-backend
+ROCm↔Metal unproven; and at q2 (~81 GB) the model **fits the Strix solo — so it never
+even exercises a split.** We'd have spent real effort to run a specific model in a way
+that doesn't advance the actual demonstration.
+
+**Where the goal actually goes.** Our existing ggml-RPC path is already validated
+heterogeneous: **Strix-Vulkan host ↔ Mac-Metal worker, 4B, tokens out, the Mac holding
+only its shard** (see Reference). The demonstration is that path scaled to a model
+that genuinely must split — e.g. **Qwen-122B (already on disk, already runs on our
+bindings on both Vulkan and Metal), forced across both boxes** via the
+[RUN_A_BIGGER_MODEL](./RUN_A_BIGGER_MODEL.md) flow, measuring tok/s. That's rung 1 of
+the SHARED_MODEL ladder, uses only proven components, needs no bleeding edge, and the
+impressive part is *our mesh* doing the splitting — not a third-party engine. That
+work belongs in its own runbook; this page is not it.
+
+**If we ever do want DeepSeek-V4-Flash for its own sake**, the plan above is real and
+runnable: the ds4 execution path (prebuilt kyuz0 toolbox → GTT/GRUB unlock → 81 GB
+`q2-imatrix` → `ds4-server` → sidecar) is the shortest route, and ds4 is a genuinely
+good *fast local provider* — just decoupled from the distribution goal.
+
+### Durable learnings (these outlive the DeepSeek question)
+
+1. **External-provider architecture — the main takeaway.** Don't integrate a new
+   engine as a llama-cpp *slot*; add it as a *provider* behind the abstraction we
+   already have. Generalize `PinnedWorkerEndpointSource` → a **managed external
+   provider** (rented pod *or* local sidecar): declared in config, supervised as a
+   child, health-gated before advertisement, scored in the OICP pool like any peer.
+   ds4 (or a WIP-llama.cpp sidecar) then becomes *config, not code*. Crash isolation
+   stops being a workaround and becomes the reason — a beta engine behind an HTTP
+   boundary can SEGV without taking the daemon down, strictly better than the
+   in-process `GGML_ABORT` we can't make crash-safe. Route A (bump the vendored
+   binding) is the *optional* clean path once a model merges to llama.cpp master;
+   Route B (sidecar) is the right permanent home for volatile / purpose-built engines.
+
+2. **Two distribution layers that never compose.** *Request-level* (route a whole
+   request to the best provider) is engine-agnostic — OICP/mesh, where any sidecar
+   joins. *Tensor-level* (split one model across machines) is engine-*specific* — ours
+   is ggml-RPC; ds4's is its own coordinator/worker. You cannot reuse our RPC sharding
+   for a non-ggml engine. Two boxes combine cleanly at the request level (two providers
+   in the pool); tensor-fusing them is the hard path, owned by the engine, and only
+   needed when one model won't fit either box.
+
+3. **Our ggml-RPC path is the heterogeneous asset.** It already spans Vulkan+Metal; the
+   open items are scale / tok-s and worker-death robustness (uncatchable abort → run
+   under `install-service`), not "does heterogeneous work." That's the lever for the
+   real goal.
+
+4. **ds4 / DwarfStar is worth remembering.** Purpose-built C engine for DeepSeek-V4,
+   gfx1151 a first-class target, OpenAI + Anthropic server, SSD-streaming (experts on
+   NVMe → run a bigger model on *one* box, an alternative to splitting), prebuilt kyuz0
+   toolbox, fast (26–35 tok/s Metal). If we ever want DeepSeek-V4 capability locally,
+   this is the way — as a sidecar provider.
+
+5. **Strix Halo ROCm gotcha (for any future ROCm work).** By default ROCm exposes only
+   ~62 GB of the 128 GB; unlock the full GTT aperture via GRUB kernel params
+   (`amdgpu.gttsize` / `ttm.*`) + reboot before expecting a large model to load.
+   kyuz0's toolboxes make ROCm-on-gfx1151 viable (kernel ≥ 6.18.4, `-fa 1 --no-mmap`),
+   contra our older ggml-ROCm-SEGV experience — worth revisiting the Vulkan-only
+   default someday.
 
 ## Reference — the code this rides on
 
@@ -316,3 +432,12 @@ one cleanly points to the other.
   fork. Decided Stage 3 goes **Route B (sidecar)** for the trial, keeping the WIP
   llama.cpp out of the shared binding; Route A (fork `-sys-4`, bump/cherry-pick) is
   deferred until V4 merges to master. Stages 0–2 are unaffected (standalone binaries).
+- **2026-07-09** — Evaluated `antirez/ds4` (DwarfStar) + kyuz0's prebuilt ds4 toolbox
+  and captured the full execution path; briefly made ds4 the primary engine. Then
+  stepped back: the true goal is **heterogeneous distributed inference**, and
+  ds4/DeepSeek is off-axis for it (q2 fits the Strix solo → no split; ds4's own
+  distribution is non-ggml and homogeneous Mac↔Mac; cross-backend ROCm↔Metal unproven).
+  **Parked** the whole exploration in favour of a Qwen-122B split over our proven
+  ggml-RPC path. Preserved the durable learnings — chiefly the external-provider
+  architecture — in the Verdict section. Sunk cost: ~15 GB partial download (cut) +
+  design thinking (kept).

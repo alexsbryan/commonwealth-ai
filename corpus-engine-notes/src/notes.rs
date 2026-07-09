@@ -2919,6 +2919,38 @@ impl NoteStore {
         Ok(n)
     }
 
+    /// True if an active (non-retired, non-tombstoned) note already exists with
+    /// this exact `kind`/`content`/`source`.
+    ///
+    /// Automated emitters — the observed-pattern matcher above all — call this
+    /// before writing so a cooldown reset (new session, or a daemon restart that
+    /// wipes the in-memory cooldown map) can't re-file a lesson the store already
+    /// holds. It is deliberately content-level and session-agnostic: `content_hash`
+    /// folds in `session_id`, so two sessions emitting the same observation hash it
+    /// differently and the hash-based dedup in `write_note_full_v9` never fires for
+    /// exactly the cross-session case we most want to collapse.
+    pub async fn has_active_note_with_content(
+        &self,
+        kind: &str,
+        content: &str,
+        source: NoteSource,
+    ) -> Result<bool> {
+        let sql = "SELECT EXISTS(
+                     SELECT 1 FROM notes
+                      WHERE kind = ? AND content = ? AND source = ?
+                        AND retired_at IS NULL AND tombstone = 0
+                   )";
+        let conn = self.conn.lock().await;
+        let exists: bool = conn
+            .query_row(
+                sql,
+                rusqlite::params![kind, content, source.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(sqlite_err)?;
+        Ok(exists)
+    }
+
     /// Semantic-blend variant of [`read_notes_scoped`].
     ///
     /// Returns the same NoteRow shape but ranks the candidate pool
@@ -4013,6 +4045,55 @@ mod tests {
         let active = store.scan_all(false).await.unwrap();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].kind, "decision");
+    }
+
+    #[tokio::test]
+    async fn has_active_note_with_content_is_the_observed_emitter_guard() {
+        let store = make_store().await;
+        let content = "Three or more code-intel calls with no `build` or `note` follow-up.";
+
+        // Absent to begin with.
+        assert!(!store
+            .has_active_note_with_content("reflection", content, NoteSource::Observed)
+            .await
+            .unwrap());
+
+        // After an observed write, present — this is the signal the pattern
+        // matcher uses to skip re-filing across a cooldown reset.
+        let id = store
+            .write_note_with_source(
+                "reflection",
+                content,
+                vec!["symbols".into()],
+                vec![],
+                "session-a",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Observed,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(store
+            .has_active_note_with_content("reflection", content, NoteSource::Observed)
+            .await
+            .unwrap());
+
+        // Source-discriminated: an agent-authored note with identical text does
+        // NOT satisfy the observed guard (different provenance, different lane).
+        assert!(!store
+            .has_active_note_with_content("reflection", content, NoteSource::Agent)
+            .await
+            .unwrap());
+
+        // Retiring the row clears the guard — a genuinely fresh observation may
+        // then re-file, which is the intended behaviour.
+        store.retire_by_id(&id, "test").await.unwrap();
+        assert!(!store
+            .has_active_note_with_content("reflection", content, NoteSource::Observed)
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
