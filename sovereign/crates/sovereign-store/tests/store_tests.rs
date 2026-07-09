@@ -1149,3 +1149,126 @@ async fn corpus_raptor_version_returns_scoped_max_created_at() {
     assert_eq!(store.corpus_raptor_version("other").await.unwrap(), 999);
     assert_eq!(store.corpus_raptor_version("missing").await.unwrap(), 0);
 }
+
+// ─── T1 memory embeddings + T3 mem-raptor (tiered memory port) ────
+
+/// T1: `update_memory_embedding` persists and round-trips through the
+/// full-columns reader; a fresh row carries None.
+#[tokio::test]
+async fn sqlite_memory_embedding_roundtrip() {
+    let store = sqlite_store();
+    let mem = Memory {
+        id: "emb1".to_string(),
+        content: "walked by the river".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+        ..Default::default()
+    };
+    store.save_memory(&mem).await.unwrap();
+
+    let all = store.get_all_memories().await.unwrap();
+    assert!(all[0].embedding.is_none(), "fresh row must carry no embedding");
+
+    store
+        .update_memory_embedding("emb1", &[0.25f32, -1.5, 3.0], "test-embedder")
+        .await
+        .unwrap();
+    let all = store.get_all_memories().await.unwrap();
+    assert_eq!(all[0].embedding.as_deref(), Some(&[0.25f32, -1.5, 3.0][..]));
+    assert_eq!(all[0].embedding_model.as_deref(), Some("test-embedder"));
+}
+
+/// T1: a save_memory carrying an embedding persists it (compute-on-write
+/// path shape).
+#[tokio::test]
+async fn sqlite_memory_save_with_embedding() {
+    let store = sqlite_store();
+    let mem = Memory {
+        id: "emb2".to_string(),
+        content: "quiet evening".to_string(),
+        source: "test".to_string(),
+        confidence: 1.0,
+        created_at: now(),
+        last_used: now(),
+        embedding: Some(vec![1.0, 2.0]),
+        embedding_model: Some("m1".to_string()),
+        ..Default::default()
+    };
+    store.save_memory(&mem).await.unwrap();
+    let all = store.get_all_memories().await.unwrap();
+    assert_eq!(all[0].embedding.as_deref(), Some(&[1.0f32, 2.0][..]));
+    assert_eq!(all[0].embedding_model.as_deref(), Some("m1"));
+}
+
+fn mk_mem_node(node_id: &str, scope: &str, members: &[&str]) -> MemRaptorNodeRow {
+    MemRaptorNodeRow {
+        node_id: node_id.to_string(),
+        scope: scope.to_string(),
+        level: 0,
+        summary: format!("summary of {node_id}"),
+        summary_embedding: vec![0.1, 0.2],
+        centroid_embedding: vec![0.3, 0.4],
+        children_node_ids: vec![],
+        direct_member_memory_ids: members.iter().map(|s| s.to_string()).collect(),
+        evidence_memory_ids: members.iter().map(|s| s.to_string()).collect(),
+        primary_entities: vec!["River".to_string()],
+        cluster_coherence: 0.75,
+        embedding_model: "test-embedder".to_string(),
+        created_at: 1234,
+        ..Default::default()
+    }
+}
+
+/// T3: save/list/delete roundtrip, and — the sequestration property —
+/// scope keys never bleed into each other's listings.
+#[tokio::test]
+async fn sqlite_mem_raptor_scope_isolation() {
+    let store = sqlite_store();
+    store
+        .save_mem_raptor_nodes(
+            "mem:inner-work",
+            &[mk_mem_node("n1", "mem:inner-work", &["m-a", "m-b"])],
+        )
+        .await
+        .unwrap();
+    store
+        .save_mem_raptor_nodes("mem:general", &[mk_mem_node("n2", "mem:general", &["m-c"])])
+        .await
+        .unwrap();
+
+    let scoped = store.list_mem_raptor_nodes("mem:inner-work").await.unwrap();
+    assert_eq!(scoped.len(), 1);
+    assert_eq!(scoped[0].node_id, "n1");
+    assert_eq!(scoped[0].direct_member_memory_ids, vec!["m-a", "m-b"]);
+    assert_eq!(scoped[0].summary_embedding, vec![0.1, 0.2]);
+    assert_eq!(scoped[0].embedding_model, "test-embedder");
+
+    let general = store.list_mem_raptor_nodes("mem:general").await.unwrap();
+    assert_eq!(general.len(), 1);
+    assert_eq!(general[0].node_id, "n2");
+
+    // Replace semantics: a second save for the same scope drops the
+    // prior tree instead of accumulating.
+    store
+        .save_mem_raptor_nodes("mem:inner-work", &[mk_mem_node("n3", "mem:inner-work", &["m-d"])])
+        .await
+        .unwrap();
+    let scoped = store.list_mem_raptor_nodes("mem:inner-work").await.unwrap();
+    assert_eq!(scoped.len(), 1);
+    assert_eq!(scoped[0].node_id, "n3");
+    // Other scope untouched.
+    assert_eq!(store.list_mem_raptor_nodes("mem:general").await.unwrap().len(), 1);
+
+    store
+        .delete_mem_raptor_nodes_for_scope("mem:inner-work")
+        .await
+        .unwrap();
+    assert!(store
+        .list_mem_raptor_nodes("mem:inner-work")
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(store.list_mem_raptor_nodes("mem:general").await.unwrap().len(), 1);
+}

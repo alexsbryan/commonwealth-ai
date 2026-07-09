@@ -2256,6 +2256,12 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.model_id_for(speed)
     }
 
+    fn embed_model_id(&self) -> String {
+        // Embeds always run locally (see `embed`/`embed_batch` above),
+        // so the local slot's id is the honest answer.
+        self.local.embed_model_id()
+    }
+
     fn code_model_id(&self) -> Option<String> {
         // Delegate so the mesh-level self-advertisement sees the
         // same code slot the underlying `EmbeddedLlamaCpp` sees.

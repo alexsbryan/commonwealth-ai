@@ -300,6 +300,20 @@ impl MemoryStore for InMemoryStateStore {
         Ok(())
     }
 
+    async fn update_memory_embedding(
+        &self,
+        id: &str,
+        embedding: &[f32],
+        model: &str,
+    ) -> Result<()> {
+        let mut mems = self.memories.write().await;
+        if let Some(m) = mems.iter_mut().find(|m| m.id == id) {
+            m.embedding = Some(embedding.to_vec());
+            m.embedding_model = Some(model.to_string());
+        }
+        Ok(())
+    }
+
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()> {
         let mut mems = self.memories.write().await;
         if let Some(m) = mems.iter_mut().find(|m| m.id == id) {

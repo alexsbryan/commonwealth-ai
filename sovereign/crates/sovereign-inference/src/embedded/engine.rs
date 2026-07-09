@@ -348,6 +348,12 @@ pub struct EmbeddedLlamaCpp {
     /// general models (e.g., DeepSeek Coder vs Qwen3.5).
     code_quirks: ModelQuirks,
     embed_slot: Option<Arc<EmbedSlot>>,
+    /// Advertised id of the loaded embed model — the gguf file stem,
+    /// the same convention `/v1/models` advertises and
+    /// `SplitInferenceProvider` reports, so persisted embeddings
+    /// written through either surface vouch under the same id.
+    /// `None` when no embed slot is configured.
+    embed_model_id: Option<String>,
     /// Optional cross-encoder reranker slot. Behind a Mutex<Option<…>>
     /// rather than `Option<Arc<…>>` so it can be installed lazily
     /// after the inference provider is constructed — the daemon
@@ -979,6 +985,9 @@ impl EmbeddedLlamaCpp {
             code_path: code_model_path.map(|p| p.to_path_buf()),
             code_quirks,
             embed_slot,
+            embed_model_id: embed_model_path
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().into_owned()),
             rerank_slot: std::sync::Mutex::new(None),
             hardware,
             fast_quirks,
@@ -2881,6 +2890,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         } else {
             self.fast.model_id.clone()
         }
+    }
+
+    fn embed_model_id(&self) -> String {
+        self.embed_model_id
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     /// Configured primary-slot context size. This is the value passed

@@ -44,19 +44,27 @@ pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// where keyword FTS misses the seed memories on abstract queries
 /// (hard-mode H05: *"what kind of person am I?"* against concrete-
 /// event memories shares zero keywords). Retrieves all live
-/// memories, batch-embeds their content alongside the query, scores
-/// by cosine similarity, applies the same confidence-decay floor as
+/// memories, scores their content embeddings against the query by
+/// cosine similarity, applies the same confidence-decay floor as
 /// FTS, returns top-K.
 ///
 /// Falls back to the FTS path on any embedding error (empty query,
 /// dim mismatch, batch failure) so the caller never sees a hard
 /// failure — the retrieval just degrades to keyword.
 ///
-/// Cost: 1 query embed + 1 batched embed of all live memories per
-/// turn. For voice-eval scenarios with <10 seeds, this is ~50–200ms.
-/// At production scale (hundreds of memories) the right next step is
-/// schema-side caching of embeddings; this helper keeps the
-/// architectural surface clean for that follow-up.
+/// ## T1 persistent embeddings (tiered-retrieval memory-pool port)
+///
+/// Content embeddings are read from `Memory.embedding` when the
+/// stored vector is usable — produced by the same
+/// `embed_model_id()` the live provider reports, with the query's
+/// dimensionality. Rows without a usable vector (pre-migration rows,
+/// model swaps, providers that can't identify their embed model) are
+/// batch re-embedded exactly as before and the result is written
+/// back best-effort via `update_memory_embedding`, so the O(N)
+/// re-embed cost is paid once per pool, not once per turn.
+/// Retrieval-equivalent by construction: stored vectors come from
+/// the identical document-side `embed_batch` call over the identical
+/// content text.
 pub async fn recall_relevant_memories_embed(
     inference: &dyn InferenceProvider,
     store: &dyn StateStore,
@@ -92,22 +100,144 @@ pub async fn recall_relevant_memories_embed(
         }
     };
 
-    let texts: Vec<String> = all.iter().map(|m| m.content.clone()).collect();
-    let embs = match inference.embed_batch(&texts).await {
-        Ok(es) if es.len() == all.len() => es,
-        _ => {
-            tracing::debug!(
-                memories = all.len(),
-                "memory: embed recall — batch embed failed, falling back to FTS"
-            );
-            return Ok(store
-                .get_relevant_memories_for_scope(scope, query, limit)
-                .await
-                .unwrap_or_default());
+    // Partition into rows with a usable stored T1 embedding vs rows
+    // that need a fresh embed. "unknown" from `embed_model_id()`
+    // means the provider cannot identify its embed model — never
+    // match against it and never persist under it (a silent model
+    // swap would mis-rank).
+    let current_model = inference.embed_model_id();
+    let model_known = current_model != "unknown";
+    let mut embs: Vec<Option<Vec<f32>>> = Vec::with_capacity(all.len());
+    let mut missing_idx: Vec<usize> = Vec::new();
+    for (i, m) in all.iter().enumerate() {
+        let usable = model_known
+            && m.embedding_model.as_deref() == Some(current_model.as_str())
+            && m.embedding
+                .as_ref()
+                .is_some_and(|e| e.len() == query_emb.len());
+        if usable {
+            embs.push(m.embedding.clone());
+        } else {
+            embs.push(None);
+            missing_idx.push(i);
         }
-    };
+    }
+
+    if !missing_idx.is_empty() {
+        let texts: Vec<String> = missing_idx
+            .iter()
+            .map(|&i| all[i].content.clone())
+            .collect();
+        match inference.embed_batch(&texts).await {
+            Ok(fresh) if fresh.len() == texts.len() => {
+                for (&i, emb) in missing_idx.iter().zip(fresh.into_iter()) {
+                    // Lazy backfill — best-effort: a failed write just
+                    // means this row re-embeds next turn.
+                    if model_known && !emb.is_empty() {
+                        if let Err(e) = store
+                            .update_memory_embedding(&all[i].id, &emb, &current_model)
+                            .await
+                        {
+                            tracing::debug!(
+                                id = %all[i].id,
+                                error = %e,
+                                "memory: embed recall — embedding backfill write failed"
+                            );
+                        }
+                    }
+                    embs[i] = Some(emb);
+                }
+            }
+            _ => {
+                tracing::debug!(
+                    memories = missing_idx.len(),
+                    "memory: embed recall — batch embed failed, falling back to FTS"
+                );
+                return Ok(store
+                    .get_relevant_memories_for_scope(scope, query, limit)
+                    .await
+                    .unwrap_or_default());
+            }
+        }
+    }
+    let stored_hits = all.len() - missing_idx.len();
+
+    // ── T3 tier-aware boost (memory RAPTOR; spec
+    // TIERED_RETRIEVAL_MEMORIES.md) ────────────────────────────────
+    //
+    // A summary node ("ongoing grief for their father, hardest
+    // through spring") embeds far closer to an oblique callback
+    // ("that night in the spring") than any raw leaf does. When the
+    // scope has a tree whose embeddings the live provider can vouch
+    // for, cosine the query against each node summary; a matched
+    // node lifts its member leaves to
+    //
+    //   score = max(leaf_cos, α·node_cos + (1−α)·leaf_cos)
+    //
+    // The blend (NOT a flat `α·node_cos`) is load-bearing: a flat
+    // boost gives every member of the matched cluster the same
+    // score, so the sought memory ties with its ~15 cluster
+    // siblings and its rank inside the cluster is arbitrary. The
+    // (1−α)·leaf term preserves within-cluster leaf ordering while
+    // the α·node term lifts the whole cluster past unmatched-cluster
+    // distractors. Empty node list (no tree, tiny pool,
+    // non-persisting store, model swap) leaves scoring
+    // byte-identical to flat T1.
+    let alpha = std::env::var("SOVEREIGN_MEM_TIER_ALPHA")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .map(|a| a.clamp(0.0, 1.0))
+        .unwrap_or(0.85);
+    let mut tier_boost: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    if model_known {
+        let nodes = store
+            .list_mem_raptor_nodes(&scope.atlas_key())
+            .await
+            .unwrap_or_default();
+        if !nodes.is_empty() {
+            // Weak node matches carry no signal — don't let them
+            // shuffle the tail of the ranking.
+            const NODE_FLOOR: f32 = 0.30;
+            // Only LEAF clusters boost. Higher-level nodes' evidence
+            // converges on the whole pool (the root covers every
+            // memory), so their boost lifts everything equally — zero
+            // discriminating power, measured on the recall probe
+            // (2026-07-08): the root matched every callback at ~0.4
+            // and moved no ranks.
+            let mut matched_nodes = 0usize;
+            for node in nodes.iter().filter(|n| n.level == 0) {
+                if node.embedding_model != current_model
+                    || node.summary_embedding.len() != query_emb.len()
+                {
+                    continue;
+                }
+                let node_sim = cosine_similarity(&query_emb, &node.summary_embedding);
+                if node_sim < NODE_FLOOR {
+                    continue;
+                }
+                matched_nodes += 1;
+                for mid in &node.evidence_memory_ids {
+                    tier_boost
+                        .entry(mid.clone())
+                        .and_modify(|b| *b = b.max(node_sim))
+                        .or_insert(node_sim);
+                }
+            }
+            // Stored per-memory as the BEST matching node sim; the
+            // blend against the leaf happens at scoring time below.
+            tracing::debug!(
+                nodes = nodes.len(),
+                matched_nodes,
+                boosted_memories = tier_boost.len(),
+                alpha,
+                scope = ?scope,
+                "memory: embed recall — T3 tier boost active"
+            );
+        }
+    }
 
     let now_ts = now();
+    let in_scope = all.len();
     let mut scored: Vec<(f32, Memory)> = embs
         .into_iter()
         .zip(all.into_iter())
@@ -120,7 +250,10 @@ pub async fn recall_relevant_memories_embed(
             if decayed < 0.2 {
                 return None;
             }
-            let sim = cosine_similarity(&query_emb, &emb);
+            let leaf = cosine_similarity(&query_emb, &emb?);
+            let sim = tier_boost
+                .get(&m.id)
+                .map_or(leaf, |node_sim| leaf.max(alpha * node_sim + (1.0 - alpha) * leaf));
             Some((sim, m))
         })
         .collect();
@@ -128,9 +261,22 @@ pub async fn recall_relevant_memories_embed(
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(limit);
 
-    let top = scored.into_iter().map(|(_, m)| m).collect::<Vec<_>>();
+    let top = scored
+        .into_iter()
+        .map(|(_, mut m)| {
+            // Strip the vector from returned rows — callers render
+            // content, and a 1024-float payload per row would bloat
+            // every downstream clone/serialize (bench journals,
+            // prompt-context plumbing) for no reader.
+            m.embedding = None;
+            m.embedding_model = None;
+            m
+        })
+        .collect::<Vec<_>>();
     tracing::debug!(
-        in_scope = texts.len(),
+        in_scope,
+        stored_embeddings = stored_hits,
+        freshly_embedded = in_scope - stored_hits,
         returned = top.len(),
         limit,
         scope = ?scope,
@@ -991,6 +1137,39 @@ pub async fn prune_decayed_memories_with_config(
 
 // ─── Save with Contradiction Check ────────────────────────────
 
+/// Compute the T1 content embedding for a memory about to be saved,
+/// when the provider can identify its embed model and the row doesn't
+/// already carry one. Best-effort: an embed failure leaves the fields
+/// `None` and recall lazy-backfills on first use. Uses the
+/// document-side `embed_batch` — the SAME call recall uses on memory
+/// contents — so stored and recall-computed vectors rank identically.
+/// (NOT `embed_query`: instruction-aware embedders like
+/// Qwen3-Embedding prefix queries and documents differently.)
+pub async fn attach_content_embedding(inference: &dyn InferenceProvider, memory: &mut Memory) {
+    if memory.embedding.is_some() {
+        return;
+    }
+    let model = inference.embed_model_id();
+    if model == "unknown" {
+        return;
+    }
+    match inference
+        .embed_batch(std::slice::from_ref(&memory.content))
+        .await
+    {
+        Ok(mut embs) if embs.len() == 1 && !embs[0].is_empty() => {
+            memory.embedding = Some(embs.remove(0));
+            memory.embedding_model = Some(model);
+        }
+        _ => {
+            tracing::debug!(
+                id = %memory.id,
+                "memory: write-path embed failed — recall will lazy-backfill"
+            );
+        }
+    }
+}
+
 /// Save a new memory, first checking for duplicates and contradictions.
 pub async fn save_with_contradiction_check(
     inference: &dyn InferenceProvider,
@@ -1013,6 +1192,12 @@ pub async fn save_with_contradiction_check(
     for id in &contradicted_ids {
         store.delete_memory(id).await?;
     }
+
+    // T1 compute-on-write — AFTER the duplicate gate so a dropped
+    // duplicate never costs an embed, and at the single funnel every
+    // extracted memory passes through.
+    let mut new_memory = new_memory;
+    attach_content_embedding(inference, &mut new_memory).await;
 
     store.save_memory(&new_memory).await
 }

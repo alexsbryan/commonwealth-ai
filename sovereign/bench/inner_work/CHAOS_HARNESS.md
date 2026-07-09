@@ -268,3 +268,28 @@ back. That is the safe-but-doesn't-land outcome, and it is exactly the signal th
 extension exists to expose: the next lever is retrieval recall over a dense store
 (the callback is currently classified into expressive/metalingual registers whose
 memory-retrieval path doesn't surface the plant), not confabulation suppression.
+
+**Retrieval-only diagnostics (`--recall-probe`).** Separates the RETRIEVAL axis
+from the SYNTHESIS axis: seed the store once, then rank every plant's verbatim
+`oblique_callback` through the real `recall_relevant_memories_embed` path under
+BOTH memory scopes, top-10 by cosine, no witness turns, no judge. Each plant
+prints its rank verdict, per-recall wall time (making the T1 stored-embedding
+effect visible: the first recall pays the one-time lazy backfill, later recalls
+read stored vectors), and — when a memory-RAPTOR tree exists — tier diagnostics:
+the plant's leaf-only rank/cosine, the summary-node similarity of its own leaf
+cluster, and the best any-leaf-node similarity. Those three numbers decide
+whether a miss is a node-summary problem, a blend problem, or a leaf-tie
+problem.
+
+**Streaming-insert oracle (`--recall-stream`).** The recall run seeds a static
+pool, so it cannot exercise *incremental* re-clustering (the memory pool in
+production is an ever-growing stream). This mode validates
+`sovereign-tools::mem_tree` with a three-tree oracle over the same fixture:
+batch-build a base tree over ~40% of the seeds, stream the remaining ~60%
+one-by-one through `insert_memory` (collecting the trigger-ladder glassbox
+traces + LLM-call counts), then compare per-plant retrieval ranks against (a) a
+fresh full-batch tree over the identical final pool and (b) flat T1. Exit 1 on
+incremental-vs-batch divergence (needs ≥7/8 identical ranks, 8/8 within one) or
+a cost regression (≥1.0 LLM calls per insert means the ladder is firing
+expensive ops on the common path). The trace JSON is the tuning surface for the
+ladder knobs (θ₀, λ, radius headroom, Page-Hinkley δ, τ_c).

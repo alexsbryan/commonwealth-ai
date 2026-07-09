@@ -404,6 +404,21 @@ pub trait InferenceProvider: Send + Sync {
         "unknown".to_string()
     }
 
+    /// Stable identifier of the embedding model behind `embed` /
+    /// `embed_batch`. Persisted alongside cached embeddings (e.g.
+    /// `memories.embedding_model`) as a staleness guard: a stored vector is
+    /// only reusable when the model that produced it matches the model that
+    /// would embed the query — a same-dimension different-model vector would
+    /// silently mis-rank.
+    ///
+    /// Default returns `"unknown"`. Callers MUST treat `"unknown"` as
+    /// "cannot verify" — never match a stored embedding against it and never
+    /// persist embeddings under it. Override in providers that know their
+    /// embed model (`SplitInferenceProvider`, `EmbeddedLlamaCpp`).
+    fn embed_model_id(&self) -> String {
+        "unknown".to_string()
+    }
+
     /// The actual context window size the chat slots are currently
     /// configured with, after any llama.cpp-side padding /
     /// `n_ctx_train` capping. This is the value the runtime should
@@ -769,6 +784,17 @@ impl MemoryScope {
             _ => Self::General,
         }
     }
+
+    /// Grouping key for per-scope memory enrichment artifacts (the
+    /// `mem_raptor_nodes.scope` column). The `mem:` namespace keeps
+    /// these keys collision-free with document/conversation/vault
+    /// source ids should the stores ever share a table.
+    pub fn atlas_key(&self) -> String {
+        match self {
+            Self::General => "mem:general".to_string(),
+            Self::Scoped(id) => format!("mem:{id}"),
+        }
+    }
 }
 
 #[async_trait]
@@ -779,6 +805,81 @@ pub trait MemoryStore: Send + Sync {
     async fn delete_memory(&self, id: &str) -> Result<()>;
     async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()>;
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()>;
+
+    /// Persist a memory's content embedding (T1 tier of the memory-pool
+    /// tiered-retrieval port). Called best-effort by the lazy backfill in
+    /// `recall_relevant_memories_embed` after it re-embeds a row that had no
+    /// usable stored vector — failures degrade to re-embedding next turn,
+    /// never to a recall error.
+    ///
+    /// `model` is the `InferenceProvider::embed_model_id()` that produced
+    /// `embedding`; recall treats a model mismatch as "no stored embedding".
+    /// Default is a no-op so non-persistent impls (mocks, stubs) compile.
+    async fn update_memory_embedding(
+        &self,
+        id: &str,
+        embedding: &[f32],
+        model: &str,
+    ) -> Result<()> {
+        let _ = (id, embedding, model);
+        Ok(())
+    }
+
+    /// Replace the memory-RAPTOR node set for one scope (T3 tier of the
+    /// tiered-retrieval memory port). Atomic delete + insert so a
+    /// crashed builder never leaves a half tree. `scope_key` is
+    /// `MemoryScope::atlas_key()`.
+    ///
+    /// Default errors — a builder must notice a store that can't
+    /// persist its output rather than silently dropping the tree.
+    /// Read-side (`list_`) defaults to empty so recall on such stores
+    /// simply stays flat.
+    async fn save_mem_raptor_nodes(
+        &self,
+        scope_key: &str,
+        nodes: &[MemRaptorNodeRow],
+    ) -> Result<()> {
+        let _ = (scope_key, nodes);
+        Err(Error::NotImplemented(
+            "save_mem_raptor_nodes not supported by this store".to_string(),
+        ))
+    }
+
+    /// All memory-RAPTOR nodes for one scope, highest level first.
+    /// Empty = no tree (never built, pool too small, or store doesn't
+    /// persist trees) — recall treats that as flat T1.
+    async fn list_mem_raptor_nodes(&self, scope_key: &str) -> Result<Vec<MemRaptorNodeRow>> {
+        let _ = scope_key;
+        Ok(Vec::new())
+    }
+
+    /// Write ONE tree node (insert or replace). The incremental path
+    /// (`mem_tree`) touches O(path) rows per memory insert — this is
+    /// its single-row write, in contrast to `save_mem_raptor_nodes`'s
+    /// whole-scope replace. Default errors like the batch save: a
+    /// mutation path must notice a store that drops its writes.
+    async fn upsert_mem_raptor_node(&self, node: &MemRaptorNodeRow) -> Result<()> {
+        let _ = node;
+        Err(Error::NotImplemented(
+            "upsert_mem_raptor_node not supported by this store".to_string(),
+        ))
+    }
+
+    /// Remove ONE tree node (split replaced it, or eviction emptied
+    /// it). Idempotent.
+    async fn delete_mem_raptor_node(&self, node_id: &str) -> Result<()> {
+        let _ = node_id;
+        Err(Error::NotImplemented(
+            "delete_mem_raptor_node not supported by this store".to_string(),
+        ))
+    }
+
+    /// Drop the tree for one scope (pool shrank below the build
+    /// threshold, or a rebuild is invalidating). Idempotent.
+    async fn delete_mem_raptor_nodes_for_scope(&self, scope_key: &str) -> Result<()> {
+        let _ = scope_key;
+        Ok(())
+    }
 
     /// Scoped variant of `get_relevant_memories`. Default impl filters
     /// the unscoped result in-process so existing impls compile, but

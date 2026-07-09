@@ -53,8 +53,10 @@ pub(crate) struct ViewEntry {
 /// view id; the debouncer tracks a pending-write counter per view.
 #[derive(Debug, Clone)]
 pub(crate) enum ViewEvent {
-    /// A memory was written → refresh the personal view.
-    MemoryTouched,
+    /// A memory was written → refresh the personal view, and queue the
+    /// id for the incremental memory-tree drain (`mem_tree`) that runs
+    /// on the same debounce window.
+    MemoryTouched { memory_id: String },
     /// A conversation had new activity → refresh conversation view.
     ConversationTouched,
     /// A conversation was deleted → refresh the conversation view
@@ -67,14 +69,26 @@ pub(crate) enum ViewEvent {
 /// Start the background debouncer task. Returns immediately; the
 /// task runs until the `rx` channel is closed (i.e. until all
 /// `KnowledgeViewManager` clones are dropped).
+///
+/// `mem_atlas` is the late-installed handle pair for the memory-pool
+/// RAPTOR rebuild (T3 of the tiered-retrieval memory port). It rides
+/// the SAME debounce window as the personal view — every fire of
+/// `ViewKind::Personal` also rebuilds the per-scope memory trees —
+/// so memory writes never trigger synchronous enrichment on the
+/// witness turn. `None` (never installed) = feature inert.
 pub(crate) fn spawn_debouncer(
     engine: Arc<CorpusEngine>,
     inference: InferenceFn,
     views: Arc<RwLock<HashMap<String, ViewEntry>>>,
     mut rx: mpsc::UnboundedReceiver<ViewEvent>,
+    mem_atlas: Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
 ) {
     tokio::spawn(async move {
         let mut state: HashMap<String, PendingView> = HashMap::new();
+        // Memory ids written since the last personal-view fire — the
+        // incremental tree (`mem_tree`) drains exactly these instead of
+        // re-clustering the whole pool.
+        let mut pending_memory_ids: Vec<String> = Vec::new();
 
         loop {
             let wakeup = state
@@ -89,8 +103,9 @@ pub(crate) fn spawn_debouncer(
                 maybe_event = rx.recv() => {
                     match maybe_event {
                         Some(event) => match event {
-                            ViewEvent::MemoryTouched => {
+                            ViewEvent::MemoryTouched { memory_id } => {
                                 note(&mut state, ViewKind::Personal.id());
+                                pending_memory_ids.push(memory_id);
                             }
                             ViewEvent::ConversationTouched |
                             ViewEvent::ConversationDeleted => {
@@ -99,6 +114,9 @@ pub(crate) fn spawn_debouncer(
                             ViewEvent::Manual { view_id } => {
                                 // Manual triggers bypass the debounce window.
                                 run_enrichment(&engine, inference.clone(), &views, &view_id).await;
+                                if view_id == ViewKind::Personal.id() {
+                                    drain_memory_atlas(&mem_atlas, std::mem::take(&mut pending_memory_ids)).await;
+                                }
                                 state.remove(&view_id);
                             }
                         },
@@ -118,10 +136,71 @@ pub(crate) fn spawn_debouncer(
                 .collect();
             for view_id in ready {
                 run_enrichment(&engine, inference.clone(), &views, &view_id).await;
+                if view_id == ViewKind::Personal.id() {
+                    drain_memory_atlas(&mem_atlas, std::mem::take(&mut pending_memory_ids)).await;
+                }
                 state.remove(&view_id);
             }
         }
     });
+}
+
+/// Drain the debounced memory writes through the incremental tree —
+/// one `mem_tree::insert_memory` per touched id, O(path) rows each,
+/// instead of a whole-pool batch rebuild. (Bootstrap and degeneration
+/// still fall through to the batch builder INSIDE `insert_memory`'s
+/// ladder.) Soft-fails like `run_enrichment` — the debouncer loop must
+/// survive a flaky inference provider.
+///
+/// Ids that no longer resolve in the pool (deleted or superseded
+/// between write and drain) are skipped: recall never boosts an
+/// out-of-pool id, and the tree's op-4 rebuild reconciles membership
+/// wholesale.
+async fn drain_memory_atlas(
+    mem_atlas: &Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
+    ids: Vec<String>,
+) {
+    let handles = { mem_atlas.read().await.clone() };
+    let Some(h) = handles else { return };
+    if ids.is_empty() {
+        return;
+    }
+    let pool = match h.store.get_all_memories().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "memory-tree drain: pool read failed");
+            return;
+        }
+    };
+    let by_id: HashMap<&str, &sovereign_core::types::Memory> =
+        pool.iter().map(|m| (m.id.as_str(), m)).collect();
+
+    let mut seen = std::collections::HashSet::new();
+    let mut inserted = 0usize;
+    let mut skipped = 0usize;
+    for id in ids {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let Some(memory) = by_id.get(id.as_str()) else {
+            skipped += 1;
+            continue;
+        };
+        let scope = sovereign_core::traits::MemoryScope::from_conversation_skill(
+            memory.source_skill_id.as_deref(),
+        );
+        match crate::mem_tree::insert_memory(&h.inference, h.store.as_ref(), &scope, memory).await
+        {
+            Ok(trace) => {
+                inserted += 1;
+                tracing::debug!(memory_id = %id, op = ?trace.op, "memory-tree drain: inserted");
+            }
+            Err(e) => {
+                tracing::warn!(memory_id = %id, error = %e, "memory-tree drain: insert failed");
+            }
+        }
+    }
+    tracing::info!(inserted, skipped, "memory-tree drain complete (debounced)");
 }
 
 /// One view's in-progress debounce window.

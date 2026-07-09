@@ -820,6 +820,10 @@ pub struct SplitInferenceProvider {
     chat: std::sync::Arc<RemoteApiProvider>,
     embed: std::sync::Arc<RemoteApiProvider>,
     chat_model_id: String,
+    /// Kept so `embed_model_id()` can vouch for persisted embeddings
+    /// (the T1 memory-embedding staleness guard) without a daemon
+    /// round-trip.
+    embed_model_id: String,
     /// Daemon-side chat slot context window, captured at construction (the same
     /// `SetupConfig.effective_context_size()` value the daemon's slot loader
     /// uses) so `effective_context_size` answers without a daemon round-trip —
@@ -852,6 +856,7 @@ impl SplitInferenceProvider {
             chat,
             embed,
             chat_model_id,
+            embed_model_id,
             context_size,
         }
     }
@@ -935,6 +940,10 @@ impl InferenceProvider for SplitInferenceProvider {
         // request (Speed / max_tokens) to its loaded fast/primary slots.
         // Reporting the request model is the most honest client-side signal.
         self.chat_model_id.clone()
+    }
+
+    fn embed_model_id(&self) -> String {
+        self.embed_model_id.clone()
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

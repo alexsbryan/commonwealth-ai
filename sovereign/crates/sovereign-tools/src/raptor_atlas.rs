@@ -87,6 +87,33 @@ pub async fn build_raptor_atlas(
     build_raptor_atlas_with_checkpoint(inference, chunks, embeddings, doc_type, None, None).await
 }
 
+/// Variant with a caller-chosen leaf-cluster target size. The default
+/// (20) is tuned for document chunks (~1-2k chars each); memory-pool
+/// entries are one-to-two sentences, and 20 of them per cluster
+/// washes the summary out to a generic period description — measured
+/// on the inner-chaos recall probe (2026-07-08): every leaf summary
+/// converged to "this period captures significant personal…" and the
+/// tier boost had zero discriminating power. Memory callers pass ~7
+/// so each summary stays thematically specific.
+pub async fn build_raptor_atlas_with_leaf_target(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    leaf_target: usize,
+) -> Result<Vec<RaptorNode>> {
+    build_raptor_atlas_impl(
+        inference,
+        chunks,
+        embeddings,
+        doc_type,
+        None,
+        None,
+        leaf_target.max(2),
+    )
+    .await
+}
+
 /// Build the full RAPTOR atlas from a document's chunks + their
 /// pre-computed embeddings. Returns the flat node list (leaves first,
 /// then intermediate, then root) ready for `save_raptor_nodes`.
@@ -123,6 +150,28 @@ pub async fn build_raptor_atlas_with_checkpoint(
     doc_type: DocumentTypeTag,
     checkpoint: Option<&RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+) -> Result<Vec<RaptorNode>> {
+    build_raptor_atlas_impl(
+        inference,
+        chunks,
+        embeddings,
+        doc_type,
+        checkpoint,
+        progress,
+        LEAF_TARGET_CLUSTER_SIZE,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn build_raptor_atlas_impl(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    leaf_target: usize,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.len() != embeddings.len() {
         return Err(sovereign_core::error::Error::Storage(format!(
@@ -193,7 +242,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
                 )
             }
             None => {
-                let k = target_k(chunks.len(), LEAF_TARGET_CLUSTER_SIZE);
+                let k = target_k(chunks.len(), leaf_target);
                 let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
                 if let Some(handle) = checkpoint {
                     let record = LevelClustering {
@@ -662,6 +711,13 @@ async fn summarize_one_cluster(
         DocumentTypeTag::Chronicle => "episode-level summary: who, when, what occurred",
         DocumentTypeTag::Technical => {
             "procedure-level summary: what step or component is described"
+        }
+        DocumentTypeTag::Journal => {
+            "feeling-level summary: name the specific emotions and the concrete anchors \
+             that carry them — the people, places, objects, and times of day these \
+             entries keep returning to. Do NOT lead with month ranges or the word \
+             period; a reader should recognise the felt experience, not the calendar \
+             span"
         }
         DocumentTypeTag::Unknown => "section-level summary: topic and what is said about it",
     };

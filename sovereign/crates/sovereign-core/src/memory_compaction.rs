@@ -272,7 +272,7 @@ async fn run_pass(
     // scoped; mixing scopes would leak across the surface wall).
     let oldest = &to_fold[0];
     let confidence = to_fold.iter().map(|m| m.confidence).sum::<f64>() / (to_fold.len() as f64);
-    let summary = Memory {
+    let mut summary = Memory {
         id: summary_id.clone(),
         content: summary_text,
         source: oldest.source.clone(),
@@ -286,7 +286,12 @@ async fn run_pass(
         kind: MemoryKind::Summary,
         source_memory_ids: source_ids.clone(),
         superseded_by: None,
+        embedding: None,
+        embedding_model: None,
     };
+    // T1 compute-on-write — the worker already holds the inference
+    // handle it synthesized with; recall lazy-backfills on failure.
+    crate::memory::attach_content_embedding(inference, &mut summary).await;
     let summary_chars = summary.content.chars().count();
     memory_store.save_memory(&summary).await?;
     for src_id in &source_ids {
