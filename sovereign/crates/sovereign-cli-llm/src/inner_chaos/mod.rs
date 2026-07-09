@@ -35,6 +35,7 @@ pub mod personas;
 pub mod recall;
 pub mod recall_stream;
 pub mod report;
+pub mod synth;
 pub mod runner;
 pub mod transcript;
 
@@ -47,9 +48,11 @@ const DEFAULT_SPECIFICITY_FLOOR: f64 = 0.75;
 const BOOLEAN_FLAGS: &[&str] = &[
     "calibrate",
     "calibrate-recall",
+    "calibrate-mem-grounding",
     "recall",
     "recall-probe",
     "recall-stream",
+    "recall-synth",
     "no-judge",
     "help",
     "h",
@@ -105,6 +108,26 @@ pub async fn run_inner_chaos(args: &[String]) -> i32 {
     }
     if has_flag(&flags, "calibrate") {
         return run_calibrate_mode(&flags, bench_dir).await;
+    }
+    if has_flag(&flags, "calibrate-mem-grounding") {
+        let opts = recall_opts_from_flags(&flags, bench_dir);
+        return match synth::run_mem_grounding_calibration(&opts).await {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("inner-chaos calibrate-mem-grounding: {e}");
+                1
+            }
+        };
+    }
+    if has_flag(&flags, "recall-synth") {
+        let opts = recall_opts_from_flags(&flags, bench_dir);
+        return match synth::run_recall_synth(&opts).await {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("inner-chaos recall-synth: {e}");
+                1
+            }
+        };
     }
     if has_flag(&flags, "recall-probe") {
         return run_recall_probe_mode(&flags, bench_dir).await;
@@ -360,6 +383,31 @@ async fn run_recall_probe_mode(flags: &[(String, String)], bench_dir: Option<Pat
             eprintln!("inner-chaos recall-probe: {e}");
             1
         }
+    }
+}
+
+/// Shared option assembly for the recall-family modes that don't need
+/// the full run loop's flags (`--recall-synth`,
+/// `--calibrate-mem-grounding`). `--threads` doubles as
+/// samples-per-plant on the synth probe.
+fn recall_opts_from_flags(
+    flags: &[(String, String)],
+    bench_dir: Option<PathBuf>,
+) -> recall::RecallRunOptions {
+    recall::RecallRunOptions {
+        minutes: None,
+        max_threads: get_flag(flags, "threads").and_then(|v| v.parse().ok()),
+        plant_filter: get_flag(flags, "plant"),
+        bench_dir,
+        fixture_path: get_flag(flags, "fixture").map(PathBuf::from),
+        journal_path: recall::default_recall_journal(),
+        output: get_flag(flags, "output").map(PathBuf::from),
+        daemon_base: get_flag(flags, "daemon"),
+        chat_model: get_flag(flags, "chat-model"),
+        brain_model: None,
+        judge_model: get_flag(flags, "judge-model"),
+        skills_dir: get_flag(flags, "skills-dir").map(PathBuf::from),
+        temperature: get_flag(flags, "temperature").and_then(|v| v.parse().ok()),
     }
 }
 
