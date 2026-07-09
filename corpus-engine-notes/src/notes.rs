@@ -652,6 +652,23 @@ impl NoteScope {
     }
 }
 
+/// Note kinds that are OPERATIONAL EXHAUST, not durable knowledge: high-volume,
+/// machine-emitted, read back only within a conversation (never a cross-session
+/// or cross-node reference). They are the lifecycle opposite of durable kinds
+/// (decision / invariant / attempt / reflection / …).
+///
+/// This is the single source of truth for "is this note ephemeral?", consulted
+/// by both the write path ([`NoteStore::write_note_full_v9`] auto-scopes these
+/// to Session so they never gossip) and the TTL sweep
+/// ([`NoteStore::purge_expired_ephemeral`]). The CLI `notes rationalize` imports
+/// it too, so there is exactly ONE list to keep current.
+pub const EPHEMERAL_KINDS: &[&str] = &["tool_decision", "checkpoint", "checkpoint_restored"];
+
+/// True when `kind` is operational exhaust (see [`EPHEMERAL_KINDS`]).
+pub fn is_ephemeral_kind(kind: &str) -> bool {
+    EPHEMERAL_KINDS.contains(&kind)
+}
+
 /// Provenance dimension for notes (audit-hardening v6 schema).
 ///
 /// `Agent` is the highest-confidence source — the agent explicitly
@@ -1322,6 +1339,26 @@ impl NoteStore {
         payload_json: Option<&str>,
         private: bool,
     ) -> Result<String> {
+        // Lifecycle policy (the single write chokepoint — every write_* path
+        // funnels here). Operational-exhaust kinds are forced to Session scope
+        // regardless of the scope the caller passed: `notes_delta_since` gossips
+        // ONLY scope='global', so Session keeps this high-volume machine-written
+        // telemetry off the mesh's durable channel. Most notes are authored by
+        // agents via the MCP `note` tool, which can't be trusted to pick the
+        // right scope on every write — enforcing it here, not at call sites,
+        // covers every writer (agent, CLI, internal) uniformly and permanently.
+        let scope = if is_ephemeral_kind(kind) && scope != NoteScope::Session {
+            tracing::debug!(
+                target = "notes",
+                kind,
+                was = scope.as_str(),
+                "notes: ephemeral kind auto-scoped to Session (kept local, never gossiped)"
+            );
+            NoteScope::Session
+        } else {
+            scope
+        };
+
         if scope == NoteScope::Feature && feature_id.is_none() {
             return Err(Error::InvalidInput(
                 "write_note_full: scope='feature' requires feature_id".into(),
@@ -2793,6 +2830,95 @@ impl NoteStore {
         Ok(out)
     }
 
+    /// Full, un-windowed scan of every note — the maintenance / rationalization
+    /// read path.
+    ///
+    /// [`read_notes`] deliberately caps at 100 rows (`limit.min(100)`) because
+    /// it is a *retrieval* surface: the most-relevant recent window an agent
+    /// reasons over. Rationalization is the opposite need — to cluster
+    /// duplicates, detect supersession, and report the store's true
+    /// composition, it must see EVERY row, not a window. This method applies no
+    /// LIMIT and no relevance ranking; it returns all rows newest-first,
+    /// excluding retired + tombstoned notes unless `include_retired` is set.
+    ///
+    /// Callers hold the whole set in memory and group it themselves — this is
+    /// for `notes rationalize` and audits, NOT hot paths. On a store dominated
+    /// by high-volume telemetry kinds this can be thousands of rows; that is
+    /// the point (that volume is exactly what rationalization exists to see).
+    pub async fn scan_all(&self, include_retired: bool) -> Result<Vec<NoteRow>> {
+        let retired_clause = if include_retired {
+            ""
+        } else {
+            "AND n.retired_at IS NULL AND n.tombstone = 0"
+        };
+        let sql = format!(
+            "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+                    n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                    n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                    n.source, n.supersedes, n.payload_json
+             FROM notes n
+             WHERE 1=1 {retired_clause}
+             ORDER BY n.created_at DESC"
+        );
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+        let mapped = stmt.query_map([], map_note_row).map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for row in mapped {
+            out.push(row.map_err(sqlite_err)?);
+        }
+        Ok(out)
+    }
+
+    /// TTL sweep for operational exhaust: tombstone every [`is_ephemeral_kind`]
+    /// note older than `older_than_secs`, returning how many were swept.
+    ///
+    /// This is what keeps the store clean without anyone thinking about it — the
+    /// daemon calls it on a timer, and the telemetry kinds age out on their own.
+    /// We TOMBSTONE rather than DELETE deliberately: a bare DELETE of a row that
+    /// had been gossiped (legacy Global telemetry) would let a peer re-send it
+    /// and resurrect it (`ingest_remote_notes` re-INSERTs unknown content
+    /// hashes), whereas a tombstone is resurrection-proof (tombstone-wins) and,
+    /// for any still-Global legacy rows, gossips the removal so peers clean up
+    /// too. Recent ephemeral notes are untouched, so the dossier's
+    /// intra-conversation reads keep working.
+    ///
+    /// Idempotent: already-tombstoned rows are skipped. `older_than_secs` is a
+    /// duration (e.g. 30 days), not an absolute time — safe to resume.
+    pub async fn purge_expired_ephemeral(&self, older_than_secs: i64) -> Result<usize> {
+        let now = unix_now();
+        let cutoff = now - older_than_secs;
+        let placeholders = EPHEMERAL_KINDS.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "UPDATE notes SET tombstone = 1, updated_at = ?
+               WHERE kind IN ({placeholders})
+                 AND created_at < ?
+                 AND tombstone = 0"
+        );
+        // All-anonymous `?` bound in TEXT order — do NOT mix with `?N`, or the
+        // IN-list `?`s collide with the numbered params. Order: updated_at (SET),
+        // then each ephemeral kind (IN), then the cutoff (created_at <).
+        let mut binds: Vec<rusqlite::types::Value> =
+            vec![rusqlite::types::Value::Integer(now)];
+        for k in EPHEMERAL_KINDS {
+            binds.push(rusqlite::types::Value::Text((*k).to_string()));
+        }
+        binds.push(rusqlite::types::Value::Integer(cutoff));
+        let conn = self.conn.lock().await;
+        let n = conn
+            .execute(&sql, rusqlite::params_from_iter(binds))
+            .map_err(sqlite_err)?;
+        if n > 0 {
+            tracing::info!(
+                target = "notes",
+                swept = n,
+                cutoff_unix = cutoff,
+                "notes: TTL swept expired ephemeral notes (tombstoned)"
+            );
+        }
+        Ok(n)
+    }
+
     /// Semantic-blend variant of [`read_notes_scoped`].
     ///
     /// Returns the same NoteRow shape but ranks the candidate pool
@@ -3787,6 +3913,106 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].kind, "todo");
+    }
+
+    #[tokio::test]
+    async fn scan_all_sees_the_whole_store_past_the_read_notes_window() {
+        let store = make_store().await;
+        // Write more than the read_notes 100-row retrieval cap.
+        for i in 0..150 {
+            store
+                .write_note("tool_decision", &format!("outcome {i}"), vec![], vec![], "s1")
+                .await
+                .unwrap();
+        }
+
+        // read_notes is a retrieval window — capped at 100 regardless of limit.
+        let windowed = store
+            .read_notes(None, &[], &[], &[], 10_000, false)
+            .await
+            .unwrap();
+        assert_eq!(windowed.len(), 100, "read_notes must stay a 100-row window");
+
+        // scan_all is the maintenance path — it sees everything.
+        let all = store.scan_all(false).await.unwrap();
+        assert_eq!(all.len(), 150, "scan_all must return the whole active store");
+
+        // Retiring a note drops it from the active scan but survives include_retired.
+        store
+            .retire_by_id(&all[0].id, "folded into a consolidation")
+            .await
+            .unwrap();
+        assert_eq!(store.scan_all(false).await.unwrap().len(), 149);
+        assert_eq!(store.scan_all(true).await.unwrap().len(), 150);
+    }
+
+    #[tokio::test]
+    async fn ephemeral_kind_is_forced_to_session_and_never_gossips() {
+        let store = make_store().await;
+        // Caller asks for Global, but tool_decision is operational exhaust.
+        let eph = store
+            .write_note_with_source(
+                "tool_decision",
+                "knowledge_lookup → useful — synthesised over 12 chunks",
+                vec!["knowledge_lookup".to_string()],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+            )
+            .await
+            .unwrap();
+        let dur = store
+            .write_note_with_source(
+                "decision",
+                "chose FTS5 over LanceDB",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // The ephemeral note was auto-downgraded to Session; the durable one kept Global.
+        assert_eq!(store.read_note_by_id(&eph).await.unwrap().unwrap().scope, "session");
+        assert_eq!(store.read_note_by_id(&dur).await.unwrap().unwrap().scope, "global");
+
+        // notes_delta_since gossips only scope='global' — so the ephemeral note
+        // is structurally excluded from the wire, the durable one is included.
+        let delta = store.notes_delta_since("peer-x", 100).await.unwrap();
+        let ids: Vec<&str> = delta.iter().map(|e| e.note.id.as_str()).collect();
+        assert!(ids.contains(&dur.as_str()), "durable global note must gossip");
+        assert!(!ids.contains(&eph.as_str()), "ephemeral note must NOT gossip");
+    }
+
+    #[tokio::test]
+    async fn purge_expired_ephemeral_sweeps_old_telemetry_only() {
+        let store = make_store().await;
+        for _ in 0..2 {
+            store.write_note("tool_decision", "x → useful — y", vec![], vec![], "s1").await.unwrap();
+        }
+        store.write_note("checkpoint", "session snapshot", vec![], vec![], "s1").await.unwrap();
+        store.write_note("decision", "keep me forever", vec![], vec![], "s1").await.unwrap();
+        assert_eq!(store.scan_all(false).await.unwrap().len(), 4);
+
+        // A 30-day TTL sweeps nothing — everything was just written.
+        assert_eq!(store.purge_expired_ephemeral(30 * 86_400).await.unwrap(), 0);
+        assert_eq!(store.scan_all(false).await.unwrap().len(), 4);
+
+        // A future cutoff (negative age) catches all ephemeral rows, but never
+        // the durable decision — the kind filter is the guard.
+        assert_eq!(store.purge_expired_ephemeral(-10).await.unwrap(), 3);
+        let active = store.scan_all(false).await.unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].kind, "decision");
     }
 
     #[tokio::test]

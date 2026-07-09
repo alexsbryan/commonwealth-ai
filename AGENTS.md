@@ -54,3 +54,43 @@ commonwealth-ai/
 - Before changing a function signature: `find_callers("fn_name")`
 - Before adding a trait method: `find_callers("TraitName")`
 - Before non-trivial refactor: `blast_radius("symbol", max_depth: 2)`
+
+## Working style
+
+How the maintainer expects agents to work here. Norms, not code rules —
+but load-bearing for a good session. (The maintainer works with agents
+across several machines; these keep them consistent.)
+
+- **Prose, not formatting flash.** Default to plain, considered prose in
+  replies and authored docs. Use a heading, bullet, or table only when
+  the content genuinely is one — never as the default shape. Don't sell
+  ("powerful", "seamless", "full stop"); say what a thing does. Full
+  guide: `docs/internal/VOICE.md`.
+- **Don't `git commit` without an explicit ask.** "Ship it" / "land
+  this" / "commit X" mean *prepare* the change: finalize code, run
+  checks, hand back the commit message as plain text to copy-paste.
+  `git add` is fine; running `git commit` is the maintainer's call.
+  Branch first if on `main`.
+- **Debug builds for dev, not release.** `cargo build` → `target/debug/`
+  for all behavioral work including CI benches (the llama.cpp kernels are
+  native C++ either way). Release is ~5× slower to compile — reserve it
+  for a named perf need (e.g. OCR). Run e2e via `target/debug/<sibling>`
+  directly; the `sovereign` symlink may point at release.
+- **Observability before hypothesis.** When a deployed-path behavior is
+  wrong and one signal can't explain it, make the real decision *visible*
+  first (tracing at a captured target + `RUST_LOG`, or a trace file) and
+  confirm the trace lands — a detached daemon discards `eprintln`/`dbg!`.
+  Only then form a fix. No whack-a-mole.
+- **Quality over the metric.** Benches approximate epistemically-grounded
+  inference for end users; they are not the goal. Don't tune a
+  gate/prompt/threshold to flip one bank number at the expense of the
+  unmeasured whole (tone, false caveats, suppressed-correct answers).
+  Prefer structural, glassbox mechanisms; surface trade-offs rather than
+  silently optimizing a number.
+- **Fluent CLI is a feature.** A known workflow ("kick off the SEP
+  ingest") should be ~3 shell lines (daemon start · pipeline run ·
+  status). If it isn't, the friction is a bug in the CLI/recipe/config —
+  fix the bug, don't wrap ceremony around it.
+- **No trailing `/schedule` offers.** Don't close turns proposing to
+  schedule background follow-ups; the maintainer reads it as pestering.
+  An ordinary "next step?" for the task at hand is fine.

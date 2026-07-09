@@ -116,7 +116,7 @@ pub use code::{
 pub use code::{CapabilityFindingsTool, CapabilityPostureTool};
 pub use code::{CodeSearchTool, RecentChangesTool};
 #[cfg(feature = "treesitter")]
-pub use code::{DeleteNoteTool, ReadNotesTool, WriteNoteTool};
+pub use code::{DeleteNoteTool, ReadNotesTool, RetireNoteTool, WriteNoteTool};
 #[cfg(feature = "treesitter")]
 pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]

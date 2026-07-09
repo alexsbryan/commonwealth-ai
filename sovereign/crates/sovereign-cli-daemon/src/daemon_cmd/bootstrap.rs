@@ -784,6 +784,43 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
             );
         }
     });
+
+    // TTL sweep — this is what keeps the store all-signal WITHOUT anyone running
+    // `notes rationalize` by hand. Operational-exhaust kinds (tool_decision,
+    // checkpoint…) age out on their own: first sweep ~30s after boot, then every
+    // 24h. Tombstone (not delete) so it's resurrection-proof and, for any legacy
+    // Global telemetry, gossips the removal to peers. TTL tunable via
+    // SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS (default 30; <=0 disables).
+    let notes_for_ttl = Arc::clone(&notes_store);
+    tokio::spawn(async move {
+        let ttl_days: i64 = std::env::var("SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
+        if ttl_days <= 0 {
+            tracing::info!(target = "notes", "notes: ephemeral TTL sweep disabled (ttl_days<=0)");
+            return;
+        }
+        let ttl_secs = ttl_days * 86_400;
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            match notes_for_ttl.purge_expired_ephemeral(ttl_secs).await {
+                Ok(n) if n > 0 => tracing::info!(
+                    target = "notes",
+                    swept = n,
+                    ttl_days,
+                    "notes: TTL sweep tombstoned expired ephemeral notes"
+                ),
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(target = "notes", error = %e, "notes: TTL sweep failed")
+                }
+            }
+        }
+    });
 }
 
 /// Spawn the poller that bridges inbound gossip note entries into `NoteStore`.

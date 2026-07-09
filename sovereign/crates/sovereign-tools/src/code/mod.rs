@@ -122,6 +122,8 @@ pub mod capability_posture;
 #[cfg(feature = "treesitter")]
 pub mod delete_note;
 #[cfg(feature = "treesitter")]
+pub mod retire_note;
+#[cfg(feature = "treesitter")]
 pub mod read_notes;
 #[cfg(feature = "treesitter")]
 pub mod suggest_note;
@@ -224,6 +226,8 @@ pub use blast_radius::BlastRadiusTool;
 pub use check_doc_paths::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use delete_note::DeleteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use retire_note::RetireNoteTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use design_signals_extract::DesignSignalsExtractTool;
 #[cfg(feature = "treesitter")]

@@ -1620,7 +1620,15 @@ pub async fn write_tool_decision(
             vec![tool_id.to_string()],
             vec![],
             session_id,
-            NoteScope::Global,
+            // SESSION, not Global, on purpose. Tool-decision rows are per-turn
+            // operational telemetry read back only within a conversation (the
+            // dossier). `notes_delta_since` gossips ONLY `scope = 'global'`, so
+            // Session keeps this high-volume log LOCAL — it never floods the
+            // mesh's durable channel. The dossier read (`read_recent_tool_decisions`
+            // → `read_notes`, scope-agnostic default filter) is unaffected. Do
+            // NOT change back to Global: it re-creates the telemetry firehose
+            // that `notes rationalize` exists to clean up.
+            NoteScope::Session,
             None,
             None,
             NoteSource::Agent,

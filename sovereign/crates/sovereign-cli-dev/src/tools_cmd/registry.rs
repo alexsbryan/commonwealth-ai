@@ -311,6 +311,9 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
         &notes_store,
     ))));
+    tools.register(Box::new(sovereign_tools::RetireNoteTool::new(Arc::clone(
+        &notes_store,
+    ))));
     tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(
         Arc::clone(&notes_store),
     )));
