@@ -63,13 +63,9 @@ pub struct RerankSlot {
     /// doc + trailing rerank token). Pairs longer than this are
     /// truncated on the doc side.
     pub(crate) max_input_tokens: usize,
-    /// Token-ID of `<|score_token|>` — read once at load time. The
-    /// reranker emits this token's logit at the last-input position
-    /// and that logit IS the relevance score.
-    pub(crate) score_token_id: i32,
-    /// Token-ID of `<|rerank_token|>` — placed at the end of the
-    /// prompt so the model conditions on "now produce a score".
-    pub(crate) rerank_token_id: i32,
+    /// How this model expresses a relevance score — auto-detected at
+    /// load from the tokenizer (see [`RerankProtocol`]).
+    pub(crate) protocol: RerankProtocol,
     /// Pre-tokenised chat-template prefix (everything up to where
     /// the query gets spliced in). Built once at load time so the
     /// hot path skips re-tokenising the boilerplate.
@@ -77,13 +73,41 @@ pub struct RerankSlot {
     /// Pre-tokenised separator between query and document (the
     /// `<|im_end|>\n<doc>` glue in the Qwen3 chat template).
     pub(crate) middle_tokens: Vec<LlamaToken>,
-    /// Pre-tokenised suffix between document and `<|rerank_token|>`
-    /// (the `<|im_end|>\n<|im_start|>assistant\n` glue).
+    /// Pre-tokenised suffix after the document (protocol-specific
+    /// closing glue).
     pub(crate) suffix_tokens: Vec<LlamaToken>,
     /// File stem of the loaded reranker — surfaced in provenance +
     /// telemetry so a user can tell which reranker scored a given
     /// result. Format matches `ModelSlot.model_id`.
     pub(crate) model_id: String,
+}
+
+/// Score-extraction protocol, auto-detected from the GGUF tokenizer.
+///
+/// - `JinaScoreToken`: the jina-reranker-v3 scheme — prompt ends with
+///   `<|rerank_token|>` and the score is the `<|score_token|>` logit
+///   at the last position. NOTE: measured 2026-07-09, the publicly
+///   converted jina-v3 GGUF DROPS the model's scoring/projection head
+///   (no `output.weight`, no head tensors), so this protocol reads a
+///   tied-embedding dot product — relevance noise. It is kept for a
+///   future correctly-converted GGUF; prefer a yes/no-family reranker
+///   until one exists.
+/// - `YesNoLogit`: the Qwen3-Reranker family scheme (incl. fine-tunes
+///   like harrier-oss-v1) — a chat prompt asks whether the document
+///   answers the query, and the score is `logit("yes") − logit("no")`
+///   at the last position. Survives vanilla GGUF conversion because
+///   Qwen3-0.6B ties `lm_head` to `token_embd` — the scoring surface
+///   IS the trained next-token head, nothing to drop.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RerankProtocol {
+    JinaScoreToken {
+        score_token_id: i32,
+        rerank_token_id: i32,
+    },
+    YesNoLogit {
+        yes_token_id: i32,
+        no_token_id: i32,
+    },
 }
 
 /// Build the Qwen3-style chat-template fragments used to wrap a
@@ -119,6 +143,25 @@ fn jina_v3_prompt_fragments() -> (String, String, String) {
             (prefix, middle, suffix)
         }
     }
+}
+
+/// Prompt fragments for the Qwen3-Reranker yes/no protocol (the
+/// published Qwen3-Reranker chat scaffold, empty think block included
+/// — the family is trained with thinking disabled for scoring).
+/// `SOVEREIGN_RERANK_INSTRUCT` overrides the instruct line; the
+/// default is the family's own generic retrieval instruction.
+fn yes_no_prompt_fragments() -> (String, String, String) {
+    let instruct = std::env::var("SOVEREIGN_RERANK_INSTRUCT").unwrap_or_else(|_| {
+        "Given a web search query, retrieve relevant passages that answer the query".to_string()
+    });
+    let prefix = format!(
+        "<|im_start|>system\nJudge whether the Document meets the requirements based on the \
+         Query and the Instruct provided. Note that the answer can only be \"yes\" or \
+         \"no\".<|im_end|>\n<|im_start|>user\n<Instruct>: {instruct}\n<Query>: "
+    );
+    let middle = "\n<Document>: ".to_string();
+    let suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n".to_string();
+    (prefix, middle, suffix)
 }
 
 pub(crate) struct RerankSlotContext {
@@ -217,34 +260,51 @@ impl RerankSlot {
             .unwrap_or("reranker")
             .to_string();
 
-        // Resolve the two special tokens by name. They're added by
-        // Jina's fine-tune and embedded in the GGUF tokenizer.
-        // `str_to_token` returns them when the string matches a
-        // special token exactly. If either lookup fails, the load
-        // fails up front — we never want to silently fall through to
-        // garbage scores at query time.
-        let score_token_id = resolve_special_token(&model, "<|score_token|>").ok_or_else(|| {
-            Error::Inference(
-                "Reranker GGUF lacks `<|score_token|>` — does this model \
-                     follow the jina-reranker-v3 protocol?"
-                    .to_string(),
-            )
-        })?;
-        let rerank_token_id =
-            resolve_special_token(&model, "<|rerank_token|>").ok_or_else(|| {
-                Error::Inference(
-                    "Reranker GGUF lacks `<|rerank_token|>` — does this model \
-                     follow the jina-reranker-v3 protocol?"
-                        .to_string(),
-                )
-            })?;
+        // Protocol auto-detection from the tokenizer. Jina's special
+        // tokens present → jina score-token protocol; otherwise fall
+        // back to the Qwen3-Reranker yes/no protocol (plain "yes"/"no"
+        // must each resolve to a single token — true for the whole
+        // qwen vocab family). Either way a failed resolution fails the
+        // load up front — never garbage scores at query time.
+        let protocol = match (
+            resolve_special_token(&model, "<|score_token|>"),
+            resolve_special_token(&model, "<|rerank_token|>"),
+        ) {
+            (Some(score_token_id), Some(rerank_token_id)) => RerankProtocol::JinaScoreToken {
+                score_token_id,
+                rerank_token_id,
+            },
+            _ => {
+                let yes_token_id = resolve_special_token(&model, "yes").ok_or_else(|| {
+                    Error::Inference(
+                        "Reranker GGUF lacks jina special tokens AND `yes` is not a \
+                         single token — unknown reranker protocol"
+                            .to_string(),
+                    )
+                })?;
+                let no_token_id = resolve_special_token(&model, "no").ok_or_else(|| {
+                    Error::Inference(
+                        "Reranker GGUF lacks jina special tokens AND `no` is not a \
+                         single token — unknown reranker protocol"
+                            .to_string(),
+                    )
+                })?;
+                RerankProtocol::YesNoLogit {
+                    yes_token_id,
+                    no_token_id,
+                }
+            }
+        };
 
         // Pre-tokenise the static chat-template fragments. The hot
         // path stitches: prefix + query_tokens + middle + doc_tokens
-        // + suffix + rerank_token. Boilerplate is non-trivial (~40
-        // tokens) so caching saves a meaningful slice of per-pair
-        // CPU.
-        let (prefix_str, middle_str, suffix_str) = jina_v3_prompt_fragments();
+        // + suffix (+ rerank token on the jina protocol). Boilerplate
+        // is non-trivial (~40 tokens) so caching saves a meaningful
+        // slice of per-pair CPU.
+        let (prefix_str, middle_str, suffix_str) = match protocol {
+            RerankProtocol::JinaScoreToken { .. } => jina_v3_prompt_fragments(),
+            RerankProtocol::YesNoLogit { .. } => yes_no_prompt_fragments(),
+        };
         let prefix_tokens = model
             .str_to_token(&prefix_str, AddBos::Never)
             .map_err(|e| Error::Inference(format!("tokenise rerank prefix: {e}")))?;
@@ -269,8 +329,7 @@ impl RerankSlot {
             max_input_tokens,
             n_threads,
             compute_backend,
-            score_token = score_token_id,
-            rerank_token = rerank_token_id,
+            protocol = ?protocol,
             prefix_tokens_n = prefix_tokens.len(),
             middle_tokens_n = middle_tokens.len(),
             suffix_tokens_n = suffix_tokens.len(),
@@ -281,8 +340,7 @@ impl RerankSlot {
             model: model.clone(),
             ctx: std::sync::Mutex::new(RerankSlotContext { ctx, _model: model }),
             max_input_tokens,
-            score_token_id,
-            rerank_token_id,
+            protocol,
             prefix_tokens,
             middle_tokens,
             suffix_tokens,
@@ -312,11 +370,11 @@ fn resolve_special_token(model: &LlamaModel, name: &str) -> Option<i32> {
 
 // Continuation of the RerankSlot impl block (split for the helper above).
 impl RerankSlot {
-    /// Score a single (query, doc) pair via the jina-reranker-v3
-    /// protocol: build a Qwen3 chat-template prompt that wraps the
-    /// pair, end with `<|rerank_token|>`, run one forward pass, and
-    /// read the logit of `<|score_token|>` at the last input
-    /// position. Higher = more relevant.
+    /// Score a single (query, doc) pair: build the protocol's chat
+    /// prompt around the pair, run one forward pass, and read the
+    /// relevance score off the last position's logits — the
+    /// `<|score_token|>` logit (jina) or `logit(yes) − logit(no)`
+    /// (Qwen3-Reranker family). Higher = more relevant.
     #[allow(clippy::too_many_arguments)]
     fn score_pair_sync(
         model: &LlamaModel,
@@ -324,8 +382,7 @@ impl RerankSlot {
         query: &str,
         doc: &str,
         max_input_tokens: usize,
-        score_token_id: i32,
-        rerank_token_id: i32,
+        protocol: RerankProtocol,
         prefix_tokens: &[LlamaToken],
         middle_tokens: &[LlamaToken],
         suffix_tokens: &[LlamaToken],
@@ -369,7 +426,9 @@ impl RerankSlot {
         tokens.extend_from_slice(middle_tokens);
         tokens.extend(doc_tokens.iter().take(doc_budget).copied());
         tokens.extend_from_slice(suffix_tokens);
-        tokens.push(LlamaToken(rerank_token_id));
+        if let RerankProtocol::JinaScoreToken { rerank_token_id, .. } = protocol {
+            tokens.push(LlamaToken(rerank_token_id));
+        }
 
         let mut batch = LlamaBatch::new(tokens.len(), 1);
         let last = tokens.len() - 1;
@@ -387,20 +446,25 @@ impl RerankSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Rerank decode: {e}")))?;
 
-        // Read the score-token logit at the last position. This is
-        // the model's pre-softmax confidence that the next token
-        // SHOULD be `<|score_token|>` — calibrated by fine-tuning
-        // to be high for relevant pairs and low for irrelevant
-        // ones.
+        // Read the relevance score off the last position's logits.
         let logits = ctx.get_logits_ith(last as i32);
-        let idx = score_token_id as usize;
-        if idx >= logits.len() {
-            return Err(Error::Inference(format!(
-                "score_token_id {score_token_id} out of vocab ({} tokens)",
-                logits.len()
-            )));
+        let read = |id: i32| -> Result<f32> {
+            let idx = id as usize;
+            if idx >= logits.len() {
+                return Err(Error::Inference(format!(
+                    "token id {id} out of vocab ({} tokens)",
+                    logits.len()
+                )));
+            }
+            Ok(logits[idx])
+        };
+        match protocol {
+            RerankProtocol::JinaScoreToken { score_token_id, .. } => read(score_token_id),
+            RerankProtocol::YesNoLogit {
+                yes_token_id,
+                no_token_id,
+            } => Ok(read(yes_token_id)? - read(no_token_id)?),
         }
-        Ok(logits[idx])
     }
 
     /// Score multiple docs against one query. Sequential under the
@@ -422,8 +486,7 @@ impl RerankSlot {
                 query,
                 doc,
                 self.max_input_tokens,
-                self.score_token_id,
-                self.rerank_token_id,
+                self.protocol,
                 &self.prefix_tokens,
                 &self.middle_tokens,
                 &self.suffix_tokens,

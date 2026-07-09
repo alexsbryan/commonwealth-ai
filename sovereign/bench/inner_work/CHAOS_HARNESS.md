@@ -315,3 +315,51 @@ production path is opt-IN only (`SOVEREIGN_MEM_RERANK=1` + a configured
 `rerank_fn`); with either absent the recall is byte-identical to plain embed
 recall. The wrong-direction demotions suggest a jina-v3 quirks/score-parsing
 issue in the RerankSlot worth diagnosing before any retry.
+
+**LLM-pick recall (2026-07-09) — the lever that reaches the hard callbacks.**
+Root-caused the jina-v3 GGUF (its scoring/projection head was dropped in
+conversion — scores are tied-embedding noise; unusable under any prompt) and
+added a second auto-detected RerankSlot protocol (Qwen3-Reranker-style
+yes/no logits, survives vanilla GGUF conversion). A yes/no 0.6B
+(harrier-oss-v1) separates domains cleanly but cannot discriminate within a
+journal of emotionally-adjacent one-liners — still demotes correct plants.
+What works: `--recall-probe`'s `SOVEREIGN_MEM_LLM_PICK=<model|chat>` arm and
+the production `SOVEREIGN_MEM_PICK=1` stage — one structured completion
+reading a 48-candidate bi-encoder pool, gated on **field ambiguity**
+(`SOVEREIGN_MEM_PICK_MARGIN`, default 0.025: fire only when the blended
+top1−top2 margin has no dominant winner). The margin is the RIGHT signal and
+an absolute-score gate is the WRONG one — measured landscape: the two hard
+callbacks' fields are exactly tied (margin 0.000) while every solved callback
+has a dominant winner (0.022–0.131), but absolute top-1 overlaps across arms
+(solved 0.488–0.648 vs ambiguous ~0.50). An earlier absolute gate (0.48)
+never fired, and its smoke "success" came from picks firing on warmup turns —
+single-plant smokes can validate the wrong mechanism. The probe now prints
+each callback's `field: top3/margin/plant` landscape permanently. Validated
+with the margin gate: **8/8 plants renderable for the first time** (grief
+rank 2 from never-retrieved, daughter TOP-1 from rank 7, six preserved),
+fired on 4/8 callbacks (~3.6s each; false fires are latency-only). Off by
+default pending the on/off A/B campaign numbers.
+
+**Synthesis loop (2026-07-09) — closing the retrieval→synthesis gap.** With
+retrieval solved (memory rendered 15/16 turns) faithful recall was still
+12.5%; three gated iterations moved it to 31% at unchanged confab (12%) and
+converted deferral to engagement (honest_gap 7→3). The isolated fixes, each
+behind its own calibration gate: (1) the grounding verifier was DATE-BLIND —
+`render_candidates` now mirrors the witness's date-prefixed rendering, and
+the rubric compresses to one rule (every claimed memory fully contained in
+ONE entry, bracketed date included); gated by `--calibrate-mem-grounding`
+(10 novel-scenario cases mirroring real receipt structures — no fixture
+content — 1.00/1.00). (2) The witness's deferral bias became a 4-case ladder
+(sure → speak; plausible → offer as question; two candidates → ask which;
+nothing → not-finding), plus the window≠record rule: the witness sees a few
+retrieved entries, never the journal, so it must say what it's
+seeing/not-finding rather than claim what the record contains ("the only
+entry…" was a dominant false-claim species). (3) Recall-judge metric v3: the
+judge receives the entries the witness actually had IN VIEW that turn — the
+bench replicates the witness's env-gated recall once and shares it with the
+judge and plant_rank. Without it, accurate citations of rendered FILLER
+entries scored as fabrication (the store holds ~150 filler entries the judge
+never saw; both A/B arms' dominant "confab" receipts were this artifact).
+`--recall-synth` (single-turn probe, `--threads` = samples/plant) is the
+tight iteration surface: seed + atlas once, one witness turn per sample
+through the real runtime, judged with receipts for every non-faithful turn.

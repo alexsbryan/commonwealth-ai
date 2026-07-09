@@ -35,7 +35,7 @@ use crate::types::{CompletionRequest, Memory, Speed};
 /// reply unchanged; otherwise `unsupported` names the offending detail
 /// for the correction retry.
 #[derive(Debug, Clone)]
-pub(crate) struct RecallGroundingVerdict {
+pub struct RecallGroundingVerdict {
     pub grounded: bool,
     /// The specific asserted-but-unsupported past detail (empty when
     /// grounded). Fed into the regeneration prompt.
@@ -58,15 +58,40 @@ struct RawVerdict {
     unsupported: String,
 }
 
-/// Render the candidate entries the same way the judge/verifier reads
-/// them: numbered, content only (dates already live inside content for
-/// dated memories via the prompt formatter, but we include created_at
-/// context-free here to keep the verifier prompt self-contained).
+/// Render the candidate entries EXACTLY as informatively as the
+/// witness prompt renders them (`memory::render_band`): date prefix
+/// (when the entry has a source conversation) + summary-of-N prefix.
+///
+/// The date is load-bearing: the witness speaks in dates ("your
+/// April 9th entry…"), and a verifier that sees content-only
+/// candidates is DATE-BLIND — it cannot check date-anchored welds,
+/// which were the dominant confab species in BOTH arms of the
+/// 2026-07-09 A/B (record-meta fabrications like "entries exist for
+/// June 21, June 8, May 30"). Verifier and witness must read the
+/// same record.
 fn render_candidates(memories: &[Memory]) -> String {
     memories
         .iter()
         .enumerate()
-        .map(|(i, m)| format!("[{}] {}", i + 1, m.content))
+        .map(|(i, m)| {
+            let date_prefix = m
+                .source_conversation_id
+                .as_ref()
+                .and_then(|_| {
+                    chrono::DateTime::<chrono::Utc>::from_timestamp(m.created_at, 0)
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                })
+                .map(|d| format!("[{d}] "))
+                .unwrap_or_default();
+            let summary_prefix = match m.kind {
+                crate::types::MemoryKind::Summary => format!(
+                    "[summary of {n} entries] ",
+                    n = m.source_memory_ids.len().max(1)
+                ),
+                crate::types::MemoryKind::Raw => String::new(),
+            };
+            format!("[{}] {summary_prefix}{date_prefix}{}", i + 1, m.content)
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -76,7 +101,7 @@ fn render_candidates(memories: &[Memory]) -> String {
 /// error, empty inputs, or a long-form reply out of scope — the gate
 /// is a quality lever, never an availability risk (same contract as
 /// `grounding::judge::verify_grounding`).
-pub(crate) async fn verify_recall_grounding(
+pub async fn verify_recall_grounding(
     inference: &dyn InferenceProvider,
     user_message: &str,
     reply: &str,
@@ -97,23 +122,15 @@ pub(crate) async fn verify_recall_grounding(
          {candidates}\n\n\
          The user just said:\n\"{user}\"\n\n\
          The companion replied:\n\"{reply}\"\n\n\
-         Work through this carefully and strictly.\n\
-         1. MATCH: which ONE numbered entry is the user actually referring to? If none clearly \
-         fits what they said, the match is NONE.\n\
-         2. ASSERTIONS: list every specific past detail the reply states as fact about the user's \
-         history — each date, event, name, place, number, or \"you told me / the record shows X\".\n\
-         3. CHECK each asserted detail against the MATCHED entry only. A detail is UNSUPPORTED if it \
-         adds a specific the matched entry does NOT contain — a concrete fact the entry never \
-         states. This includes welding (a detail that appears only in a DIFFERENT entry) and it is \
-         automatically true for every asserted detail when the match is NONE. Judge fairly, not \
-         suspiciously: faithfully paraphrasing, summarizing, or reflecting the matched entry — even \
-         loosely — is SUPPORTED; naming the same event or feeling in different words is SUPPORTED. \
-         Flag a detail ONLY when it introduces a concrete specific (a date, name, place, number, \
-         quote, or event) that is genuinely not in the matched entry. A correct recall must not be \
-         flagged.\n\n\
-         The reply is grounded if every asserted detail is supported by the matched entry. \
-         Speaking in general terms with no specific past assertions, or honestly saying the memory \
-         isn't available, is grounded.\n\n\
+         The rule: every past memory the reply claims must be fully contained in ONE entry. An \
+         entry's bracketed [date] is part of that entry.\n\
+         UNGROUNDED (flag it): a claimed memory that no single entry accounts for — an added \
+         fact, a date paired with the wrong event, two entries merged into one claimed memory, \
+         or an invented quote.\n\
+         GROUNDED (pass it): paraphrasing or loosely reflecting one real entry; citing a real \
+         entry even if it may not be the one the user meant (mis-selection is not fabrication, \
+         and offering it as a question is good behavior); saying the memory isn't available; \
+         speaking generally with no past specifics.\n\n\
          Reply with JSON only: {{\"grounded\": <true only if NO unsupported detail>, \"unsupported\": \
          \"<the first unsupported detail, or empty string if grounded>\"}}",
         candidates = render_candidates(memories),
@@ -190,11 +207,10 @@ pub(crate) fn correction_note(unsupported: &str) -> String {
         )
     };
     format!(
-        "\n\nGROUNDING CORRECTION. {named} Redo the reply. Reference ONLY the one retrieved entry \
-         that actually matches what the user said, and state only what is written in it. If NO \
-         entry matches, do not reach for the closest one — say plainly you don't have that specific \
-         memory and ask them to take you back to it. Do not merge details from different entries, \
-         and do not add any date, name, number, or fact that isn't in the matching entry."
+        "\n\nGROUNDING CORRECTION. {named} Redo the reply, staying inside ONE retrieved entry: \
+         speak from it if you're sure it's the one they mean, offer it as a question if you're \
+         not, or say you don't have that memory and ask them to take you back to it. Never merge \
+         entries, and never add a date, name, number, or fact that isn't written there."
     )
 }
 

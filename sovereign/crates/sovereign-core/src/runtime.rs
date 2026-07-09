@@ -147,7 +147,11 @@ mod retrieval_helpers;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
-mod memory_grounding;
+/// Public for the inner-chaos bench's verifier-calibration gate —
+/// rubric changes to the recall grounding verifier must pass a
+/// hand-labeled bank before they may ship (same discipline as the
+/// recall judge's `--calibrate-recall`).
+pub mod memory_grounding;
 mod streaming;
 mod system_message;
 mod turn;

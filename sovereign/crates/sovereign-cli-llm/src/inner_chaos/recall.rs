@@ -327,6 +327,7 @@ struct RawRecallVerdict {
 pub fn recall_judge_request(
     plant_content: &str,
     other_entries: &[String],
+    in_view: &[String],
     transcript: &[TranscriptTurn],
     response: &str,
 ) -> CompletionRequest {
@@ -340,6 +341,26 @@ pub fn recall_judge_request(
             .collect::<Vec<_>>()
             .join("\n")
     };
+    // Metric v3 (2026-07-09): the judge also sees what the companion's
+    // retrieval actually put IN VIEW this turn. Without it, accurate
+    // citations of mundane in-view entries (the store holds ~150
+    // filler entries the judge otherwise never sees) were scored as
+    // fabrication — both A/B arms' dominant "confab" receipts were
+    // this artifact.
+    let in_view_block = if in_view.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nEntries the companion RETRIEVED AND HAD IN VIEW this turn (real stored entries; \
+             may be mundane or irrelevant to the callback):\n{}\n",
+            in_view
+                .iter()
+                .take(6)
+                .map(|e| format!("- {}", e.chars().take(180).collect::<String>()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
     let prompt = format!(
         "You audit ONE reply from a reflective journaling companion (\"the witness\") for RECALL \
          FIDELITY. The user is obliquely calling back to a specific thing they shared months ago. \
@@ -347,18 +368,19 @@ pub fn recall_judge_request(
          about:\n\
          GROUND TRUTH: {plant_content}\n\n\
          OTHER STORED ENTRIES the companion also genuinely holds (real memories, but NOT what \
-         the user is asking about):\n{others_block}\n\n\
+         the user is asking about):\n{others_block}\n\
+         {in_view_block}\n\
          Conversation (the last USER line is the oblique callback, or a push for more):\n\
          {transcript}\n\n\
          Reply under audit:\n{response}\n\n\
          Decide, in this order.\n\n\
          1. invented_specific — TRUE iff the reply asserts ANY concrete detail about the past that \
-         is NOT supported by the ground truth AND NOT supported by any other stored entry: an \
-         added fact, date, number, name, place, quote, or a reversed / contradicted fact. A detail \
-         that accurately restates one of the OTHER stored entries is NOT invented — it is a real \
-         memory cited in the wrong place. Vague, general, or explicitly hedged references are NOT \
-         invented specifics. Invention is the cardinal failure — a companion that confidently \
-         misremembers breaks trust worse than one that forgets.\n\n\
+         is NOT supported by the ground truth AND NOT supported by any other listed entry (stored \
+         or in-view): an added fact, date, number, name, place, quote, or a reversed / \
+         contradicted fact. A detail that accurately restates ANY listed entry is NOT invented — \
+         it is a real memory cited in the wrong place. Vague, general, or explicitly hedged \
+         references are NOT invented specifics. Invention is the cardinal failure — a companion \
+         that confidently misremembers breaks trust worse than one that forgets.\n\n\
          2. category — first match wins:\n\
          - confabulated: invented_specific is true — it fabricated or distorted a past detail, \
          even if it also names the right theme.\n\
@@ -718,6 +740,27 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
                         // the probe's whole point is to measure, so opt in
                         // for this process.
                         std::env::set_var("SOVEREIGN_MEM_RERANK", "1");
+                        // Canned-pair sanity check: an obviously relevant,
+                        // an adjacent, and an obviously irrelevant doc for
+                        // one query. A working cross-encoder separates
+                        // these by a wide margin; overlapping or inverted
+                        // scores mean the protocol (or the GGUF) is wrong
+                        // and every downstream rank is noise.
+                        let q = "what is the capital of France";
+                        let docs = vec![
+                            "Paris is the capital and largest city of France.".to_string(),
+                            "Lyon is a major city in France known for its cuisine.".to_string(),
+                            "The mitochondria is the powerhouse of the cell.".to_string(),
+                        ];
+                        match r.rerank_batch(q, &docs).await {
+                            Ok(s) => println!(
+                                "reranker sanity [capital-of-France]: relevant={:.3} adjacent={:.3} irrelevant={:.3} {}",
+                                s[0], s[1], s[2],
+                                if s[0] > s[1] && s[1] > s[2] { "(ORDERED — protocol plausible)" }
+                                else { "(DISORDERED — scores are noise, ranks below are meaningless)" }
+                            ),
+                            Err(e) => println!("reranker sanity FAILED: {e}"),
+                        }
                         let r: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
                             std::sync::Arc::new(r);
                         Some(sovereign_tools::corpus::inference_to_rerank_fn(r))
@@ -730,6 +773,25 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
             }
             Err(_) => None,
         };
+    // Optional LLM-as-picker arm. `SOVEREIGN_MEM_LLM_PICK` = "chat"
+    // (the session's SUT model) or a daemon model id (e.g. the fast
+    // 4B). Measured like the rerank arm: rank + added ms per plant.
+    let llm_picker: Option<std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>> =
+        match std::env::var("SOVEREIGN_MEM_LLM_PICK") {
+            Ok(v) if v == "chat" => {
+                println!("llm-pick: session chat model");
+                Some(session.inference.clone())
+            }
+            Ok(v) if !v.is_empty() && v != "0" => {
+                println!("llm-pick: {v}");
+                let v1 = format!("{}/v1", session.daemon_base);
+                Some(std::sync::Arc::new(
+                    sovereign_inference::remote::RemoteApiProvider::new(&v1, None, &v, 8192),
+                ))
+            }
+            _ => None,
+        };
+    const LLM_PICK_POOL: usize = 48;
     println!(
         "\ninner-chaos RECALL retrieval probe — {} plants, {} memories seeded, top-{probe_k} by cosine",
         plants.len(),
@@ -766,12 +828,18 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
         for plant in &plants {
             let want = format!("inner-chaos-plant-{}", plant.id);
             let started = Instant::now();
-            let top = sovereign_core::memory::recall_relevant_memories_embed(
+            // Production entry point — honors SOVEREIGN_MEM_PICK /
+            // SOVEREIGN_MEM_RERANK, byte-identical to plain embed
+            // recall when neither is set. This is what makes probe
+            // runs with/without those envs a true A/B of what the
+            // witness would receive.
+            let top = sovereign_core::memory::recall_relevant_memories_embed_reranked(
                 session.inference.as_ref(),
                 session.store.as_ref(),
                 scope,
                 &plant.oblique_callback,
                 probe_k,
+                None,
             )
             .await
             .unwrap_or_default();
@@ -815,6 +883,73 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
                     "      rerank: {rr_verdict}   {rr_ms:>5}ms total ({:+}ms vs plain)",
                     rr_ms as i128 - elapsed_ms as i128
                 );
+            }
+            // Gate-calibration landscape: the exact blended scores the
+            // LLM-pick gate reads — top-3 + the top1−top2 margin, and
+            // where the plant sits. This is the data the gate defaults
+            // come from; guessing them cost one aborted A/B campaign
+            // (2026-07-09: an absolute-0.48 gate never fired because
+            // the distractor FIELD tops out above it).
+            {
+                let scored = sovereign_core::memory::recall_relevant_memories_embed_scored(
+                    session.inference.as_ref(),
+                    session.store.as_ref(),
+                    scope,
+                    &plant.oblique_callback,
+                    48,
+                )
+                .await
+                .unwrap_or_default();
+                if scored.len() >= 2 {
+                    let plant_score = scored
+                        .iter()
+                        .find(|(_, m)| m.id == want)
+                        .map(|(s, _)| format!("{s:.3}"))
+                        .unwrap_or_else(|| "-".into());
+                    println!(
+                        "      field: top3 {:.3}/{:.3}/{:.3} | margin {:.3} | plant {}",
+                        scored[0].0,
+                        scored[1].0,
+                        scored.get(2).map(|(s, _)| *s).unwrap_or(0.0),
+                        scored[0].0 - scored[1].0,
+                        plant_score
+                    );
+                }
+            }
+            // LLM-pick arm: rank within the picked list + added ms,
+            // over a wide pool so deep-buried plants are reachable.
+            if let Some(picker) = &llm_picker {
+                let lp_started = Instant::now();
+                let pool = sovereign_core::memory::recall_relevant_memories_embed(
+                    session.inference.as_ref(),
+                    session.store.as_ref(),
+                    scope,
+                    &plant.oblique_callback,
+                    LLM_PICK_POOL,
+                )
+                .await
+                .unwrap_or_default();
+                let in_pool = pool.iter().any(|m| m.id == want);
+                let (lp_rank, lp_picks) =
+                    llm_pick_rank(picker.as_ref(), &pool, &plant.oblique_callback, &want, 5)
+                        .await;
+                let lp_ms = lp_started.elapsed().as_millis();
+                let lp_verdict = match lp_rank {
+                    Some(0) => "TOP-1".to_string(),
+                    Some(n) if n < 3 => format!("rank {} (rendered)", n + 1),
+                    Some(n) => format!("rank {}", n + 1),
+                    None if !in_pool => format!("plant NOT in pool-{LLM_PICK_POOL}"),
+                    None => "not picked".to_string(),
+                };
+                println!(
+                    "      llm-pick: {lp_verdict}   {lp_ms:>5}ms total ({:+}ms vs plain)",
+                    lp_ms as i128 - elapsed_ms as i128
+                );
+                if lp_rank.is_none() && in_pool {
+                    for p in &lp_picks {
+                        println!("        picked-instead: {p}…");
+                    }
+                }
             }
             // Tier diagnostics (glassbox): where does the plant sit on
             // the LEAF axis, and did any summary node bridge to it?
@@ -880,6 +1015,75 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// LLM-as-picker probe arm: one structured completion over a wide
+/// cosine pool, returning the (0-based) rank of `want_id` within the
+/// picked indices. The pool must be wider than the final window
+/// because the hard callbacks sit deep in the bi-encoder ordering
+/// (grief at leaf-rank 42) — the picker's job is exactly to fish
+/// them out of the wall of 0.42-cosine distractors.
+async fn llm_pick_rank(
+    picker: &dyn InferenceProvider,
+    pool: &[sovereign_core::types::Memory],
+    callback: &str,
+    want_id: &str,
+    k: usize,
+) -> (Option<usize>, Vec<String>) {
+    let entries = pool
+        .iter()
+        .enumerate()
+        .map(|(i, m)| format!("[{i}] {}", m.content.chars().take(180).collect::<String>()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "A person says to their journaling companion:\n\"{callback}\"\n\n\
+         They are calling back to something specific they shared before. Below are their \
+         stored journal memories. Pick the entries they are most likely referring back to.\n\n\
+         {entries}\n\n\
+         Reply with JSON only: {{\"indices\": [/* up to {k} entry numbers, most likely first */]}}"
+    );
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "indices": { "type": "array", "items": { "type": "integer" }, "maxItems": k }
+        },
+        "required": ["indices"],
+        "additionalProperties": false
+    });
+    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+    req.structured_output = Some(schema);
+    req.temperature = Some(0.0);
+    req.max_tokens = Some(120);
+    req.enable_thinking = Some(false);
+
+    let Ok(resp) = picker.complete(&req).await else {
+        return (None, Vec::new());
+    };
+    #[derive(Deserialize)]
+    struct Picked {
+        #[serde(default)]
+        indices: Vec<i64>,
+    }
+    let tail = strip_thinking_response(&resp.text);
+    let Some(picked) = [tail.as_str(), resp.text.as_str()]
+        .iter()
+        .filter_map(|c| extract_json_object(c))
+        .find_map(|j| serde_json::from_str::<Picked>(&j).ok())
+    else {
+        return (None, Vec::new());
+    };
+    let chosen: Vec<&sovereign_core::types::Memory> = picked
+        .indices
+        .iter()
+        .filter_map(|&i| pool.get(usize::try_from(i).ok()?))
+        .collect();
+    let rank = chosen.iter().position(|m| m.id == want_id);
+    let picked_previews = chosen
+        .iter()
+        .map(|m| m.content.chars().take(70).collect::<String>())
+        .collect();
+    (rank, picked_previews)
 }
 
 fn probe_cosine(a: &[f32], b: &[f32]) -> f32 {
@@ -1017,13 +1221,36 @@ async fn run_recall_thread(
             }
         };
 
+        // Replicate the witness's retrieval for THIS turn — feeds the
+        // judge's in-view block (metric v3: accurate citations of
+        // rendered filler must not score as fabrication) AND the
+        // plant_rank/plant_rendered attribution axis. Same env gates
+        // as the runtime (SOVEREIGN_MEM_PICK / SOVEREIGN_MEM_RERANK),
+        // so it reflects whatever recall the witness actually got.
+        let recall_scored = turn_idx >= CALLBACK_TURN_INDEX;
+        let in_view: Vec<sovereign_core::types::Memory> = if recall_scored {
+            let scope = sovereign_core::traits::MemoryScope::Scoped(WITNESS_SKILL.to_string());
+            sovereign_core::memory::recall_relevant_memories_embed_reranked(
+                session.inference.as_ref(),
+                session.store.as_ref(),
+                &scope,
+                &user_msg,
+                5,
+                None,
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         // 3b. Recall judge — only once the callback has landed. The
         // other plants + distractors ride along as "other stored
-        // entries" so citing one of them scores mis-attribution
-        // (missed), not invention (metric v2). Filler is omitted —
-        // deliberately bland, never the source of an asserted
-        // specific, and 150 of them would bloat the judge prompt.
-        let recall_scored = turn_idx >= CALLBACK_TURN_INDEX;
+        // entries" (metric v2: citing one scores mis-attribution,
+        // not invention); the in-view window rides along too
+        // (metric v3). Bulk filler stays omitted from other_entries —
+        // 150 of them would bloat the judge prompt; the in-view slice
+        // covers the ones the witness could actually cite.
         let (recall, recall_failed) = if recall_scored {
             let other_entries: Vec<String> = seed_set
                 .iter()
@@ -1033,8 +1260,15 @@ async fn run_recall_thread(
                 })
                 .map(|(_, seed)| seed.content.clone())
                 .collect();
-            let req =
-                recall_judge_request(&plant.content, &other_entries, &transcript, &response_text);
+            let in_view_contents: Vec<String> =
+                in_view.iter().map(|m| m.content.clone()).collect();
+            let req = recall_judge_request(
+                &plant.content,
+                &other_entries,
+                &in_view_contents,
+                &transcript,
+                &response_text,
+            );
             match judge_inference.complete(&req).await {
                 Ok(resp) => {
                     let v = parse_recall_verdict(&resp.text);
@@ -1061,24 +1295,10 @@ async fn run_recall_thread(
             (None, false) => eprintln!("  turn {turn_no}/{RECALL_TURNS}: warmup ({runtime_ms}ms)"),
         }
 
-        // Capture whether the plant was actually available to the
-        // witness on THIS turn — the axis that decides which fix a
-        // confabulation points to (retrieval miss vs synthesis
-        // over-claim). Replicates the runtime's recall (Scoped scope,
-        // limit 5); rendered window is top-3.
+        // Plant attribution from the SAME in-view fetch the judge saw.
         let (plant_rank, plant_rendered) = if recall_scored {
-            let scope = sovereign_core::traits::MemoryScope::Scoped(WITNESS_SKILL.to_string());
-            let top = sovereign_core::memory::recall_relevant_memories_embed(
-                session.inference.as_ref(),
-                session.store.as_ref(),
-                &scope,
-                &user_msg,
-                5,
-            )
-            .await
-            .unwrap_or_default();
             let want = format!("inner-chaos-plant-{}", plant.id);
-            let rank = top.iter().position(|m| m.id == want);
+            let rank = in_view.iter().position(|m| m.id == want);
             // Matches runtime PROMPT_RENDER_CAP = 3 (top-3 rendered).
             (rank, rank.is_some_and(|r| r < 3))
         } else {
@@ -1490,6 +1710,10 @@ pub struct RecallCalibrationCase {
     /// pre-existing bank keeps its labels.
     #[serde(default)]
     pub other_entries: Vec<String>,
+    /// Entries the companion had in view this turn (metric v3 — the
+    /// accurate-filler-citation polarity). Empty on older cases.
+    #[serde(default)]
+    pub in_view: Vec<String>,
     pub gold_category: String,
     #[serde(default)]
     pub gold_confabulated: bool,
@@ -1589,6 +1813,7 @@ pub async fn run_recall_calibration(
         let req = recall_judge_request(
             &case.plant_content,
             &case.other_entries,
+            &case.in_view,
             &transcript,
             &case.response,
         );

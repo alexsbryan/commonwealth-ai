@@ -72,6 +72,42 @@ pub async fn recall_relevant_memories_embed(
     query: &str,
     limit: usize,
 ) -> Result<Vec<Memory>> {
+    let scored =
+        recall_relevant_memories_embed_scored(inference, store, scope, query, limit).await?;
+    Ok(strip_embeddings(scored))
+}
+
+/// Strip the T1 vectors from rows leaving the recall path — callers
+/// render content, and a 1024-float payload per row would bloat every
+/// downstream clone/serialize (bench journals, prompt-context
+/// plumbing) for no reader.
+fn strip_embeddings(scored: Vec<(f32, Memory)>) -> Vec<Memory> {
+    scored
+        .into_iter()
+        .map(|(_, mut m)| {
+            m.embedding = None;
+            m.embedding_model = None;
+            m
+        })
+        .collect()
+}
+
+/// Score-carrying variant of [`recall_relevant_memories_embed`] —
+/// same retrieval, but the caller also sees each row's final blended
+/// similarity. The score is the confidence signal the LLM-pick gate
+/// reads: a strong top score means the bi-encoder already resolved
+/// the reference and no LLM assistance is worth its latency.
+/// FTS-fallback rows carry score 0.0 (no cosine exists for them).
+///
+/// Public for the bench probes — gate calibration needs the exact
+/// score landscape the gate sees, not a re-derivation.
+pub async fn recall_relevant_memories_embed_scored(
+    inference: &dyn InferenceProvider,
+    store: &dyn StateStore,
+    scope: &MemoryScope,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<(f32, Memory)>> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -96,7 +132,10 @@ pub async fn recall_relevant_memories_embed(
             return Ok(store
                 .get_relevant_memories_for_scope(scope, query, limit)
                 .await
-                .unwrap_or_default());
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| (0.0, m))
+                .collect());
         }
     };
 
@@ -156,7 +195,10 @@ pub async fn recall_relevant_memories_embed(
                 return Ok(store
                     .get_relevant_memories_for_scope(scope, query, limit)
                     .await
-                    .unwrap_or_default());
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|m| (0.0, m))
+                    .collect());
             }
         }
     }
@@ -261,29 +303,17 @@ pub async fn recall_relevant_memories_embed(
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(limit);
 
-    let top = scored
-        .into_iter()
-        .map(|(_, mut m)| {
-            // Strip the vector from returned rows — callers render
-            // content, and a 1024-float payload per row would bloat
-            // every downstream clone/serialize (bench journals,
-            // prompt-context plumbing) for no reader.
-            m.embedding = None;
-            m.embedding_model = None;
-            m
-        })
-        .collect::<Vec<_>>();
     tracing::debug!(
         in_scope,
         stored_embeddings = stored_hits,
         freshly_embedded = in_scope - stored_hits,
-        returned = top.len(),
+        returned = scored.len(),
         limit,
         scope = ?scope,
-        top_ids = ?top.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+        top_ids = ?scored.iter().map(|(_, m)| m.id.as_str()).collect::<Vec<_>>(),
         "memory: embed recall — returning top-K by cosine"
     );
-    Ok(top)
+    Ok(scored)
 }
 
 /// Candidate pool handed to the cross-encoder when reranking is
@@ -312,6 +342,16 @@ pub async fn recall_relevant_memories_embed_reranked(
     limit: usize,
     rerank_fn: Option<&corpus_engine::RerankFn>,
 ) -> Result<Vec<Memory>> {
+    // LLM-pick stage (opt-in, `SOVEREIGN_MEM_PICK=1`) takes
+    // precedence over the cross-encoder when both are enabled — it
+    // measured strictly better on the recall fixture (2026-07-09):
+    // pointwise 0.6B cross-encoders could not discriminate within a
+    // journal of emotionally-adjacent entries, while an LLM reading
+    // the pool solved the deep-buried callbacks.
+    if std::env::var("SOVEREIGN_MEM_PICK").map_or(false, |v| v == "1") {
+        return recall_llm_picked(inference, store, scope, query, limit).await;
+    }
+
     // Opt-IN (`SOVEREIGN_MEM_RERANK=1`), never inherited from the
     // corpus reranker's mere presence: measured on the recall probe
     // (2026-07-09, jina-reranker-v3-Q8), the cross-encoder DEMOTED
@@ -369,6 +409,156 @@ pub async fn recall_relevant_memories_embed_reranked(
             Ok(pool.into_iter().take(limit).collect())
         }
     }
+}
+
+/// Candidate pool for the LLM-pick stage. Must reach past the hard
+/// callbacks' bi-encoder depth (measured: the grief plant at
+/// leaf-rank 42). Env-tunable via `SOVEREIGN_MEM_PICK_POOL`.
+const MEM_PICK_POOL_DEFAULT: usize = 48;
+
+/// Ambiguity gate: the picker fires only when the bi-encoder's
+/// top1−top2 MARGIN falls below this. Measured on the recall fixture
+/// (2026-07-09 probe, blended scores): the two callbacks the
+/// bi-encoder misses have margin 0.000 — an exactly tied field —
+/// while every solved callback has a dominant winner at margin
+/// 0.022–0.131. An absolute-score gate cannot make this cut (solved
+/// top1 spans 0.488–0.648, overlapping the ambiguous fields at
+/// ~0.50) — an aborted A/B campaign proved that the expensive way.
+/// A false FIRE costs only latency (the picker preserved every
+/// bi-encoder-solved callback in all measured runs), so the default
+/// sits just above the thinnest solved margin. Env-tunable via
+/// `SOVEREIGN_MEM_PICK_MARGIN`.
+const MEM_PICK_MARGIN_DEFAULT: f32 = 0.025;
+
+/// LLM-pick recall (opt-in via `SOVEREIGN_MEM_PICK=1`): bi-encoder
+/// pool of `MEM_PICK_POOL` candidates, then — ONLY when the field has
+/// no dominant winner (margin gate) — one structured completion that
+/// reads the pool and picks the entries the user is referring back
+/// to. Picked entries lead, cosine order fills the remainder.
+///
+/// Cost model (measured 2026-07-09): the gate keeps confident recalls
+/// at bi-encoder speed (~40ms); ambiguous recalls pay one LLM read of
+/// ~48 snippets (~3.6s on the local 4B/35B) and in exchange the
+/// deep-buried oblique callbacks become renderable (daughter rank
+/// 7 → TOP-1 deterministically; grief reaches the rendered window
+/// when picked). Any pick failure degrades to plain bi-encoder order.
+async fn recall_llm_picked(
+    inference: &dyn InferenceProvider,
+    store: &dyn StateStore,
+    scope: &MemoryScope,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<Memory>> {
+    let pool_n = std::env::var("SOVEREIGN_MEM_PICK_POOL")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(MEM_PICK_POOL_DEFAULT)
+        .max(limit);
+    let margin_gate = std::env::var("SOVEREIGN_MEM_PICK_MARGIN")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(MEM_PICK_MARGIN_DEFAULT);
+
+    let scored =
+        recall_relevant_memories_embed_scored(inference, store, scope, query, pool_n).await?;
+    if scored.is_empty() {
+        return Ok(Vec::new());
+    }
+    let margin = if scored.len() >= 2 {
+        scored[0].0 - scored[1].0
+    } else {
+        f32::MAX
+    };
+    if margin >= margin_gate || scored.len() <= limit {
+        tracing::debug!(
+            top_score = scored[0].0,
+            margin,
+            margin_gate,
+            "memory: llm-pick gate — dominant bi-encoder winner, no LLM call"
+        );
+        return Ok(strip_embeddings(scored.into_iter().take(limit).collect()));
+    }
+
+    let started = std::time::Instant::now();
+    let entries = scored
+        .iter()
+        .enumerate()
+        .map(|(i, (_, m))| format!("[{i}] {}", m.content.chars().take(180).collect::<String>()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "A person says to their journaling companion:\n\"{query}\"\n\n\
+         They may be calling back to something specific they shared before. Below are their \
+         stored journal memories. Pick the entries they are most likely referring back to.\n\n\
+         {entries}\n\n\
+         Reply with JSON only: {{\"indices\": [/* up to {limit} entry numbers, most likely \
+         first */]}}"
+    );
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "indices": { "type": "array", "items": { "type": "integer" }, "maxItems": limit }
+        },
+        "required": ["indices"],
+        "additionalProperties": false
+    });
+    let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Fast);
+    req.structured_output = Some(schema);
+    req.temperature = Some(0.0);
+    req.max_tokens = Some(120);
+    req.enable_thinking = Some(false);
+
+    #[derive(serde::Deserialize)]
+    struct Picked {
+        #[serde(default)]
+        indices: Vec<i64>,
+    }
+    let picked_idx: Vec<usize> = match inference.complete(&req).await {
+        Ok(resp) => {
+            let tail = crate::title::strip_thinking_response(&resp.text);
+            let json = tail
+                .find('{')
+                .and_then(|s| tail.rfind('}').map(|e| &tail[s..=e]))
+                .unwrap_or("");
+            serde_json::from_str::<Picked>(json)
+                .map(|p| {
+                    p.indices
+                        .into_iter()
+                        .filter_map(|i| usize::try_from(i).ok())
+                        .filter(|&i| i < scored.len())
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "memory: llm-pick failed — keeping bi-encoder order");
+            Vec::new()
+        }
+    };
+
+    // Picked entries lead (in pick order), the rest follow in cosine
+    // order — the witness's rendered window sees the picker's best
+    // guesses first, and a bad pick can only reorder, never lose the
+    // bi-encoder's own candidates.
+    let mut order: Vec<usize> = picked_idx.clone();
+    for i in 0..scored.len() {
+        if !order.contains(&i) {
+            order.push(i);
+        }
+    }
+    let mut by_idx: Vec<Option<(f32, Memory)>> = scored.into_iter().map(Some).collect();
+    let reordered: Vec<(f32, Memory)> = order
+        .into_iter()
+        .filter_map(|i| by_idx.get_mut(i).and_then(|slot| slot.take()))
+        .take(limit)
+        .collect();
+    tracing::debug!(
+        picked = picked_idx.len(),
+        pick_ms = started.elapsed().as_millis() as u64,
+        scope = ?scope,
+        "memory: llm-pick applied"
+    );
+    Ok(strip_embeddings(reordered))
 }
 
 // ─── Working Memory Compression ───────────────────────────────
