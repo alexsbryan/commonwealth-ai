@@ -287,10 +287,14 @@ impl ToolPatternMatcher {
             }
             hits.push(ObservedPattern {
                 rule: PatternRule::IsolatedInvestigation,
-                message: format!(
-                    "Three or more code-intel calls ({}) with no `build` or `note` follow-up.",
-                    deduped.join(", ")
-                ),
+                // Stable lesson text — the specific tools that fired vary run
+                // to run and were previously interpolated into the message,
+                // which fragmented one lesson into N near-duplicate rows. The
+                // tools live in `tools` (→ the note's symbols) where the detail
+                // belongs; the message stays identical so the store-level dedup
+                // below can actually collapse re-emits.
+                message: "Three or more code-intel calls with no `build` or `note` follow-up."
+                    .to_string(),
                 tools: deduped.clone(),
             });
             cooldowns.insert(
@@ -374,6 +378,39 @@ impl ToolPatternMatcher {
             } else {
                 NoteScope::Global
             };
+            // Emitter idempotency. The `cooldowns` map above is per-session and
+            // in-memory: it resets on a new session and on every daemon restart,
+            // so on its own it re-files the same observed lesson indefinitely
+            // (measured: 7 copies of the isolated-investigation reflection). The
+            // store's own content_hash dedup can't catch this — the hash folds
+            // in session_id, so cross-session re-emits hash differently. So we
+            // ask the store directly: is there already an active observed
+            // reflection with this exact content? If so, the lesson is recorded;
+            // skip. A failed check is non-fatal — fall through and let the write
+            // path's hash dedup be the backstop rather than dropping the note.
+            match self
+                .notes
+                .has_active_note_with_content("reflection", &hit.message, NoteSource::Observed)
+                .await
+            {
+                Ok(true) => {
+                    tracing::debug!(
+                        session_id,
+                        rule = hit.rule.as_str(),
+                        "tool_pattern_matcher: active observed reflection already present; skipping re-file"
+                    );
+                    continue;
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        session_id,
+                        rule = hit.rule.as_str(),
+                        error = %e,
+                        "tool_pattern_matcher: observed-dup check failed; proceeding to write"
+                    );
+                }
+            }
             // Record under kind="reflection" so existing readers
             // that filter by kind in the audit's "observed patterns"
             // section pick them up. The discriminator that the audit

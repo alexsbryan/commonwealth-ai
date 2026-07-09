@@ -455,6 +455,20 @@ enum Mode {
 enum MoveKind {
     Consolidate,
     Supersede,
+    /// Reflection whose flagged limitation may have been fixed (code churned on
+    /// its anchor since it was written). Distinct from the others because a
+    /// reflection's staleness is a FIX event, not age or a duplicate.
+    ReflectionFix,
+}
+
+/// An active reflection that is a fix-check candidate: its anchor (tool_name or
+/// symbol) has code churn since the reflection was written, so the limitation it
+/// flags MIGHT be resolved. Only the model rules resolved-vs-still-relevant.
+struct ReflectionFixCandidate<'a> {
+    note: &'a NoteRow,
+    anchor: String,
+    /// Commit subjects touching the anchor since `note.created_at`.
+    churn: Vec<String>,
 }
 
 /// A telemetry-log consolidation group: all log rows for one (kind, tool,
@@ -484,11 +498,18 @@ struct LogGroup<'a> {
 ///   anchor. The model rules "overtaking vs complementary"; on OVERTAKES the
 ///   older is retired with a pointer to the newer.
 ///
+///   REFLECTION FIX-CHECK: an active reflection whose flagged limitation may be
+///   resolved — its anchor (tool_name/symbol) has code churn since it was
+///   written. The model rules RESOLVED vs STILL-RELEVANT; on RESOLVED the
+///   reflection is retired. A reflection's staleness is a FIX event, not age —
+///   so this is deliberately NOT the time-based ephemeral TTL.
+///
 /// Modes: default = deterministic candidate report (no LLM, no writes);
 /// `--distill` = run the model and PREVIEW every survivor/verdict (no writes);
-/// `--apply --yes` = also write. Scope with `--only consolidate|supersede`,
+/// `--apply --yes` = also write. Scope with `--only consolidate|supersede|reflections`,
 /// `--kind <k>`, `--limit <n>`. `--model` defaults to `primary` (never the fast
-/// slot — distillation quality needs the big model).
+/// slot — distillation quality needs the big model). Fix-check needs to run
+/// inside the code repo the reflections describe (git churn is the fix-signal).
 async fn cmd_rationalize(args: &[String]) -> i32 {
     let mut data_dir: Option<PathBuf> = None;
     let mut mode = Mode::Report;
@@ -512,8 +533,11 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                 only = match args.get(i).map(String::as_str) {
                     Some("consolidate") => Some(MoveKind::Consolidate),
                     Some("supersede") => Some(MoveKind::Supersede),
+                    Some("reflections") | Some("reflection-fix") => Some(MoveKind::ReflectionFix),
                     other => {
-                        eprintln!("notes rationalize: --only wants consolidate|supersede, got {other:?}");
+                        eprintln!(
+                            "notes rationalize: --only wants consolidate|supersede|reflections, got {other:?}"
+                        );
                         return 2;
                     }
                 };
@@ -679,6 +703,35 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         .filter(|n| n.supersedes.is_none() && mentions_supersede(&n.content))
         .collect();
 
+    // ---- REFLECTION FIX-CHECK candidates ----
+    // A reflection's staleness is a FIX event, not age or a duplicate: it stops
+    // being true when the limitation it flags gets fixed. So we find active
+    // reflections with an anchor (tool_name, else first symbol) whose code has
+    // CHURNED since the reflection was written — those are the ones that might
+    // now be resolved. No churn ⇒ not a candidate (nothing suggests a fix). Only
+    // the model rules resolved-vs-still-relevant; we never retire on churn alone.
+    // Requires running inside the git repo the reflections describe; outside one,
+    // churn comes back empty and this section is silently absent.
+    let want_reflection_fix = only.is_none() || only == Some(MoveKind::ReflectionFix);
+    let mut reflection_fixes: Vec<ReflectionFixCandidate> = Vec::new();
+    if want_reflection_fix {
+        for n in &notes {
+            if n.kind != "reflection" {
+                continue;
+            }
+            let Some(anchor) = reflection_anchor(n) else {
+                continue;
+            };
+            let churn = git_churn_since(&anchor, &n.created_at);
+            if churn.is_empty() {
+                continue;
+            }
+            reflection_fixes.push(ReflectionFixCandidate { note: n, anchor, churn });
+        }
+        // Most churn first — likeliest to have addressed the limitation.
+        reflection_fixes.sort_by_key(|c| std::cmp::Reverse(c.churn.len()));
+    }
+
     // ---- kind filter (applies to consolidation candidates) ----
     let kind_ok = |k: &str| kind_filter.as_deref().map(|f| f == k).unwrap_or(true);
     log_groups.retain(|g| kind_ok(&g.kind));
@@ -767,8 +820,29 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         println!();
 
         println!(
-            "Next: `--distill` previews the LLM-written survivors; `--apply --yes` writes them + \
-             the retire-with-pointer links. Scope with --only / --kind / --limit."
+            "## REFLECTION FIX-CHECK — {} candidates (limitation flagged, anchor code churned since)",
+            reflection_fixes.len()
+        );
+        println!("#  --distill asks the model RESOLVED vs STILL-RELEVANT; --apply --yes retires only RESOLVED.");
+        for c in reflection_fixes.iter().take(30) {
+            println!(
+                "  [{}] {}  ({} commit(s) since {})",
+                c.anchor,
+                c.note.id,
+                c.churn.len(),
+                &c.note.created_at.get(0..10).unwrap_or("?")
+            );
+            println!("       {}", first_line(&c.note.content));
+            println!("       ↳ {}", c.churn[0]);
+        }
+        if reflection_fixes.is_empty() {
+            println!("  (none — run inside the code repo so churn can be detected)");
+        }
+        println!();
+
+        println!(
+            "Next: `--distill` previews the LLM-written survivors/verdicts; `--apply --yes` writes them + \
+             the retire links. Scope with --only consolidate|supersede|reflections / --kind / --limit."
         );
         return 0;
     }
@@ -784,8 +858,9 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         if mode == Mode::Apply && !commit { " — no --yes, so PREVIEW only" } else { "" }
     );
 
-    let do_consolidate = only != Some(MoveKind::Supersede);
-    let do_supersede = only != Some(MoveKind::Consolidate);
+    let do_consolidate = only.is_none() || only == Some(MoveKind::Consolidate);
+    let do_supersede = only.is_none() || only == Some(MoveKind::Supersede);
+    let do_reflection_fix = only.is_none() || only == Some(MoveKind::ReflectionFix);
     let mut wrote = 0usize;
     let mut retired = 0usize;
 
@@ -908,6 +983,46 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         }
     }
 
+    // ---- REFLECTION FIX-CHECK: LLM rules whether the limitation is resolved ----
+    if do_reflection_fix {
+        for c in reflection_fixes.iter().take(limit) {
+            println!(
+                "\n── REFLECTION FIX-CHECK?  [{}] {}  ({} commit(s) since {})",
+                c.anchor,
+                c.note.id,
+                c.churn.len(),
+                &c.note.created_at.get(0..10).unwrap_or("?")
+            );
+            println!("   limitation: {}", first_line(&c.note.content));
+            for line in c.churn.iter().take(4) {
+                println!("   churn: {line}");
+            }
+            let (system, user) = reflection_fix_prompt(c);
+            let verdict = match daemon_complete(&client, &base_url, &model, &system, &user, 120, 0.0).await {
+                Ok(s) => s.trim().to_string(),
+                Err(e) => {
+                    eprintln!("   LLM error, skipping reflection: {e}");
+                    continue;
+                }
+            };
+            // First token is the verdict (prompt forces RESOLVED / STILL-RELEVANT);
+            // starts_with avoids matching a trailing "...not resolved".
+            let resolved = verdict.trim_start().to_uppercase().starts_with("RESOLVED");
+            println!("   verdict → {verdict}");
+            if writing && resolved {
+                let reason = format!("fixed — {} (rationalize fix-check)", first_line(&verdict));
+                match store.retire_by_id(&c.note.id, &reason).await {
+                    Ok(true) => {
+                        retired += 1;
+                        println!("   retired reflection {} (limitation resolved)", c.note.id);
+                    }
+                    Ok(false) => {}
+                    Err(e) => eprintln!("   retire {} failed: {e}", c.note.id),
+                }
+            }
+        }
+    }
+
     if writing {
         println!(
             "\n✓ applied: wrote {wrote} survivor(s), retired {retired} note(s).\n  \
@@ -978,6 +1093,123 @@ fn supersede_prompt(newer: &NoteRow, older: &NoteRow) -> (String, String) {
         truncate(&newer.content, 600),
         older.created_at,
         truncate(&older.content, 600)
+    );
+    (system, user)
+}
+
+/// The anchor a reflection is "about" — the join key for the fix-check. Prefer
+/// the explicit `tool_name` (session_reflection sets it); fall back to the first
+/// symbol. `None` for anchorless general reflections, which can't be fix-checked.
+fn reflection_anchor(n: &NoteRow) -> Option<String> {
+    // 1. The explicit column — the common, clean path.
+    if let Some(t) = n
+        .tool_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        return Some(t.to_string());
+    }
+    // 2. First symbol.
+    if let Some(s) = n.symbols.iter().map(|s| s.trim()).find(|s| !s.is_empty()) {
+        return Some(s.to_string());
+    }
+    // 3. Recover from the `session_reflection` JSON body, where an agent
+    //    sometimes names the tool inside the payload instead of the column.
+    //    Prefer an explicit `tool_name`, then the first `tools_that_helped`
+    //    entry. Commit-message reflections (source=committed) aren't JSON and
+    //    fall through to None — correctly, since they have no tool anchor.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(n.content.trim()) {
+        if let Some(t) = v
+            .get("tool_name")
+            .and_then(|t| t.as_str())
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            return Some(t.to_string());
+        }
+        if let Some(t) = v
+            .get("tools_that_helped")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.first())
+            .and_then(|t| t.as_str())
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            return Some(t.to_string());
+        }
+    }
+    None
+}
+
+/// Commit subjects that changed lines matching `anchor` since `since_rfc3339`,
+/// via `git log` pickaxe in the current repo. Empty when there's no churn, git
+/// is unavailable, or we're not inside a repo — all of which correctly mean "no
+/// fix-signal, not a candidate". Capped so a hot anchor doesn't flood.
+///
+/// Precision: for identifier-shaped anchors we use a word-bounded regex (`-G`)
+/// so `symbols` no longer matches `symbolstable` and `build` no longer matches
+/// `rebuild` — the generic-substring over-matching that flooded the candidate
+/// set with commits that merely touched the term in passing. Non-word anchors
+/// (containing `::`, `<`, …) fall back to the literal-substring pickaxe (`-S`),
+/// where a `\b`-wrapped regex would be both unsafe and ill-defined. Anchors
+/// under 3 chars pickaxe against nearly every diff, so they yield no signal.
+fn git_churn_since(anchor: &str, since_rfc3339: &str) -> Vec<String> {
+    let anchor = anchor.trim();
+    if anchor.len() < 3 {
+        return Vec::new();
+    }
+    let is_word = anchor.chars().all(|c| c.is_alphanumeric() || c == '_');
+    let needle = if is_word {
+        format!("-G\\b{anchor}\\b")
+    } else {
+        format!("-S{anchor}")
+    };
+    let output = std::process::Command::new("git")
+        .args([
+            "log",
+            &format!("--since={since_rfc3339}"),
+            "-n",
+            "8",
+            "--no-merges",
+            "--pretty=format:%h %s",
+            &needle,
+        ])
+        .output();
+    match output {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// System + user prompt to rule whether recent code churn resolved a reflection's
+/// flagged limitation.
+fn reflection_fix_prompt(c: &ReflectionFixCandidate) -> (String, String) {
+    let system = "You decide whether recent code changes RESOLVED a limitation an engineer flagged \
+                  about a tool. Answer with exactly one word — RESOLVED or STILL-RELEVANT — then a \
+                  dash and at most 12 words. Default to STILL-RELEVANT unless the commits clearly \
+                  address the SPECIFIC limitation described (a commit merely touching the tool is \
+                  not enough)."
+        .to_string();
+    let churn = c
+        .churn
+        .iter()
+        .take(8)
+        .map(|s| format!("- {}", truncate(s, 160)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let user = format!(
+        "LIMITATION (about '{}', flagged {}):\n{}\n\nCommits changing '{}' since then:\n{churn}\n\n\
+         Do these resolve the specific limitation?",
+        c.anchor,
+        &c.note.created_at.get(0..10).unwrap_or("?"),
+        truncate(&c.note.content, 800),
+        c.anchor,
     );
     (system, user)
 }
@@ -1168,6 +1400,74 @@ mod rationalize_tests {
         assert!(is_ephemeral_kind("checkpoint"));
         assert!(!is_ephemeral_kind("decision"));
         assert!(!is_ephemeral_kind("invariant"));
+    }
+
+    #[test]
+    fn git_churn_since_respects_the_since_bound() {
+        // Runs inside the repo, but nothing has been committed since the year
+        // 2099 — so the fix-signal is empty regardless of anchor. Uses a
+        // >=3-char anchor so it exercises the real git path, not the
+        // short-anchor floor below.
+        assert!(git_churn_since("runtime", "2099-01-01").is_empty());
+    }
+
+    #[test]
+    fn git_churn_since_floors_out_tiny_anchors() {
+        // A 1-2 char anchor pickaxes against nearly every diff — no signal.
+        // Returns empty without even shelling out to git.
+        assert!(git_churn_since("fn", "1970-01-01").is_empty());
+        assert!(git_churn_since("x", "1970-01-01").is_empty());
+    }
+
+    /// Minimal `NoteRow` for anchor tests — only the three fields
+    /// `reflection_anchor` reads vary; the rest are inert placeholders.
+    fn anchor_row(tool_name: Option<&str>, symbols: &[&str], content: &str) -> NoteRow {
+        NoteRow {
+            id: String::new(),
+            kind: "reflection".to_string(),
+            content: content.to_string(),
+            symbols: symbols.iter().map(|s| s.to_string()).collect(),
+            files: Vec::new(),
+            session_id: String::new(),
+            created_at: String::new(),
+            tool_name: tool_name.map(str::to_string),
+            retired_at: None,
+            retired_by: None,
+            scope: "global".to_string(),
+            feature_id: None,
+            promoted_from: None,
+            related_entity: None,
+            source: "agent".to_string(),
+            supersedes: None,
+            payload_json: None,
+        }
+    }
+
+    #[test]
+    fn reflection_anchor_recovers_tool_from_json_body() {
+        // Explicit tool_name in the JSON body when the column is empty.
+        let base = anchor_row(
+            None,
+            &[],
+            r#"{"task_summary":"x","tool_name":"blast","tools_that_helped":["callers"]}"#,
+        );
+        assert_eq!(reflection_anchor(&base).as_deref(), Some("blast"));
+
+        // tool_name null in the body → fall back to first tools_that_helped.
+        let helped = anchor_row(
+            None,
+            &[],
+            r#"{"task_summary":"x","tool_name":null,"tools_that_helped":["lint_status","build"]}"#,
+        );
+        assert_eq!(reflection_anchor(&helped).as_deref(), Some("lint_status"));
+
+        // A prose commit-message reflection isn't JSON → no anchor.
+        let prose = anchor_row(None, &[], "docs(uap): skeptic-proof the demo — reconciled numbers");
+        assert!(reflection_anchor(&prose).is_none());
+
+        // The explicit column still wins over the body.
+        let column = anchor_row(Some("symbols"), &[], r#"{"tool_name":"blast"}"#);
+        assert_eq!(reflection_anchor(&column).as_deref(), Some("symbols"));
     }
 
     #[test]
