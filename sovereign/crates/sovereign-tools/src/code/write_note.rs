@@ -14,7 +14,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine_notes::{NoteScope, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 
 /// Kinds the tool admits in `validate()`. Single source of truth for
 /// the schema-`enum` field, the validator, and any future test that
@@ -108,6 +108,15 @@ impl Tool for WriteNoteTool {
                         "description": "Required when scope='feature'. The id returned by \
                                         provision_feature (same value as $SOVEREIGN_FEATURE_ID \
                                         in the ATOS driver env)."
+                    },
+                    "supersedes": {
+                        "type": "string",
+                        "description": "Optional id of a prior note this one REPLACES. The \
+                                        superseded note is auto-retired (hidden from read_notes, \
+                                        with a 'superseded by <id>' reason) while its row is kept \
+                                        for the gossip-propagated supersedes chain. Use when a new \
+                                        decision/invariant reverses or updates an older one, so the \
+                                        two don't coexist and contradict."
                     }
                 },
                 "required": ["kind", "content"]
@@ -149,7 +158,9 @@ impl Tool for WriteNoteTool {
                     "id":         { "type": "string" },
                     "kind":       { "type": "string" },
                     "scope":      { "type": "string" },
-                    "feature_id": { "type": ["string", "null"] }
+                    "feature_id": { "type": ["string", "null"] },
+                    "supersedes": { "type": ["string", "null"] },
+                    "retired":    { "type": ["string", "null"] }
                 }
             })),
         }
@@ -228,10 +239,14 @@ impl Tool for WriteNoteTool {
             .get("related_entity")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
+        let supersedes = params
+            .get("supersedes")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
 
         let id = self
             .store
-            .write_note_with_relation(
+            .write_note_with_source(
                 kind,
                 content,
                 symbols,
@@ -240,12 +255,38 @@ impl Tool for WriteNoteTool {
                 scope,
                 feature_id,
                 related_entity,
+                NoteSource::Agent,
+                supersedes,
             )
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "note".to_string(),
                 message: e.to_string(),
             })?;
+
+        // Auto-retire the superseded note. Declaring B supersedes A means A is
+        // now stale, so hide it from read_notes (set retired_at) while keeping
+        // the row for the gossip-propagated supersedes chain. Without this the
+        // link is recorded but both notes still surface and contradict — the
+        // exact accretion this closes. Non-fatal: if the old id is missing or
+        // already retired, the supersedes link on the new note still stands.
+        let mut retired: Option<&str> = None;
+        if let Some(old_id) = supersedes {
+            match self
+                .store
+                .retire_by_id(old_id, &format!("superseded by note {id}"))
+                .await
+            {
+                Ok(true) => retired = Some(old_id),
+                Ok(false) => {} // not found or already retired — link still recorded
+                Err(e) => tracing::warn!(
+                    target: "notes",
+                    old_id,
+                    error = %e,
+                    "supersede: retire of superseded note failed"
+                ),
+            }
+        }
 
         // The created_at timestamp can be retrieved via read_notes if needed.
         Ok(StepOutput::Json(json!({
@@ -254,6 +295,105 @@ impl Tool for WriteNoteTool {
             "scope": scope.as_str(),
             "feature_id": feature_id,
             "related_entity": related_entity,
+            "supersedes": supersedes,
+            "retired": retired,
         })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sovereign_core::types::ToolContext;
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "write-note-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        }
+    }
+
+    fn id_of(out: &StepOutput) -> String {
+        match out {
+            StepOutput::Json(v) => v["id"].as_str().unwrap().to_string(),
+            other => panic!("expected Json output, got {other:?}"),
+        }
+    }
+
+    /// Declaring B supersedes A must (1) record the supersedes link on B and
+    /// (2) auto-retire A so it stops surfacing in read_notes — the whole point
+    /// of exposing supersedes over MCP. Without the auto-retire, both notes
+    /// would coexist and contradict.
+    #[tokio::test]
+    async fn supersedes_records_link_and_auto_retires_the_old_note() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let tool = WriteNoteTool::new(Arc::clone(&store));
+
+        let a_id = id_of(
+            &tool
+                .execute(
+                    &json!({"kind": "decision", "content": "A: original decision"}),
+                    &ctx(),
+                )
+                .await
+                .unwrap(),
+        );
+        // A is live before it is superseded.
+        assert!(store
+            .read_note_by_id(&a_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .retired_at
+            .is_none());
+
+        let out_b = tool
+            .execute(
+                &json!({"kind": "decision", "content": "B: replaces A", "supersedes": a_id}),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        let b_id = id_of(&out_b);
+        let retired = match &out_b {
+            StepOutput::Json(v) => v["retired"].as_str().map(String::from),
+            _ => None,
+        };
+
+        // Response reports A retired; A is hidden; B records the link.
+        assert_eq!(retired.as_deref(), Some(a_id.as_str()));
+        let a_row = store.read_note_by_id(&a_id).await.unwrap().unwrap();
+        assert!(a_row.retired_at.is_some(), "superseded note must be retired");
+        let b_row = store.read_note_by_id(&b_id).await.unwrap().unwrap();
+        assert_eq!(b_row.supersedes.as_deref(), Some(a_id.as_str()));
+    }
+
+    /// A supersedes pointing at a nonexistent id must not fail the write — the
+    /// new note is still created and its link recorded; `retired` is null.
+    #[tokio::test]
+    async fn supersedes_missing_target_still_writes_the_new_note() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let tool = WriteNoteTool::new(Arc::clone(&store));
+
+        let out = tool
+            .execute(
+                &json!({"kind": "invariant", "content": "X", "supersedes": "does-not-exist"}),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        match out {
+            StepOutput::Json(v) => {
+                assert!(v["id"].as_str().is_some(), "note still created");
+                assert!(v["retired"].is_null(), "nothing retired for a missing target");
+            }
+            other => panic!("expected Json, got {other:?}"),
+        }
     }
 }

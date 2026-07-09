@@ -59,6 +59,11 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // Working notes (the audit's primary input).
     "note",
     "notes",
+    // Non-destructive retirement (safe counterpart to the unexposed
+    // `delete_note`): hides a stale note from `read_notes` but keeps
+    // the row + supersedes chain. `note` with `supersedes` retires
+    // automatically; this is for stale-with-no-replacement.
+    "retire_note",
     // Catalog-driven on-demand article ingest. Surfaced so an MCP
     // client (or `mcp call wikipedia_fetch`) can drive the
     // chat-with-wikipedia loop directly when the agent's autonomous

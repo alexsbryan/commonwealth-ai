@@ -199,6 +199,9 @@ pub(super) async fn build_tool_registry(
     tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
         &notes,
     ))));
+    tools.register(Box::new(sovereign_tools::RetireNoteTool::new(Arc::clone(
+        &notes,
+    ))));
     tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
         Arc::clone(&notes),
     )));
