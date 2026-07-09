@@ -2433,6 +2433,9 @@ async fn classify_motifs(
         DocumentTypeTag::Technical => {
             "recurring motifs are protocols, components, or recurring procedures"
         }
+        DocumentTypeTag::Journal => {
+            "recurring motifs are people, feelings, or situations the entries keep returning to"
+        }
         DocumentTypeTag::Unknown => {
             "recurring motifs are terms the document returns to deliberately, not incidentally"
         }

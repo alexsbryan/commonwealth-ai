@@ -218,6 +218,14 @@ impl PostgresStateStore {
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'raw';
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_memory_ids TEXT NOT NULL DEFAULT '[]';
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by TEXT;
+
+            -- T1 persistent memory embeddings (tiered-retrieval memory
+            -- port). Mirror of run_memory_embedding_migration on the
+            -- SQLite side: little-endian f32 bytes + producing-model id
+            -- as the staleness guard. NULL = not computed; recall
+            -- lazy-backfills.
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding BYTEA;
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding_model TEXT;
             CREATE INDEX IF NOT EXISTS idx_memories_superseded_by
                 ON memories(superseded_by);
             CREATE INDEX IF NOT EXISTS idx_memories_conv_active
@@ -763,15 +771,19 @@ impl MemoryStore for PostgresStateStore {
             };
             let source_memory_ids_json =
                 serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
+            let embedding_bytes: Option<Vec<u8>> =
+                memory.embedding.as_deref().map(crate::sqlite::encode_f32_vec);
             client
                 .execute(
                     "INSERT INTO memories \
                        (id, content, source, confidence, created_at, last_used, \
-                        kind, source_memory_ids, superseded_by) \
-                     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8) \
+                        kind, source_memory_ids, superseded_by, \
+                        embedding, embedding_model) \
+                     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10) \
                      ON CONFLICT (id) DO UPDATE SET \
                        content = $2, confidence = $4, \
-                       kind = $6, source_memory_ids = $7, superseded_by = $8",
+                       kind = $6, source_memory_ids = $7, superseded_by = $8, \
+                       embedding = $9, embedding_model = $10",
                     &[
                         &memory.id,
                         &memory.content,
@@ -781,6 +793,8 @@ impl MemoryStore for PostgresStateStore {
                         &kind_str,
                         &source_memory_ids_json,
                         &memory.superseded_by,
+                        &embedding_bytes,
+                        &memory.embedding_model,
                     ],
                 )
                 .await
@@ -800,7 +814,8 @@ impl MemoryStore for PostgresStateStore {
         let rows = client
             .query(
                 "SELECT id, content, source, confidence, created_at, last_used, \
-                        kind, source_memory_ids, superseded_by \
+                        kind, source_memory_ids, superseded_by, \
+                        embedding, embedding_model \
                  FROM memories \
                  WHERE content ILIKE $1 \
                    AND confidence > 0.1 \
@@ -823,7 +838,8 @@ impl MemoryStore for PostgresStateStore {
         let rows = client
             .query(
                 "SELECT id, content, source, confidence, created_at, last_used, \
-                        kind, source_memory_ids, superseded_by \
+                        kind, source_memory_ids, superseded_by, \
+                        embedding, embedding_model \
                  FROM memories \
                  WHERE superseded_by IS NULL \
                  ORDER BY created_at DESC",
@@ -880,6 +896,28 @@ impl MemoryStore for PostgresStateStore {
         Ok(())
     }
 
+    async fn update_memory_embedding(
+        &self,
+        id: &str,
+        embedding: &[f32],
+        model: &str,
+    ) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let bytes = crate::sqlite::encode_f32_vec(embedding);
+        client
+            .execute(
+                "UPDATE memories SET embedding = $1, embedding_model = $2 WHERE id = $3",
+                &[&bytes, &model, &id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
     async fn list_memories_for_conversation(&self, conversation_id: &str) -> Result<Vec<Memory>> {
         let client = self
             .pool
@@ -889,7 +927,8 @@ impl MemoryStore for PostgresStateStore {
         let rows = client
             .query(
                 "SELECT id, content, source, confidence, created_at, last_used, \
-                        kind, source_memory_ids, superseded_by \
+                        kind, source_memory_ids, superseded_by, \
+                        embedding, embedding_model \
                  FROM memories \
                  WHERE source_conversation_id = $1 \
                    AND superseded_by IS NULL \
@@ -930,6 +969,10 @@ fn pg_row_to_memory(r: &tokio_postgres::Row) -> Memory {
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
     let superseded_by: Option<String> = r.try_get("superseded_by").ok().flatten();
+    // Tolerant reads — projections that don't SELECT the T1 embedding
+    // columns simply yield None, and recall lazy-backfills.
+    let embedding_bytes: Option<Vec<u8>> = r.try_get("embedding").ok().flatten();
+    let embedding_model: Option<String> = r.try_get("embedding_model").ok().flatten();
     Memory {
         id: r.get("id"),
         content: r.get("content"),
@@ -944,6 +987,8 @@ fn pg_row_to_memory(r: &tokio_postgres::Row) -> Memory {
         kind,
         source_memory_ids,
         superseded_by,
+        embedding: embedding_bytes.as_deref().map(crate::sqlite::decode_f32_vec),
+        embedding_model,
     }
 }
 

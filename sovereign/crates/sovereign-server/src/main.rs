@@ -349,6 +349,11 @@ async fn main() {
         // observer slot lets us swap it in without restructuring.
         store_concrete
             .set_observer(mgr.clone() as sovereign_core::observer::SharedStateStoreObserver);
+        // Memory-pool RAPTOR rebuild (T3 tiered-retrieval memory port):
+        // rides the debouncer's MemoryTouched window alongside the
+        // personal view.
+        mgr.install_memory_atlas(Arc::clone(&store), Arc::clone(&inference))
+            .await;
         // Kick off initial ingest in the background. First-run ingest
         // can take 10–60s on a populated DB; blocking startup on it
         // would delay the /v1/* listener binding for no good reason —

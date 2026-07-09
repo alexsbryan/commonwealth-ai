@@ -793,6 +793,7 @@ pub async fn bootstrap_with_progress(
         &skills,
         &corpus_engine,
         &inference_fn,
+        &inference,
         &state.sqlite_store,
     )
     .await;

@@ -652,6 +652,27 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
         .await
         .map_err(|e| format!("seed failed: {e}"))?;
 
+    // T3: build the memory RAPTOR atlas over the seeded scoped pool —
+    // the bench session wires no observer, so the production debounce
+    // path never fires; build synchronously like the runtime's
+    // debouncer eventually would. Timed + reported so the probe output
+    // makes the tier's presence (or absence) explicit.
+    let atlas_scope = MemoryScope::Scoped(WITNESS_SKILL.to_string());
+    let atlas_started = Instant::now();
+    match sovereign_tools::mem_atlas::build_memory_atlas(
+        &session.inference,
+        session.store.as_ref(),
+        &atlas_scope,
+    )
+    .await
+    {
+        Ok(n) => println!(
+            "memory atlas: {n} RAPTOR nodes built over scoped pool in {}ms",
+            atlas_started.elapsed().as_millis()
+        ),
+        Err(e) => println!("memory atlas: build FAILED ({e}) — probe runs flat T1"),
+    }
+
     let probe_k = 10usize;
     println!(
         "\ninner-chaos RECALL retrieval probe — {} plants, {} memories seeded, top-{probe_k} by cosine",
@@ -666,15 +687,29 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
         ("Scoped(inner-work)", MemoryScope::Scoped(WITNESS_SKILL.to_string())),
     ];
     for (scope_label, scope) in &scopes {
-        let in_scope = session
+        let scope_mems = session
             .store
             .get_all_memories_for_scope(scope)
             .await
-            .map(|v| v.len())
-            .unwrap_or(0);
-        println!("\n  scope {scope_label}: {in_scope} memories in scope");
+            .unwrap_or_default();
+        let in_scope = scope_mems.len();
+        let tier_nodes = session
+            .store
+            .list_mem_raptor_nodes(&scope.atlas_key())
+            .await
+            .unwrap_or_default();
+        println!(
+            "\n  scope {scope_label}: {in_scope} memories in scope, {} tier nodes",
+            tier_nodes.len()
+        );
+        // Per-recall wall time makes the T1 stored-embedding effect
+        // directly visible: the first recall in a scope pays the one-
+        // time lazy backfill (O(N) embeds), every later recall reads
+        // stored vectors and embeds only the query.
+        let mut recall_ms: Vec<u128> = Vec::with_capacity(plants.len());
         for plant in &plants {
             let want = format!("inner-chaos-plant-{}", plant.id);
+            let started = Instant::now();
             let top = sovereign_core::memory::recall_relevant_memories_embed(
                 session.inference.as_ref(),
                 session.store.as_ref(),
@@ -684,6 +719,8 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
             )
             .await
             .unwrap_or_default();
+            let elapsed_ms = started.elapsed().as_millis();
+            recall_ms.push(elapsed_ms);
             let rank = top.iter().position(|m| m.id == want);
             let verdict = match rank {
                 Some(0) => "TOP-1".to_string(),
@@ -692,13 +729,88 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
                 None => format!("NOT in top-{probe_k}"),
             };
             println!(
-                "    {:<28} {verdict}   [callback: {}]",
+                "    {:<28} {verdict}   {elapsed_ms:>5}ms   [callback: {}]",
                 plant.id,
                 truncate_probe(&plant.oblique_callback, 52)
             );
+            // Tier diagnostics (glassbox): where does the plant sit on
+            // the LEAF axis, and did any summary node bridge to it?
+            // These are the numbers that decide whether a miss is a
+            // node-summary problem (plant-node sim low), a blend
+            // problem (node matched, rank unmoved), or a leaf-tie
+            // problem (leaf rank high but siblings higher).
+            if !tier_nodes.is_empty() {
+                if let Ok(q) = session.inference.embed_query(&plant.oblique_callback).await {
+                    let mut leaf: Vec<(f32, &str)> = scope_mems
+                        .iter()
+                        .filter_map(|m| {
+                            m.embedding
+                                .as_ref()
+                                .map(|e| (probe_cosine(&q, e), m.id.as_str()))
+                        })
+                        .collect();
+                    leaf.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                    let leaf_rank = leaf.iter().position(|(_, id)| *id == want);
+                    let leaf_cos = leaf
+                        .iter()
+                        .find(|(_, id)| *id == want)
+                        .map(|(c, _)| *c)
+                        .unwrap_or(0.0);
+                    // Leaf nodes only — mirrors the recall boost, which
+                    // ignores pool-spanning higher levels.
+                    let plant_node = tier_nodes
+                        .iter()
+                        .filter(|n| n.level == 0)
+                        .filter(|n| n.evidence_memory_ids.iter().any(|m| m == &want))
+                        .map(|n| (probe_cosine(&q, &n.summary_embedding), n.summary.as_str()))
+                        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                    let best_node = tier_nodes
+                        .iter()
+                        .filter(|n| n.level == 0)
+                        .map(|n| probe_cosine(&q, &n.summary_embedding))
+                        .fold(0.0f32, f32::max);
+                    match plant_node {
+                        Some((sim, summary)) => println!(
+                            "      tier: leaf-rank {} (cos {leaf_cos:.3}) | plant-node sim {sim:.3} \
+                             (best any-node {best_node:.3}) | node: {}",
+                            leaf_rank.map(|r| (r + 1).to_string()).unwrap_or_else(|| "-".into()),
+                            truncate_probe(summary, 80)
+                        ),
+                        None => println!(
+                            "      tier: leaf-rank {} (cos {leaf_cos:.3}) | plant NOT in any node \
+                             (best any-node {best_node:.3})",
+                            leaf_rank.map(|r| (r + 1).to_string()).unwrap_or_else(|| "-".into())
+                        ),
+                    }
+                }
+            }
+        }
+        if let Some((first, rest)) = recall_ms.split_first() {
+            if !rest.is_empty() {
+                let rest_avg = rest.iter().sum::<u128>() / rest.len() as u128;
+                println!(
+                    "    wall-time: first recall {first}ms (pays lazy embedding backfill), \
+                     subsequent avg {rest_avg}ms over {} recalls",
+                    rest.len()
+                );
+            }
         }
     }
     Ok(())
+}
+
+fn probe_cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || b.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if na == 0.0 || nb == 0.0 {
+        0.0
+    } else {
+        dot / (na * nb)
+    }
 }
 
 fn truncate_probe(s: &str, max: usize) -> String {
@@ -742,6 +854,20 @@ async fn run_recall_thread(
     if let Err(e) = seed_memories(session.store.as_ref(), seed_set, Some(WITNESS_SKILL)).await {
         push(journal, records, error_record(thread_idx, 0, plant, &conv_id, format!("memory-seed failed: {e}")));
         return;
+    }
+    // T3: build the memory RAPTOR atlas synchronously (the bench
+    // session wires no observer, so the production debounce trigger
+    // never fires here). A failed build degrades to flat T1 recall —
+    // logged, not fatal, so the safety axes still measure.
+    match sovereign_tools::mem_atlas::build_memory_atlas(
+        &session.inference,
+        session.store.as_ref(),
+        &sovereign_core::traits::MemoryScope::Scoped(WITNESS_SKILL.to_string()),
+    )
+    .await
+    {
+        Ok(n) => eprintln!("  memory atlas: {n} RAPTOR nodes"),
+        Err(e) => eprintln!("  memory atlas build failed ({e}) — thread runs flat T1"),
     }
 
     let brain_inference = pinned_or_shared(&session, opts.brain_model.as_ref(), opts.chat_model.as_ref());

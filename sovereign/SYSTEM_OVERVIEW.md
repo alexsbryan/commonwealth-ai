@@ -952,6 +952,29 @@ stay mesh-side.
   `Memory` has `confidence`, `created_at`, `last_used`. FTS5
   retrieval. Exponential monthly decay; pruned below
   `prune_threshold`.
+- **Tiered memory retrieval** (spec
+  `docs/specs/TIERED_RETRIEVAL_MEMORIES.md`) — the embed-recall path
+  (`memory::recall_relevant_memories_embed`, relational/witness
+  surfaces) reads **persistent T1 embeddings**
+  (`memories.embedding + embedding_model`, computed on write at
+  `save_with_contradiction_check`/compaction, lazily backfilled on
+  first recall; `embedding_model` must equal the provider's
+  `embed_model_id()` or the row re-embeds — the model-swap guard) and
+  blends a **T3 memory-RAPTOR** signal: per-scope trees in
+  `mem_raptor_nodes` (batch builder
+  `sovereign-tools::mem_atlas::build_memory_atlas`, journal-tuned
+  leaf clusters of ~7; incremental maintenance
+  `sovereign-tools::mem_tree::insert_memory` — MemTree-style descent
+  + a 4-op trigger ladder attach/re-summarize/split/rebuild with
+  BIRCH-CF + Page-Hinkley gates, every trigger emitting a glassbox
+  `InsertTrace`). Level-0 node matches lift member leaves by
+  `max(leaf, α·node + (1−α)·leaf)`. Scope key = the memory wall
+  (`MemoryScope::atlas_key()`), so a node never summarizes across
+  scopes. Production trigger: the knowledge-view debouncer's
+  `MemoryTouched` window drains touched ids through `insert_memory`
+  (handles installed via
+  `KnowledgeViewManager::install_memory_atlas`). Bench:
+  `svrn eval inner-chaos --recall-probe / --recall / --recall-stream`.
 - **Routing-correction memory** —
   `RoutingCorrection { message_hash, classified_as, was_correct }`
   fed back into the router prompt as "avoid these mistakes."

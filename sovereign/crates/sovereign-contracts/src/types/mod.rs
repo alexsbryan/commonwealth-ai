@@ -521,6 +521,21 @@ pub struct Memory {
     /// are independent — a memory can be both superseded and deleted.
     #[serde(default)]
     pub superseded_by: Option<String>,
+    /// T1 persistent embedding of `content`, produced by the
+    /// document-side embed path (`embed_batch`) — the SAME call recall
+    /// uses on memory contents, so stored and freshly-computed vectors
+    /// rank identically. `None` until computed (write-path compute in
+    /// `save_with_contradiction_check` / compaction, or lazy backfill
+    /// on first recall). Never sent over serde when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
+    /// `InferenceProvider::embed_model_id()` of the model that produced
+    /// `embedding`. The staleness guard: recall reuses `embedding` only
+    /// when this matches the current provider's id (and neither side is
+    /// `"unknown"`) — a same-dimension different-model vector would
+    /// silently mis-rank, so a mismatch means "re-embed".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

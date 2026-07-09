@@ -124,6 +124,11 @@ pub struct KnowledgeViewManager {
     /// scope; initiatives can still surface from atoms but they
     /// won't link to a local project.
     project_toml_path: Option<PathBuf>,
+    /// Late-installed handles for the memory-pool RAPTOR rebuild
+    /// (see [`Self::install_memory_atlas`]). Shared with the
+    /// debouncer task; `None` until installed.
+    mem_atlas_handles:
+        Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
     /// Lazy NoteStore handle, opened on first splice. The store
     /// itself is sharable across threads, so we hold an Arc.
     #[cfg(feature = "treesitter")]
@@ -215,7 +220,14 @@ impl KnowledgeViewManager {
         let (tx, rx) = mpsc::unbounded_channel();
         let views = Arc::new(RwLock::new(views));
 
-        spawn_debouncer(engine.clone(), inference, views.clone(), rx);
+        let mem_atlas_handles = Arc::new(RwLock::new(None));
+        spawn_debouncer(
+            engine.clone(),
+            inference,
+            views.clone(),
+            rx,
+            mem_atlas_handles.clone(),
+        );
 
         Self {
             engine,
@@ -227,11 +239,29 @@ impl KnowledgeViewManager {
             notes_db_path,
             features_db_path: None,
             project_toml_path: None,
+            mem_atlas_handles,
             #[cfg(feature = "treesitter")]
             notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
             #[cfg(all(feature = "treesitter", feature = "atos"))]
             features_handle: Arc::new(tokio::sync::Mutex::new(None)),
         }
+    }
+
+    /// Install the store + inference handles the memory-pool RAPTOR
+    /// rebuild needs (T3 of the tiered-retrieval memory port). Interior
+    /// mutability — safe to call AFTER the manager is Arc-wrapped and
+    /// installed as the store observer, which is exactly the situation
+    /// at every construction site (the manager is built from a db
+    /// *path*; the store handle exists only in the caller). Until this
+    /// is called, memory writes debounce the personal view only and
+    /// recall stays flat T1.
+    pub async fn install_memory_atlas(
+        &self,
+        store: Arc<dyn sovereign_core::traits::StateStore>,
+        inference: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    ) {
+        let mut slot = self.mem_atlas_handles.write().await;
+        *slot = Some(crate::mem_atlas::MemAtlasHandles { store, inference });
     }
 
     /// Set the ATOS feature DB path. When set + `with_project_toml_path`
@@ -891,8 +921,10 @@ impl KnowledgeViewManager {
 }
 
 impl StateStoreObserver for KnowledgeViewManager {
-    fn on_memory_written(&self, _memory_id: &str) {
-        let _ = self.triggers.send(ViewEvent::MemoryTouched);
+    fn on_memory_written(&self, memory_id: &str) {
+        let _ = self.triggers.send(ViewEvent::MemoryTouched {
+            memory_id: memory_id.to_string(),
+        });
     }
 
     fn on_message_written(&self, _conversation_id: &str) {

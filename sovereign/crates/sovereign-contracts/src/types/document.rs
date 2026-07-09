@@ -174,6 +174,11 @@ pub enum DocumentTypeTag {
     Chronicle,
     /// Manuals, specifications, documentation.
     Technical,
+    /// A person's private memory/journal entries (the memory-pool
+    /// RAPTOR port). Summaries frame recurring feelings, situations,
+    /// and periods in the person's life rather than document
+    /// structure.
+    Journal,
     /// Not yet classified or doesn't fit a category.
     #[default]
     Unknown,
@@ -187,6 +192,7 @@ impl DocumentTypeTag {
             DocumentTypeTag::Evidence => "Evidence",
             DocumentTypeTag::Chronicle => "Chronicle",
             DocumentTypeTag::Technical => "Technical",
+            DocumentTypeTag::Journal => "Journal",
             DocumentTypeTag::Unknown => "Document",
         }
     }
@@ -464,6 +470,79 @@ pub struct QuoteSpan {
     pub char_start: u32,
     pub char_end: u32,
     pub text: String,
+}
+
+/// A node of the memory-pool RAPTOR tree (tiered-retrieval memory
+/// port, spec `TIERED_RETRIEVAL_MEMORIES.md`). Mirrors [`RaptorNode`]
+/// but members are `memories.id` strings, not u32 chunk indices — the
+/// builder translates through an id table before persisting — and the
+/// grouping key is a memory scope (`mem:<skill>` / `mem:general`),
+/// never a corpus. The scope IS the sequestration boundary: a node
+/// only ever summarizes memories from within one scope.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemRaptorNodeRow {
+    /// Stable UUID — primary key + child reference from the level above.
+    pub node_id: String,
+    /// Atlas scope key — `MemoryScope::atlas_key()`.
+    pub scope: String,
+    /// 0 = clusters of raw memories. Higher = clusters of summaries.
+    pub level: u8,
+    /// LLM paraphrase. Contract-free of `"` (same grammar as RaptorNode).
+    pub summary: String,
+    /// Embedding of `summary` — matched against recall queries.
+    pub summary_embedding: Vec<f32>,
+    /// Centroid in the input space (memory embeddings at level 0).
+    pub centroid_embedding: Vec<f32>,
+    pub children_node_ids: Vec<String>,
+    /// Memory ids directly in this cluster. Populated only at level 0.
+    pub direct_member_memory_ids: Vec<String>,
+    /// Transitive union of member memory ids under this subtree.
+    pub evidence_memory_ids: Vec<String>,
+    /// Primary entities named by the summarization prompt.
+    pub primary_entities: Vec<String>,
+    /// Cluster tightness in [0,1].
+    pub cluster_coherence: f32,
+    /// `InferenceProvider::embed_model_id()` that produced the node
+    /// embeddings — the same staleness guard as `memories.embedding_model`;
+    /// recall ignores tier nodes whose model doesn't match the live one.
+    pub embedding_model: String,
+    pub created_at: i64,
+
+    // ── Incremental-tree state (Phase 3, `mem_tree`) ─────────────
+    //
+    // Batch-built rows leave all of this at default; the incremental
+    // path initialises CF lazily from member embeddings on first
+    // touch. `#[serde(default)]` keeps pre-Phase-3 JSON deserialising.
+    /// Upward pointer for the top-down insert + path re-summarize
+    /// walk. Batch rows persist None (parents derived from
+    /// `children_node_ids` at load).
+    #[serde(default)]
+    pub parent_node_id: Option<String>,
+    /// BIRCH cluster feature N — member count folded into cf_ls/cf_ss.
+    #[serde(default)]
+    pub cf_n: i64,
+    /// BIRCH CF linear sum of member embeddings.
+    #[serde(default)]
+    pub cf_ls: Vec<f32>,
+    /// BIRCH CF sum of squared norms — radius in O(1).
+    #[serde(default)]
+    pub cf_ss: f64,
+    /// Page-Hinkley running mean of insert residuals.
+    #[serde(default)]
+    pub ph_mean: f64,
+    /// Page-Hinkley cumulative statistic.
+    #[serde(default)]
+    pub ph_cum: f64,
+    /// Page-Hinkley running minimum of the cumulative statistic.
+    #[serde(default)]
+    pub ph_min: f64,
+    /// Members absorbed since this node's summary was last refreshed.
+    #[serde(default)]
+    pub n_since_summary: i64,
+    /// CF radius observed when the summary was last refreshed —
+    /// anchors the split limit (radius > headroom × this).
+    #[serde(default)]
+    pub radius_at_summary: f32,
 }
 
 /// A recurring word or phrase that distinguishes this document from

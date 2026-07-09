@@ -686,10 +686,11 @@ fn parse_doc_type(s: &str) -> Result<DocumentTypeTag, String> {
         "evidence" => DocumentTypeTag::Evidence,
         "chronicle" => DocumentTypeTag::Chronicle,
         "technical" => DocumentTypeTag::Technical,
+        "journal" => DocumentTypeTag::Journal,
         "unknown" | "document" => DocumentTypeTag::Unknown,
         other => {
             return Err(format!(
-                "unknown --doc-type '{other}' (argument|narrative|evidence|chronicle|technical|unknown)"
+                "unknown --doc-type '{other}' (argument|narrative|evidence|chronicle|technical|journal|unknown)"
             ))
         }
     })

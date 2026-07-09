@@ -79,6 +79,10 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_memory_compaction_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Memory compaction migration failed: {e}")))?;
+        migrations::run_memory_embedding_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Memory embedding migration failed: {e}")))?;
+        migrations::run_mem_raptor_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Memory raptor migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
@@ -399,6 +403,10 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_memory_compaction_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Memory compaction migration failed: {e}")))?;
+        migrations::run_memory_embedding_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Memory embedding migration failed: {e}")))?;
+        migrations::run_mem_raptor_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Memory raptor migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
@@ -436,14 +444,16 @@ fn map_json(e: serde_json::Error) -> Error {
 /// in the same edit.
 const MEMORY_FULL_COLUMNS: &str = "id, content, source, confidence, created_at, last_used, \
      source_conversation_id, source_skill_id, \
-     kind, source_memory_ids, superseded_by";
+     kind, source_memory_ids, superseded_by, \
+     embedding, embedding_model";
 
 /// Read a row produced by a SELECT whose projection matches
-/// [`MEMORY_FULL_COLUMNS`] (11 columns) into a `Memory`. Honors the
+/// [`MEMORY_FULL_COLUMNS`] (13 columns) into a `Memory`. Honors the
 /// compaction-fields defaults (Raw / empty / None) when the row
 /// predates the compaction migration — sqlite returns NULL for those
 /// columns on unmigrated rows; `Option::get` collapses NULL to None
-/// and we coerce to the documented defaults below.
+/// and we coerce to the documented defaults below. Same for the T1
+/// embedding pair: NULL blob → `None`, and recall lazy-backfills.
 fn row_to_memory_full(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
     let kind_str: Option<String> = row.get(8)?;
     let kind = match kind_str.as_deref() {
@@ -455,6 +465,7 @@ fn row_to_memory_full(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
+    let embedding_blob: Option<Vec<u8>> = row.get(11)?;
     Ok(Memory {
         id: row.get(0)?,
         content: row.get(1)?,
@@ -469,6 +480,8 @@ fn row_to_memory_full(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
         kind,
         source_memory_ids,
         superseded_by: row.get(10)?,
+        embedding: embedding_blob.as_deref().map(decode_f32_vec),
+        embedding_model: row.get(12)?,
     })
 }
 
@@ -990,12 +1003,15 @@ impl MemoryStore for SqliteStateStore {
             };
             let source_memory_ids_json =
                 serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
+            let embedding_blob: Option<Vec<u8>> =
+                memory.embedding.as_deref().map(encode_f32_vec);
             conn.execute(
                 "INSERT OR REPLACE INTO memories
                    (id, content, source, confidence, created_at, last_used,
                     source_conversation_id, source_skill_id,
-                    kind, source_memory_ids, superseded_by)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    kind, source_memory_ids, superseded_by,
+                    embedding, embedding_model)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     memory.id,
                     memory.content,
@@ -1008,6 +1024,8 @@ impl MemoryStore for SqliteStateStore {
                     kind_str,
                     source_memory_ids_json,
                     memory.superseded_by,
+                    embedding_blob,
+                    memory.embedding_model,
                 ],
             )
             .map_err(map_db)?;
@@ -1251,6 +1269,123 @@ impl MemoryStore for SqliteStateStore {
         conn.execute(
             "UPDATE memories SET confidence = ?2 WHERE id = ?1",
             rusqlite::params![id, confidence],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn update_memory_embedding(
+        &self,
+        id: &str,
+        embedding: &[f32],
+        model: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE memories SET embedding = ?2, embedding_model = ?3 WHERE id = ?1",
+            rusqlite::params![id, encode_f32_vec(embedding), model],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn save_mem_raptor_nodes(
+        &self,
+        scope_key: &str,
+        nodes: &[MemRaptorNodeRow],
+    ) -> Result<()> {
+        // Atomic replace — mirrors `save_conv_raptor_nodes` so a
+        // partial builder crash never leaves a half-built tree.
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM mem_raptor_nodes WHERE scope = ?1",
+            rusqlite::params![scope_key],
+        )
+        .map_err(map_db)?;
+        for node in nodes {
+            exec_upsert_mem_raptor_node(&tx, node).map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn upsert_mem_raptor_node(&self, node: &MemRaptorNodeRow) -> Result<()> {
+        let conn = self.conn.lock().await;
+        exec_upsert_mem_raptor_node(&conn, node).map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn delete_mem_raptor_node(&self, node_id: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "DELETE FROM mem_raptor_nodes WHERE node_id = ?1",
+            rusqlite::params![node_id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn list_mem_raptor_nodes(&self, scope_key: &str) -> Result<Vec<MemRaptorNodeRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT node_id, scope, level, summary,
+                        summary_embedding, centroid_embedding,
+                        children_node_ids, direct_member_memory_ids,
+                        evidence_memory_ids, primary_entities,
+                        cluster_coherence, embedding_model, created_at,
+                        parent_node_id, cf_n, cf_ls, cf_ss,
+                        ph_mean, ph_cum, ph_min, n_since_summary,
+                        radius_at_summary
+                 FROM mem_raptor_nodes
+                 WHERE scope = ?1
+                 ORDER BY level DESC, node_id ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![scope_key], |r| {
+                let parse =
+                    |s: String| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default();
+                let cf_ls_blob: Option<Vec<u8>> = r.get(15)?;
+                Ok(MemRaptorNodeRow {
+                    node_id: r.get(0)?,
+                    scope: r.get(1)?,
+                    level: r.get::<_, i64>(2)? as u8,
+                    summary: r.get(3)?,
+                    summary_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(4)?.as_slice()),
+                    centroid_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(5)?.as_slice()),
+                    children_node_ids: parse(r.get(6)?),
+                    direct_member_memory_ids: parse(r.get(7)?),
+                    evidence_memory_ids: parse(r.get(8)?),
+                    primary_entities: parse(r.get(9)?),
+                    cluster_coherence: r.get::<_, f64>(10)? as f32,
+                    embedding_model: r.get(11)?,
+                    created_at: r.get(12)?,
+                    parent_node_id: r.get(13)?,
+                    cf_n: r.get(14)?,
+                    cf_ls: cf_ls_blob.as_deref().map(decode_f32_vec).unwrap_or_default(),
+                    cf_ss: r.get(16)?,
+                    ph_mean: r.get(17)?,
+                    ph_cum: r.get(18)?,
+                    ph_min: r.get(19)?,
+                    n_since_summary: r.get(20)?,
+                    radius_at_summary: r.get::<_, f64>(21)? as f32,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    async fn delete_mem_raptor_nodes_for_scope(&self, scope_key: &str) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "DELETE FROM mem_raptor_nodes WHERE scope = ?1",
+            rusqlite::params![scope_key],
         )
         .map_err(map_db)?;
         Ok(())
@@ -2547,7 +2682,7 @@ impl DocumentAssetStore for SqliteStateStore {
 }
 
 /// Encode a vector of f32s as little-endian bytes for BLOB storage.
-fn encode_f32_vec(v: &[f32]) -> Vec<u8> {
+pub(crate) fn encode_f32_vec(v: &[f32]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(v.len() * 4);
     for x in v {
         bytes.extend_from_slice(&x.to_le_bytes());
@@ -2558,11 +2693,62 @@ fn encode_f32_vec(v: &[f32]) -> Vec<u8> {
 /// Decode a little-endian f32 BLOB into a vector. Trailing bytes that
 /// don't form a complete f32 are silently dropped — embeddings are
 /// fixed-width per model so this only triggers on a corrupted row.
-fn decode_f32_vec(bytes: &[u8]) -> Vec<f32> {
+pub(crate) fn decode_f32_vec(bytes: &[u8]) -> Vec<f32> {
     bytes
         .chunks_exact(4)
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect()
+}
+
+/// Single-row REPLACE for `mem_raptor_nodes` — shared by the batch
+/// save (inside its transaction) and the incremental single-node
+/// upsert, so the column list exists exactly once.
+fn exec_upsert_mem_raptor_node(
+    conn: &rusqlite::Connection,
+    node: &MemRaptorNodeRow,
+) -> rusqlite::Result<usize> {
+    let json = |v: &Vec<String>| serde_json::to_string(v).unwrap_or_else(|_| "[]".into());
+    conn.execute(
+        "INSERT OR REPLACE INTO mem_raptor_nodes
+            (node_id, scope, level, summary,
+             summary_embedding, centroid_embedding,
+             children_node_ids, direct_member_memory_ids,
+             evidence_memory_ids, primary_entities,
+             cluster_coherence, embedding_model, created_at,
+             parent_node_id, cf_n, cf_ls, cf_ss,
+             ph_mean, ph_cum, ph_min, n_since_summary,
+             radius_at_summary)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+        rusqlite::params![
+            node.node_id,
+            node.scope,
+            node.level as i64,
+            node.summary,
+            encode_f32_vec(&node.summary_embedding),
+            encode_f32_vec(&node.centroid_embedding),
+            json(&node.children_node_ids),
+            json(&node.direct_member_memory_ids),
+            json(&node.evidence_memory_ids),
+            json(&node.primary_entities),
+            node.cluster_coherence as f64,
+            node.embedding_model,
+            node.created_at,
+            node.parent_node_id,
+            node.cf_n,
+            if node.cf_ls.is_empty() {
+                None
+            } else {
+                Some(encode_f32_vec(&node.cf_ls))
+            },
+            node.cf_ss,
+            node.ph_mean,
+            node.ph_cum,
+            node.ph_min,
+            node.n_since_summary,
+            node.radius_at_summary as f64,
+        ],
+    )
 }
 
 fn row_to_raptor_node(row: &rusqlite::Row) -> Result<RaptorNode> {

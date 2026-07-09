@@ -33,6 +33,7 @@ pub mod journal;
 pub mod judge;
 pub mod personas;
 pub mod recall;
+pub mod recall_stream;
 pub mod report;
 pub mod runner;
 pub mod transcript;
@@ -43,8 +44,16 @@ const DEFAULT_JOURNAL: &str = "test-artifacts/inner-chaos-journal.jsonl";
 const DEFAULT_SENSITIVITY_FLOOR: f64 = 0.9;
 const DEFAULT_SPECIFICITY_FLOOR: f64 = 0.75;
 
-const BOOLEAN_FLAGS: &[&str] =
-    &["calibrate", "calibrate-recall", "recall", "recall-probe", "no-judge", "help", "h"];
+const BOOLEAN_FLAGS: &[&str] = &[
+    "calibrate",
+    "calibrate-recall",
+    "recall",
+    "recall-probe",
+    "recall-stream",
+    "no-judge",
+    "help",
+    "h",
+];
 
 fn split_args(args: &[String]) -> (Vec<String>, Vec<(String, String)>) {
     let mut positional = Vec::new();
@@ -99,6 +108,9 @@ pub async fn run_inner_chaos(args: &[String]) -> i32 {
     }
     if has_flag(&flags, "recall-probe") {
         return run_recall_probe_mode(&flags, bench_dir).await;
+    }
+    if has_flag(&flags, "recall-stream") {
+        return run_recall_stream_mode(&flags, bench_dir).await;
     }
     if has_flag(&flags, "recall") {
         return run_recall_mode(&flags, bench_dir).await;
@@ -351,6 +363,35 @@ async fn run_recall_probe_mode(flags: &[(String, String)], bench_dir: Option<Pat
     }
 }
 
+/// `--recall-stream`: the streaming-insert three-tree oracle for the
+/// incremental memory tree (Phase 4 of the tiered-retrieval memory
+/// port). Exit 1 on incremental-vs-batch divergence or a cost
+/// regression.
+async fn run_recall_stream_mode(flags: &[(String, String)], bench_dir: Option<PathBuf>) -> i32 {
+    let opts = recall::RecallRunOptions {
+        minutes: None,
+        max_threads: None,
+        plant_filter: get_flag(flags, "plant"),
+        bench_dir,
+        fixture_path: get_flag(flags, "fixture").map(PathBuf::from),
+        journal_path: recall::default_recall_journal(),
+        output: get_flag(flags, "output").map(PathBuf::from),
+        daemon_base: get_flag(flags, "daemon"),
+        chat_model: get_flag(flags, "chat-model"),
+        brain_model: None,
+        judge_model: None,
+        skills_dir: get_flag(flags, "skills-dir").map(PathBuf::from),
+        temperature: None,
+    };
+    match recall_stream::run_recall_stream(&opts).await {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("inner-chaos recall-stream: {e}");
+            1
+        }
+    }
+}
+
 /// `--calibrate-recall`: score the recall-fidelity judge against its
 /// hand-labeled bank. Exit 1 when a floor fails — the gate that blocks
 /// a drifted recall rubric from scoring runs.
@@ -484,6 +525,14 @@ fn print_help() {
     eprintln!("                         --temperature/--daemon/--*-model/--journal/--output.");
     eprintln!("  --plant <id>           Run only the thread for this plant id.");
     eprintln!("  --fixture <path>       Recall fixture (default bench/inner_work/recall_fixture.toml).");
+    eprintln!("  --recall-probe         Retrieval-only diagnostic: seed once, rank every plant's");
+    eprintln!("                         oblique callback through the real recall path (both scopes),");
+    eprintln!("                         with per-plant tier diagnostics. No witness turns, no judge.");
+    eprintln!("  --recall-stream        Streaming-insert oracle for the incremental memory tree:");
+    eprintln!("                         batch-build over ~40% of the seeds, stream the rest through");
+    eprintln!("                         mem_tree::insert_memory, compare per-plant ranks vs a fresh");
+    eprintln!("                         full-batch tree and vs flat T1. Exits 1 on divergence or a");
+    eprintln!("                         cost regression. Emits the trigger-ladder trace JSON.");
     eprintln!("  --calibrate-recall     Score the recall-fidelity judge against its bank");
     eprintln!("                         (default bench/inner_work/recall_calibration.toml); no live run.");
     eprintln!();

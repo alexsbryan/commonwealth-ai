@@ -54,6 +54,7 @@ pub(crate) async fn build_knowledge_view(
     skills: &SkillRegistry,
     corpus_engine: &Arc<CorpusEngine>,
     inference_fn: &corpus_engine::InferenceFn,
+    inference: &Arc<dyn sovereign_core::traits::InferenceProvider>,
     sqlite_store: &RwLock<Option<Arc<SqliteStateStore>>>,
 ) -> Option<Arc<KnowledgeViewManager>> {
     if is_attach_mode {
@@ -97,6 +98,14 @@ pub(crate) async fn build_knowledge_view(
         let mgr = Arc::new(mgr);
         if let Some(concrete) = sqlite_store.read().await.as_ref() {
             concrete.set_observer(mgr.clone() as SharedStateStoreObserver);
+            // Memory-pool RAPTOR rebuild (T3 tiered-retrieval memory
+            // port): the debouncer's MemoryTouched window rebuilds the
+            // per-scope memory trees alongside the personal view.
+            mgr.install_memory_atlas(
+                concrete.clone() as Arc<dyn sovereign_core::traits::StateStore>,
+                Arc::clone(inference),
+            )
+            .await;
         } else {
             tracing::warn!(
                 "KnowledgeView: desktop store was not SQLite-backed; \
@@ -141,6 +150,7 @@ mod tests {
             &skills,
             &corpus_engine,
             &inference_fn,
+            &(Arc::new(StubInference) as Arc<dyn InferenceProvider>),
             &sqlite_store,
         )
         .await;
@@ -164,6 +174,7 @@ mod tests {
             &skills,
             &corpus_engine,
             &inference_fn,
+            &(Arc::new(StubInference) as Arc<dyn InferenceProvider>),
             &sqlite_store,
         )
         .await;
@@ -191,6 +202,7 @@ mod tests {
             &skills,
             &corpus_engine,
             &inference_fn,
+            &(Arc::new(StubInference) as Arc<dyn InferenceProvider>),
             &sqlite_store,
         )
         .await;

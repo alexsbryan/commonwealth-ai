@@ -578,6 +578,91 @@ pub fn run_memory_compaction_migrations(conn: &Connection) -> rusqlite::Result<(
     Ok(())
 }
 
+/// T1 persistent memory embeddings (tiered-retrieval memory-pool port;
+/// spec `sovereign/docs/specs/TIERED_RETRIEVAL_MEMORIES.md`). Two
+/// additive nullable columns on `memories`:
+///
+/// - `embedding` — little-endian f32 bytes of the content's
+///   document-side embedding (same encoding as `raptor_nodes` /
+///   `conv_raptor_nodes` blobs). NULL = not yet computed; recall
+///   lazy-backfills on first use.
+/// - `embedding_model` — `InferenceProvider::embed_model_id()` of the
+///   producer. The staleness guard: recall reuses the blob only when
+///   this matches the live provider's id; a mismatch (model swap)
+///   silently falls back to re-embed, never mis-ranks.
+///
+/// Migrations cannot embed (no inference handle at `Connection::open`),
+/// so there is deliberately NO backfill here — the read path backfills
+/// lazily and the write path (`save_with_contradiction_check`,
+/// compaction) populates new rows.
+pub fn run_memory_embedding_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN embedding BLOB");
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN embedding_model TEXT");
+    Ok(())
+}
+
+/// Memory-pool RAPTOR nodes (T3 tier of the tiered-retrieval memory
+/// port; spec `sovereign/docs/specs/TIERED_RETRIEVAL_MEMORIES.md`).
+/// Mirrors the `conv_raptor_nodes` shape but keys on `scope`
+/// (`MemoryScope::atlas_key()` — `mem:general` / `mem:<skill>`) and
+/// carries memory-id STRINGS for membership (memories aren't
+/// `document_assets`, so no FK and no u32 chunk ids). The
+/// `embedding_model` column is the same staleness guard as
+/// `memories.embedding_model` — recall ignores trees built under a
+/// different embedder.
+pub fn run_mem_raptor_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS mem_raptor_nodes (
+            node_id                  TEXT    PRIMARY KEY,
+            scope                    TEXT    NOT NULL,
+            level                    INTEGER NOT NULL,
+            summary                  TEXT    NOT NULL,
+            -- little-endian f32 bytes, same encoding as conv_raptor_nodes
+            summary_embedding        BLOB    NOT NULL,
+            centroid_embedding       BLOB    NOT NULL,
+            children_node_ids        TEXT    NOT NULL,    -- JSON array of node ids
+            direct_member_memory_ids TEXT    NOT NULL,    -- JSON array of memories.id (level 0)
+            evidence_memory_ids      TEXT    NOT NULL,    -- JSON array (transitive subtree union)
+            primary_entities         TEXT    NOT NULL,    -- JSON array of name strings
+            cluster_coherence        REAL    NOT NULL,
+            embedding_model          TEXT    NOT NULL,
+            created_at               INTEGER NOT NULL,
+            -- Incremental-tree state (mem_tree; Phase 3). Batch rows
+            -- leave these at default; the incremental path owns them.
+            parent_node_id           TEXT,
+            cf_n                     INTEGER NOT NULL DEFAULT 0,
+            cf_ls                    BLOB,
+            cf_ss                    REAL    NOT NULL DEFAULT 0,
+            ph_mean                  REAL    NOT NULL DEFAULT 0,
+            ph_cum                   REAL    NOT NULL DEFAULT 0,
+            ph_min                   REAL    NOT NULL DEFAULT 0,
+            n_since_summary          INTEGER NOT NULL DEFAULT 0,
+            radius_at_summary        REAL    NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mem_raptor_nodes_scope_level
+            ON mem_raptor_nodes(scope, level DESC);
+        ",
+    )?;
+    // Idempotent catch-up for tables created by the short-lived
+    // Phase-2 shape (same-day dev DBs; nothing deployed carried it).
+    for alter in [
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN parent_node_id TEXT",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN cf_n INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN cf_ls BLOB",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN cf_ss REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN ph_mean REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN ph_cum REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN ph_min REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN n_since_summary INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE mem_raptor_nodes ADD COLUMN radius_at_summary REAL NOT NULL DEFAULT 0",
+    ] {
+        let _ = conn.execute_batch(alter);
+    }
+    Ok(())
+}
+
 /// Conversation tiered-retrieval port (Phase B; spec
 /// `sovereign/docs/specs/CONV_TIERED_PORT.md`).
 ///

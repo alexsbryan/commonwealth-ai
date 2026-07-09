@@ -32,6 +32,8 @@ pub mod knowledge;
 pub mod knowledge_lookup;
 pub mod knowledge_view;
 pub mod local_corpus;
+pub mod mem_atlas;
+pub mod mem_tree;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
 pub mod raptor_index;
