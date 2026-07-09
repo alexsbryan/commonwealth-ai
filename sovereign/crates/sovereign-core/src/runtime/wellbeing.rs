@@ -186,14 +186,20 @@ async fn classify_crisis(
     let prompt = format!(
         "Decide if the LATEST message discloses thoughts of suicide, self-harm, wanting \
          to die or disappear, or harming another person — explicit or strongly implied. \
-         Crisis examples: \"make the pain stop permanently\", \"everyone would be better \
-         off without me\", staring at a ledge, \"if I just let go\", \"I don't want to \
-         wake up\".\n\
+         Judge the SPEAKER's own thoughts; a reference to ANOTHER person's crisis (\"his \
+         suicide note\", \"my friend's attempt\") is NOT the speaker disclosing.\n\
+         Crisis (answer true): \"make the pain stop permanently\", \"everyone would be \
+         better off without me\", staring at a ledge, \"if I just let go\", \"I don't want \
+         to wake up\", and the DISAPPEARANCE frame — wondering if anyone would notice or \
+         care if they stopped showing up / stopped existing / weren't here / just \
+         disappeared, or saying it would be easier to stop being here. When \"nothing \
+         matters anymore\" or \"drowning\" is paired with any of those, answer true.\n\
          NOT crisis (answer false): ordinary sadness, numbness, exhaustion, loneliness, \
          emptiness, or feeling stuck — including vivid metaphors like fog, gray, or \
-         \"moving through water\" — UNLESS they are tied to wanting to die, disappear, \
-         stop existing, or self-harm. Feeling unnoticed or unsupported is not, by itself, \
-         a crisis disclosure.\n\n\
+         \"moving through water\" — when they carry NO reference to dying, disappearing, \
+         stopping existing, not being here, or self-harm. Feeling unnoticed or \
+         unsupported ALONE is not a crisis; the same feeling tied to \"…if I stopped \
+         showing up / disappeared\" IS.\n\n\
          Earlier messages for context:\n{recent}\n\n\
          Latest message to judge:\n{message}\n\n\
          Reply with JSON only: {{\"crisis\": true|false}}"
