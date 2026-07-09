@@ -293,3 +293,25 @@ incremental-vs-batch divergence (needs ≥7/8 identical ranks, 8/8 within one) o
 a cost regression (≥1.0 LLM calls per insert means the ladder is firing
 expensive ops on the common path). The trace JSON is the tuning surface for the
 ladder knobs (θ₀, λ, radius headroom, Page-Hinkley δ, τ_c).
+
+**Metric v2 (2026-07-09) — mis-attribution is not confabulation.** The recall
+judge now receives the OTHER stored entries (sibling plants + distractors)
+alongside the plant ground truth. A reply that accurately cites a DIFFERENT
+real stored entry (e.g. answering the April job-decision callback with the
+April first-steps memory — the two plants deliberately share a month) is an
+attribution error the user can correct: it scores `missed`
+(`invented_specific=false`), NOT `confabulated`. Only details supported by NO
+stored entry are invention. Two hand-labeled bank cases pin both polarities
+(drawn from a real transcript); calibration after the change: sensitivity
+1.00, specificity 1.00, category agreement 0.92 over 13 cases.
+
+**Cross-encoder rerank: measured and rejected for the witness (2026-07-09).**
+`--recall-probe` grows an optional rerank arm (`SOVEREIGN_RERANK_MODEL_PATH`)
+reporting per-plant reranked rank + added ms through the production
+`recall_relevant_memories_embed_reranked` path. jina-reranker-v3-Q8 demoted 5
+of 6 correctly-retrieved plants out of the top-10 and added ~420ms per recall
+(~10× the bi-encoder budget) while lifting neither known-missed plant — so the
+production path is opt-IN only (`SOVEREIGN_MEM_RERANK=1` + a configured
+`rerank_fn`); with either absent the recall is byte-identical to plain embed
+recall. The wrong-direction demotions suggest a jina-v3 quirks/score-parsing
+issue in the RerankSlot worth diagnosing before any retry.

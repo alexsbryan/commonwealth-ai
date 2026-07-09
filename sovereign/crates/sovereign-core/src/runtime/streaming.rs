@@ -2299,12 +2299,16 @@ impl Runtime {
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
             );
-            match memory::recall_relevant_memories_embed(
+            // Optional cross-encoder rerank — same seam as the
+            // non-streaming path; inert when no `rerank_fn` is
+            // configured.
+            match memory::recall_relevant_memories_embed_reranked(
                 self.inference.as_ref(),
                 self.store.as_ref(),
                 &scope,
                 message,
                 5,
+                self.rerank_fn.as_ref(),
             )
             .await
             {

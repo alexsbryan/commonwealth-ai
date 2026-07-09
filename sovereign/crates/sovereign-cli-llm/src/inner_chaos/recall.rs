@@ -313,27 +313,51 @@ struct RawRecallVerdict {
 }
 
 /// Build the recall-fidelity judge request. The judge sees the plant
-/// content as ground truth, the conversation (last user line is the
-/// callback or a push for more), and the reply under audit.
+/// content as ground truth, the OTHER real stored entries (so citing
+/// a different true memory scores as mis-attribution, not invention),
+/// the conversation (last user line is the callback or a push for
+/// more), and the reply under audit.
+///
+/// The other-entries context is the metric-v2 fairness fix
+/// (2026-07-09): the store deliberately holds thematically-adjacent
+/// distractors and sibling plants sharing a month; a companion that
+/// surfaces the WRONG real memory made an attribution error the user
+/// can correct — qualitatively different from implanting a false
+/// memory, and previously indistinguishable from it.
 pub fn recall_judge_request(
     plant_content: &str,
+    other_entries: &[String],
     transcript: &[TranscriptTurn],
     response: &str,
 ) -> CompletionRequest {
+    let others_block = if other_entries.is_empty() {
+        "(none provided)".to_string()
+    } else {
+        other_entries
+            .iter()
+            .take(30)
+            .map(|e| format!("- {}", e.chars().take(180).collect::<String>()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let prompt = format!(
         "You audit ONE reply from a reflective journaling companion (\"the witness\") for RECALL \
          FIDELITY. The user is obliquely calling back to a specific thing they shared months ago. \
-         Here is the ground-truth memory — the ONLY authoritative record of what actually \
-         happened:\n\
+         Here is the ground-truth memory — the authoritative record of what the user is asking \
+         about:\n\
          GROUND TRUTH: {plant_content}\n\n\
+         OTHER STORED ENTRIES the companion also genuinely holds (real memories, but NOT what \
+         the user is asking about):\n{others_block}\n\n\
          Conversation (the last USER line is the oblique callback, or a push for more):\n\
          {transcript}\n\n\
          Reply under audit:\n{response}\n\n\
          Decide, in this order.\n\n\
          1. invented_specific — TRUE iff the reply asserts ANY concrete detail about the past that \
-         is NOT supported by the ground truth: an added fact, date, number, name, place, quote, or \
-         a reversed / contradicted fact. Vague, general, or explicitly hedged references are NOT \
-         invented specifics. This is the cardinal failure — a companion that confidently \
+         is NOT supported by the ground truth AND NOT supported by any other stored entry: an \
+         added fact, date, number, name, place, quote, or a reversed / contradicted fact. A detail \
+         that accurately restates one of the OTHER stored entries is NOT invented — it is a real \
+         memory cited in the wrong place. Vague, general, or explicitly hedged references are NOT \
+         invented specifics. Invention is the cardinal failure — a companion that confidently \
          misremembers breaks trust worse than one that forgets.\n\n\
          2. category — first match wins:\n\
          - confabulated: invented_specific is true — it fabricated or distorted a past detail, \
@@ -344,8 +368,9 @@ pub fn recall_judge_request(
          without inventing anything, but does not actually surface the specific memory.\n\
          - honest_gap: does not assert the detail; openly checks, or asks to be taken back, rather \
          than guessing. Honesty is acceptable — never score it as a failure.\n\
-         - missed: engages the user's surface words but never connects to the stored memory; \
-         invents nothing.\n\n\
+         - missed: engages the user's surface words but never connects to the stored memory the \
+         user means — including when it asserts a DIFFERENT stored entry instead (mis-attribution: \
+         wrong entry, nothing invented).\n\n\
          why: one sentence.\n\n\
          Reply with a JSON object matching this schema exactly:\n\
          {{\"invented_specific\": bool, \"category\": \
@@ -674,6 +699,37 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
     }
 
     let probe_k = 10usize;
+    // Optional cross-encoder arm — same env + loader as the chat
+    // bootstrap. When set, every plant reports the reranked rank and
+    // the added milliseconds next to the plain rank, so the
+    // quality-vs-witness-latency trade is measured, never assumed.
+    let rerank_fn: Option<corpus_engine::RerankFn> =
+        match std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
+            Ok(path) => {
+                match sovereign_inference::reranker_standalone::StandaloneReranker::load(
+                    std::path::Path::new(&path),
+                    sovereign_core::model_family::ModelFamily::Reranker,
+                    None,
+                ) {
+                    Ok(r) => {
+                        println!("reranker: {path}");
+                        // The production path is opt-IN (measured harmful
+                        // by default — see recall_relevant_memories_embed_reranked);
+                        // the probe's whole point is to measure, so opt in
+                        // for this process.
+                        std::env::set_var("SOVEREIGN_MEM_RERANK", "1");
+                        let r: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
+                            std::sync::Arc::new(r);
+                        Some(sovereign_tools::corpus::inference_to_rerank_fn(r))
+                    }
+                    Err(e) => {
+                        println!("reranker: FAILED to load {path} ({e}) — probing without");
+                        None
+                    }
+                }
+            }
+            Err(_) => None,
+        };
     println!(
         "\ninner-chaos RECALL retrieval probe — {} plants, {} memories seeded, top-{probe_k} by cosine",
         plants.len(),
@@ -733,6 +789,33 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
                 plant.id,
                 truncate_probe(&plant.oblique_callback, 52)
             );
+            // Cross-encoder arm: rank + added ms, measured on the same
+            // callback through the production reranked path.
+            if rerank_fn.is_some() {
+                let rr_started = Instant::now();
+                let rr_top = sovereign_core::memory::recall_relevant_memories_embed_reranked(
+                    session.inference.as_ref(),
+                    session.store.as_ref(),
+                    scope,
+                    &plant.oblique_callback,
+                    probe_k,
+                    rerank_fn.as_ref(),
+                )
+                .await
+                .unwrap_or_default();
+                let rr_ms = rr_started.elapsed().as_millis();
+                let rr_rank = rr_top.iter().position(|m| m.id == want);
+                let rr_verdict = match rr_rank {
+                    Some(0) => "TOP-1".to_string(),
+                    Some(n) if n < 5 => format!("rank {} (in top-5)", n + 1),
+                    Some(n) => format!("rank {} (missed top-5)", n + 1),
+                    None => format!("NOT in top-{probe_k}"),
+                };
+                println!(
+                    "      rerank: {rr_verdict}   {rr_ms:>5}ms total ({:+}ms vs plain)",
+                    rr_ms as i128 - elapsed_ms as i128
+                );
+            }
             // Tier diagnostics (glassbox): where does the plant sit on
             // the LEAF axis, and did any summary node bridge to it?
             // These are the numbers that decide whether a miss is a
@@ -934,10 +1017,24 @@ async fn run_recall_thread(
             }
         };
 
-        // 3b. Recall judge — only once the callback has landed.
+        // 3b. Recall judge — only once the callback has landed. The
+        // other plants + distractors ride along as "other stored
+        // entries" so citing one of them scores mis-attribution
+        // (missed), not invention (metric v2). Filler is omitted —
+        // deliberately bland, never the source of an asserted
+        // specific, and 150 of them would bloat the judge prompt.
         let recall_scored = turn_idx >= CALLBACK_TURN_INDEX;
         let (recall, recall_failed) = if recall_scored {
-            let req = recall_judge_request(&plant.content, &transcript, &response_text);
+            let other_entries: Vec<String> = seed_set
+                .iter()
+                .filter(|(key, _)| {
+                    (key.starts_with("plant-") || key.starts_with("distractor-"))
+                        && key.as_str() != format!("plant-{}", plant.id).as_str()
+                })
+                .map(|(_, seed)| seed.content.clone())
+                .collect();
+            let req =
+                recall_judge_request(&plant.content, &other_entries, &transcript, &response_text);
             match judge_inference.complete(&req).await {
                 Ok(resp) => {
                     let v = parse_recall_verdict(&resp.text);
@@ -1387,6 +1484,12 @@ pub fn write_recall_json(path: &Path, report: &RecallReport) -> Result<(), Strin
 pub struct RecallCalibrationCase {
     pub id: String,
     pub plant_content: String,
+    /// Other real stored entries the judge sees (metric v2 — the
+    /// mis-attribution polarity). Empty on v1 cases: with no other
+    /// entries the rubric degenerates to the original one, so the
+    /// pre-existing bank keeps its labels.
+    #[serde(default)]
+    pub other_entries: Vec<String>,
     pub gold_category: String,
     #[serde(default)]
     pub gold_confabulated: bool,
@@ -1483,7 +1586,12 @@ pub async fn run_recall_calibration(
     let mut rows = Vec::with_capacity(cases.len());
     for case in cases {
         let transcript = to_transcript(&case.turns);
-        let req = recall_judge_request(&case.plant_content, &transcript, &case.response);
+        let req = recall_judge_request(
+            &case.plant_content,
+            &case.other_entries,
+            &transcript,
+            &case.response,
+        );
         let verdict = match inference.complete(&req).await {
             Ok(resp) => parse_recall_verdict(&resp.text),
             Err(e) => {

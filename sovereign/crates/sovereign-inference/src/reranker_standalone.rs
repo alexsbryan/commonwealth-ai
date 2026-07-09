@@ -67,14 +67,33 @@ impl StandaloneReranker {
         family: ModelFamily,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
-        let mut backend =
-            LlamaBackend::init().map_err(|e| Error::Inference(format!("init backend: {e}")))?;
-        // Honour the same llama.cpp-log-suppression policy the host
-        // daemon uses — set SOVEREIGN_LLAMA_LOGS=1 to see ggml output.
-        if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-            backend.void_logs();
-        }
-        let backend = Arc::new(backend);
+        let backend = match LlamaBackend::init() {
+            Ok(mut b) => {
+                // Honour the same llama.cpp-log-suppression policy the
+                // host daemon uses — SOVEREIGN_LLAMA_LOGS=1 to see ggml
+                // output.
+                if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
+                    b.void_logs();
+                }
+                Arc::new(b)
+            }
+            Err(crate::llama::cpp::LLamaCppError::BackendAlreadyInitialized) => {
+                // Another in-process component (router classifiers,
+                // an embedded engine) already owns the process-global
+                // backend — `LlamaBackend` is only a zero-sized proof
+                // of initialization, so piggyback on it with a shadow
+                // handle. The Arc is deliberately leaked (strong count
+                // pinned above zero) so OUR handle can never run
+                // `Drop` and free the backend out from under the real
+                // owner; the shadow is inert for the process lifetime.
+                let shadow = Arc::new(LlamaBackend {});
+                std::mem::forget(Arc::clone(&shadow));
+                shadow
+            }
+            Err(e) => {
+                return Err(Error::Inference(format!("init backend: {e}")));
+            }
+        };
         let rerank_quirks = family.default_quirks().rerank;
         let slot = RerankSlot::load(
             &backend,

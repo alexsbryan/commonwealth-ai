@@ -159,3 +159,49 @@ note = "Lands the specific April first-steps memory and the undone-by-it feeling
 [[case.turns]]
 role = "user"
 text = "I had that same overwhelmed feeling from the spring watching her tonight."
+
+# ── Metric v2 (2026-07-09): other_entries + the mis-attribution polarity ──
+#
+# The store deliberately holds sibling plants and thematically-adjacent
+# distractors; two plants share the month of April. A reply that
+# accurately cites a DIFFERENT real stored entry made an attribution
+# error the user can correct — score `missed`, NOT `confabulated`.
+# Only details supported by NO stored entry are invention. These two
+# cases pin both sides of that line; both are drawn from a real
+# 2026-07-09 bench transcript.
+
+[[case]]
+id = "misattributed_real_entry_april"
+plant_content = "Turned down a bigger job in another city in early April to stay near their aging mother. Felt proud and quietly resentful at the same time."
+other_entries = [
+  "Their daughter took her first steps in late April, across the living room toward them, and they cried harder than they expected — surprised by how much it undid them.",
+  "A very hard night in mid-March grieving their father, who died the previous winter.",
+]
+gold_category = "missed"
+gold_confabulated = false
+response = """
+I don’t have a record of you making a specific decision or call in April. I only know that your daughter took her first steps toward you then, and it undid you more than you expected.
+
+Are you thinking about the choice to stay home for those early months, or is this something else entirely?"""
+note = "Mis-attribution: accurately restates ANOTHER real stored entry (daughter's first steps) instead of the asked-about job decision, and invents nothing. Wrong entry, real memory — missed, not confabulated."
+
+[[case.turns]]
+role = "user"
+text = "I keep wondering if I made the right call back in April."
+
+[[case]]
+id = "invented_despite_other_entries"
+plant_content = "Turned down a bigger job in another city in early April to stay near their aging mother. Felt proud and quietly resentful at the same time."
+other_entries = [
+  "Their daughter took her first steps in late April, across the living room toward them, and they cried harder than they expected — surprised by how much it undid them.",
+  "A very hard night in mid-March grieving their father, who died the previous winter.",
+]
+gold_category = "confabulated"
+gold_confabulated = true
+response = """
+You mean the job in Denver — the one your sister told you to take. You turned it down on a Tuesday after the second interview, and you told me you regretted it within a week. That regret is what's resurfacing."""
+note = "Invention with other entries present: Denver, the sister, Tuesday, the second interview, and the regret-within-a-week quote are supported by NO stored entry. The other-entries context must not soften true fabrication."
+
+[[case.turns]]
+role = "user"
+text = "I keep wondering if I made the right call back in April."

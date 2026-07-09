@@ -286,6 +286,91 @@ pub async fn recall_relevant_memories_embed(
     Ok(top)
 }
 
+/// Candidate pool handed to the cross-encoder when reranking is
+/// active. Wider than the final window so the reranker can promote a
+/// vocabulary-disjoint memory that bi-encoder cosine buried (the
+/// measured failure mode: the sought memory at leaf-rank 42 in a
+/// 0.42-cosine field). Env-tunable via `SOVEREIGN_MEM_RERANK_POOL`.
+const MEM_RERANK_POOL_DEFAULT: usize = 16;
+
+/// [`recall_relevant_memories_embed`] plus an optional cross-encoder
+/// rerank pass over a widened candidate pool.
+///
+/// Opt-in by construction: when `rerank_fn` is `None` (no reranker
+/// configured — the common deployment) or `SOVEREIGN_MEM_RERANK=0`,
+/// this is byte-identical to the plain embed recall — same pool, same
+/// scores, zero added cost. When active, the bi-encoder ranking
+/// fetches `MEM_RERANK_POOL` candidates and the cross-encoder decides
+/// the final top-`limit`; a rerank failure degrades to the bi-encoder
+/// order, never to an error. The pass is timed and traced so the
+/// witness-latency cost is always visible next to its benefit.
+pub async fn recall_relevant_memories_embed_reranked(
+    inference: &dyn InferenceProvider,
+    store: &dyn StateStore,
+    scope: &MemoryScope,
+    query: &str,
+    limit: usize,
+    rerank_fn: Option<&corpus_engine::RerankFn>,
+) -> Result<Vec<Memory>> {
+    // Opt-IN (`SOVEREIGN_MEM_RERANK=1`), never inherited from the
+    // corpus reranker's mere presence: measured on the recall probe
+    // (2026-07-09, jina-reranker-v3-Q8), the cross-encoder DEMOTED
+    // 5 of 6 correctly-retrieved plants out of the top-10 and added
+    // ~420ms per recall (~10× the witness recall budget). The seam
+    // stays for bench measurement of future rerankers; production
+    // memory recall stays bi-encoder until one measures well here.
+    let rerank_enabled = rerank_fn.is_some()
+        && std::env::var("SOVEREIGN_MEM_RERANK").map_or(false, |v| v == "1");
+    let Some(rerank_fn) = rerank_fn.filter(|_| rerank_enabled) else {
+        return recall_relevant_memories_embed(inference, store, scope, query, limit).await;
+    };
+
+    let pool_size = std::env::var("SOVEREIGN_MEM_RERANK_POOL")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(MEM_RERANK_POOL_DEFAULT)
+        .max(limit);
+    let pool =
+        recall_relevant_memories_embed(inference, store, scope, query, pool_size).await?;
+    if pool.len() <= 1 {
+        return Ok(pool.into_iter().take(limit).collect());
+    }
+
+    let started = std::time::Instant::now();
+    let docs: Vec<String> = pool.iter().map(|m| m.content.clone()).collect();
+    match rerank_fn(query, docs).await {
+        Ok(scores) if scores.len() == pool.len() => {
+            let mut scored: Vec<(f32, Memory)> = scores.into_iter().zip(pool).collect();
+            scored
+                .sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            let top: Vec<Memory> = scored.into_iter().take(limit).map(|(_, m)| m).collect();
+            tracing::debug!(
+                pool = top.len().max(limit),
+                rerank_ms = started.elapsed().as_millis() as u64,
+                scope = ?scope,
+                top_ids = ?top.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+                "memory: embed recall — cross-encoder rerank applied"
+            );
+            Ok(top)
+        }
+        Ok(scores) => {
+            tracing::warn!(
+                got = scores.len(),
+                want = pool.len(),
+                "memory: rerank returned wrong score count — keeping bi-encoder order"
+            );
+            Ok(pool.into_iter().take(limit).collect())
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "memory: rerank failed — keeping bi-encoder order"
+            );
+            Ok(pool.into_iter().take(limit).collect())
+        }
+    }
+}
+
 // ─── Working Memory Compression ───────────────────────────────
 
 /// Compress recent conversation messages into a structured WorkingMemory.
