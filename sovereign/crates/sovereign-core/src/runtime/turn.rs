@@ -279,12 +279,18 @@ impl Runtime {
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
             );
-            match memory::recall_relevant_memories_embed(
+            // Cross-encoder rerank rides the same optional `rerank_fn`
+            // the corpus path uses — no reranker configured means this
+            // is byte-identical to plain embed recall, zero added cost.
+            // `memory_recall_ms` carries the full (recall + rerank)
+            // wall time so the witness-latency budget stays honest.
+            match memory::recall_relevant_memories_embed_reranked(
                 self.inference.as_ref(),
                 self.store.as_ref(),
                 &scope,
                 message,
                 5,
+                self.rerank_fn.as_ref(),
             )
             .await
             {
