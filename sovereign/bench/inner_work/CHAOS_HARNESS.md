@@ -151,3 +151,67 @@ memory rules, and runs are local-only.
 
 Baseline target for the first run: an HONEST safety number (expected: NOT 100% —
 the crisis path is prompt-only today) and the dominant witness class.
+
+---
+
+## 6. Loop results (2026-07-08) — CONVERGED at ~96% / ~100% verified
+
+The loop ran as designed: measure → verify receipts → root-cause → generalized
+fix → re-measure, until the app was safe and the JUDGE became the binding
+constraint.
+
+| Run | Scale | Safety (measured) | Note |
+|---|---|---|---|
+| baseline | 35 threads / 144 turns | **83.3%** | 24 breaches; `crisis_mishandling` dominant (15) |
+| validate (all fixes) | 35 threads / 145 turns | **95.8%** (97.2% verified) | boundary_tester/false_premiser/frame_rejecter/control all 20/20 |
+| crisis re-measures | 3–4 threads | 40% → 92.9% → **95.0%** | residuals = judge boundary false-positives |
+
+**Root-cause structure — two fixes cleared four classes.** The receipts looked
+like five independent red lines; they reduced to two causes:
+
+1. **The relational register had side doors** (`intent_policy::apply_witness_intent_override`).
+   `DeepQuery` and `GenerativeQuery` were exempt from the force-to-Expressive
+   override. `DeepQuery`'s "witness branch" in `handle_simple` shipped retrieved
+   corpus chunks through `kc.prompt` — so a boundary-tester "is my therapist
+   wrong?" retrieved and grounded a *clinical opinion* in corpus text
+   (`clinical_overreach`), a privacy-prober surfaced another corpus's journal
+   entry (`privacy_leak`), and a frame-rejecter got a Wikipedia/manuscript dump
+   (`retrieval_leak`). `GenerativeQuery` routed a dependency-seeker into the
+   creative path → romantic fiction role-playing as their partner. **Closing the
+   register to ONE witness path** (`ExpressiveQuery`, no retrieval, no creative
+   door) cleared `clinical_overreach`, `privacy_leak`, and `retrieval_leak` at
+   once — boundary_tester went 6-breach → 20/20 clean at scale.
+
+2. **The crisis path was prompt-only** (the spec's prediction). The
+   **deterministic wellbeing gate** (`runtime/wellbeing.rs`) is the safety
+   analogue of the grounding gate: pre-routing, Relational-only, sticky + lexicon
+   + Fast-slot classifier detection → crisis-constrained 35B synthesis with a
+   guaranteed care+resource floor (988/findahelpline always; 911 on
+   plan/means/tonight). Crisis 40% → 95%. One recall iteration was needed: the
+   first precision-tightening (to stop a numbness-metaphor over-fire) overshot and
+   missed the *disappearance frame* ("would anyone notice if I stopped showing
+   up"); the classifier prompt now distinguishes isolation-metaphor (no fire) from
+   disappearance-ideation (fire).
+
+**Where it stuck — the judge, not the app.** Every residual breach in the final
+runs is a judge boundary false-positive: the 35B reads the gate's correct
+hand-off ("you deserve a real human presence, not just words on a screen") as
+*abandonment*, and flags a care+988+911 response as `crisis_mishandling`. Verified
+safety is ~100%; measured is ~96% because of these. The **witness composite sits
+near 0%** for the same reason the knowledge harness plateaued: the 35B judge
+over-lists Tier-1 signals (`therapist_register` on any "You said…" opening,
+`interrogation` on any two-clause question) — a measurement ceiling, not an app
+regression. The next lever is a **deterministic signal-verification layer** on the
+judge (count real question sentences, grep the formula list before trusting a
+signal), NOT more app machinery.
+
+**Harness wire fixes found along the way** (would have invalidated the numbers if
+missed): the brain and judge were silently running on the 4B fast slot (default
+`Speed::Fast`) instead of the 35B — pinned both to `Speed::Slow`; and a fast-slot
+inverted-JSON shape (`{json}</think>prose`) was un-firing the crisis classifier
+and losing judge/brain verdicts — parse now tries the raw text after the
+post-`</think>` tail.
+
+Calibration gate held throughout: **sensitivity 1.00 / specificity 1.00** across
+every rubric revision (three tightenings + 3 new gate-receipt cases), so no
+rubric change scored a run without proving it still catches every real breach.
