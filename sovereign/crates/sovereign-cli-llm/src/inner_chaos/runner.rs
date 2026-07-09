@@ -33,7 +33,7 @@ use super::transcript::TranscriptTurn;
 
 /// The witness skill under test. The whole harness is pointed at
 /// the Reflect rail; other skills are out of scope by design.
-const WITNESS_SKILL: &str = "inner-work";
+pub(super) const WITNESS_SKILL: &str = "inner-work";
 
 pub struct RunOptions {
     /// Wall-clock budget. Checked before each new thread; the run
@@ -168,7 +168,14 @@ async fn run_thread(
 ) {
     let conv_id = format!("inner-chaos-{stamp}-t{thread_idx}-{}", persona.id);
 
-    let (session, _tmpdir_keepalive) = match build_thread_session(skills_dir, opts).await {
+    let (session, _tmpdir_keepalive) = match build_thread_session(
+        skills_dir,
+        opts.daemon_base.as_deref(),
+        opts.chat_model.as_deref(),
+        opts.temperature,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             let record = error_record(thread_idx, 0, persona, &conv_id, format!("session setup failed: {e}"));
@@ -176,7 +183,19 @@ async fn run_thread(
             return;
         }
     };
-    if let Err(e) = seed_memories(session.store.as_ref(), memories).await {
+    // NOTE: seeded with `None` (General pool), which the inner-work
+    // witness scope (`Scoped("inner-work")`) cannot see — so the core
+    // safety personas run against an EMPTY recall pool. That is fine
+    // for the LEAK-RESISTANCE personas (they test that the witness
+    // does not fabricate/recite, and an empty pool can't be leaked),
+    // but it means the core loop never exercised positive recall. The
+    // `--recall` extension seeds with `Some("inner-work")` so its
+    // memories are actually visible. Switching the core to
+    // `Some("inner-work")` would let privacy_prober test a live pool —
+    // a strictly better test, but it reopens the converged core safety
+    // numbers, so it is left as an explicit follow-up, not a silent
+    // change here.
+    if let Err(e) = seed_memories(session.store.as_ref(), memories, None).await {
         let record = error_record(thread_idx, 0, persona, &conv_id, format!("memory-seed failed: {e}"));
         push(journal, records, record);
         return;
@@ -300,25 +319,27 @@ async fn run_thread(
 /// the witness skill activated. The returned `TempDir` must stay
 /// alive for the session's lifetime (dropping it yanks the SQLite
 /// db out from under the runtime).
-async fn build_thread_session(
+pub(super) async fn build_thread_session(
     skills_dir: &std::path::Path,
-    opts: &RunOptions,
+    daemon_base: Option<&str>,
+    chat_model: Option<&str>,
+    temperature: Option<f32>,
 ) -> Result<(ChatSession, tempfile::TempDir), String> {
     let tmp = tempfile::TempDir::new().map_err(|e| format!("create inner-chaos tempdir: {e}"))?;
 
     let mut globals = default_globals_for_voice_eval();
-    if let Some(base) = &opts.daemon_base {
-        globals.daemon_base = base.clone();
+    if let Some(base) = daemon_base {
+        globals.daemon_base = base.to_string();
     }
-    if let Some(model) = &opts.chat_model {
-        globals.chat_model = Some(model.clone());
+    if let Some(model) = chat_model {
+        globals.chat_model = Some(model.to_string());
     }
     globals.data_dir = tmp.path().to_path_buf();
     globals.data_dir_explicit = true;
     // Unlike voice_eval (which pins 0.2 for reproducibility), the
     // chaos harness defaults to the product temperature — the
     // honest baseline measures what users get.
-    globals.temperature = opts.temperature;
+    globals.temperature = temperature;
 
     let mut skills = SkillRegistry::new();
     skills.load_and_register(skills_dir);
@@ -339,7 +360,7 @@ async fn build_thread_session(
 /// Resolve a role's inference handle: pinned to `role_model` when it
 /// differs from the SUT chat model, else the session's shared
 /// provider (same pattern as voice_eval's judge pinning).
-fn pinned_or_shared(
+pub(super) fn pinned_or_shared(
     session: &ChatSession,
     role_model: Option<&String>,
     chat_model: Option<&String>,
@@ -353,9 +374,22 @@ fn pinned_or_shared(
     }
 }
 
-async fn seed_memories(
+/// Seed resident memories into the store.
+///
+/// `source_skill_id` decides which memory-recall POOL the seeds land
+/// in. This is load-bearing: on the first message the runtime tags the
+/// conversation with the active skill (`inner-work`) and recalls under
+/// `MemoryScope::Scoped("inner-work")`, which admits ONLY memories
+/// whose `source_skill_id == Some("inner-work")`. Seeding with `None`
+/// puts them in the General pool where the witness can NEVER see them
+/// (the inner-work memory wall is bidirectional). Pass
+/// `Some("inner-work")` to replicate real journal entries the witness
+/// can actually recall; pass `None` only when the pool is deliberately
+/// irrelevant to the test.
+pub(super) async fn seed_memories(
     store: &dyn StateStore,
     seeds: &std::collections::BTreeMap<String, SeedMemory>,
+    source_skill_id: Option<&str>,
 ) -> sovereign_core::error::Result<()> {
     for (key, seed) in seeds {
         let created_at = seed
@@ -373,7 +407,7 @@ async fn seed_memories(
             version: 0,
             deleted_at: None,
             source_conversation_id: seed.source_conversation_id.clone(),
-            source_skill_id: None,
+            source_skill_id: source_skill_id.map(|s| s.to_string()),
             ..Default::default()
         };
         store.save_memory(&memory).await?;
@@ -413,14 +447,14 @@ fn push(journal: &mut Journal, records: &mut Vec<TurnRecord>, record: TurnRecord
     records.push(record);
 }
 
-fn unix_seconds() -> u64 {
+pub(super) fn unix_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
 
-fn unix_millis() -> u64 {
+pub(super) fn unix_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)

@@ -70,7 +70,11 @@ impl Journal {
         })
     }
 
-    pub fn append(&mut self, record: &TurnRecord) -> Result<(), String> {
+    /// Append any serializable record as one JSONL line. Generic so
+    /// the recall extension (`super::recall::RecallTurnRecord`) can
+    /// share the wipe-on-start + flush discipline without a second
+    /// journal type; the core loop still passes `TurnRecord`.
+    pub fn append<T: serde::Serialize>(&mut self, record: &T) -> Result<(), String> {
         let line = serde_json::to_string(record).map_err(|e| format!("serialize record: {e}"))?;
         writeln!(self.file, "{line}").map_err(|e| format!("write journal: {e}"))?;
         self.file

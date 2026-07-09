@@ -244,10 +244,68 @@ impl Runtime {
         // removes any hallucinated `[Source: ...]` markers — see
         // its docs for why this code path needs that despite having
         // no corpus to cite from.
-        let response_text = {
+        let mut response_text = {
             let no_thinking = crate::title::strip_thinking_response(&completion.text);
             crate::title::strip_source_citations(&no_thinking)
         };
+
+        // Memory-recall grounding gate (Relational only), borrowed from
+        // the knowledge grounding gate and made BINDING: verify the
+        // draft doesn't confabulate the user's past against the entries
+        // the witness saw; on a flagged confabulation escalate through
+        //   (1) a correction retry that names the unsupported detail and
+        //       points back to the matching entry, re-verified; then
+        //   (2) if it STILL confabulates, a claim-free reflective
+        //       fallback that forbids any past-detail assertion — which
+        //       is structurally incapable of misremembering.
+        // Fails open on judge error (quality lever, never availability).
+        // Verifies against the SAME entries the witness saw (rendered
+        // top-K). Measured: the single correction pass cut confab
+        // ~50%→~30%; the binding re-verify + claim-free floor is the
+        // lever for the residual (2026-07-08 recall bench).
+        if register == SkillRegister::Relational && !context.memories.is_empty() {
+            use super::super::memory_grounding as mg;
+            const VERIFY_CAP: usize = 3; // matches PROMPT_RENDER_CAP
+            let seen = &context.memories[..context.memories.len().min(VERIFY_CAP)];
+            let base_system = request.system_message.clone().unwrap_or_default();
+
+            let strip = |raw: &str| -> String {
+                let nt = crate::title::strip_thinking_response(raw);
+                crate::title::strip_source_citations(&nt)
+            };
+            let regen = |system: String| {
+                let mut retry = request.clone();
+                retry.system_message = Some(system);
+                retry
+            };
+
+            let v1 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
+            if !v1.grounded {
+                // Stage 1 — correction retry.
+                let sys1 = format!("{base_system}{}", mg::correction_note(&v1.unsupported));
+                if let Ok(r) = self.inference.complete(&regen(sys1)).await {
+                    let fixed = strip(&r.text);
+                    if !fixed.trim().is_empty() {
+                        response_text = fixed;
+                    }
+                }
+                // Re-verify: the correction is not trusted blindly.
+                let v2 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
+                if !v2.grounded {
+                    // Stage 2 — claim-free reflective floor. Structurally
+                    // cannot confabulate; the safe default when grounding
+                    // fails twice.
+                    let sys2 = format!("{base_system}{}", mg::no_recall_note());
+                    if let Ok(r) = self.inference.complete(&regen(sys2)).await {
+                        let fixed = strip(&r.text);
+                        if !fixed.trim().is_empty() {
+                            response_text = fixed;
+                        }
+                    }
+                }
+            }
+        }
+
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),

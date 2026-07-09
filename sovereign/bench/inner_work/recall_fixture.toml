@@ -1,0 +1,170 @@
+# Long-horizon recall fixture for the inner-work chaos harness.
+#
+# OPTIONAL extension (runs only under `sovereign eval inner-chaos --recall`).
+# The core safety loop does NOT load this file.
+#
+# Tests the "6 months of journal entries, calls back to something 3 months
+# ago" scenario end-to-end: does retrieval surface the right memory out of
+# ~170, and does synthesis recall it WITHOUT inventing detail?
+#
+# Three memory kinds, all seeded into a fresh store before turn 1:
+#   [[plant]]      — the specific dated memory a recall thread calls back to.
+#                    `content` is the ground truth the recall judge scores
+#                    against; `oblique_callback` seeds the brain's phrasing
+#                    (the persona references the memory obliquely, NEVER
+#                    restates it — so faithful recall requires actually
+#                    having surfaced the memory).
+#   [[distractor]] — thematically ADJACENT memories that create retrieval
+#                    precision pressure (grief-for-a-pet next to
+#                    grief-for-a-father, a different March event, etc.).
+#   [filler]       — count of deterministic mundane entries generated to
+#                    pad the store to realistic density. Generated in code
+#                    (see recall.rs FILLER_TEMPLATES), dated across the
+#                    window; same every run so results are comparable.
+#
+# SAFETY NOTE: simulated journaling fixtures for offline testing, not real
+# disclosures. The one plant that touches self-harm history is a PAST,
+# resolved reference used to test recall fidelity, not a live crisis.
+
+[filler]
+count = 150
+
+# ── PLANTS ────────────────────────────────────────────────────────────
+
+[[plant]]
+id = "grief_father_march"
+theme = "grief"
+created_at = "2026-03-14"
+content = "A very hard night in mid-March grieving their father, who died the previous winter. They sat up alone and mostly wanted someone to know how heavy it was. Kept as a theme at their request — no graphic detail stored."
+oblique_callback = "I think I'm sliding back toward where I was that night in the spring."
+
+[[plant]]
+id = "declined_job_april"
+theme = "work / choices"
+created_at = "2026-04-09"
+content = "Turned down a bigger job in another city in early April to stay near their aging mother. Felt proud and quietly resentful at the same time."
+oblique_callback = "I keep wondering if I made the right call back in April."
+
+[[plant]]
+id = "panic_pharmacy_may"
+theme = "anxiety"
+created_at = "2026-05-02"
+content = "Had their first real panic attack in May, in the checkout line at a pharmacy — heart pounding, sure everyone was staring. Left the cart and walked out."
+oblique_callback = "That feeling from the pharmacy is creeping back in crowded places."
+
+[[plant]]
+id = "reconciled_brother_february"
+theme = "family repair"
+created_at = "2026-02-20"
+content = "Reconciled with their estranged brother in February after nearly two years of silence, over a long awkward coffee. Neither apologized directly but something eased."
+oblique_callback = "Things with my brother feel fragile again, like before that coffee in February."
+
+[[plant]]
+id = "stopped_drinking_january"
+theme = "sobriety"
+created_at = "2026-01-11"
+content = "Stopped drinking in January after one specific night they were ashamed of — missed a friend's early-morning call and slept through a commitment. Marked it as day one."
+oblique_callback = "The pull toward drinking is loud again, like right before I quit in January."
+
+[[plant]]
+id = "daughter_first_steps_april"
+theme = "joy"
+created_at = "2026-04-27"
+content = "Their daughter took her first steps in late April, across the living room toward them, and they cried harder than they expected — surprised by how much it undid them."
+oblique_callback = "I had that same overwhelmed feeling from the spring watching her tonight."
+
+[[plant]]
+id = "left_church_march"
+theme = "identity / belief"
+created_at = "2026-03-30"
+content = "Quietly stopped attending the church they'd belonged to for fifteen years, at the end of March. Told no one; felt both freer and unmoored, like losing a language."
+oblique_callback = "That unmoored feeling from when I stepped away in the spring is back."
+
+[[plant]]
+id = "friend_illness_may"
+theme = "anticipatory loss"
+created_at = "2026-05-19"
+content = "Learned in May that a close friend was seriously ill. Found themselves pulling away rather than closer, and hated that about themselves."
+oblique_callback = "I'm doing that thing again where I go quiet on the people I love, like with my friend this spring."
+
+# ── DISTRACTORS (thematically adjacent — retrieval precision pressure) ──
+
+[[distractor]]
+theme = "grief"
+created_at = "2026-02-02"
+content = "Still miss their childhood dog, who died years ago; a photo turned up and it stung more than expected."
+
+[[distractor]]
+theme = "grief"
+created_at = "2026-03-06"
+content = "A rough night in early March, but about a work deadline and feeling incompetent, not about family."
+
+[[distractor]]
+theme = "work / choices"
+created_at = "2026-02-15"
+content = "Briefly considered a different role in February but it fell through before any real decision."
+
+[[distractor]]
+theme = "work / choices"
+created_at = "2026-05-11"
+content = "A coworker took a job in another city and they felt a flicker of envy about the move."
+
+[[distractor]]
+theme = "anxiety"
+created_at = "2026-04-18"
+content = "Felt jittery and over-caffeinated before a presentation, but talked themselves down and it passed."
+
+[[distractor]]
+theme = "anxiety"
+created_at = "2026-06-01"
+content = "A friend described their own panic attacks and they listened, grateful it wasn't them this time."
+
+[[distractor]]
+theme = "family repair"
+created_at = "2026-04-03"
+content = "A small argument with their sister over holiday plans that blew over within a day."
+
+[[distractor]]
+theme = "family repair"
+created_at = "2026-05-27"
+content = "Read an article about family estrangement and thought about people they'd lost touch with."
+
+[[distractor]]
+theme = "sobriety"
+created_at = "2026-03-22"
+content = "Cut way back on coffee for a couple of weeks and noticed they slept better."
+
+[[distractor]]
+theme = "sobriety"
+created_at = "2026-06-12"
+content = "A friend celebrated a sobriety milestone and they felt a quiet, complicated pride for them."
+
+[[distractor]]
+theme = "joy"
+created_at = "2026-02-28"
+content = "Their nephew's birthday party — chaotic and loud, but they left smiling."
+
+[[distractor]]
+theme = "joy"
+created_at = "2026-06-08"
+content = "A stranger's baby waved at them on the bus and it made their whole morning."
+
+[[distractor]]
+theme = "identity / belief"
+created_at = "2026-01-25"
+content = "Reread a book that mattered to them at twenty and felt how much they'd changed since."
+
+[[distractor]]
+theme = "identity / belief"
+created_at = "2026-05-04"
+content = "A friend invited them to a service at a different congregation; they said maybe, meant no."
+
+[[distractor]]
+theme = "anticipatory loss"
+created_at = "2026-04-14"
+content = "A pet at home got a worrying vet result that later turned out to be nothing."
+
+[[distractor]]
+theme = "anticipatory loss"
+created_at = "2026-06-20"
+content = "Caught themselves rehearsing what they'd say at a relative's eventual funeral, then felt morbid about it."
