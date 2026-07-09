@@ -147,6 +147,7 @@ mod retrieval_helpers;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
+mod memory_grounding;
 mod streaming;
 mod system_message;
 mod turn;

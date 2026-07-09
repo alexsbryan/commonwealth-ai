@@ -130,8 +130,11 @@ pub async fn recall_relevant_memories_embed(
 
     let top = scored.into_iter().map(|(_, m)| m).collect::<Vec<_>>();
     tracing::debug!(
+        in_scope = texts.len(),
         returned = top.len(),
         limit,
+        scope = ?scope,
+        top_ids = ?top.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
         "memory: embed recall — returning top-K by cosine"
     );
     Ok(top)

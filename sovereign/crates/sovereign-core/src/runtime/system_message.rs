@@ -478,6 +478,14 @@ impl Runtime {
         // the witness move, few enough threads to keep the reply
         // tight. The full retrieval result still flows through to
         // `detect_contradiction` (Pass A sees all 5).
+        //
+        // (Recall bench 2026-07-08 tested K=1 to kill cross-entry
+        // welding — it BACKFIRED: confab rose and faithful recall
+        // halved. The model embellishes even a single memory, and
+        // fewer candidates starve correct recall. The lever is a
+        // binding verifier, not fewer candidates — see
+        // `memory_grounding` + the expressive handler's escalating
+        // regeneration.)
         const PROMPT_RENDER_CAP: usize = 3;
         let render_slice: &[Memory] = if context.memories.len() > PROMPT_RENDER_CAP {
             &context.memories[..PROMPT_RENDER_CAP]
@@ -489,6 +497,37 @@ impl Runtime {
         {
             s.push_str("\n\n");
             s.push_str(&mem_section);
+
+            // Retrieval-handling discipline (borrowed from the
+            // knowledge-grounding bench: an answer may only assert what
+            // the retrieved evidence supports). The entries above are
+            // pulled by SIMILARITY to the user's message, not by the
+            // user pointing at them — so on an oblique callback the set
+            // routinely contains adjacent-but-wrong notes, and
+            // sometimes the right note is absent entirely. Without this
+            // block the witness treats all rendered entries as
+            // established fact and welds their details together
+            // (measured: 56% confabulation on the recall bench,
+            // 2026-07-08 — the model attributed one note's specifics to
+            // a different callback, or asserted the nearest distractor
+            // when the true memory hadn't been retrieved). The rule is
+            // the memory analogue of citation grounding: match ONE,
+            // quote nothing you can't point to, and prefer an honest
+            // gap over a confident wrong memory.
+            s.push_str(
+                "\n\nHow to use those entries. They were retrieved by similarity to what the user \
+                 just said — they are CANDIDATES, not a confirmed match, and the right memory may \
+                 not be among them. Before you refer to any of them:\n\
+                 \u{2022} Identify the ONE entry the user is actually pointing to. If none clearly \
+                 matches what they said, tell them you don't have that specific memory and ask them \
+                 to take you back to it — do NOT reach for the closest-sounding entry.\n\
+                 \u{2022} State only what is literally written in the entry you matched. Never merge \
+                 details from two entries, and never add a date, name, number, place, or fact that \
+                 isn't there.\n\
+                 \u{2022} A plain \"I don't have the detail of that\" always beats a confident wrong \
+                 memory. Misremembering their past on their behalf is the one thing that breaks \
+                 trust for good.",
+            );
         }
 
         // Iter3: universal brevity anchor (no memory-count gate).

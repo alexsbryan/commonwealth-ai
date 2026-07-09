@@ -93,3 +93,6 @@ __pycache__/
 /mesh-soak-findings.jsonl
 /mesh-soak-baseline.json
 /mesh-soak-repro/
+# Inner-chaos / bench run outputs (ephemeral) — at repo root or under any
+# sub-repo (e.g. sovereign/test-artifacts/ when a harness runs with CWD there).
+test-artifacts/
