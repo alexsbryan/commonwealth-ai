@@ -91,6 +91,14 @@ arm64 is ready to uncomment in `cli-release.yml` once a local
 validated. (GitHub's hosted Intel `macos-13` runner stays avoided — it hangs on
 "Waiting for a runner" and drains the Actions budget.)
 
+**No CI / no runner?** All three CLI targets (mac aarch64, mac x86_64 cross,
+Linux x86_64 via podman) can be built, packaged, and uploaded from one arm64
+Mac with `scripts/release-cli-local.sh` — CI-identical packaging (same
+binaries, tar layout, `.sha256` sidecars) plus a `SHA256SUMS` regeneration
+that keeps any CI-built assets on the draft covered. Same `--skip-*` /
+`--no-upload` / `--upload-only` flags as `release-desktop-local.sh`; the
+desktop runbook's one-time setup table applies (podman machine, gh auth).
+
 ### 3. Promote
 
 1. Watch `https://github.com/<owner>/<repo>/actions/workflows/cli-release.yml`.
@@ -139,6 +147,10 @@ git commit -am "chore(desktop): release v0.2.0"
 git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
 # → desktop-release.yml → promote the draft after smoke-testing an installer
 ```
+
+No CI (or no Intel runner)? The whole macOS + Linux matrix can be built and
+uploaded from one arm64 Mac with `scripts/release-desktop-local.sh` — see
+"Full local release from the arm64 Mac" in the desktop RELEASING.md.
 
 ---
 
