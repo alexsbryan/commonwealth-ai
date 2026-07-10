@@ -407,8 +407,12 @@ jobs:
           # minus the background image. Mirrors scripts/build-desktop-macos.sh.
           # ANY other failure (or non-macOS) re-raises the original exit code.
           BUNDLE="$GITHUB_WORKSPACE/target/${{ matrix.platform.target }}/release/bundle"
-          APP="$BUNDLE/macos/Sovereign.app"
-          if [[ "${RUNNER_OS:-}" == "macOS" && -d "$APP" ]] && ! ls "$BUNDLE"/dmg/*.dmg >/dev/null 2>&1; then
+          # .app name tracks productName in tauri.conf.json ("svrnmesh" since
+          # the 2026-06-29 rename) — glob so a rename can't silently disable
+          # this fallback (which is what happened locally for v0.1.19).
+          APP="$(find "$BUNDLE/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+          APP_NAME="$(basename "${APP:-svrnmesh.app}" .app)"
+          if [[ "${RUNNER_OS:-}" == "macOS" && -n "$APP" && -d "$APP" ]] && ! ls "$BUNDLE"/dmg/*.dmg >/dev/null 2>&1; then
             echo "Tauri DMG step failed but the signed .app exists — packaging via hdiutil (create-dmg's Finder step was unavailable)."
             VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
             case "${{ matrix.platform.target }}" in
@@ -416,19 +420,50 @@ jobs:
               x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
               *)                    ARCH_SUFFIX="$(uname -m)" ;;
             esac
-            DMG_OUT="$BUNDLE/dmg/Sovereign_${VERSION}_${ARCH_SUFFIX}.dmg"
+            DMG_OUT="$BUNDLE/dmg/${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.dmg"
             rm -f "$BUNDLE"/macos/rw.*.dmg
             STAGE="$(mktemp -d)"
-            ditto "$APP" "$STAGE/Sovereign.app"        # preserves the ad-hoc signature
+            ditto "$APP" "$STAGE/$APP_NAME.app"        # preserves the ad-hoc signature
             ln -s /Applications "$STAGE/Applications"   # drag-to-install target
             mkdir -p "$BUNDLE/dmg"
-            hdiutil create -volname "Sovereign" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
+            hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
             rm -rf "$STAGE"
             echo "DMG built via hdiutil fallback: $DMG_OUT"
           else
             echo "::error::Build failed (exit $BUILD_RC) and it is not the macOS Finder/TCC DMG cosmetic case — see the cargo output above." >&2
             exit "$BUILD_RC"
           fi
+
+      - name: Arch-qualify macOS updater artifacts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Tauri emits the macOS updater archive as a bare
+          # `<productName>.app.tar.gz` (+ .sig) — identical names across the
+          # two mac targets, which would collide in the publish job's flatten
+          # step and can't carry the arch the updater manifest endpoint
+          # (landing/api/desktop/updater.js) matches on. Rename to
+          # `<productName>_<ver>_<aarch64|x64>.app.tar.gz`. Renaming is safe:
+          # the .sig signs the tar.gz BYTES, and the manifest inlines the sig
+          # content while pointing at the renamed asset URL.
+          BUNDLE="$GITHUB_WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/macos"
+          case "${{ matrix.platform.target }}" in
+            aarch64-apple-darwin) ARCH_SUFFIX=aarch64 ;;
+            x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
+            *)                    ARCH_SUFFIX="$(uname -m)" ;;
+          esac
+          shopt -s nullglob
+          for f in "$BUNDLE"/*.app.tar.gz; do
+            base="$(basename "$f" .app.tar.gz)"
+            # already qualified (idempotent re-runs)
+            [[ "$base" == *"_${ARCH_SUFFIX}" ]] && continue
+            VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/$base.app/Contents/Info.plist")"
+            mv "$f" "$BUNDLE/${base}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz"
+            if [[ -f "$f.sig" ]]; then
+              mv "$f.sig" "$BUNDLE/${base}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz.sig"
+            fi
+          done
+          ls -la "$BUNDLE"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
