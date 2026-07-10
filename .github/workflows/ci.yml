@@ -55,7 +55,7 @@ jobs:
     name: Check + Test (workspace)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The workspace build + restored cache + apt stack don't fit in the
       # runner's ~20 GB of free disk (observed: compiler scratch in /tmp hit
       # ENOSPC mid llama.cpp build). Drop ~30 GB of preinstalled images we
@@ -97,7 +97,7 @@ jobs:
       # also serves the release workflows.
       - name: Restore llama.cpp CMake tree
         id: llama-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -148,7 +148,7 @@ jobs:
       # Bank the C++ build even on a red run (see the restore step's comment).
       - name: Save llama.cpp CMake tree
         if: always() && steps.llama-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -163,7 +163,7 @@ jobs:
     name: Mesh DST (fault-injection / invariants)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Same disk headroom problem as the test job — see its comment.
       - name: Free runner disk space
         run: |
@@ -194,7 +194,7 @@ jobs:
       # rust-cache (whose cleanup would delete it), and the guard forces a
       # rebuild instead of a link failure if the tree is missing.
       - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -253,7 +253,7 @@ jobs:
     # NOT advisory: a boundary breach means the workflow/recipe package can no
     # longer be lifted out against just the OICP contract. See studio/BOUNDARY.md.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -268,7 +268,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Same disk headroom problem as the test job — see its comment.
       - name: Free runner disk space
         run: |
@@ -315,7 +315,7 @@ jobs:
       # rust-cache (whose cleanup would delete it), and the guard forces a
       # rebuild instead of a link failure if the tree is missing.
       - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}

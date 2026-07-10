@@ -31,7 +31,7 @@ jobs:
       # Match ci.yml: no debuginfo (disk headroom + cache size).
       CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Same disk headroom problem as ci.yml's test job — see its comment.
       - name: Free runner disk space
         run: |
@@ -59,7 +59,7 @@ jobs:
       # rust-cache (whose cleanup would delete it); the guard forces a
       # rebuild instead of a link failure if the tree is missing.
       - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -101,7 +101,7 @@ jobs:
             --baseline .github/mesh-slo-baseline.json || true
       - name: Upload findings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mesh-soak-findings
           path: mesh-soak-findings.jsonl
