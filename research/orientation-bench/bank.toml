@@ -1,0 +1,362 @@
+# Orientation-intent bank v1 — corpus-engine scope. See README.md for protocol.
+#
+# AUTHORING DISCIPLINE (recorded for the audit):
+# - Drafted 2026-07-09, BEFORE any rollup node summary exists (the ordering is
+#   the anti-contamination mechanism).
+# - Questions written from week-1-developer intent, in user vocabulary, no
+#   function names in N/S/P shapes. Module `//!` headers and the code-intel
+#   leaf cache were used ONLY to verify gold paths, never for question phrasing.
+# - Gold paths are repo-relative prefixes; a directory prefix matches anything
+#   under it. Multi-home golds where the answer genuinely lives in >1 place.
+# - frozen=false until Alex's review pass; set true at freeze. Post-freeze
+#   edits require a note in FINDINGS.md.
+
+[meta]
+name = "orientation-bench-v1"
+scope_prefix = "corpus-engine/"
+authored = "2026-07-09"
+frozen = true  # frozen 2026-07-09 after review (Alex: lgtm)
+
+# Scoring rules (deterministic, encoded here so spike.py has no policy of its own):
+#  navigation/purpose: hit@5 = any top-5 item whose path starts with any gold prefix
+#  structure:          hit@5 = >=2 distinct gold prefixes covered within top-5
+#  guardrail:          hit@5 = gold file present in top-5; ALSO record rank per arm —
+#                      the G2 gate metric is rank shift C vs A (displacement)
+#  negative:           report-only; flag if any rollup NODE ranks in top-3 (arm C)
+[meta.scoring]
+hit_k = 5
+structure_min_distinct = 2
+negative_node_flag_k = 3
+
+# ---------------------------------------------------------------- navigation
+
+[[question]]
+id = "N01"
+shape = "navigation"
+text = "Where does a new corpus's raw material get downloaded from the web or an API before anything is processed?"
+gold = ["corpus-engine/src/acquirers"]
+
+[[question]]
+id = "N02"
+shape = "navigation"
+text = "Which part decides how a document is split into the smaller pieces that get stored for search?"
+gold = ["corpus-engine/src/chunkers"]
+
+[[question]]
+id = "N03"
+shape = "navigation"
+text = "If I wanted to change how Word documents or HTML pages are turned into plain text, where would I look?"
+gold = ["corpus-engine/src/extractors"]
+
+[[question]]
+id = "N04"
+shape = "navigation"
+text = "Which code notices that source files on disk have changed and keeps the search index up to date?"
+gold = ["corpus-engine/src/update", "corpus-engine/src/engine/reindex.rs"]
+
+[[question]]
+id = "N05"
+shape = "navigation"
+text = "Where do the results of background compile and test runs get parsed and recorded?"
+gold = ["corpus-engine/src/update/lint_watcher.rs", "corpus-engine/src/update/test_watcher.rs", "corpus-engine/src/lint_results.rs", "corpus-engine/src/test_results.rs"]
+
+[[question]]
+id = "N06"
+shape = "navigation"
+text = "Which module owns reading and writing the on-disk table where searchable chunks live?"
+gold = ["corpus-engine/src/index"]
+
+[[question]]
+id = "N07"
+shape = "navigation"
+text = "Where does the plain-English summarization of individual functions in a codebase happen?"
+gold = ["corpus-engine/src/enrichment/code_intel"]
+
+[[question]]
+id = "N08"
+shape = "navigation"
+text = "Which part builds the layered tree of summaries over a whole document collection?"
+gold = ["corpus-engine/src/enrichment/tiered.rs"]
+
+[[question]]
+id = "N09"
+shape = "navigation"
+text = "Where are documents screened out before chunking — say, ones that are too thin or not on an allow-list?"
+gold = ["corpus-engine/src/filters"]
+
+[[question]]
+id = "N10"
+shape = "navigation"
+text = "When installing a corpus, where does the decision happen that a prebuilt bundle can be used instead of building from scratch?"
+gold = ["corpus-engine/src/snapshot.rs", "corpus-engine/src/snapshot_restore.rs", "corpus-engine/src/engine"]
+
+[[question]]
+id = "N11"
+shape = "navigation"
+text = "Which code scrubs personal information like emails or phone numbers before text is stored?"
+gold = ["corpus-engine/src/pii.rs"]
+
+[[question]]
+id = "N12"
+shape = "navigation"
+text = "Where are the recipes that describe how to build a corpus defined and parsed?"
+gold = ["corpus-engine/src/recipe.rs", "corpus-engine/src/recipe_parsing.rs", "corpus-engine/src/recipe_schema.rs", "corpus-engine/src/recipe_builtin.rs"]
+
+[[question]]
+id = "N13"
+shape = "navigation"
+text = "Where does search that spans several installed corpora at once live?"
+gold = ["corpus-engine/src/meta_atlas"]
+
+[[question]]
+id = "N14"
+shape = "navigation"
+text = "When the system answers a question by walking a knowledge graph built over a corpus, where is that traversal implemented?"
+gold = ["corpus-engine/src/atlas_traversal"]
+
+[[question]]
+id = "N15"
+shape = "navigation"
+text = "Once ingested, where are original files like images and source documents kept?"
+gold = ["corpus-engine/src/asset_store"]
+
+[[question]]
+id = "N16"
+shape = "navigation"
+text = "A multi-hour enrichment crashed halfway — where is the machinery that lets it pick up where it left off?"
+gold = ["corpus-engine/src/enrichment/checkpoint.rs", "corpus-engine/src/enrichment/field_engine.rs", "corpus-engine/src/enrichment/state.rs"]
+
+[[question]]
+id = "N17"
+shape = "navigation"
+text = "Which code pulls people, places, and organizations out of ingested text?"
+gold = ["corpus-engine/src/enrichment/entity_extraction.rs"]
+
+[[question]]
+id = "N18"
+shape = "navigation"
+text = "Where is a large corpus divided into pieces so several machines can work on it in parallel?"
+gold = ["corpus-engine/src/sharding.rs"]
+
+# ----------------------------------------------------------------- structure
+
+[[question]]
+id = "S01"
+shape = "structure"
+text = "What are the main stages a document goes through from raw file to searchable index?"
+gold = ["corpus-engine/src/acquirers", "corpus-engine/src/extractors", "corpus-engine/src/filters", "corpus-engine/src/chunkers", "corpus-engine/src/index", "corpus-engine/src/engine"]
+
+[[question]]
+id = "S02"
+shape = "structure"
+text = "How is the enrichment subsystem organized — what are its major pieces?"
+gold = ["corpus-engine/src/enrichment/atlas", "corpus-engine/src/enrichment/code_intel", "corpus-engine/src/enrichment/pipeline", "corpus-engine/src/enrichment/tiered.rs", "corpus-engine/src/enrichment/field_engine.rs", "corpus-engine/src/enrichment/domains"]
+
+[[question]]
+id = "S03"
+shape = "structure"
+text = "What kinds of document sources can be brought in out of the box?"
+gold = ["corpus-engine/src/extractors", "corpus-engine/src/acquirers"]
+
+[[question]]
+id = "S04"
+shape = "structure"
+text = "What strategies exist for splitting documents into chunks, and how do they differ?"
+gold = ["corpus-engine/src/chunkers/fixed.rs", "corpus-engine/src/chunkers/semantic.rs", "corpus-engine/src/chunkers/paragraph.rs", "corpus-engine/src/chunkers/sentence.rs", "corpus-engine/src/chunkers/sectioned.rs"]
+
+[[question]]
+id = "S05"
+shape = "structure"
+text = "Which parts of this crate are about keeping a corpus fresh after the initial build, rather than building it?"
+gold = ["corpus-engine/src/update", "corpus-engine/src/engine/reindex.rs", "corpus-engine/src/freshness.rs", "corpus-engine/src/canonical_sync.rs"]
+
+[[question]]
+id = "S06"
+shape = "structure"
+text = "What does the code-intelligence enrichment produce, and how does it get stored and kept current?"
+gold = ["corpus-engine/src/enrichment/code_intel/mod.rs", "corpus-engine/src/enrichment/code_intel/store.rs", "corpus-engine/src/enrichment/code_intel/pass.rs"]
+
+[[question]]
+id = "S07"
+shape = "structure"
+text = "How does publishing a corpus so another machine can install it without rebuilding work?"
+gold = ["corpus-engine/src/snapshot.rs", "corpus-engine/src/snapshot_restore.rs", "corpus-engine/src/sharding.rs"]
+
+[[question]]
+id = "S08"
+shape = "structure"
+text = "If I'm adding support for a new file format, what are the seams I plug into?"
+gold = ["corpus-engine/src/extractors", "corpus-engine/src/registry.rs"]
+
+# ------------------------------------------------------------------- purpose
+
+[[question]]
+id = "P01"
+shape = "purpose"
+text = "What does the update module do?"
+gold = ["corpus-engine/src/update"]
+
+[[question]]
+id = "P02"
+shape = "purpose"
+text = "What is the meta-atlas for?"
+gold = ["corpus-engine/src/meta_atlas"]
+
+[[question]]
+id = "P03"
+shape = "purpose"
+text = "What does the harness module provide?"
+gold = ["corpus-engine/src/harness"]
+
+[[question]]
+id = "P04"
+shape = "purpose"
+text = "What lives in the engine module?"
+gold = ["corpus-engine/src/engine"]
+
+[[question]]
+id = "P05"
+shape = "purpose"
+text = "What is the asset store?"
+gold = ["corpus-engine/src/asset_store"]
+
+[[question]]
+id = "P06"
+shape = "purpose"
+text = "What does the atlas_traversal module do?"
+gold = ["corpus-engine/src/atlas_traversal"]
+
+[[question]]
+id = "P07"
+shape = "purpose"
+text = "What does corpus-engine as a whole do?"
+gold = ["corpus-engine"]
+
+[[question]]
+id = "P08"
+shape = "purpose"
+text = "What are the filters for?"
+gold = ["corpus-engine/src/filters"]
+
+# ------------------------------------- guardrail (pointed, conceptual→symbol)
+# Gold at file granularity; symbol + line recorded for the audit trail.
+# The G2 gate metric is the rank of the gold file in arm C vs arm A.
+
+[[question]]
+id = "G01"
+shape = "guardrail"
+text = "After I edit one source file, which function refreshes just that file's entries in the search index?"
+gold = ["corpus-engine/src/engine/reindex.rs"]
+symbol = "reindex_file"
+line = 59
+
+[[question]]
+id = "G02"
+shape = "guardrail"
+text = "A function's summary has to be found and replaced when its body changes — what makes the stable key that allows that?"
+gold = ["corpus-engine/src/enrichment/code_intel/store.rs"]
+symbol = "symbol_source_key"
+line = 45
+
+[[question]]
+id = "G03"
+shape = "guardrail"
+text = "What makes sure only the functions whose bodies actually changed get re-summarized after a commit?"
+gold = ["corpus-engine/src/enrichment/code_intel/mod.rs"]
+symbol = "enrich_symbols_incremental"
+line = 352
+
+[[question]]
+id = "G04"
+shape = "guardrail"
+text = "Which function gathers the stored text pieces back together per original source document?"
+gold = ["corpus-engine/src/index/read.rs"]
+symbol = "group_chunks_by_source_doc"
+line = 561
+
+[[question]]
+id = "G05"
+shape = "guardrail"
+text = "Which function is the entry point that takes a configured source and builds a corpus from it end to end?"
+gold = ["corpus-engine/src/engine/ingest.rs"]
+symbol = "ingest"
+line = 42
+
+[[question]]
+id = "G06"
+shape = "guardrail"
+text = "Which function decides the exact text that gets embedded for a code summary?"
+gold = ["corpus-engine/src/enrichment/code_intel/store.rs"]
+symbol = "render_for_index"
+line = 57
+
+[[question]]
+id = "G07"
+shape = "guardrail"
+text = "Which function finds stored chunks that are exact duplicates of each other and marks them for removal?"
+gold = ["corpus-engine/src/index/write.rs"]
+symbol = "dedupe_by_content_hash"
+line = 454
+
+[[question]]
+id = "G08"
+shape = "guardrail"
+text = "Which function breaks a document apart at its section headings?"
+gold = ["corpus-engine/src/chunkers/semantic.rs"]
+symbol = "split_at_headings"
+line = 136
+
+[[question]]
+id = "G09"
+shape = "guardrail"
+text = "Imported ChatGPT conversations carry private-use placeholder characters — which function strips them out?"
+gold = ["corpus-engine/src/extractors/chatgpt_export.rs"]
+symbol = "clean_markers"
+line = 370
+
+[[question]]
+id = "G10"
+shape = "guardrail"
+text = "Where does an enrichment run's resume-state file path come from?"
+gold = ["corpus-engine/src/enrichment/checkpoint.rs"]
+symbol = "checkpoint"
+line = 1
+
+# -------------------------------------------- negative controls (out of scope)
+# Answers live OUTSIDE corpus-engine/. gold is empty; answer_hint is for the
+# auditor only and must never reach the retrieval pool or prompts.
+
+[[question]]
+id = "X01"
+shape = "negative"
+text = "Where is the gossip protocol that spreads notes between machines on the mesh?"
+gold = []
+answer_hint = "svrnmesh / sovereign mesh crates — not corpus-engine"
+
+[[question]]
+id = "X02"
+shape = "negative"
+text = "Which code picks which machine on the mesh should serve an inference request?"
+gold = []
+answer_hint = "sovereign-mesh peer_inference (select_route) — not corpus-engine"
+
+[[question]]
+id = "X03"
+shape = "negative"
+text = "Where does the desktop app start and supervise the background daemon as a child process?"
+gold = []
+answer_hint = "desktop daemon-lifecycle code — not corpus-engine"
+
+[[question]]
+id = "X04"
+shape = "negative"
+text = "Where is speculative multi-token decoding implemented?"
+gold = []
+answer_hint = "commonwealth inference / MTP session code — not corpus-engine"
+
+[[question]]
+id = "X05"
+shape = "negative"
+text = "Which code runs the chat loop that lets the assistant call tools mid-conversation?"
+gold = []
+answer_hint = "sovereign-cli-llm chat_cmd — not corpus-engine"
