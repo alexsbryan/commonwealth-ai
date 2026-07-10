@@ -35,8 +35,8 @@
 #
 # Output (visible on host):
 #   target/<triple>/release/bundle/
-#     dmg/Sovereign_<ver>_<arch>.dmg
-#     macos/Sovereign.app.tar.gz[.sig]
+#     dmg/svrnmesh_<ver>_<arch>.dmg
+#     macos/svrnmesh.app.tar.gz[.sig]
 
 set -euo pipefail
 
@@ -152,6 +152,9 @@ mkdir -p "$BIN_DIR"
 
 stage_tesseract_for() {
     local triple="$1"
+    # A prior staging copies brew's read-only mode (r-xr-xr-x) onto the dest,
+    # so a plain cp over it fails with "Permission denied" — remove first.
+    rm -f "$BIN_DIR/tesseract-$triple"
     cp "$(brew --prefix tesseract)/bin/tesseract" "$BIN_DIR/tesseract-$triple"
     log "  Staged tesseract for $triple"
 }
@@ -198,7 +201,13 @@ set +e
 BUILD_RC=$?
 set -e
 
-APP="$OUT_DIR/macos/Sovereign.app"
+# Tauri names the bundle after productName in tauri.conf.json ("svrnmesh"
+# since the 2026-06-29 rename). Glob instead of hardcoding so a rename can't
+# silently disable the TCC fallback below (which is exactly what happened
+# for desktop-v0.1.19: the old "Sovereign.app" path made a Finder-denied DMG
+# step look like a compile failure).
+APP="$(find "$OUT_DIR/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+APP_NAME="$(basename "${APP:-svrnmesh.app}" .app)"
 
 if (( BUILD_RC != 0 )); then
     # The most common LOCAL failure is the DMG cosmetic step, NOT the build.
@@ -216,7 +225,7 @@ if (( BUILD_RC != 0 )); then
     # drag-to-install image; it just lacks the background picture). A genuine
     # compile/link failure leaves no .app, and we re-raise the original exit
     # code instead of masking it.
-    if [[ -d "$APP" ]] && ! ls "$OUT_DIR"/dmg/*.dmg >/dev/null 2>&1; then
+    if [[ -n "$APP" && -d "$APP" ]] && ! ls "$OUT_DIR"/dmg/*.dmg >/dev/null 2>&1; then
         if osascript -e 'tell application "Finder" to count windows' >/dev/null 2>&1; then
             log "Tauri DMG step failed though Finder IS scriptable here — packaging via hdiutil anyway. Check the cargo output above for the underlying cause."
         else
@@ -229,14 +238,14 @@ if (( BUILD_RC != 0 )); then
             *)                    ARCH_SUFFIX="$(uname -m)" ;;
         esac
         (( UNIVERSAL )) && ARCH_SUFFIX=universal
-        DMG_OUT="$OUT_DIR/dmg/Sovereign_${VERSION}_${ARCH_SUFFIX}.dmg"
+        DMG_OUT="$OUT_DIR/dmg/${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.dmg"
         rm -f "$OUT_DIR"/macos/rw.*.dmg   # create-dmg's leftover read-write scratch image
         STAGE="$(mktemp -d /tmp/sovereign-dmg.XXXXXX)"
-        ditto "$APP" "$STAGE/Sovereign.app"        # ditto preserves the ad-hoc signature
+        ditto "$APP" "$STAGE/$APP_NAME.app"        # ditto preserves the ad-hoc signature
         ln -s /Applications "$STAGE/Applications"   # drag-to-install target
         mkdir -p "$OUT_DIR/dmg"
         rm -f "$DMG_OUT"
-        hdiutil create -volname "Sovereign" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
+        hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
         rm -rf "$STAGE"
         log "DMG built via hdiutil fallback: $DMG_OUT"
     else
@@ -260,6 +269,6 @@ Sharing with friends:
   This build is ad-hoc signed (runs on Apple Silicon) but NOT notarized,
   so macOS Gatekeeper warns on first launch. Tell recipients to either:
     • right-click the app → Open → Open, or
-    • run once:  xattr -dr com.apple.quarantine /Applications/Sovereign.app
+    • run once:  xattr -dr com.apple.quarantine /Applications/svrnmesh.app
   (A Developer ID + notarization removes this — see RELEASING.md Phase 2.)
 EOF
