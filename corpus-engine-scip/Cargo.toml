@@ -52,7 +52,7 @@ fs4 = "0.12"
 # Exporter discovery: `which::which("rust-analyzer")`, glob walks for
 # detecting language presence in a workspace, and tempfile for the
 # rust-analyzer config-file argument.
-which = "7"
+which = "8"
 glob = "0.3"
 tempfile = "3"
 
