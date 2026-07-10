@@ -410,7 +410,10 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
             String::new()
         };
 
-        if !url.is_empty() && !title.is_empty() && seen.insert(url.clone()) {
+        // Absolute-URL guard (the Lite parser below already has it): the
+        // html.duckduckgo.com markup contains relative hrefs like the form
+        // action "/html/", which leaked into results as a source URL.
+        if url.starts_with("http") && !title.is_empty() && seen.insert(url.clone()) {
             results.push(SearchResult {
                 title: html_decode(&title),
                 url,
