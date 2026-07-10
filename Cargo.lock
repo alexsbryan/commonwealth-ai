@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-agent-tools"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "proc-macro2",
@@ -1898,7 +1898,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-api"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1942,7 +1942,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-app"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "bytes",
  "commonwealth-core",
@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-core"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "getrandom 0.3.4",
@@ -1971,7 +1971,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-daemon"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -1994,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-discovery"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "blake3",
  "commonwealth-core",
@@ -2013,7 +2013,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-inference"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "axum",
@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-knowledge"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2052,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-state"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "bytes",
  "commonwealth-core",
@@ -2066,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-tdd"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "commonwealth-agent-tools",
@@ -2083,7 +2083,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-test-harness"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "axum",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-transport"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "commonwealth-core",
@@ -2386,7 +2386,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-archaeology"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "chrono",
  "regex",
@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-atos"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "chrono",
  "pulldown-cmark",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-notes"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "chrono",
  "clap",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-scip"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "chrono",
  "fs4 0.12.0",
@@ -11930,7 +11930,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-agent-bench"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -11955,7 +11955,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-atos"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "bytes",
@@ -11978,7 +11978,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-authoring-harness"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "corpus-engine",
  "serde",
@@ -11988,7 +11988,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12026,7 +12026,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-daemon"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12069,7 +12069,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-dev"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12111,7 +12111,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-llm"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12163,7 +12163,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-shared"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "corpus-engine",
  "corpus-engine-scip",
@@ -12177,7 +12177,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-contracts"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "chrono",
@@ -12197,7 +12197,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-core"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "chrono",
@@ -12226,7 +12226,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-desktop"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12276,7 +12276,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-eval"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12301,7 +12301,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-inference"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -12329,7 +12329,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-mesh"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12385,7 +12385,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-meshapp"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "chrono",
  "corpus-engine",
@@ -12398,7 +12398,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-pipeline"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12434,7 +12434,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-server"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12471,7 +12471,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-store"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "chrono",
@@ -12506,7 +12506,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-tools"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "arrow",
@@ -12597,7 +12597,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-work-atlas"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "arc-swap",
  "async-trait",
