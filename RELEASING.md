@@ -148,9 +148,10 @@ git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
 # → desktop-release.yml → promote the draft after smoke-testing an installer
 ```
 
-No CI (or no Intel runner)? The whole macOS + Linux matrix can be built and
-uploaded from one arm64 Mac with `scripts/release-desktop-local.sh` — see
-"Full local release from the arm64 Mac" in the desktop RELEASING.md.
+No CI (or no Intel runner)? The whole four-platform matrix — macOS both
+arches, Linux, and Windows (containerized cargo-xwin + NSIS) — can be built
+and uploaded from one arm64 Mac with `scripts/release-desktop-local.sh` —
+see "Full local release from the arm64 Mac" in the desktop RELEASING.md.
 
 ---
 

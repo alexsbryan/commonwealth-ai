@@ -17,6 +17,14 @@
 /.npm-container-modules/
 /.tauri-cache-container/
 
+# Windows containerized cross-build (scripts/build-desktop-windows.sh):
+# same isolation pattern, plus cargo-xwin's MSVC CRT/SDK download cache.
+/target-container-windows/
+/.cargo-container-windows/
+/.npm-container-modules-windows/
+/.xwin-container/
+/.ort-cache-container/
+
 # Windows cross-compile gate (scripts/windows-crosscheck.sh) uses a separate
 # CARGO_TARGET_DIR so the windows-msvc build doesn't stomp the host target/.
 # Unanchored so it's ignored wherever it lands. All regenerable build output.

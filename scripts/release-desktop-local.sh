@@ -34,14 +34,15 @@ cd "$REPO_ROOT"
 log()  { printf '\n[release-desktop-local] %s\n' "$*"; }
 die()  { log "ERROR: $*"; exit 1; }
 
-SKIP_MACOS_ARM=0 SKIP_MACOS_INTEL=0 SKIP_LINUX=0 NO_UPLOAD=0 UPLOAD_ONLY=0
+SKIP_MACOS_ARM=0 SKIP_MACOS_INTEL=0 SKIP_LINUX=0 SKIP_WINDOWS=0 NO_UPLOAD=0 UPLOAD_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --skip-macos-arm)   SKIP_MACOS_ARM=1 ;;
         --skip-macos-intel) SKIP_MACOS_INTEL=1 ;;
         --skip-linux)       SKIP_LINUX=1 ;;
+        --skip-windows)     SKIP_WINDOWS=1 ;;
         --no-upload)        NO_UPLOAD=1 ;;
-        --upload-only)      UPLOAD_ONLY=1; SKIP_MACOS_ARM=1; SKIP_MACOS_INTEL=1; SKIP_LINUX=1 ;;
+        --upload-only)      UPLOAD_ONLY=1; SKIP_MACOS_ARM=1; SKIP_MACOS_INTEL=1; SKIP_LINUX=1; SKIP_WINDOWS=1 ;;
         *) die "unknown flag: $arg" ;;
     esac
 done
@@ -79,7 +80,7 @@ if ! (( NO_UPLOAD )); then
         || die "release $TAG does not exist. Create it first: gh release create $TAG --draft --title \"$TAG\""
 fi
 
-if ! (( SKIP_LINUX )); then
+if ! (( SKIP_LINUX && SKIP_WINDOWS )); then
     podman machine inspect --format '{{.Resources.Memory}}' >/dev/null 2>&1 \
         || die "no podman machine. One-time setup: podman machine init --cpus 8 --memory 24576 --disk-size 120 && podman machine start"
     MEM="$(podman machine inspect --format '{{.Resources.Memory}}')"
@@ -91,14 +92,16 @@ FREE_GB="$(df -g "$REPO_ROOT" | awk 'NR==2 {print $4}')"
 (( FREE_GB >= 40 )) || log "WARNING: only ${FREE_GB}GB free. A cold three-leg build wants ~40GB+; an ENOSPC mid-build corrupts the podman VM (recreate it if that happens)."
 
 # ─── Build legs (sequential: shared cargo caches + disk headroom) ─────
-(( SKIP_MACOS_ARM ))   || { log "[1/3] macOS aarch64..."; scripts/build-desktop-macos.sh --target aarch64-apple-darwin; }
-(( SKIP_MACOS_INTEL )) || { log "[2/3] macOS x86_64 (cross)..."; scripts/build-desktop-macos.sh --target x86_64-apple-darwin; }
-(( SKIP_LINUX ))       || { log "[3/3] Linux x86_64 (podman)..."; scripts/build-desktop-linux.sh; }
+(( SKIP_MACOS_ARM ))   || { log "[1/4] macOS aarch64..."; scripts/build-desktop-macos.sh --target aarch64-apple-darwin; }
+(( SKIP_MACOS_INTEL )) || { log "[2/4] macOS x86_64 (cross)..."; scripts/build-desktop-macos.sh --target x86_64-apple-darwin; }
+(( SKIP_LINUX ))       || { log "[3/4] Linux x86_64 (podman)..."; scripts/build-desktop-linux.sh; }
+(( SKIP_WINDOWS ))     || { log "[4/4] Windows x86_64 (podman, cargo-xwin)..."; scripts/build-desktop-windows.sh; }
 
 # ─── Collect + verify ─────────────────────────────────────────────────
 MAC_ARM=target/aarch64-apple-darwin/release/bundle
 MAC_X64=target/x86_64-apple-darwin/release/bundle
 LINUX=target-container-linux/x86_64-unknown-linux-gnu/release/bundle
+WINDOWS=target-container-windows/x86_64-pc-windows-msvc/release/bundle
 
 ASSETS=(
     "$MAC_ARM/dmg/svrnmesh_${VERSION}_aarch64.dmg"
@@ -111,6 +114,8 @@ ASSETS=(
     "$LINUX/appimage/svrnmesh_${VERSION}_amd64.AppImage.sig"
     "$LINUX/deb/svrnmesh_${VERSION}_amd64.deb"
     "$LINUX/rpm/svrnmesh-${VERSION}-1.x86_64.rpm"
+    "$WINDOWS/nsis/svrnmesh_${VERSION}_x64-setup.exe"
+    "$WINDOWS/nsis/svrnmesh_${VERSION}_x64-setup.exe.sig"
 )
 
 log "Verifying assets..."

@@ -167,10 +167,10 @@ CI-only failure — the user-facing version didn't change.
 
 When CI isn't an option (the Intel self-hosted runner is offline, Actions
 is down, or you just want to ship from your desk), the entire
-macOS + Linux release can be cut from a single Apple Silicon machine.
-First done for desktop-v0.1.19 (2026-07-10, commit `b440eac3`); Windows is
-the one leg this path can't produce (see `scripts/build-desktop-windows.sh`
-/ the CI matrix for that).
+four-platform release — macOS both arches, Linux, AND Windows — can be
+cut from a single Apple Silicon machine. First done for desktop-v0.1.19
+(2026-07-10): macOS + Linux in commit `b440eac3`, Windows the same day via
+the containerized cargo-xwin leg.
 
 ```sh
 # after the usual bump + tag + draft-release creation:
@@ -204,7 +204,8 @@ on disk.
 |-----|--------|--------|
 | macOS arm64 | `build-desktop-macos.sh --target aarch64-apple-darwin` | `target/aarch64-apple-darwin/release/bundle/{dmg,macos}/` — DMG + arch-qualified updater `.app.tar.gz(.sig)` |
 | macOS x86_64 | `build-desktop-macos.sh --target x86_64-apple-darwin` | same shape under `target/x86_64-apple-darwin/` |
-| Linux x86_64 | `build-desktop-linux.sh` (podman) | `target-container-linux/.../bundle/{appimage,deb,rpm}/` |
+| Linux x86_64 | `build-desktop-linux.sh` (podman, Rosetta-emulated amd64) | `target-container-linux/.../bundle/{appimage,deb,rpm}/` |
+| Windows x86_64 | `build-desktop-windows.sh` (podman, **native arm64** — cargo-xwin cross-compiles, so no emulation tax) | `target-container-windows/.../bundle/nsis/` — NSIS `-setup.exe(.sig)`. NSIS only; `.msi`/WiX is Windows-only tooling |
 
 **The traps are already handled** — each build script self-recovers and
 its comments explain why. For orientation when something new breaks:
@@ -218,9 +219,24 @@ its comments explain why. For orientation when something new breaks:
 | host `npm run build` breaks after a Linux build | container `npm ci` used to stomp `node_modules`; now shadowed by `.npm-container-modules/` mount |
 | `cc1plus … Killed` in ggml-vulkan | podman VM under-memoried; needs ≥16 GiB (24 GiB recommended) |
 | podman "creating overlay mount … input/output error" | VM storage corrupted by host ENOSPC; `podman machine rm -f && init` (sizes above) |
+| *(Windows)* `STL1000: Unexpected compiler version` | xwin's MSVC CRT / msvc-sysroot STL demand a newer clang than distro llvm; the image installs the apt.llvm.org snapshot (see Containerfile.windows-build) |
+| *(Windows)* cargo-xwin "failed to symlink … File exists" | stale per-run symlinks in the persistent `.xwin-container/` cache after an image rebuild; entrypoint clears them every run |
+| *(Windows)* `cannot use 'throw' with exceptions disabled` / `undefined symbol: __std_max_element_4i` | cargo-xwin's C++ flags lack `/EHsc` and mix bleeding-edge msstl headers with the older xwin CRT's `msvcprt.lib`; entrypoint forces a unified xwin-CRT CXXFLAGS set via cargo `[env]` (a plain export is clobbered by cargo-xwin) |
+| *(Windows)* aws-lc-sys "NASM command not found" | nasm is in the image; the MSVC asm path needs it |
+| *(Windows)* `could not find native static library onnxruntime` on a rerun | ort-sys extracts pyke's prebuilt into `/root/.cache/ort.pyke.io` and cargo caches that path; persisted via the `.ort-cache-container/` mount |
+| *(Windows)* llama cmake dies on a `C:\Temp/llcb/…` path | llama-cpp-sys-4's MAX_PATH workaround keys off the TARGET; `LOCALAPPDATA=/tmp` in the entrypoint redirects it to a valid host path |
+| *(Windows)* `undefined symbol: RegOpenKeyExA` at llama's cmake link | xwin's toolchain file deliberately empties CMake's standard libraries and its libpaths miss the compiler-ID try-link; the entrypoint's wrapper toolchain (`sovereign-windows-toolchain.cmake`) restores both |
+| *(Windows)* tauri-cli panics "Can't detect any appindicator library" | host-side detection that runs on Linux regardless of target; `libayatana-appindicator3-dev` is in the image |
 
 The mac legs are **not notarized** (ad-hoc signed) — same as CI; recipients
-clear Gatekeeper once, and the auto-updater doesn't care.
+clear Gatekeeper once, and the auto-updater doesn't care. The Windows
+installer likewise has no Authenticode signature (SmartScreen will warn) —
+same as the CI leg would produce; Phase 2 covers both.
+
+**Windows caveat:** this leg cross-compiles and cross-bundles — the exe
+never executes during the build. Smoke-test the installer on a real
+Windows machine (or VM) before publishing a release whose Windows asset
+came from this path.
 
 ---
 
