@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Build the TAG when called by release.yml's bump flow (the run's
           # own SHA predates the bump commit). Empty on tag pushes → default.
@@ -156,7 +156,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Build the TAG when called by release.yml's bump flow (the run's
           # own SHA predates the bump commit). Empty on tag pushes → default.
@@ -205,7 +205,7 @@ jobs:
       # regardless of cargo profile). Windows uses a LOCALAPPDATA path
       # instead of this dir; the steps are harmless no-ops there.
       - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -220,7 +220,7 @@ jobs:
         run: cargo install tauri-cli --version "^2.0.0" --locked
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
@@ -466,7 +466,7 @@ jobs:
           ls -la "$BUNDLE"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.platform.name }}
           # Cargo's workspace target dir is at the repo root (single workspace,
@@ -500,7 +500,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Build the TAG when called by release.yml's bump flow (the run's
           # own SHA predates the bump commit). Empty on tag pushes → default.
@@ -536,7 +536,7 @@ jobs:
 
       - name: Download all build artifacts
         if: steps.resolve.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -566,7 +566,7 @@ jobs:
 
       - name: Publish draft release
         if: steps.resolve.outputs.skip != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.resolve.outputs.tag }}
           name: Sovereign Desktop ${{ steps.resolve.outputs.tag }}

@@ -81,7 +81,7 @@ jobs:
           #   target: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # When called by release.yml AFTER its bump job pushed the tag, the
           # run's own SHA predates the bump — build the TAG, not the dispatch
@@ -139,7 +139,7 @@ jobs:
       # C++ built by main's CI runs. (Windows uses a LOCALAPPDATA path
       # instead of this dir; the steps are harmless no-ops there.)
       - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target/llama-cmake-cache
           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
@@ -217,7 +217,7 @@ jobs:
           ( cd dist && shasum -a 256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
           ls -la dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sovereign-${{ matrix.platform.target }}
           path: |
@@ -237,7 +237,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true # flatten all platform artifacts into dist/
@@ -279,7 +279,7 @@ jobs:
 
       - name: Publish draft release
         if: steps.tag.outputs.skip != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true # publish manually after a smoke test, per desktop-release
           tag_name: ${{ steps.tag.outputs.tag }}
