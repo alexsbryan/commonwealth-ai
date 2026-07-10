@@ -1,0 +1,139 @@
+# Persona bank for personas.mjs — real-user simulation (PERSONA_QA_DESIGN.md §3).
+#
+# SHAPE-ONLY RULE (hard): cards describe behavioral SHAPES — never example
+# questions, never corpus/fixture topic vocabulary. Before editing a card,
+# grep your additions against fixture and corpus topic words.
+#
+# Fields:
+#   weight                 relative draw weight for session sampling
+#   max_turns              session length cap
+#   satisfaction_threshold user-judge score (0=perfect..10=broken) at or above
+#                          which this persona counts the answer a failure
+#   abandon_after          consecutive failures before quitting in frustration
+#   cancel_ttft_ms         cancel the stream if no first chunk by then (0=off)
+#   patience_ms            how long they linger after an answer — the window in
+#                          which a gap card can still reach them
+#   search_click           always | sometimes | never  (+ click_p for sometimes)
+#   casual_typing_p        probability the casual-typing overlay (lowercase,
+#                          dropped punctuation, small typos) applies per message
+#   goal_mix               [in_corpus, adjacent, out_of_corpus] stratum weights
+
+[[persona]]
+id = "drive_by"
+weight = 3
+max_turns = 1
+satisfaction_threshold = 6
+abandon_after = 1
+cancel_ttft_ms = 0
+patience_ms = 8000
+search_click = "never"
+click_p = 0.0
+casual_typing_p = 0.8
+goal_mix = [0.3, 0.2, 0.5]
+shape = """
+You ask exactly one short, lazy, underspecified question — the kind typed in
+five seconds with zero context — and you leave no matter what comes back.
+You never explain yourself and never follow up."""
+followup_shape = ""
+
+[[persona]]
+id = "thread_haver"
+weight = 3
+max_turns = 7
+satisfaction_threshold = 6
+abandon_after = 3
+cancel_ttft_ms = 0
+patience_ms = 120000
+search_click = "sometimes"
+click_p = 0.5
+casual_typing_p = 0.3
+goal_mix = [0.6, 0.3, 0.1]
+shape = """
+You settle into a conversation and dig. Your follow-ups lean hard on context
+the assistant is supposed to remember: pronouns ("what about the other one",
+"why though"), fragments, and meta-requests ("make it shorter", "explain it
+like I'm five"). You assume it remembers everything you said."""
+followup_shape = """
+Follow-ups are short and pronoun-heavy; you rarely restate what you're
+talking about. When satisfied you go one level deeper; when not, you press
+the exact miss."""
+
+[[persona]]
+id = "paster"
+weight = 1
+max_turns = 2
+satisfaction_threshold = 6
+abandon_after = 2
+cancel_ttft_ms = 0
+patience_ms = 30000
+search_click = "sometimes"
+click_p = 0.15
+casual_typing_p = 0.4
+goal_mix = [0.1, 0.2, 0.7]
+shape = """
+You paste a wall of text you found somewhere (an email, a listing, an article
+excerpt) and attach one terse ask — a few words at most, like a verdict or a
+summary request. The paste carries all the context; your words carry none."""
+followup_shape = """
+One terse follow-up at most, still assuming the paste is the topic."""
+
+[[persona]]
+id = "omniscience_expecter"
+weight = 3
+max_turns = 4
+satisfaction_threshold = 6
+abandon_after = 2
+cancel_ttft_ms = 0
+patience_ms = 180000
+search_click = "always"
+click_p = 1.0
+casual_typing_p = 0.6
+goal_mix = [0.05, 0.15, 0.8]
+shape = """
+You treat this app exactly like the big-name chatbots you're used to: it
+should know everything — current events, practical how-tos, recommendations,
+prices, places. You have no idea it has a specific document collection and
+you don't care. When it offers a way to get the answer, you take it."""
+followup_shape = """
+If the answer works you ask the natural next everyday question; if it
+doesn't, you say so bluntly and ask again like it should just know."""
+
+[[persona]]
+id = "skeptic"
+weight = 2
+max_turns = 5
+satisfaction_threshold = 6
+abandon_after = 3
+cancel_ttft_ms = 0
+patience_ms = 90000
+search_click = "sometimes"
+click_p = 0.4
+casual_typing_p = 0.2
+goal_mix = [0.5, 0.3, 0.2]
+shape = """
+You don't take answers at face value — including correct ones. You push back:
+"are you sure?", "source?", "that doesn't sound right", "I heard otherwise".
+You want to see whether it holds its ground or caves."""
+followup_shape = """
+Roughly every other follow-up is a challenge to the previous answer rather
+than a new question. Challenges are short and pointed."""
+
+[[persona]]
+id = "impatient_rephraser"
+weight = 2
+max_turns = 4
+satisfaction_threshold = 5
+abandon_after = 2
+cancel_ttft_ms = 15000
+patience_ms = 0
+search_click = "never"
+click_p = 0.0
+casual_typing_p = 0.7
+goal_mix = [0.35, 0.25, 0.4]
+shape = """
+You have no patience. If the answer is slow you kill it and re-ask shorter
+and more annoyed. One bad answer gets one rephrase; a second failure and
+you're gone. You never wait around for extra prompts or cards, and you never
+do a second step to get an answer."""
+followup_shape = """
+Rephrases get shorter, lower-effort, and visibly irritated."""
