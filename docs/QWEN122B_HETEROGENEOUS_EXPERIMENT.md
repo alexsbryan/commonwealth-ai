@@ -142,13 +142,15 @@ the first request (cache warm-up). Report cold-load once.
 Build the small tool the SHARED_MODEL gate named as missing (`mtp-probe.sh` is
 MTP-local; `rpc-distributed-e2e.sh` proves the chain but measures no t/s). It streams a
 fixed completion against `/v1/chat/completions`, parses the SSE stream, and emits
-**TTFT + steady-state decode t/s + inter-token p50/p95**, plus it samples each node's
-RSS (over the mesh status / a simple `ssh rocm-smi` + `metal` readout). One JSON line
-per run so the results table is mechanical to fill.
+**TTFT + steady-state decode t/s + inter-token p50/p95**. One JSON line per run so the
+results table is mechanical to fill. **Built & validated 2026-07-09** —
+`scripts/throughput_probe.py`, stdlib-only, streaming SSE, endpoint-agnostic (point
+`--url` at the daemon or a raw `llama-server`).
 
-First-pass fallback before the probe exists: `llama-server` prints eval timing per
-response, and the Sovereign path logs its own — enough for a rough A0 vs B1 read, but
-not for per-node RSS or clean p95.
+Per-node memory is read **out-of-band** (`free` / `rocm-smi` / Metal counters), not by
+the probe — on Vulkan unified memory the model is GPU-allocated and does *not* show in
+process RSS (see the A0 memory note). Known gap: prefill t/s needs the stream `usage`
+block, which our server doesn't emit yet.
 
 ## Controls & confounds
 
@@ -200,17 +202,26 @@ down (see Risks).
 
 ## Results (fill in)
 
-_Model: Qwen3.5-122B-A10B-UD-Q5_K_XL (86 GB) · ctx 8192 · greedy · N=5 median [min,max]_
+_Model: Qwen3.5-122B-A10B-UD-Q5_K_XL (86 GB) · ctx 32768 · greedy · N=5 median [min,max]_
 _Link: ____ · RTT ____ ms · iperf3 ____ Gbit/s_
+_Probe: `scripts/throughput_probe.py --trials 5 --warmup 1 --max-tokens 256`_
 
 | Arm | Cold load (s) | Seed (s) | TTFT (ms) | Prefill t/s @512 | Decode t/s | ITL p95 (ms) | Strix RSS | Mac RSS | Out == solo? |
 |---|---|---|---|---|---|---|---|---|---|
-| A0 solo Strix | | — | | | | | | — | (ref) |
+| A0 solo Strix | 110 | — | 895 | n/a | **19.34** [19.0, 19.9] | 53.7 | ~86 GB (sys 122 GiB) | — | (ref) |
 | B1 dist ~70/30 | | | | | | | | | |
 | B2 Mac 10 % | | | | | | | | | |
 | B2 Mac 25 % | | | | | | | | | |
 | B2 Mac 40 % | | | | | | | | | |
 | B3 native ctrl | | | | | | | | | |
+
+**A0 recorded 2026-07-09.** Notes: *Prefill t/s is n/a* — our SSE stream omits `usage`,
+so live prompt-token count isn't available (fix: honour `include_usage`, or read tokens
+from the daemon log). *Memory* — on Vulkan unified memory the weights are GPU-allocated,
+**not** in process RSS (daemon RSS was 1.4 GB); residency shows in system `free`
+(~122 GiB used with the 122B loaded — the box is near-full solo at this quant). For the
+B arms, read each node's share via `free` / `rocm-smi` / Metal counters, **not** process
+RSS. Cold load was ~110 s (the 86 GB); warm TTFT ~0.9 s.
 
 ## Success criteria & the decision it feeds
 
@@ -257,3 +268,10 @@ _Link: ____ · RTT ____ ms · iperf3 ____ Gbit/s_
   absent). Models on disk: UD-Q5_K_XL (86 GB, primary) / Q6_K (95 GB). Next: build the
   throughput probe, then run A0 → B1 → sweep. Experiment 2 (oversized model) deferred
   until Exp 1 clears.
+- **2026-07-09** — Built `scripts/throughput_probe.py` (streaming TTFT + decode t/s +
+  ITL p50/p95, JSON row); validated on the 9B, then swapped the daemon primary to
+  Qwen-122B-Q5_K_XL and recorded **A0 = 19.34 t/s decode** [19.0, 19.9], TTFT 895 ms,
+  ITL p95 53.7 ms, ctx 32768, greedy-deterministic. Cold load ~110 s; box ~122 GiB used
+  (near-full solo). Config backed up (`config.toml.bak-preqwen122b-*`); 122B left as
+  primary for B1. Learnings: process RSS ≠ residency on Vulkan unified mem (read `free`);
+  server omits stream `usage` (prefill t/s blocked). Next: BeefyMac worker → B1.
