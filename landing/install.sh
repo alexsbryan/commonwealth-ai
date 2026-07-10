@@ -37,7 +37,7 @@ case "$os" in
   Darwin)
     case "$arch" in
       arm64 | aarch64) target="aarch64-apple-darwin" ;;
-      x86_64) err "no prebuilt for Intel macOS yet — build from source: https://github.com/$REPO" ;;
+      x86_64) target="x86_64-apple-darwin" ;;
       *) err "no prebuilt for macOS/$arch — build from source: https://github.com/$REPO" ;;
     esac
     ;;
