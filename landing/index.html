@@ -7,15 +7,15 @@
 <meta name="theme-color" content="#1a0f3a"/>
 
 <title>svrn ai</title>
-<meta name="description" content="Sovereign is a local AI assistant. The model lives on your computer. Coming soon — sign up to be notified."/>
+<meta name="description" content="Sovereign is a local AI assistant. The model lives on your computer. Download the desktop app for macOS, Linux, or Windows — or install the CLI with one line."/>
 
 <meta property="og:type" content="website"/>
 <meta property="og:title" content="Sovereign — the model runs on your machine"/>
-<meta property="og:description" content="A local AI assistant. The model lives on your computer. Your conversations stay on your computer. Coming soon."/>
+<meta property="og:description" content="A local AI assistant. The model lives on your computer. Your conversations stay on your computer. Out now for macOS, Linux, and Windows."/>
 <meta property="og:site_name" content="Sovereign"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="Sovereign — the model runs on your machine"/>
-<meta name="twitter:description" content="A local AI assistant. The model lives on your computer. Coming soon."/>
+<meta name="twitter:description" content="A local AI assistant. The model lives on your computer. Out now for macOS, Linux, and Windows."/>
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -74,6 +74,19 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 .sov-signup-status[data-state="ok"] { display: block; color: var(--sov-purple-deep); background: color-mix(in oklch, var(--sov-gold) 22%, var(--sov-paper)); border-color: var(--sov-gold-deep); }
 .sov-signup-status[data-state="err"] { display: block; color: oklch(0.32 0.12 25); background: oklch(0.96 0.02 25); border-color: oklch(0.62 0.14 25); }
 
+.sov-get { padding: 48px 36px 56px; border-top: 0.5px solid var(--sov-rule); background: var(--sov-paper); }
+.sov-get-title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 6px; color: var(--sov-ink); }
+.sov-get-version { font-size: 12px; color: var(--sov-ink-soft); margin: 0 0 26px; }
+.sov-get p { font-size: 13.5px; line-height: 1.7; color: var(--sov-ink); max-width: 640px; }
+.sov-term { display: flex; align-items: center; gap: 0; max-width: 640px; margin: 14px 0 8px; border-radius: var(--border-radius-md); overflow: hidden; border: 1px solid var(--sov-purple-deep); }
+.sov-term code { flex: 1; display: block; padding: 14px 16px; background: var(--sov-purple-night); color: var(--sov-gold); font-family: var(--sov-mono); font-size: 12.5px; white-space: nowrap; overflow-x: auto; }
+.sov-term-copy { all: unset; cursor: pointer; box-sizing: border-box; padding: 14px 18px; align-self: stretch; display: inline-flex; align-items: center; background: var(--sov-purple-deep); color: var(--sov-paper); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; transition: background 0.15s ease; }
+.sov-term-copy:hover { background: color-mix(in oklch, var(--sov-purple-deep) 80%, var(--sov-gold)); }
+.sov-dl-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 8px; max-width: 640px; }
+.sov-dl { text-decoration: none; font-family: var(--sov-mono); font-size: 12px; font-weight: 700; color: var(--sov-ink); border: 1px solid var(--sov-purple-deep); border-radius: var(--border-radius-md); padding: 11px 14px; background: var(--sov-paper); transition: background 0.15s ease, color 0.15s ease; }
+.sov-dl:hover { background: var(--sov-purple-deep); color: var(--sov-paper); }
+.sov-dl small { display: block; font-weight: 400; font-size: 10.5px; color: inherit; opacity: 0.65; margin-top: 2px; }
+.sov-get-fine { font-size: 11.5px; line-height: 1.7; color: var(--sov-ink-soft); max-width: 640px; }
 .sov-coda { padding: 64px 36px 36px; background: var(--sov-purple-night); color: oklch(0.78 0.04 80); position: relative; overflow: hidden; }
 .sov-coda-stars { position: absolute; inset: 0; pointer-events: none; opacity: 0.7; background-image: radial-gradient(1px 1px at 8% 18%, oklch(0.85 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 22% 38%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 38% 22%, oklch(0.85 0.10 80) 50%, transparent 51%), radial-gradient(1px 1px at 54% 68%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 71% 30%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 88% 56%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(1px 1px at 31% 84%, oklch(0.78 0.06 80) 50%, transparent 51%), radial-gradient(1px 1px at 64% 88%, oklch(0.75 0.04 290) 50%, transparent 51%), radial-gradient(2px 2px at 92% 14%, oklch(0.88 0.12 80) 50%, transparent 51%); animation: star-drift 18s ease-in-out infinite; }
 .sov-coda-text { position: relative; font-family: var(--sov-mono); font-size: 13px; line-height: 1.95; max-width: 50ch; color: oklch(0.78 0.04 80); letter-spacing: -0.005em; margin-bottom: 36px; }
@@ -115,7 +128,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 <span class="dot"></span>
 <span>sovereign</span>
 <span class="sep">·</span>
-<span>hacking away & coming soon</span>
+<span>hacking away · v0.1.19 is out</span>
 <span class="sep">·</span>
 <span>local or mesh</span>
 <span class="sep">·</span>
@@ -132,12 +145,39 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
   <button id="signup-submit" class="sov-signup-btn" type="submit">Tune in →</button>
 </form>
 <div id="signup-status" class="sov-signup-status" role="status" aria-live="polite"></div>
-<div class="sov-signup-note">We'll email you exactly once, when the desktop build and cli is ready to download. No drip. No newsletter.</div>
+<div class="sov-signup-note">It's ready — <a href="#get">grab it below</a>. The list is still worth joining: we'll email for the big releases only. No drip. No newsletter.</div>
 
 
 </section>
 
+<section class="sov-get" id="get">
+<h2 class="sov-get-title">Take it home</h2>
+<p class="sov-get-version">v<span id="dl-version">0.1.19</span> · macOS (both chips) · Linux · Windows</p>
 
+<p>The CLI installs with one line. Three binaries into <code>~/.local/bin</code>, checksum-verified, no sudo, nothing running you didn't start:</p>
+
+<div class="sov-term">
+<code id="install-cmd">curl -fsSL https://svrnme.sh/install.sh | sh</code>
+<button class="sov-term-copy" id="install-copy" type="button" aria-label="Copy install command">Copy</button>
+</div>
+
+<p>The desktop app is the same engine with a face. Pick your machine:</p>
+
+<!-- Version-free links: /download/<platform> is an edge redirect
+     (api/desktop/download.js) that resolves the newest desktop-v*
+     release at request time. Publishing a release updates these
+     without touching this page. -->
+<div class="sov-dl-grid" id="dl-grid">
+  <a class="sov-dl" href="/download/mac-arm">macOS<small>Apple Silicon · .dmg</small></a>
+  <a class="sov-dl" href="/download/mac-intel">macOS<small>Intel · .dmg</small></a>
+  <a class="sov-dl" href="/download/linux-appimage">Linux<small>.AppImage</small></a>
+  <a class="sov-dl" href="/download/linux-deb">Debian / Ubuntu<small>.deb</small></a>
+  <a class="sov-dl" href="/download/linux-rpm">Fedora<small>.rpm</small></a>
+  <a class="sov-dl" href="/download/windows">Windows<small>installer .exe</small></a>
+</div>
+
+<p class="sov-get-fine">The honest fine print: everything is signed for the auto-updater and checksummed, but the mac builds aren't notarized yet — so the first launch is right-click → Open, once. Windows will show a SmartScreen warning for the same reason: a missing certificate, not malice. Updates arrive on their own from this version forward, so with any luck this is the last installer you download by hand. Something broken? <a href="https://github.com/alexsbryan/commonwealth-ai/issues">Tell me</a> — be patient, be constructive, then demand the best.</p>
+</section>
 
 <section class="sov-coda">
 <div class="sov-coda-stars" aria-hidden="true"></div>
@@ -155,6 +195,29 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 
 <script>
 (function () {
+  // Copy button for the curl one-liner.
+  var copyBtn = document.getElementById('install-copy');
+  copyBtn.addEventListener('click', function () {
+    var cmd = document.getElementById('install-cmd').textContent;
+    navigator.clipboard.writeText(cmd).then(function () {
+      copyBtn.textContent = 'Copied';
+      setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1600);
+    });
+  });
+
+  // Progressive enhancement: the download links resolve server-side
+  // (/download/<platform> → newest desktop-v*), so only the version
+  // LABEL needs refreshing; the static text is the deploy-time fallback.
+  fetch('https://api.github.com/repos/alexsbryan/commonwealth-ai/releases?per_page=15')
+    .then(function (r) { return r.ok ? r.json() : []; })
+    .then(function (releases) {
+      var rel = (releases || []).find(function (r) {
+        return !r.draft && !r.prerelease && r.tag_name.indexOf('desktop-v') === 0;
+      });
+      if (rel) document.getElementById('dl-version').textContent = rel.tag_name.slice('desktop-v'.length);
+    })
+    .catch(function () { /* label stays at the deploy-time version */ });
+
   var form = document.getElementById('signup-form');
   var input = document.getElementById('signup-email');
   var btn = document.getElementById('signup-submit');

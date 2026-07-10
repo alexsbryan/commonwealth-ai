@@ -6,6 +6,10 @@
     {
       "source": "/api/desktop/updater/:target/:current_version",
       "destination": "/api/desktop/updater?target=:target&current_version=:current_version"
+    },
+    {
+      "source": "/download/:platform",
+      "destination": "/api/desktop/download?platform=:platform"
     }
   ],
   "headers": [
