@@ -163,6 +163,67 @@ CI-only failure — the user-facing version didn't change.
 
 ---
 
+## Full local release from the arm64 Mac (no CI)
+
+When CI isn't an option (the Intel self-hosted runner is offline, Actions
+is down, or you just want to ship from your desk), the entire
+macOS + Linux release can be cut from a single Apple Silicon machine.
+First done for desktop-v0.1.19 (2026-07-10, commit `b440eac3`); Windows is
+the one leg this path can't produce (see `scripts/build-desktop-windows.sh`
+/ the CI matrix for that).
+
+```sh
+# after the usual bump + tag + draft-release creation:
+gh release create desktop-v<ver> --draft --title "desktop-v<ver>"   # if CI didn't
+source ~/.zshrc     # provides TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD)
+scripts/release-desktop-local.sh
+```
+
+That driver sequences the three legs, verifies every artifact (including
+that each `.sig` was made by the key whose pubkey is embedded in
+`tauri.conf.json` — a wrong/empty signing env fails loudly instead of
+shipping unverifiable updates), uploads with `--clobber`, and prints the
+final asset listing. Useful flags: `--skip-macos-arm` /
+`--skip-macos-intel` / `--skip-linux` to re-run a single failed leg,
+`--no-upload` to build+verify only, `--upload-only` to push what's already
+on disk.
+
+**One-time setup:**
+
+| What | How |
+|------|-----|
+| Signing key env | `TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD)` in `~/.zshrc` (see "Auto-updates" below) |
+| Intel rust target | `rustup target add x86_64-apple-darwin` |
+| podman machine | `podman machine init --cpus 8 --memory 24576 --disk-size 120 && podman machine start` |
+| gh auth | `gh auth login` |
+| Disk headroom | ≥40 GB free (cold three-leg build; ENOSPC mid-build corrupts the podman VM) |
+
+**What each leg produces** (all under the repo):
+
+| Leg | Script | Output |
+|-----|--------|--------|
+| macOS arm64 | `build-desktop-macos.sh --target aarch64-apple-darwin` | `target/aarch64-apple-darwin/release/bundle/{dmg,macos}/` — DMG + arch-qualified updater `.app.tar.gz(.sig)` |
+| macOS x86_64 | `build-desktop-macos.sh --target x86_64-apple-darwin` | same shape under `target/x86_64-apple-darwin/` |
+| Linux x86_64 | `build-desktop-linux.sh` (podman) | `target-container-linux/.../bundle/{appimage,deb,rpm}/` |
+
+**The traps are already handled** — each build script self-recovers and
+its comments explain why. For orientation when something new breaks:
+
+| Symptom | Cause + where it's handled |
+|---------|---------------------------|
+| `undefined symbol: sum_4bit_dist_table_32bytes_batch_avx512` | lance-linalg's shared AVX-512 cfg; fixed by the vendored `vendor/lance-linalg` (`[patch.crates-io]` in `Cargo.toml`) |
+| mac DMG step dies, no updater `.app.tar.gz` | Finder/TCC Apple-Events denial; `build-desktop-macos.sh` builds the DMG via hdiutil and re-runs an app-only pass for the updater archive |
+| `failed to run linuxdeploy` / "Exec format error" | AppImage `AI\x02` magic vs Rosetta/qemu binfmt; entrypoint zeros the plugin's magic bytes (persistent `.tauri-cache-container/`) |
+| zero-byte `mode 0200` libs in the AppDir | virtiofs copy corruption; entrypoint bundles the AppImage on container-local storage and copies the artifact back |
+| host `npm run build` breaks after a Linux build | container `npm ci` used to stomp `node_modules`; now shadowed by `.npm-container-modules/` mount |
+| `cc1plus … Killed` in ggml-vulkan | podman VM under-memoried; needs ≥16 GiB (24 GiB recommended) |
+| podman "creating overlay mount … input/output error" | VM storage corrupted by host ENOSPC; `podman machine rm -f && init` (sizes above) |
+
+The mac legs are **not notarized** (ad-hoc signed) — same as CI; recipients
+clear Gatekeeper once, and the auto-updater doesn't care.
+
+---
+
 ## External binaries
 
 The OCR pipeline (rasterize → recognize → daemon cleanup) needs two
@@ -259,11 +320,19 @@ GitHub's hosted `macos-13` Intel runner is **retired** — the job sat on
 *"Waiting for a runner to pick up this job… Requested labels: macos-13"*
 forever and, because `publish` was `needs: build`, blocked the whole release
 even when the other legs were green. Cross-compiling x86_64 on a `macos-14`
-(arm64) runner proved too fragile (cross-only link blockers a native build
-never hits: llama.cpp `cpp-httplib`→OpenSSL, lance AVX-512). So Intel coverage
-comes from a **native self-hosted runner** — a real Intel Mac registered with
-labels `self-hosted, macOS, X64`. It built and ran clean from HEAD on
-2026-06-20 (signed `x64.dmg`, dyld-verified).
+(arm64) runner originally proved too fragile (cross-only link blockers a
+native build never hits: llama.cpp `cpp-httplib`→OpenSSL, lance AVX-512), so
+Intel coverage came from a **native self-hosted runner** — a real Intel Mac
+registered with labels `self-hosted, macOS, X64`. It built and ran clean from
+HEAD on 2026-06-20 (signed `x64.dmg`, dyld-verified).
+
+> **2026-07-10 update:** both cross-link blockers are now fixed in-repo
+> (`scripts/cmake/darwin-cross-no-openssl.cmake` and the vendored
+> `vendor/lance-linalg`), and `build-desktop-macos.sh --target
+> x86_64-apple-darwin` cross-builds cleanly on Apple Silicon — that's how
+> desktop-v0.1.19 shipped (see "Full local release from the arm64 Mac").
+> The self-hosted runner remains the CI path; the cross-build is the local
+> fallback when that Mac is offline.
 
 **One-time registration** (on the Intel Mac):
 

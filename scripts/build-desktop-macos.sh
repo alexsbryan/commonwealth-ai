@@ -266,6 +266,41 @@ if (( BUILD_RC != 0 )); then
     fi
 fi
 
+# ─── Updater artifacts (recovery pass + arch-qualified names) ────────
+# When the DMG step dies, cargo tauri build exits BEFORE creating updater
+# artifacts even with bundle.createUpdaterArtifacts=true, so
+# svrnmesh.app.tar.gz(.sig) never appear (verified on desktop-v0.1.19,
+# 2026-07-10). An app-only second pass re-bundles + signs them in about a
+# minute (the compile is already done). Skipped when the archive already
+# exists, or when no signing key is set (unsigned updater artifacts are
+# useless — the updater rejects them).
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] && ! ls "$OUT_DIR"/macos/*.app.tar.gz >/dev/null 2>&1; then
+    log "Updater archive missing (the DMG failure aborted the bundler) — running an app-only pass to emit + sign it..."
+    (cd sovereign/crates/sovereign-desktop && cargo tauri build \
+        $TARGET_ARG \
+        --bundles app \
+        --config src-tauri/tauri.release.conf.json)
+fi
+
+# Tauri emits a bare svrnmesh.app.tar.gz which (a) collides across the two
+# mac targets when release assets are flattened, and (b) doesn't match the
+# svrnme.sh manifest endpoint's svrnmesh_<ver>_<aarch64|x64>.app.tar.gz
+# pattern. Copy to the arch-qualified name next to the original.
+if [[ -f "$OUT_DIR/macos/$APP_NAME.app.tar.gz" ]]; then
+    VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+    case "$TARGET" in
+        aarch64-apple-darwin) ARCH_SUFFIX=aarch64 ;;
+        x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
+        *)                    ARCH_SUFFIX="$(uname -m)" ;;
+    esac
+    (( UNIVERSAL )) && ARCH_SUFFIX=universal
+    for ext in app.tar.gz app.tar.gz.sig; do
+        src="$OUT_DIR/macos/$APP_NAME.$ext"
+        [[ -f "$src" ]] && cp "$src" "$OUT_DIR/macos/${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.$ext"
+    done
+    log "Updater artifacts arch-qualified: ${APP_NAME}_${VERSION}_${ARCH_SUFFIX}.app.tar.gz(.sig)"
+fi
+
 # ─── Surface results ─────────────────────────────────────────────────
 log "Build complete. Bundles:"
 shopt -s nullglob
