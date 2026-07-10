@@ -96,3 +96,7 @@ __pycache__/
 # Inner-chaos / bench run outputs (ephemeral) — at repo root or under any
 # sub-repo (e.g. sovereign/test-artifacts/ when a harness runs with CWD there).
 test-artifacts/
+# Generated research/bench artifacts — keep source scripts, ignore heavy outputs
+research/**/out/
+research/**/out-v2/
+*.npz

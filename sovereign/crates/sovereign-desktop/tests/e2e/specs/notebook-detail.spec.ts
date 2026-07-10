@@ -196,4 +196,117 @@ test.describe("Notebook detail", () => {
     await page.getByTestId("notebook-open-workshop").click();
     await expect(page.getByTestId("workshop-view")).toBeVisible();
   });
+
+  // A governance notebook — one carrying open conflicts. The Conflicts
+  // tab (and the shelf chip) appear only when `open_conflicts` is
+  // non-null; a plain notebook (null) never shows them.
+  const GOV_NB = {
+    id: "maple-house",
+    name: "Maple House",
+    source_kind: "folder",
+    doc_count: 42,
+    explorable: true,
+    updated_unix: Math.floor(Date.now() / 1000) - 3600,
+    scope: "local",
+    open_conflicts: 2,
+  };
+
+  function govPayload() {
+    return {
+      view: {
+        rules: [
+          { id: "claim-a", text: "Quiet hours begin at 11 PM.", status: { status: "active" }, citation: { chunk_id: "sec_1" } },
+          { id: "claim-b", text: "Quiet hours begin at 10 PM on weeknights.", status: { status: "active" }, citation: { chunk_id: "sec_2" } },
+        ],
+        tensions: [
+          {
+            id: "edge-1",
+            rule_a: "claim-a",
+            text_a: "Quiet hours begin at 11 PM.",
+            rule_b: "claim-b",
+            text_b: "Quiet hours begin at 10 PM on weeknights.",
+            why: "When do quiet hours begin now?",
+            confidence: 0.9,
+            disposition: { disposition: "open" },
+          },
+        ],
+        issues: [],
+      },
+      section_titles: { sec_1: "Charter, Article II", sec_2: "Decision — Feb 10" },
+      section_chunks: {},
+      scope_names: {},
+      vocabulary: null,
+      decisions: {},
+      docs_changed_since_build: false,
+    };
+  }
+
+  test("Conflicts tab shows for a governance notebook and dismiss fires", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedOneNotebook(page, GOV_NB);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      (window as unknown as { __govCalls: string[] }).__govCalls = [];
+      w.__sovereign_test__.setHandler("governance_get_view", () => {
+        const payload = (window as unknown as { __govPayload: unknown }).__govPayload;
+        return payload;
+      });
+      w.__sovereign_test__.setHandler("governance_dismiss", (args) => {
+        const a = args as { tensionId?: string };
+        (window as unknown as { __govCalls: string[] }).__govCalls.push(
+          `dismiss:${a.tensionId}`,
+        );
+        return ["op-1"];
+      });
+    });
+    await page.evaluate((p) => {
+      (window as unknown as { __govPayload: unknown }).__govPayload = p;
+    }, govPayload());
+
+    // The shelf card carries the open-conflict chip.
+    await page.getByTestId("nav-library").click();
+    await expect(page.getByText("2 conflicts")).toBeVisible();
+
+    // Open the notebook and switch to the Conflicts tab.
+    await page.getByTestId("notebook-ask").first().click();
+    await expect(page.getByTestId("notebook-tab-conflicts")).toBeVisible();
+    await page.getByTestId("notebook-tab-conflicts").click();
+    await expect(page.getByTestId("notebook-tab-conflicts")).toHaveClass(/active/);
+
+    // The conflict renders with both source-labelled rules.
+    await expect(page.getByText("Charter, Article II")).toBeVisible();
+    await expect(page.getByText("Decision — Feb 10")).toBeVisible();
+
+    // "Not a conflict" is one click; it calls governance_dismiss.
+    await page.getByTestId("conflict-dismiss").click();
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () => (window as unknown as { __govCalls: string[] }).__govCalls,
+          ),
+        { timeout: 8_000 },
+      )
+      .toContain("dismiss:edge-1");
+  });
+
+  test("Conflicts tab is absent for a non-governance notebook", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    // CATALOG_NB has no `open_conflicts` field (→ null on the wire).
+    await seedOneNotebook(page, CATALOG_NB);
+    await page.getByTestId("nav-library").click();
+    await page.getByTestId("notebook-ask").first().click();
+    await expect(page.getByTestId("notebook-detail")).toBeVisible();
+    await expect(page.getByTestId("notebook-tab-conflicts")).toHaveCount(0);
+  });
 });

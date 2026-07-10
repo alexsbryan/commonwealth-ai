@@ -650,6 +650,10 @@ export interface NotebookSummary {
   updated_unix: number | null;
   /** `"local"` | `"mesh"` | `"public"`. */
   scope: string;
+  /** Count of open (unadjudicated) conflicts for a governance corpus.
+   *  `null` for an ordinary corpus — which is what gates the Conflicts
+   *  tab off; `0` still shows the tab (exports + "all clear"). */
+  open_conflicts: number | null;
 }
 
 /** Notebook source kinds, narrowed for the shelf's icon + label map.
@@ -660,6 +664,109 @@ export type NotebookSourceKind =
   | "watched"
   | "catalog"
   | "installed";
+
+// ── Governance (FR-9) — mirrors corpus-engine `GovernanceView` +
+//    the desktop `governance_commands` payloads. The Rust enums are
+//    serde-internally-tagged (`RuleStatus` on `status`, `TensionDisposition`
+//    on `disposition`, `GovernanceIssue` on `issue`), snake_case; these TS
+//    discriminated unions must key on the same tag. `OpId` / `AtomId` /
+//    `EdgeId` serialize as bare strings (newtype transparent).
+
+/** A governed rule's status in current law. */
+export type RuleStatus =
+  | { status: "active" }
+  | { status: "superseded"; by: string; by_rules: string[] }
+  | { status: "retracted"; by: string };
+
+/** How a surfaced conflict stands — open, adjudicated, or moot. */
+export type TensionDisposition =
+  | { disposition: "open" }
+  | { disposition: "resolved"; by: string }
+  | { disposition: "accepted"; by: string }
+  | { disposition: "dismissed"; by: string }
+  | { disposition: "moot"; dead_endpoint: string };
+
+/** Glass-box data-integrity finding — surfaced, never silently dropped. */
+export type GovernanceIssue =
+  | { issue: "rule_has_no_atom"; rule: string }
+  | { issue: "tension_endpoint_missing"; tension: string; endpoint: string }
+  | { issue: "adjudicated_tension_not_surfaced"; tension: string }
+  | { issue: "unattended_act"; op: string };
+
+/** A rule's source citation. `chunk_id` is a *section* id (e.g.
+ *  `"sec_00001"`); resolve via `GovernanceViewPayload.section_chunks` for
+ *  a deep-link, or show `passage_preview` inline (zero I/O). */
+export interface ChunkRef {
+  chunk_id: string;
+  passage_preview?: string;
+  source_doc_id?: string;
+}
+
+/** A governed rule with its derived status, ready to render. */
+export interface RuleView {
+  id: string;
+  text: string;
+  /** `"requires"` | `"forbids"` | `"permits"`. */
+  deontic?: string;
+  /** Scope entity id — the topic this rule governs. */
+  scope?: string;
+  citation?: ChunkRef;
+  status: RuleStatus;
+}
+
+/** A surfaced conflict with both rule texts attached — a meeting-agenda row. */
+export interface TensionView {
+  id: string;
+  rule_a: string;
+  text_a: string;
+  rule_b: string;
+  text_b: string;
+  /** The sub-question the conflict turns on (the crux). */
+  why?: string;
+  confidence: number;
+  disposition: TensionDisposition;
+}
+
+/** The joined governance read-model. */
+export interface GovernanceView {
+  rules: RuleView[];
+  tensions: TensionView[];
+  issues: GovernanceIssue[];
+}
+
+/** Recipe vocabulary labels so the panel speaks the community's language. */
+export interface OntologyVocabulary {
+  position_term: string | null;
+  tension_term: string | null;
+  concern_term: string | null;
+  evidence_term: string | null;
+}
+
+/** Everything the Conflicts panel needs, from `governance_get_view`. */
+export interface GovernanceViewPayload {
+  view: GovernanceView;
+  /** section id → human title (e.g. `"Decision — 2026-03-14"`). */
+  section_titles: Record<string, string>;
+  /** citation section id → numeric chunk id, for "view passage" deep-links. */
+  section_chunks: Record<string, number>;
+  /** scope entity id → canonical name, for topic grouping in exports. */
+  scope_names: Record<string, string>;
+  vocabulary: OntologyVocabulary | null;
+  /** op id → decision metadata (timestamp, rationale, actor), to sort
+   *  settled decisions recent-first and show *why* each was made. */
+  decisions: Record<string, DecisionMeta>;
+  /** Documents changed since the last atlas build → show the "update" banner. */
+  docs_changed_since_build: boolean;
+}
+
+/** Metadata for one governance decision, keyed by op id. */
+export interface DecisionMeta {
+  ts_unix: number;
+  /** Human rationale (empty for an auto-asserted rule). */
+  rationale: string;
+  /** `"human:<name>"` or `"seed"` — who authored the act. */
+  actor: string;
+}
 
 /** Detailed health stats for an installed corpus — loaded on demand. */
 export interface CorpusHealthDetail {

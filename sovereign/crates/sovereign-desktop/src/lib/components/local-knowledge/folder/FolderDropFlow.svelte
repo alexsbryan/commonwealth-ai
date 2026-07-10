@@ -8,10 +8,12 @@
     enrichCancelBuild,
     enrichGetStarterQuestions,
     enrichInitForLocalCorpus,
+    governanceWriteRecipe,
     lcCancel,
     lcIngest,
     lcOcrAvailable,
     lcPreScan,
+    recipeEnrichInitFromCorpus,
   } from "../../../api";
   import type {
     IngestStats,
@@ -148,6 +150,15 @@
   );
   let unlisten: UnlistenFn | null = null;
   let cancelling = $state(false);
+  /** The corpus template the user picked on the confirm step. `"notes"`
+   *  = the default sample-atlas path; `"governance"` = attach the
+   *  community-governance recipe and build the full corpus so the
+   *  Conflicts panel lights up. Captured at confirm, read at
+   *  ingest-complete (the linear flow guarantees one in flight). */
+  let ingestTemplate: "notes" | "governance" = "notes";
+  /** Source folder path, captured at confirm — the governance recipe
+   *  records it as provenance. */
+  let ingestPath = "";
   /** Whether the desktop has a working OCR pipeline. Probed once at
    *  flow start; passed into PreScanPanel so the OCR offer only
    *  surfaces when accepting it would actually do something. */
@@ -213,9 +224,14 @@
     }
   }
 
-  async function handleConfirmIngest(useOcr: boolean) {
+  async function handleConfirmIngest(
+    useOcr: boolean,
+    template: "notes" | "governance" = "notes",
+  ) {
     if (step.kind !== "confirm") return;
-    const { corpusId, displayName } = step;
+    const { corpusId, displayName, path } = step;
+    ingestTemplate = template;
+    ingestPath = path;
     step = {
       kind: "ingesting",
       corpusId,
@@ -269,6 +285,27 @@
     const { corpusId, displayName } = step;
     step = { kind: "initializing_atlas", corpusId, displayName, stats };
     try {
+      // Governance corpus: attach the community-governance recipe (so
+      // enrichment takes the custom-ontology path) and build the FULL
+      // corpus — a rule set is small and every decision matters, so we
+      // don't sample. The rule baseline is seeded server-side on build
+      // completion (the enrich hook), so no client seed step is needed.
+      if (ingestTemplate === "governance") {
+        await governanceWriteRecipe(corpusId, displayName, ingestPath);
+        await recipeEnrichInitFromCorpus(corpusId);
+        const handle = await enrichBuildAsync(corpusId, null, null);
+        await enrichProgressStore.track(handle);
+        step = {
+          kind: "enriching",
+          corpusId,
+          displayName,
+          stats,
+          sampled: { titles: [], total: stats.files_indexed },
+          jobId: handle.job_id,
+          spawnError: null,
+        };
+        return;
+      }
       const sampled = await enrichInitForLocalCorpus(
         corpusId,
         DEFAULT_PIPELINE,

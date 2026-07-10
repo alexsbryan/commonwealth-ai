@@ -70,7 +70,7 @@ impl OpId {
 
 // ── The acts ─────────────────────────────────────────────────
 
-/// The five governance acts (spec §6.3) plus the one general reversal op.
+/// The six governance acts (spec §6.3) plus the one general reversal op.
 ///
 /// Internally tagged on `"op"` so each line is self-describing and each
 /// variant carries exactly its own fields — illegal field combinations
@@ -104,15 +104,43 @@ pub enum GovernanceOpKind {
     /// A surfaced tension is adjudicated as resolved. `via` names the act
     /// that resolved it (a [`GovernanceOpKind::Supersede`]), so the audit
     /// trail links the tension to its fix.
+    ///
+    /// `endpoints` records the tension's two rule ids at adjudication
+    /// time. Edge ids are re-minted sequentially on every atlas rebuild,
+    /// but content-hash rule ids are stable — so the endpoint pair is the
+    /// adjudication's durable identity across rebuilds (see
+    /// [`ActiveSet::tension_pairs`]). Optional for back-compat with logs
+    /// written before the field existed.
     ResolveTension {
         tension: EdgeId,
         via: OpId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        endpoints: Option<(AtomId, AtomId)>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         rationale: String,
     },
     /// A surfaced tension is adjudicated as known-and-tolerated. The
     /// rationale is required: an accepted contradiction must say why.
-    AcceptTension { tension: EdgeId, rationale: String },
+    /// `endpoints` as on [`GovernanceOpKind::ResolveTension`].
+    AcceptTension {
+        tension: EdgeId,
+        rationale: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        endpoints: Option<(AtomId, AtomId)>,
+    },
+    /// A surfaced tension is adjudicated as not-a-conflict: the detector
+    /// was wrong (a decoy), not a contradiction the community tolerates —
+    /// that distinct state is [`GovernanceOpKind::AcceptTension`].
+    /// Deliberately light-ceremony (rationale optional): dismissing
+    /// detector noise is the steward's call, and it is revertible like
+    /// every act. `endpoints` as on [`GovernanceOpKind::ResolveTension`].
+    DismissTension {
+        tension: EdgeId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        endpoints: Option<(AtomId, AtomId)>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        rationale: String,
+    },
     /// Tomb-stone prior op(s). The fold skips each target *and its
     /// effects* as if it had never been recorded. A human adjudication is
     /// usually a small bundle (AssertRule + Supersede + ResolveTension);
@@ -209,6 +237,40 @@ pub enum TensionStatus {
     Resolved { by: OpId },
     /// Accepted as known-and-tolerated, via op `by`.
     Accepted { by: OpId },
+    /// Dismissed as not-a-conflict (detector noise), via op `by`.
+    Dismissed { by: OpId },
+}
+
+impl TensionStatus {
+    /// The op that produced this status. Every adjudication carries the
+    /// id of the act that decided it — used to identify the *live,
+    /// winning* adjudication for an edge (last-write-wins in the fold).
+    pub fn by(&self) -> &OpId {
+        match self {
+            TensionStatus::Resolved { by }
+            | TensionStatus::Accepted { by }
+            | TensionStatus::Dismissed { by } => by,
+        }
+    }
+}
+
+/// Canonical, order-independent key for a tension's endpoint rule pair —
+/// `"<lo-id>|<hi-id>"`. String-backed so [`ActiveSet`] stays
+/// JSON-serializable (JSON map keys must be strings); constructed only
+/// through [`PairKey::new`], which normalizes the order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PairKey(String);
+
+impl PairKey {
+    pub fn new(a: &AtomId, b: &AtomId) -> Self {
+        let (lo, hi) = if a.as_str() <= b.as_str() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        Self(format!("{}|{}", lo.as_str(), hi.as_str()))
+    }
 }
 
 /// The folded current state: every rule the log has touched with its
@@ -219,6 +281,14 @@ pub struct ActiveSet {
     pub rules: BTreeMap<AtomId, RuleStatus>,
     /// Adjudicated tension id → outcome.
     pub tensions: BTreeMap<EdgeId, TensionStatus>,
+    /// Adjudicated endpoint-pair → outcome, for adjudication ops that
+    /// carried `endpoints`. Edge ids are re-minted on every atlas
+    /// rebuild; the (content-hash) rule-id pair is the identity that
+    /// survives, so a re-detected tension between the same two rules
+    /// inherits its adjudication (see the view join in
+    /// `governance_view::build_view`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tension_pairs: BTreeMap<PairKey, TensionStatus>,
 }
 
 impl ActiveSet {
@@ -315,17 +385,32 @@ pub fn derive_active(ops: &[GovernanceOp]) -> ActiveSet {
                 set.rules
                     .insert(rule.clone(), RuleStatus::Retracted { by: op.id.clone() });
             }
-            GovernanceOpKind::ResolveTension { tension, .. } => {
-                set.tensions.insert(
-                    tension.clone(),
-                    TensionStatus::Resolved { by: op.id.clone() },
-                );
+            GovernanceOpKind::ResolveTension {
+                tension, endpoints, ..
+            } => {
+                let status = TensionStatus::Resolved { by: op.id.clone() };
+                if let Some((a, b)) = endpoints {
+                    set.tension_pairs.insert(PairKey::new(a, b), status.clone());
+                }
+                set.tensions.insert(tension.clone(), status);
             }
-            GovernanceOpKind::AcceptTension { tension, .. } => {
-                set.tensions.insert(
-                    tension.clone(),
-                    TensionStatus::Accepted { by: op.id.clone() },
-                );
+            GovernanceOpKind::AcceptTension {
+                tension, endpoints, ..
+            } => {
+                let status = TensionStatus::Accepted { by: op.id.clone() };
+                if let Some((a, b)) = endpoints {
+                    set.tension_pairs.insert(PairKey::new(a, b), status.clone());
+                }
+                set.tensions.insert(tension.clone(), status);
+            }
+            GovernanceOpKind::DismissTension {
+                tension, endpoints, ..
+            } => {
+                let status = TensionStatus::Dismissed { by: op.id.clone() };
+                if let Some((a, b)) = endpoints {
+                    set.tension_pairs.insert(PairKey::new(a, b), status.clone());
+                }
+                set.tensions.insert(tension.clone(), status);
             }
             // Revert has no forward effect; its work was done in pass 1.
             GovernanceOpKind::Revert { .. } => {}
@@ -522,6 +607,7 @@ mod tests {
             GovernanceOpKind::AcceptTension {
                 tension: t.clone(),
                 rationale: "quiet-hours vs private-room is intentional".into(),
+                endpoints: None,
             },
             1000,
             "human:alex",
@@ -533,6 +619,84 @@ mod tests {
         ));
         // The unadjudicated tension is still open; the accepted one is not.
         assert_eq!(set.open_tensions(&[t.clone(), other.clone()]), vec![&other]);
+    }
+
+    #[test]
+    fn dismiss_tension_closes_open_and_is_revertible() {
+        let t = tension(1);
+        let other = tension(2);
+        let dismiss = op(
+            GovernanceOpKind::DismissTension {
+                tension: t.clone(),
+                endpoints: None,
+                rationale: String::new(),
+            },
+            1000,
+            "human:alex",
+        );
+        let set = derive_active(std::slice::from_ref(&dismiss));
+        assert!(matches!(
+            set.tensions.get(&t),
+            Some(TensionStatus::Dismissed { .. })
+        ));
+        // Dismissed leaves the open set; the untouched tension stays open.
+        assert_eq!(set.open_tensions(&[t.clone(), other.clone()]), vec![&other]);
+
+        // Reverting the dismissal reopens the tension.
+        let revert = op(
+            GovernanceOpKind::Revert {
+                targets: vec![dismiss.id.clone()],
+                rationale: "mis-click".into(),
+            },
+            1001,
+            "human:alex",
+        );
+        let set = derive_active(&[dismiss, revert]);
+        assert!(set.tensions.is_empty());
+        assert_eq!(
+            set.open_tensions(&[t.clone(), other.clone()]),
+            vec![&t, &other]
+        );
+    }
+
+    #[test]
+    fn adjudication_by_endpoint_pair_survives_edge_renumbering() {
+        // Adjudicate edge-0001 carrying its endpoint rule pair. After a
+        // rebuild the same conceptual tension is re-minted as a NEW edge
+        // id — the pair map is what lets the view still see it settled.
+        let (a, b) = (rule(1), rule(2));
+        let ops = vec![op(
+            GovernanceOpKind::AcceptTension {
+                tension: tension(1),
+                rationale: "both can stand".into(),
+                endpoints: Some((b.clone(), a.clone())), // reversed on purpose
+            },
+            1000,
+            "human:alex",
+        )];
+        let set = derive_active(&ops);
+        // Pair lookup is order-independent (normalized key).
+        assert!(matches!(
+            set.tension_pairs.get(&PairKey::new(&a, &b)),
+            Some(TensionStatus::Accepted { .. })
+        ));
+        assert!(matches!(
+            set.tension_pairs.get(&PairKey::new(&b, &a)),
+            Some(TensionStatus::Accepted { .. })
+        ));
+        // The renumbered edge id itself is unknown to the edge-id map…
+        assert!(set.tensions.get(&tension(99)).is_none());
+        // …and an op without endpoints populates no pair entry.
+        let bare = derive_active(&[op(
+            GovernanceOpKind::AcceptTension {
+                tension: tension(3),
+                rationale: "legacy".into(),
+                endpoints: None,
+            },
+            1001,
+            "human:alex",
+        )]);
+        assert!(bare.tension_pairs.is_empty());
     }
 
     #[test]
@@ -564,6 +728,7 @@ mod tests {
                 GovernanceOpKind::ResolveTension {
                     tension: t.clone(),
                     via: supersede_id.clone(),
+                    endpoints: None,
                     rationale: String::new(),
                 },
                 1002,
@@ -621,6 +786,7 @@ mod tests {
             GovernanceOpKind::ResolveTension {
                 tension: t.clone(),
                 via: supersede.id.clone(),
+                endpoints: None,
                 rationale: String::new(),
             },
             1003,
@@ -736,6 +902,7 @@ mod tests {
         let kind = GovernanceOpKind::AcceptTension {
             tension: tension(1),
             rationale: "ok".into(),
+            endpoints: None,
         };
         // Same (kind, ts, actor) → same id.
         let a = GovernanceOp::new(kind.clone(), 5, "human:alex");
@@ -817,12 +984,22 @@ mod tests {
             GovernanceOpKind::ResolveTension {
                 tension: t.clone(),
                 via: supersede.id.clone(),
+                endpoints: Some((old.clone(), new.clone())),
                 rationale: String::new(),
             },
             1002,
             "human:alex",
         );
-        let written = vec![assert_old, supersede, resolve];
+        let dismiss = op(
+            GovernanceOpKind::DismissTension {
+                tension: tension(2),
+                endpoints: Some((rule(3), rule(4))),
+                rationale: "parking vs stays — not a conflict".into(),
+            },
+            1003,
+            "human:alex",
+        );
+        let written = vec![assert_old, supersede, resolve, dismiss];
         for o in &written {
             log.append(o).unwrap();
         }

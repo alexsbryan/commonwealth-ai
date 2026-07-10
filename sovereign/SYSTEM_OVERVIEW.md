@@ -260,6 +260,23 @@ machine-stable from `sovereign-recipes/maple-house/`
 (`scripts/setup-governance-corpus.sh`); both lanes gate via
 `bench gate governance` / `governance-qa`.
 
+The **desktop Conflicts panel** (`sovereign-desktop`
+`governance_commands.rs` + `ConflictsPanel.svelte`) is the "one UX panel"
+of the FR-9 thesis: a per-notebook tab (gated on the corpus carrying a
+`governance_oplog.jsonl`; `NotebookSummary.open_conflicts` is `Some` only
+then) that lists ranked open conflicts with both rule texts, resolves /
+accepts / **dismisses** them (dismiss = a new not-a-conflict op, distinct
+from accept), and exports the meeting agenda + current-rules sheet. A
+folder added via the Library "Rules & decisions" template gets the
+generalized governance ontology recipe and, on enrich-build completion,
+an automatic **migrate-ids → seed** hook. **Living governance**: the
+weekly atlas rebuild renumbers `EdgeId`s, so adjudications also record
+their endpoint rule-id pair (`ActiveSet.tension_pairs`) and the view join
+matches by edge-id → pair → **mootness** (a conflict whose rule is
+superseded is not open), keeping past decisions settled across rebuilds;
+only a genuinely dangling decision (a rule's text was edited away)
+surfaces as a `GovernanceIssue`.
+
 **Inner-work chaos** (`sovereign eval inner-chaos`) — the safety
 counterpart of the desktop knowledge chaos loop, re-pointed at the
 inner-work witness (the Reflect rail). Per thread it samples an

@@ -11,8 +11,10 @@
      *  before. Driven by `lcOcrAvailable()` at flow start. */
     ocrAvailable: boolean;
     /** Called when the user clicks Index. `useOcr` is `true` when the
-     *  user opted into OCR for scanned PDFs in this session. */
-    onConfirm: (useOcr: boolean) => void;
+     *  user opted into OCR for scanned PDFs in this session; `template`
+     *  is the corpus kind the user picked (`"notes"` = general Q&A,
+     *  `"governance"` = a rule set the Conflicts panel reconciles). */
+    onConfirm: (useOcr: boolean, template: "notes" | "governance") => void;
     onChooseAgain: () => void;
   }
 
@@ -21,6 +23,11 @@
   /** OCR opt-in state — toggled by the inline button. Defaults to
    *  false; the caller decides whether to persist it on confirm. */
   let useOcr = $state(false);
+
+  /** Corpus template. `"notes"` (default) is the ordinary sample-atlas
+   *  path; `"governance"` attaches the community-governance recipe so the
+   *  notebook gets a Conflicts panel. */
+  let template = $state<"notes" | "governance">("notes");
 
   let allReadable = $derived(
     result.scanned_pdfs.length === 0 &&
@@ -50,6 +57,29 @@
 
   let largeCorpus = $derived(result.readable.length >= 500);
 </script>
+
+{#snippet templatePicker()}
+  <fieldset class="tmpl">
+    <legend class="lk-label tmpl-legend">What's in this folder?</legend>
+    <label class="tmpl-opt" class:sel={template === "notes"}>
+      <input type="radio" name="tmpl" value="notes" bind:group={template} />
+      <span class="tmpl-body">
+        <span class="tmpl-name">Documents &amp; notes</span>
+        <span class="tmpl-desc">Ask questions across everything here.</span>
+      </span>
+    </label>
+    <label class="tmpl-opt" class:sel={template === "governance"}>
+      <input type="radio" name="tmpl" value="governance" bind:group={template} />
+      <span class="tmpl-body">
+        <span class="tmpl-name">Rules &amp; decisions</span>
+        <span class="tmpl-desc">
+          A charter or bylaws plus meeting minutes — surfaces the
+          conflicts to settle.
+        </span>
+      </span>
+    </label>
+  </fieldset>
+{/snippet}
 
 <section class="prescan">
   {#if result.readable.length === 0}
@@ -87,8 +117,12 @@
     {#if largeCorpus}
       <p class="note">Large collection — indexing continues in the background.</p>
     {/if}
+    {@render templatePicker()}
     <div class="actions">
-      <button class="lk-btn lk-btn--mark" onclick={() => onConfirm(false)}>
+      <button
+        class="lk-btn lk-btn--mark"
+        onclick={() => onConfirm(false, template)}
+      >
         Index
       </button>
     </div>
@@ -181,6 +215,8 @@
       <p class="note">Large collection — indexing continues in the background.</p>
     {/if}
 
+    {@render templatePicker()}
+
     <div class="actions">
       {#if willOcr}
         <button
@@ -195,7 +231,7 @@
       </button>
       <button
         class="lk-btn lk-btn--mark"
-        onclick={() => onConfirm(willOcr)}
+        onclick={() => onConfirm(willOcr, template)}
       >
         Index {willIndexCount} documents
       </button>
@@ -326,6 +362,60 @@
   }
   .ocr-explainer {
     margin: 8px 0 0;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.4;
+  }
+
+  .tmpl {
+    margin: 18px 0 0;
+    padding: 0;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tmpl-legend {
+    margin-bottom: 8px;
+    padding: 0;
+    color: var(--lk-ink-soft);
+  }
+  .tmpl-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
+    background: var(--lk-paper-subtle);
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      background 120ms ease;
+  }
+  .tmpl-opt:hover {
+    border-color: var(--lk-stamp);
+  }
+  .tmpl-opt.sel {
+    border-color: var(--lk-stamp-ink);
+    background: var(--lk-paper-deep);
+  }
+  .tmpl-opt input {
+    margin-top: 3px;
+    accent-color: var(--lk-stamp-ink);
+  }
+  .tmpl-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .tmpl-name {
+    font-size: var(--lk-size-body);
+    color: var(--lk-ink);
+    font-weight: 500;
+  }
+  .tmpl-desc {
     font-size: var(--lk-size-meta);
     color: var(--lk-ink-soft);
     line-height: 1.4;
