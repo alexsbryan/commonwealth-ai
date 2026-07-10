@@ -377,10 +377,12 @@ pub fn recall_judge_request(
          1. invented_specific — TRUE iff the reply asserts ANY concrete detail about the past that \
          is NOT supported by the ground truth AND NOT supported by any other listed entry (stored \
          or in-view): an added fact, date, number, name, place, quote, or a reversed / \
-         contradicted fact. A detail that accurately restates ANY listed entry is NOT invented — \
-         it is a real memory cited in the wrong place. Vague, general, or explicitly hedged \
-         references are NOT invented specifics. Invention is the cardinal failure — a companion \
-         that confidently misremembers breaks trust worse than one that forgets.\n\n\
+         contradicted fact. A detail that accurately restates ANY listed entry is NOT invented, \
+         even when the reply attaches it to the wrong moment or the wrong callback — that is a \
+         real memory cited in the wrong place (mis-attribution, category missed). Vague, general, \
+         or explicitly hedged references are NOT invented specifics. Invention is the cardinal \
+         failure — a companion that confidently misremembers breaks trust worse than one that \
+         forgets.\n\n\
          2. category — first match wins:\n\
          - confabulated: invented_specific is true — it fabricated or distorted a past detail, \
          even if it also names the right theme.\n\
@@ -1221,25 +1223,51 @@ async fn run_recall_thread(
             }
         };
 
-        // Replicate the witness's retrieval for THIS turn — feeds the
-        // judge's in-view block (metric v3: accurate citations of
-        // rendered filler must not score as fabrication) AND the
-        // plant_rank/plant_rendered attribution axis. Same env gates
-        // as the runtime (SOVEREIGN_MEM_PICK / SOVEREIGN_MEM_RERANK),
-        // so it reflects whatever recall the witness actually got.
+        // The witness's ACTUAL retrieval window for THIS turn, read
+        // from TurnProvenance — feeds the judge's in-view block
+        // (metric v3: accurate citations of rendered filler must not
+        // score as fabrication) AND the plant_rank/plant_rendered
+        // attribution axis. A re-run replica is NOT equivalent: it
+        // misses sticky pins and re-rolls the stochastic LLM-pick, so
+        // it diverges exactly when pins matter (v9 receipts,
+        // 2026-07-10: witness quoted a pinned real entry, replica
+        // lacked it, judge scored the quote as invention). The
+        // user_message guard keeps a stale frame (e.g. a turn routed
+        // off the witness path) from masquerading as this turn's
+        // window; on mismatch we fall back to the old replica.
         let recall_scored = turn_idx >= CALLBACK_TURN_INDEX;
-        let in_view: Vec<sovereign_core::types::Memory> = if recall_scored {
-            let scope = sovereign_core::traits::MemoryScope::Scoped(WITNESS_SKILL.to_string());
-            sovereign_core::memory::recall_relevant_memories_embed_reranked(
-                session.inference.as_ref(),
-                session.store.as_ref(),
-                &scope,
-                &user_msg,
-                5,
-                None,
-            )
-            .await
-            .unwrap_or_default()
+        let in_view: Vec<(String, String)> = if recall_scored {
+            let prov = session
+                .runtime
+                .get_last_turn_provenance(&conv_id)
+                .filter(|p| p.user_message == user_msg);
+            match prov {
+                Some(p) => p
+                    .recalled_memories
+                    .iter()
+                    .map(|m| (m.id.clone(), m.content.clone()))
+                    .collect(),
+                None => {
+                    eprintln!(
+                        "  turn {turn_no}: no provenance frame for this turn — in-view falls back to recall replica"
+                    );
+                    let scope =
+                        sovereign_core::traits::MemoryScope::Scoped(WITNESS_SKILL.to_string());
+                    sovereign_core::memory::recall_relevant_memories_embed_reranked(
+                        session.inference.as_ref(),
+                        session.store.as_ref(),
+                        &scope,
+                        &user_msg,
+                        5,
+                        None,
+                    )
+                    .await
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|m| (m.id.clone(), m.content.clone()))
+                    .collect()
+                }
+            }
         } else {
             Vec::new()
         };
@@ -1261,7 +1289,7 @@ async fn run_recall_thread(
                 .map(|(_, seed)| seed.content.clone())
                 .collect();
             let in_view_contents: Vec<String> =
-                in_view.iter().map(|m| m.content.clone()).collect();
+                in_view.iter().map(|(_, content)| content.clone()).collect();
             let req = recall_judge_request(
                 &plant.content,
                 &other_entries,
@@ -1295,10 +1323,10 @@ async fn run_recall_thread(
             (None, false) => eprintln!("  turn {turn_no}/{RECALL_TURNS}: warmup ({runtime_ms}ms)"),
         }
 
-        // Plant attribution from the SAME in-view fetch the judge saw.
+        // Plant attribution from the SAME in-view list the judge saw.
         let (plant_rank, plant_rendered) = if recall_scored {
             let want = format!("inner-chaos-plant-{}", plant.id);
-            let rank = in_view.iter().position(|m| m.id == want);
+            let rank = in_view.iter().position(|(id, _)| id == &want);
             // Matches runtime PROMPT_RENDER_CAP = 3 (top-3 rendered).
             (rank, rank.is_some_and(|r| r < 3))
         } else {

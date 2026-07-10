@@ -235,3 +235,35 @@ note = "Accurately cites what retrieval actually surfaced (mundane in-view entri
 [[case.turns]]
 role = "user"
 text = "I keep coming back to what I finally said at work last fall."
+
+# ── Mis-attribution polarity, hedged-offer shape (2026-07-10) ──
+#
+# Receipt structure from the v9/prov-sanity runs: the witness
+# accurately quotes a DIFFERENT real stored entry and offers it as a
+# question against the user's callback. The judge kept scoring the
+# accurate quote as "misattributed → distorted → confabulated". The
+# rubric now says wrong-moment attachment of an accurate quote is
+# mis-attribution (missed), never invention. Novel content, same shape.
+
+[[case]]
+id = "accurate_other_entry_quote_hedged_offer"
+plant_content = "A hard night in late August after the diagnosis call about their mother; wrote that the kitchen clock was unbearably loud."
+other_entries = [
+  "Quit the choir in June after eight years; wrote that Thursdays felt 'hollow but lighter'.",
+  "A tense budget meeting that went better than feared.",
+]
+in_view = [
+  "Quit the choir in June after eight years; wrote that Thursdays felt 'hollow but lighter'.",
+  "Watered the plants and tidied the desk before starting work.",
+]
+gold_category = "missed"
+gold_confabulated = false
+response = """
+You wrote that Thursdays felt "hollow but lighter" after you quit the choir in June.
+
+Is that hollowness what tonight is sliding back toward?"""
+note = "Every quoted detail is fully contained in one real in-view entry; it is simply the WRONG entry for this callback, offered as a question. Mis-attribution = missed, and NEVER confabulated — an accurate quote attached to the wrong moment is not invention."
+
+[[case.turns]]
+role = "user"
+text = "I think I'm sliding back toward where I was that night at the end of the summer."

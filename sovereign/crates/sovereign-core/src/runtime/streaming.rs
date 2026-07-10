@@ -2295,7 +2295,23 @@ impl Runtime {
         // skill_id so an inner-work conversation only surfaces
         // inner-work memories, and a general conversation never sees
         // them. See `MemoryScope` for the invariant.
-        if context.turn_register() == SkillRegister::Relational {
+        //
+        // Mode-derived guard, NOT `turn_register()` — the intent
+        // policy binds after routing (line ~2581), so at this point
+        // `turn_register()` always returns the Factual fallback and a
+        // register check would silently disable embed recall + sticky
+        // pins (found 2026-07-09 on the non-streaming twin).
+        let relational_turn = {
+            let early_mode = self.resolve_active_mode(conversation_id).await;
+            let declared_register = early_mode
+                .as_deref()
+                .and_then(|id| self.skills.skill_by_id(id))
+                .map(|s| s.inference.register)
+                .unwrap_or_default();
+            declared_register == SkillRegister::Relational
+                || early_mode.as_deref() == Some(crate::intent_policy::MODE_INNER_WORK)
+        };
+        if relational_turn {
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
             );
@@ -2318,7 +2334,11 @@ impl Runtime {
                         after = top.len(),
                         "runtime: stream memories overridden via embedding recall"
                     );
-                    context.memories = top;
+                    // Sticky pins — same contract as the non-streaming
+                    // path (see `merge_recall_pins`).
+                    context.memories = self
+                        .merge_recall_pins(&context.conversation.id, &scope, top)
+                        .await;
                 }
                 _ => {}
             }

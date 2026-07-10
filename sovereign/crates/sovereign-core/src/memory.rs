@@ -943,10 +943,12 @@ fn render_band(memories: &[&Memory]) -> Vec<String> {
                 ),
                 MemoryKind::Raw => String::new(),
             };
-            format!(
-                "- {summary_prefix}{date_prefix}{}   (confidence {:.2})",
-                m.content, m.confidence
-            )
+            // No per-entry confidence annotation: the three bands
+            // already encode it, and a hand-read (2026-07-09) caught
+            // the witness echoing "(confidence 0.85)" verbatim into a
+            // user-facing reply — internals leaking through the one
+            // surface that must feel human.
+            format!("- {summary_prefix}{date_prefix}{}", m.content)
         })
         .collect()
 }
@@ -1915,9 +1917,10 @@ mod tests {
         assert!(result.contains("Tentative — flag these as guesses"));
         assert!(result.contains("[2026-03-12]"));
         assert!(result.contains("[2026-04-08]"));
-        assert!(result.contains("(confidence 0.92)"));
-        assert!(result.contains("(confidence 0.62)"));
-        assert!(result.contains("(confidence 0.35)"));
+        // Per-entry confidence annotations must NOT render — the bands
+        // carry the signal, and the witness echoed "(confidence 0.85)"
+        // verbatim into a user-facing reply (hand-read, 2026-07-09).
+        assert!(!result.contains("(confidence"));
         // The flat-list factual heading must NOT appear in relational format.
         assert!(!result.contains("Known facts about the user:"));
     }

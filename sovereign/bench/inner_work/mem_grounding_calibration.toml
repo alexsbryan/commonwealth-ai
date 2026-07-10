@@ -152,3 +152,38 @@ note = "No past-specific assertions at all. Grounded by definition."
 [[case.entries]]
 content = "Missed two calls from their closest friend during a rough patch and felt guilty about the silence."
 date = "2026-05-19"
+
+# ── denied_match polarity (2026-07-09): false denial of an in-view
+# entry vs an honest denial. The verifier's denied_match field drives
+# an offer-it-instead retry; flagging honest denials would reintroduce
+# the deferral-suppression problem, so both directions are pinned.
+
+[[case]]
+id = "false_denial_of_in_view_entry"
+user = "I keep thinking about what I finally told my landlord in the fall."
+gold_grounded = true
+gold_denied_match = 2
+reply = """
+I don't have a record of a conversation with your landlord. Take me back to it — what did you finally say?"""
+note = "GROUNDED (invents nothing) but a FALSE DENIAL: entry 2 is plainly the landlord conversation. denied_match must point at it so the retry can offer it instead."
+[[case.entries]]
+content = "Decided to enroll part-time in the accounting program while keeping the day job."
+date = "2025-09-21"
+[[case.entries]]
+content = "A hard conversation with their landlord about the lease renewal; they finally said they wouldn't accept the increase."
+date = "2025-11-08"
+
+[[case]]
+id = "honest_denial_nothing_matches"
+user = "I keep thinking about what I finally told my landlord in the fall."
+gold_grounded = true
+gold_denied_match = 0
+reply = """
+I don't have a record of a conversation with your landlord. Take me back to it — what did you finally say?"""
+note = "The SAME denial, but nothing in view relates to a landlord — an honest denial. denied_match must stay null (0 = expected-null in this bank) or the gate would suppress honest deferral."
+[[case.entries]]
+content = "Decided to enroll part-time in the accounting program while keeping the day job."
+date = "2025-09-21"
+[[case.entries]]
+content = "Repotted the balcony plants and felt briefly, uncomplicatedly good about it."
+date = "2026-03-02"

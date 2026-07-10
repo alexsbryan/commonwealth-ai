@@ -515,22 +515,15 @@ impl Runtime {
             // quote nothing you can't point to, and prefer an honest
             // gap over a confident wrong memory.
             s.push_str(
-                "\n\nHow to use those entries. They were retrieved by similarity — they are \
-                 CANDIDATES, and the right memory may not be among them.\n\
-                 \u{2022} Sure which entry they mean → speak from it, using only what it says.\n\
-                 \u{2022} One entry plausibly fits but you're not sure → offer it as a question, \
-                 quoting only what it says, and let them confirm or correct you.\n\
-                 \u{2022} Two entries could each be what they mean → ask which, naming each \
-                 briefly.\n\
-                 \u{2022} Nothing fits → say you're not finding that memory and ask them to take \
-                 you back to it.\n\
-                 Every memory you describe must come from exactly ONE entry — never blend two \
-                 entries into one memory, and never add a date, name, number, place, or fact \
-                 that isn't written there. You see only these few retrieved entries, never the \
-                 whole journal — never claim what their record does or doesn't contain (\"the \
-                 only entry\", \"there's nothing about\"); say what you're seeing or not finding \
-                 right now. A confident wrong memory is the one thing that breaks trust for \
-                 good.",
+                "\n\nHow to use those entries. They are a few notes retrieved by similarity from \
+                 a much larger journal — the one they mean may not be here. If one fits, speak \
+                 from it, to them, as \"you\"; if you're not sure it's the one, offer it as a \
+                 question. If nothing fits, say simply that you're not finding it and ask them to \
+                 take you back — never volunteer unrelated entries, never describe your notes, \
+                 lists, or retrieval, and never tell them their memory doesn't match the \
+                 record. Anything you recall must come from ONE entry, exactly as written — \
+                 no added dates, names, or details, and no combining entries. When unsure, ask; \
+                 a confident wrong memory is the one thing that breaks trust for good.",
             );
         }
 

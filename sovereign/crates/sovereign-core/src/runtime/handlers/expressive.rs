@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use crate::error::Result;
-use crate::traits::*;
 
 use super::super::*;
 
@@ -280,7 +279,38 @@ impl Runtime {
             };
 
             let v1 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
-            if !v1.grounded {
+            let mut final_referenced = None;
+            if v1.grounded {
+                final_referenced = v1.referenced;
+                // False-denial correction: the draft is grounded but
+                // told the user "I don't have that memory" while a
+                // retrieved entry plausibly IS it — the dominant
+                // surviving trust-breaker in the 2026-07-09 hand-read.
+                // One retry that offers the entry as a question; the
+                // retry is kept only if it re-verifies grounded, else
+                // the original (honest-toned) denial stands.
+                if let Some(idx) = v1.denied_match {
+                    if let Some(m) = seen.get(idx.saturating_sub(1)) {
+                        let sysd = format!("{base_system}{}", mg::denial_note(&m.content));
+                        if let Ok(r) = self.inference.complete(&regen(sysd)).await {
+                            let fixed = strip(&r.text);
+                            if !fixed.trim().is_empty() {
+                                let vd = mg::verify_recall_grounding(
+                                    self.inference.as_ref(),
+                                    message,
+                                    &fixed,
+                                    seen,
+                                )
+                                .await;
+                                if vd.grounded {
+                                    response_text = fixed;
+                                    final_referenced = vd.referenced.or(Some(idx));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
                 // Stage 1 — correction retry.
                 let sys1 = format!("{base_system}{}", mg::correction_note(&v1.unsupported));
                 if let Ok(r) = self.inference.complete(&regen(sys1)).await {
@@ -291,7 +321,9 @@ impl Runtime {
                 }
                 // Re-verify: the correction is not trusted blindly.
                 let v2 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
-                if !v2.grounded {
+                if v2.grounded {
+                    final_referenced = v2.referenced;
+                } else {
                     // Stage 2 — claim-free reflective floor. Structurally
                     // cannot confabulate; the safe default when grounding
                     // fails twice.
@@ -304,10 +336,105 @@ impl Runtime {
                     }
                 }
             }
+            // Sticky pin: the entry the (grounded) reply actually spoke
+            // about stays in view on later turns. Reference-driven, so
+            // warmup chatter never pins noise (see `merge_recall_pins`).
+            tracing::info!(
+                target: "memory_grounding",
+                grounded = v1.grounded,
+                referenced = ?final_referenced,
+                denied = ?v1.denied_match,
+                seen = seen.len(),
+                "recall gate verdict"
+            );
+            if let Some(idx) = final_referenced {
+                if let Some(m) = seen.get(idx.saturating_sub(1)) {
+                    tracing::info!(
+                        target: "memory_grounding",
+                        memory_id = %m.id,
+                        "recall pin set"
+                    );
+                    self.pin_referenced_memory(conversation_id, &m.id);
+                }
+            }
+        }
+
+        // Glassbox parity with the streaming variant: capture
+        // TurnProvenance on the non-streaming witness path too. The
+        // desktop Cmd+? surface and the inner-chaos recall bench (which
+        // must judge against the turn's ACTUAL retrieval window, not a
+        // once-per-thread replica — v9 receipts, 2026-07-10) both read
+        // this via `get_last_turn_provenance`.
+        let message_id = uuid::Uuid::new_v4().to_string();
+        if register == SkillRegister::Relational {
+            let recalled_memories: Vec<RecalledMemoryProv> = context
+                .memories
+                .iter()
+                .map(|m| RecalledMemoryProv {
+                    id: m.id.clone(),
+                    content: m.content.clone(),
+                    created_at: m.created_at,
+                    kind: Some(
+                        match m.kind {
+                            crate::types::MemoryKind::Raw => "raw",
+                            crate::types::MemoryKind::Summary => "summary",
+                        }
+                        .to_string(),
+                    ),
+                    source_memory_ids: m.source_memory_ids.clone(),
+                })
+                .collect();
+            let history_summary = HistorySummaryProv {
+                total_messages: context.conversation.messages.len(),
+                user_count: context
+                    .conversation
+                    .messages
+                    .iter()
+                    .filter(|m| m.role == Role::User)
+                    .count(),
+                assistant_count: context
+                    .conversation
+                    .messages
+                    .iter()
+                    .filter(|m| m.role == Role::Assistant)
+                    .count(),
+                sent_to_model: Vec::new(),
+            };
+            let temporal_tensions = if context.temporal_tensions.is_empty() {
+                Vec::new()
+            } else {
+                vec![render_temporal_tensions(&context.temporal_tensions)]
+            };
+            let prov_system = request.system_message.clone().unwrap_or_default();
+            let provenance = TurnProvenance {
+                conversation_id: conversation_id.to_string(),
+                message_id: message_id.clone(),
+                captured_at: now(),
+                register: format!("{register:?}"),
+                user_message: message.to_string(),
+                system_prompt_chars: prov_system.chars().count(),
+                system_prompt: prov_system,
+                recalled_memories,
+                history_summary,
+                temporal_tensions,
+                contradiction: None,
+                current_goal: current_goal.clone(),
+                recent_topic: recent_topic.clone(),
+                last_assistant_excerpt: last_assistant.clone(),
+                model_id: None,
+                max_tokens: request.max_tokens,
+                enable_thinking: request.enable_thinking,
+                pass_a_ms: metrics.pass_a_ms,
+            };
+            if let Ok(mut guard) = self.turn_provenance.write() {
+                guard.insert(conversation_id.to_string(), provenance);
+            } else {
+                tracing::warn!("expressive: turn_provenance lock poisoned, skipping capture");
+            }
         }
 
         let response_msg = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: message_id,
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
             content: response_text,

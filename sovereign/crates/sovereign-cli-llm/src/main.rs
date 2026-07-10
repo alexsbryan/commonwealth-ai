@@ -102,6 +102,12 @@ async fn async_main() {
         "chat" if std::env::var_os("RUST_LOG").is_some() => {
             init_tracing("sovereign_cli_llm=info,sovereign_core=info")
         }
+        // eval: same on-demand glassbox as chat — e.g.
+        // `RUST_LOG=memory_grounding=info` to watch the recall grounding
+        // gate + sticky-pin lifecycle during inner-chaos runs.
+        "eval" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_cli_llm=info,sovereign_core=info")
+        }
         // workflow: quiet by default so the run summary + `## item` bodies stay
         // clean for piping, but glassbox the runner on demand — including the
         // B:P9a decision of whether the chat context window + embed prefix came

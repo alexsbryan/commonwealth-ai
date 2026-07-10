@@ -131,6 +131,26 @@ pub(crate) async fn maybe_wellbeing_signal(
         return None;
     }
     if prior_crisis_context(&context.conversation.messages) {
+        // A gated thread stays gated only while the CURRENT message is
+        // still in crisis territory. Before 2026-07-10 the sticky arm
+        // preempted every subsequent turn unconditionally, so one
+        // classifier false-positive turned the rest of the conversation
+        // into identical canned floors — even for a direct memory
+        // question (v8 recall receipts: 3x verbatim-repeated crisis
+        // template reads as abandonment, the opposite of care).
+        //
+        // Fail-closed: only an explicit classifier `Some(false)` hands
+        // the turn back to the witness. A lexical hit or classifier
+        // true/failure keeps the guaranteed floor. Re-escalation later
+        // re-enters here and re-gates with the continued template.
+        if !lexical_crisis_signal(message)
+            && classify_crisis(inference, context, message).await == Some(false)
+        {
+            tracing::info!(
+                "wellbeing gate: sticky context, current message non-crisis — witness resumes"
+            );
+            return None;
+        }
         return Some(WellbeingSignal {
             trigger: "sticky",
             first_fire: false,

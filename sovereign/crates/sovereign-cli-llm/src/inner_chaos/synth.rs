@@ -45,6 +45,11 @@ struct GroundingCase {
     user: String,
     reply: String,
     gold_grounded: bool,
+    /// Expected `denied_match`: absent = don't check; 0 = must be
+    /// None (an honest denial); N≥1 = must point at entry N (a false
+    /// denial of an in-view entry).
+    #[serde(default)]
+    gold_denied_match: Option<usize>,
     #[serde(default)]
     note: String,
     entries: Vec<GroundingEntry>,
@@ -136,18 +141,32 @@ pub async fn run_mem_grounding_calibration(opts: &RecallRunOptions) -> Result<()
             &memories,
         )
         .await;
-        let ok = v.grounded == case.gold_grounded;
+        let denial_ok = match case.gold_denied_match {
+            None => true,
+            Some(0) => v.denied_match.is_none(),
+            Some(n) => v.denied_match == Some(n),
+        };
+        let ok = v.grounded == case.gold_grounded && denial_ok;
         match (case.gold_grounded, v.grounded) {
             (false, false) => tp += 1,
             (false, true) => fn_ += 1,
             (true, true) => tn += 1,
             (true, false) => fp += 1,
         }
+        if !denial_ok {
+            // A denial-signal miss is a hard gate failure regardless of
+            // the grounded/ungrounded tallies: a missed false-denial
+            // leaves the trust-breaker ungated, and a spurious one
+            // suppresses honest deferral.
+            fp += 1;
+            tn = tn.saturating_sub(1);
+        }
         println!(
-            "  {} gold={} judged={} {}{}",
+            "  {} gold={} judged={} denied_match={:?} {}{}",
             case.id,
             if case.gold_grounded { "grounded" } else { "UNGROUNDED" },
             if v.grounded { "grounded" } else { "UNGROUNDED" },
+            v.denied_match,
             if ok { "OK" } else { "MISMATCH" },
             if ok {
                 String::new()
