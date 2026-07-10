@@ -14,6 +14,8 @@
 /target-container-linux/
 /.cargo-container/
 /.npm-container/
+/.npm-container-modules/
+/.tauri-cache-container/
 
 # Windows cross-compile gate (scripts/windows-crosscheck.sh) uses a separate
 # CARGO_TARGET_DIR so the windows-msvc build doesn't stomp the host target/.
