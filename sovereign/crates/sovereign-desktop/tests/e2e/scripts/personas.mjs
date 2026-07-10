@@ -20,7 +20,7 @@
 // Journal: test-artifacts/persona-journal.jsonl (wiped on start — copy stamped
 // files per run, chaos.mjs convention). Live web search (DDG) is ON by design:
 // budget via --max-searches + a politeness floor between clicks.
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,22 @@ const chance = (p) => rand() < p;
 
 const bridge = makeBridge();
 let BRAIN = null;
+
+// Daemon RSS snapshot (best-effort): the daemon ballooned 10.8GB→37.7GB over
+// a day of serving and got OOM-picked twice (2026-07-10) — every run journals
+// start/end RSS so growth-per-run is a free time series.
+function daemonRssMb() {
+  try {
+    const pid = execSync("pgrep -f 'sovereign-cli-daemon daemon run' | head -1", {
+      encoding: "utf8",
+    }).trim();
+    if (!pid) return null;
+    const m = fs.readFileSync(`/proc/${pid}/status`, "utf8").match(/VmRSS:\s+(\d+) kB/);
+    return m ? Math.round(Number(m[1]) / 1024) : null;
+  } catch {
+    return null;
+  }
+}
 
 // All persona/judge calls go through this wrapper: it appends the Qwen
 // soft-switch that disables thinking mode (the 122B honors it; smaller
@@ -469,7 +485,14 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     const res = await bridge.invoke("send_message_stream", { message, conversationId: convo }, 60_000);
     messageId = res?.message_id ?? res;
   } catch (e) {
-    return { error: String(e).slice(0, 240), latencyMs: Date.now() - t0 };
+    // Same shape as every other return — a missing narration array crashed
+    // the turn loop (gapCheckRan .some) when the send itself failed.
+    return {
+      error: String(e).slice(0, 240),
+      latencyMs: Date.now() - t0,
+      narration: [],
+      seq: since,
+    };
   }
   let ttft = null;
   let canceled = false;
@@ -783,7 +806,7 @@ async function runSession(persona, corpora, corporaMeta) {
           : Promise.resolve(null),
       ]);
     }
-    const gapCheckRan = t.narration.some((p) => /gap_check/i.test(p));
+    const gapCheckRan = (t.narration ?? []).some((p) => /gap_check/i.test(p));
     const refinedChanged = refined != null && refined !== t.answer;
     const partial = {
       canceled: t.canceled,
@@ -907,6 +930,11 @@ async function main() {
   fs.rmSync(JOURNAL, { force: true });
   if (!SPAWN && !(await bridge.healthz()))
     throw new Error("bridge not reachable at :9745 — pass --spawn (and --attach for the study config)");
+  // Route the gate's per-claim dbg() lines into the app log (methodology
+  // §3.5) — without this, adjudicating WHY a refinement was rejected
+  // (over-claiming vs judge miss) is guesswork. Must be set BEFORE spawn:
+  // the child inherits process.env at spawn time.
+  process.env.SOVEREIGN_AGENTIC_KQ_DEBUG ??= "1";
   const app = await spawnDesktop({
     bridge,
     attach: ATTACH,
@@ -964,6 +992,7 @@ async function main() {
       scoped: SCOPE_GOAL,
       maxSearches: MAX_SEARCHES,
       brain: BRAIN,
+      daemonRssMb: daemonRssMb(),
     });
 
     const endAt = Date.now() + MINUTES * 60_000;
@@ -991,6 +1020,7 @@ async function main() {
       tallies,
       strand: { ...strand, unseen: strandDetail.unseen },
       searchesUsed,
+      daemonRssMb: daemonRssMb(),
     });
   } finally {
     // Attach courtesy: remove the conversations this run minted.
