@@ -414,6 +414,36 @@ pub async fn notebook_list(
         }
     }
 
+    // Open-conflict counts for governance corpora — those carrying a
+    // `governance_oplog.jsonl`. Cheap gate: stat the oplog per corpus;
+    // only for the (typically one) governance corpus do we load the view
+    // to count open tensions. Best-effort and off the async executor; a
+    // read failure just omits the count. A `Some(_)` here is what shows
+    // the notebook's Conflicts tab — including `Some(0)` ("all clear").
+    let open_conflicts: HashMap<String, u32> = {
+        let index_dir = engine.index_dir().to_path_buf();
+        let ids: Vec<String> = installed
+            .iter()
+            .filter(|i| !i.is_shard && i.parent_corpus_id.is_none())
+            .map(|i| i.corpus_id.clone())
+            .collect();
+        tokio::task::spawn_blocking(move || {
+            let mut counts = HashMap::new();
+            for id in ids {
+                let atlas = index_dir.join(&id).join("atlas");
+                if !atlas.join("governance_oplog.jsonl").exists() {
+                    continue;
+                }
+                if let Ok(view) = corpus_engine::enrichment::GovernanceView::from_atlas_dir(&atlas) {
+                    counts.insert(id, view.open_tensions().count() as u32);
+                }
+            }
+            counts
+        })
+        .await
+        .unwrap_or_default()
+    };
+
     let mut notebooks = Vec::new();
     for info in &installed {
         // Shards are storage internals; layer children belong to their
@@ -461,6 +491,7 @@ pub async fn notebook_list(
             explorable: explorable.contains(&info.corpus_id),
             updated_unix: Some(info.created_at),
             scope,
+            open_conflicts: open_conflicts.get(&info.corpus_id).copied(),
         });
     }
 

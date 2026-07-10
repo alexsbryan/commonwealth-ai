@@ -206,6 +206,39 @@ pub async fn enrich_build_async(
                     unrecognised_lines = outcome.unrecognised_lines.len(),
                     "enrich build subprocess finished"
                 );
+                // Living-governance hook: after a clean atlas build of a
+                // governance corpus, migrate atom ids to content-hash and
+                // (re-)seed the rule baseline. Order is load-bearing —
+                // migrate THEN seed — so rules survive the weekly rebuild
+                // that renumbers sequential ids. Best-effort: failure logs
+                // and never blocks the build. Runs only for a corpus whose
+                // recipe declares `[enrichment] domain = "governance"`, so
+                // ordinary corpora are untouched.
+                if outcome.exit_code == 0 && !outcome.cancelled {
+                    let cid = outcome.corpus_id.clone();
+                    if crate::governance_commands::is_governance_corpus(&cid) {
+                        let seed_cid = cid.clone();
+                        match tokio::task::spawn_blocking(move || {
+                            crate::governance_commands::governance_post_build(&seed_cid)
+                        })
+                        .await
+                        {
+                            Ok(Ok(seeded)) => tracing::info!(
+                                corpus_id = %cid,
+                                seeded,
+                                "governance post-build: migrated + seeded rule baseline"
+                            ),
+                            Ok(Err(e)) => tracing::warn!(
+                                corpus_id = %cid, error = %e,
+                                "governance post-build failed"
+                            ),
+                            Err(e) => tracing::warn!(
+                                corpus_id = %cid, error = %e,
+                                "governance post-build task join failed"
+                            ),
+                        }
+                    }
+                }
             }
             Err(e) => {
                 // Subprocess failed to spawn at all (CLI not in

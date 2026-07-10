@@ -156,6 +156,9 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
         GovernanceOpKind::ResolveTension {
             tension: tension.id.clone(),
             via: supersede.id.clone(),
+            // Record the endpoint rule pair so this adjudication survives
+            // an atlas rebuild that renumbers the tension's edge id.
+            endpoints: Some((keep_id.clone(), old_id.clone())),
             rationale: parsed.rationale.clone(),
         },
         ts,

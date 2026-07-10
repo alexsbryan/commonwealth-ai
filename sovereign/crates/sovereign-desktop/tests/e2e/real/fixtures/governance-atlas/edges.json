@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0",
+  "edges": [
+    {
+      "id": "edge-00001",
+      "edge_type": "Tension",
+      "source": "claim-179b296698ec4911",
+      "target": "claim-7d2475b7cdf5223c",
+      "sub_question": "When do quiet hours begin now?",
+      "confidence": 0.85,
+      "provenance": "derived"
+    },
+    {
+      "id": "edge-00002",
+      "edge_type": "Tension",
+      "source": "claim-5ba6f4db902ff89f",
+      "target": "claim-7f57ac9f2cd3e236",
+      "sub_question": "May a guest stay overnight?",
+      "confidence": 0.85,
+      "provenance": "derived"
+    },
+    {
+      "id": "edge-00003",
+      "edge_type": "Tension",
+      "source": "claim-b16274f771ace2b5",
+      "target": "claim-559da354c115ec6a",
+      "sub_question": "Who cleans the kitchen?",
+      "confidence": 0.85,
+      "provenance": "derived"
+    },
+    {
+      "id": "edge-00004",
+      "edge_type": "Tension",
+      "source": "claim-5ba6f4db902ff89f",
+      "target": "claim-c62cbf4bb47da8d4",
+      "sub_question": "Where do guests park?",
+      "confidence": 0.85,
+      "provenance": "derived"
+    }
+  ]
+}

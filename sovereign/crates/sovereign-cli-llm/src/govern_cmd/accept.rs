@@ -72,6 +72,9 @@ pub fn cmd_accept(args: &[String]) -> i32 {
         GovernanceOpKind::AcceptTension {
             tension: tension.id.clone(),
             rationale: rationale.clone(),
+            // Record the endpoint rule pair so this adjudication survives
+            // an atlas rebuild that renumbers the tension's edge id.
+            endpoints: Some((tension.rule_a.clone(), tension.rule_b.clone())),
         },
         now_unix(),
         "human:cli",

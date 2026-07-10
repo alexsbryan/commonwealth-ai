@@ -1,0 +1,131 @@
+{
+  "schema_version": "2.3",
+  "atoms": [
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-179b296698ec4911",
+        "content": "Quiet hours begin at 11 PM every night.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_charter_ii"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-7d2475b7cdf5223c",
+        "content": "Quiet hours begin at 10 PM on weeknights.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_2026_02_10"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-5ba6f4db902ff89f",
+        "content": "Guests may stay up to two nights.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_charter_i"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-7f57ac9f2cd3e236",
+        "content": "No overnight guests are permitted.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_2026_03_14"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-b16274f771ace2b5",
+        "content": "Whoever cooks cleans the kitchen.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_charter_iii"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-559da354c115ec6a",
+        "content": "The cook is excused from kitchen cleanup.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_2026_04_02"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-c62cbf4bb47da8d4",
+        "content": "Guests may park on the street.",
+        "discourse_act": "enact",
+        "epistemic_status": "confident",
+        "scope": "contextual",
+        "evidence": [
+          {
+            "chunk_id": "sec_2026_03_28"
+          }
+        ],
+        "attributed_to": "entity-0001",
+        "claim_kind": "requires",
+        "enrichment_depth": "extracted"
+      }
+    }
+  ]
+}

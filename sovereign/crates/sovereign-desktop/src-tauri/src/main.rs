@@ -10,6 +10,7 @@ mod dev_flags;
 mod enrich_commands;
 mod error;
 mod friendly_names;
+mod governance_commands;
 mod import_commands;
 mod insight_commands;
 mod local_corpus_commands;
@@ -484,6 +485,14 @@ fn main() -> ExitCode {
             atlas_commands::atlas_list_atoms,
             atlas_commands::atlas_subgraph,
             atlas_commands::atlas_get_atom_detail,
+            governance_commands::governance_get_view,
+            governance_commands::governance_resolve,
+            governance_commands::governance_accept,
+            governance_commands::governance_dismiss,
+            governance_commands::governance_undo_tension,
+            governance_commands::governance_seed,
+            governance_commands::governance_write_recipe,
+            governance_commands::governance_export_write,
             atlas_commands::atlas_list_conv_corpora,
             atlas_commands::atlas_list_conversations,
             atlas_commands::atlas_get_conv_detail,

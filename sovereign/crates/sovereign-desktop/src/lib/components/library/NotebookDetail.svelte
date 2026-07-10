@@ -20,6 +20,7 @@
   import { untrack } from "svelte";
   import ChatView from "../ChatView.svelte";
   import AtlasSurface from "../atlas/AtlasSurface.svelte";
+  import ConflictsPanel from "./ConflictsPanel.svelte";
   import EnrichmentStage from "../EnrichmentStage.svelte";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
   import { cardSend, cardReceive } from "../../motion";
@@ -43,7 +44,7 @@
     ConversationEntry,
   } from "../../types";
 
-  type TabId = "ask" | "explore" | "sources" | "settings";
+  type TabId = "ask" | "explore" | "conflicts" | "sources" | "settings";
 
   let {
     notebook,
@@ -309,6 +310,16 @@
           data-testid="notebook-tab-explore"
           onclick={() => setTab("explore")}
         >Explore</button>
+        <!-- Conflicts appears only for a governance corpus (one with a
+             governance oplog); `open_conflicts` is null otherwise. -->
+        {#if notebook.open_conflicts != null}
+          <button
+            class="seg-btn"
+            class:active={tab === "conflicts"}
+            data-testid="notebook-tab-conflicts"
+            onclick={() => setTab("conflicts")}
+          >Conflicts{#if notebook.open_conflicts > 0}<span class="seg-count">{notebook.open_conflicts}</span>{/if}</button>
+        {/if}
       </div>
 
       {#if tab === "ask" && notebookConvs.length > 0}
@@ -428,6 +439,12 @@
           </button>
         </div>
       {/if}
+    {:else if tab === "conflicts"}
+      <ConflictsPanel
+        corpusId={notebook.id}
+        notebookName={notebook.name}
+        onChanged={onChanged}
+      />
     {:else if tab === "sources"}
       <div class="pad">
         <h2>Where this came from</h2>
@@ -595,6 +612,16 @@
     color: var(--text-primary);
     border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  }
+  /* Open-conflict count on the Conflicts tab — a small warning-tinted pill. */
+  .seg-count {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 650;
+    background: color-mix(in oklch, var(--error) 20%, transparent);
+    color: color-mix(in oklch, var(--error) 80%, var(--text-primary));
   }
 
   .menu-anchor { position: relative; display: inline-flex; }

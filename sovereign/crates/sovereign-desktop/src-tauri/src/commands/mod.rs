@@ -198,6 +198,11 @@ pub struct NotebookSummary {
     /// `"local"` | `"mesh"` | `"public"`. Local corpora carry their
     /// configured scope; everything else defaults to `"local"`.
     pub scope: String,
+    /// Count of open (unadjudicated) conflicts for a governance corpus —
+    /// one carrying a `governance_oplog.jsonl`. `None` for an ordinary
+    /// corpus (which is what gates the notebook's Conflicts tab off);
+    /// `Some(0)` still shows the tab (exports + "all clear" state).
+    pub open_conflicts: Option<u32>,
 }
 
 /// Detailed health report for a single installed corpus, loaded on demand

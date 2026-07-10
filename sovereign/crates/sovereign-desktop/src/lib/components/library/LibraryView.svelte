@@ -39,7 +39,7 @@
   let error = $state<string | null>(null);
 
   // Local routing within the Library surface.
-  type DetailTab = "ask" | "explore" | "sources" | "settings";
+  type DetailTab = "ask" | "explore" | "conflicts" | "sources" | "settings";
   let selected = $state<NotebookSummary | null>(null);
   let selectedTab = $state<DetailTab>("ask");
   let showAdd = $state(false);
@@ -160,6 +160,12 @@
                   <span class="chip">{kindLabel(nb.source_kind)}</span>
                   <span class="dot">·</span>
                   <span>{nb.doc_count.toLocaleString()} passages</span>
+                  {#if nb.open_conflicts != null && nb.open_conflicts > 0}
+                    <span
+                      class="chip chip-conflict"
+                      title="Open conflicts to settle"
+                    >{nb.open_conflicts} {nb.open_conflicts === 1 ? "conflict" : "conflicts"}</span>
+                  {/if}
                 </div>
                 <div class="card-fresh">{freshness(nb.updated_unix)}</div>
               </button>
@@ -298,6 +304,12 @@
     border-radius: 5px;
     padding: 1px 6px;
     font-weight: 500;
+  }
+  .chip-conflict {
+    color: color-mix(in oklch, var(--error) 80%, var(--text-primary));
+    background: color-mix(in oklch, var(--error) 12%, transparent);
+    border-color: color-mix(in oklch, var(--error) 35%, var(--border));
+    font-weight: 600;
   }
   .dot { opacity: 0.6; }
   .card-fresh { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }

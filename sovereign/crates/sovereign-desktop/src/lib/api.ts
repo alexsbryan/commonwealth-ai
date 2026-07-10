@@ -53,6 +53,7 @@ import type {
   ConvListPage,
   EntityAggregateRow,
   GlinerModelStatus,
+  GovernanceViewPayload,
 } from "./types";
 
 /// Tauri `invoke` that normalises every rejection to a `DesktopError`
@@ -613,6 +614,89 @@ export async function notebookList(): Promise<NotebookSummary[]> {
 
 export async function installCorpus(corpusId: string): Promise<void> {
   return invoke("install_corpus", { corpusId });
+}
+
+// ── Governance (FR-9) — the Conflicts panel's command surface. ──
+
+/// Full governance panel payload for a corpus: the joined read-model
+/// (rules + ranked conflicts + integrity issues) plus section titles,
+/// resolved chunk ids for "view passage", topic names, recipe vocabulary,
+/// op timestamps, and the doc-staleness flag.
+export async function governanceGetView(
+  corpusId: string,
+): Promise<GovernanceViewPayload> {
+  return invokeChecked("governance_get_view", { corpusId });
+}
+
+/// Resolve a conflict by keeping one rule (the other is superseded).
+/// Returns the two appended op ids. `rationale` records the decision.
+export async function governanceResolve(
+  corpusId: string,
+  tensionId: string,
+  keepRuleId: string,
+  rationale: string,
+): Promise<string[]> {
+  return invokeChecked("governance_resolve", {
+    corpusId,
+    tensionId,
+    keepRuleId,
+    rationale,
+  });
+}
+
+/// Accept a conflict as known-and-tolerated (both rules stand). The
+/// rationale is required.
+export async function governanceAccept(
+  corpusId: string,
+  tensionId: string,
+  rationale: string,
+): Promise<string[]> {
+  return invokeChecked("governance_accept", { corpusId, tensionId, rationale });
+}
+
+/// Dismiss a conflict as detector noise (not a real contradiction).
+/// One-click; note optional. Distinct from accept.
+export async function governanceDismiss(
+  corpusId: string,
+  tensionId: string,
+  rationale?: string,
+): Promise<string[]> {
+  return invokeChecked("governance_dismiss", {
+    corpusId,
+    tensionId,
+    rationale: rationale ?? null,
+  });
+}
+
+/// Undo the current decision on a conflict (reverts the adjudication
+/// bundle atomically). Returns the appended revert op id.
+export async function governanceUndoTension(
+  corpusId: string,
+  tensionId: string,
+): Promise<string> {
+  return invokeChecked("governance_undo_tension", { corpusId, tensionId });
+}
+
+/// Write the community-governance template recipe for a folder corpus,
+/// so its enrichment takes the custom-ontology (governance) atlas path.
+export async function governanceWriteRecipe(
+  corpusId: string,
+  displayName: string,
+  sourcePath: string,
+): Promise<string> {
+  return invokeChecked("governance_write_recipe", {
+    corpusId,
+    displayName,
+    sourcePath,
+  });
+}
+
+/// Write export text (agenda / current rules) to a user-picked path.
+export async function governanceExportWrite(
+  destPath: string,
+  content: string,
+): Promise<void> {
+  return invokeChecked("governance_export_write", { destPath, content });
 }
 
 /// Expand an installed corpus to a relaxed scope (e.g. Wikipedia

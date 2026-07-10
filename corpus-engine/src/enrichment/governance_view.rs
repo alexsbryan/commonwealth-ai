@@ -35,7 +35,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::governance::{
-    derive_active, GovernanceOp, GovernanceOpKind, GovernanceOplog, OpId, RuleStatus, TensionStatus,
+    derive_active, ActiveSet, GovernanceOp, GovernanceOpKind, GovernanceOplog, OpId, PairKey,
+    RuleStatus, TensionStatus,
 };
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
@@ -100,6 +101,17 @@ pub enum TensionDisposition {
     Open,
     Resolved { by: OpId },
     Accepted { by: OpId },
+    /// The steward judged this a detector false-positive (not a real
+    /// contradiction). Distinct from [`Accepted`](Self::Accepted), which
+    /// is a *real* conflict the community tolerates.
+    Dismissed { by: OpId },
+    /// Not an open question because one of its rules is no longer in force
+    /// (superseded or retracted). View-only — the fold can't know this
+    /// without the edge's endpoints, which this join supplies. Keeps a
+    /// resolved conflict closed after an atlas rebuild renumbers its edge,
+    /// and keeps a fresh rule's conflict with already-dead law off the
+    /// agenda.
+    Moot { dead_endpoint: AtomId },
 }
 
 /// A surfaced tension with both rule texts attached, ready to render as
@@ -127,8 +139,14 @@ pub enum GovernanceIssue {
     RuleHasNoAtom { rule: AtomId },
     /// A Tension edge references a rule atom that doesn't exist.
     TensionEndpointMissing { tension: EdgeId, endpoint: AtomId },
-    /// The oplog adjudicated a tension no Tension edge surfaces (the
-    /// edge was re-extracted away, or its id drifted).
+    /// A live adjudication maps to no current tension and can't be
+    /// re-matched — genuine drift the steward should re-adjudicate.
+    /// Fires only for (a) a legacy edge-id-only decision whose edge no
+    /// longer surfaces, or (b) an endpoint-carrying decision one of whose
+    /// rule atoms has vanished (the rule text was edited). A decision
+    /// whose endpoints still exist but whose edge the detector simply
+    /// didn't re-surface this rebuild is *normal weekly variance*, held in
+    /// the pair map for re-match — deliberately NOT an issue.
     AdjudicatedTensionNotSurfaced { tension: EdgeId },
     /// INV-2: an adjudication was authored by a non-human actor.
     UnattendedAct { op: OpId },
@@ -272,6 +290,52 @@ pub fn section_titles(index_root: impl AsRef<Path>) -> HashMap<String, String> {
 
 // ── Pure builder ─────────────────────────────────────────────
 
+/// Map a folded [`TensionStatus`] to its view disposition.
+fn disposition_from_status(s: &TensionStatus) -> TensionDisposition {
+    match s {
+        TensionStatus::Resolved { by } => TensionDisposition::Resolved { by: by.clone() },
+        TensionStatus::Accepted { by } => TensionDisposition::Accepted { by: by.clone() },
+        TensionStatus::Dismissed { by } => TensionDisposition::Dismissed { by: by.clone() },
+    }
+}
+
+/// Decide how a surfaced tension stands, in four steps of decreasing
+/// specificity. The order is load-bearing for *living* governance, where
+/// the atlas is rebuilt weekly and every edge id is re-minted:
+///
+/// 1. **Edge-id match** — same build, or a legacy edge-id-only decision.
+/// 2. **Endpoint-pair match** — the same two rules, adjudicated under a
+///    now-stale edge id. This is what carries a decision across a rebuild.
+/// 3. **Mootness** — a tension one of whose rules is superseded/retracted
+///    is not a live question. Independently keeps a resolved conflict off
+///    the agenda after rebuild (resolve always supersedes a rule) and
+///    drops a fresh rule's conflict with already-dead law.
+/// 4. **Open** — genuinely awaiting adjudication.
+fn tension_disposition(
+    edge: &EdgeId,
+    rule_a: &AtomId,
+    rule_b: &AtomId,
+    active: &ActiveSet,
+) -> TensionDisposition {
+    if let Some(s) = active.tensions.get(edge) {
+        return disposition_from_status(s);
+    }
+    if let Some(s) = active.tension_pairs.get(&PairKey::new(rule_a, rule_b)) {
+        return disposition_from_status(s);
+    }
+    for endpoint in [rule_a, rule_b] {
+        if matches!(
+            active.rules.get(endpoint),
+            Some(RuleStatus::Superseded { .. } | RuleStatus::Retracted { .. })
+        ) {
+            return TensionDisposition::Moot {
+                dead_endpoint: endpoint.clone(),
+            };
+        }
+    }
+    TensionDisposition::Open
+}
+
 /// Join rule content + surfaced tensions + the act log into a
 /// [`GovernanceView`]. Pure; the single source of read-model truth.
 ///
@@ -341,11 +405,7 @@ pub fn build_view(
                 String::new()
             }
         };
-        let disposition = match active.tensions.get(&t.id) {
-            None => TensionDisposition::Open,
-            Some(TensionStatus::Resolved { by }) => TensionDisposition::Resolved { by: by.clone() },
-            Some(TensionStatus::Accepted { by }) => TensionDisposition::Accepted { by: by.clone() },
-        };
+        let disposition = tension_disposition(&t.id, &t.rule_a, &t.rule_b, &active);
         tension_views.push(TensionView {
             id: t.id.clone(),
             rule_a: t.rule_a.clone(),
@@ -358,12 +418,43 @@ pub fn build_view(
         });
     }
 
-    // An adjudication of a tension no edge surfaces is drift.
-    for tid in active.tensions.keys() {
-        if !surfaced.contains(tid) {
-            issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced {
-                tension: tid.clone(),
-            });
+    // Dangling adjudications. Edge ids are re-minted on every atlas
+    // rebuild, so a bare "adjudicated edge no longer surfaces" test would
+    // false-positive on every past decision — the weekly-treadmill bug.
+    // Instead: walk the LIVE, winning adjudication for each edge (matched
+    // by `by()` == op.id, which the fold sets last-write-wins, so reverted
+    // and superseded decisions are skipped) and flag only genuine drift —
+    // a legacy decision with no surfaced edge, or an endpoint-carrying
+    // decision whose rule atom has vanished. A valid pair simply awaiting
+    // re-detection is normal variance, not an issue.
+    for op in ops {
+        let (edge, endpoints) = match &op.kind {
+            GovernanceOpKind::ResolveTension {
+                tension, endpoints, ..
+            }
+            | GovernanceOpKind::DismissTension {
+                tension, endpoints, ..
+            }
+            | GovernanceOpKind::AcceptTension {
+                tension, endpoints, ..
+            } => (tension, endpoints),
+            _ => continue,
+        };
+        // Only the live, winning adjudication for this edge counts.
+        if active.tensions.get(edge).map(TensionStatus::by) != Some(&op.id) {
+            continue;
+        }
+        // Matched to a currently-surfaced edge → fine.
+        if surfaced.contains(edge) {
+            continue;
+        }
+        match endpoints {
+            // Pair carried: dangling only if an endpoint atom is gone.
+            Some((a, b)) if by_id.contains_key(a) && by_id.contains_key(b) => {}
+            // Legacy (no endpoints) unsurfaced, or a vanished endpoint atom.
+            _ => issues.push(GovernanceIssue::AdjudicatedTensionNotSurfaced {
+                tension: edge.clone(),
+            }),
         }
     }
 
@@ -643,6 +734,7 @@ mod tests {
                 GovernanceOpKind::AcceptTension {
                     tension: EdgeId::new(1),
                     rationale: "intentional".into(),
+                    endpoints: None,
                 },
                 1002,
                 "human:alex",
@@ -677,6 +769,7 @@ mod tests {
                 GovernanceOpKind::ResolveTension {
                     tension: EdgeId::new(1),
                     via: supersede.id.clone(),
+                    endpoints: Some((AtomId::claim(1), AtomId::claim(2))),
                     rationale: String::new(),
                 },
                 1003,
@@ -689,6 +782,146 @@ mod tests {
             view.tensions[0].disposition,
             TensionDisposition::Resolved { .. }
         ));
+    }
+
+    #[test]
+    fn dismissed_tension_leaves_the_open_set() {
+        let rules = vec![rule(1, "a"), rule(2, "b")];
+        let tensions = vec![tension(1, 1, 2, "why", 0.9)];
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(2, 1001),
+            op(
+                GovernanceOpKind::DismissTension {
+                    tension: EdgeId::new(1),
+                    endpoints: Some((AtomId::claim(1), AtomId::claim(2))),
+                    rationale: "detector noise".into(),
+                },
+                1002,
+                "human:alex",
+            ),
+        ];
+        let view = build_view(&rules, &tensions, &ops);
+        assert_eq!(view.open_tensions().count(), 0);
+        assert!(matches!(
+            view.tensions[0].disposition,
+            TensionDisposition::Dismissed { .. }
+        ));
+        assert!(view.issues.is_empty());
+    }
+
+    #[test]
+    fn pair_matched_disposition_survives_rebuild_edge_ids() {
+        // Week 1: accept the conflict between rules 1 and 2, adjudicating
+        // edge-0001 and recording the endpoint pair. Week 2: the atlas is
+        // rebuilt and the same conflict re-surfaces under a NEW edge id
+        // (edge-0005). The decision must carry over via the pair map, and
+        // no false "not surfaced" issue may fire.
+        let rules = vec![rule(1, "a"), rule(2, "b")];
+        let rebuilt_tensions = vec![tension(5, 1, 2, "why", 0.9)];
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(2, 1001),
+            op(
+                GovernanceOpKind::AcceptTension {
+                    tension: EdgeId::new(1),
+                    rationale: "both can stand".into(),
+                    endpoints: Some((AtomId::claim(1), AtomId::claim(2))),
+                },
+                1002,
+                "human:alex",
+            ),
+        ];
+        let view = build_view(&rules, &rebuilt_tensions, &ops);
+        assert_eq!(view.tensions[0].id, EdgeId::new(5));
+        assert!(
+            matches!(view.tensions[0].disposition, TensionDisposition::Accepted { .. }),
+            "the re-minted edge inherits the pair's accepted disposition"
+        );
+        assert_eq!(view.open_tensions().count(), 0);
+        assert!(
+            view.issues.is_empty(),
+            "a pair re-detected under a new edge id is not drift"
+        );
+    }
+
+    #[test]
+    fn tension_with_superseded_endpoint_is_moot_not_open() {
+        // Rule 1 was superseded by rule 2. A tension the detector surfaces
+        // between the dead rule 1 and a live rule 3 is not a live question —
+        // it is moot, off the agenda, with no adjudication needed.
+        let rules = vec![rule(1, "dead"), rule(2, "successor"), rule(3, "live")];
+        let tensions = vec![tension(7, 1, 3, "stale overlap", 0.8)];
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(3, 1001),
+            op(
+                GovernanceOpKind::Supersede {
+                    new_rule: AtomId::claim(2),
+                    old_rules: vec![AtomId::claim(1)],
+                    rationale: String::new(),
+                },
+                1002,
+                "human:alex",
+            ),
+        ];
+        let view = build_view(&rules, &tensions, &ops);
+        assert_eq!(view.open_tensions().count(), 0);
+        assert!(matches!(
+            view.tensions[0].disposition,
+            TensionDisposition::Moot { .. }
+        ));
+        if let TensionDisposition::Moot { dead_endpoint } = &view.tensions[0].disposition {
+            assert_eq!(dead_endpoint, &AtomId::claim(1));
+        }
+    }
+
+    #[test]
+    fn vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is() {
+        // (a) A pair decision whose edge the detector simply didn't
+        //     re-surface this rebuild — both rule atoms still exist — is
+        //     normal weekly variance, NOT an issue.
+        let rules = vec![rule(1, "a"), rule(2, "b")];
+        let ops = vec![
+            assert_rule(1, 1000),
+            assert_rule(2, 1001),
+            op(
+                GovernanceOpKind::AcceptTension {
+                    tension: EdgeId::new(1),
+                    rationale: "both can stand".into(),
+                    endpoints: Some((AtomId::claim(1), AtomId::claim(2))),
+                },
+                1002,
+                "human:alex",
+            ),
+        ];
+        let view = build_view(&rules, &[], &ops);
+        assert!(
+            view.issues.is_empty(),
+            "a valid pair awaiting re-detection is not drift"
+        );
+
+        // (b) A pair decision one of whose rule atoms has vanished (the
+        //     rule text was edited into a new atom) IS drift needing
+        //     attention.
+        let ops_edited = vec![
+            assert_rule(1, 1000),
+            op(
+                GovernanceOpKind::AcceptTension {
+                    tension: EdgeId::new(1),
+                    rationale: "both can stand".into(),
+                    endpoints: Some((AtomId::claim(1), AtomId::claim(9))),
+                },
+                1002,
+                "human:alex",
+            ),
+        ];
+        let view_edited = build_view(&[rule(1, "a")], &[], &ops_edited);
+        assert!(view_edited
+            .issues
+            .contains(&GovernanceIssue::AdjudicatedTensionNotSurfaced {
+                tension: EdgeId::new(1)
+            }));
     }
 
     #[test]
@@ -720,10 +953,13 @@ mod tests {
 
     #[test]
     fn adjudication_without_surfaced_edge_is_an_issue() {
+        // Case (a): a legacy edge-id-only decision whose edge no longer
+        // surfaces is genuine drift — nothing to re-match against.
         let ops = vec![op(
             GovernanceOpKind::AcceptTension {
                 tension: EdgeId::new(9),
                 rationale: "x".into(),
+                endpoints: None,
             },
             1000,
             "human:alex",
