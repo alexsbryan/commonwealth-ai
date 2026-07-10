@@ -151,8 +151,8 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 </section>
 
 <section class="sov-get" id="get">
-<h2 class="sov-get-title">Take it home</h2>
-<p class="sov-get-version">v<span id="dl-version">0.1.19</span> · alpha · macOS (both chips) · Linux · Windows</p>
+<h2 class="sov-get-title">Let it rip</h2>
+<p class="sov-get-version"> super-alpha-y · macOS · Linux · Windows</p>
 
 <p>The CLI installs with one line. Three binaries into <code>~/.local/bin</code>, checksum-verified, no sudo, nothing running you didn't start:</p>
 
@@ -205,18 +205,9 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
     });
   });
 
-  // Progressive enhancement: the download links resolve server-side
-  // (/download/<platform> → newest desktop-v*), so only the version
-  // LABEL needs refreshing; the static text is the deploy-time fallback.
-  fetch('https://api.github.com/repos/alexsbryan/svrnmesh-releases/releases?per_page=15')
-    .then(function (r) { return r.ok ? r.json() : []; })
-    .then(function (releases) {
-      var rel = (releases || []).find(function (r) {
-        return !r.draft && !r.prerelease && r.tag_name.indexOf('desktop-v') === 0;
-      });
-      if (rel) document.getElementById('dl-version').textContent = rel.tag_name.slice('desktop-v'.length);
-    })
-    .catch(function () { /* label stays at the deploy-time version */ });
+  // No version label on the page by design ("super-alpha-y" says it
+  // better) — the download links resolve server-side to the newest
+  // desktop-v* release, so nothing here needs to know the number.
 
   var form = document.getElementById('signup-form');
   var input = document.getElementById('signup-email');
