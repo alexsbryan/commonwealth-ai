@@ -132,7 +132,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 <span class="sep">·</span>
 <span>local or mesh</span>
 <span class="sep">·</span>
-<span>open source & broke af</span>
+<span>alpha & broke af</span>
 </div>
 
 <h1 class="sov-headline">Open models for<br/>the rest of us</h1>
@@ -152,7 +152,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 
 <section class="sov-get" id="get">
 <h2 class="sov-get-title">Take it home</h2>
-<p class="sov-get-version">v<span id="dl-version">0.1.19</span> · macOS (both chips) · Linux · Windows</p>
+<p class="sov-get-version">v<span id="dl-version">0.1.19</span> · alpha · macOS (both chips) · Linux · Windows</p>
 
 <p>The CLI installs with one line. Three binaries into <code>~/.local/bin</code>, checksum-verified, no sudo, nothing running you didn't start:</p>
 
@@ -176,7 +176,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
   <a class="sov-dl" href="/download/windows">Windows<small>installer .exe</small></a>
 </div>
 
-<p class="sov-get-fine">The honest fine print: everything is signed for the auto-updater and checksummed, but the mac builds aren't notarized yet — so the first launch is right-click → Open, once. Windows will show a SmartScreen warning for the same reason: a missing certificate, not malice. Updates arrive on their own from this version forward, so with any luck this is the last installer you download by hand. Something broken? <a href="https://github.com/alexsbryan/commonwealth-ai/issues">Tell me</a> — be patient, be constructive, then demand the best.</p>
+<p class="sov-get-fine">The honest fine print: this is an alpha — the builds work, the edges are rough, and you're early on purpose. Everything is signed for the auto-updater and checksummed, but the mac builds aren't notarized yet — so the first launch is right-click → Open, once. Windows will show a SmartScreen warning for the same reason: a missing certificate, not malice. Updates arrive on their own from this version forward, so with any luck this is the last installer you download by hand. Something broken? <a href="https://github.com/alexsbryan/svrnmesh-releases/issues">Tell me</a> — be patient, be constructive, then demand the best. And the source? AGPLv3, opening with the beta — alpha collaborators get it now; the signup form above is how you ask.</p>
 </section>
 
 <section class="sov-coda">
@@ -185,7 +185,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
 <p class="sov-coda-text">Let's try to make AI that's better together.</p>
 
 <div class="sov-foot">
-<span>open source · AGPLv3 · bring your own model</span>
+<span>AGPLv3 · source opens with the beta · bring your own model</span>
 </div>
 
 </section>
@@ -208,7 +208,7 @@ body { background: oklch(0.965 0.014 85); font-family: 'JetBrains Mono', ui-mono
   // Progressive enhancement: the download links resolve server-side
   // (/download/<platform> → newest desktop-v*), so only the version
   // LABEL needs refreshing; the static text is the deploy-time fallback.
-  fetch('https://api.github.com/repos/alexsbryan/commonwealth-ai/releases?per_page=15')
+  fetch('https://api.github.com/repos/alexsbryan/svrnmesh-releases/releases?per_page=15')
     .then(function (r) { return r.ok ? r.json() : []; })
     .then(function (releases) {
       var rel = (releases || []).find(function (r) {

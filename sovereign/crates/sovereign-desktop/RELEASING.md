@@ -173,11 +173,25 @@ cut from a single Apple Silicon machine. First done for desktop-v0.1.19
 the containerized cargo-xwin leg.
 
 ```sh
-# after the usual bump + tag + draft-release creation:
-gh release create desktop-v<ver> --draft --title "desktop-v<ver>"   # if CI didn't
+# after the usual bump + tag:
+gh release create desktop-v<ver> --repo alexsbryan/svrnmesh-releases --draft --title "desktop-v<ver>"
 source ~/.zshrc     # provides TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD)
 scripts/release-desktop-local.sh
 ```
+
+**Alpha distribution model (2026-07 → beta).** The source repo is
+invite-only, so its release assets aren't anonymously fetchable — which
+would break install.sh, the landing-page downloads, and the auto-updater.
+Releases therefore publish to the PUBLIC shelf repo
+**`alexsbryan/svrnmesh-releases`** (both drivers default to it via
+`RELEASES_REPO`; the svrnme.sh edge endpoints default to it too). Rules of
+the shelf: release notes are hand-written and sanitized — never
+auto-generated, which would leak private-repo PR titles; binaries there are
+public-by-obscurity, and the invite gate is social (you add collaborators
+to THIS repo by hand; the landing signup form is the front door). The page
+footer says "source opens with the beta" — when that day comes, flip this
+repo public, retire the shelf (or keep it), and repoint `RELEASES_REPO` +
+the endpoint defaults back here.
 
 That driver sequences the three legs, verifies every artifact (including
 that each `.sig` was made by the key whose pubkey is embedded in

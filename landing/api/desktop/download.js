@@ -15,7 +15,8 @@
 // cli-v* stream, and asset names embed the version anyway. Resolution matches
 // updater.js: newest published, non-draft, non-prerelease desktop-v* tag.
 //
-// Same env as updater.js: GITHUB_OWNER, GITHUB_REPO, optional GITHUB_TOKEN.
+// Same env as updater.js: GITHUB_OWNER, GITHUB_REPO (defaults point at the
+// public svrnmesh-releases shelf), optional GITHUB_TOKEN.
 
 const PLATFORM_TO_ASSET_PATTERN = {
   // Installer artifacts (what a human downloads), NOT the updater archives.
@@ -40,8 +41,8 @@ export default async function handler(req) {
     );
   }
 
-  const owner = process.env.GITHUB_OWNER;
-  const repo  = process.env.GITHUB_REPO;
+  const owner = process.env.GITHUB_OWNER || 'alexsbryan';
+  const repo  = process.env.GITHUB_REPO  || 'svrnmesh-releases';
   if (!owner || !repo) {
     console.error('[download] GITHUB_OWNER / GITHUB_REPO not configured');
     return text('server not configured', 500);
