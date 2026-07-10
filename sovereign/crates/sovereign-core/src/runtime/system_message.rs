@@ -753,7 +753,7 @@ impl Runtime {
         )
         .await
         {
-            crate::runtime::collaboration::RefinementOutcome::Refined(text) => text,
+            crate::runtime::collaboration::RefinementOutcome::Refined { text, .. } => text,
             crate::runtime::collaboration::RefinementOutcome::NotAttempted
             | crate::runtime::collaboration::RefinementOutcome::NoChange
             | crate::runtime::collaboration::RefinementOutcome::Failed { .. } => {

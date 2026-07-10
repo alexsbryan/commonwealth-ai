@@ -75,8 +75,14 @@ pub(crate) enum RefinementOutcome {
     /// fire `onRefiningStarted`. No emit needed.
     NotAttempted,
     /// User provided content; refinement inference ran and produced
-    /// new text that differs from the original.
-    Refined(String),
+    /// new text that differs from the original. Carries the user's
+    /// content alongside the rewrite because the refinement re-gate
+    /// must verify against the corpus evidence PLUS this source: the
+    /// rewrite legitimately contains facts from it (that is the whole
+    /// point of the affordance), and verifying against corpus-only
+    /// evidence rejected every genuinely-new web rescue (measured
+    /// 3/3 reverted, persona-QA 2026-07-10).
+    Refined { text: String, user_content: String },
     /// User provided content; refinement inference ran but produced
     /// output identical to the original answer. Frontend's refining
     /// flag must clear — caller emits `message-refined` with the
@@ -242,9 +248,12 @@ pub(crate) async fn run_collaboration(
         "The user asked: {question}\n\n\
          Your initial answer (drawn from the local corpus):\n{response}\n\n\
          Additional source the user provided:\n{content}\n\n\
-         Refine the answer to integrate the user's source. Be explicit \
-         about what came from the corpus vs. what came from the user's \
-         source. Mark anything that remains uncertain — especially \
+         Refine the answer to integrate the user's source, using ONLY \
+         facts stated in the initial answer or in the source. If the \
+         source names a thing without explaining it, name it without \
+         explaining it — no mechanisms, numbers, or background from \
+         memory. Be explicit about what came from the corpus vs. the \
+         user's source. Mark anything that remains uncertain — especially \
          claims that hinge on dates that may now be in the past."
     );
 
@@ -300,7 +309,10 @@ pub(crate) async fn run_collaboration(
                 }
                 RefinementOutcome::NoChange
             } else {
-                RefinementOutcome::Refined(c.text)
+                RefinementOutcome::Refined {
+                    text: c.text,
+                    user_content: content,
+                }
             }
         }
         Err(e) => {
@@ -392,7 +404,21 @@ pub(crate) async fn run_post_stream_refinement(
 
         // Inference ran and produced new content. Persist the rewrite
         // and emit `message-refined` so the desktop swaps the bubble.
-        RefinementOutcome::Refined(refined) => {
+        RefinementOutcome::Refined {
+            text: refined,
+            user_content,
+        } => {
+            // The verification universe for a REFINED answer is the corpus
+            // evidence PLUS the user-provided source (paste or web-search
+            // results): the rewrite exists precisely to integrate that
+            // source, so verifying against corpus-only evidence rejects
+            // every rescue that adds genuinely new information — the
+            // affordance's entire purpose.
+            let evidence_with_source = if user_content.is_empty() {
+                evidence.to_string()
+            } else {
+                format!("{evidence}\n---\n{user_content}")
+            };
             // Post-synthesis guardrail (refinement path): the gap-check
             // rewrite is a fresh generation grounded in the same
             // evidence, so re-verify its quotes before it overwrites the
@@ -400,8 +426,10 @@ pub(crate) async fn run_post_stream_refinement(
             // would be silently defeated on exactly the turns the gap
             // check fires. Empty evidence is a no-op.
             let refined = {
-                let v =
-                    crate::quote_verification::verify_answer_against_evidence(&refined, evidence);
+                let v = crate::quote_verification::verify_answer_against_evidence(
+                    &refined,
+                    &evidence_with_source,
+                );
                 if v.demoted_count > 0 {
                     tracing::warn!(
                         demoted = v.demoted_count,
@@ -417,13 +445,73 @@ pub(crate) async fn run_post_stream_refinement(
             // KEEP the verified original, but still emit
             // `message-refined` with the original content — the UI's
             // `refining` flag must clear either way.
-            if let Some(guard) = &grounding_guard {
+            if let Some(guard) = grounding_guard {
                 let profile = crate::runtime::grounding::GateSurface::Refinement.profile();
+                // The gate's sealed universe must include the user's source,
+                // or web/paste-derived facts in the rewrite can never verify.
+                // chunk_labels stays PARALLEL to chunks (the alignment check
+                // indexes them together) — when labels were unavailable
+                // (empty, alignment skipped) we leave them empty rather than
+                // desync the vectors.
+                let mut gate_evidence = guard.evidence;
+                if !user_content.is_empty() {
+                    let labels_parallel =
+                        gate_evidence.chunk_labels.len() == gate_evidence.chunks.len();
+                    // PREPEND, not append: the per-claim support check walks
+                    // chunks in order under a top-12 cap (judge.rs:292) and
+                    // the specifics scan truncates similarly — appended at
+                    // position 20-40 the user's source is never checked and
+                    // the rewrite still rejects (measured: 5/5 reverts with
+                    // the appended variant, user_content_chars in receipts).
+                    //
+                    // The chunk also carries the SAME date anchor the
+                    // refinement system prompt injects: that prompt mandates
+                    // date reasoning ("Current date: … compare source dates"),
+                    // so refined answers legitimately say "since today is
+                    // <date>" — and the gate then prosecuted exactly that as
+                    // an ungrounded claim ("the evidence does not state the
+                    // current date"; measured 2026-07-10, both validation
+                    // rejects). Ambient truth the system itself asserted in
+                    // the prompt belongs in the verification universe.
+                    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+                    // Judge-sized pieces: claim_violation_joint truncates
+                    // EACH passage at 1,500 chars (judge.rs:755), so one
+                    // multi-result block loses its tail — split on paragraph
+                    // boundaries so every part of the source stays visible
+                    // to every per-claim check. Each piece carries the date
+                    // anchor so any piece alone grounds "today is <date>".
+                    let mut pieces: Vec<String> = vec![String::new()];
+                    for para in user_content.split("\n\n") {
+                        let cur = pieces.last_mut().expect("pieces starts non-empty");
+                        if !cur.is_empty() && cur.len() + para.len() > 1_300 {
+                            pieces.push(para.to_string());
+                        } else {
+                            if !cur.is_empty() {
+                                cur.push_str("\n\n");
+                            }
+                            cur.push_str(para);
+                        }
+                    }
+                    for piece in pieces.iter().rev().filter(|p| !p.is_empty()) {
+                        gate_evidence.chunks.insert(
+                            0,
+                            format!("Current date: {today}.\nUser-provided source:\n{piece}"),
+                        );
+                        if labels_parallel {
+                            gate_evidence
+                                .chunk_labels
+                                .insert(0, vec!["user-provided source".to_string()]);
+                        }
+                    }
+                    gate_evidence
+                        .source_labels
+                        .push("user-provided source".to_string());
+                }
                 let outcome = crate::runtime::grounding::gate_answer(
                     &guard.inference,
                     question,
                     refined.clone(),
-                    &guard.evidence,
+                    &gate_evidence,
                     &crate::types::CompletionRequest::default(),
                     &profile,
                 )
@@ -438,6 +526,7 @@ pub(crate) async fn run_post_stream_refinement(
                         target: "grounding_gate",
                         message_id = %message_id,
                         action,
+                        user_content_chars = user_content.len(),
                         "refinement_rejected: refined text failed the grounding \
                          gate — keeping the verified original"
                     );
