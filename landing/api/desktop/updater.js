@@ -28,10 +28,16 @@ const PLATFORM_TO_ASSET_PATTERN = {
   // Tauri target triples on the LEFT, regex matching the bundle artifact
   // name on the RIGHT. Patterns match against Vercel-side string regex,
   // so escape carefully.
-  'darwin-aarch64': /Sovereign[._].*aarch64.*\.app\.tar\.gz$/i,
-  'darwin-x86_64':  /Sovereign[._].*x64.*\.app\.tar\.gz$/i,
-  'linux-x86_64':   /sovereign[._].*amd64.*\.AppImage$/i,
-  'windows-x86_64': /Sovereign[._].*x64.*-setup\.exe$/i,
+  //
+  // Names track productName in tauri.conf.json ("svrnmesh" since the
+  // 2026-06-29 rename). Tauri emits the macOS updater archive as a bare
+  // `svrnmesh.app.tar.gz`; the release pipeline arch-qualifies it to
+  // `svrnmesh_<ver>_<aarch64|x64>.app.tar.gz` before upload so the two
+  // mac targets can coexist in one release and match here.
+  'darwin-aarch64': /svrnmesh[._].*aarch64.*\.app\.tar\.gz$/i,
+  'darwin-x86_64':  /svrnmesh[._].*(x64|x86_64).*\.app\.tar\.gz$/i,
+  'linux-x86_64':   /svrnmesh[._].*amd64.*\.AppImage$/i,
+  'windows-x86_64': /svrnmesh[._].*x64.*-setup\.exe$/i,
 };
 
 export const config = { runtime: 'edge' };
