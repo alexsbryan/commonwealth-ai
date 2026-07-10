@@ -573,6 +573,70 @@ pub(super) fn unwrap_unverified_excerpts(s: &str) -> String {
 /// rewrite instructions AND the user-visible verification note — where the
 /// chatter reads as the assistant indicting itself (observed live 2026-07-01:
 /// a released answer footnoted "… is a fabricated specific not found in the
+/// Deterministic jurisdiction filter: self-referential DECLINE statements —
+/// negated capability/coverage claims whose subject is the system itself or
+/// its evidence ("the system does not have access to…", "the provided
+/// passages do not contain…", "there is no evidence in the sources…").
+/// These are honesty meta-language, not world-claims: no passage can state
+/// them, so auditing them prosecutes the answer's own honesty. Observed
+/// 2026-07-10 (persona-QA): refined honest declines rejected at vp
+/// 0.85–0.98 on exactly these sentences, reverting the web-search
+/// refinement to the original. A decline asserts the ABSENCE of
+/// information — it cannot launder a false world-claim — so exempting the
+/// SHAPE is safe. Same family as the offline judge's decline-shape
+/// override (calibration gate) and the `[Source:]` scan-jurisdiction rule.
+pub(super) fn is_self_referential_decline(text: &str) -> bool {
+    // Strip markdown emphasis throughout ("does **not** have" must match
+    // "does not"), then leading list/quote decoration.
+    let t = text
+        .replace('*', "")
+        .trim()
+        .trim_start_matches(['-', ' ', '"', '\u{201c}'])
+        .to_lowercase();
+    let subject = [
+        "the system",
+        "the assistant",
+        "the model",
+        "the app",
+        "this system",
+        "i ",
+        "it ",
+        "the provided",
+        "the retrieved",
+        "the sources",
+        "the passages",
+        "the evidence",
+        "the corpus",
+        "the collection",
+        "the knowledge base",
+        "the local corpus",
+        "the initial answer",
+        "there is no",
+        "as of ",
+    ]
+    .iter()
+    .any(|s| t.starts_with(s));
+    if !subject {
+        return false;
+    }
+    [
+        "does not",
+        "do not",
+        "doesn't",
+        "don't",
+        "cannot",
+        "can't",
+        "no evidence",
+        "no information",
+        "lacks",
+        "not include",
+        "not contain",
+        "not have",
+    ]
+    .iter()
+    .any(|n| t.contains(n))
+}
+
 /// evidence"). Deterministic reduction, ordered:
 /// 1. the longest QUOTED span that actually occurs in the answer → the span;
 /// 2. a prefix cut at " — " that occurs in the answer (dash-appended
@@ -774,6 +838,38 @@ pub(super) async fn claim_violation_joint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn self_referential_declines_are_exempt() {
+        // The two live-observed rejection shapes (persona-QA 2026-07-10).
+        assert!(is_self_referential_decline(
+            "The system does not have access to real-time earthquake or tsunami data for Japan."
+        ));
+        assert!(is_self_referential_decline(
+            "As of 2026-07-10, there is no evidence that the assistant's capabilities include live seismic feeds."
+        ));
+        assert!(is_self_referential_decline(
+            "The provided passages do not contain real-time viewership data."
+        ));
+        // Markdown-decorated variant (scan findings arrive with emphasis).
+        assert!(is_self_referential_decline(
+            "**The system does **not** have access to real-time earthquake data"
+        ));
+    }
+
+    #[test]
+    fn world_claims_are_not_exempt() {
+        assert!(!is_self_referential_decline(
+            "Azelaic acid inhibits tyrosinase and has anti-inflammatory properties."
+        ));
+        assert!(!is_self_referential_decline(
+            "Family Guy remains a consistent driver of engagement on Hulu."
+        ));
+        // System-subject but AFFIRMATIVE (not a decline) stays in jurisdiction.
+        assert!(!is_self_referential_decline(
+            "The system retrieves twelve chunks per query."
+        ));
+    }
 
     const ANSWER: &str = "Robinson attacked aggregate production functions and \
         neoclassical production theory more broadly, a task she showed to be \

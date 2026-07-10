@@ -1104,6 +1104,18 @@ async fn gate_longform(
                 h
             };
             for claim in claims.iter().take(budget) {
+                // Jurisdiction: honesty meta-language is not a world-claim —
+                // "the system does not have access to X" can never be stated
+                // by a passage, and auditing it prosecutes the answer's own
+                // honesty (observed: refined honest declines rejected at vp
+                // 0.85–0.98 on exactly these sentences). Deterministic shape
+                // check; see is_self_referential_decline.
+                if judge::is_self_referential_decline(claim) {
+                    dbg(&format!(
+                        "longform claim EXEMPT — self-referential decline: {claim:?}"
+                    ));
+                    continue;
+                }
                 // Deterministic pre-check: an in-world attribution naming a
                 // person absent from the ENTIRE evidence is fabricated — do
                 // not ask the yes-biased joint judge (measured: "Betty
@@ -1190,6 +1202,11 @@ async fn gate_longform(
                         // the scan flagged REAL label citations, which then read
                         // as self-indictment in the verification note).
                         if spec.to_lowercase().contains("[source:") {
+                            continue;
+                        }
+                        // Same jurisdiction rule as the claim loop: the
+                        // answer's own honesty meta-language is exempt.
+                        if judge::is_self_referential_decline(&spec) {
                             continue;
                         }
                         // Skip specifics already surfaced by the per-claim audit.
