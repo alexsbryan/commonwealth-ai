@@ -40,6 +40,20 @@ pub struct RecallGroundingVerdict {
     /// The specific asserted-but-unsupported past detail (empty when
     /// grounded). Fed into the regeneration prompt.
     pub unsupported: String,
+    /// 1-based index of the candidate entry the reply actually spoke
+    /// about, when it referenced one. This is the sticky-pin signal:
+    /// the entry the witness NAMED to the user is the one later turns
+    /// must keep in view. `None` = the reply referenced no entry
+    /// (pure reflection / deferral) — pins are left as they were.
+    pub referenced: Option<usize>,
+    /// 1-based index of a candidate entry that plausibly IS the memory
+    /// the user means while the reply claims not to have it — the
+    /// false-denial signal. Hand-read (2026-07-09): denying an in-view
+    /// entry ("I have no record of church" one turn after quoting the
+    /// church entry) was the dominant surviving trust-breaker. Drives
+    /// a single offer-it-instead retry; `None` = no denial, or an
+    /// honest one (nothing in view matches).
+    pub denied_match: Option<usize>,
 }
 
 impl RecallGroundingVerdict {
@@ -47,6 +61,8 @@ impl RecallGroundingVerdict {
         Self {
             grounded: true,
             unsupported: String::new(),
+            referenced: None,
+            denied_match: None,
         }
     }
 }
@@ -56,6 +72,10 @@ struct RawVerdict {
     grounded: bool,
     #[serde(default)]
     unsupported: String,
+    #[serde(default)]
+    referenced: Option<i64>,
+    #[serde(default)]
+    denied_match: Option<i64>,
 }
 
 /// Render the candidate entries EXACTLY as informatively as the
@@ -132,7 +152,10 @@ pub async fn verify_recall_grounding(
          and offering it as a question is good behavior); saying the memory isn't available; \
          speaking generally with no past specifics.\n\n\
          Reply with JSON only: {{\"grounded\": <true only if NO unsupported detail>, \"unsupported\": \
-         \"<the first unsupported detail, or empty string if grounded>\"}}",
+         \"<the first unsupported detail, or empty string if grounded>\", \"referenced\": <the \
+         number of the ONE entry the reply mainly speaks about, or null if it references none>, \
+         \"denied_match\": <when the reply claims NOT to have or find the memory but entry N \
+         plausibly IS what the user described, that N; otherwise null>}}",
         candidates = render_candidates(memories),
         user = user_message.chars().take(600).collect::<String>(),
         reply = reply.chars().take(1400).collect::<String>(),
@@ -142,9 +165,11 @@ pub async fn verify_recall_grounding(
         "type": "object",
         "properties": {
             "grounded": { "type": "boolean" },
-            "unsupported": { "type": "string" }
+            "unsupported": { "type": "string" },
+            "referenced": { "type": ["integer", "null"] },
+            "denied_match": { "type": ["integer", "null"] }
         },
-        "required": ["grounded", "unsupported"],
+        "required": ["grounded", "unsupported", "referenced", "denied_match"],
         "additionalProperties": false
     });
 
@@ -214,6 +239,21 @@ pub(crate) fn correction_note(unsupported: &str) -> String {
     )
 }
 
+/// Correction for a FALSE DENIAL — the reply told the user "I don't
+/// have that memory" while a retrieved entry plausibly is it. The
+/// retry offers that entry as a question instead. Applied at most
+/// once, and only when the draft was otherwise grounded; the fallback
+/// on a failed retry is the original (honest-toned) denial.
+pub(crate) fn denial_note(entry: &str) -> String {
+    format!(
+        "\n\nRECALL CORRECTION. You told them you don't have that memory, but this retrieved \
+         entry may be exactly what they mean: \"{}\". Redo the reply: offer this entry to them \
+         as a question, in your own words, speaking to them as \"you\", and let them confirm or \
+         correct you. Add nothing that isn't written in it.",
+        entry.chars().take(300).collect::<String>()
+    )
+}
+
 /// Last-resort instruction when a correction retry STILL confabulates.
 /// Forbids any past-detail assertion, so the reply is structurally
 /// incapable of misremembering — it can only reflect the present
@@ -242,6 +282,14 @@ fn parse_verdict(text: &str) -> Option<RecallGroundingVerdict> {
                     return Some(RecallGroundingVerdict {
                         grounded: raw.grounded,
                         unsupported: raw.unsupported.trim().to_string(),
+                        referenced: raw
+                            .referenced
+                            .and_then(|i| usize::try_from(i).ok())
+                            .filter(|&i| i >= 1),
+                        denied_match: raw
+                            .denied_match
+                            .and_then(|i| usize::try_from(i).ok())
+                            .filter(|&i| i >= 1),
                     });
                 }
             }

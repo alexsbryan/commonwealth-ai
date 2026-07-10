@@ -289,6 +289,18 @@ pub struct Runtime {
     /// `search_with_rerank` no-op back to baseline regardless of
     /// `rerank_fn`'s presence.
     pub rerank_config: corpus_engine::RerankConfig,
+    /// Sticky in-conversation memory pins (relational recall).
+    /// conv_id → the memory ids most recently RENDERED to the user in
+    /// that conversation. Once the witness has shown the user an
+    /// entry, later turns keep it in view even when the new turn's
+    /// query embeds elsewhere — hand-read transcripts (2026-07-09)
+    /// showed per-turn retrieval swapping the window on follow-up
+    /// meta-questions ("what does my record actually say?"), making
+    /// the witness deny or retract entries it had surfaced one turn
+    /// earlier: the single worst trust-breaker in the set. Process-
+    /// local by design (a resumed conversation re-pins on its first
+    /// recall); capped per conversation at the render window.
+    pub(crate) recall_pins: std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>,
     /// Cross-corpus meta-atlas index (Move 5). Built at bootstrap
     /// from `~/.sovereign/meta-atlas/canonical_atoms.json` (produced
     /// by `sovereign meta-atlas build`). The chat-path boost pass
@@ -440,10 +452,99 @@ impl Runtime {
             folder_metadata: None,
             rerank_fn: None,
             rerank_config: corpus_engine::RerankConfig::default(),
+            recall_pins: std::sync::Mutex::new(std::collections::HashMap::new()),
             meta_atlas: std::sync::RwLock::new(None),
             bridge: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
             gliner: None,
+        }
+    }
+
+    /// Merge this turn's fresh relational recall with the entries the
+    /// witness has actually SPOKEN ABOUT in this conversation (pinned
+    /// by `pin_referenced_memory` from the grounding verifier's
+    /// `referenced` signal). Pinned entries lead — once the witness
+    /// has named an entry to the user, a follow-up turn must still
+    /// have it in view; per-turn similarity retrieval swaps the window
+    /// on meta-questions and the witness ends up denying what it said
+    /// one turn earlier.
+    ///
+    /// Pins are reference-driven, NEVER render-driven: a first version
+    /// that pinned whatever was rendered locked warmup-turn noise into
+    /// the window and displaced the correct recall on the turn that
+    /// mattered (hand-read, 2026-07-09). At most 2 pins lead, so fresh
+    /// recall always keeps at least one render slot.
+    pub(crate) async fn merge_recall_pins(
+        &self,
+        conversation_id: &str,
+        scope: &crate::traits::MemoryScope,
+        fresh: Vec<crate::types::Memory>,
+    ) -> Vec<crate::types::Memory> {
+        const PIN_CAP: usize = 2;
+        const WINDOW: usize = 5;
+        let pinned_ids: Vec<String> = self
+            .recall_pins
+            .lock()
+            .map(|m| m.get(conversation_id).cloned().unwrap_or_default())
+            .unwrap_or_default();
+
+        let mut merged: Vec<crate::types::Memory> = Vec::with_capacity(WINDOW);
+        if !pinned_ids.is_empty() {
+            // Pinned entries the fresh recall didn't resurface are
+            // fetched from the scoped pool (same wall as recall).
+            let mut by_id: std::collections::HashMap<String, crate::types::Memory> = self
+                .store
+                .get_all_memories_for_scope(scope)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| (m.id.clone(), m))
+                .collect();
+            for id in pinned_ids.iter().take(PIN_CAP) {
+                if let Some(m) = fresh
+                    .iter()
+                    .find(|m| &m.id == id)
+                    .cloned()
+                    .or_else(|| by_id.remove(id))
+                {
+                    if !merged.iter().any(|x| x.id == m.id) {
+                        merged.push(m);
+                    }
+                }
+            }
+        }
+        for m in fresh {
+            if merged.len() >= WINDOW {
+                break;
+            }
+            if !merged.iter().any(|x| x.id == m.id) {
+                merged.push(m);
+            }
+        }
+        merged.truncate(WINDOW);
+        tracing::info!(
+            target: "memory_grounding",
+            pins = ?pinned_ids,
+            window = ?merged.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            "recall pin merge"
+        );
+        merged
+    }
+
+    /// Record that the witness's (grounded) reply spoke about this
+    /// memory — called by the expressive handler with the entry the
+    /// grounding verifier attributed the reply to. The most recently
+    /// referenced entry leads; a short history of 2 keeps yesterday's
+    /// thread available without crowding fresh recall.
+    pub(crate) fn pin_referenced_memory(&self, conversation_id: &str, memory_id: &str) {
+        if let Ok(mut pins) = self.recall_pins.lock() {
+            if pins.len() > 512 {
+                pins.clear();
+            }
+            let entry = pins.entry(conversation_id.to_string()).or_default();
+            entry.retain(|id| id != memory_id);
+            entry.insert(0, memory_id.to_string());
+            entry.truncate(2);
         }
     }
 

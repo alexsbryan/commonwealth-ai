@@ -275,7 +275,13 @@ A hand-labeled calibration bank (`--calibrate`,
 sensitivity ≥0.9. Journal + breach receipts:
 `test-artifacts/inner-chaos-journal.jsonl` (stamped copy per run). Spec:
 `sovereign/bench/inner_work/CHAOS_HARNESS.md`; runner:
-`sovereign-cli-llm/src/inner_chaos/`.
+`sovereign-cli-llm/src/inner_chaos/`. The witness's deterministic
+wellbeing gate (`runtime/wellbeing.rs`) fires pre-routing on lexical /
+classifier / sticky signals; since 2026-07-10 the sticky arm re-checks
+the current message and hands non-crisis follow-ups back to the witness
+(only an explicit classifier not-crisis releases; lexical hits and
+classifier failures keep the guaranteed floor) — any edit there must
+re-pass the `--persona crisis_discloser` suite.
 
 **CI composition** (`scripts/sovereign-ci-bench.sh`) — the single ≤2h
 core-regression gate; it *composes* the benches above rather than
@@ -975,6 +981,18 @@ stay mesh-side.
   (handles installed via
   `KnowledgeViewManager::install_memory_atlas`). Bench:
   `svrn eval inner-chaos --recall-probe / --recall / --recall-stream`.
+  Live-path invariant (2026-07-10): the embed-recall stanzas in
+  `handle_turn`/`handle_message_stream` run PRE-ROUTING, where
+  `context.turn_register()` still returns the Factual fallback — they
+  gate on mode-derived relational-ness (`resolve_active_mode`), never
+  on `turn_register()`. On witness turns the recall result then passes
+  through `merge_recall_pins` (reference-driven sticky pins: the entry
+  a grounded reply actually spoke about, attributed by the grounding
+  verifier's `referenced` field, stays in view ≤2 pins / 5-window);
+  glassbox via `RUST_LOG=memory_grounding=info` (gate verdict, pin
+  set, pin merge) and `TurnProvenance.recalled_memories`, captured on
+  BOTH expressive variants (the recall bench judges against this
+  actual window, not a retrieval replica).
 - **Routing-correction memory** —
   `RoutingCorrection { message_hash, classified_as, was_correct }`
   fed back into the router prompt as "avoid these mistakes."

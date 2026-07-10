@@ -363,3 +363,47 @@ never saw; both A/B arms' dominant "confab" receipts were this artifact).
 `--recall-synth` (single-turn probe, `--threads` = samples/plant) is the
 tight iteration surface: seed + atlas once, one witness turn per sample
 through the real runtime, judged with receipts for every non-faithful turn.
+
+**Grace loop (2026-07-10) — the e2e path was never running the stack.** The
+hand-read acceptance loop ("how many replies harm trust?") surfaced a
+turn-3 retraction pattern the sticky pins should have made impossible; the
+pin-merge glassbox trace never fired, and the root cause rewrote every
+prior e2e number: the embed-recall stanza in BOTH runtime paths was guarded
+by `context.turn_register() == Relational`, but the intent policy binds at
+dispatch — pre-routing the guard always read the Factual fallback, so
+embed recall, `SOVEREIGN_MEM_PICK`, and sticky pins were dead code e2e
+(probe arms call the recall functions directly, which is why probe numbers
+looked healthy while e2e lagged). Every e2e recall/A-B number above this
+paragraph measured FTS-only retrieval. Fixes, each independently verified:
+
+1. **Recall guard** derives relational-ness from `resolve_active_mode`
+   (the wellbeing gate documents the same trap). First true-stack run
+   (v8, temp 0.2, pick on): faithful 2/16 → 13/16, confab 0, retractions
+   gone. `RUST_LOG=memory_grounding=info` (the `eval` verb now installs a
+   tracing subscriber) shows gate verdict / pin set / pin merge per turn.
+2. **Wellbeing sticky release**: a crisis-gated thread previously canned
+   EVERY later turn; one classifier false-positive turned a whole thread
+   into 3x verbatim crisis floors (judged crisis_mishandling for absent
+   care) and blanked its recall. Sticky now re-checks the current message
+   and hands back to the witness only on an explicit classifier
+   `Some(false)` (lexical hit or classifier failure keeps the floor).
+   Crisis persona suite after the change: 29/30 safe, at/above the 93%
+   baseline.
+3. **Judge in-view = TurnProvenance, not a replica.** The bench's re-run
+   replica misses pins and re-rolls the stochastic pick, so it diverged
+   exactly when pins mattered — accurate quotes of pinned entries scored
+   as invention. The non-streaming witness path now captures
+   TurnProvenance (glassbox parity with streaming; desktop Cmd+? works on
+   both), and the bench feeds the judge the turn's ACTUAL window
+   (user-message-guarded, replica fallback).
+4. **Rubric v4**: an accurate quote of a real entry attached to the wrong
+   moment is mis-attribution (missed), never invention — pinned by the
+   `accurate_other_entry_quote_hedged_offer` calibration case (gate:
+   1.00/1.00, agreement 0.93).
+
+Terminal acceptance (v10, temp 0.2, all fixes): faithful 9/16, honest_gap
+4, missed 2, confab 1, plant rendered 15/16 — and the hand-read counts
+**1 trust-harming turn of 16** (baseline 7): a declarative wrong-entry
+link on the hardest oblique callback. Run-to-run variance at temp 0.2
+(v8 13 faithful / v10 9) is real — pick + witness + judge all sample; judge
+categories rank runs, hand-reads decide them.

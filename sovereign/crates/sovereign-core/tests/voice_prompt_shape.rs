@@ -358,10 +358,10 @@ fn memory_format_relational_register_renders_three_bands_with_dates() {
     assert!(out.contains("[2026-03-12]"));
     assert!(out.contains("[2026-04-08]"));
 
-    // Confidence rendered to two decimals so the model can weight it.
-    assert!(out.contains("(confidence 0.92)"));
-    assert!(out.contains("(confidence 0.62)"));
-    assert!(out.contains("(confidence 0.35)"));
+    // Per-entry confidence annotations must NOT render: the bands
+    // carry the weighting signal, and the annotation leaked verbatim
+    // into a witness reply on the recall bench (hand-read 2026-07-09).
+    assert!(!out.contains("(confidence"));
 }
 
 #[test]

@@ -207,16 +207,25 @@ impl Runtime {
         // register from the active mode the same way the policy
         // build below does. See `runtime/wellbeing.rs` for the
         // receipts that justify this gate.
-        {
+        //
+        // `relational_turn` is shared with the embed-recall stanza
+        // below (1a), which runs pre-routing for the same reason and
+        // must NOT read `turn_register()` — the Factual fallback made
+        // that guard permanently false and silently disabled embed
+        // recall + sticky pins on this path (found 2026-07-09 via the
+        // pin-merge trace never firing).
+        let relational_turn = {
             let early_mode = self.resolve_active_mode(conversation_id).await;
             let declared_register = early_mode
                 .as_deref()
                 .and_then(|id| self.skills.skill_by_id(id))
                 .map(|s| s.inference.register)
                 .unwrap_or_default();
-            let relational = declared_register == SkillRegister::Relational
-                || early_mode.as_deref() == Some(crate::intent_policy::MODE_INNER_WORK);
-            if relational {
+            declared_register == SkillRegister::Relational
+                || early_mode.as_deref() == Some(crate::intent_policy::MODE_INNER_WORK)
+        };
+        {
+            if relational_turn {
                 if let Some(signal) = super::wellbeing::maybe_wellbeing_signal(
                     self.inference.as_ref(),
                     &context,
@@ -274,7 +283,12 @@ impl Runtime {
         // *"I left my last job because the team was burning out"*).
         // Re-rank/replace `context.memories` via cosine over batched
         // embeddings. Falls back to the FTS list on any error.
-        if context.turn_register() == SkillRegister::Relational {
+        //
+        // Guarded by `relational_turn` (mode-derived, computed above),
+        // NOT `turn_register()` — the intent policy binds after
+        // routing, so at this point `turn_register()` always returns
+        // the Factual fallback.
+        if relational_turn {
             let recall_start = std::time::Instant::now();
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
@@ -300,7 +314,12 @@ impl Runtime {
                         after = top.len(),
                         "runtime: memories overridden via embedding recall"
                     );
-                    context.memories = top;
+                    // Sticky pins: entries already shown to the user in
+                    // this conversation stay in view (see
+                    // `merge_recall_pins`).
+                    context.memories = self
+                        .merge_recall_pins(&context.conversation.id, &scope, top)
+                        .await;
                 }
                 _ => {}
             }
