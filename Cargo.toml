@@ -328,5 +328,17 @@ codegen-units = 1
 #      so ggml/llama static-link and every sovereign binary is self-contained
 #      (the daemon's relocatability + the desktop .deb/.rpm/AppImage). See
 #      RELEASING.md and [[project_desktop_linux_build_deps]].
+# Vendored `lance-linalg` (4.0.0) carries ONE divergence: build.rs compiles the
+# AVX-512 dist_table kernel with -march=x86-64-v4 instead of upstream's
+# -march=native. Upstream's flag breaks cross-compiles (arm64 host → x86_64
+# target) and any x86_64 build machine without AVX-512 (Rosetta VMs, pre-Zen4):
+# the f16 avx512 compile still succeeds and sets the SAME shared
+# kernel_support="avx512" cfg, so the Rust extern references
+# sum_4bit_dist_table_32bytes_batch_avx512 which was never compiled → link
+# error (hit on the desktop-v0.1.19 Intel cut, 2026-07-10). Runtime dispatch
+# (SimdSupport) already gates execution, so pinning the arch level is safe on
+# non-AVX-512 CPUs. Re-apply when re-vendoring; upstream fix would be separate
+# cfgs per kernel.
 [patch.crates-io]
 llama-cpp-4 = { path = "vendor/llama-cpp-4" }
+lance-linalg = { path = "vendor/lance-linalg" }

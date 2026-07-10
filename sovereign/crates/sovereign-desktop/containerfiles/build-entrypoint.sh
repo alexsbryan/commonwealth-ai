@@ -66,10 +66,61 @@ fi
 # installers. (If you re-enable `dynamic-link`, you'll need to put the
 # ggml/llama .so dir on LD_LIBRARY_PATH before bundling so linuxdeploy can
 # resolve them — see RELEASING.md.)
-log "Running cargo tauri build..."
+log "Running cargo tauri build (deb + rpm)..."
 (cd sovereign/crates/sovereign-desktop && cargo tauri build \
     --target "$TARGET" \
+    --bundles deb,rpm \
     --config src-tauri/tauri.release.conf.json)
+
+# ─── AppImage (container-local storage, then copy back) ─────────────
+# Two traps make the AppImage step special (both hit on 2026-07-10,
+# desktop-v0.1.19, macOS podman-machine host):
+#
+# 1. linuxdeploy-plugin-appimage is a static-pie ELF carrying the
+#    AppImage type-2 magic "AI\x02" at e_ident offset 8. The binfmt_misc
+#    masks Rosetta/qemu register require zeros there, so under emulation
+#    the kernel refuses to exec it ("Exec format error") and linuxdeploy
+#    dies with "subprocess failed (exit code 2)". Zeroing the three
+#    magic bytes is harmless (it's an identification tag, not loader
+#    input) and makes binfmt match. The cache is a persistent mount
+#    (see build-desktop-linux.sh), so after the first download the
+#    patched copy sticks.
+#
+# 2. linuxdeploy's library copies onto the virtiofs /work mount arrive
+#    as zero-byte mode-0200 files (its copy path doesn't survive
+#    virtiofs). Bundling on container-local storage avoids the write
+#    pattern entirely; only the finished AppImage is copied back.
+patch_appimage_plugin() {
+    local f=/root/.cache/tauri/linuxdeploy-plugin-appimage.AppImage
+    if [[ -f "$f" ]]; then
+        printf '\x00\x00\x00' | dd of="$f" bs=1 seek=8 count=3 conv=notrunc 2>/dev/null
+    fi
+}
+
+bundle_appimage() {
+    mkdir -p "/tmp/bundle-target/${TARGET}/release"
+    cp "${CARGO_TARGET_DIR:-/work/target-container-linux}/${TARGET}/release/sovereign-desktop" \
+       "/tmp/bundle-target/${TARGET}/release/"
+    (cd sovereign/crates/sovereign-desktop && \
+        CARGO_TARGET_DIR=/tmp/bundle-target cargo tauri bundle \
+            --bundles appimage \
+            --target "$TARGET" \
+            --config src-tauri/tauri.release.conf.json)
+}
+
+log "Bundling AppImage on container-local storage..."
+patch_appimage_plugin
+if ! bundle_appimage; then
+    # First run on a cold cache: the bundler downloads the plugin during
+    # the attempt and fails at exec; patch what it downloaded and retry.
+    log "AppImage bundling failed — patching plugin magic bytes and retrying once..."
+    patch_appimage_plugin
+    bundle_appimage
+fi
+
+APPIMAGE_OUT="${CARGO_TARGET_DIR:-/work/target-container-linux}/${TARGET}/release/bundle/appimage"
+mkdir -p "$APPIMAGE_OUT"
+cp "/tmp/bundle-target/${TARGET}/release/bundle/appimage/"*.AppImage* "$APPIMAGE_OUT/"
 
 # ─── Report what landed ──────────────────────────────────────────────
 BUNDLE_DIR="${CARGO_TARGET_DIR:-/work/target-container-linux}/${TARGET}/release/bundle"

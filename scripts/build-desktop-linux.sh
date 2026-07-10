@@ -74,21 +74,39 @@ fi
 
 if (( needs_build )); then
     echo "[build-desktop-linux] Building image $IMAGE (one-time, ~10 minutes)..."
-    $RUNTIME build -t "$IMAGE" -f "$CONTAINERFILE" .
+    # Pin amd64: the build targets x86_64-unknown-linux-gnu and the LunarG
+    # Vulkan apt repo only ships amd64 packages — on an arm64 host (Apple
+    # Silicon + Rosetta/qemu) the default host-arch image build fails at
+    # apt with "vulkan-headers has no installation candidate".
+    $RUNTIME build --platform linux/amd64 -t "$IMAGE" -f "$CONTAINERFILE" .
 fi
 
 # ─── Prepare host-side cache dirs (visible to container at /work/...) ──
-mkdir -p target-container-linux .cargo-container .npm-container
+mkdir -p target-container-linux .cargo-container .npm-container \
+         .tauri-cache-container .npm-container-modules
 
 # ─── Run ──────────────────────────────────────────────────────────────
 # Forward signing env if present; pass empty strings otherwise so the
 # entrypoint's logging can detect "not set" without ambiguity.
 RUN_ARGS=(
     --rm
+    --platform linux/amd64
     -v "$REPO_ROOT:/work:Z"
     -e "TAURI_SIGNING_PRIVATE_KEY=${TAURI_SIGNING_PRIVATE_KEY:-}"
     -e "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
     -e "SOVEREIGN_DESKTOP_SKIP_BINARIES_FETCH=${SOVEREIGN_DESKTOP_SKIP_BINARIES_FETCH:-0}"
+    # linuxdeploy is itself an AppImage; containers have no FUSE, so tell it
+    # (and its plugins) to self-extract instead of FUSE-mounting.
+    -e "APPIMAGE_EXTRACT_AND_RUN=1"
+    # Persist tauri-bundler's tool downloads (linuxdeploy + plugins) across
+    # runs, and let the entrypoint patch the appimage plugin's magic bytes
+    # (see build-entrypoint.sh) before the bundler executes it.
+    -v "$REPO_ROOT/.tauri-cache-container:/root/.cache/tauri:Z"
+    # Shadow the package's node_modules with a container-private dir.
+    # Without this, the entrypoint's `npm ci` replaces the host's
+    # darwin-arm64 native binaries (esbuild, rollup) with linux-x64 ones
+    # and host `npm run build` breaks until you rm -rf + npm ci again.
+    -v "$REPO_ROOT/.npm-container-modules:/work/sovereign/crates/sovereign-desktop/node_modules:Z"
 )
 
 if (( SHELL_ONLY )); then

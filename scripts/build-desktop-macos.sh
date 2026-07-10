@@ -188,6 +188,18 @@ if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
     log "Updater: TAURI_SIGNING_PRIVATE_KEY not set — no .sig sidecars (fine for hand-shared builds; the in-app updater just won't engage)."
 fi
 
+# ─── Cross-build: keep host-arch OpenSSL out of llama.cpp ────────────
+# When TARGET != host arch, llama.cpp's LLAMA_OPENSSL=ON finds the HOST
+# Homebrew OpenSSL (arm64) and the mtmd tool binaries fail to link for
+# x86_64 ("_X509_* not found"). llama-cpp-sys-4 passes no
+# -DCMAKE_TOOLCHAIN_FILE on apple targets, so cmake >=3.21 honors the env
+# var — inject a fragment that forces LLAMA_OPENSSL OFF.
+HOST_TRIPLE="$( [[ "$(uname -m)" == "arm64" ]] && echo aarch64-apple-darwin || echo x86_64-apple-darwin )"
+if [[ "$TARGET" != "$HOST_TRIPLE" ]]; then
+    export CMAKE_TOOLCHAIN_FILE="$REPO_ROOT/scripts/cmake/darwin-cross-no-openssl.cmake"
+    log "Cross build ($HOST_TRIPLE -> $TARGET): CMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE (LLAMA_OPENSSL=OFF)"
+fi
+
 # ─── Build ───────────────────────────────────────────────────────────
 # Capture cargo's real exit code. Do NOT pipe this through `tee`/`| …`
 # or chain it with `; echo` — a pipeline's status is the LAST stage's, so
