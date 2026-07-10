@@ -149,6 +149,12 @@ jobs:
           # - name: windows-x86_64           # CPU; uncomment after NATIVE validation (VM or one windows-2022 run)
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
+          # NOTE (2026-07-10): a LOCAL containerized Windows leg exists —
+          # scripts/build-desktop-windows.sh (cargo-xwin + NSIS in a native
+          # arm64 container; shipped desktop-v0.1.19's x64-setup.exe). The
+          # old cross-link blockers are solved there (see that script + the
+          # RELEASING.md "Full local release" symptom table); this CI leg
+          # stays available as the native-MSVC alternative.
           # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step + features: windows-vulkan
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc

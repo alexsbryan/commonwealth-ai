@@ -1,0 +1,106 @@
+# syntax=docker/dockerfile:1.7
+# Local Windows desktop-bundle builder — cross-compiles
+# x86_64-pc-windows-msvc from inside a NATIVE arm64 Linux container.
+#
+# Same containerized paradigm as Containerfile.linux-build, with one big
+# difference: the container runs at native arm64 speed (no Rosetta/qemu
+# emulation) because cargo-xwin cross-compiles from any host — clang-cl
+# targets x86_64 Windows regardless of where it runs, and xwin downloads
+# the MSVC CRT + Windows SDK headers/libs (redistributable) on first use.
+#
+# Toolchain:
+#   - clang/lld from Ubuntu 24.04's llvm — provides clang-cl (MSVC-compatible
+#     driver), lld-link (MSVC-compatible linker), llvm-rc (resource compiler),
+#     llvm-lib. cargo-xwin wires these up per-crate.
+#   - cargo-xwin — downloads + caches the MSVC CRT/SDK (cache is mounted
+#     from the host via the driver script, so it survives image rebuilds),
+#     sets up CC/CXX/CMake env for -sys crates.
+#   - nsis — Tauri v2's documented Linux→Windows cross-bundling path builds
+#     the NSIS -setup.exe with system makensis. (.msi/WiX is Windows-only;
+#     we deliberately ship NSIS-only from this leg — same as what the
+#     updater consumes.)
+#
+# Known-good foundation: the entire Rust/cfg layer compiles for
+# windows-msvc (validated 2026-06-20 via scripts/windows-crosscheck.sh —
+# 326 crates, zero Rust errors; see the desktop RELEASING.md). The
+# residual risk is llama.cpp native linkage under lld-link — the same
+# class of trap solved for the mac cross-build (LLAMA_OPENSSL) in
+# scripts/cmake/darwin-cross-no-openssl.cmake.
+#
+# ── Build (run from monorepo root):
+#     podman build --platform linux/arm64 -t sovereign-desktop-windows-build:latest \
+#         -f sovereign/crates/sovereign-desktop/containerfiles/Containerfile.windows-build .
+#
+# ── Run: scripts/build-desktop-windows.sh (driver, recommended)
+
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ─── System deps ──────────────────────────────────────────────────────
+# build-essential stays: build scripts + proc-macros compile for the
+# HOST (aarch64 linux) and need a native toolchain alongside clang-cl.
+#
+# LLVM comes from apt.llvm.org's SNAPSHOT suite (currently major 22), not
+# Ubuntu 24.04's llvm (18): cargo-xwin's clang backend downloads the
+# windows-msvc-sysroot project's rolling release, whose bundled MSVC STL
+# static-asserts a minimum clang ("STL1000: expected Clang 22 or newer"
+# as of 2026-07). The sysroot tracks LLVM HEAD, so the snapshot suite is
+# the matching toolchain; a pinned older clang fails the assert.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg git lsb-release software-properties-common \
+      build-essential cmake ninja-build pkg-config \
+      protobuf-compiler libprotobuf-dev \
+      python3 file unzip zip \
+      nsis nasm \
+      libayatana-appindicator3-dev \
+ && curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh \
+ && bash /tmp/llvm.sh 22 \
+ && apt-get install -y --no-install-recommends libclang-22-dev clang-tools-22 \
+ && /usr/lib/llvm-22/bin/clang --version \
+ && rm -rf /var/lib/apt/lists/* /tmp/llvm.sh
+
+# llvm tools resolve via PATH (appended AFTER /usr/local/bin, which we
+# leave symlink-free on purpose: cargo-xwin creates its own clang/clang-cl
+# shim symlinks in the first writable PATH dir and errors on collisions).
+ENV PATH=$PATH:/usr/lib/llvm-22/bin
+
+# ─── Node 20 (frontend build, same as the linux image) ───────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/* \
+ && node --version && npm --version
+
+# ─── Rust stable (aarch64 host) + the Windows cross target ───────────
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain stable --profile minimal \
+                 --target x86_64-pc-windows-msvc \
+ && rustup component add rustfmt \
+ && rustc --version && cargo --version
+
+# ─── Tauri CLI + cargo-xwin ───────────────────────────────────────────
+RUN cargo install tauri-cli --version "^2.0.0" --locked \
+ && cargo install cargo-xwin --locked \
+ && cargo xwin --version
+
+# ─── Cache locations (driver mounts /work; caches live under it) ─────
+# Separate from the linux container's caches: different host arch means
+# different build-script/proc-macro artifacts, and concurrent legs must
+# not fight over one CARGO_HOME package lock.
+ENV CARGO_TARGET_DIR=/work/target-container-windows \
+    CARGO_HOME=/work/.cargo-container-windows \
+    npm_config_cache=/work/.npm-container \
+    XWIN_CACHE_DIR=/work/.xwin-container
+
+ENV PATH=/usr/local/cargo/bin:$PATH
+
+WORKDIR /work
+
+COPY sovereign/crates/sovereign-desktop/containerfiles/build-entrypoint-windows.sh /usr/local/bin/build-entrypoint
+RUN chmod +x /usr/local/bin/build-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/build-entrypoint"]
