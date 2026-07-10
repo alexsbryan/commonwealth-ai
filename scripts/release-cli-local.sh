@@ -54,14 +54,19 @@ VERSION="$(python3 -c "
 import tomllib
 print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")"
 TAG="cli-v$VERSION"
+# Releases publish to the PUBLIC shelf repo, not the (invite-only) source
+# repo: assets on a private repo aren't anonymously fetchable, which breaks
+# install.sh, the landing-page downloads, and the desktop auto-updater.
+# Override for testing with RELEASES_REPO.
+RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
 log "Releasing $TAG (workspace version $VERSION)"
 
 [[ "$(uname -sm)" == "Darwin arm64" ]] || die "this driver assumes an arm64 Mac host"
 
 if ! (( NO_UPLOAD )); then
     gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
-    gh release view "$TAG" >/dev/null 2>&1 \
-        || die "release $TAG does not exist. Create it: gh release create $TAG --draft --title \"$TAG\""
+    gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1 \
+        || die "release $TAG does not exist. Create it: gh release create $TAG --repo "$RELEASES_REPO" --draft --title \"$TAG\""
 fi
 
 # Shared with the desktop legs: SDKROOT for bindgen, deployment target,
@@ -134,23 +139,23 @@ TARBALLS=(dist/sovereign-*.tar.gz)
 
 log "Uploading ${#TARBALLS[@]} tarball(s) + sidecars to $TAG..."
 for t in "${TARBALLS[@]}"; do
-    gh release upload "$TAG" --clobber "$t" "$t.sha256"
+    gh release upload "$TAG" --repo "$RELEASES_REPO" --clobber "$t" "$t.sha256"
 done
 
 # Regenerate SHA256SUMS from every .sha256 sidecar ON THE RELEASE, so
 # CI-built assets we didn't rebuild locally stay covered.
 log "Regenerating SHA256SUMS from all release sidecars..."
 TMP="$(mktemp -d)"
-for name in $(gh release view "$TAG" --json assets --template '{{range .assets}}{{.name}}
+for name in $(gh release view "$TAG" --repo "$RELEASES_REPO" --json assets --template '{{range .assets}}{{.name}}
 {{end}}' | grep '\.tar\.gz\.sha256$'); do
-    gh release download "$TAG" --pattern "$name" --dir "$TMP" --clobber
+    gh release download "$TAG" --repo "$RELEASES_REPO" --pattern "$name" --dir "$TMP" --clobber
 done
 cat "$TMP"/*.sha256 | sort -k2 > "$TMP/SHA256SUMS"
-gh release upload "$TAG" --clobber "$TMP/SHA256SUMS"
+gh release upload "$TAG" --repo "$RELEASES_REPO" --clobber "$TMP/SHA256SUMS"
 rm -rf "$TMP"
 
 log "Final asset listing for $TAG:"
-gh release view "$TAG" --json assets --template '{{range .assets}}  {{.name}}  {{.size}}
+gh release view "$TAG" --repo "$RELEASES_REPO" --json assets --template '{{range .assets}}  {{.name}}  {{.size}}
 {{end}}'
 
 log "Done. Smoke-test (extract a tarball, ./sovereign-cli --version → $VERSION), then publish: gh release edit $TAG --draft=false"

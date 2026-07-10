@@ -17,7 +17,9 @@
 
 set -eu
 
-REPO="alexsbryan/commonwealth-ai"
+# The public releases shelf. The source repo is invite-only during the
+# alpha; binaries are published here (see that repo's README).
+REPO="alexsbryan/svrnmesh-releases"
 BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm"
 INSTALL_DIR="${SVRNMESH_INSTALL_DIR:-${SOVEREIGN_INSTALL_DIR:-$HOME/.local/bin}}"
 

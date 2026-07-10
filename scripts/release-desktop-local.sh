@@ -51,6 +51,11 @@ done
 CONF=sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json
 VERSION="$(python3 -c "import json;print(json.load(open('$CONF'))['version'])")"
 TAG="desktop-v$VERSION"
+# Releases publish to the PUBLIC shelf repo, not the (invite-only) source
+# repo: assets on a private repo aren't anonymously fetchable, which breaks
+# install.sh, the landing-page downloads, and the desktop auto-updater.
+# Override for testing with RELEASES_REPO.
+RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
 log "Releasing $TAG"
 
 [[ "$(uname -sm)" == "Darwin arm64" ]] || die "this driver assumes an arm64 Mac host"
@@ -76,8 +81,8 @@ log "Updater pubkey key ID: $EXPECTED_KEY_ID"
 
 if ! (( NO_UPLOAD )); then
     gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
-    gh release view "$TAG" >/dev/null 2>&1 \
-        || die "release $TAG does not exist. Create it first: gh release create $TAG --draft --title \"$TAG\""
+    gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1 \
+        || die "release $TAG does not exist. Create it first: gh release create $TAG --repo "$RELEASES_REPO" --draft --title \"$TAG\""
 fi
 
 if ! (( SKIP_LINUX && SKIP_WINDOWS )); then
@@ -147,10 +152,10 @@ if (( NO_UPLOAD )); then
 fi
 
 log "Uploading ${#ASSETS[@]} assets to $TAG..."
-gh release upload "$TAG" --clobber "${ASSETS[@]}"
+gh release upload "$TAG" --repo "$RELEASES_REPO" --clobber "${ASSETS[@]}"
 
 log "Final asset listing for $TAG:"
-gh release view "$TAG" --json assets --template '{{range .assets}}  {{.name}}  {{.size}}
+gh release view "$TAG" --repo "$RELEASES_REPO" --json assets --template '{{range .assets}}  {{.name}}  {{.size}}
 {{end}}'
 
 log "Done. Smoke-test an installer, then publish the draft: gh release edit $TAG --draft=false"

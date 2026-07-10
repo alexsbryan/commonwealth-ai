@@ -15,9 +15,11 @@
 // turns those segments into the `target` + `current_version` query params
 // this handler reads.
 //
-// Required env vars (set in the Vercel project settings):
-//   GITHUB_OWNER   -- repo owner, e.g. "alexsbryan"
-//   GITHUB_REPO    -- repo name,  e.g. "commonwealth-ai"
+// Env vars (Vercel project settings; both have working defaults):
+//   GITHUB_OWNER   -- repo owner (default "alexsbryan")
+//   GITHUB_REPO    -- repo name (default "svrnmesh-releases" — the PUBLIC
+//                     releases shelf; the source repo is invite-only during
+//                     the alpha and its assets aren't anonymously fetchable)
 //
 // Optional:
 //   GITHUB_TOKEN   -- raises the API rate limit from 60/h to 5000/h. Not
@@ -54,8 +56,8 @@ export default async function handler(req) {
     return text(`unsupported target: ${target}`, 400);
   }
 
-  const owner = process.env.GITHUB_OWNER;
-  const repo  = process.env.GITHUB_REPO;
+  const owner = process.env.GITHUB_OWNER || 'alexsbryan';
+  const repo  = process.env.GITHUB_REPO  || 'svrnmesh-releases';
   if (!owner || !repo) {
     console.error('[updater] GITHUB_OWNER / GITHUB_REPO not configured');
     return text('updater backend not configured', 500);
