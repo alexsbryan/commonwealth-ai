@@ -711,12 +711,58 @@ fn squash(s: &str) -> String {
 /// a corpus artifact must exist in the corpus; a GK claim ("Noam Cohen wrote
 /// in Wired…", no artifact noun) passes through to the judge untouched.
 /// Returns the offending name for the glassbox.
+/// Remove `[Source: …]` citation spans before any name/identifier sweep:
+/// labels are pre-validated by the deterministic snap pass and are OUT OF
+/// JURISDICTION here — sweeping them produced user-visible self-indictments
+/// ("The answer references \"Source Psilocybin\", which does not appear in
+/// the sources", persona-QA 2026-07-10: 4 of 9 answers ended that way).
+/// Unclosed brackets strip to end-of-line (the bounded-bracket lesson).
+pub(super) fn strip_citation_spans(claim: &str) -> String {
+    let mut out = String::with_capacity(claim.len());
+    let mut rest = claim;
+    loop {
+        let Some(i) = rest.to_lowercase().find("[source:") else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..i]);
+        out.push(' ');
+        let tail = &rest[i..];
+        let end = tail
+            .find(']')
+            .map(|e| e + 1)
+            .or_else(|| tail.find('\n'))
+            .unwrap_or(tail.len());
+        rest = &tail[end..];
+    }
+}
+
+/// Capitalized FUNCTION/BOILERPLATE words are structurally never given
+/// names — "From Retrieved" (a section header), "Source Federalist" (a
+/// label fragment). Blocking them as bigram members costs a theoretical
+/// missed fabrication and removes a measured class of self-indictments.
+fn non_name_word(w: &str) -> bool {
+    matches!(
+        w.to_lowercase().as_str(),
+        "from" | "the" | "this" | "these" | "those" | "your" | "their" | "our"
+            | "its" | "based" | "initial" | "additional" | "retrieved"
+            | "provided" | "source" | "sources" | "answer" | "web" | "search"
+            | "note" | "summary" | "overview" | "key" | "corpus" | "evidence"
+            | "passage" | "passages" | "section" | "document" | "knowledge"
+            // Pronouns: "Webber He averaged…" flagged "Webber He" as a
+            // fabricated name (persona-QA, the run after the label fix).
+            | "he" | "she" | "they" | "we" | "his" | "her" | "him" | "them"
+            | "who" | "which" | "when" | "where" | "while" | "after" | "before"
+    )
+}
+
 pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<String> {
     const ARTIFACT: &[&str] = &[
         "email", "e-mail", "letter", "memo", "message", "document", "passage",
         "chapter", "section", "thread", "forwarded", "sent", "wrote", "authored",
         "signed", "replied",
     ];
+    let claim = strip_citation_spans(claim);
     let low = claim.to_lowercase();
     if !ARTIFACT.iter().any(|a| low.contains(a)) {
         return None;
@@ -733,6 +779,9 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
     let words: Vec<&str> = claim.split_whitespace().collect();
     for pair in words.windows(2) {
         if let (Some(a), Some(b)) = (cap_name(pair[0]), cap_name(pair[1])) {
+            if non_name_word(a) || non_name_word(b) {
+                continue;
+            }
             let full = format!("{a} {b}").to_lowercase();
             if !hay_lower.contains(&full) {
                 return Some(format!("{a} {b}"));
@@ -758,6 +807,10 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
         "constant", "config", "material", "corpus", "notes", "document",
         "codebase", "snippet",
     ];
+    // [Source: …] labels are the snap pass's jurisdiction — see
+    // strip_citation_spans.
+    let claim = strip_citation_spans(claim);
+    let claim = claim.as_str();
     let low = claim.to_lowercase();
     if !ARTIFACT.iter().any(|a| low.contains(a)) {
         return None;
@@ -838,6 +891,52 @@ pub(super) async fn claim_violation_joint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn name_sweep_skips_citation_labels_and_boilerplate() {
+        // The persona-QA self-indictment class (2026-07-10): label fragments
+        // and header bigrams flagged as fabricated names.
+        assert_eq!(
+            absent_name_attribution(
+                "The passage discusses effects as documented [Source: Psilocybin Mushrooms — Effects]",
+                "some unrelated evidence text"
+            ),
+            None
+        );
+        assert_eq!(
+            absent_name_attribution(
+                "From Retrieved Sources: the document describes the mechanism in a later section.",
+                "some unrelated evidence text"
+            ),
+            None
+        );
+        // Surname + capitalized pronoun is not a name ("Webber He
+        // averaged…" — observed live).
+        assert_eq!(
+            absent_name_attribution(
+                "The document states Webber He averaged 19.1 points per game.",
+                "webber averaged 19.1 points"
+            ),
+            None
+        );
+        // Positive control: a genuine in-world attribution absent from
+        // evidence still trips the veto.
+        assert_eq!(
+            absent_name_attribution(
+                "The email was sent by Betty Alexander to the finance team.",
+                "totally different evidence"
+            ),
+            Some("Betty Alexander".to_string())
+        );
+        // Unclosed bracket strips to end-of-line, not end-of-answer.
+        assert_eq!(
+            absent_name_attribution(
+                "cited in [Source: Broken Label\nThe letter was written by Elowen Marsh yesterday.",
+                "nothing relevant"
+            ),
+            Some("Elowen Marsh".to_string())
+        );
+    }
 
     #[test]
     fn self_referential_declines_are_exempt() {
