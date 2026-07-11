@@ -132,6 +132,57 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
     dot / (na.sqrt() * nb.sqrt())
 }
 
+/// Pick the first cache source whose stored sentinel probe agrees with the
+/// live `probe` (same embed space, cosine ≥ [`PROBE_MIN_COSINE`]) and whose
+/// schema matches. Candidates are tried in priority order — a user-written
+/// on-disk cache first (it can carry exemplars from a newer release than the
+/// binary), then the binary-baked artifact.
+///
+/// The load-bearing property: a candidate that *parses* but fails validation
+/// (wrong schema, or a probe from a different / degenerate embed model — e.g.
+/// a zero-vector cache left behind by a past broken embed slot) no longer
+/// *shadows* a healthy fallback. We advance to the next candidate instead of
+/// giving up. Before this, a parseable-but-stale disk cache short-circuited the
+/// baked fallback and forced a full re-embed of ~300 exemplars on the CPU-only
+/// embed slot every boot (minutes) — the "router is slow to launch" bug.
+///
+/// Pure: no I/O, no inference. Returns the chosen `(entries, source)` or `None`
+/// when nothing validates (caller then re-embeds and flushes a fresh cache).
+fn select_cache_source(
+    candidates: [(Option<CacheFile>, &'static str); 2],
+    probe: &[f32],
+) -> Option<(HashMap<String, Vec<f32>>, &'static str)> {
+    for (parsed, source) in candidates {
+        let Some(f) = parsed else { continue };
+        if f.schema_version != SCHEMA_VERSION {
+            tracing::info!(
+                target: "router.bootstrap",
+                source,
+                "exemplar embed cache: schema changed; trying next source"
+            );
+            continue;
+        }
+        let sim = cosine(probe, &f.probe);
+        if sim >= PROBE_MIN_COSINE {
+            tracing::info!(
+                target: "router.bootstrap",
+                entries = f.entries.len(),
+                probe_cosine = sim,
+                source,
+                "exemplar embed cache validated"
+            );
+            return Some((f.entries, source));
+        }
+        tracing::info!(
+            target: "router.bootstrap",
+            probe_cosine = sim,
+            source,
+            "exemplar embed cache: probe mismatch (embed model changed or degenerate cache); trying next source"
+        );
+    }
+    None
+}
+
 impl BootEmbedCache {
     /// Load the cache and validate it against the live provider via
     /// the sentinel probe. Always returns a usable cache — probe or
@@ -158,60 +209,35 @@ impl BootEmbedCache {
             }
         };
 
-        // Prefer a user-written on-disk cache (it can carry exemplars from a
-        // newer release than the binary's baked copy); otherwise fall back to
-        // the binary-baked artifact so a shipped `.app` — or a cleared
-        // ~/.sovereign — still hits. Either source is validated by the SAME
-        // sentinel probe below, so a baked cache built for a different embed
-        // model is correctly discarded rather than trusted.
-        let (parsed, source): (Option<CacheFile>, &'static str) = match std::fs::read(p)
+        // Validate candidate caches against the live sentinel probe, in
+        // priority order: the user-written on-disk cache first (it can carry
+        // exemplars from a newer release than the binary), then the binary-baked
+        // artifact so a shipped `.app` — or a cleared ~/.sovereign — still hits.
+        // Crucially, an on-disk cache that PARSES but fails validation (stale
+        // probe, wrong schema, or a degenerate zero-vector write from a past
+        // broken embed slot) falls through to the baked fallback rather than
+        // shadowing it — see `select_cache_source`.
+        let disk = std::fs::read(p)
             .ok()
-            .and_then(|bytes| serde_json::from_slice::<CacheFile>(&bytes).ok())
-        {
-            Some(f) => (Some(f), "disk"),
-            None => (
-                serde_json::from_str::<CacheFile>(BAKED_ROUTER_EMBED_CACHE).ok(),
-                "baked",
-            ),
-        };
-        match parsed {
-            Some(f) if f.schema_version == SCHEMA_VERSION => {
-                let sim = cosine(&probe, &f.probe);
-                if sim >= PROBE_MIN_COSINE {
-                    tracing::info!(
-                        target: "router.bootstrap",
-                        entries = f.entries.len(),
-                        probe_cosine = sim,
-                        source,
-                        "exemplar embed cache validated"
-                    );
-                    Self {
-                        path,
-                        entries: f.entries,
-                        touched: std::collections::HashSet::new(),
-                        probe,
-                        hits: 0,
-                        misses: 0,
-                        dirty: false,
-                    }
-                } else {
-                    tracing::info!(
-                        target: "router.bootstrap",
-                        probe_cosine = sim,
-                        source,
-                        "exemplar embed cache: embed model changed; discarding stale cache"
-                    );
-                    Self::empty(path, probe)
-                }
-            }
-            Some(_) => {
+            .and_then(|bytes| serde_json::from_slice::<CacheFile>(&bytes).ok());
+        let baked = serde_json::from_str::<CacheFile>(BAKED_ROUTER_EMBED_CACHE).ok();
+        match select_cache_source([(disk, "disk"), (baked, "baked")], &probe) {
+            Some((entries, _source)) => Self {
+                path,
+                entries,
+                touched: std::collections::HashSet::new(),
+                probe,
+                hits: 0,
+                misses: 0,
+                dirty: false,
+            },
+            None => {
                 tracing::info!(
                     target: "router.bootstrap",
-                    "exemplar embed cache: schema changed; discarding"
+                    "exemplar embed cache: no source validated; re-embedding exemplars this boot"
                 );
                 Self::empty(path, probe)
             }
-            None => Self::empty(path, probe),
         }
     }
 
@@ -289,6 +315,22 @@ impl BootEmbedCache {
             "exemplar embed cache: boot embed accounting"
         );
         if !self.dirty {
+            return;
+        }
+        // Never persist a degenerate embedding space. An empty or all-zero
+        // probe means the embed slot returned garbage this boot (a failed or
+        // stub load) — writing it poisons every future boot: the sentinel probe
+        // can never validate zero-vectors, so the file is dead weight that (via
+        // the read-side fallback) is skipped, or (before that fix) shadowed the
+        // healthy baked cache. Refuse the write. Correctness is unaffected — the
+        // classifiers already embedded live this boot; only the next boot's
+        // cache-hit is forgone, which is exactly right for a broken embed slot.
+        if self.probe.iter().all(|&x| x == 0.0) {
+            tracing::warn!(
+                target: "router.bootstrap",
+                probe_dims = self.probe.len(),
+                "exemplar embed cache: refusing to persist a degenerate (all-zero) embedding space"
+            );
             return;
         }
         let Some(ref p) = self.path else { return };
@@ -496,5 +538,102 @@ mod tests {
         );
         assert_eq!(back.entries.len(), 1);
         assert_eq!(back.probe, vec![1.0, 0.0]);
+    }
+
+    /// A cache carrying `probe`, `n` entries, and `schema` — entries reuse the
+    /// probe vector; only `probe`/`schema`/`len` matter for source selection.
+    fn cache_with(probe: Vec<f32>, n: usize, schema: u32) -> CacheFile {
+        let entries = (0..n).map(|i| (format!("q:{i}"), probe.clone())).collect();
+        CacheFile {
+            schema_version: schema,
+            built_for: None,
+            probe,
+            entries,
+        }
+    }
+
+    #[test]
+    fn poisoned_disk_cache_falls_back_to_baked() {
+        // Regression for the "router slow to launch" bug: a parseable on-disk
+        // cache written by a past degenerate embed slot (8-dim zero-vectors)
+        // must NOT shadow the healthy baked cache. Before the fix, this returned
+        // an empty cache and forced a full re-embed of ~300 exemplars on the
+        // CPU-only slot (minutes) every boot.
+        let live = vec![1.0f32, 0.0, 0.0];
+        let poisoned = cache_with(vec![0.0; 8], 277, SCHEMA_VERSION);
+        let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
+        let (entries, source) =
+            select_cache_source([(Some(poisoned), "disk"), (Some(baked), "baked")], &live)
+                .expect("baked fallback must validate when disk is poisoned");
+        assert_eq!(source, "baked");
+        assert_eq!(entries.len(), 303, "baked entries, not the poisoned disk set");
+    }
+
+    #[test]
+    fn fresh_disk_cache_wins_over_baked() {
+        // Priority order: a valid on-disk cache (possibly newer exemplars than
+        // the binary) is preferred over the baked artifact.
+        let live = vec![1.0f32, 0.0, 0.0];
+        let disk = cache_with(live.clone(), 300, SCHEMA_VERSION);
+        let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
+        let (entries, source) =
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).unwrap();
+        assert_eq!(source, "disk");
+        assert_eq!(entries.len(), 300);
+    }
+
+    #[test]
+    fn both_sources_stale_returns_none() {
+        // A genuinely swapped embed model (orthogonal probe): neither source
+        // validates, so the caller re-embeds and flushes a fresh cache.
+        let live = vec![1.0f32, 0.0, 0.0];
+        let stale = vec![0.0f32, 1.0, 0.0];
+        let disk = cache_with(stale.clone(), 277, SCHEMA_VERSION);
+        let baked = cache_with(stale, 303, SCHEMA_VERSION);
+        assert!(
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).is_none()
+        );
+    }
+
+    #[test]
+    fn disk_schema_mismatch_falls_back_to_baked() {
+        let live = vec![1.0f32, 0.0];
+        let disk = cache_with(live.clone(), 10, SCHEMA_VERSION + 1);
+        let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
+        let (_entries, source) =
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).unwrap();
+        assert_eq!(source, "baked");
+    }
+
+    #[test]
+    fn absent_disk_uses_baked() {
+        let live = vec![1.0f32, 0.0];
+        let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
+        let (_entries, source) =
+            select_cache_source([(None, "disk"), (Some(baked), "baked")], &live).unwrap();
+        assert_eq!(source, "baked");
+    }
+
+    #[test]
+    fn flush_refuses_degenerate_all_zero_probe() {
+        // A broken embed slot yields an all-zero probe; persisting it would
+        // poison future boots (the write-side origin of the 8-dim zero-vector
+        // cache). flush() must refuse and leave no file behind.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("cache.json");
+        let k = key("q", "exemplar");
+        let mut entries = HashMap::new();
+        entries.insert(k.clone(), vec![0.0f32; 8]);
+        let mut cache = BootEmbedCache {
+            path: Some(path.clone()),
+            entries,
+            touched: std::iter::once(k).collect(),
+            probe: vec![0.0f32; 8],
+            hits: 0,
+            misses: 1,
+            dirty: true,
+        };
+        cache.flush();
+        assert!(!path.exists(), "degenerate cache must not be persisted");
     }
 }

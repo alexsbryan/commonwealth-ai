@@ -307,6 +307,9 @@ pub async fn build_session_with_skills(
         Arc::clone(&store),
         Arc::clone(&skills),
         &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
+        || eprintln!(
+            "Router: exemplar embed cache cold — re-embedding exemplars (can take minutes on a CPU-only embed slot)…"
+        ),
     )
     .await;
     eprintln!(

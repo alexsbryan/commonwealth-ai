@@ -250,6 +250,10 @@ async fn main() {
         Arc::clone(&store),
         Arc::clone(&skills),
         &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
+        || tracing::info!(
+            target: "router.bootstrap",
+            "exemplar embed cache cold — re-embedding exemplars (minutes on a CPU-only embed slot)"
+        ),
     )
     .await;
     tracing::info!(
