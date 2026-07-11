@@ -82,6 +82,20 @@ read it as a hang (measured: personas cancel at 15-57s). 15s median on
 35B-class local hardware requires cutting gate-call prefill volume — the
 known mechanism (~100 verify-shaped calls/20min), not magic."""
 
+[ttdraft_p50_s]
+direction = "max"
+floor = 45
+target = 15
+min_n_turns = 5
+rationale = """
+Perceived first text under the draft-preview experiment
+(SOVEREIGN_DRAFT_STREAM=1): the user's patience clock keys on visible
+words forming, not on the gate's verdict — personas cancel at 15-57s of
+silence. Measured at introduction: 30.2s median vs 106.5s official ttft
+(3.5x). The residual is retrieval+prefill before drafting; 15s requires
+the prompt-budget caps. Only evaluated on draft-stream runs
+(insufficient-n otherwise)."""
+
 [ttv_median_s]
 direction = "max"
 floor = 120
