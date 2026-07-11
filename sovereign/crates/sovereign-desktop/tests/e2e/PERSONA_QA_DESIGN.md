@@ -364,6 +364,18 @@ judge, e9414f8d) carry judge noise: v1 flagged half of GOOD answers as
 broken, which drove phantom rephrase/abandon — session-level numbers from
 those runs are pessimistically biased.
 
+**Gates** (`persona-gates.toml`, run `persona-gates.mjs <journals…>`): every
+metric carries an aspirational floor/target pair with its theoretical
+rationale IN the file — no threshold changes without a rationale edit in
+the same commit. Floors are the refuse-to-ship line (non-zero exit);
+targets define the mountain. Loop discipline: every fix must name the red gate
+it attacks; runs end with the gate report; a plateau means all floors
+green, after which floors ratchet toward targets. Baseline 2026-07-11
+(17 sessions / 49 turns, judge v2): 8 of 11 floors failing — gfr 0.53,
+abandon 0.29, hallucinations 1, grounded 0.16, ttft_p50 143s, ttv 136s,
+grace 1.22, self_indictment 0.12; flips at target; rephrases and
+silent_gap passing floors.
+
 ## 9. Outputs
 
 - `test-artifacts/persona-journal.jsonl` — per-turn records: persona, goal,
