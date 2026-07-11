@@ -332,6 +332,38 @@ run against hermetic fixtures. Candidate for folding into soak once stable.
 conversation logs + public datasets for the §4 stats; retune persona
 weights and style overlays from measurement.
 
+## 8b. Core quality metrics — the session-first frame
+
+Users experience GOALS across sessions, not turns; the top-line metrics are
+session-level, each anchored in an established dimension of human-agent
+interaction. `persona-scoreboard.mjs` computes one row per run so change is
+visible and attributable (or honestly not attributable):
+
+- **GFR — goal fulfillment rate** (task success, the HCI headline): sessions
+  ending `satisfied` / all sessions. The single number a real user's
+  retention tracks.
+- **TTV — time-to-value** (time-on-task, not TTFT): elapsed from the first
+  send to the first turn whose answer the user-judge accepts. TTFT is a
+  component; users forgive latency that ends in value and punish fast
+  garbage.
+- **Trust integrity** (asymmetric, per the chaos-QA product bar: trust is
+  kept by punishing confabulation): hallucination count + sycophancy flips.
+  One betrayal outweighs many successes — these are counts, not rates, and
+  the target is zero.
+- **Grace** (failure quality): posture 0–3 on gap turns — admits plainly /
+  offers agency / no internal jargon. How the system fails when it fails.
+- **Effort tax** (interaction cost): rephrases and cancels per session —
+  work the user spends extracting value.
+
+Reporting discipline: every scoreboard row states N (sessions/turns are
+SMALL per run — 3–13 turns); runs differ in persona mix and corpora unless
+explicitly paired, so cross-run deltas are attributable only with
+receipts (a mechanism trace or a controlled pair). Metric movement without
+a receipt is weather, not progress. Pre-calibration runs (before the v2
+judge, e9414f8d) carry judge noise: v1 flagged half of GOOD answers as
+broken, which drove phantom rephrase/abandon — session-level numbers from
+those runs are pessimistically biased.
+
 ## 9. Outputs
 
 - `test-artifacts/persona-journal.jsonl` — per-turn records: persona, goal,
