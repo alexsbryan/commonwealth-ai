@@ -455,22 +455,18 @@ pub async fn bootstrap_with_progress(
     // (sovereign-core/router_bootstrap.rs). Exemplars are baked into the binary,
     // so this works inside the packaged `.app` with no on-disk files present.
     emit(BootstrapPhase::AssemblingRouter);
-    // Be up front about a cold router-embed cache. If it will MISS (first
-    // launch, a cleared ~/.sovereign, or a genuinely swapped embed model), the
-    // four classifiers re-embed ~277 exemplars below — minutes on a CPU-only
-    // embed slot. Surface a distinct phase instead of a frozen splash. Costs one
-    // probe embed to decide; `build_llm_router` re-opens the cache for the work.
-    if !sovereign_core::router_embed_cache::BootEmbedCache::open(&*inference)
-        .await
-        .is_populated()
-    {
-        emit(BootstrapPhase::RebuildingRouterEmbeddings);
-    }
+    // Be up front about a cold router-embed cache. If it MISSES (first launch, a
+    // cleared ~/.sovereign, or a genuinely swapped embed model), the four
+    // classifiers re-embed ~300 exemplars — minutes on a CPU-only embed slot.
+    // `build_llm_router` opens the cache once and fires this hook exactly when
+    // that re-embed is imminent, so we surface a distinct phase instead of a
+    // frozen splash without paying a second open + sentinel probe here.
     let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
         Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
         &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
+        || emit(BootstrapPhase::RebuildingRouterEmbeddings),
     )
     .await;
     tracing::info!(

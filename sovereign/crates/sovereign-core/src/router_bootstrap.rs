@@ -167,11 +167,19 @@ impl RouterBuildReport {
 /// current-info, each from its override path when present else the baked
 /// default, each soft-degrading independently. Returns the router plus a
 /// [`RouterBuildReport`] for the caller to log.
+///
+/// `on_cold_start` fires once, before any exemplar embedding, iff the shared
+/// embed cache opened un-populated (a re-embed of ~300 exemplars is imminent —
+/// minutes on a CPU-only slot). Callers surface a progress phase there; pass a
+/// no-op when there's no UI to narrate. This is the single source of truth for
+/// "is the cache cold?" — callers must not re-`open` to probe it themselves,
+/// which costs a duplicate sentinel embed (~2.6s CPU) for no new information.
 pub async fn build_llm_router(
     inference: Arc<dyn InferenceProvider>,
     store: Arc<dyn StateStore>,
     skills: Arc<SkillRegistry>,
     overrides: &ExemplarOverrides,
+    on_cold_start: impl FnOnce(),
 ) -> (LlmRouter, RouterBuildReport) {
     let mut router = LlmRouter::new(Arc::clone(&inference), store, skills);
     let mut report = RouterBuildReport::default();
@@ -181,6 +189,12 @@ pub async fn build_llm_router(
     // sequentially at every boot (~5.7s of desktop splash, measured
     // 2026-06-10). Validity is a sentinel cosine probe inside `open`.
     let mut embed_cache = crate::router_embed_cache::BootEmbedCache::open(&*inference).await;
+
+    // Opened once. If it missed, the classifiers below are about to re-embed —
+    // tell the caller now so it can narrate the phase honestly.
+    if !embed_cache.is_populated() {
+        on_cold_start();
+    }
 
     // 1. Embed router — the primary, deterministic intent pre-check. When it
     //    returns a confident verdict the router skips the heuristic + LLM
