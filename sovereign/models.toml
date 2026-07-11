@@ -111,12 +111,20 @@ code        = 1
 instruction = 2
 math        = 1
 
+# Q8_0, NOT Q4_K_M: (a) the upstream repo publishes only Q8_0 + f16 — the
+# Q4_K_M file this used to prescribe does not exist ("Entry not found"), so
+# cpu_only setups hit a dead download; (b) the baked router-embed cache is
+# built from the repo's f16 and the sentinel probe measures f16↔Q8_0 cosine
+# at 1.000000 (HIT) while a re-quant like Q4 lands below the 0.98 threshold
+# (MISS) — so Q8_0 is also what spares CPU-only machines the "re-embedding
+# ~303 exemplars, minutes on a CPU-only embed slot" first launch.
+# Forensics: desktop-v0.1.19 Intel first-launch investigation, 2026-07-10.
 [profiles.cpu_only.embed]
 repo    = "Qwen/Qwen3-Embedding-0.6B-GGUF"
-file    = "Qwen3-Embedding-0.6B-Q4_K_M.gguf"
+file    = "Qwen3-Embedding-0.6B-Q8_0.gguf"
 family  = "Qwen3Embedding"
-quant   = "Q4_K_M"
-size_gb = 0.4
+quant   = "Q8_0"
+size_gb = 0.6
 thinking = false
 hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
 [profiles.cpu_only.embed.quirks_override]
