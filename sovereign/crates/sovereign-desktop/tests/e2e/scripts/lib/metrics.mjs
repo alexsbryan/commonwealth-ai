@@ -68,6 +68,10 @@ export function computeMetrics(rows) {
     self_indictment_rate: turns.length ? selfIndicted / turns.length : null,
     ttft_p50_s: ttfts.length ? quantile(ttfts, 0.5) / 1000 : null,
     ttft_p95_s: ttfts.length ? quantile(ttfts, 0.95) / 1000 : null,
+    ttdraft_p50_s: (() => {
+      const xs = turns.map((t) => t.ttdraftMs).filter((x) => x != null);
+      return xs.length ? quantile(xs, 0.5) / 1000 : null;
+    })(),
     ttv_median_s: ttvs.length ? quantile(ttvs, 0.5) / 1000 : null,
     ttv_sessions_with_value: ttvs.length,
     grace_mean: postured.length
