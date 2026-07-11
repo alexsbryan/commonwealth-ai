@@ -768,6 +768,28 @@ fn rewrite_system_note(failed: &[FailedClaim]) -> String {
 /// verbatim) was rewritten to "[unverified excerpt: …]", turning the app's own
 /// footer into a self-contradiction (probed 2026-07-01: the note trace showed
 /// clean items; the released text showed them wrapped).
+/// EXPERIMENT (`SOVEREIGN_NOTE_AS_METADATA=1`): keep the verification note
+/// OUT of the answer text — the failed claims already ride
+/// `GateOutcome.meta.failed_claims` → `metadata.grounding_gate`, and the
+/// desktop renders them as a collapsible disclosure instead. Persona-QA
+/// receipts (2026-07-11): the appended note owns the answer's final words
+/// ("— The evidence states…", "[unverified excerpt:…]"), which zeroes the
+/// grace gate's `agency`/`clean` components and buries the model's own
+/// closing line — the honest audit trail read as auditor-speak in user
+/// space. Default OFF: non-desktop surfaces (API/CLI) keep the in-text
+/// note so a known-failed claim is never silently released without its
+/// caveat (the never-silent invariant).
+fn append_note(text: String, note: &str) -> String {
+    let as_metadata = std::env::var("SOVEREIGN_NOTE_AS_METADATA")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if as_metadata {
+        text
+    } else {
+        format!("{text}{note}")
+    }
+}
+
 fn verification_note(failed_claims: &[String]) -> String {
     const NOTE_ITEM_CHARS: usize = 160;
     let mut seen = std::collections::HashSet::new();
@@ -1311,7 +1333,7 @@ async fn gate_longform(
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
-            text: format!("{text}{note}"),
+            text: append_note(text, &note),
             meta: serde_json::json!({
                 "surface": profile.surface.id(),
                 "action": "annotated_no_retry", "retried": false,
@@ -1371,7 +1393,7 @@ async fn gate_longform(
                     let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
                     let note = verification_note(&failed_claims);
                     GateOutcome {
-                        text: format!("{text2}{note}"),
+                        text: append_note(text2, &note),
                         meta: serde_json::json!({
                             "action": "rewrite_annotated", "retried": true,
                             "claims_checked": n2, "failed_claims": failed_claims,
@@ -1397,7 +1419,7 @@ async fn gate_longform(
             let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
-                text: format!("{text}{note}"),
+                text: append_note(text, &note),
                 meta: serde_json::json!({
                     "surface": profile.surface.id(),
                     "action": "annotated_rewrite_error", "retried": false,
