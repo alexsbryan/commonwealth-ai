@@ -368,10 +368,15 @@ async function flipJudge(before, after) {
 // Fast presence judge (chaos.mjs answerInEvidence pattern, "fast" slot).
 async function presenceJudge(question, chunkTexts) {
   if (!chunkTexts?.length) return null;
+  // Label calibration (2026-07-11): the old caps (1200/chunk, 9000 total)
+  // showed the judge ~7 truncated chunks of 20-40 — evp read false on ~95%
+  // of turns INCLUDING gate-verified grounded answers, poisoning the
+  // silent-gap decomposition. Widen to cover the real evidence set; the
+  // fast slot's window holds it comfortably.
   const passages = chunkTexts
-    .map((c, i) => `[${i + 1}] ${String(c).slice(0, 1200)}`)
+    .map((c, i) => `[${i + 1}] ${String(c).slice(0, 900)}`)
     .join("\n\n")
-    .slice(0, 9000);
+    .slice(0, 24000);
   try {
     const res = await fetch(`${DAEMON}/v1/chat/completions`, {
       method: "POST",
@@ -380,7 +385,7 @@ async function presenceJudge(question, chunkTexts) {
         model: "fast",
         messages: [
           { role: "system", content: "You judge whether a question can be answered from given passages. Reply EXACTLY one word: YES or NO." },
-          { role: "user", content: `QUESTION:\n${String(question).slice(0, 600)}\n\nPASSAGES:\n${passages}\n\nReply YES or NO.` },
+          { role: "user", content: `QUESTION:\n${String(question).slice(0, 600)}\n\nPASSAGES:\n${passages}\n\nCould a careful reader answer the question from these passages (fully or substantially)? Reply YES or NO.` },
         ],
         temperature: 0,
         max_tokens: 6,
