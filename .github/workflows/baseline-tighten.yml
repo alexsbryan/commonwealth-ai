@@ -1,0 +1,57 @@
+# Weekly ratchet tightening — the anti-rot mechanism the original arch-gate
+# lacked (its baseline drifted stale and red-X'd 58 unrelated commits, which
+# demoted it to advisory).
+#
+# Every gate's `--tighten` rewrites ONLY entries that improved — it never
+# adds and never raises — so this PR can only bank wins: a split file leaves
+# the oversized baseline, a de-duplicated crate leaves lock_dups, a shrunk
+# fan-in lowers its cap. Improvements get locked in weekly instead of
+# becoming slack a future regression can hide inside. Intentional debt
+# ADDITIONS still require a human running `--update-baseline` and defending
+# the diff in review.
+
+name: baseline-tighten
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  tighten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Same tiny xtask tree as ci.yml's gates job.
+          shared-key: xtask
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y mold clang
+      - name: Tighten all ratchet baselines
+        run: |
+          cargo run -p xtask -- arch-gate --tighten
+          cargo run -p xtask -- layer-gate --tighten
+          cargo run -p xtask -- lock-gate --tighten
+      - name: Open PR when anything improved
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/baseline-tighten
+          title: "chore(quality): bank ratchet improvements (weekly tighten)"
+          commit-message: |
+            chore(quality): bank ratchet improvements (weekly tighten)
+
+            Machine-written by baseline-tighten.yml: `--tighten` only
+            removes or lowers baseline entries that improved on main.
+          body: |
+            Weekly `cargo xtask <gate> --tighten` run. Entries below either
+            left a baseline (debt cleared) or had their cap lowered
+            (improvement banked). This PR can only shrink baselines — see
+            `quality/baselines/`.
+          delete-branch: true

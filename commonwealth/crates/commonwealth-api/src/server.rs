@@ -79,7 +79,10 @@ pub fn client_router(state: AppState) -> Router {
             "/oicp/v1/corpus/progress",
             get(routes_oicp_ingest::corpus_progress),
         )
-        .route("/oicp/v1/recipe/test", post(routes_oicp_ingest::recipe_test))
+        .route(
+            "/oicp/v1/recipe/test",
+            post(routes_oicp_ingest::recipe_test),
+        )
         // Ollama-native /api/* compatibility shim. Pure translation over the
         // OpenAI handlers above — no new inference/routing logic. Chat +
         // generate carry the same peer-admission gate as /v1/chat/completions

@@ -130,8 +130,7 @@ pub async fn run_recall_stream(opts: &RecallRunOptions) -> Result<(), String> {
     let mut traces: Vec<InsertTrace> = Vec::new();
     let stream_started = Instant::now();
     for (i, (key, seed)) in stream.iter().enumerate() {
-        let singleton: BTreeMap<String, SeedMemory> =
-            BTreeMap::from([(key.clone(), seed.clone())]);
+        let singleton: BTreeMap<String, SeedMemory> = BTreeMap::from([(key.clone(), seed.clone())]);
         seed_memories(inc_session.store.as_ref(), &singleton, Some(WITNESS_SKILL))
             .await
             .map_err(|e| format!("stream seed {key} failed: {e}"))?;
@@ -175,9 +174,13 @@ pub async fn run_recall_stream(opts: &RecallRunOptions) -> Result<(), String> {
         opts.temperature,
     )
     .await?;
-    seed_memories(oracle_session.store.as_ref(), &seed_set, Some(WITNESS_SKILL))
-        .await
-        .map_err(|e| format!("oracle seed failed: {e}"))?;
+    seed_memories(
+        oracle_session.store.as_ref(),
+        &seed_set,
+        Some(WITNESS_SKILL),
+    )
+    .await
+    .map_err(|e| format!("oracle seed failed: {e}"))?;
     let flat_ranks = probe_ranks(&oracle_session, &fixture, &scope).await;
     let t = Instant::now();
     let oracle_nodes = sovereign_tools::mem_atlas::build_memory_atlas(
@@ -236,7 +239,10 @@ pub async fn run_recall_stream(opts: &RecallRunOptions) -> Result<(), String> {
         traces,
     };
 
-    println!("\n  {:<28} {:>6} {:>12} {:>7}", "plant", "flat", "incremental", "batch");
+    println!(
+        "\n  {:<28} {:>6} {:>12} {:>7}",
+        "plant", "flat", "incremental", "batch"
+    );
     for p in &report.per_plant {
         let f = |r: Option<usize>| r.map(|n| n.to_string()).unwrap_or_else(|| "-".into());
         println!(

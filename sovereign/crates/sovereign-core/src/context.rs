@@ -202,8 +202,8 @@ pub async fn summarize_dropped_history(
     });
 
     // SLOT_POLICY §3 Housekeep: conversation-preamble summarization.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
-        .with_output_budget(400);
+    let mut request =
+        CompletionRequest::for_workload(Workload::Housekeep, prompt).with_output_budget(400);
     request.temperature = Some(0.0);
     request.structured_output = Some(schema);
 
@@ -351,8 +351,8 @@ pub async fn update_topic_context(
     });
 
     // SLOT_POLICY §3 Housekeep: topic/domain extraction.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
-        .with_output_budget(60);
+    let mut request =
+        CompletionRequest::for_workload(Workload::Housekeep, prompt).with_output_budget(60);
     request.temperature = Some(0.0);
     request.structured_output = Some(schema);
 

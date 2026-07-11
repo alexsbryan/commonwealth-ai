@@ -97,7 +97,9 @@ impl Tool for RetireNoteTool {
             .get("reason")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("retire_note requires a non-empty 'reason'".to_string()))?;
+            .ok_or_else(|| {
+                Error::InvalidInput("retire_note requires a non-empty 'reason'".to_string())
+            })?;
         Ok(())
     }
 
@@ -153,13 +155,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
         let id = store
-            .write_note(
-                "invariant",
-                "stale constraint",
-                vec![],
-                vec![],
-                "s1",
-            )
+            .write_note("invariant", "stale constraint", vec![], vec![], "s1")
             .await
             .unwrap();
 

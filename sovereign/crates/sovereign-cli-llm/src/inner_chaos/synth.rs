@@ -119,8 +119,11 @@ pub async fn run_mem_grounding_calibration(opts: &RecallRunOptions) -> Result<()
         opts.temperature,
     )
     .await?;
-    let verifier_inference =
-        pinned_or_shared(&session, opts.judge_model.as_ref(), opts.chat_model.as_ref());
+    let verifier_inference = pinned_or_shared(
+        &session,
+        opts.judge_model.as_ref(),
+        opts.chat_model.as_ref(),
+    );
 
     println!(
         "\ninner-chaos MEM-GROUNDING verifier calibration — {} cases",
@@ -164,14 +167,21 @@ pub async fn run_mem_grounding_calibration(opts: &RecallRunOptions) -> Result<()
         println!(
             "  {} gold={} judged={} denied_match={:?} {}{}",
             case.id,
-            if case.gold_grounded { "grounded" } else { "UNGROUNDED" },
+            if case.gold_grounded {
+                "grounded"
+            } else {
+                "UNGROUNDED"
+            },
             if v.grounded { "grounded" } else { "UNGROUNDED" },
             v.denied_match,
             if ok { "OK" } else { "MISMATCH" },
             if ok {
                 String::new()
             } else {
-                format!("\n      unsupported=\"{}\"\n      note: {}", v.unsupported, case.note)
+                format!(
+                    "\n      unsupported=\"{}\"\n      note: {}",
+                    v.unsupported, case.note
+                )
             }
         );
     }
@@ -235,8 +245,11 @@ pub async fn run_recall_synth(opts: &RecallRunOptions) -> Result<(), String> {
         Ok(n) => println!("memory atlas: {n} nodes in {}s", t.elapsed().as_secs()),
         Err(e) => println!("memory atlas build failed ({e}) — flat T1"),
     }
-    let judge_inference =
-        pinned_or_shared(&session, opts.judge_model.as_ref(), opts.chat_model.as_ref());
+    let judge_inference = pinned_or_shared(
+        &session,
+        opts.judge_model.as_ref(),
+        opts.chat_model.as_ref(),
+    );
     let stamp = super::runner::unix_seconds();
 
     println!(
@@ -313,7 +326,11 @@ pub async fn run_recall_synth(opts: &RecallRunOptions) -> Result<(), String> {
                             plant.id,
                             v.category.as_str(),
                             v.why.chars().take(200).collect::<String>(),
-                            reply.replace('\n', " ").chars().take(260).collect::<String>()
+                            reply
+                                .replace('\n', " ")
+                                .chars()
+                                .take(260)
+                                .collect::<String>()
                         );
                     }
                 }
@@ -324,12 +341,23 @@ pub async fn run_recall_synth(opts: &RecallRunOptions) -> Result<(), String> {
     }
     println!("\n  totals over {judged} judged single turns:");
     for (cat, n) in &counts {
-        println!("    {cat:<16} {n:>2}/{judged} = {:.0}%", *n as f64 * 100.0 / judged.max(1) as f64);
+        println!(
+            "    {cat:<16} {n:>2}/{judged} = {:.0}%",
+            *n as f64 * 100.0 / judged.max(1) as f64
+        );
     }
-    let confab = counts.get(RecallCategory::Confabulated.as_str()).copied().unwrap_or(0);
-    let faithful = counts.get(RecallCategory::FaithfulRecall.as_str()).copied().unwrap_or(0)
-        + counts.get(RecallCategory::PartialRecall.as_str()).copied().unwrap_or(0);
+    let confab = counts
+        .get(RecallCategory::Confabulated.as_str())
+        .copied()
+        .unwrap_or(0);
+    let faithful = counts
+        .get(RecallCategory::FaithfulRecall.as_str())
+        .copied()
+        .unwrap_or(0)
+        + counts
+            .get(RecallCategory::PartialRecall.as_str())
+            .copied()
+            .unwrap_or(0);
     println!("  headline: landed {faithful}/{judged}, confab {confab}/{judged}");
     Ok(())
 }
-

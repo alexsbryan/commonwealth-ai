@@ -101,14 +101,33 @@ impl Default for InferenceConfig {
 }
 
 // ── extracted submodules (façade re-export; ARCH §3.2) ──
+// EXPLICIT lists, not globs (quality program R1, 2026-07-11): a new pub item
+// in a submodule joins the `types::*` surface — and therefore the
+// sovereign-contracts and sovereign-core crate roots — only by being added
+// HERE, as a reviewable diff. api-gate snapshots the resulting surface.
 mod completion;
-pub use completion::*;
+pub use completion::{
+    CompletionRequest, CompletionResponse, FinishReason, ProviderCapabilities, SamplingMode,
+    StreamFrame, StreamUsage, ToolSchema,
+};
 mod routing;
-pub use routing::*;
+pub use routing::{
+    compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,
+    Scope, ToolContext, ToolDescriptor, ToolExample, TrustLevel,
+};
 mod conversation;
-pub use conversation::*;
+pub use conversation::{
+    Conversation, ConversationContext, ConversationTopicContext, HistoryRetrievalHit,
+    LandscapeDigest, Message, Role, SearchedSourceEntry, TemporalTension, ToolDossier,
+    ToolDossierEntry, ToolDossierOutcome, WorkingMemory,
+};
 mod narration;
-pub use narration::*;
+pub use narration::{
+    build_next_step_offers, decide_policy, ClarificationOption, ClarificationRequest,
+    ConfidenceThresholds, ConfidenceTier, IntentCandidate, InterpretationProposed, MoveKind,
+    NarrationEvent, NarrationPhase, NextStepOffer, OfferContext, ProposedAlternative,
+    ResumeSession, RouterClassification, RoutingPolicy, RoutingTiming, TurnNarration,
+};
 
 // ─── Plan Types ────────────────────────────────────────────────
 
@@ -935,10 +954,18 @@ pub struct RuntimeMetrics {
 // and policy tunable without touching the router. Threshold calibration
 // (future PR4) mutates policy, not the Router trait.
 
+// Explicit lists, not globs — see the submodule façade comment above.
 mod ui;
-pub use ui::*;
+pub use ui::{
+    ActionPreview, CoverageNote, InsightNode, InsightPosition, InsightSinkState, InsightSource,
+    PositionStyle, ResponseProvenance, SourceSummary, ThinFolder,
+};
 mod document;
-pub use document::*;
+pub use document::{
+    ActionAtom, AssetMotif, AssetState, DocumentAsset, DocumentAssetOperation, DocumentSegment,
+    DocumentSkeleton, DocumentTypeTag, EntityAppearances, EntityKind, MemRaptorNodeRow, QuoteSpan,
+    RankedEntity, RaptorNode, SectionAnnotation, SectionFunction, StructuralMoment,
+};
 
 #[cfg(test)]
 mod finish_reason_tests {

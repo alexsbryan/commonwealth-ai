@@ -28,8 +28,8 @@ use crate::backend::ChatBackend;
 use crate::prompts::TRIAL_SYSTEM_PROMPT;
 use crate::shared::{
     apply_edit, discover_source_files, has_dangling_action, parse_response_edits,
-    render_with_line_numbers, run_tests,
-    snapshot_dir, EditAction, Language, ParsedResponse, TestRunResult,
+    render_with_line_numbers, run_tests, snapshot_dir, EditAction, Language, ParsedResponse,
+    TestRunResult,
 };
 use crate::types::{
     Polarity, RoundObserver, RoundSummary, TestSummary, Trial, TrialResult, TrialStatus,
@@ -1406,7 +1406,11 @@ mod multi_file_target_tests {
     fn rewrite_resolves_to_the_file_holding_the_function() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("minilang")).unwrap();
-        std::fs::write(tmp.path().join("minilang/__init__.py"), "from .evaluator import evaluate_ast\n").unwrap();
+        std::fs::write(
+            tmp.path().join("minilang/__init__.py"),
+            "from .evaluator import evaluate_ast\n",
+        )
+        .unwrap();
         std::fs::write(
             tmp.path().join("minilang/evaluator.py"),
             "def evaluate_ast(node, env):\n    return None\n",

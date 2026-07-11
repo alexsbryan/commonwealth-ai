@@ -1,13 +1,24 @@
 # Workspace clippy configuration.
 #
-# Panic-ratchet (tech-debt PR4): `clippy::unwrap_used` / `clippy::expect_used`
-# are enabled per-crate (each gated crate carries `#![warn(...)]` /
-# `#![deny(...)]` in its lib.rs) as the panic surface is burned down. A
-# panic in a production request handler surfaces as an opaque 500; the
-# lints push that code toward `?` / typed errors / graceful fallbacks.
+# Panic-ratchet: `clippy::unwrap_used` / `clippy::expect_used` warn
+# WORKSPACE-WIDE via [workspace.lints.clippy] (quality program, 2026-07-11 —
+# superseding the earlier per-crate `#![warn(...)]` opt-in; commonwealth-api's
+# stricter crate-level attributes remain). A panic in a production request
+# handler surfaces as an opaque 500; the lints push that code toward `?` /
+# typed errors / graceful fallbacks. Counts are frozen per (crate, lint) in
+# quality/baselines/clippy_counts.tsv and enforced by `cargo xtask lint-gate`
+# — the number may never grow.
 #
 # Test code keeps the `unwrap()` / `expect()` idiom — a panic inside a
 # test is the correct, loud failure mode, not a launch risk — so the
 # lints are suppressed there workspace-wide.
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+
+# Function-level complexity budgets (clippy::too_many_lines /
+# clippy::cognitive_complexity, warned via [workspace.lints.clippy] and
+# count-ratcheted like the panic lints). Deliberately NOT aligned with the
+# arch-gate's 1200-line FILE ceiling — functions and files are different
+# budgets.
+too-many-lines-threshold = 200
+cognitive-complexity-threshold = 30

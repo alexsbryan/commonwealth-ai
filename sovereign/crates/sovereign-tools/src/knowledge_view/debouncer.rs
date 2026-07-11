@@ -189,8 +189,7 @@ async fn drain_memory_atlas(
         let scope = sovereign_core::traits::MemoryScope::from_conversation_skill(
             memory.source_skill_id.as_deref(),
         );
-        match crate::mem_tree::insert_memory(&h.inference, h.store.as_ref(), &scope, memory).await
-        {
+        match crate::mem_tree::insert_memory(&h.inference, h.store.as_ref(), &scope, memory).await {
             Ok(trace) => {
                 inserted += 1;
                 tracing::debug!(memory_id = %id, op = ?trace.op, "memory-tree drain: inserted");

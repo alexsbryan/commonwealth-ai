@@ -334,7 +334,9 @@ fn print_round(ev: &Value) {
     let failing = ev["failed_after"].as_u64().unwrap_or(0);
     match ev["winner"].as_str() {
         Some(winner) => {
-            println!("[{stage}] round {round} — {winner} won · {passing} passing / {failing} failing");
+            println!(
+                "[{stage}] round {round} — {winner} won · {passing} passing / {failing} failing"
+            );
         }
         None => {
             let tried = ev["candidates"]
@@ -368,18 +370,17 @@ fn print_done(ev: &Value, workdir: &std::path::Path) -> i32 {
         }
         other => {
             let reason = ev["reason"].as_str().unwrap_or("");
-            println!("\n✗ {other}{}{reason}", if reason.is_empty() { "" } else { " — " });
+            println!(
+                "\n✗ {other}{}{reason}",
+                if reason.is_empty() { "" } else { " — " }
+            );
             1
         }
     }
 }
 
 async fn print_status(http: &reqwest::Client, base: &str, id: &str) -> i32 {
-    match http
-        .get(format!("{base}/v1/solve/jobs/{id}"))
-        .send()
-        .await
-    {
+    match http.get(format!("{base}/v1/solve/jobs/{id}")).send().await {
         Ok(r) if r.status().is_success() => match r.json::<Value>().await {
             Ok(v) => {
                 println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());

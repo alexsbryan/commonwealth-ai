@@ -35,9 +35,9 @@ use crate::pipeline::judge::{should_judge, spawn_voice_judge};
 use crate::pipeline::presenter::present_request;
 use crate::pipeline::stages::{CuratedPackage, Sufficiency};
 use crate::skills::SkillRegister;
+use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
-use crate::slot_policy::Workload;
 use crate::types::{
     CompletionRequest, NarrationEvent, NarrationPhase, RouterClassification, StreamFrame,
     TurnNarration,

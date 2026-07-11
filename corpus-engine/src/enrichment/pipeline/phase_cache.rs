@@ -69,7 +69,11 @@ impl PhaseCache {
     /// built without it grandfathers every phase (serves regardless).
     /// Partial adoption is monotone-safe: an unstamped write simply
     /// leaves the next read to grandfather, never corrupts.
-    pub fn with_model_identity(mut self, model: impl Into<String>, fingerprint: Option<String>) -> Self {
+    pub fn with_model_identity(
+        mut self,
+        model: impl Into<String>,
+        fingerprint: Option<String>,
+    ) -> Self {
         self.identity = Some(CacheModelIdentity {
             model: model.into(),
             fingerprint,
@@ -392,8 +396,7 @@ mod tests {
     #[test]
     fn fingerprint_distinguishes_same_model_name() {
         let dir = tempdir().unwrap();
-        let a = PhaseCache::new(dir.path())
-            .with_model_identity("qwen", Some("fp-v1".to_string()));
+        let a = PhaseCache::new(dir.path()).with_model_identity("qwen", Some("fp-v1".to_string()));
         a.write(
             PipelinePhase::Questions,
             &Dummy {
@@ -404,10 +407,12 @@ mod tests {
         .unwrap();
         // Same model id, changed weights/quant/template → new fingerprint
         // → cache miss.
-        let a2 = PhaseCache::new(dir.path())
-            .with_model_identity("qwen", Some("fp-v2".to_string()));
+        let a2 = PhaseCache::new(dir.path()).with_model_identity("qwen", Some("fp-v2".to_string()));
         let got: Option<Dummy> = a2.read(PipelinePhase::Questions).unwrap();
-        assert!(got.is_none(), "fingerprint change must invalidate the cache");
+        assert!(
+            got.is_none(),
+            "fingerprint change must invalidate the cache"
+        );
     }
 
     #[test]
@@ -420,9 +425,7 @@ mod tests {
             value: 9,
         };
         legacy.write(PipelinePhase::Questions, &d).unwrap();
-        assert!(!legacy
-            .identity_path(PipelinePhase::Questions)
-            .exists());
+        assert!(!legacy.identity_path(PipelinePhase::Questions).exists());
         // A later run *with* a guard must still serve it (grandfathered),
         // not treat the unstamped cache as a foreign-model miss.
         let guarded = PhaseCache::new(dir.path()).with_model_identity("model-a", None);

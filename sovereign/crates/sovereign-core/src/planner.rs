@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use crate::context::format_history_as_prompt;
 use crate::error::{Error, Result};
 use crate::skills::SkillRegistry;
-use crate::traits::{InferenceProvider, Planner};
 use crate::slot_policy::Workload;
+use crate::traits::{InferenceProvider, Planner};
 use crate::types::*;
 
 /// LLM-based planner that uses the Primary inference slot to generate execution plans.

@@ -139,8 +139,6 @@ fn ident_prefix(s: &str) -> Option<String> {
     }
 }
 
-
-
 /// True when the response ENDS with a fenced JSON action that has no
 /// source block after it — the model declared an edit and stopped
 /// before emitting its content. MTP models emit spontaneous EOS
@@ -383,8 +381,12 @@ def evaluate(s):
 ```"#;
         let edits = parse_response_edits(content);
         assert_eq!(edits.len(), 2);
-        assert!(matches!(&edits[0].action, EditAction::WriteFile { path: Some(p) } if p == "calc/__init__.py"));
-        assert!(matches!(&edits[1].action, EditAction::WriteFile { path: Some(p) } if p == "calc/core.py"));
+        assert!(
+            matches!(&edits[0].action, EditAction::WriteFile { path: Some(p) } if p == "calc/__init__.py")
+        );
+        assert!(
+            matches!(&edits[1].action, EditAction::WriteFile { path: Some(p) } if p == "calc/core.py")
+        );
         assert!(edits[1].body.contains("def evaluate"));
     }
 
@@ -417,7 +419,8 @@ mod dangling_action_tests {
 
     #[test]
     fn complete_pair_is_not_dangling() {
-        let content = "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```";
+        let content =
+            "```json\n{\"action\": \"write_file\", \"path\": \"a.py\"}\n```\n```python\nx = 1\n```";
         assert!(!has_dangling_action(content));
     }
 

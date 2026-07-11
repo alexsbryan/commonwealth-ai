@@ -28,9 +28,9 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::skills::SkillRegister;
+use crate::slot_policy::Workload;
 use crate::title::strip_thinking_response;
 use crate::traits::InferenceProvider;
-use crate::slot_policy::Workload;
 use crate::types::{CompletionRequest, Speed};
 
 /// What the Presenter returns. The text is the user-visible reply

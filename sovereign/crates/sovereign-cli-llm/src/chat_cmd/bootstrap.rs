@@ -119,8 +119,8 @@ pub async fn build_session_with_skills(
     // window (e.g. 32768) instead of the historical 8192 approximation. On a
     // v0.3 host that doesn't serve `/oicp/v1/capabilities`, fall back to 8192 +
     // the `DEFAULT_MANIFEST`-derived prefix (the prior behavior, bit-identical).
-    let inference: Arc<dyn InferenceProvider> =
-        Arc::new(match sovereign_inference::remote::fetch_manifest(&base, None).await {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(
+        match sovereign_inference::remote::fetch_manifest(&base, None).await {
             Some(manifest) => SplitInferenceProvider::from_manifest(
                 &v1,
                 &manifest,
@@ -135,7 +135,8 @@ pub async fn build_session_with_skills(
                 sovereign_core::models_manifest::DEFAULT_MANIFEST
                     .embed_query_instruction(&embed_model),
             ),
-        });
+        },
+    );
 
     // 3. Open the state store. Creating the data dir on the fly is
     //    safe — mirrors the desktop's behaviour and means a first

@@ -195,7 +195,10 @@ pub fn attribute_citations(
                     && t.to_lowercase().starts_with("ev-")
                     && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
                     || (t.to_lowercase().starts_with("passage ")
-                        && t["passage ".len()..].trim().chars().all(|c| c.is_ascii_digit()));
+                        && t["passage ".len()..]
+                            .trim()
+                            .chars()
+                            .all(|c| c.is_ascii_digit()));
                 if is_handle {
                     if out.ends_with(' ') {
                         out.pop();
@@ -243,7 +246,8 @@ pub fn attribute_citations(
                 // scanner skipped the malformed bracket entirely). Recover the
                 // intended title conservatively, judge it with the SAME ordered
                 // procedure, and re-emit it properly closed (or drop it).
-                if let Some((title_len, title)) = recover_unclosed_title(&chars[i + 1..], &label_set)
+                if let Some((title_len, title)) =
+                    recover_unclosed_title(&chars[i + 1..], &label_set)
                 {
                     citations_total += 1;
                     match judge_title(&title, &hay, &label_set) {
@@ -590,8 +594,7 @@ fn recover_unclosed_title(
         if bchars[k] == '\n' {
             let title: String = bchars[..k].iter().collect();
             let title = title.trim().trim_end_matches(['.', ',']).trim();
-            return (!title.is_empty())
-                .then(|| (consumed_prefix + k, title.to_string()));
+            return (!title.is_empty()).then(|| (consumed_prefix + k, title.to_string()));
         }
         if bchars[k] == '.'
             && bchars.get(k + 1).is_some_and(|c| c.is_whitespace())
@@ -600,8 +603,7 @@ fn recover_unclosed_title(
             let title: String = bchars[..k].iter().collect();
             let title = title.trim().trim_end_matches(',').trim();
             // Consume through the '.' so the prose resumes at " However …".
-            return (!title.is_empty())
-                .then(|| (consumed_prefix + k + 1, title.to_string()));
+            return (!title.is_empty()).then(|| (consumed_prefix + k + 1, title.to_string()));
         }
     }
     None
@@ -1269,7 +1271,9 @@ mod tests {
         let r = attribute_citations(answer, &[], &["public-goods".to_string()]);
         assert!(r.cleaned.contains("[Source: public-goods]"));
         assert!(r.cleaned.contains("Verification note"));
-        assert!(r.cleaned.contains("[unverified excerpt: Mill argued tolls]"));
+        assert!(r
+            .cleaned
+            .contains("[unverified excerpt: Mill argued tolls]"));
     }
 
     #[test]
@@ -1278,10 +1282,15 @@ mod tests {
         // flowed into prose and shipped raw — the bounded scanner skipped it,
         // bypassing the veto. Recovery cuts at the sentence boundary, the
         // composite date veto strips the invented title, and the prose resumes.
-        let labels = vec!["Decision — 2026-03-28 — Guest Parking".to_string(), "maple-house".to_string()];
-        let body = vec!["Guests are welcome to leave a vehicle parked in those two spaces \
+        let labels = vec![
+            "Decision — 2026-03-28 — Guest Parking".to_string(),
+            "maple-house".to_string(),
+        ];
+        let body = vec![
+            "Guests are welcome to leave a vehicle parked in those two spaces \
                          overnight without needing any permit."
-            .to_string()];
+                .to_string(),
+        ];
         let answer = "no permit needed \
                       [Source: Decision — 2026-12-28 — Visitor and Guest Parking. However, \
                       it is critical to note that parking is unrestricted.";
@@ -1312,7 +1321,9 @@ mod tests {
         let body = vec!["NARA fileUnit 28940827.".to_string()];
         let answer = "the file [Source: FALLS CHURCH, VA. (1952-01-01) has one page.";
         let r = attribute_citations(answer, &body, &labels);
-        assert!(r.cleaned.contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
+        assert!(r
+            .cleaned
+            .contains("[Source: FALLS CHURCH, VA. (1952-01-01)]"));
         assert!(r.cleaned.contains(" has one page."));
     }
 

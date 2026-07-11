@@ -262,11 +262,12 @@ impl SlotContext {
         // serving) state. If `build_target_ctx_for_slot` fails the
         // slot is wedged anyway, but at least the error is loud and
         // diagnosable rather than silent.
-        let new_target = build_target_ctx_for_slot(&self._model, rebuild, &model_id).map_err(|e| {
-            Error::Inference(format!(
-                "demote_to_single_token: failed to rebuild target ctx: {e}"
-            ))
-        })?;
+        let new_target =
+            build_target_ctx_for_slot(&self._model, rebuild, &model_id).map_err(|e| {
+                Error::Inference(format!(
+                    "demote_to_single_token: failed to rebuild target ctx: {e}"
+                ))
+            })?;
         // Replace the mode in one step. Dropping the old
         // `Speculative` variant runs the destructors for
         // `target_ctx`, `draft_ctx`, and `session` in declaration
@@ -1101,8 +1102,8 @@ impl ModelSlot {
                          lacks MTP heads, or upstream rejected the pairing at \
                          common_speculative_init.)"
                     );
-                    let fresh =
-                        build_target_ctx_for_slot(&model, &rebuild_params, &model_id).map_err(|e| {
+                    let fresh = build_target_ctx_for_slot(&model, &rebuild_params, &model_id)
+                        .map_err(|e| {
                             Error::Inference(format!(
                                 "Failed to rebuild target ctx after MTP upgrade failure: {e}"
                             ))

@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Contract crate: the public surface IS the product — every pub item needs
+// docs (count-ratcheted by lint-gate, never a hard deny).
+#![warn(missing_docs)]
 //! `sovereign-contracts` — the daemon↔package contract.
 //!
 //! The trait + type vocabulary a package (the workflow/recipe authoring stack)
@@ -33,6 +36,13 @@ pub mod types;
 
 // Root re-exports mirroring the ones `sovereign-core` exposed, so
 // `sovereign_contracts::{Error, Result, ToolRegistry, <Type>}` all resolve.
+//
+// The two module aliases below are BOUNDED globs (quality program R1,
+// 2026-07-11): `traits` declares every item explicitly and `types` re-exports
+// its submodules through explicit lists (types/mod.rs), so nothing can join
+// this crate root without an explicit, reviewable edit — and api-gate
+// snapshots the resulting surface. New pub items declared directly in
+// types/mod.rs still flow through; the api snapshot is the net for those.
 pub use error::{Error, Result};
 pub use registry::ToolRegistry;
 pub use traits::*;

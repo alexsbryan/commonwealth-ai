@@ -45,8 +45,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::error::Result;
-use crate::traits::{InferenceProvider, MemoryStore};
 use crate::slot_policy::Workload;
+use crate::traits::{InferenceProvider, MemoryStore};
 use crate::types::{CompletionRequest, Memory, MemoryKind};
 
 // The operator-facing config knobs (`CompactionConfig`, `CompactionMode`,

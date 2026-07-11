@@ -220,7 +220,9 @@ pub fn parse_vitest_default(stdout: &str) -> TestParseResult {
     if !playwright_fatal
         && stdout.contains("Error")
         && !stdout.contains("No tests found")
-        && (stdout.contains(".spec.ts") || stdout.contains("[chromium]") || stdout.contains("playwright"))
+        && (stdout.contains(".spec.ts")
+            || stdout.contains("[chromium]")
+            || stdout.contains("playwright"))
         && passed == 0
         && failed == 0
         && errors == 0
@@ -334,7 +336,9 @@ pub fn parse_pytest_text(stdout: &str) -> TestParseResult {
             }
         }
         let stripped = trimmed.trim_matches('=').trim();
-        if !stripped.contains("passed") && !stripped.contains("failed") && !stripped.contains("error")
+        if !stripped.contains("passed")
+            && !stripped.contains("failed")
+            && !stripped.contains("error")
         {
             continue;
         }

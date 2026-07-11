@@ -224,6 +224,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arch-layers"
+version = "0.1.19"
+dependencies = [
+ "serde",
+ "toml 0.8.2",
+]
+
+[[package]]
 name = "arg_enum_proc_macro"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12507,6 +12515,7 @@ name = "sovereign-tools"
 version = "0.1.20"
 dependencies = [
  "arc-swap",
+ "arch-layers",
  "arrow",
  "arrow-array",
  "async-trait",
@@ -16089,6 +16098,10 @@ dependencies = [
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "arch-layers",
+ "serde_json",
+]
 
 [[package]]
 name = "xxhash-rust"

@@ -187,7 +187,9 @@ pub async fn citation_grounded_answer(
         .flatten()
     {
         Some(fixed) => {
-            dbg(&format!("citation: answer case-snapped to the quote's casing → {fixed:?}"));
+            dbg(&format!(
+                "citation: answer case-snapped to the quote's casing → {fixed:?}"
+            ));
             fixed
         }
         None => answer,
@@ -202,7 +204,9 @@ pub async fn citation_grounded_answer(
         .flatten()
     {
         Some(fixed) => {
-            dbg(&format!("citation: answer respaced from the quote → {fixed:?}"));
+            dbg(&format!(
+                "citation: answer respaced from the quote → {fixed:?}"
+            ));
             fixed
         }
         None => answer,
@@ -281,7 +285,10 @@ fn answer_supported_by_quote(answer: &str, quote: &str) -> bool {
                 // repairs the surface after verification. A compound absent
                 // from the quote even space-blind ("50minutes" with no
                 // "50 minutes" anywhere) still fails.
-                q.contains(w.as_str()) || q.split_whitespace().collect::<String>().contains(w.as_str())
+                q.contains(w.as_str())
+                    || q.split_whitespace()
+                        .collect::<String>()
+                        .contains(w.as_str())
             }
         })
 }
@@ -324,7 +331,12 @@ fn find_spaced_span(quote_norm: &str, token: &str) -> Option<String> {
     let q: Vec<char> = quote_norm.chars().collect();
     let t: Vec<char> = token.chars().collect();
     for start in 0..q.len() {
-        if q[start].is_whitespace() || (start > 0 && q[start - 1].is_alphanumeric() && q[start].is_alphanumeric() && start_is_mid_run(&q, start)) {
+        if q[start].is_whitespace()
+            || (start > 0
+                && q[start - 1].is_alphanumeric()
+                && q[start].is_alphanumeric()
+                && start_is_mid_run(&q, start))
+        {
             continue;
         }
         let mut i = start;
@@ -344,7 +356,13 @@ fn find_spaced_span(quote_norm: &str, token: &str) -> Option<String> {
             let boundary = i >= q.len() || !q[i].is_alphanumeric();
             let left_ok = start == 0 || !q[start - 1].is_alphanumeric();
             if boundary && left_ok {
-                return Some(q[start..i].iter().collect::<String>().trim_end().to_string());
+                return Some(
+                    q[start..i]
+                        .iter()
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string(),
+                );
             }
         }
     }
@@ -823,8 +841,14 @@ mod tests {
     #[test]
     fn exact_case_and_non_span_answers_are_untouched() {
         let quote = "Then simply define Hn+1 := ¬H1 ∧ … ∧ ¬Hn here.";
-        assert_eq!(snap_answer_case_to_quote("Hn+1 := ¬H1 ∧ … ∧ ¬Hn", quote), None);
-        assert_eq!(snap_answer_case_to_quote("something else entirely", quote), None);
+        assert_eq!(
+            snap_answer_case_to_quote("Hn+1 := ¬H1 ∧ … ∧ ¬Hn", quote),
+            None
+        );
+        assert_eq!(
+            snap_answer_case_to_quote("something else entirely", quote),
+            None
+        );
     }
 
     #[test]
@@ -852,8 +876,11 @@ mod tests {
         // The answer collapses the quote's line break; casing still restores.
         let quote = "the RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT\n(compact) form";
         assert_eq!(
-            snap_answer_case_to_quote("the relational_expressive_system_prompt (compact) form", quote)
-                .as_deref(),
+            snap_answer_case_to_quote(
+                "the relational_expressive_system_prompt (compact) form",
+                quote
+            )
+            .as_deref(),
             Some("the RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT\n(compact) form")
         );
     }

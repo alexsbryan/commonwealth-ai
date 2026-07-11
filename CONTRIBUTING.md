@@ -59,14 +59,25 @@ If you'd rather be sure before you push, these are the same commands CI runs:
 ```sh
 cargo check --workspace --all-targets
 cargo test --workspace
-cargo run -p xtask -- arch-gate      # file-size ratchet + doc contracts
-cargo run -p xtask -- docs-gate      # every path the narrative docs cite must resolve
+cargo fmt --all --check              # blocking; the toolchain is pinned (rust-toolchain.toml)
+cargo run -p xtask -- quality        # every local gate, one summary table
 ```
 
-Formatting and clippy also run in CI, but they're advisory for now — don't sweat
-them. There's a friendlier test wrapper the maintainer uses day to day,
-`./scripts/sovereign-test.sh --human`, which prints a compact summary and takes
-`--package <crate>` / `--filter <pattern>` to narrow a run; it's optional.
+`cargo xtask quality` bundles the sub-second structural gates: arch-gate
+(file-size ratchet), docs-gate (every path the narrative docs cite must
+resolve), boundary-gate (the studio package stays liftable), layer-gate
+(dependency direction per `quality/ARCH_LAYERS.toml` + god-crate fan-in
+caps), and lock-gate (no new duplicate crate versions). Each failure message
+ends with the exact command that fixes it; baselines live under
+`quality/baselines/` and may only shrink (see ARCH_PRINCIPLES §8.6).
+
+Clippy runs in CI as a count ratchet (lint-gate): existing warnings are
+grandfathered per crate/lint, so you only need to care about warnings YOUR
+change introduces — the gate names them. The lane is advisory during its
+burn-in month, blocking after. There's a friendlier test wrapper the
+maintainer uses day to day, `./scripts/sovereign-test.sh --human`, which
+prints a compact summary and takes `--package <crate>` / `--filter
+<pattern>` to narrow a run; it's optional.
 
 ## What makes a change easy to merge
 

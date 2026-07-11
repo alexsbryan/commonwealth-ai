@@ -50,6 +50,11 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // deterministic; agent-callable to get a capability-level overview
     // instead of reading files one by one.
     "capability_map",
+    // Architecture observability (quality program): the full report (god
+    // crates, coupling carriers, declared↔observed deltas, layer-map
+    // violations, temporal coupling) + the cheap persisted-posture reader.
+    "arch_report",
+    "arch_posture",
     // Build/lint status. `build` is the canonical single-call
     // tool; `lint_status` + `get_lint_output` remain registered
     // for backward-compat during the alias window.

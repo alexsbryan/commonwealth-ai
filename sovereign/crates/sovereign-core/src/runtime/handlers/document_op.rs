@@ -89,7 +89,7 @@ impl Runtime {
 
         // 2. Generate map/reduce prompts with a single focused inference call.
         let prompt = format!(
-                "The user uploaded a document ({chunk_count} chunks, ~{word_count} words) and asked:\n\
+            "The user uploaded a document ({chunk_count} chunks, ~{word_count} words) and asked:\n\
                  \"{user_query}\"\n\n\
                  Write two prompts for a map-reduce analysis of this document.\n\n\
                  MAP PROMPT — applied to each chunk of the document:\n\

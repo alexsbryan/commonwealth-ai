@@ -1,0 +1,6 @@
+# Workspace-wide rustfmt policy — deliberately stock defaults. This file
+# exists so formatting config has exactly one home: a stray
+# commonwealth/rustfmt.toml used to apply non-default options to that subtree
+# only (removed 2026-07-11; shorthand it had already applied stays applied,
+# rustfmt never reverses it).
+edition = "2021"

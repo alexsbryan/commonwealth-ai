@@ -155,8 +155,16 @@ mod multi_file_tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("minilang")).unwrap();
         std::fs::write(tmp.path().join("minilang/__init__.py"), "x = 1\n").unwrap();
-        std::fs::write(tmp.path().join("minilang/evaluator.py"), "def evaluate_ast():\n    pass\n").unwrap();
-        std::fs::write(tmp.path().join("minilang/tokenizer.py"), "def tokenize():\n    pass\n").unwrap();
+        std::fs::write(
+            tmp.path().join("minilang/evaluator.py"),
+            "def evaluate_ast():\n    pass\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("minilang/tokenizer.py"),
+            "def tokenize():\n    pass\n",
+        )
+        .unwrap();
         let files = discover_source_files(tmp.path());
         assert_eq!(files.len(), 3);
         assert!(files.contains(&"minilang/evaluator.py".to_string()));

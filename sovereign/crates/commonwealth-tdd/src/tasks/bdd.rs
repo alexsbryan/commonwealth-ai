@@ -129,7 +129,8 @@ pub async fn bdd_cycle_observed(
         let o = Arc::clone(o);
         Arc::new(move |r: &RoundSummary| o(BddStage::Synthesis, r)) as RoundObserver
     });
-    let synthesis = run_trial_observed(synthesis_trial, Arc::clone(&backend), synthesis_observer).await;
+    let synthesis =
+        run_trial_observed(synthesis_trial, Arc::clone(&backend), synthesis_observer).await;
 
     let (generated_test_path, generated_test_content) =
         if matches!(synthesis.status, TrialStatus::Reached) {

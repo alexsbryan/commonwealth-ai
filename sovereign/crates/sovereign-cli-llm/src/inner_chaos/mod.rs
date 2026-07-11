@@ -35,8 +35,8 @@ pub mod personas;
 pub mod recall;
 pub mod recall_stream;
 pub mod report;
-pub mod synth;
 pub mod runner;
+pub mod synth;
 pub mod transcript;
 
 use std::path::PathBuf;
@@ -561,7 +561,9 @@ fn print_help() {
     eprintln!("  --temperature <f>      SUT temperature (default: product default).");
     eprintln!();
     eprintln!("CALIBRATE FLAGS");
-    eprintln!("  --calibrate            Score the judge against the hand-labeled bank; no live run.");
+    eprintln!(
+        "  --calibrate            Score the judge against the hand-labeled bank; no live run."
+    );
     eprintln!("  --calibration <path>   Bank path (default bench/inner_work/calibration.toml).");
     eprintln!("  --sensitivity-floor <f>  Breach-recall floor (default {DEFAULT_SENSITIVITY_FLOOR}). Exit 1 below it.");
     eprintln!("  --specificity-floor <f>  Safe-recall floor (default {DEFAULT_SPECIFICITY_FLOOR}). Exit 1 below it.");
@@ -569,20 +571,36 @@ fn print_help() {
     eprintln!("RECALL EXTENSION (optional; leaves the core safety loop unchanged)");
     eprintln!("  --recall               Long-horizon recall run: seeds ~170 memories/thread and");
     eprintln!("                         measures CONFABULATION vs faithful recall on an oblique");
-    eprintln!("                         callback to a months-old memory. Reuses --minutes/--threads/");
+    eprintln!(
+        "                         callback to a months-old memory. Reuses --minutes/--threads/"
+    );
     eprintln!("                         --temperature/--daemon/--*-model/--journal/--output.");
     eprintln!("  --plant <id>           Run only the thread for this plant id.");
-    eprintln!("  --fixture <path>       Recall fixture (default bench/inner_work/recall_fixture.toml).");
+    eprintln!(
+        "  --fixture <path>       Recall fixture (default bench/inner_work/recall_fixture.toml)."
+    );
     eprintln!("  --recall-probe         Retrieval-only diagnostic: seed once, rank every plant's");
-    eprintln!("                         oblique callback through the real recall path (both scopes),");
-    eprintln!("                         with per-plant tier diagnostics. No witness turns, no judge.");
+    eprintln!(
+        "                         oblique callback through the real recall path (both scopes),"
+    );
+    eprintln!(
+        "                         with per-plant tier diagnostics. No witness turns, no judge."
+    );
     eprintln!("  --recall-stream        Streaming-insert oracle for the incremental memory tree:");
-    eprintln!("                         batch-build over ~40% of the seeds, stream the rest through");
-    eprintln!("                         mem_tree::insert_memory, compare per-plant ranks vs a fresh");
-    eprintln!("                         full-batch tree and vs flat T1. Exits 1 on divergence or a");
+    eprintln!(
+        "                         batch-build over ~40% of the seeds, stream the rest through"
+    );
+    eprintln!(
+        "                         mem_tree::insert_memory, compare per-plant ranks vs a fresh"
+    );
+    eprintln!(
+        "                         full-batch tree and vs flat T1. Exits 1 on divergence or a"
+    );
     eprintln!("                         cost regression. Emits the trigger-ladder trace JSON.");
     eprintln!("  --calibrate-recall     Score the recall-fidelity judge against its bank");
-    eprintln!("                         (default bench/inner_work/recall_calibration.toml); no live run.");
+    eprintln!(
+        "                         (default bench/inner_work/recall_calibration.toml); no live run."
+    );
     eprintln!();
     eprintln!("SCORING");
     eprintln!("  Two numbers, never averaged: the SAFETY NUMBER (% judged turns with zero");
@@ -612,13 +630,19 @@ mod tests {
         assert!(positional.is_empty());
         assert_eq!(get_flag(&flags, "minutes").as_deref(), Some("10"));
         assert!(has_flag(&flags, "no-judge"));
-        assert_eq!(get_flag(&flags, "persona").as_deref(), Some("crisis_discloser"));
+        assert_eq!(
+            get_flag(&flags, "persona").as_deref(),
+            Some("crisis_discloser")
+        );
     }
 
     #[test]
     fn calibrate_is_boolean_and_consumes_no_value() {
         let (_, flags) = split_args(&svec(&["--calibrate", "--sensitivity-floor", "0.95"]));
         assert!(has_flag(&flags, "calibrate"));
-        assert_eq!(get_flag(&flags, "sensitivity-floor").as_deref(), Some("0.95"));
+        assert_eq!(
+            get_flag(&flags, "sensitivity-floor").as_deref(),
+            Some("0.95")
+        );
     }
 }

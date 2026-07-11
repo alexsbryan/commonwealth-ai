@@ -22,6 +22,7 @@ decompositions, and archaeology — lives in
 ```
 commonwealth-ai/
 ├── oicp-types/                # OICP wire types — no other deps
+├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
@@ -30,6 +31,8 @@ commonwealth-ai/
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
+├── studio/                    # Liftable authoring package — workflow engine + recipe-author + headless CLI (see studio/BOUNDARY.md)
+├── quality/                   # Quality program — ARCH_LAYERS.toml (layer map), gate baselines, arch-layers crate
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
 └── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
@@ -143,8 +146,6 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `sovereign workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
-├── sovereign-workflow-host   # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI).
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-mesh           # In-process Commonwealth embed
@@ -186,6 +187,41 @@ crates/
 
 `contrib/` ships `install.sh`, systemd unit, launchd plist.
 `docs/oicp-v0.3.md` is the canonical OICP spec.
+`commonwealth/crates/oicp-conformance` is the standalone OICP v0.4
+host conformance tester — minimal deps (oicp-types + HTTP), liftable
+by any third party certifying their own implementation.
+
+### studio
+
+The liftable authoring package (`studio/crates/`) — buildable against
+only the OICP contract crates, enforced by the xtask `boundary-gate`
+(contract: `studio/BOUNDARY.md`).
+
+```
+crates/
+├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `sovereign workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
+├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI).
+├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP) — the tool set the studio package ships without sovereign-tools
+├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (re-exported as `sovereign_tools::recipe_author` for legacy paths)
+└── sovereign-studio         # Headless studio CLI — authors/tests recipes + runs workflows against any OICP daemon; the proof the package is independently usable
+```
+
+### quality
+
+The quality program's policy + baselines (landed 2026-07-11).
+`quality/ARCH_LAYERS.toml` is the declared layer map — the
+dependency-direction contract enforced by `cargo xtask layer-gate`
+(Cargo-declared edges, CI) and the code-intel arch report
+(SCIP-observed edges). `quality/arch-layers/` is the tiny shared
+schema/evaluator crate both consumers use. `quality/baselines/` holds
+the machine-written ratchet baselines (oversized files, fan-in caps,
+Cargo.lock duplicates, clippy counts, public-API snapshots) —
+regenerated only via `cargo xtask <gate> --update-baseline`, banked
+weekly via `--tighten`. `cargo xtask quality` runs every sub-second
+local gate with one summary table; `lint-gate` (clippy-count ratchet)
+and `api-gate` (public-API surface diffs on the pinned nightly from
+`quality/nightly-pin.txt`) run on their own cadence — locally and in
+the weekly CI lane, never on the PR critical path.
 
 ### sovereign-recipes
 
@@ -554,11 +590,12 @@ it. Generic primitives:
   JSON-Schema → llguidance grammar. Three built-in graph-pattern
   detectors (`circular_flow`, `role_overlap`, `threshold`).
 - **Lifecycle** — `sovereign recipe {validate,test,publish,list}`.
-- **Agent-callable tools** under
-  `sovereign-tools/src/recipe_author/` — eight Tool impls behind
-  `Permission::RecipeAuthoring`. Wired into MCP via
+- **Agent-callable tools** in the studio crate
+  `studio/crates/sovereign-recipe-author/` (re-exported as
+  `sovereign_tools::recipe_author` for legacy paths) — eight Tool
+  impls behind `Permission::RecipeAuthoring`. Wired into MCP via
   `MCP_TOOLS_ALWAYS` in `sovereign-tools/src/mcp_surface.rs`.
-- **Recipe-author agent loop** — `recipe_author/project.rs`
+- **Recipe-author agent loop** — `sovereign-recipe-author/src/project.rs`
   (project model), `situated_context.rs` (per-turn renderer),
   `sovereign recipe-agent {new,show,list,live-trial}` CLI. Skill
   manifest at `sovereign/modes/recipe-author/skill.toml`
@@ -615,7 +652,10 @@ unless the user opts in to web search or a Commonwealth mesh.
 
 ### Trait architecture
 
-`sovereign-core/src/traits.rs`:
+`sovereign-contracts/src/traits.rs` (re-exported as
+`sovereign_core::traits` — the contract crate carved out of
+sovereign-core so packages build against the vocabulary without the
+runtime hub):
 
 | Trait                          | Surface                                                     |
 |--------------------------------|-------------------------------------------------------------|
@@ -1919,14 +1959,14 @@ Default ports:
 |--------------------------------------------------|---------------------------------------------------------------------|
 | Understand the agent runtime                     | `sovereign/crates/sovereign-core/src/runtime.rs` + `runtime/handlers/` |
 | See how plans are executed                       | `sovereign-core/src/executor.rs`                                    |
-| Add a tool                                       | `sovereign-core/src/traits.rs` then a new file under `sovereign-tools/src/` |
+| Add a tool                                       | `sovereign-contracts/src/traits.rs` (the `Tool` trait) then a new file under `sovereign-tools/src/` |
 | Run a workflow (CLI or desktop)                  | CLI: `sovereign workflow run` → `workflow-host::run_workflow_in_process`. Desktop: `sovereign-desktop/src-tauri/src/workflow_commands.rs` → `run_workflow_with_provider` → `src/lib/components/workflow_run/WorkflowRunView.svelte` (the "Run" nav view) |
 | Ingest a folder via the Runner (substrate prize) | CLI `corpus ingest` (`corpus_cmd/ingest.rs`) runs the document-capable `notebook` shape. Desktop `lc_ingest` (`local_corpus_commands.rs`) runs it behind `SOVEREIGN_RUNNER_INGEST` (opt-in; bespoke `LocalCorpusManager::ingest` is still the default + owns OCR/enrichment). See `docs/specs/WORKFLOW_SUBSTRATE.md` roadmap |
 | Add a corpus extractor                           | `corpus-engine/src/extractors/` then register in `engine/ingest.rs` |
 | Add a corpus filter                              | `corpus-engine/src/filters/` (impl `DocumentFilter`) + `recipe.rs::FilterConfig` + `filters/loader.rs` |
 | Bundle a generated data file in corpus-engine    | Place in `sovereign-recipes/<corpus>/data/`, append filename to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!(concat!(env!("OUT_DIR"), …))` in `filters/assets.rs` |
 | Write a recipe                                   | `sovereign-recipes/<id>/recipe.toml` then add to `registry.toml` |
-| Author a recipe via the agent loop               | `sovereign-tools/src/recipe_author/` + skill at `sovereign/modes/recipe-author/skill.toml` |
+| Author a recipe via the agent loop               | `studio/crates/sovereign-recipe-author/` + skill at `sovereign/modes/recipe-author/skill.toml` |
 | Add an `http_api` recipe (REST source)           | See `corpus-engine/src/recipe.rs` round-trip tests                  |
 | Add an investigation recipe                      | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `sovereign enrich investigation build <id>` |
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
@@ -2070,6 +2110,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
 | `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3,900 lines) | `StateStore` trait-impl hotel — 12 sub-trait impls (+ the `StateStore` aggregate), one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines (it is ~90 lines away). |
+| `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
 | `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
 | `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~5,000 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `sovereign project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |

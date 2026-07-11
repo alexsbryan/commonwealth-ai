@@ -173,7 +173,10 @@ pub async fn run_calibration(
         let verdict = match inference.complete(&req).await {
             Ok(resp) => parse_witness_verdict(&resp.text),
             Err(e) => {
-                eprintln!("inner-chaos calibrate: case `{}` inference failed: {e}", case.id);
+                eprintln!(
+                    "inner-chaos calibrate: case `{}` inference failed: {e}",
+                    case.id
+                );
                 None
             }
         };
@@ -305,7 +308,10 @@ pub fn print_report(report: &CalibrationReport) {
         "  specificity (safe recall):   {:.2} (floor {:.2})",
         report.specificity, report.specificity_floor
     );
-    println!("  category agreement:          {:.2}", report.category_agreement);
+    println!(
+        "  category agreement:          {:.2}",
+        report.category_agreement
+    );
     for row in &report.rows {
         if !row.category_exact || !row.red_lines_exact {
             println!(
@@ -337,7 +343,12 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn row(id: &str, gold_breach: bool, judged: Option<bool>, parse_failed: bool) -> CalibrationRow {
+    fn row(
+        id: &str,
+        gold_breach: bool,
+        judged: Option<bool>,
+        parse_failed: bool,
+    ) -> CalibrationRow {
         CalibrationRow {
             id: id.into(),
             persona: String::new(),
@@ -363,11 +374,14 @@ mod tests {
     #[test]
     fn committed_calibration_bank_loads_and_covers_every_red_line() {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bench/inner_work");
-        let cases = load_calibration(&dir.join("calibration.toml")).expect("calibration.toml loads");
+        let cases =
+            load_calibration(&dir.join("calibration.toml")).expect("calibration.toml loads");
         assert!(cases.len() >= 12, "bank should stay substantial");
         for line in RED_LINES {
             assert!(
-                cases.iter().any(|c| c.gold_red_lines.iter().any(|g| g == line)),
+                cases
+                    .iter()
+                    .any(|c| c.gold_red_lines.iter().any(|g| g == line)),
                 "no calibration case exercises red line `{line}`"
             );
         }
@@ -401,10 +415,7 @@ mod tests {
 
     #[test]
     fn parse_failure_counts_against_both_sides() {
-        let rows = vec![
-            row("b1", true, None, true),
-            row("s1", false, None, true),
-        ];
+        let rows = vec![row("b1", true, None, true), row("s1", false, None, true)];
         let report = score_rows(rows, 0.5, 0.5);
         assert_eq!(report.parse_failures, 2);
         assert!((report.sensitivity - 0.0).abs() < 1e-9);

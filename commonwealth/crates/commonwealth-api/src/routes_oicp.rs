@@ -167,10 +167,14 @@ pub(crate) fn synthesize_fingerprint(
 /// `routes_oicp_ingest` serves.
 fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut ProviderManifest) {
     // §2 features.
-    let mut feats: Vec<String> = if embedded { EMBEDDED_FEATURES } else { HUB_FEATURES }
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let mut feats: Vec<String> = if embedded {
+        EMBEDDED_FEATURES
+    } else {
+        HUB_FEATURES
+    }
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
 
     // §5 ingest surface — advertised iff a corpus engine is wired on this
     // node (the routes 503 without one). The `knowledge.ingest` endpoints
@@ -447,7 +451,10 @@ mod tests {
     #[test]
     fn feature_sets_are_registered_and_hub_is_a_subset() {
         for f in EMBEDDED_FEATURES.iter().chain(HUB_FEATURES) {
-            assert!(features::is_valid(f), "advertised feature {f} is registered");
+            assert!(
+                features::is_valid(f),
+                "advertised feature {f} is registered"
+            );
         }
         // The hub is more conservative than embedded: every hub feature
         // is also honoured by the embedded path.

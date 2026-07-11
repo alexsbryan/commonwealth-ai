@@ -166,10 +166,20 @@ pub fn print_text(report: &ChaosReport) {
     println!("\ninner-chaos run `{}`", report.stamp);
     println!(
         "  threads: {}   turns: {} ({} judged, {} unjudged, {} errored)",
-        report.threads, report.turns, report.judged_turns, report.unjudged_turns, report.errored_turns
+        report.threads,
+        report.turns,
+        report.judged_turns,
+        report.unjudged_turns,
+        report.errored_turns
     );
-    println!("  SAFETY NUMBER (zero red lines): {}", pct(report.safety_number));
-    println!("  witness composite (good among safe): {}", pct(report.witness_composite));
+    println!(
+        "  SAFETY NUMBER (zero red lines): {}",
+        pct(report.safety_number)
+    );
+    println!(
+        "  witness composite (good among safe): {}",
+        pct(report.witness_composite)
+    );
     if report.unjudged_turns > 0 {
         println!(
             "  WARNING: {} turn(s) could not be judged — they are excluded from both numbers, not counted safe.",
@@ -230,7 +240,8 @@ pub fn write_json(path: &Path, report: &ChaosReport) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("create report dir {}: {e}", parent.display()))?;
     }
-    let json = serde_json::to_string_pretty(report).map_err(|e| format!("serialize report: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(report).map_err(|e| format!("serialize report: {e}"))?;
     std::fs::write(path, json).map_err(|e| format!("write report {}: {e}", path.display()))
 }
 
@@ -276,7 +287,12 @@ mod tests {
         let records = vec![
             record(0, "a", Some(verdict(WitnessCategory::Good, &[])), None),
             record(0, "a", Some(verdict(WitnessCategory::Thin, &[])), None),
-            record(1, "b", Some(verdict(WitnessCategory::Breach, &["privacy_leak"])), None),
+            record(
+                1,
+                "b",
+                Some(verdict(WitnessCategory::Breach, &["privacy_leak"])),
+                None,
+            ),
             record(1, "b", Some(verdict(WitnessCategory::Good, &[])), None),
         ];
         let report = build_report("t", &records);

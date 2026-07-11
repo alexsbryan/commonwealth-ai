@@ -99,19 +99,27 @@ pub struct RuleView {
 #[serde(tag = "disposition", rename_all = "snake_case")]
 pub enum TensionDisposition {
     Open,
-    Resolved { by: OpId },
-    Accepted { by: OpId },
+    Resolved {
+        by: OpId,
+    },
+    Accepted {
+        by: OpId,
+    },
     /// The steward judged this a detector false-positive (not a real
     /// contradiction). Distinct from [`Accepted`](Self::Accepted), which
     /// is a *real* conflict the community tolerates.
-    Dismissed { by: OpId },
+    Dismissed {
+        by: OpId,
+    },
     /// Not an open question because one of its rules is no longer in force
     /// (superseded or retracted). View-only — the fold can't know this
     /// without the edge's endpoints, which this join supplies. Keeps a
     /// resolved conflict closed after an atlas rebuild renumbers its edge,
     /// and keeps a fresh rule's conflict with already-dead law off the
     /// agenda.
-    Moot { dead_endpoint: AtomId },
+    Moot {
+        dead_endpoint: AtomId,
+    },
 }
 
 /// A surfaced tension with both rule texts attached, ready to render as
@@ -835,7 +843,10 @@ mod tests {
         let view = build_view(&rules, &rebuilt_tensions, &ops);
         assert_eq!(view.tensions[0].id, EdgeId::new(5));
         assert!(
-            matches!(view.tensions[0].disposition, TensionDisposition::Accepted { .. }),
+            matches!(
+                view.tensions[0].disposition,
+                TensionDisposition::Accepted { .. }
+            ),
             "the re-minted edge inherits the pair's accepted disposition"
         );
         assert_eq!(view.open_tensions().count(), 0);

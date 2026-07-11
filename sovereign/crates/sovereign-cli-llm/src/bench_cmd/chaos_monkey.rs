@@ -1191,20 +1191,19 @@ async fn score_answer(rest: &[String]) -> i32 {
     // the evidence? Grounded = release; Ungrounded = blatant confabulation (the
     // cardinal sin); NoValue = nothing checkable asserted (a decline/discursive).
     use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-    let (value, grounded): (Option<String>, Option<bool>) =
-        match assess_asserted_value(
-            critic.as_ref(),
-            &question,
-            &answer,
-            &chunks,
-            sovereign_core::oicp::ShardingPrivacy::LocalOnly,
-        )
-        .await
-        {
-            AssertedValue::Grounded(v) => (Some(v), Some(true)),
-            AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
-            AssertedValue::NoValue => (None, None),
-        };
+    let (value, grounded): (Option<String>, Option<bool>) = match assess_asserted_value(
+        critic.as_ref(),
+        &question,
+        &answer,
+        &chunks,
+        sovereign_core::oicp::ShardingPrivacy::LocalOnly,
+    )
+    .await
+    {
+        AssertedValue::Grounded(v) => (Some(v), Some(true)),
+        AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
+        AssertedValue::NoValue => (None, None),
+    };
 
     // The same abstention + caveat classifiers the live scorer uses. `answered`
     // = does a reader come away with an answer? `caveat` = did it flag the answer

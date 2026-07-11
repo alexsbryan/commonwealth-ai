@@ -350,11 +350,7 @@ impl CompletionRequest {
     /// enrich-client pattern.
     pub fn with_output_budget(mut self, tokens: u32) -> Self {
         self.max_tokens = Some(tokens as usize);
-        self.oicp = Some(
-            self.oicp
-                .unwrap_or_default()
-                .with_max_output_tokens(tokens),
-        );
+        self.oicp = Some(self.oicp.unwrap_or_default().with_max_output_tokens(tokens));
         self
     }
 

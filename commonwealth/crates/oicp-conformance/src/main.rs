@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Contract-adjacent binary: liftable by third parties — public items need
+// docs (count-ratcheted by lint-gate, never a hard deny).
+#![warn(missing_docs)]
 //! `oicp-conformance` — a standalone certifier for OICP v0.4 hosts.
 //!
 //! Point it at `--host <url>` and it fetches the capabilities manifest, then

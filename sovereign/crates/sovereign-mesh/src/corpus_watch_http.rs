@@ -1100,9 +1100,7 @@ async fn enrich_once_handler(
     // WITHOUT the watcher.
     let corpus_id = match manager.register(cfg).await {
         Ok(id) => id,
-        Err(e) => {
-            return error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response()
-        }
+        Err(e) => return error(StatusCode::BAD_REQUEST, format!("register: {e}")).into_response(),
     };
     // Ingest in the daemon (blocking) so the SAME process that writes the index
     // is the one that reads it to enrich. Doing the ingest in the desktop and
@@ -1111,8 +1109,7 @@ async fn enrich_once_handler(
     let stats = match manager.ingest(&corpus_id, None, None).await {
         Ok(s) => s,
         Err(e) => {
-            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}"))
-                .into_response()
+            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("ingest: {e}")).into_response()
         }
     };
     // Enrich in the background — RAPTOR is slow and reads the index we just

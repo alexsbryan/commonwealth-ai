@@ -80,17 +80,12 @@ pub fn write_structural_test(
 
 /// Largest source-file line count in the workdir for the framework's
 /// language — seeds the ladder's top rung. Skips test/build dirs.
-fn worst_source_file_lines(
-    workdir: &Path,
-    framework: crate::tasks::framework::Framework,
-) -> usize {
+fn worst_source_file_lines(workdir: &Path, framework: crate::tasks::framework::Framework) -> usize {
     use crate::tasks::framework::Framework;
     let exts: &[&str] = match framework {
         Framework::Pytest => &["py"],
         Framework::Cargo => &["rs"],
-        Framework::Vitest | Framework::Jest | Framework::Playwright => {
-            &["ts", "tsx", "js", "jsx"]
-        }
+        Framework::Vitest | Framework::Jest | Framework::Playwright => &["ts", "tsx", "js", "jsx"],
         Framework::GoTest => &["go"],
     };
     fn walk(dir: &Path, exts: &[&str], worst: &mut usize) {
@@ -103,7 +98,9 @@ fn worst_source_file_lines(
             "dist",
             "__pycache__",
         ];
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for entry in rd.flatten() {
             let name = entry.file_name();
             let s = name.to_string_lossy();

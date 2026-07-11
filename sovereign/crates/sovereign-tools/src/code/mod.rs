@@ -118,13 +118,23 @@ pub mod capability_findings;
 #[cfg(feature = "treesitter")]
 pub mod capability_posture;
 
+// Architecture observability (quality program, 2026-07-11): the OBSERVED
+// half of dependency-direction enforcement — the xtask layer-gate checks
+// Cargo-declared edges in CI; arch_report checks SCIP-observed symbol
+// references against the same quality/ARCH_LAYERS.toml (shared arch-layers
+// parser). arch_posture is the cheap persisted-report reader.
+#[cfg(feature = "treesitter")]
+pub mod arch_posture;
+#[cfg(feature = "treesitter")]
+pub mod arch_report;
+
 // Working notes tools.
 #[cfg(feature = "treesitter")]
 pub mod delete_note;
 #[cfg(feature = "treesitter")]
-pub mod retire_note;
-#[cfg(feature = "treesitter")]
 pub mod read_notes;
+#[cfg(feature = "treesitter")]
+pub mod retire_note;
 #[cfg(feature = "treesitter")]
 pub mod suggest_note;
 #[cfg(feature = "treesitter")]
@@ -196,6 +206,10 @@ pub use run_tests::RunTestsTool;
 pub use test_status::TestStatusTool;
 
 #[cfg(feature = "treesitter")]
+pub use arch_posture::ArchPostureTool;
+#[cfg(feature = "treesitter")]
+pub use arch_report::ArchReportTool;
+#[cfg(feature = "treesitter")]
 pub use build::BuildTool;
 #[cfg(feature = "treesitter")]
 pub use capability_findings::CapabilityFindingsTool;
@@ -226,8 +240,6 @@ pub use blast_radius::BlastRadiusTool;
 pub use check_doc_paths::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use delete_note::DeleteNoteTool;
-#[cfg(feature = "treesitter")]
-pub use retire_note::RetireNoteTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use design_signals_extract::DesignSignalsExtractTool;
 #[cfg(feature = "treesitter")]
@@ -246,6 +258,8 @@ pub use read_note_digest::ReadNoteDigestTool;
 pub use read_notes::ReadNotesTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use record_atos_event::RecordAtosEventTool;
+#[cfg(feature = "treesitter")]
+pub use retire_note::RetireNoteTool;
 #[cfg(feature = "treesitter")]
 pub use session_reflection::SessionReflectionTool;
 #[cfg(feature = "treesitter")]

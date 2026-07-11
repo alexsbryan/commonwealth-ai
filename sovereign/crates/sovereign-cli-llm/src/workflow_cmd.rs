@@ -563,22 +563,16 @@ pub(crate) async fn run_assembled(
     // so no `DEFAULT_MANIFEST` closure is threaded through here.
     let mut extra = sovereign_tools::workflow_corpus_tools();
     extra.extend(enrich_tools());
-    let report = match run_workflow_in_process(
-        wf,
-        daemon,
-        concurrency,
-        no_cache,
-        params.clone(),
-        extra,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{e}");
-            return 1;
-        }
-    };
+    let report =
+        match run_workflow_in_process(wf, daemon, concurrency, no_cache, params.clone(), extra)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("{e}");
+                return 1;
+            }
+        };
 
     eprintln!(
         "\n— {} — {} ok, {} failed · {} steps ran, {} cached —",

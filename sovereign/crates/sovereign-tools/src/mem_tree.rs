@@ -45,9 +45,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, MemoryScope, StateStore};
-use sovereign_core::types::{
-    CompletionRequest, MemRaptorNodeRow, Memory, Speed,
-};
+use sovereign_core::types::{CompletionRequest, MemRaptorNodeRow, Memory, Speed};
 
 use crate::mem_atlas::{build_memory_atlas, MIN_MEMORIES_FOR_ATLAS};
 
@@ -250,12 +248,7 @@ async fn resummarize_node(
         ..Default::default()
     };
     let resp = inference.complete(&req).await?;
-    let cleaned: String = resp
-        .text
-        .trim()
-        .chars()
-        .filter(|c| *c != '"')
-        .collect();
+    let cleaned: String = resp.text.trim().chars().filter(|c| *c != '"').collect();
     if cleaned.is_empty() {
         return Err(Error::Inference(
             "mem_tree: re-summarize returned empty text".to_string(),
@@ -267,11 +260,7 @@ async fn resummarize_node(
 /// Summary text for a brand-new singleton cluster — content-derived,
 /// zero LLM calls (it gets a real summary when growth trips op-2).
 fn singleton_summary(content: &str) -> String {
-    content
-        .chars()
-        .filter(|c| *c != '"')
-        .take(400)
-        .collect()
+    content.chars().filter(|c| *c != '"').take(400).collect()
 }
 
 // ── Tree view (in-memory index over the scope's rows) ────────────
@@ -686,7 +675,9 @@ pub async fn insert_memory(
             .skip(1)
             .take(DEPTH_CAP)
         {
-            let Some(anc) = view.nodes.get_mut(&anc_id) else { break };
+            let Some(anc) = view.nodes.get_mut(&anc_id) else {
+                break;
+            };
             anc.evidence_memory_ids.push(memory.id.clone());
             anc.n_since_summary += 1;
             if llm_calls > 0 {
@@ -814,7 +805,11 @@ async fn split_leaf(
     let mut assign = vec![0u8; members.len()];
     for _ in 0..8 {
         for (i, (_, e)) in members.iter().enumerate() {
-            assign[i] = if cosine(e, &ca) >= cosine(e, &cb) { 0 } else { 1 };
+            assign[i] = if cosine(e, &ca) >= cosine(e, &cb) {
+                0
+            } else {
+                1
+            };
         }
         let mean = |side: u8| -> Vec<f32> {
             let sel: Vec<&Vec<f32>> = members
@@ -865,19 +860,14 @@ async fn split_leaf(
                 }
             })
             .collect();
-        let summary = match resummarize_node(
-            inference,
-            "(new cluster after split)",
-            &contents,
-        )
-        .await
-        {
-            Ok(s) => {
-                llm_calls += 1;
-                s
-            }
-            Err(_) => singleton_summary(contents.first().map(|s| s.as_str()).unwrap_or("")),
-        };
+        let summary =
+            match resummarize_node(inference, "(new cluster after split)", &contents).await {
+                Ok(s) => {
+                    llm_calls += 1;
+                    s
+                }
+                Err(_) => singleton_summary(contents.first().map(|s| s.as_str()).unwrap_or("")),
+            };
         let summary_embedding = inference
             .embed_batch(std::slice::from_ref(&summary))
             .await
@@ -1077,7 +1067,10 @@ mod tests {
         b.node_id = "b".into();
         let view = TreeView::load(vec![root, a, b]);
         assert_eq!(view.roots().len(), 1);
-        assert_eq!(view.path_to_root("a"), vec!["a".to_string(), "r".to_string()]);
+        assert_eq!(
+            view.path_to_root("a"),
+            vec!["a".to_string(), "r".to_string()]
+        );
     }
 
     #[test]

@@ -96,23 +96,19 @@ fn outcome_from_wire(report: &RecipeTestReport) -> RecipeTestOutcome {
         .unwrap_or_default();
 
     // The `extract` stage: docs_in = records attempted, docs_out = succeeded.
-    let extraction = report
-        .stages
-        .iter()
-        .find(|s| s.name == "extract")
-        .map(|s| {
-            let attempted = s.docs_in as usize;
-            let succeeded = s.docs_out as usize;
-            ExtractionOutcome {
-                records_attempted: attempted,
-                records_succeeded: succeeded,
-                extraction_rate: if attempted == 0 {
-                    0.0
-                } else {
-                    succeeded as f32 / attempted as f32
-                },
-            }
-        });
+    let extraction = report.stages.iter().find(|s| s.name == "extract").map(|s| {
+        let attempted = s.docs_in as usize;
+        let succeeded = s.docs_out as usize;
+        ExtractionOutcome {
+            records_attempted: attempted,
+            records_succeeded: succeeded,
+            extraction_rate: if attempted == 0 {
+                0.0
+            } else {
+                succeeded as f32 / attempted as f32
+            },
+        }
+    });
 
     RecipeTestOutcome {
         validation,
@@ -149,10 +145,7 @@ impl RecipeTester for HttpRecipeTester {
             rb = rb.header("Authorization", format!("Bearer {tok}"));
         }
         let resp = rb.send().await.map_err(|e| {
-            Error::Execution(format!(
-                "recipe-test POST to {} failed: {e}",
-                self.endpoint
-            ))
+            Error::Execution(format!("recipe-test POST to {} failed: {e}", self.endpoint))
         })?;
         if !resp.status().is_success() {
             let status = resp.status();
@@ -162,9 +155,10 @@ impl RecipeTester for HttpRecipeTester {
                 self.endpoint
             )));
         }
-        let report: RecipeTestReport = resp.json().await.map_err(|e| {
-            Error::Execution(format!("could not parse recipe-test report: {e}"))
-        })?;
+        let report: RecipeTestReport = resp
+            .json()
+            .await
+            .map_err(|e| Error::Execution(format!("could not parse recipe-test report: {e}")))?;
         Ok(outcome_from_wire(&report))
     }
 }
@@ -174,7 +168,13 @@ mod tests {
     use super::*;
     use sovereign_contracts::oicp::RecipeStageReport;
 
-    fn stage(name: &str, docs_in: u32, docs_out: u32, misses: &[&str], sample: &[&str]) -> RecipeStageReport {
+    fn stage(
+        name: &str,
+        docs_in: u32,
+        docs_out: u32,
+        misses: &[&str],
+        sample: &[&str],
+    ) -> RecipeStageReport {
         RecipeStageReport {
             name: name.into(),
             docs_in,
@@ -221,7 +221,13 @@ mod tests {
             stages: vec![
                 stage("validate", 0, 0, &["missing url"], &["consider a glob"]),
                 stage("extract", 10, 8, &["record 3: 404"], &[]),
-                stage("chunk", 8, 40, &["a.html / Intro: not found"], &["chunk preview…"]),
+                stage(
+                    "chunk",
+                    8,
+                    40,
+                    &["a.html / Intro: not found"],
+                    &["chunk preview…"],
+                ),
             ],
         };
         let out = outcome_from_wire(&report);

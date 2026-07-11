@@ -466,6 +466,37 @@ diverge; when you diverge, comment the reason.
 library crate should not pull in a GUI framework because one line imports
 its types "for convenience."
 
+### 8.6 The layer map is the contract
+
+`quality/ARCH_LAYERS.toml` declares the workspace's dependency direction:
+ordered layers (a crate depends only on its own or a lower layer),
+`[[forbid]]` rules for what ordering can't express (the
+commonwealth↔sovereign family seam), and `[[exception]]` entries — the
+grandfathered-violation burn-down list. Every workspace member must appear
+in exactly one layer; the map is total by construction.
+
+Enforced two ways, one parser (the `quality/arch-layers` crate, so the
+halves can't drift on semantics):
+
+- `cargo xtask layer-gate` checks **Cargo-declared** edges in CI (<1s).
+- `sovereign code arch-report` checks **SCIP-observed** symbol references —
+  the coupling that re-export chains hide from Cargo — and persists the
+  posture for the `arch_posture` tool.
+
+Adding a violating edge requires adding an `[[exception]]` with a reason in
+the same PR — a reviewable policy change, never silent accretion. A stale
+exception (violation fixed) FAILS the gate until the entry is deleted:
+removals are the celebration. Fan-in caps for the god-crates live in
+`quality/baselines/fan_in.tsv` under the same ratchet.
+
+**The ratchet lifecycle** (uniform across arch/layer/lock/lint gates):
+baselines under `quality/baselines/` are machine-written only —
+`--update-baseline` snapshots current state (defend the diff in review);
+`--tighten` banks improvements and never raises (automated weekly by
+`baseline-tighten.yml`). Every gate failure ends with the exact command
+that fixes it. `cargo xtask quality` runs every local gate with one
+summary table.
+
 ---
 
 ## 9. Observability — the glassbox principle

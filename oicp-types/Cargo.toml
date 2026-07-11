@@ -4,6 +4,7 @@ description = "Open Inference Capabilities Protocol (OICP) v0.2 — shared type 
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

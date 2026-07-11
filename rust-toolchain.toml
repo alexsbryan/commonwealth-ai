@@ -1,0 +1,9 @@
+# Pinned workspace toolchain — single source of truth for local dev AND CI
+# (workflows run `rustup toolchain install`, which reads this file; no version
+# strings live in workflow YAML). Bump via a monthly chore PR together with
+# `rust-version` in [workspace.package]. Each bump cold-starts the CI rust
+# caches (their keys include the compiler version) — the price of everyone
+# compiling with the same rustc.
+[toolchain]
+channel = "1.95.0"
+components = ["clippy", "rustfmt"]

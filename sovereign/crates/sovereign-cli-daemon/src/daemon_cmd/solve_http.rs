@@ -396,8 +396,8 @@ impl SolveJobs {
     pub fn submit(&self, req: SubmitWire) -> Result<Arc<SolveJob>, SubmitError> {
         let canonical = std::fs::canonicalize(&req.workdir)
             .map_err(|e| SubmitError::BadWorkdir(format!("{}: {e}", req.workdir.display())))?;
-        let vetted = Workdir::check_safe(canonical.clone(), req.force)
-            .map_err(SubmitError::DirtyWorkdir)?;
+        let vetted =
+            Workdir::check_safe(canonical.clone(), req.force).map_err(SubmitError::DirtyWorkdir)?;
         let verb = parse_verb(req.verb.as_deref(), req.max_lines)?;
 
         let framework = detect_framework(&canonical);
@@ -480,7 +480,10 @@ impl SolveJobs {
     }
 }
 
-fn parse_verb(verb: Option<&str>, max_lines: Option<usize>) -> Result<Option<SolveVerb>, SubmitError> {
+fn parse_verb(
+    verb: Option<&str>,
+    max_lines: Option<usize>,
+) -> Result<Option<SolveVerb>, SubmitError> {
     match verb {
         None => Ok(None),
         Some("fix") => Ok(Some(SolveVerb::Fix)),

@@ -201,7 +201,10 @@ mod tests {
             "new\n"
         );
         let meta = base.path().join("node_modules").symlink_metadata().unwrap();
-        assert!(meta.file_type().is_dir(), "real dir survived, no symlink chain");
+        assert!(
+            meta.file_type().is_dir(),
+            "real dir survived, no symlink chain"
+        );
         assert!(base.path().join("node_modules/vite").exists());
     }
 }

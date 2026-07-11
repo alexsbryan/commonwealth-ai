@@ -62,20 +62,12 @@ pub(crate) fn config_from_env() -> Option<CvecConfig> {
 /// context. Call once per context creation; a no-op unless `SOVEREIGN_CVEC`
 /// is set. All failure modes log and return — slot load must never fail
 /// because steering config is wrong.
-pub(crate) fn maybe_apply(
-    ctx: &mut LlamaContext<'_>,
-    model_id: &str,
-    n_embd: i32,
-    n_layer: i32,
-) {
+pub(crate) fn maybe_apply(ctx: &mut LlamaContext<'_>, model_id: &str, n_embd: i32, n_layer: i32) {
     let Some(cfg) = config_from_env() else {
         return;
     };
     if let Some(filter) = &cfg.model_filter {
-        if !model_id
-            .to_lowercase()
-            .contains(&filter.to_lowercase())
-        {
+        if !model_id.to_lowercase().contains(&filter.to_lowercase()) {
             tracing::debug!(
                 model_id = %model_id,
                 filter = %filter,

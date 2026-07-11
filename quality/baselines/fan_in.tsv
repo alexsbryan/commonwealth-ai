@@ -1,0 +1,13 @@
+# layer-gate baseline — crate fan-in caps (distinct dependent workspace crates, normal+build deps).
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- layer-gate --update-baseline
+# Bank improvements only (never adds, never raises — safe to run anytime):
+#   cargo run -p xtask -- layer-gate --tighten
+19	commonwealth-core
+13	commonwealth-state
+17	corpus-engine
+12	corpus-engine-notes
+9	corpus-engine-scip
+12	sovereign-contracts
+13	sovereign-core
+8	sovereign-tools

@@ -2958,6 +2958,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     ));
     // Capability map — derived "what the codebase does" overview.
     tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
+    // Architecture observability (quality program) — report + posture.
+    tools.register(Box::new(sovereign_tools::ArchReportTool::new()));
+    tools.register(Box::new(sovereign_tools::ArchPostureTool::new()));
 
     // ── Test / lint watcher tools ───────────────────────────────
 
