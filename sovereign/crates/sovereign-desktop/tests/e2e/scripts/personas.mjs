@@ -477,7 +477,6 @@ function scoreAnswerAligned(question, answer, chunkTexts) {
 
 // Deterministic quick-flags (complement the LLM posture judge).
 const LEAKAGE_RE = /\b(corpus|corpora|knowledge base|retriev(al|ed)|chunk|index(es|ed)?|mesh|atlas)\b/i;
-const DECLINE_RE = /\b(don't have|do not have|no (specific|relevant)|not (in|covered by|available in) (your|the|my)|couldn't find|could not find|sources? (don't|do not))\b/i;
 
 // ── the reactive chat turn ─────────────────────────────────────────
 // Sends a message, tracks TTFT, applies the cancel policy, and collects the
@@ -602,50 +601,14 @@ async function politeSearchGate() {
 }
 
 // ── outcome classification (design §6) ─────────────────────────────
-function classifyOutcome(t) {
-  if (t.canceled) return "canceled_slow";
-  if (t.error) return "turn_error";
-  if (t.timeout) return "turn_timeout";
-  const declineShape =
-    t.aligned?.verdict === "honest_abstention" ||
-    t.aligned?.verdict === "caveated_ood" ||
-    (t.aligned == null && DECLINE_RE.test(t.answer ?? ""));
-  if (t.card) {
-    if (t.search?.error || t.search?.blocked) return "search_blocked";
-    if (t.search?.clicked) {
-      // The refinement re-gate can REJECT the web-refined text and re-emit the
-      // ORIGINAL content just to clear the UI's refining flag
-      // (collaboration.rs: refinement_rejected / NoChange / Failed all emit
-      // message-refined with original_content). new_content == original is the
-      // detectable signature — never count it as a rescue.
-      if (
-        t.refinedChanged &&
-        t.refinedJudge &&
-        !t.refinedJudge.broken &&
-        t.refinedJudge.score < 6
-      )
-        return "rescued_by_web";
-      return "search_futile";
-    }
-    return "gap_admitted_offered";
-  }
-  if (t.aligned?.verdict === "hallucination") return "answered_ungrounded";
-  const unresponsive = t.judge && (t.judge.broken || t.judge.score >= 6);
-  if (declineShape) return "gap_admitted_no_offer";
-  if (unresponsive) return "silent_gap";
-  return "answered_grounded";
-}
-const GAP_FAMILY = new Set([
-  "gap_admitted_offered",
-  "gap_admitted_no_offer",
-  "silent_gap",
-  "rescued_by_web",
-  "search_futile",
-  "search_blocked",
-]);
+// Taxonomy v2 lives in lib/classify.mjs (shared with the atlas, which
+// reclassifies past journals): answer QUALITY classifies; the gap card is
+// an orthogonal journal field, not an outcome override.
+import { classifyOutcome, GAP_FAMILY } from "./lib/classify.mjs";
 
 // ── one session ────────────────────────────────────────────────────
 let sessionCounter = 0;
+let runEndAt = Infinity; // set in main; enforced between TURNS, not just sessions
 const tallies = {};
 const strand = { shown: 0, ignored: 0 };
 async function runSession(persona, corpora, corporaMeta) {
@@ -682,6 +645,12 @@ async function runSession(persona, corpora, corporaMeta) {
   let prevAnswer = null;
 
   for (let turn = 1; turn <= persona.max_turns; turn++) {
+    // The --minutes cap gates between TURNS too: a single long session
+    // overran a 45-min run to 80 min (turns cost 3-8 min at current TTFTs).
+    if (Date.now() > runEndAt && turn > 1) {
+      endReason = "time_cap";
+      break;
+    }
     // Compose the message.
     let message;
     let turnKind = "ask";
@@ -1005,6 +974,7 @@ async function main() {
     });
 
     const endAt = Date.now() + MINUTES * 60_000;
+    runEndAt = endAt;
     while (Date.now() < endAt && (SESSIONS === 0 || sessionCounter < SESSIONS)) {
       const persona = pickWeighted(personas);
       try {
