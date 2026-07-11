@@ -72,6 +72,23 @@ elif ! $RUNTIME image exists "$IMAGE" 2>/dev/null; then
     fi
 fi
 
+# Staleness check: rebuild when the Containerfile or entrypoint is newer
+# than the image. The entrypoint is BAKED into the image at build time, so
+# an existing image silently drops later fixes — the 0.1.20 cut ran a
+# pre-AppImage-fixes entrypoint this way and the leg failed.
+if (( ! needs_build )); then
+    img_epoch=$(python3 -c "
+from datetime import datetime; import sys
+try: print(int(datetime.fromisoformat(sys.argv[1].split('.')[0] + '+00:00').timestamp()))
+except Exception: print(0)" "$($RUNTIME image inspect "$IMAGE" --format '{{.Created}}' 2>/dev/null | sed 's/ /T/;s/ .*//')" 2>/dev/null || echo 0)
+    for f in "$CONTAINERFILE" "$(dirname "$CONTAINERFILE")/build-entrypoint.sh"; do
+        if [[ -f "$f" ]] && (( $(stat -f %m "$f") > img_epoch )); then
+            echo "[build-desktop-linux] $f is newer than the image — rebuilding."
+            needs_build=1
+        fi
+    done
+fi
+
 if (( needs_build )); then
     echo "[build-desktop-linux] Building image $IMAGE (one-time, ~10 minutes)..."
     # Pin amd64: the build targets x86_64-unknown-linux-gnu and the LunarG

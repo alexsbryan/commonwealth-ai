@@ -202,6 +202,17 @@ final asset listing. Useful flags: `--skip-macos-arm` /
 `--no-upload` to build+verify only, `--upload-only` to push what's already
 on disk.
 
+**Machine maintenance (learned the hard way, 2026-07-10 — three ENOSPCs
+in one release day):** after any day of container-image iteration, run
+`podman system prune -f` and then `podman machine ssh 'sudo fstrim -av'`
+— every `--rebuild`/`--rebuild-image` leaves an orphaned image layer
+*inside the VM's sparse disk*, invisible to host `du` (217 GB had
+accumulated). The fstrim is what actually returns the space to the host.
+Also consider capping sccache (`SCCACHE_CACHE_SIZE=10G`); it grew to
+34 GB in one day of multi-target llama.cpp builds. The container build
+scripts auto-rebuild their image when the Containerfile/entrypoint is
+newer than it — a stale baked-in entrypoint silently drops fixes.
+
 **One-time setup:**
 
 | What | How |
