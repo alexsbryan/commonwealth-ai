@@ -96,6 +96,24 @@ fi
 FREE_GB="$(df -g "$REPO_ROOT" | awk 'NR==2 {print $4}')"
 (( FREE_GB >= 40 )) || log "WARNING: only ${FREE_GB}GB free. A cold three-leg build wants ~40GB+; an ENOSPC mid-build corrupts the podman VM (recreate it if that happens)."
 
+# Router-embed cache freshness. desktop-release.yml has a CI gate for this;
+# local releases bypass the workflow entirely (v0.1.19 shipped ungated —
+# harmless that time, but only by luck). A stale baked cache means every
+# fresh install re-embeds ~303 router exemplars at first launch: minutes on
+# a CPU-only embed slot. Exit 3 = stale.
+if ! (( UPLOAD_ONLY )); then
+    log "Checking router-embed cache freshness..."
+    set +e
+    cargo run --quiet --release -p sovereign-cli-llm -- router-cache check
+    ROUTER_RC=$?
+    set -e
+    case "$ROUTER_RC" in
+        0) ;;
+        3) die "router-embed cache is STALE — run: cargo run --release -p sovereign-cli-llm -- router-cache rebuild, commit sovereign/router/router-embed-cache.json, and re-run" ;;
+        *) die "router-cache check errored (exit $ROUTER_RC) — fix before releasing" ;;
+    esac
+fi
+
 # ─── Build legs (sequential: shared cargo caches + disk headroom) ─────
 (( SKIP_MACOS_ARM ))   || { log "[1/4] macOS aarch64..."; scripts/build-desktop-macos.sh --target aarch64-apple-darwin; }
 (( SKIP_MACOS_INTEL )) || { log "[2/4] macOS x86_64 (cross)..."; scripts/build-desktop-macos.sh --target x86_64-apple-darwin; }
