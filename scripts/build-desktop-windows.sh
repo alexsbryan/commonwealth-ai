@@ -40,7 +40,24 @@ done
 command -v "$RUNTIME" >/dev/null || { echo "$RUNTIME not found" >&2; exit 2; }
 "$RUNTIME" machine start >/dev/null 2>&1 || true   # no-op if already running
 
+NEEDS_BUILD=0
 if (( REBUILD_IMAGE )) || ! "$RUNTIME" image exists "$IMAGE"; then
+    NEEDS_BUILD=1
+else
+    # Staleness check: the entrypoint is BAKED into the image, so an
+    # existing image silently drops later fixes (see build-desktop-linux.sh).
+    IMG_EPOCH=$(python3 -c "
+from datetime import datetime; import sys
+try: print(int(datetime.fromisoformat(sys.argv[1].split('.')[0] + '+00:00').timestamp()))
+except Exception: print(0)" "$($RUNTIME image inspect "$IMAGE" --format '{{.Created}}' 2>/dev/null | sed 's/ /T/;s/ .*//')" 2>/dev/null || echo 0)
+    for f in "$CONTAINERFILE" "$(dirname "$CONTAINERFILE")/build-entrypoint-windows.sh"; do
+        if [[ -f "$f" ]] && (( $(stat -f %m "$f") > IMG_EPOCH )); then
+            log "$f is newer than the image — rebuilding."
+            NEEDS_BUILD=1
+        fi
+    done
+fi
+if (( NEEDS_BUILD )); then
     log "Building image $IMAGE (native arm64)..."
     "$RUNTIME" build --platform linux/arm64 -t "$IMAGE" -f "$CONTAINERFILE" .
 fi
