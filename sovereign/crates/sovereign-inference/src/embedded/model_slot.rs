@@ -905,20 +905,13 @@ impl ModelSlot {
             "MTP candidacy decided — draft-ctx build will confirm or fall back"
         );
         let mtp_n_rs_seq: u32 = 4;
-        // SOVEREIGN_FLASH_ATTN=1 — envelope experiment (2026-07-10),
-        // MEASURED NO EFFECT: paired probe (tiny×3, ~9k-token prefill×3)
-        // identical with the flag on vs off (10.38 vs 10.43-10.51GB
-        // high-water; decode 40-48 tok/s both ways). Engagement could not be
-        // verified — the daemon's llama log callback suppresses the context
-        // init lines that would print flash_attn — so this is either a
-        // silent Vulkan fallback or FA isn't the term. The ~10.4GB primary
-        // envelope materializes on the slot's first meaningful use and is
-        // FLAT thereafter regardless of prompt size (bounded high-water, not
-        // a leak — see the RSS-probe note 2026-07-10). Flag kept for future
-        // A/Bs on other backends; default OFF.
-        let flash_attn = std::env::var("SOVEREIGN_FLASH_ATTN")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        // NEGATIVE RESULT (2026-07-10, mechanism removed per the
+        // complexity-must-move-a-metric rule): a with_flash_attention(true)
+        // experiment measured ZERO envelope/throughput effect here (paired
+        // probe identical on/off; engagement unverifiable — the llama log
+        // callback suppresses context-init lines). See git history
+        // (3af2070d) and the RSS-probe sovereign note before re-trying FA
+        // on this backend.
         let build_ctx_params = move |gpu: bool| {
             let mut p = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
@@ -941,9 +934,6 @@ impl ModelSlot {
                 // limit moves.
                 .with_n_batch(ctx_n_batch(context_size))
                 .with_n_ubatch(512);
-            if flash_attn {
-                p = p.with_flash_attention(true);
-            }
             if is_mtp_model {
                 // Only the target context type stays Default here; the
                 // draft context flips to Mtp below. `n_rs_seq` is what
