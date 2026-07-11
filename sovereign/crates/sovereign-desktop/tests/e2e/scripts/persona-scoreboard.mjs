@@ -16,6 +16,7 @@
 // Usage: node tests/e2e/scripts/persona-scoreboard.mjs <journal.jsonl>...
 import fs from "node:fs";
 import { reclassifyRow, GAP_FAMILY } from "./lib/classify.mjs";
+import { computeMetrics } from "./lib/metrics.mjs";
 
 const files = process.argv.slice(2);
 if (!files.length) {
@@ -39,65 +40,26 @@ for (const f of files) {
   } catch {
     continue;
   }
-  const turns = lines
-    .filter((r) => r.kind === "turn")
-    .map((r) => ({ ...r, outcome: reclassifyRow(r) }));
-  const sessions = lines.filter((r) => r.kind === "session_end");
   const runStart = lines.find((r) => r.kind === "run_start") ?? {};
   const runEnd = lines.find((r) => r.kind === "run_end") ?? {};
-  if (!turns.length) continue;
-
-  const satisfied = sessions.filter((s) => s.endReason === "satisfied").length;
-  const abandoned = sessions.filter((s) => s.endReason === "abandoned").length;
-  const grounded = turns.filter((t) => t.outcome === "answered_grounded").length;
-  const rescued = turns.filter((t) => t.outcome === "rescued_by_web").length;
-  const halluc = turns.filter((t) => t.aligned?.verdict === "hallucination").length;
-  const flips = turns.filter((t) => t.flip?.flipped).length;
-  const cancels = turns.filter((t) => t.outcome === "canceled_slow").length;
-  const gapT = turns.filter((t) => GAP_FAMILY.has(t.outcome));
-  const postured = turns.filter((t) => t.posture);
-  const ttfts = turns.map((t) => t.ttftMs).filter((x) => x != null);
-  // TTV per session: first GOOD-judged turn's cumulative time (approximated
-  // by summing latencies up to and including it).
-  const ttvs = [];
-  const bySession = {};
-  for (const t of turns) (bySession[t.session] ??= []).push(t);
-  for (const st of Object.values(bySession)) {
-    let acc = 0;
-    let got = null;
-    for (const t of st.sort((a, b) => a.turn - b.turn)) {
-      acc += t.latencyMs ?? 0;
-      const good = t.judge && !t.judge.broken && t.judge.score < 6;
-      // Rescued turns delivered their value via the REFINED answer — the
-      // refined judge is the arbiter there, not the original-answer judge.
-      const isGood =
-        t.outcome === "rescued_by_web" || (good && t.outcome === "answered_grounded");
-      if (isGood) {
-        got = acc;
-        break;
-      }
-    }
-    if (got != null) ttvs.push(got);
-  }
-  const rephrases = sessions.reduce((a, s) => a + (s.rephrases ?? 0), 0);
+  const m = computeMetrics(lines);
+  if (!m.nTurns) continue;
 
   rows.push({
     run: f.split("/").pop().replace(/^persona-|\.jsonl$/g, ""),
-    sessions: sessions.length,
-    turns: turns.length,
-    gfr: pct(satisfied, sessions.length),
-    abandon: pct(abandoned, sessions.length),
-    grounded: pct(grounded, turns.length),
-    rescued: `${rescued}`,
-    halluc: `${halluc}`,
-    flips: `${flips}`,
-    ttft_p50: secs(q(ttfts, 0.5)),
-    ttv_med: ttvs.length ? secs(q(ttvs, 0.5)) : "never",
-    cancels: `${cancels}`,
-    posture: postured.length
-      ? (postured.reduce((a, t) => a + t.posture.score, 0) / postured.length).toFixed(1)
-      : "—",
-    rephr_per_sess: sessions.length ? (rephrases / sessions.length).toFixed(1) : "—",
+    sessions: m.nSessions,
+    turns: m.nTurns,
+    gfr: m.gfr == null ? "—" : `${Math.round(m.gfr * 100)}%`,
+    abandon: m.abandon_rate == null ? "—" : `${Math.round(m.abandon_rate * 100)}%`,
+    grounded: m.grounded_rate == null ? "—" : `${Math.round(m.grounded_rate * 100)}%`,
+    rescued: `${m.rescued}`,
+    halluc: `${m.hallucinations}`,
+    flips: `${m.flips}`,
+    ttft_p50: m.ttft_p50_s == null ? "—" : `${Math.round(m.ttft_p50_s)}s`,
+    ttv_med: m.ttv_median_s == null ? "never" : `${Math.round(m.ttv_median_s)}s`,
+    cancels: `${m.cancels}`,
+    posture: m.grace_mean == null ? "—" : m.grace_mean.toFixed(1),
+    rephr_per_sess: m.rephrases_per_session == null ? "—" : m.rephrases_per_session.toFixed(1),
     rss_gb:
       runStart.daemonRssMb && runEnd.daemonRssMb
         ? `+${((runEnd.daemonRssMb - runStart.daemonRssMb) / 1024).toFixed(0)}`

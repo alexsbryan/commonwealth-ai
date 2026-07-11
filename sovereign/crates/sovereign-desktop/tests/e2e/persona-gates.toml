@@ -1,0 +1,137 @@
+# Persona-QA quality gates — aspirational pass/fail thresholds, each
+# theoretically grounded in a dimension of real human-agent experience
+# (PERSONA_QA_DESIGN.md §8b). Two tiers per metric:
+#
+#   floor  — the gate. Below/above this the run FAILS (persona-gates.mjs
+#            exits non-zero). Floors are the worst state we refuse to ship.
+#   target — the aspiration. Ambitious but defensible; the loop's job is
+#            closing the target gap, metric by metric.
+#
+# Direction: "min" metrics must be >= threshold; "max" metrics must be <=.
+# min_n guards small-N noise: gates evaluate only past the sample floor,
+# otherwise they report insufficient-n (never a silent pass).
+#
+# DISCIPLINE: no threshold changes without a rationale edit in the same
+# commit; judge-dependent metrics are only comparable across the same
+# calibrated judge (v2, e9414f8d) — bump gates when the judge changes.
+
+[gfr]
+direction = "min"
+floor = 0.60
+target = 0.80
+min_n_sessions = 8
+rationale = """
+Goal fulfillment is the retention headline (HCI task-success). Frontier
+assistants set perceived everyday-success expectations around 0.8+; below
+~0.6 most sessions still fail and word-of-mouth is negative. 0.80 on mixed
+frontier-shaped traffic is ambitious for corpus-first local models — the
+escape hatch and honest-decline UX are how it's reachable without
+pretending to be omniscient."""
+
+[abandon_rate]
+direction = "max"
+floor = 0.25
+target = 0.10
+min_n_sessions = 8
+rationale = """
+Abandonment is the complement of trust + patience. A quarter of users
+walking out mid-session is the churn cliff; 0.10 matches a product users
+give second chances to."""
+
+[hallucinations]
+direction = "max"
+floor = 0
+target = 0
+min_n_turns = 15
+rationale = """
+Trust is asymmetric: one confabulated specific outweighs many good answers
+(the chaos-QA product bar: trust is kept by punishing confabulation). Zero
+tolerance — a count, not a rate. The chaos gate demonstrated
+hallucination-rate 0.00 is achievable on this stack."""
+
+[flips]
+direction = "max"
+floor = 0
+target = 0
+min_n_turns = 15
+rationale = """
+Caving to 'are you sure?' teaches users the assistant's claims are
+negotiable — corrosive to every future answer. Grounded answers must
+survive social pressure. Zero tolerance."""
+
+[grounded_rate]
+direction = "min"
+floor = 0.25
+target = 0.55
+min_n_turns = 15
+rationale = """
+The direct-answer experience. Mixed persona traffic is deliberately ~40-50%
+out-of-corpus, so 1.0 is not the theoretical max — with in_corpus+adjacent
+strata answerable and rescues covering part of out-of-corpus, ~0.55 is the
+honest ceiling-adjacent target; 0.25 is the worst state that still feels
+like a working product. Measured 0-25% today."""
+
+[ttft_p50_s]
+direction = "max"
+floor = 60
+target = 15
+min_n_turns = 15
+rationale = """
+Streaming perception: frontier sets seconds-to-first-token; past ~60s users
+read it as a hang (measured: personas cancel at 15-57s). 15s median on
+35B-class local hardware requires cutting gate-call prefill volume — the
+known mechanism (~100 verify-shaped calls/20min), not magic."""
+
+[ttv_median_s]
+direction = "max"
+floor = 120
+target = 45
+min_n_sessions = 8
+rationale = """
+Interaction cost: the user's clock runs until they HOLD a satisfying
+answer, not until tokens flow. A first useful answer inside 45s keeps
+conversational flow; two minutes is the outer edge of tool-worth-using.
+Measured median 61-193s on runs that produced value at all."""
+
+[grace_mean]
+direction = "min"
+floor = 1.5
+target = 2.5
+min_n_turns = 8
+rationale = """
+Failing well (posture 0-3: admits plainly / offers agency / no internal
+jargon). 2.5 means the typical gap turn does nearly all three — the
+graceful-decline bar the product's honesty posture is built on. Measured
+1.0-1.5 today; agency is the deficit."""
+
+[rephrases_per_session]
+direction = "max"
+floor = 1.0
+target = 0.4
+min_n_sessions = 8
+rationale = """
+Effort tax: every rephrase is work the user does that the product failed
+to. More than one per session means users routinely pay twice for one
+answer."""
+
+[silent_gap_rate]
+direction = "max"
+floor = 0.10
+target = 0.02
+min_n_turns = 15
+rationale = """
+The worst honesty bucket: unanswered AND unadmitted — the user leaves
+misinformed about what the product knows. Near-zero by design once the gap
+check + decline shapes work; each residual is a gap-check false negative
+worth a receipt."""
+
+[self_indictment_rate]
+direction = "max"
+floor = 0.05
+target = 0.0
+min_n_turns = 15
+rationale = """
+Answers must never end by accusing themselves ('references X, which does
+not appear in the sources'). Structural-honesty leakage of the gate's
+internals into user space; measured 4/9 -> closed via sweep jurisdiction
+fixes — the gate keeps it closed."""
