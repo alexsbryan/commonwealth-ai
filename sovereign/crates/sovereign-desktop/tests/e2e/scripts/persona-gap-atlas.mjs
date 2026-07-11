@@ -8,6 +8,7 @@
 // Usage: node tests/e2e/scripts/persona-gap-atlas.mjs <journal.jsonl> [out.md]
 import fs from "node:fs";
 import path from "node:path";
+import { reclassifyRow, GAP_FAMILY as GAP_FAMILY_SHARED } from "./lib/classify.mjs";
 
 const journalPath = process.argv[2];
 if (!journalPath) {
@@ -30,7 +31,13 @@ const rows = fs
   })
   .filter(Boolean);
 
-const turns = rows.filter((r) => r.kind === "turn");
+// Reclassify under the CURRENT taxonomy (lib/classify.mjs) so taxonomy fixes
+// retroactively correct past runs. The journaled outcome is kept as
+// outcome_at_run for drift visibility.
+const turns = rows
+  .filter((r) => r.kind === "turn")
+  .map((r) => ({ ...r, outcome_at_run: r.outcome, outcome: reclassifyRow(r) }));
+const reclassified = turns.filter((t) => t.outcome !== t.outcome_at_run).length;
 const sessions = rows.filter((r) => r.kind === "session_end");
 const runMeta = rows.find((r) => r.kind === "run_start") ?? {};
 
@@ -52,14 +59,7 @@ const OUTCOMES = [
   "turn_error",
   "turn_timeout",
 ];
-const GAP_FAMILY = new Set([
-  "gap_admitted_offered",
-  "gap_admitted_no_offer",
-  "silent_gap",
-  "rescued_by_web",
-  "search_futile",
-  "search_blocked",
-]);
+const GAP_FAMILY = GAP_FAMILY_SHARED;
 
 const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : "—");
 const count = (arr, f) => arr.filter(f).length;
@@ -129,6 +129,8 @@ md.push(
 md.push(``);
 md.push(`## Outcome overview`);
 md.push(``);
+if (reclassified)
+  md.push(`_(${reclassified}/${turns.length} turns reclassified under the current taxonomy vs. what the run recorded)_`, ``);
 for (const o of OUTCOMES) {
   const n = count(turns, (t) => t.outcome === o);
   if (n) md.push(`- **${o}**: ${n} (${pct(n, turns.length)})`);
