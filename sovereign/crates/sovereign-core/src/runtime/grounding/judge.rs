@@ -763,6 +763,20 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
         "signed", "replied",
     ];
     let claim = strip_citation_spans(claim);
+    // Markdown headings / bold-only lines are TOPIC LABELS in Title Case
+    // ("**Energy Costs**", "## Legislative Origination") — the sweep read
+    // them as person names (overnight soak, 2026-07-11). The sweep's
+    // sentence-splitter hands headings over as their own "sentences";
+    // refuse label-shaped input outright.
+    {
+        let t = claim.trim();
+        let heading = t.starts_with('#')
+            || (t.starts_with("**") && t.trim_end_matches(':').ends_with("**"))
+            || (t.ends_with(':') && t.split_whitespace().count() <= 6);
+        if heading {
+            return None;
+        }
+    }
     let low = claim.to_lowercase();
     if !ARTIFACT.iter().any(|a| low.contains(a)) {
         return None;
@@ -778,6 +792,19 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
     }
     let words: Vec<&str> = claim.split_whitespace().collect();
     for pair in words.windows(2) {
+        // A separator on the first word means a LIST, not a name:
+        // "Hamilton, Madison" is two people — fusing them minted the
+        // fictitious "Hamilton Madison" (overnight soak, 2026-07-11).
+        if pair[0].ends_with([',', ';', ':', '/', '&']) {
+            continue;
+        }
+        // Markdown-emphasized words are HEADINGS/labels, not names — the
+        // splitter glues "**Energy Costs**: The document…" into one
+        // sentence, and trim_matches strips the asterisks before cap_name
+        // sees them (same overnight soak).
+        if pair[0].contains("**") || pair[1].contains("**") || pair[0].starts_with('#') {
+            continue;
+        }
         if let (Some(a), Some(b)) = (cap_name(pair[0]), cap_name(pair[1])) {
             if non_name_word(a) || non_name_word(b) {
                 continue;
@@ -907,6 +934,22 @@ mod tests {
             absent_name_attribution(
                 "From Retrieved Sources: the document describes the mechanism in a later section.",
                 "some unrelated evidence text"
+            ),
+            None
+        );
+        // Heading bigrams and comma-separated name lists are not names
+        // (overnight soak receipts).
+        assert_eq!(
+            absent_name_attribution(
+                "**Energy Costs**: The document describes rate changes for households.",
+                "unrelated evidence"
+            ),
+            None
+        );
+        assert_eq!(
+            absent_name_attribution(
+                "The letter was signed by Hamilton, Madison and Jay together.",
+                "hamilton wrote often. madison replied. jay concurred."
             ),
             None
         );
