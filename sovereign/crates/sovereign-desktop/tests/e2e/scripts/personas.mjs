@@ -1021,8 +1021,29 @@ async function main() {
         say(`✋ aborting run: brain unavailable ${consecutiveSkips}× (daemon ${daemonUp ? "responds but degraded" : "DOWN"})`);
         break;
       }
-      const backoffMs = consecutiveSkips > 0 ? 30_000 : 2000 + rand() * 3000;
-      await new Promise((r) => setTimeout(r, backoffMs));
+      if (consecutiveSkips > 0) {
+        // The daemon may be mid-supervised-restart (memory-watch hard-limit
+        // self-restart + model reload ≈ 60-90s). Wait for recovery before
+        // counting further skips; only sustained downness reaches the abort.
+        const deadline = Date.now() + 300_000;
+        let recovered = false;
+        while (Date.now() < deadline) {
+          try {
+            const r = await fetch(`${DAEMON}/healthz`, { signal: AbortSignal.timeout(5000) });
+            if (r.ok) {
+              recovered = true;
+              break;
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 10_000));
+        }
+        if (recovered) {
+          say("daemon recovered (supervised restart?) — resuming");
+          consecutiveSkips = 0;
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 2000 + rand() * 3000));
+      }
     }
 
     record({
