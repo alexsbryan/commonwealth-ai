@@ -125,6 +125,13 @@ export const routingStore = {
   get synthesisProgress() {
     return _snapshot.context.synthesisProgress;
   },
+  /** Draft-preview experiment (SOVEREIGN_DRAFT_STREAM=1): the
+   *  accumulated UNVERIFIED draft text while the gate holds the answer.
+   *  DraftPreview renders it as an explicitly-provisional section;
+   *  `null` when the experiment is off or no draft is in flight. */
+  get draftPreview() {
+    return _snapshot.context.draftPreview;
+  },
   /** New-assistant-message-id produced by the most recent successful
    *  redirect. ChatView watches this to wire up the chat.machine
    *  placeholder before the first chunk arrives; after consuming it,

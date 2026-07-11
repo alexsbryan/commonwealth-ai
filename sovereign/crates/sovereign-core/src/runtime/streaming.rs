@@ -52,6 +52,25 @@ struct SynthStreamOutcome {
 /// `return` immediately: `tx` was dropped (receiver gone) or the slot emitted
 /// `Finish::Error`/`Error` (the error frame is already forwarded). Otherwise
 /// returns the final model id + observed finish/usage.
+/// One heartbeat from the gated synthesis hold: the running held-token
+/// count, plus (EXPERIMENT `SOVEREIGN_DRAFT_STREAM=1`) the draft text
+/// appended since the last beat — the caller forwards it as a
+/// `NarrationPhase::DraftDelta` so the desktop can render a provisional
+/// draft preview. Official release semantics unchanged.
+pub(crate) struct SynthBeat {
+    pub tokens: u32,
+    pub delta: Option<String>,
+}
+
+pub(crate) fn draft_stream_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("SOVEREIGN_DRAFT_STREAM")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
 async fn run_synthesis_stream(
     inference: &Arc<dyn InferenceProvider>,
     mut s: Pin<Box<dyn Stream<Item = crate::types::StreamFrame> + Send>>,
@@ -62,11 +81,12 @@ async fn run_synthesis_stream(
     full_text: &mut String,
     had_retrieved_chunks: bool,
     gate_on: bool,
-    // In gate mode, a throttled sink for the running held-token COUNT — the
-    // caller pumps it into a `SynthesisProgress` heartbeat so the user sees
-    // the answer forming behind the gate. `None` on ungated/naked paths (they
-    // stream tokens live, so there's nothing to bridge).
-    progress_tx: Option<&tokio::sync::mpsc::Sender<u32>>,
+    // In gate mode, a throttled sink for the running held-token COUNT (and,
+    // when the draft-stream experiment is on, the held text deltas) — the
+    // caller pumps it into `SynthesisProgress` / `DraftDelta` narration so
+    // the user sees the answer forming behind the gate. `None` on
+    // ungated/naked paths (they stream tokens live, nothing to bridge).
+    progress_tx: Option<&tokio::sync::mpsc::Sender<SynthBeat>>,
     log_tag: &'static str,
 ) -> Option<SynthStreamOutcome> {
     let mut observed_finish: Option<crate::types::FinishReason> = None;
@@ -79,6 +99,10 @@ async fn run_synthesis_stream(
     let mut held_tokens: u32 = 0;
     let mut last_heartbeat = std::time::Instant::now();
     const HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+    // Draft-preview experiment: accumulate held text between heartbeats so
+    // each beat can carry the delta (see SynthBeat).
+    let draft_preview = draft_stream_enabled();
+    let mut pending_delta = String::new();
 
     'synth: loop {
         loop {
@@ -120,10 +144,16 @@ async fn run_synthesis_stream(
                         // 250ms in — then throttle subsequent frames.
                         if let Some(ptx) = progress_tx {
                             held_tokens += 1;
-                            if held_tokens == 1
-                                || last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL
-                            {
-                                let _ = ptx.try_send(held_tokens);
+                            if draft_preview {
+                                pending_delta.push_str(&chunk);
+                            }
+                            if held_tokens == 1 || last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
+                                let delta = (draft_preview && !pending_delta.is_empty())
+                                    .then(|| std::mem::take(&mut pending_delta));
+                                let _ = ptx.try_send(SynthBeat {
+                                    tokens: held_tokens,
+                                    delta,
+                                });
                                 last_heartbeat = std::time::Instant::now();
                             }
                         }
@@ -771,8 +801,10 @@ impl Runtime {
         // evidence, or grammar. SLOT_POLICY §3 Passthrough — the model
         // the user chose to run naked; latency=Normal → shadow Speed::Slow
         // (Primary), unchanged from the prior explicit Slow.
-        let mut request =
-            CompletionRequest::for_workload(Workload::Passthrough, format_history_as_prompt(&context, 24));
+        let mut request = CompletionRequest::for_workload(
+            Workload::Passthrough,
+            format_history_as_prompt(&context, 24),
+        );
         request.system_message = Some(system);
 
         let message_id = uuid::Uuid::new_v4().to_string();
@@ -1186,7 +1218,7 @@ impl Runtime {
             // already streams tokens the user can watch. The reader ends when
             // the channel closes (`hb_tx` dropped after synthesis).
             let hb_tx = if gate_on {
-                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<u32>(4);
+                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<SynthBeat>(32);
                 let hb_events = collab_routing_events.clone();
                 let hb_sid = collab_session_id.clone();
                 let hb_cid = conversation_id_owned.clone();
@@ -1194,18 +1226,33 @@ impl Runtime {
                     let (Some(events), Some(sid)) = (hb_events, hb_sid) else {
                         return;
                     };
-                    while let Some(tokens) = rx_hb.recv().await {
+                    while let Some(beat) = rx_hb.recv().await {
                         events
                             .emit_turn_narration(TurnNarration {
                                 session_id: sid.clone(),
                                 conversation_id: hb_cid.clone(),
                                 event: NarrationEvent {
-                                    phase: NarrationPhase::SynthesisProgress { tokens },
+                                    phase: NarrationPhase::SynthesisProgress {
+                                        tokens: beat.tokens,
+                                    },
                                     text: String::new(),
                                     elapsed_ms: started.elapsed().as_millis() as u64,
                                 },
                             })
                             .await;
+                        if let Some(delta) = beat.delta {
+                            events
+                                .emit_turn_narration(TurnNarration {
+                                    session_id: sid.clone(),
+                                    conversation_id: hb_cid.clone(),
+                                    event: NarrationEvent {
+                                        phase: NarrationPhase::DraftDelta { delta },
+                                        text: String::new(),
+                                        elapsed_ms: started.elapsed().as_millis() as u64,
+                                    },
+                                })
+                                .await;
+                        }
                     }
                 });
                 Some(tx_hb)
@@ -1982,7 +2029,7 @@ impl Runtime {
             // Token-count heartbeat during the gated hold (mirrors the
             // KnowledgeQuery spawn). Reader ends when `hb_tx` drops.
             let hb_tx = if deep_gate_on {
-                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<u32>(4);
+                let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<SynthBeat>(32);
                 let hb_events = routing_events_for_spawn.clone();
                 let hb_sid = session_id_for_spawn.clone();
                 let hb_cid = conversation_id_owned.clone();
@@ -1990,18 +2037,33 @@ impl Runtime {
                     let (Some(events), Some(sid)) = (hb_events, hb_sid) else {
                         return;
                     };
-                    while let Some(tokens) = rx_hb.recv().await {
+                    while let Some(beat) = rx_hb.recv().await {
                         events
                             .emit_turn_narration(TurnNarration {
                                 session_id: sid.clone(),
                                 conversation_id: hb_cid.clone(),
                                 event: NarrationEvent {
-                                    phase: NarrationPhase::SynthesisProgress { tokens },
+                                    phase: NarrationPhase::SynthesisProgress {
+                                        tokens: beat.tokens,
+                                    },
                                     text: String::new(),
                                     elapsed_ms: started.elapsed().as_millis() as u64,
                                 },
                             })
                             .await;
+                        if let Some(delta) = beat.delta {
+                            events
+                                .emit_turn_narration(TurnNarration {
+                                    session_id: sid.clone(),
+                                    conversation_id: hb_cid.clone(),
+                                    event: NarrationEvent {
+                                        phase: NarrationPhase::DraftDelta { delta },
+                                        text: String::new(),
+                                        elapsed_ms: started.elapsed().as_millis() as u64,
+                                    },
+                                })
+                                .await;
+                        }
                     }
                 });
                 Some(tx_hb)
@@ -2815,12 +2877,7 @@ impl Runtime {
         if matches!(intent, Intent::GenerativeQuery) {
             tracing::info!(intent = ?intent, "runtime: dispatching GenerativeQuery to streaming");
             return self
-                .handle_generative_query_stream(
-                    message,
-                    conversation_id,
-                    &context,
-                    cancel_token,
-                )
+                .handle_generative_query_stream(message, conversation_id, &context, cancel_token)
                 .await;
         }
 

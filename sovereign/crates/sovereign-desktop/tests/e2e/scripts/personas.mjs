@@ -77,6 +77,12 @@ const CARD_OBSERVE_MS = Number(flag("card-observe-secs", "45")) * 1000;
 const SEARCH_MIN_GAP_MS = 20_000; // politeness floor between live DDG clicks
 const ATTACH = argv.includes("--attach");
 const SPAWN = argv.includes("--spawn");
+// Draft-preview experiment: stream the unverified draft as DraftDelta
+// narration while the gate holds (SOVEREIGN_DRAFT_STREAM on the desktop
+// process — the runtime/gate run desktop-side in attach mode). The driver
+// measures ttdraft (first draft glyphs) alongside the official ttft.
+const DRAFT_STREAM = argv.includes("--draft-stream");
+if (DRAFT_STREAM) process.env.SOVEREIGN_DRAFT_STREAM = "1";
 
 // Seedless like chaos.mjs — every run is a fresh draw.
 const rand = () => Math.random();
@@ -503,6 +509,7 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     };
   }
   let ttft = null;
+  let ttdraft = null; // first DraftDelta narration — perceived first text
   let canceled = false;
   const narration = [];
   let cursor = since;
@@ -518,7 +525,9 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
       }
       if (r.event === "turn-narration") {
         const p = r.payload?.event ?? r.payload ?? {};
-        narration.push(JSON.stringify(p.phase ?? ""));
+        const phaseStr = JSON.stringify(p.phase ?? "");
+        narration.push(phaseStr);
+        if (ttdraft == null && phaseStr.includes("draft_delta")) ttdraft = Date.now() - t0;
       }
       if (r.event === "message-complete" && r.payload?.message_id === messageId) terminal = r;
       if (r.event === "message-error") terminal = terminal ?? r;
@@ -554,8 +563,10 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     await new Promise((r) => setTimeout(r, 1200));
   }
   const latencyMs = Date.now() - t0;
-  if (canceled) return { canceled: true, ttft, latencyMs, narration, seq: cursor, messageId };
-  if (!terminal) return { timeout: true, ttft, latencyMs, narration, seq: cursor, messageId };
+  if (canceled)
+    return { canceled: true, ttft, ttdraft, latencyMs, narration, seq: cursor, messageId };
+  if (!terminal)
+    return { timeout: true, ttft, ttdraft, latencyMs, narration, seq: cursor, messageId };
   if (terminal.event === "message-error")
     return { error: JSON.stringify(terminal.payload ?? {}).slice(0, 240), ttft, latencyMs, narration, seq: terminal.seq, messageId };
   const rc = terminal.payload?.metadata?.retrieved_chunks;
@@ -569,6 +580,7 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     finishReason: prov.finish_reason ?? null,
     intent: prov.intent ?? terminal.payload?.metadata?.intent ?? null,
     ttft,
+    ttdraft,
     latencyMs,
     narration,
     seq: terminal.seq,
@@ -846,6 +858,7 @@ async function runSession(persona, corpora, corporaMeta) {
       refined: refined ? refined.slice(0, 12000) : null,
       refinedChanged,
       ttftMs: t.ttft ?? null,
+      ttdraftMs: t.ttdraft ?? null,
       latencyMs: t.latencyMs,
       retrieved: t.chunks?.length ?? null,
       aligned: aligned
