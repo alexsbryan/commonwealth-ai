@@ -49,6 +49,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "brief" => cmd_brief(&args[1..]).await,
         "reflect" => cmd_reflect(&args[1..]).await,
         "capability-map" => cmd_capability_map(&args[1..]).await,
+        "arch-report" => crate::arch_report_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,
@@ -1353,6 +1354,12 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "capability-map <corpus-id>",
                 "Derive a capability map (what the codebase does) from the SCIP call graph",
+            ),
+            (
+                "arch-report [corpus-id]",
+                "Architecture posture: god-crate fan-in, coupling carriers, declared↔observed \
+                 deltas, layer-map violations, temporal coupling; persists for arch_posture \
+                 (--no-git skips history; --root <path> overrides the workspace root)",
             ),
             (
                 "capability-graph <corpus-id>",

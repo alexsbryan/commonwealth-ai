@@ -15,6 +15,13 @@
 # These resolve to the same owner today. As co-maintainers come on, split an
 # area off by changing the one line for it — nothing else needs to move.
 
+# Quality program — layer map (the dependency-direction contract) + ratchet
+# baselines. Owner eyes on every baseline diff: a baseline that grows is a
+# policy decision, not a mechanical update.
+/quality/                       @alexsbryan
+/deny.toml                      @alexsbryan
+/rust-toolchain.toml            @alexsbryan
+
 # Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
 /corpus-engine/                 @alexsbryan
 /corpus-engine-scip/            @alexsbryan

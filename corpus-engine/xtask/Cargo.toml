@@ -9,10 +9,17 @@ publish = false
 name = "xtask"
 path = "src/main.rs"
 
-# arch-gate (the sole remaining command) uses only std. The recipe/registry
-# snapshot sync that needed reqwest+toml was retired when corpus-engine/build.rs
-# took over vendoring the canonical sovereign-recipes tree at compile time.
+# The gates use std + the arch-layers policy crate (schema + evaluator for
+# quality/ARCH_LAYERS.toml; brings serde + toml). The std-only stance ended
+# deliberately with the layer-gate (quality program, 2026-07-11): the policy
+# parser must be SHARED with the code-intel arch_report, or the two
+# enforcement halves drift on what the layer map means.
 [dependencies]
+arch-layers = { workspace = true }
+# lint-gate parses `cargo clippy --message-format=json` — a hand-rolled
+# string scan mis-read diagnostics whose children precede the top-level
+# `level` field (every clippy lint with a help child), so: real parser.
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

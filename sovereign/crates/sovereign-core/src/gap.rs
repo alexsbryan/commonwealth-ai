@@ -16,9 +16,9 @@
 //! with the corpus-only answer.
 
 use crate::error::Result;
+use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
-use crate::slot_policy::Workload;
 use crate::types::{CompletionRequest, InformationRequest, InformationRequestKind};
 
 /// Hard caps on the inputs we feed the gap-assessment prompt. The

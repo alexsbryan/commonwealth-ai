@@ -648,7 +648,10 @@ pub(crate) async fn gate_answer(
         && !text.contains("Grounded in the source")
         && question.trim().chars().count() > 40
     {
-        dbg(&format!("fragment guard: released text {:?} answers nothing — abstaining", text.trim()));
+        dbg(&format!(
+            "fragment guard: released text {:?} answers nothing — abstaining",
+            text.trim()
+        ));
         return GateOutcome {
             text: grounded_abstention(question, chunks.len().min(12)),
             meta: serde_json::json!({
@@ -873,10 +876,10 @@ fn answer_declines(text: &str) -> bool {
         "i'm not certain",
         "i do not have information",
         "i don't have information",
-        "couldn't confirm an answer",     // grounded_abstention prose (current)
-        "could not confirm an answer",    // grounded_abstention prose (current)
+        "couldn't confirm an answer", // grounded_abstention prose (current)
+        "could not confirm an answer", // grounded_abstention prose (current)
         "none of them actually cover it", // grounded_abstention prose (legacy, still in-the-wild)
-        "i'd rather not guess",           // grounded_abstention prose (legacy)
+        "i'd rather not guess",       // grounded_abstention prose (legacy)
         "do not contain",
         "does not contain",
         "not recorded there",
@@ -945,10 +948,14 @@ async fn short_specifics_guard(
         }
     }
     let specifics = if !swept.is_empty() {
-        dbg(&format!("short sweep VETOED {swept:?} (absent from evidence)"));
+        dbg(&format!(
+            "short sweep VETOED {swept:?} (absent from evidence)"
+        ));
         swept
             .iter()
-            .map(|x| format!("The answer references \"{x}\", which does not appear in the sources."))
+            .map(|x| {
+                format!("The answer references \"{x}\", which does not appear in the sources.")
+            })
             .collect()
     } else {
         if !short_specifics_scan_enabled() {
@@ -960,16 +967,15 @@ async fn short_specifics_guard(
         }
         // Small budget floored at 3 so even a terse citation answer ("David Hart")
         // gets a real check; scales modestly on longer short answers.
-        let specifics =
-            scan_unsupported_specifics(
-                inference,
-                question,
-                released,
-                chunks,
-                budget,
-                crate::slot_policy::posture_of(base_request),
-            )
-            .await?;
+        let specifics = scan_unsupported_specifics(
+            inference,
+            question,
+            released,
+            chunks,
+            budget,
+            crate::slot_policy::posture_of(base_request),
+        )
+        .await?;
         if specifics.is_empty() {
             return None; // clean — release unchanged
         }
@@ -1135,7 +1141,10 @@ async fn gate_longform(
                         Some(s) => s.search(claim).await,
                         None => Vec::new(),
                     };
-                    failed.push(FailedClaim { claim: claim.clone(), evidence: extra });
+                    failed.push(FailedClaim {
+                        claim: claim.clone(),
+                        evidence: extra,
+                    });
                     continue;
                 }
                 // Claim-conditioned retrieval: verify against the
@@ -1260,7 +1269,10 @@ async fn gate_longform(
                         Some(s) => s.search(&synthetic).await,
                         None => Vec::new(),
                     };
-                    failed.push(FailedClaim { claim: synthetic, evidence: extra });
+                    failed.push(FailedClaim {
+                        claim: synthetic,
+                        evidence: extra,
+                    });
                 }
             }
             Some((text, claims.len(), failed))

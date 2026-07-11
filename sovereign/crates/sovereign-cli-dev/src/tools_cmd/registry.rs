@@ -176,6 +176,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     ));
     // Capability map — derived "what the codebase does" overview.
     tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
+    // Architecture observability (quality program): the SCIP-observed layer
+    // check + coupling report, and the cheap persisted-posture reader. The
+    // repo root unlocks declared-deps/layer-map/filesystem/git sections.
+    tools.register(Box::new(
+        sovereign_tools::ArchReportTool::new().with_project_root(repo_root.clone()),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::ArchPostureTool::new().with_project_root(repo_root.clone()),
+    ));
     // Work atlas — coordination layer for agents sharing the repo.
     // Best-effort: the canonical mesh.db (the same one the daemon
     // writes to) lives at `.sovereign/mesh.db`. Falling back to

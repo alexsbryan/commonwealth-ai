@@ -1,0 +1,226 @@
+# Weekly quality lane — everything here is ADVISORY and deliberately off the
+# PR critical path (the quality program's rule: PRs get sub-minute
+# deterministic gates; anything that costs a compile runs weekly or locally
+# on demand).
+#
+# Lanes:
+#   api-surface   — cargo public-api vs committed snapshots (pinned nightly,
+#                   the ONLY nightly use in the repo: quality/nightly-pin.txt)
+#   features      — cargo hack: every feature compiles solo; powerset depth-2
+#                   on the graph-reshaping crates (treesitter/atos axes)
+#   cycles        — cargo modules: intra-crate use-cycles on the god crates
+#                   (report-only until runtime on corpus-engine is measured)
+#   timings       — cold-build critical path (an HTML artifact; a workspace
+#                   that serializes can't be worked on in parallel)
+#   doc-coverage  — % documented public items per crate (trend artifact)
+#   advisories    — RustSec against the moving DB (pages the owner; never
+#                   red-Xes a contributor PR)
+
+name: weekly
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC (before baseline-tighten at 06:00)
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
+jobs:
+  api-surface:
+    name: Public-API snapshots (pinned nightly)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchains (stable + the api nightly)
+        run: |
+          rustup toolchain install
+          rustup toolchain install "$(cat quality/nightly-pin.txt)"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: api
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler libprotobuf-dev cmake mold clang \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+      - name: Install cargo-public-api
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-public-api
+      - run: cargo run -p xtask -- api-gate
+
+  features:
+    name: Feature matrix (cargo hack)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache \
+            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+          sudo mkdir -p /mnt/target /mnt/tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+          mkdir -p target
+          sudo mount --bind /mnt/target target
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hack
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler libprotobuf-dev cmake mold clang \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      # Every feature compiles solo, on the 10 feature-bearing crates.
+      # `--no-dev-deps` keeps it check-only.
+      - name: Each-feature check
+        run: |
+          cargo hack check --each-feature --no-dev-deps \
+            -p corpus-engine -p sovereign-cli -p sovereign-cli-daemon \
+            -p sovereign-cli-shared -p sovereign-inference -p sovereign-mesh \
+            -p sovereign-store -p sovereign-tools -p commonwealth-api \
+            -p commonwealth-transport
+      # Pairwise combinations only where the axes actually reshape the dep
+      # graph (treesitter / atos / dst / iroh-experimental).
+      - name: Powerset (depth 2) on the graph-reshaping crates
+        run: |
+          cargo hack check --feature-powerset --depth 2 --no-dev-deps \
+            -p corpus-engine -p sovereign-mesh -p sovereign-tools \
+            -p commonwealth-transport
+
+  cycles:
+    name: Module cycles (cargo modules, report-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hack
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y mold clang protobuf-compiler cmake
+      - name: Install cargo-modules
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-modules
+      # Report-only: measure runtime on the 138k-LOC corpus-engine before
+      # ever considering PR promotion. `use`-cycles complement the SCIP
+      # call-cycle detection in `sovereign code arch-report`.
+      - name: Acyclicity per god crate
+        run: |
+          for crate in corpus-engine-notes commonwealth-core sovereign-contracts oicp-types; do
+            echo "── $crate ──"
+            time cargo modules dependencies --acyclic -p "$crate" || true
+          done
+
+  timings:
+    name: Cold-build critical path
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache \
+            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+          sudo mkdir -p /mnt/target /mnt/tmp
+          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+          mkdir -p target
+          sudo mount --bind /mnt/target target
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      # NO rust-cache: the point is the COLD critical path.
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler libprotobuf-dev cmake mold clang \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+      - run: cargo build --workspace --timings -j 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings
+          path: target/cargo-timings/
+          retention-days: 90
+
+  doc-coverage:
+    name: Doc coverage trend (nightly)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the api nightly
+        run: rustup toolchain install "$(cat quality/nightly-pin.txt)"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: api
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler libprotobuf-dev cmake mold clang \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+      - name: Show doc coverage (contract crates)
+        run: |
+          RUSTDOCFLAGS="-Z unstable-options --show-coverage" \
+            cargo "+$(cat quality/nightly-pin.txt)" doc --no-deps \
+            -p oicp-types -p oicp-client -p sovereign-contracts \
+            -p commonwealth-core -p corpus-engine-scip | tee doc-coverage.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doc-coverage
+          path: doc-coverage.txt
+          retention-days: 90
+
+  advisories:
+    name: RustSec advisories (owner signal)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

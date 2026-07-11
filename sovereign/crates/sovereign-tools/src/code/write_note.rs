@@ -368,7 +368,10 @@ mod tests {
         // Response reports A retired; A is hidden; B records the link.
         assert_eq!(retired.as_deref(), Some(a_id.as_str()));
         let a_row = store.read_note_by_id(&a_id).await.unwrap().unwrap();
-        assert!(a_row.retired_at.is_some(), "superseded note must be retired");
+        assert!(
+            a_row.retired_at.is_some(),
+            "superseded note must be retired"
+        );
         let b_row = store.read_note_by_id(&b_id).await.unwrap().unwrap();
         assert_eq!(b_row.supersedes.as_deref(), Some(a_id.as_str()));
     }
@@ -391,7 +394,10 @@ mod tests {
         match out {
             StepOutput::Json(v) => {
                 assert!(v["id"].as_str().is_some(), "note still created");
-                assert!(v["retired"].is_null(), "nothing retired for a missing target");
+                assert!(
+                    v["retired"].is_null(),
+                    "nothing retired for a missing target"
+                );
             }
             other => panic!("expected Json, got {other:?}"),
         }

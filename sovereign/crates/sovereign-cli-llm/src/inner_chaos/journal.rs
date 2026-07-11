@@ -77,9 +77,7 @@ impl Journal {
     pub fn append<T: serde::Serialize>(&mut self, record: &T) -> Result<(), String> {
         let line = serde_json::to_string(record).map_err(|e| format!("serialize record: {e}"))?;
         writeln!(self.file, "{line}").map_err(|e| format!("write journal: {e}"))?;
-        self.file
-            .flush()
-            .map_err(|e| format!("flush journal: {e}"))
+        self.file.flush().map_err(|e| format!("flush journal: {e}"))
     }
 
     /// Copy the live journal to a stamped sibling
@@ -137,7 +135,10 @@ mod tests {
         journal.append(&record()).unwrap();
 
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(!content.contains("stale line"), "journal must wipe on start");
+        assert!(
+            !content.contains("stale line"),
+            "journal must wipe on start"
+        );
         assert_eq!(content.lines().count(), 2);
 
         // Roundtrip.

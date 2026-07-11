@@ -1,0 +1,191 @@
+# The declared layer map — the workspace's dependency-direction contract.
+# See ARCH_PRINCIPLES.md §8 and quality/arch-layers/src/lib.rs (the shared
+# schema + evaluator).
+#
+# Layers are ordered bottom → top. A crate may depend (normal + build deps;
+# dev-deps are reported but exempt) only on crates in the same or a LOWER
+# layer. [[forbid]] expresses cross-family rules ordering can't. Every
+# workspace member must match exactly one layer — the map is total.
+#
+# [[exception]] entries are the grandfathered-violation burn-down list:
+# adding one is a reviewable policy change (do it in the same PR as the edge,
+# with a reason); a STALE entry (violation fixed) fails the gate until the
+# entry is deleted — removals are the celebration.
+#
+# Enforced two ways, one parser (quality/arch-layers):
+#   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
+#   sovereign code arch-report           SCIP-OBSERVED symbol references
+
+schema_version = 1
+
+# ── Layers (bottom → top) ────────────────────────────────────────────────────
+
+# Wire protocol + daemon↔package contract + the quality-policy leaf. The
+# liftable crates: budgets pinned exactly in boundary-gate's allowed_leaf_deps.
+[[layer]]
+name = "contract"
+crates = ["oicp-types", "sovereign-contracts", "oicp-client", "arch-layers"]
+
+# The knowledge layer: corpus-engine + its carve-outs. Self-contained by
+# design — neither sovereign nor commonwealth types appear here.
+[[layer]]
+name = "knowledge"
+crates = ["corpus-engine", "corpus-engine-*"]
+
+# Commonwealth mesh internals BELOW the runtime: shared mesh types + state +
+# transport + discovery + scheduling + app platform. These must stay
+# consumable by sovereign-* without dragging the runtime back in.
+[[layer]]
+name = "mesh-foundation"
+crates = [
+    "commonwealth-core",
+    "commonwealth-state",
+    "commonwealth-transport",
+    "commonwealth-discovery",
+    "commonwealth-inference",
+    "commonwealth-knowledge",
+    "commonwealth-app",
+]
+
+# The agent substrate: runtime core, inference, persistence, and the studio
+# package's engine crates (contract-only by design).
+[[layer]]
+name = "runtime"
+crates = [
+    "sovereign-core",
+    "sovereign-inference",
+    "sovereign-store",
+    "sovereign-workflow",
+    "sovereign-tools-base",
+    "sovereign-recipe-author",
+]
+
+# Capabilities over the runtime: tool implementations, work atlas, workflow
+# host, ATOS, eval scorers, meshapp projections, authoring verdicts.
+[[layer]]
+name = "capabilities"
+crates = [
+    "sovereign-tools",
+    "sovereign-work-atlas",
+    "sovereign-workflow-host",
+    "sovereign-atos",
+    "sovereign-eval",
+    "sovereign-meshapp",
+    "sovereign-authoring-harness",
+    "commonwealth-agent-tools",
+]
+
+# Cross-family assembly: the mesh HTTP surface + harnesses + the in-process
+# embed. commonwealth-api's reach into sovereign-* is the KNOWN cross-family
+# debt — grandfathered below, tracked as remediation R6.
+[[layer]]
+name = "mesh-api"
+crates = [
+    "commonwealth-api",
+    "commonwealth-test-harness",
+    "commonwealth-tdd",
+    "sovereign-mesh",
+]
+
+# Binaries and end-user surfaces. Nothing may depend on a host.
+[[layer]]
+name = "hosts"
+crates = [
+    "sovereign-cli*",
+    "sovereign-server",
+    "sovereign-desktop",
+    "sovereign-pipeline",
+    "sovereign-agent-bench",
+    "sovereign-studio",
+    "commonwealth-daemon",
+    "oicp-conformance",
+    "xtask",
+]
+
+# ── Cross-family rules ───────────────────────────────────────────────────────
+
+# The two families meet only at the contract seam (SYSTEM_OVERVIEW §1: "Dep
+# direction is one-way… sovereign-mesh is the only place the two upper
+# projects meet"). sovereign-* reaching DOWN into mesh-foundation is layer-
+# legal; commonwealth-* reaching into sovereign-* is not, except contracts.
+# NOTE: commonwealth-agent-tools + commonwealth-tdd live in sovereign/crates/
+# (naming predates the monorepo merge) — their sovereign deps are exempted
+# here rather than grandfathered, since the crates are sovereign-side in all
+# but name.
+[[forbid]]
+from = "commonwealth-core"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-state"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-transport"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-discovery"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-inference"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-knowledge"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-app"
+to = "sovereign-*"
+reason = "mesh foundation must stay consumable without the agent runtime"
+
+[[forbid]]
+from = "commonwealth-daemon"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "the standalone mesh daemon must not drag the agent runtime"
+
+# The mesh API's reach into the agent runtime is real, load-bearing debt —
+# the OICP-only seam is the goal state (remediation R6). Forbidden so every
+# such edge must be individually grandfathered below and burns down visibly.
+[[forbid]]
+from = "commonwealth-api"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "cross-family reach — the mesh API should meet the runtime at the OICP/contracts seam (R6)"
+
+[[forbid]]
+from = "commonwealth-test-harness"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
+
+# ── Grandfathered violations (the burn-down list) ────────────────────────────
+# Populated by the first layer-gate census, 2026-07-11. Removing an entry —
+# with its edge — is the win condition; see the remediation roadmap (R6).
+
+[[exception]]
+from = "commonwealth-api"
+to = "sovereign-core"
+reason = "the mesh API embeds the agent runtime for in-process serving (frontdoor); goal state is the OICP seam"
+tracking = "R6"
+
+[[exception]]
+from = "commonwealth-api"
+to = "sovereign-tools"
+reason = "tool registry assembly for the embedded runtime; goal state is the OICP seam"
+tracking = "R6"
+
+[[exception]]
+from = "commonwealth-api"
+to = "sovereign-atos"
+reason = "feature-gated (atos) ATOS surface on the mesh API; opt-in experiment, off in default builds"
+tracking = "R6"

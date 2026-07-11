@@ -29,6 +29,8 @@ pub use framework::{
     Framework,
 };
 pub use make_passing::make_failing_tests_pass;
-pub use solve::{solve, SolveArgs, SolveOutcome, SolvePath, SolveRoundObserver, SolveStage, SolveVerb};
+pub use solve::{
+    solve, SolveArgs, SolveOutcome, SolvePath, SolveRoundObserver, SolveStage, SolveVerb,
+};
 pub use split_file::split_file;
 pub use write_failing_test::write_failing_test;

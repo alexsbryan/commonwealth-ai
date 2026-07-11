@@ -3,6 +3,7 @@ name = "sovereign-contracts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 # The daemon↔package contract, extracted from sovereign-core so a package
 # (workflow / recipe authoring) can build against the trait + type vocabulary

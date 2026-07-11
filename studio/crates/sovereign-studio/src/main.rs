@@ -20,7 +20,9 @@ use async_trait::async_trait;
 use sovereign_contracts::error::Result as ToolResult;
 use sovereign_contracts::recipe::testing::{RecipeTestParams, RecipeTester};
 use sovereign_contracts::traits::Tool;
-use sovereign_contracts::types::{Permission, RetryConfig, StepOutput, ToolContext, ToolDescriptor};
+use sovereign_contracts::types::{
+    Permission, RetryConfig, StepOutput, ToolContext, ToolDescriptor,
+};
 use sovereign_recipe_author::HttpRecipeTester;
 use sovereign_tools_base::mcp::auth::McpAuth;
 use sovereign_tools_base::mcp::connect_http_mcp_server;
@@ -89,7 +91,9 @@ async fn main() -> ExitCode {
 
 async fn run_recipe(args: &[String]) -> std::result::Result<ExitCode, String> {
     let Some(sub) = args.first() else {
-        return Err(format!("`recipe` needs a subcommand (validate | test)\n\n{USAGE}"));
+        return Err(format!(
+            "`recipe` needs a subcommand (validate | test)\n\n{USAGE}"
+        ));
     };
     let rest = &args[1..];
     match sub.as_str() {
@@ -143,7 +147,10 @@ async fn recipe_test(args: &[String]) -> std::result::Result<ExitCode, String> {
     let daemon = flags.daemon();
     let sample = flags
         .get("sample")
-        .map(|s| s.parse::<usize>().map_err(|_| "--sample needs a number".to_string()))
+        .map(|s| {
+            s.parse::<usize>()
+                .map_err(|_| "--sample needs a number".to_string())
+        })
         .transpose()?
         .unwrap_or(5);
 
@@ -176,7 +183,14 @@ async fn recipe_test(args: &[String]) -> std::result::Result<ExitCode, String> {
             ext.extraction_rate * 100.0
         );
     }
-    println!("  {}", if outcome.passed { "PASSED" } else { "did not pass" });
+    println!(
+        "  {}",
+        if outcome.passed {
+            "PASSED"
+        } else {
+            "did not pass"
+        }
+    );
     Ok(if outcome.validation.errors.is_empty() {
         ExitCode::SUCCESS
     } else {
@@ -188,7 +202,9 @@ async fn recipe_test(args: &[String]) -> std::result::Result<ExitCode, String> {
 
 async fn run_workflow(args: &[String]) -> std::result::Result<ExitCode, String> {
     let Some(sub) = args.first() else {
-        return Err(format!("`workflow` needs a subcommand (list | run)\n\n{USAGE}"));
+        return Err(format!(
+            "`workflow` needs a subcommand (list | run)\n\n{USAGE}"
+        ));
     };
     let rest = &args[1..];
     match sub.as_str() {
@@ -214,7 +230,10 @@ async fn workflow_run(args: &[String]) -> std::result::Result<ExitCode, String> 
     let daemon = flags.daemon();
     let concurrency = flags
         .get("concurrency")
-        .map(|s| s.parse::<usize>().map_err(|_| "--concurrency needs a number".to_string()))
+        .map(|s| {
+            s.parse::<usize>()
+                .map_err(|_| "--concurrency needs a number".to_string())
+        })
         .transpose()?
         .unwrap_or(4)
         .max(1);
@@ -243,7 +262,8 @@ async fn workflow_run(args: &[String]) -> std::result::Result<ExitCode, String> 
         Vec::new()
     };
 
-    let report = run_workflow_in_process(&wf, &daemon, concurrency, no_cache, params, extra).await?;
+    let report =
+        run_workflow_in_process(&wf, &daemon, concurrency, no_cache, params, extra).await?;
 
     eprintln!(
         "\n— {} — {} ok, {} failed · {} steps ran, {} cached —",
@@ -328,7 +348,11 @@ impl Tool for CanonicalId {
     fn required_permissions(&self) -> Vec<Permission> {
         self.inner.required_permissions()
     }
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> ToolResult<StepOutput> {
+    async fn execute(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> ToolResult<StepOutput> {
         self.inner.execute(params, ctx).await
     }
     fn validate(&self, params: &serde_json::Value) -> ToolResult<()> {
@@ -392,11 +416,15 @@ fn parse_flags(args: &[String]) -> std::result::Result<(Vec<String>, Flags), Str
                 params.insert(k.to_string(), v.to_string());
             } else if PARAM_ALIASES.contains(&name) {
                 i += 1;
-                let v = args.get(i).ok_or_else(|| format!("--{name} needs a value"))?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| format!("--{name} needs a value"))?;
                 params.insert(name.to_string(), v.clone());
             } else if VALUE_FLAGS.contains(&name) {
                 i += 1;
-                let v = args.get(i).ok_or_else(|| format!("--{name} needs a value"))?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| format!("--{name} needs a value"))?;
                 kv.insert(name.to_string(), v.clone());
             } else if BOOL_FLAGS.contains(&name) {
                 present.push(name.to_string());
@@ -409,7 +437,14 @@ fn parse_flags(args: &[String]) -> std::result::Result<(Vec<String>, Flags), Str
         i += 1;
     }
 
-    Ok((positional, Flags { kv, present, params }))
+    Ok((
+        positional,
+        Flags {
+            kv,
+            present,
+            params,
+        },
+    ))
 }
 
 #[cfg(test)]

@@ -1003,8 +1003,7 @@ impl MemoryStore for SqliteStateStore {
             };
             let source_memory_ids_json =
                 serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
-            let embedding_blob: Option<Vec<u8>> =
-                memory.embedding.as_deref().map(encode_f32_vec);
+            let embedding_blob: Option<Vec<u8>> = memory.embedding.as_deref().map(encode_f32_vec);
             conn.execute(
                 "INSERT OR REPLACE INTO memories
                    (id, content, source, confidence, created_at, last_used,
@@ -1345,8 +1344,7 @@ impl MemoryStore for SqliteStateStore {
             .map_err(map_db)?;
         let rows = stmt
             .query_map(rusqlite::params![scope_key], |r| {
-                let parse =
-                    |s: String| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default();
+                let parse = |s: String| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default();
                 let cf_ls_blob: Option<Vec<u8>> = r.get(15)?;
                 Ok(MemRaptorNodeRow {
                     node_id: r.get(0)?,
@@ -1364,7 +1362,10 @@ impl MemoryStore for SqliteStateStore {
                     created_at: r.get(12)?,
                     parent_node_id: r.get(13)?,
                     cf_n: r.get(14)?,
-                    cf_ls: cf_ls_blob.as_deref().map(decode_f32_vec).unwrap_or_default(),
+                    cf_ls: cf_ls_blob
+                        .as_deref()
+                        .map(decode_f32_vec)
+                        .unwrap_or_default(),
                     cf_ss: r.get(16)?,
                     ph_mean: r.get(17)?,
                     ph_cum: r.get(18)?,

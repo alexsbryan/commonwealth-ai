@@ -1711,7 +1711,10 @@ mod tests {
         // reaches the batch-revisions step the test will fail with a
         // non-empty `errors` count. Yield-skip path must short-circuit
         // before any media client touch.
-        let report = watcher.tick(Utc::now(), false).await.expect("tick must succeed");
+        let report = watcher
+            .tick(Utc::now(), false)
+            .await
+            .expect("tick must succeed");
         assert_eq!(report.tracked_total, 0);
         assert_eq!(report.owned_total, 0);
         assert_eq!(report.errors, 0);
@@ -1764,7 +1767,10 @@ mod tests {
             Arc::new(NoopMediaWikiClient),
             NewsworthyConfig::default(),
         );
-        let report = watcher.tick(Utc::now(), false).await.expect("tick must succeed");
+        let report = watcher
+            .tick(Utc::now(), false)
+            .await
+            .expect("tick must succeed");
         // Tick ran the tracked-load path (returned 0). Distinguishes
         // from the yield-skip case which short-circuits before
         // load_tracked.

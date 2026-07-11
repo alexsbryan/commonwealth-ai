@@ -79,11 +79,22 @@ members = [
     # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
     # liftable by any third party certifying their own host.
     "commonwealth/crates/oicp-conformance",
+
+    # Quality program (2026-07-11) — schema + evaluator for the declared
+    # layer map (quality/ARCH_LAYERS.toml). One parser shared by the xtask
+    # layer-gate (Cargo-declared edges) and the code-intel arch_report
+    # (SCIP-observed edges) so the two halves can't drift.
+    "quality/arch-layers",
 ]
 
 [workspace.package]
 version = "0.1.20"
 edition = "2021"
+# Minimum supported Rust version. While every crate is unpublished the pinned
+# toolchain (rust-toolchain.toml) IS the MSRV; the liftable leaf crates
+# (oicp-types, oicp-client, sovereign-contracts, oicp-conformance) inherit
+# this so the contract they export carries an explicit floor.
+rust-version = "1.95"
 # Single license across the monorepo: GNU AGPL-3.0-or-later. Sovereign is
 # source-available for audit; the AGPL network-use clause is the point for a
 # mesh/daemon system. (Pre-monorepo, corpus-engine + commonwealth were
@@ -116,6 +127,21 @@ items_after_test_module = "allow"
 # the value is mutated downstream; the sequential form is clearer.
 field_reassign_with_default = "allow"
 
+# ── Ratcheted lints (quality program, 2026-07-11) ────────────────────────
+# These WARN (never deny) and are enforced as a per-(crate, lint) count
+# ratchet by `cargo xtask lint-gate` against quality/baselines/
+# clippy_counts.tsv: today's counts are grandfathered; a count may never
+# grow. Burn-down happens crate by crate; the baseline shrinks weekly via
+# the --tighten automation.
+dbg_macro = "deny" # zero occurrences at adoption — free to deny outright
+todo = "warn" # 96 sites at adoption
+unwrap_used = "warn" # panic-ratchet (tests exempt via clippy.toml)
+expect_used = "warn" # panic-ratchet (tests exempt via clippy.toml)
+# Function-level complexity budgets — the complement of the arch-gate's
+# 1200-line FILE ceiling. Thresholds in clippy.toml.
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+
 [workspace.dependencies]
 # ── Internal crates (paths are relative to the workspace root) ──────────
 oicp-client = { path = "oicp-client" }
@@ -125,6 +151,7 @@ corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
+arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }

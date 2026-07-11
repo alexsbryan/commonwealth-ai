@@ -434,7 +434,8 @@ pub async fn notebook_list(
                 if !atlas.join("governance_oplog.jsonl").exists() {
                     continue;
                 }
-                if let Ok(view) = corpus_engine::enrichment::GovernanceView::from_atlas_dir(&atlas) {
+                if let Ok(view) = corpus_engine::enrichment::GovernanceView::from_atlas_dir(&atlas)
+                {
                     counts.insert(id, view.open_tensions().count() as u32);
                 }
             }

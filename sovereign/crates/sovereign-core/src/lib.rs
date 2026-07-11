@@ -42,8 +42,18 @@ pub use sovereign_contracts::{
 };
 
 // Re-export commonly used items at the crate root.
+//
+// `traits::*` / `types::*` are BOUNDED globs (quality program R1,
+// 2026-07-11): they alias sovereign-contracts modules whose surfaces are
+// explicit lists (traits.rs declares every item; types/mod.rs re-exports its
+// submodules item-by-item), so this root widens only via a reviewable edit
+// there — with the api-gate snapshot as the net. `model_family` is explicit
+// outright.
 pub use error::{Error, Result};
-pub use model_family::*;
+pub use model_family::{
+    EmbedModelInfo, EmbedQuirks, ModelFamily, ModelQuirks, NormalizationStrategy, PoolingStrategy,
+    RerankQuirks, ThinkingControl,
+};
 pub use registry::ToolRegistry;
 pub use runtime::Runtime;
 pub use skills::SkillRegistry;

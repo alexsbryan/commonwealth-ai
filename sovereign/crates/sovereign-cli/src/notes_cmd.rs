@@ -614,12 +614,22 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     let mut dup_buckets: BTreeMap<String, Vec<&NoteRow>> = BTreeMap::new();
     for n in &notes {
         if is_ephemeral_kind(&n.kind) {
-            let tool = n.symbols.first().cloned().unwrap_or_else(|| "?".to_string());
+            let tool = n
+                .symbols
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "?".to_string());
             let month = n.created_at.get(0..7).unwrap_or("?").to_string();
-            log_map.entry((n.kind.clone(), tool, month)).or_default().push(n);
+            log_map
+                .entry((n.kind.clone(), tool, month))
+                .or_default()
+                .push(n);
         } else {
             // (b) Near-duplicate durable rows: identical normalized content.
-            dup_buckets.entry(normalize_content(&n.content)).or_default().push(n);
+            dup_buckets
+                .entry(normalize_content(&n.content))
+                .or_default()
+                .push(n);
         }
     }
     let mut log_groups: Vec<LogGroup> = log_map
@@ -633,7 +643,13 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
             }
             let mut outcomes: Vec<(String, usize)> = oc.into_iter().collect();
             outcomes.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
-            LogGroup { kind, tool, month, members, outcomes }
+            LogGroup {
+                kind,
+                tool,
+                month,
+                members,
+                outcomes,
+            }
         })
         .collect();
     log_groups.sort_by_key(|g| std::cmp::Reverse(g.members.len()));
@@ -659,10 +675,16 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
             continue;
         }
         for s in &n.symbols {
-            by_anchor.entry((format!("sym:{s}"), n.kind.clone())).or_default().push(n);
+            by_anchor
+                .entry((format!("sym:{s}"), n.kind.clone()))
+                .or_default()
+                .push(n);
         }
         for f in &n.files {
-            by_anchor.entry((format!("file:{f}"), n.kind.clone())).or_default().push(n);
+            by_anchor
+                .entry((format!("file:{f}"), n.kind.clone()))
+                .or_default()
+                .push(n);
         }
     }
     // key = (newer_id, older_id) so a pair sharing two anchors is counted once,
@@ -671,8 +693,11 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     let mut pair_best: BTreeMap<(String, String), PairWitness> = BTreeMap::new();
     for ((anchor, kind), v) in &by_anchor {
         let mut seen = HashSet::new();
-        let mut distinct: Vec<&NoteRow> =
-            v.iter().copied().filter(|n| seen.insert(n.id.clone())).collect();
+        let mut distinct: Vec<&NoteRow> = v
+            .iter()
+            .copied()
+            .filter(|n| seen.insert(n.id.clone()))
+            .collect();
         if distinct.len() < 2 {
             continue;
         }
@@ -685,9 +710,10 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                 continue;
             }
             let key = (newer.id.clone(), older.id.clone());
-            let entry = pair_best
-                .entry(key)
-                .or_insert((0.0, anchor.clone(), kind.clone(), newer, older));
+            let entry =
+                pair_best
+                    .entry(key)
+                    .or_insert((0.0, anchor.clone(), kind.clone(), newer, older));
             if overlap > entry.0 {
                 *entry = (overlap, anchor.clone(), kind.clone(), newer, older);
             }
@@ -726,7 +752,11 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
             if churn.is_empty() {
                 continue;
             }
-            reflection_fixes.push(ReflectionFixCandidate { note: n, anchor, churn });
+            reflection_fixes.push(ReflectionFixCandidate {
+                note: n,
+                anchor,
+                churn,
+            });
         }
         // Most churn first — likeliest to have addressed the limitation.
         reflection_fixes.sort_by_key(|c| std::cmp::Reverse(c.churn.len()));
@@ -744,20 +774,35 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         println!("# {} active notes", notes.len());
         println!(
             "#   by kind:   {}",
-            kind_hist.iter().map(|(k, c)| format!("{k} {c}")).collect::<Vec<_>>().join(" · ")
+            kind_hist
+                .iter()
+                .map(|(k, c)| format!("{k} {c}"))
+                .collect::<Vec<_>>()
+                .join(" · ")
         );
         println!(
             "#   by source: {}",
-            source_hist.iter().map(|(s, c)| format!("{s} {c}")).collect::<Vec<_>>().join(" · ")
+            source_hist
+                .iter()
+                .map(|(s, c)| format!("{s} {c}"))
+                .collect::<Vec<_>>()
+                .join(" · ")
         );
         println!();
 
         let consolidate_count = log_groups.len() + dup_clusters.len();
-        println!("## CONSOLIDATE — {consolidate_count} clusters (many rows → one distilled survivor)");
-        println!("#  --distill previews the survivor the model would write; --apply --yes writes it");
+        println!(
+            "## CONSOLIDATE — {consolidate_count} clusters (many rows → one distilled survivor)"
+        );
+        println!(
+            "#  --distill previews the survivor the model would write; --apply --yes writes it"
+        );
         println!("#  and retires the members with retired_by → survivor (kept + auditable).");
         if !log_groups.is_empty() {
-            println!("#  telemetry log: {log_row_total} rows across {} groups →", log_groups.len());
+            println!(
+                "#  telemetry log: {log_row_total} rows across {} groups →",
+                log_groups.len()
+            );
             for g in log_groups.iter().take(20) {
                 let (lo, hi) = date_span(&g.members);
                 let oc = g
@@ -768,7 +813,10 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                     .join(" · ");
                 println!(
                     "  [{} · {} · {}]  ×{}   ({lo} → {hi})   {oc}",
-                    g.kind, g.tool, g.month, g.members.len()
+                    g.kind,
+                    g.tool,
+                    g.month,
+                    g.members.len()
                 );
             }
             if log_groups.len() > 20 {
@@ -796,8 +844,18 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         println!("#  overlap-gated so unrelated notes sharing one path don't get nominated.");
         for (overlap, anchor, kind, newer, older) in supersede_pairs.iter().take(30) {
             println!("  [{kind}] {anchor}  overlap {:.0}%", overlap * 100.0);
-            println!("       newer {}  ({})  {}", newer.id, newer.created_at, first_line(&newer.content));
-            println!("       older {}  ({})  {}", older.id, older.created_at, first_line(&older.content));
+            println!(
+                "       newer {}  ({})  {}",
+                newer.id,
+                newer.created_at,
+                first_line(&newer.content)
+            );
+            println!(
+                "       older {}  ({})  {}",
+                older.id,
+                older.created_at,
+                first_line(&older.content)
+            );
         }
         if supersede_pairs.len() > 30 {
             println!("  … {} more pairs", supersede_pairs.len() - 30);
@@ -849,13 +907,24 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
 
     // ============ DISTILL / APPLY MODE (LLM) ============
     let writing = mode == Mode::Apply && commit;
-    let base_url = format!("http://localhost:{}", crate::util::urls::DEFAULT_CLIENT_PORT);
+    let base_url = format!(
+        "http://localhost:{}",
+        crate::util::urls::DEFAULT_CLIENT_PORT
+    );
     let client = reqwest::Client::new();
 
     eprintln!(
         "notes rationalize: {} via model '{model}' at {base_url} (limit {limit}/type){}",
-        if writing { "APPLY (writing)" } else { "distill (preview only)" },
-        if mode == Mode::Apply && !commit { " — no --yes, so PREVIEW only" } else { "" }
+        if writing {
+            "APPLY (writing)"
+        } else {
+            "distill (preview only)"
+        },
+        if mode == Mode::Apply && !commit {
+            " — no --yes, so PREVIEW only"
+        } else {
+            ""
+        }
     );
 
     let do_consolidate = only.is_none() || only == Some(MoveKind::Consolidate);
@@ -876,16 +945,20 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                 .join(", ");
             println!(
                 "\n── CONSOLIDATE  [{} · {} · {}]  ×{}  ({lo}→{hi})  {oc}",
-                g.kind, g.tool, g.month, g.members.len()
+                g.kind,
+                g.tool,
+                g.month,
+                g.members.len()
             );
             let (system, user) = consolidate_prompt(g, &lo, &hi);
-            let survivor = match daemon_complete(&client, &base_url, &model, &system, &user, 400, 0.2).await {
-                Ok(s) => s.trim().to_string(),
-                Err(e) => {
-                    eprintln!("   LLM error, skipping group: {e}");
-                    continue;
-                }
-            };
+            let survivor =
+                match daemon_complete(&client, &base_url, &model, &system, &user, 400, 0.2).await {
+                    Ok(s) => s.trim().to_string(),
+                    Err(e) => {
+                        eprintln!("   LLM error, skipping group: {e}");
+                        continue;
+                    }
+                };
             println!("   survivor →\n     {}", survivor.replace('\n', "\n     "));
             if writing {
                 match store
@@ -905,7 +978,10 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                 {
                     Ok(sid) => {
                         wrote += 1;
-                        println!("   wrote survivor {sid}; retiring {} members →", g.members.len());
+                        println!(
+                            "   wrote survivor {sid}; retiring {} members →",
+                            g.members.len()
+                        );
                         for m in &g.members {
                             match store
                                 .retire_by_id(&m.id, &format!("consolidated into {sid}"))
@@ -952,17 +1028,21 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     // ---- SUPERSEDE: LLM adjudicates each pair ----
     if do_supersede {
         for (overlap, anchor, kind, newer, older) in supersede_pairs.iter().take(limit) {
-            println!("\n── SUPERSEDE?  [{kind}] {anchor}  overlap {:.0}%", overlap * 100.0);
+            println!(
+                "\n── SUPERSEDE?  [{kind}] {anchor}  overlap {:.0}%",
+                overlap * 100.0
+            );
             println!("   newer {}  {}", newer.id, first_line(&newer.content));
             println!("   older {}  {}", older.id, first_line(&older.content));
             let (system, user) = supersede_prompt(newer, older);
-            let verdict = match daemon_complete(&client, &base_url, &model, &system, &user, 120, 0.0).await {
-                Ok(s) => s.trim().to_string(),
-                Err(e) => {
-                    eprintln!("   LLM error, skipping pair: {e}");
-                    continue;
-                }
-            };
+            let verdict =
+                match daemon_complete(&client, &base_url, &model, &system, &user, 120, 0.0).await {
+                    Ok(s) => s.trim().to_string(),
+                    Err(e) => {
+                        eprintln!("   LLM error, skipping pair: {e}");
+                        continue;
+                    }
+                };
             let overtakes = verdict.to_uppercase().contains("OVERTAKES");
             println!("   verdict → {verdict}");
             if writing && overtakes {
@@ -998,13 +1078,14 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
                 println!("   churn: {line}");
             }
             let (system, user) = reflection_fix_prompt(c);
-            let verdict = match daemon_complete(&client, &base_url, &model, &system, &user, 120, 0.0).await {
-                Ok(s) => s.trim().to_string(),
-                Err(e) => {
-                    eprintln!("   LLM error, skipping reflection: {e}");
-                    continue;
-                }
-            };
+            let verdict =
+                match daemon_complete(&client, &base_url, &model, &system, &user, 120, 0.0).await {
+                    Ok(s) => s.trim().to_string(),
+                    Err(e) => {
+                        eprintln!("   LLM error, skipping reflection: {e}");
+                        continue;
+                    }
+                };
             // First token is the verdict (prompt forces RESOLVED / STILL-RELEVANT);
             // starts_with avoids matching a trailing "...not resolved".
             let resolved = verdict.trim_start().to_uppercase().starts_with("RESOLVED");
@@ -1190,12 +1271,13 @@ fn git_churn_since(anchor: &str, since_rfc3339: &str) -> Vec<String> {
 /// System + user prompt to rule whether recent code churn resolved a reflection's
 /// flagged limitation.
 fn reflection_fix_prompt(c: &ReflectionFixCandidate) -> (String, String) {
-    let system = "You decide whether recent code changes RESOLVED a limitation an engineer flagged \
+    let system =
+        "You decide whether recent code changes RESOLVED a limitation an engineer flagged \
                   about a tool. Answer with exactly one word — RESOLVED or STILL-RELEVANT — then a \
                   dash and at most 12 words. Default to STILL-RELEVANT unless the commits clearly \
                   address the SPECIFIC limitation described (a commit merely touching the tool is \
                   not enough)."
-        .to_string();
+            .to_string();
     let churn = c
         .churn
         .iter()
@@ -1347,7 +1429,11 @@ fn mentions_supersede(s: &str) -> bool {
 
 /// First non-empty line of a note, truncated for the report.
 fn first_line(s: &str) -> String {
-    let line = s.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    let line = s
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
     if line.chars().count() > 84 {
         format!("{}…", line.chars().take(84).collect::<String>())
     } else {
@@ -1367,7 +1453,8 @@ mod rationalize_tests {
         );
         // Hyphenated outcomes survive (we split on spaced separators, not bare '-').
         assert_eq!(
-            parse_outcome("knowledge_lookup → no-results — retrieval returned 12 chunks").as_deref(),
+            parse_outcome("knowledge_lookup → no-results — retrieval returned 12 chunks")
+                .as_deref(),
             Some("no-results")
         );
         // No arrow → not a tool-decision-shaped note.
@@ -1379,8 +1466,14 @@ mod rationalize_tests {
         let a = token_set("Three or more code-intel calls symbols callers with no build follow-up");
         let reemit = token_set("Three or more code-intel calls symbols with no build follow-up");
         let unrelated = token_set("runtime.rs was decomposed into helper and handler modules");
-        assert!(jaccard(&a, &reemit) >= 0.5, "re-emitted note should score high");
-        assert!(jaccard(&a, &unrelated) < 0.4, "unrelated note should score low");
+        assert!(
+            jaccard(&a, &reemit) >= 0.5,
+            "re-emitted note should score high"
+        );
+        assert!(
+            jaccard(&a, &unrelated) < 0.4,
+            "unrelated note should score low"
+        );
         // Empty vs anything is 0 (no false pairing on contentless notes).
         assert_eq!(jaccard(&HashSet::new(), &a), 0.0);
     }
@@ -1462,7 +1555,11 @@ mod rationalize_tests {
         assert_eq!(reflection_anchor(&helped).as_deref(), Some("lint_status"));
 
         // A prose commit-message reflection isn't JSON → no anchor.
-        let prose = anchor_row(None, &[], "docs(uap): skeptic-proof the demo — reconciled numbers");
+        let prose = anchor_row(
+            None,
+            &[],
+            "docs(uap): skeptic-proof the demo — reconciled numbers",
+        );
         assert!(reflection_anchor(&prose).is_none());
 
         // The explicit column still wins over the body.

@@ -237,8 +237,8 @@ fn map_test_report(r: &corpus_engine::testing::TestReport) -> RecipeTestReport {
 
     // A recipe is "ok" iff it validated clean and produced chunks — the
     // end-to-end signal an author cares about.
-    let ok = r.validation.errors.is_empty()
-        && r.chunking.as_ref().map_or(false, |c| c.total_chunks > 0);
+    let ok =
+        r.validation.errors.is_empty() && r.chunking.as_ref().map_or(false, |c| c.total_chunks > 0);
 
     RecipeTestReport { stages, ok }
 }

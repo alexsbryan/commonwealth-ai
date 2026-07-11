@@ -783,7 +783,10 @@ async fn run_email_import(
 fn email_index_dir() -> Result<PathBuf, String> {
     let home =
         dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
-    Ok(home.join(".sovereign").join("indexes").join(EMAIL_CORPUS_ID))
+    Ok(home
+        .join(".sovereign")
+        .join("indexes")
+        .join(EMAIL_CORPUS_ID))
 }
 
 /// Friendly pre-validation: the path must exist, a folder must not be

@@ -359,9 +359,7 @@ impl ProviderRegistry {
     /// keeps the sensible default.
     pub async fn discover_structured_output(&mut self) {
         for prov in self.providers.values_mut() {
-            if prov.structured_output_configured
-                || prov.kind != ProviderKind::OpenaiCompatible
-            {
+            if prov.structured_output_configured || prov.kind != ProviderKind::OpenaiCompatible {
                 continue;
             }
             let manifest = match sovereign_inference::remote::fetch_manifest(

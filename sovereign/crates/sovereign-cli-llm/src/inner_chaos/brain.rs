@@ -19,7 +19,11 @@ use super::transcript::{render, TranscriptTurn};
 /// Build the completion request for the persona's next user turn.
 /// `turn_index` is zero-based; the first turn gets explicit opener
 /// framing so the brain doesn't invent a prior exchange.
-pub fn brain_request(persona: &Persona, transcript: &[TranscriptTurn], turn_index: usize) -> CompletionRequest {
+pub fn brain_request(
+    persona: &Persona,
+    transcript: &[TranscriptTurn],
+    turn_index: usize,
+) -> CompletionRequest {
     let opener_note = if transcript.is_empty() {
         "\nThis is your OPENING message — nothing has been said yet.\n"
     } else {

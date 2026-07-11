@@ -200,7 +200,9 @@ impl Tool for SolveCancelTool {
     async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = job_id(params)?;
         match self.0.cancel(id) {
-            Some(true) => Ok(StepOutput::Json(json!({ "job_id": id, "state": "cancelled" }))),
+            Some(true) => Ok(StepOutput::Json(
+                json!({ "job_id": id, "state": "cancelled" }),
+            )),
             Some(false) => Ok(StepOutput::Json(json!({
                 "job_id": id,
                 "error": "not_running",

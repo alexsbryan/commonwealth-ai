@@ -323,7 +323,9 @@ async fn op_handler(
         }),
         "document_feed" => {
             let limit = a.limit.unwrap_or(14).clamp(1, 90) as usize;
-            sovereign_meshapp::document_feed(idx, limit).await.map(to_val)
+            sovereign_meshapp::document_feed(idx, limit)
+                .await
+                .map(to_val)
         }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
         "corpus_stats" => Ok(to_val(sovereign_meshapp::corpus_stats(idx))),

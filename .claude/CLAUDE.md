@@ -55,6 +55,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
 5. `drift_posture()` — answer "is the latest drift report still current against the narrative docs?" Returns top critical findings + age. If `status=stale`, the architecture docs have been edited since the last drift run; cite findings carefully. If `status=fresh`, the drift findings (and `drift_findings()` queries below) reflect current state.
 6. `work_in_flight(scope="<task area>", match_mode="file")` — **when the task names a file or symbol**, check whether a peer agent or human on the mesh is already there. A non-empty result means another node is active; surface that to the user before proceeding rather than silently colliding. See the "Coordination — work atlas" section below for grades and what to do on overlap.
+7. `arch_posture()` — **when the task moves boundaries** (new crate deps, splitting/merging modules, touching a hub crate): the architectural headlines (top god-crate, hubs, layer violations, hidden temporal coupling) + whether the persisted report is stale. Refresh with `sovereign code arch-report`; the layer map itself is `quality/ARCH_LAYERS.toml` (ARCH_PRINCIPLES §8.6).
 
 ### Precision tools — use these instead of reading files
 
@@ -92,6 +93,9 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
 | "Is the latest drift report still current?" | `drift_posture()` |
 | "Is anyone else on the mesh touching this?" | `work_in_flight(scope, match_mode)` |
+| "Where is the coupling actually? / which symbols carry it?" | `arch_report(corpus_id, include_git?)` |
+| "Architectural headlines + is the arch report current?" | `arch_posture()` |
+| "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock gates) |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |
 

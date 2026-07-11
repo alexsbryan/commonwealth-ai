@@ -278,7 +278,9 @@ impl Runtime {
                 retry
             };
 
-            let v1 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
+            let v1 =
+                mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen)
+                    .await;
             let mut final_referenced = None;
             if v1.grounded {
                 final_referenced = v1.referenced;
@@ -320,7 +322,13 @@ impl Runtime {
                     }
                 }
                 // Re-verify: the correction is not trusted blindly.
-                let v2 = mg::verify_recall_grounding(self.inference.as_ref(), message, &response_text, seen).await;
+                let v2 = mg::verify_recall_grounding(
+                    self.inference.as_ref(),
+                    message,
+                    &response_text,
+                    seen,
+                )
+                .await;
                 if v2.grounded {
                     final_referenced = v2.referenced;
                 } else {

@@ -4,6 +4,7 @@ description = "Open Inference Capabilities Protocol (OICP) — pure-HTTP client 
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # The contract vocabulary (InferenceProvider, CompletionRequest/Response,

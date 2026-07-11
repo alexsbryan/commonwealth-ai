@@ -66,7 +66,10 @@ async fn http_tester_validate_only_against_live_daemon() {
     );
     // Validate-only never chunks, so the end-to-end `passed`/`ok` verdict is
     // false — that's correct, not a failure of the client.
-    assert!(!outcome.passed, "validate-only should not report end-to-end pass");
+    assert!(
+        !outcome.passed,
+        "validate-only should not report end-to-end pass"
+    );
     eprintln!(
         "live recipe-test OK — errors={} warnings={} extraction={:?} passed={}",
         outcome.validation.errors.len(),

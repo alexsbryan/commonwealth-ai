@@ -105,6 +105,8 @@ pub use code::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
+#[cfg(feature = "treesitter")]
+pub use code::{ArchPostureTool, ArchReportTool};
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::{ArchiveFeatureTool, ProvisionFeatureTool, RecordAtosEventTool};
 #[cfg(feature = "treesitter")]

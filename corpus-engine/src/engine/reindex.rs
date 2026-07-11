@@ -625,11 +625,9 @@ mod tests {
                 {"target_title": "Elsewhere"}
             ]
         }));
-        let meta = rescope_outgoing_links_for_bullet(
-            &section_meta,
-            "At least 12 killed in [[Kyiv]].",
-        )
-        .expect("meta");
+        let meta =
+            rescope_outgoing_links_for_bullet(&section_meta, "At least 12 killed in [[Kyiv]].")
+                .expect("meta");
         let flat: Vec<&str> = meta["outbound_links"]
             .as_array()
             .unwrap()

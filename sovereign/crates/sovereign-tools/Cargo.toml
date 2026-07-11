@@ -39,6 +39,10 @@ corpus-engine-notes = { workspace = true }
 # SCIP call graph types — carved out of corpus-engine 2026-05-23.
 # Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
 corpus-engine-scip = { workspace = true }
+# Layer-map schema/evaluator (quality/ARCH_LAYERS.toml) shared with the
+# xtask layer-gate — one parser, so the declared (CI) and observed
+# (arch_report) enforcement halves can't drift.
+arch-layers = { workspace = true }
 corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
 csv = "1.3"

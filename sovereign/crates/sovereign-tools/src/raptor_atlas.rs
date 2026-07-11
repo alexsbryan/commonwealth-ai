@@ -752,8 +752,8 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 
     // SLOT_POLICY §3 ExtractDurable: RAPTOR cluster summary written to
     // the durable atlas store; corruption outlives the session.
-    let mut req = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
-        .with_output_budget(500);
+    let mut req =
+        CompletionRequest::for_workload(Workload::ExtractDurable, prompt).with_output_budget(500);
     req.temperature = Some(0.2);
     // Grammar constraint preserved verbatim (see the lark_grammar above):
     // enforces the JSON shape AND forbids the `\"` byte inside the summary

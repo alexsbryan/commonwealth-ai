@@ -127,8 +127,7 @@ pub struct KnowledgeViewManager {
     /// Late-installed handles for the memory-pool RAPTOR rebuild
     /// (see [`Self::install_memory_atlas`]). Shared with the
     /// debouncer task; `None` until installed.
-    mem_atlas_handles:
-        Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
+    mem_atlas_handles: Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
     /// Lazy NoteStore handle, opened on first splice. The store
     /// itself is sharable across threads, so we hold an Arc.
     #[cfg(feature = "treesitter")]

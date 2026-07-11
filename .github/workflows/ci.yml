@@ -31,6 +31,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # No-op until a merge queue is enabled in repo settings; landing the
+  # trigger now makes enabling one a settings flip, not a workflow PR.
+  merge_group:
+
+# Cancel superseded runs of the same PR (a force-push mid-run otherwise
+# burns a full workspace build). Never cancel main's post-merge runs —
+# they are the sole writers of the shared caches.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -76,7 +86,10 @@ jobs:
           sudo mount --bind /mnt/target target
           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
           df -h / /mnt | tail -2
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml pins the exact version; the bare install
+      # command reads it (no version strings in workflow YAML).
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: workspace
@@ -181,7 +194,10 @@ jobs:
           sudo mount --bind /mnt/target target
           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
           df -h / /mnt | tail -2
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml pins the exact version; the bare install
+      # command reads it (no version strings in workflow YAML).
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           # Restore the test job's cache read-only: the `dst` feature set
@@ -229,49 +245,76 @@ jobs:
       # makes the cache actually hit.
       - run: cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
 
-  arch-gate:
-    name: Arch-gate (file-size ratchet + §1 doc-contract, advisory)
+  # One runner for every xtask gate (each runs in <1s once xtask compiles;
+  # they used to be two jobs paying the setup twice). Blocking/advisory is
+  # per-STEP: boundary-gate keeps its blocking status; the gates landed by
+  # the quality program (2026-07-11: layer, lock, re-baselined arch) run
+  # advisory for a burn-in month — flip each by deleting its
+  # `continue-on-error` line. Local equivalent: `cargo xtask quality`.
+  gates:
+    name: Gates (boundary / arch / layer / lock)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml pins the exact version; the bare install
+      # command reads it (no version strings in workflow YAML).
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
-          # xtask + its handful of deps only — shared with docs-reconcile's
-          # docs-gate job, which builds the identical tiny tree.
+          # xtask + arch-layers + their handful of deps only — shared with
+          # docs-reconcile's docs-gate job, which builds the identical tree.
           shared-key: xtask
       # No protoc/cmake needed — xtask only reads files. mold + clang ARE
       # needed: compiling xtask itself links through the pinned ld.mold.
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y mold clang
-      - run: cargo run -p xtask -- arch-gate
+      # NOT advisory: a boundary breach means the workflow/recipe package can
+      # no longer be lifted out against just the OICP contract
+      # (studio/BOUNDARY.md).
+      - name: boundary-gate (blocking)
+        run: cargo run -p xtask -- boundary-gate
+      - name: arch-gate (advisory — burn-in until ~2026-08)
+        continue-on-error: true
+        run: cargo run -p xtask -- arch-gate
+      - name: layer-gate (advisory — burn-in until ~2026-08)
+        continue-on-error: true
+        run: cargo run -p xtask -- layer-gate
+      - name: lock-gate (advisory — burn-in until ~2026-08)
+        continue-on-error: true
+        run: cargo run -p xtask -- lock-gate
 
-  boundary-gate:
-    name: Boundary-gate (studio package stays liftable, blocking)
+  # Supply-chain policy (deny.toml). Metadata-only — no compile, ~1 min.
+  # Advisory for its burn-in month (quality program, 2026-07-11), then the
+  # licenses/bans/sources step flips blocking. The advisories lane stays
+  # permanently non-blocking on PRs: it reads the moving RustSec DB, so a
+  # brand-new CVE would otherwise red-X unrelated contributor PRs — the
+  # weekly lane owns paging the owner about those.
+  deny:
+    name: Deny (licenses / bans / sources, advisory)
     runs-on: ubuntu-latest
-    # NOT advisory: a boundary breach means the workflow/recipe package can no
-    # longer be lifted out against just the OICP contract. See studio/BOUNDARY.md.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - name: Licenses, bans, sources (deterministic vs Cargo.lock)
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          # Same tiny xtask tree as arch-gate / docs-gate.
-          shared-key: xtask
-      # No protoc/cmake — xtask only reads files; mold + clang link xtask itself.
-      - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y mold clang
-      - run: cargo run -p xtask -- boundary-gate
+          command: check licenses bans sources
+      - name: Advisories (informational — never blocks)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        continue-on-error: true
+        with:
+          command: check advisories
 
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      # rust-toolchain.toml pins the exact version + carries the rustfmt
+      # component; the bare install command reads it.
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       # BLOCKING since the 2026-07-02 `cargo fmt --all` sweep (404 files,
       # listed in .git-blame-ignore-revs) zeroed the format debt. Runs in
       # seconds (no compilation); a failure diff is now one contributor's
@@ -301,9 +344,10 @@ jobs:
           sudo mount --bind /mnt/target target
           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
           df -h / /mnt | tail -2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      # rust-toolchain.toml pins the exact version + carries the clippy
+      # component; the bare install command reads it.
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           # Reuse the test job's dependency artifacts (clippy re-lints the
@@ -339,4 +383,10 @@ jobs:
             protobuf-compiler libprotobuf-dev cmake mold clang \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
-      - run: cargo clippy --workspace --all-targets
+      # JSON stream feeds the lint-gate count ratchet: per-(crate, lint)
+      # warning counts may never grow vs quality/baselines/clippy_counts.tsv.
+      # Old debt burns down crate by crate; new debt is blocked.
+      - name: Clippy (JSON)
+        run: cargo clippy --workspace --all-targets --message-format=json > /tmp/clippy.json
+      - name: lint-gate (count ratchet)
+        run: cargo run -p xtask -- lint-gate --from /tmp/clippy.json

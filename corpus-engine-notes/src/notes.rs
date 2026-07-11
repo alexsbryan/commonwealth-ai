@@ -2888,7 +2888,11 @@ impl NoteStore {
     pub async fn purge_expired_ephemeral(&self, older_than_secs: i64) -> Result<usize> {
         let now = unix_now();
         let cutoff = now - older_than_secs;
-        let placeholders = EPHEMERAL_KINDS.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let placeholders = EPHEMERAL_KINDS
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
         let sql = format!(
             "UPDATE notes SET tombstone = 1, updated_at = ?
                WHERE kind IN ({placeholders})
@@ -2898,8 +2902,7 @@ impl NoteStore {
         // All-anonymous `?` bound in TEXT order — do NOT mix with `?N`, or the
         // IN-list `?`s collide with the numbered params. Order: updated_at (SET),
         // then each ephemeral kind (IN), then the cutoff (created_at <).
-        let mut binds: Vec<rusqlite::types::Value> =
-            vec![rusqlite::types::Value::Integer(now)];
+        let mut binds: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Integer(now)];
         for k in EPHEMERAL_KINDS {
             binds.push(rusqlite::types::Value::Text((*k).to_string()));
         }
@@ -3953,7 +3956,13 @@ mod tests {
         // Write more than the read_notes 100-row retrieval cap.
         for i in 0..150 {
             store
-                .write_note("tool_decision", &format!("outcome {i}"), vec![], vec![], "s1")
+                .write_note(
+                    "tool_decision",
+                    &format!("outcome {i}"),
+                    vec![],
+                    vec![],
+                    "s1",
+                )
                 .await
                 .unwrap();
         }
@@ -3967,7 +3976,11 @@ mod tests {
 
         // scan_all is the maintenance path — it sees everything.
         let all = store.scan_all(false).await.unwrap();
-        assert_eq!(all.len(), 150, "scan_all must return the whole active store");
+        assert_eq!(
+            all.len(),
+            150,
+            "scan_all must return the whole active store"
+        );
 
         // Retiring a note drops it from the active scan but survives include_retired.
         store
@@ -4014,25 +4027,46 @@ mod tests {
             .unwrap();
 
         // The ephemeral note was auto-downgraded to Session; the durable one kept Global.
-        assert_eq!(store.read_note_by_id(&eph).await.unwrap().unwrap().scope, "session");
-        assert_eq!(store.read_note_by_id(&dur).await.unwrap().unwrap().scope, "global");
+        assert_eq!(
+            store.read_note_by_id(&eph).await.unwrap().unwrap().scope,
+            "session"
+        );
+        assert_eq!(
+            store.read_note_by_id(&dur).await.unwrap().unwrap().scope,
+            "global"
+        );
 
         // notes_delta_since gossips only scope='global' — so the ephemeral note
         // is structurally excluded from the wire, the durable one is included.
         let delta = store.notes_delta_since("peer-x", 100).await.unwrap();
         let ids: Vec<&str> = delta.iter().map(|e| e.note.id.as_str()).collect();
-        assert!(ids.contains(&dur.as_str()), "durable global note must gossip");
-        assert!(!ids.contains(&eph.as_str()), "ephemeral note must NOT gossip");
+        assert!(
+            ids.contains(&dur.as_str()),
+            "durable global note must gossip"
+        );
+        assert!(
+            !ids.contains(&eph.as_str()),
+            "ephemeral note must NOT gossip"
+        );
     }
 
     #[tokio::test]
     async fn purge_expired_ephemeral_sweeps_old_telemetry_only() {
         let store = make_store().await;
         for _ in 0..2 {
-            store.write_note("tool_decision", "x → useful — y", vec![], vec![], "s1").await.unwrap();
+            store
+                .write_note("tool_decision", "x → useful — y", vec![], vec![], "s1")
+                .await
+                .unwrap();
         }
-        store.write_note("checkpoint", "session snapshot", vec![], vec![], "s1").await.unwrap();
-        store.write_note("decision", "keep me forever", vec![], vec![], "s1").await.unwrap();
+        store
+            .write_note("checkpoint", "session snapshot", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        store
+            .write_note("decision", "keep me forever", vec![], vec![], "s1")
+            .await
+            .unwrap();
         assert_eq!(store.scan_all(false).await.unwrap().len(), 4);
 
         // A 30-day TTL sweeps nothing — everything was just written.

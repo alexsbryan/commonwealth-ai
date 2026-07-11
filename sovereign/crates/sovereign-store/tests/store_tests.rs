@@ -1169,7 +1169,10 @@ async fn sqlite_memory_embedding_roundtrip() {
     store.save_memory(&mem).await.unwrap();
 
     let all = store.get_all_memories().await.unwrap();
-    assert!(all[0].embedding.is_none(), "fresh row must carry no embedding");
+    assert!(
+        all[0].embedding.is_none(),
+        "fresh row must carry no embedding"
+    );
 
     store
         .update_memory_embedding("emb1", &[0.25f32, -1.5, 3.0], "test-embedder")
@@ -1252,14 +1255,24 @@ async fn sqlite_mem_raptor_scope_isolation() {
     // Replace semantics: a second save for the same scope drops the
     // prior tree instead of accumulating.
     store
-        .save_mem_raptor_nodes("mem:inner-work", &[mk_mem_node("n3", "mem:inner-work", &["m-d"])])
+        .save_mem_raptor_nodes(
+            "mem:inner-work",
+            &[mk_mem_node("n3", "mem:inner-work", &["m-d"])],
+        )
         .await
         .unwrap();
     let scoped = store.list_mem_raptor_nodes("mem:inner-work").await.unwrap();
     assert_eq!(scoped.len(), 1);
     assert_eq!(scoped[0].node_id, "n3");
     // Other scope untouched.
-    assert_eq!(store.list_mem_raptor_nodes("mem:general").await.unwrap().len(), 1);
+    assert_eq!(
+        store
+            .list_mem_raptor_nodes("mem:general")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 
     store
         .delete_mem_raptor_nodes_for_scope("mem:inner-work")
@@ -1270,5 +1283,12 @@ async fn sqlite_mem_raptor_scope_isolation() {
         .await
         .unwrap()
         .is_empty());
-    assert_eq!(store.list_mem_raptor_nodes("mem:general").await.unwrap().len(), 1);
+    assert_eq!(
+        store
+            .list_mem_raptor_nodes("mem:general")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }

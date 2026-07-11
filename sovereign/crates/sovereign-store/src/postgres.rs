@@ -771,8 +771,10 @@ impl MemoryStore for PostgresStateStore {
             };
             let source_memory_ids_json =
                 serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
-            let embedding_bytes: Option<Vec<u8>> =
-                memory.embedding.as_deref().map(crate::sqlite::encode_f32_vec);
+            let embedding_bytes: Option<Vec<u8>> = memory
+                .embedding
+                .as_deref()
+                .map(crate::sqlite::encode_f32_vec);
             client
                 .execute(
                     "INSERT INTO memories \
@@ -987,7 +989,9 @@ fn pg_row_to_memory(r: &tokio_postgres::Row) -> Memory {
         kind,
         source_memory_ids,
         superseded_by,
-        embedding: embedding_bytes.as_deref().map(crate::sqlite::decode_f32_vec),
+        embedding: embedding_bytes
+            .as_deref()
+            .map(crate::sqlite::decode_f32_vec),
         embedding_model,
     }
 }

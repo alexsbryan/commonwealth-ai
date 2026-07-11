@@ -426,7 +426,10 @@ impl RerankSlot {
         tokens.extend_from_slice(middle_tokens);
         tokens.extend(doc_tokens.iter().take(doc_budget).copied());
         tokens.extend_from_slice(suffix_tokens);
-        if let RerankProtocol::JinaScoreToken { rerank_token_id, .. } = protocol {
+        if let RerankProtocol::JinaScoreToken {
+            rerank_token_id, ..
+        } = protocol
+        {
             tokens.push(LlamaToken(rerank_token_id));
         }
 

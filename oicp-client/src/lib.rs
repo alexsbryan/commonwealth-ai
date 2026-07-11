@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Contract crate: the public surface IS the product — every pub item needs
+// docs (count-ratcheted by lint-gate, never a hard deny).
+#![warn(missing_docs)]
 //! `oicp-client` — a pure-HTTP OICP / OpenAI-compatible inference client.
 //!
 //! `RemoteApiProvider` speaks the OpenAI chat/embeddings wire (plus the OICP

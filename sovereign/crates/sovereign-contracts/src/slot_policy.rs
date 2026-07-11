@@ -12,9 +12,7 @@
 //! sovereign-workflow) are absorbed here; any new mapping site is a
 //! policy violation.
 
-use crate::oicp::{
-    CapabilityHint, InferenceRequirements, LatencyClass, ShardingPrivacy,
-};
+use crate::oicp::{CapabilityHint, InferenceRequirements, LatencyClass, ShardingPrivacy};
 use crate::types::{CompletionRequest, Speed};
 
 /// SLOT_POLICY §3 workload classes. Fieldless — the class, not the
@@ -204,11 +202,41 @@ mod tests {
         use ConstraintExpectation as C;
         use LatencyClass as L;
         let expect: [(Workload, L, Option<u32>, Option<usize>, C); 7] = [
-            (Workload::Route, L::Fast, Some(256), Some(0), C::SchemaRequired),
-            (Workload::Housekeep, L::Fast, Some(512), Some(0), C::SchemaWhereStructured),
-            (Workload::ExtractDurable, L::Normal, None, None, C::SchemaRequired),
-            (Workload::EnrichBulk, L::Fast, Some(512), None, C::GrammarRequired),
-            (Workload::Judge, L::Normal, Some(512), None, C::SchemaRequired),
+            (
+                Workload::Route,
+                L::Fast,
+                Some(256),
+                Some(0),
+                C::SchemaRequired,
+            ),
+            (
+                Workload::Housekeep,
+                L::Fast,
+                Some(512),
+                Some(0),
+                C::SchemaWhereStructured,
+            ),
+            (
+                Workload::ExtractDurable,
+                L::Normal,
+                None,
+                None,
+                C::SchemaRequired,
+            ),
+            (
+                Workload::EnrichBulk,
+                L::Fast,
+                Some(512),
+                None,
+                C::GrammarRequired,
+            ),
+            (
+                Workload::Judge,
+                L::Normal,
+                Some(512),
+                None,
+                C::SchemaRequired,
+            ),
             (Workload::Synthesize, L::Normal, None, None, C::None),
             (Workload::Passthrough, L::Normal, None, None, C::None),
         ];
@@ -227,7 +255,11 @@ mod tests {
         for s in [Speed::Fast, Speed::Medium, Speed::Slow] {
             assert_ne!(speed_to_latency(s), LatencyClass::Extended);
         }
-        for c in [LatencyClass::Fast, LatencyClass::Normal, LatencyClass::Extended] {
+        for c in [
+            LatencyClass::Fast,
+            LatencyClass::Normal,
+            LatencyClass::Extended,
+        ] {
             assert_ne!(latency_to_speed(c), Speed::Medium);
         }
     }
@@ -238,7 +270,10 @@ mod tests {
         assert_eq!(latency_to_speed(speed_to_latency(Speed::Fast)), Speed::Fast);
         assert_eq!(latency_to_speed(speed_to_latency(Speed::Slow)), Speed::Slow);
         // Medium collapses to Slow — that IS the deprecation semantics.
-        assert_eq!(latency_to_speed(speed_to_latency(Speed::Medium)), Speed::Slow);
+        assert_eq!(
+            latency_to_speed(speed_to_latency(Speed::Medium)),
+            Speed::Slow
+        );
         // Extended is declaration-only and collapses on round-trip.
         assert_eq!(
             speed_to_latency(latency_to_speed(LatencyClass::Extended)),

@@ -758,9 +758,22 @@ fn non_name_word(w: &str) -> bool {
 
 pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<String> {
     const ARTIFACT: &[&str] = &[
-        "email", "e-mail", "letter", "memo", "message", "document", "passage",
-        "chapter", "section", "thread", "forwarded", "sent", "wrote", "authored",
-        "signed", "replied",
+        "email",
+        "e-mail",
+        "letter",
+        "memo",
+        "message",
+        "document",
+        "passage",
+        "chapter",
+        "section",
+        "thread",
+        "forwarded",
+        "sent",
+        "wrote",
+        "authored",
+        "signed",
+        "replied",
     ];
     let claim = strip_citation_spans(claim);
     // Markdown headings / bold-only lines are TOPIC LABELS in Title Case
@@ -829,10 +842,27 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
 /// pass through untouched.
 pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Option<String> {
     const ARTIFACT: &[&str] = &[
-        "file", "module", "function", "struct", "enum", "variant", "field",
-        "defined", "definition", "values", "type", "method", "class",
-        "constant", "config", "material", "corpus", "notes", "document",
-        "codebase", "snippet",
+        "file",
+        "module",
+        "function",
+        "struct",
+        "enum",
+        "variant",
+        "field",
+        "defined",
+        "definition",
+        "values",
+        "type",
+        "method",
+        "class",
+        "constant",
+        "config",
+        "material",
+        "corpus",
+        "notes",
+        "document",
+        "codebase",
+        "snippet",
     ];
     // [Source: …] labels are the snap pass's jurisdiction — see
     // strip_citation_spans.
@@ -846,13 +876,13 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
         let snake = t.contains('_')
             && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
             && t.chars().any(|c| c.is_ascii_alphabetic());
-        let file = t
-            .rsplit_once('.')
-            .is_some_and(|(stem, ext)| {
-                !stem.is_empty()
-                    && ["rs", "py", "js", "ts", "toml", "md", "json", "yaml", "yml", "txt", "mjs"]
-                        .contains(&ext)
-            });
+        let file = t.rsplit_once('.').is_some_and(|(stem, ext)| {
+            !stem.is_empty()
+                && [
+                    "rs", "py", "js", "ts", "toml", "md", "json", "yaml", "yml", "txt", "mjs",
+                ]
+                .contains(&ext)
+        });
         let camel_humps = {
             let mut humps = 0;
             let mut prev_lower = false;
@@ -867,7 +897,8 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
         (snake || file || camel_humps) && t.len() >= 6
     }
     for raw in claim.split(|c: char| c.is_whitespace() || "()[]{}<>,;:\"'`*".contains(c)) {
-        let mut t = raw.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'));
+        let mut t =
+            raw.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'));
         // A sentence-final period is not part of the identifier; real file
         // extensions keep their interior dot ("design_signals.rs").
         while let Some(stripped) = t.strip_suffix('.') {

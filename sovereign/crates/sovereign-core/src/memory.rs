@@ -293,9 +293,9 @@ pub async fn recall_relevant_memories_embed_scored(
                 return None;
             }
             let leaf = cosine_similarity(&query_emb, &emb?);
-            let sim = tier_boost
-                .get(&m.id)
-                .map_or(leaf, |node_sim| leaf.max(alpha * node_sim + (1.0 - alpha) * leaf));
+            let sim = tier_boost.get(&m.id).map_or(leaf, |node_sim| {
+                leaf.max(alpha * node_sim + (1.0 - alpha) * leaf)
+            });
             Some((sim, m))
         })
         .collect();
@@ -359,8 +359,8 @@ pub async fn recall_relevant_memories_embed_reranked(
     // ~420ms per recall (~10× the witness recall budget). The seam
     // stays for bench measurement of future rerankers; production
     // memory recall stays bi-encoder until one measures well here.
-    let rerank_enabled = rerank_fn.is_some()
-        && std::env::var("SOVEREIGN_MEM_RERANK").map_or(false, |v| v == "1");
+    let rerank_enabled =
+        rerank_fn.is_some() && std::env::var("SOVEREIGN_MEM_RERANK").map_or(false, |v| v == "1");
     let Some(rerank_fn) = rerank_fn.filter(|_| rerank_enabled) else {
         return recall_relevant_memories_embed(inference, store, scope, query, limit).await;
     };
@@ -370,8 +370,7 @@ pub async fn recall_relevant_memories_embed_reranked(
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(MEM_RERANK_POOL_DEFAULT)
         .max(limit);
-    let pool =
-        recall_relevant_memories_embed(inference, store, scope, query, pool_size).await?;
+    let pool = recall_relevant_memories_embed(inference, store, scope, query, pool_size).await?;
     if pool.len() <= 1 {
         return Ok(pool.into_iter().take(limit).collect());
     }
@@ -381,8 +380,7 @@ pub async fn recall_relevant_memories_embed_reranked(
     match rerank_fn(query, docs).await {
         Ok(scores) if scores.len() == pool.len() => {
             let mut scored: Vec<(f32, Memory)> = scores.into_iter().zip(pool).collect();
-            scored
-                .sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
             let top: Vec<Memory> = scored.into_iter().take(limit).map(|(_, m)| m).collect();
             tracing::debug!(
                 pool = top.len().max(limit),

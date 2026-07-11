@@ -676,11 +676,11 @@ mod tests {
 
         // (privacy, latency, expected)
         let cases: &[(ShardingPrivacy, LatencyClass, bool)] = &[
-            (mesh, LatencyClass::Fast, false), // latency gate closes it
-            (mesh, LatencyClass::Normal, true), // both gates open
-            (mesh, LatencyClass::Extended, true), // both gates open
-            (local, LatencyClass::Fast, false), // both gates closed
-            (local, LatencyClass::Normal, false), // privacy gate closes it
+            (mesh, LatencyClass::Fast, false),      // latency gate closes it
+            (mesh, LatencyClass::Normal, true),     // both gates open
+            (mesh, LatencyClass::Extended, true),   // both gates open
+            (local, LatencyClass::Fast, false),     // both gates closed
+            (local, LatencyClass::Normal, false),   // privacy gate closes it
             (local, LatencyClass::Extended, false), // privacy gate closes it
         ];
         for (privacy, latency, expected) in cases {

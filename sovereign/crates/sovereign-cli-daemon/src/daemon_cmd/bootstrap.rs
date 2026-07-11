@@ -798,7 +798,10 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
             .and_then(|s| s.parse().ok())
             .unwrap_or(30);
         if ttl_days <= 0 {
-            tracing::info!(target = "notes", "notes: ephemeral TTL sweep disabled (ttl_days<=0)");
+            tracing::info!(
+                target = "notes",
+                "notes: ephemeral TTL sweep disabled (ttl_days<=0)"
+            );
             return;
         }
         let ttl_secs = ttl_days * 86_400;

@@ -109,15 +109,13 @@ impl DocumentTool {
 
                 // SLOT_POLICY §3 Synthesize: final reduce composing a
                 // coherent document summary/analysis for the user.
-                let mut request = CompletionRequest::for_workload(
-                    Workload::Synthesize,
-                    reduce_prompt,
-                )
-                .with_system(
-                    "You are synthesizing a final summary from section summaries. \
+                let mut request =
+                    CompletionRequest::for_workload(Workload::Synthesize, reduce_prompt)
+                        .with_system(
+                            "You are synthesizing a final summary from section summaries. \
                      Produce a coherent, comprehensive result.",
-                )
-                .with_output_budget(1024);
+                        )
+                        .with_output_budget(1024);
                 request.temperature = Some(0.5);
 
                 let response = self.inference.complete(&request).await?;

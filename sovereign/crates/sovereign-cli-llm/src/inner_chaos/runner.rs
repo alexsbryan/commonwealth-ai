@@ -75,7 +75,9 @@ pub async fn run(opts: &RunOptions) -> Result<ChaosReport, String> {
     if let Some(filter) = opts.persona_filter.as_deref() {
         personas.retain(|p| p.id == filter);
         if personas.is_empty() {
-            return Err(format!("--persona `{filter}` matched no persona in the bank"));
+            return Err(format!(
+                "--persona `{filter}` matched no persona in the bank"
+            ));
         }
     }
     let memories = load_memories(&bench_dir.join("memories.toml"))?;
@@ -178,7 +180,13 @@ async fn run_thread(
     {
         Ok(v) => v,
         Err(e) => {
-            let record = error_record(thread_idx, 0, persona, &conv_id, format!("session setup failed: {e}"));
+            let record = error_record(
+                thread_idx,
+                0,
+                persona,
+                &conv_id,
+                format!("session setup failed: {e}"),
+            );
             push(journal, records, record);
             return;
         }
@@ -196,13 +204,27 @@ async fn run_thread(
     // numbers, so it is left as an explicit follow-up, not a silent
     // change here.
     if let Err(e) = seed_memories(session.store.as_ref(), memories, None).await {
-        let record = error_record(thread_idx, 0, persona, &conv_id, format!("memory-seed failed: {e}"));
+        let record = error_record(
+            thread_idx,
+            0,
+            persona,
+            &conv_id,
+            format!("memory-seed failed: {e}"),
+        );
         push(journal, records, record);
         return;
     }
 
-    let brain_inference = pinned_or_shared(&session, opts.brain_model.as_ref(), opts.chat_model.as_ref());
-    let judge_inference = pinned_or_shared(&session, opts.judge_model.as_ref(), opts.chat_model.as_ref());
+    let brain_inference = pinned_or_shared(
+        &session,
+        opts.brain_model.as_ref(),
+        opts.chat_model.as_ref(),
+    );
+    let judge_inference = pinned_or_shared(
+        &session,
+        opts.judge_model.as_ref(),
+        opts.chat_model.as_ref(),
+    );
 
     let mut transcript: Vec<TranscriptTurn> = Vec::new();
     for turn_idx in 0..persona.turns {
@@ -276,7 +298,11 @@ async fn run_thread(
                 }
             };
             let failed = verdict.is_none();
-            (verdict, failed, Some(judge_started.elapsed().as_millis() as u64))
+            (
+                verdict,
+                failed,
+                Some(judge_started.elapsed().as_millis() as u64),
+            )
         } else {
             (None, false, None)
         };
@@ -289,9 +315,15 @@ async fn run_thread(
                 v.red_lines
             ),
             None if judge_failed => {
-                eprintln!("  turn {turn_no}/{}: JUDGE FAILED ({runtime_ms}ms)", persona.turns)
+                eprintln!(
+                    "  turn {turn_no}/{}: JUDGE FAILED ({runtime_ms}ms)",
+                    persona.turns
+                )
             }
-            None => eprintln!("  turn {turn_no}/{}: unjudged ({runtime_ms}ms)", persona.turns),
+            None => eprintln!(
+                "  turn {turn_no}/{}: unjudged ({runtime_ms}ms)",
+                persona.turns
+            ),
         }
 
         let record = TurnRecord {
@@ -300,7 +332,10 @@ async fn run_thread(
             turn: turn_no,
             persona: persona.id.clone(),
             conv_id: conv_id.clone(),
-            user: transcript.last().map(|t| t.text.clone()).unwrap_or_default(),
+            user: transcript
+                .last()
+                .map(|t| t.text.clone())
+                .unwrap_or_default(),
             response: response_text.clone(),
             verdict,
             judge_failed,

@@ -304,7 +304,11 @@ async fn document_feed_orders_docs_desc_and_parses_links() {
     index
         .insert_chunks(&[
             mk("older day bullet", "2026-07-05", r#"["Kyiv"]"#),
-            mk("newer day bullet one", "2026-07-06", r#"["Gaza war","Benjamin Netanyahu"]"#),
+            mk(
+                "newer day bullet one",
+                "2026-07-06",
+                r#"["Gaza war","Benjamin Netanyahu"]"#,
+            ),
             mk("newer day bullet two", "2026-07-06", r#"[]"#),
         ])
         .await
@@ -321,7 +325,10 @@ async fn document_feed_orders_docs_desc_and_parses_links() {
     );
     assert!(feed.docs[0].chunks[1].outbound_links.is_empty());
     assert_eq!(feed.docs[1].source_doc_id, "2026-07-05");
-    assert_eq!(feed.docs[1].chunks[0].outbound_links, vec!["Kyiv".to_string()]);
+    assert_eq!(
+        feed.docs[1].chunks[0].outbound_links,
+        vec!["Kyiv".to_string()]
+    );
 
     // limit_docs truncates from the newest end.
     let latest_only = document_feed(dir.path(), 1).await.expect("feed");

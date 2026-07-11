@@ -168,6 +168,9 @@ mod tests {
         assert_eq!(pw.candidate_test_timeout.as_secs(), 300);
         let unit = trial_config_for_command("pytest -q");
         assert!(!unit.serial_candidates);
-        assert_eq!(unit.candidates_per_round, TrialConfig::default().candidates_per_round);
+        assert_eq!(
+            unit.candidates_per_round,
+            TrialConfig::default().candidates_per_round
+        );
     }
 }

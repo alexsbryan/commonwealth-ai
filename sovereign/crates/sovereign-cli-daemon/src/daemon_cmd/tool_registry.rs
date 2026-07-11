@@ -81,6 +81,24 @@ pub(super) async fn build_tool_registry(
     // Capability map — derived "what the codebase does" overview. Resolves
     // the per-corpus SCIP graph itself (same indexes dir the runtime uses).
     tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
+    // Architecture observability (quality program) — the SCIP-observed half
+    // of the layer-map story (arch_report) + the cheap persisted-posture
+    // reader (arch_posture). The workspace root unlocks the declared-deps /
+    // layer-map / filesystem sections and the posture freshness check.
+    {
+        let mut tool = sovereign_tools::ArchReportTool::new();
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_project_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
+    {
+        let mut tool = sovereign_tools::ArchPostureTool::new();
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_project_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
 
     // Deterministic land-value-tax analytics over parcel corpora
     // (e.g. sf-assessor-roll) — pre-cited figures for the "no

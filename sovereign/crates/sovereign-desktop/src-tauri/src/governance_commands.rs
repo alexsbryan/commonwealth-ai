@@ -158,11 +158,7 @@ fn scope_names(corpus_id: &str) -> HashMap<String, String> {
 /// rebuild is idempotent.
 fn docs_changed_since_build(corpus_id: &str) -> bool {
     let root = index_root(corpus_id);
-    let mtime = |p: PathBuf| {
-        std::fs::metadata(p)
-            .and_then(|m| m.modified())
-            .ok()
-    };
+    let mtime = |p: PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     let (Some(docs), Some(atoms)) = (
         mtime(root.join("chapters.json")),
         mtime(root.join("atlas").join("atoms.json")),
@@ -304,8 +300,13 @@ pub async fn governance_get_view(
 fn tension_endpoints(
     view: &GovernanceView,
     tension_id: &str,
-) -> Result<(corpus_engine::enrichment::atlas::AtomId, corpus_engine::enrichment::atlas::AtomId), String>
-{
+) -> Result<
+    (
+        corpus_engine::enrichment::atlas::AtomId,
+        corpus_engine::enrichment::atlas::AtomId,
+    ),
+    String,
+> {
     view.tensions
         .iter()
         .find(|t| t.id.as_str() == tension_id)
@@ -375,7 +376,12 @@ pub async fn governance_resolve(
     rationale: String,
 ) -> Result<Vec<String>, String> {
     tokio::task::spawn_blocking(move || {
-        resolve_at(&atlas_dir(&corpus_id), &tension_id, &keep_rule_id, &rationale)
+        resolve_at(
+            &atlas_dir(&corpus_id),
+            &tension_id,
+            &keep_rule_id,
+            &rationale,
+        )
     })
     .await
     .map_err(|e| format!("join: {e}"))?
@@ -521,8 +527,12 @@ pub async fn governance_undo_tension(
 /// rules the oplog already governs, so it is safe to re-run after every
 /// rebuild. Returns the count of newly-asserted rules.
 fn seed_at(dir: &Path) -> Result<u32, String> {
-    let atoms = read_atlas_atoms(dir)
-        .map_err(|e| format!("reading atoms.json at {}: {e} — enrich the corpus first", dir.display()))?;
+    let atoms = read_atlas_atoms(dir).map_err(|e| {
+        format!(
+            "reading atoms.json at {}: {e} — enrich the corpus first",
+            dir.display()
+        )
+    })?;
     let oplog = GovernanceOplog::new(dir);
     let already: std::collections::HashSet<_> = oplog
         .read_all()
@@ -829,7 +839,11 @@ mod tests {
     /// The current disposition tag for a tension found by its crux text.
     fn disposition_by_why(dir: &Path, why: &str) -> String {
         let v = view(dir);
-        let t = v.tensions.iter().find(|t| t.why.as_deref() == Some(why)).unwrap();
+        let t = v
+            .tensions
+            .iter()
+            .find(|t| t.why.as_deref() == Some(why))
+            .unwrap();
         serde_json::to_value(&t.disposition).unwrap()["disposition"]
             .as_str()
             .unwrap()
@@ -850,22 +864,70 @@ mod tests {
     // cross-section conflicts plus one lexical decoy.
     fn cycle1_rules() -> Vec<Rule> {
         vec![
-            Rule { idx: 1, text: "Quiet hours begin at 11 PM every night.", section: "sec_charter_ii" },
-            Rule { idx: 2, text: "Quiet hours begin at 10 PM on weeknights.", section: "sec_2026_02_10" },
-            Rule { idx: 3, text: "Guests may stay up to two nights.", section: "sec_charter_i" },
-            Rule { idx: 4, text: "No overnight guests are permitted.", section: "sec_2026_03_14" },
-            Rule { idx: 5, text: "Whoever cooks cleans the kitchen.", section: "sec_charter_iii" },
-            Rule { idx: 6, text: "The cook is excused from kitchen cleanup.", section: "sec_2026_04_02" },
-            Rule { idx: 7, text: "Guests may park on the street.", section: "sec_2026_03_28" },
+            Rule {
+                idx: 1,
+                text: "Quiet hours begin at 11 PM every night.",
+                section: "sec_charter_ii",
+            },
+            Rule {
+                idx: 2,
+                text: "Quiet hours begin at 10 PM on weeknights.",
+                section: "sec_2026_02_10",
+            },
+            Rule {
+                idx: 3,
+                text: "Guests may stay up to two nights.",
+                section: "sec_charter_i",
+            },
+            Rule {
+                idx: 4,
+                text: "No overnight guests are permitted.",
+                section: "sec_2026_03_14",
+            },
+            Rule {
+                idx: 5,
+                text: "Whoever cooks cleans the kitchen.",
+                section: "sec_charter_iii",
+            },
+            Rule {
+                idx: 6,
+                text: "The cook is excused from kitchen cleanup.",
+                section: "sec_2026_04_02",
+            },
+            Rule {
+                idx: 7,
+                text: "Guests may park on the street.",
+                section: "sec_2026_03_28",
+            },
         ]
     }
     fn cycle1_conflicts() -> Vec<Conflict> {
         vec![
-            Conflict { edge: 1, a: 1, b: 2, why: "When do quiet hours begin now?" },
-            Conflict { edge: 2, a: 3, b: 4, why: "May a guest stay overnight?" },
-            Conflict { edge: 3, a: 5, b: 6, why: "Who cleans the kitchen?" },
+            Conflict {
+                edge: 1,
+                a: 1,
+                b: 2,
+                why: "When do quiet hours begin now?",
+            },
+            Conflict {
+                edge: 2,
+                a: 3,
+                b: 4,
+                why: "May a guest stay overnight?",
+            },
+            Conflict {
+                edge: 3,
+                a: 5,
+                b: 6,
+                why: "Who cleans the kitchen?",
+            },
             // Decoy: lexical overlap on "guests", not a real conflict.
-            Conflict { edge: 4, a: 3, b: 7, why: "Where do guests park?" },
+            Conflict {
+                edge: 4,
+                a: 3,
+                b: 7,
+                why: "Where do guests park?",
+            },
         ]
     }
 
@@ -902,7 +964,10 @@ mod tests {
         // ── Triage + meeting: dismiss the decoy, resolve one, accept one ──
         let decoy = tension_id_by_why(dir, "Where do guests park?");
         dismiss_at(dir, &decoy, Some("parking vs stays — not a conflict")).unwrap();
-        assert_eq!(disposition_by_why(dir, "Where do guests park?"), "dismissed");
+        assert_eq!(
+            disposition_by_why(dir, "Where do guests park?"),
+            "dismissed"
+        );
         assert_eq!(open_count(dir), 3);
 
         // Resolve quiet-hours by keeping the 10 PM weeknight decision.
@@ -911,26 +976,49 @@ mod tests {
             let v = view(dir);
             let t = v.tensions.iter().find(|t| t.id.as_str() == quiet).unwrap();
             // Keep whichever side is the 10 PM rule.
-            if t.text_a.contains("10 PM") { t.rule_a.clone() } else { t.rule_b.clone() }
+            if t.text_a.contains("10 PM") {
+                t.rule_a.clone()
+            } else {
+                t.rule_b.clone()
+            }
         };
         resolve_at(dir, &quiet, keep.as_str(), "House meeting — kept 10 PM").unwrap();
-        assert_eq!(disposition_by_why(dir, "When do quiet hours begin now?"), "resolved");
+        assert_eq!(
+            disposition_by_why(dir, "When do quiet hours begin now?"),
+            "resolved"
+        );
         assert_eq!(open_count(dir), 2);
 
         // Accept the kitchen conflict as a tolerated contradiction.
         let kitchen = tension_id_by_why(dir, "Who cleans the kitchen?");
         accept_at(dir, &kitchen, "Both stand — cook's choice by custom").unwrap();
-        assert_eq!(disposition_by_why(dir, "Who cleans the kitchen?"), "accepted");
-        assert_eq!(open_count(dir), 1, "only the guest-overnight conflict remains open");
+        assert_eq!(
+            disposition_by_why(dir, "Who cleans the kitchen?"),
+            "accepted"
+        );
+        assert_eq!(
+            open_count(dir),
+            1,
+            "only the guest-overnight conflict remains open"
+        );
 
         // Empty rationale on accept is refused (friction = authority).
         assert!(accept_at(dir, &kitchen, "   ").is_err());
 
         // ── Undo round-trips: reopen the resolved conflict, then redo ──
         undo_at(dir, &quiet).unwrap();
-        assert_eq!(disposition_by_why(dir, "When do quiet hours begin now?"), "open");
+        assert_eq!(
+            disposition_by_why(dir, "When do quiet hours begin now?"),
+            "open"
+        );
         assert_eq!(open_count(dir), 2, "undo reopened quiet-hours");
-        resolve_at(dir, &quiet, keep.as_str(), "House meeting — kept 10 PM (redo)").unwrap();
+        resolve_at(
+            dir,
+            &quiet,
+            keep.as_str(),
+            "House meeting — kept 10 PM (redo)",
+        )
+        .unwrap();
         assert_eq!(open_count(dir), 1);
 
         // ── Cycle 2: WEEKLY REBUILD. Same rule texts (→ same content-hash
@@ -945,11 +1033,36 @@ mod tests {
         // Re-detect the same four conflicts under NEW edge numbers (11..14),
         // and surface the new 9:30-vs-10 conflict (edge 15).
         let conflicts2 = vec![
-            Conflict { edge: 11, a: 1, b: 2, why: "When do quiet hours begin now?" },
-            Conflict { edge: 12, a: 3, b: 4, why: "May a guest stay overnight?" },
-            Conflict { edge: 13, a: 5, b: 6, why: "Who cleans the kitchen?" },
-            Conflict { edge: 14, a: 3, b: 7, why: "Where do guests park?" },
-            Conflict { edge: 15, a: 2, b: 8, why: "Is it 10 PM or 9:30 PM on weeknights?" },
+            Conflict {
+                edge: 11,
+                a: 1,
+                b: 2,
+                why: "When do quiet hours begin now?",
+            },
+            Conflict {
+                edge: 12,
+                a: 3,
+                b: 4,
+                why: "May a guest stay overnight?",
+            },
+            Conflict {
+                edge: 13,
+                a: 5,
+                b: 6,
+                why: "Who cleans the kitchen?",
+            },
+            Conflict {
+                edge: 14,
+                a: 3,
+                b: 7,
+                why: "Where do guests park?",
+            },
+            Conflict {
+                edge: 15,
+                a: 2,
+                b: 8,
+                why: "Is it 10 PM or 9:30 PM on weeknights?",
+            },
         ];
         write_atlas(dir, &rules2, &conflicts2);
         let seeded2 = post_build_at(dir, corpus).unwrap();
@@ -961,15 +1074,25 @@ mod tests {
             "resolved",
             "the resolved conflict stays resolved across the edge-id renumber"
         );
-        assert_eq!(disposition_by_why(dir, "Who cleans the kitchen?"), "accepted");
-        assert_eq!(disposition_by_why(dir, "Where do guests park?"), "dismissed");
+        assert_eq!(
+            disposition_by_why(dir, "Who cleans the kitchen?"),
+            "accepted"
+        );
+        assert_eq!(
+            disposition_by_why(dir, "Where do guests park?"),
+            "dismissed"
+        );
 
         // The genuinely new conflict is open — and it is the ONLY open one.
         assert_eq!(
             disposition_by_why(dir, "Is it 10 PM or 9:30 PM on weeknights?"),
             "open"
         );
-        assert_eq!(open_count(dir), 2, "new 9:30 conflict + the never-adjudicated overnight one");
+        assert_eq!(
+            open_count(dir),
+            2,
+            "new 9:30 conflict + the never-adjudicated overnight one"
+        );
 
         // No false "needs attention": a valid pair re-detected under a new
         // edge id is normal weekly variance, not drift.
@@ -1010,7 +1133,10 @@ mod tests {
                 std::fs::copy(tmp.path().join(f), out.join(f))
                     .unwrap_or_else(|e| panic!("copying {f}: {e}"));
             }
-            eprintln!("[regen] wrote governance real-mode fixture → {}", out.display());
+            eprintln!(
+                "[regen] wrote governance real-mode fixture → {}",
+                out.display()
+            );
             return;
         }
 
@@ -1028,9 +1154,17 @@ mod tests {
         }
         let view = GovernanceView::from_atlas_dir(&out).unwrap();
         assert_eq!(view.active_rules().count(), 7, "7 seeded rules");
-        assert_eq!(view.open_tensions().count(), 4, "3 conflicts + 1 decoy, all open");
+        assert_eq!(
+            view.open_tensions().count(),
+            4,
+            "3 conflicts + 1 decoy, all open"
+        );
         // The four planted cruxes the spec drives against, by text.
-        let cruxes: Vec<&str> = view.tensions.iter().filter_map(|t| t.why.as_deref()).collect();
+        let cruxes: Vec<&str> = view
+            .tensions
+            .iter()
+            .filter_map(|t| t.why.as_deref())
+            .collect();
         for want in [
             "When do quiet hours begin now?",
             "May a guest stay overnight?",

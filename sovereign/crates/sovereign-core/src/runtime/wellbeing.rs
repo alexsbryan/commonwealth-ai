@@ -521,8 +521,12 @@ mod tests {
 
     #[test]
     fn lexicon_catches_explicit_disclosures() {
-        assert!(lexical_crisis_signal("I keep thinking about killing myself."));
-        assert!(lexical_crisis_signal("Honestly everyone would be better off without me"));
+        assert!(lexical_crisis_signal(
+            "I keep thinking about killing myself."
+        ));
+        assert!(lexical_crisis_signal(
+            "Honestly everyone would be better off without me"
+        ));
         assert!(lexical_crisis_signal("I just want to die."));
         assert!(lexical_crisis_signal(
             "I'm going to make myself stop breathing"
@@ -536,7 +540,9 @@ mod tests {
             "I'm thinking about ending things with Sam."
         ));
         assert!(!lexical_crisis_signal("Everything feels pointless lately."));
-        assert!(!lexical_crisis_signal("I'm so tired of pretending to be fine."));
+        assert!(!lexical_crisis_signal(
+            "I'm so tired of pretending to be fine."
+        ));
     }
 
     #[test]
@@ -600,7 +606,10 @@ mod tests {
             "continued template must quote the user's current words"
         );
         // Plan + tonight = acute tier: the emergency line must appear.
-        assert!(text.contains("911"), "acute signals must add the emergency line");
+        assert!(
+            text.contains("911"),
+            "acute signals must add the emergency line"
+        );
     }
 
     #[test]
@@ -663,7 +672,10 @@ mod tests {
             "I'm right here with you, and what you just said matters.".to_string(),
             "The weight is unbearable.",
         );
-        assert!(out.contains("988"), "floor must append a resource when missing");
+        assert!(
+            out.contains("988"),
+            "floor must append a resource when missing"
+        );
     }
 
     #[test]
