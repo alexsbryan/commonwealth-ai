@@ -516,6 +516,58 @@ pub(crate) struct GenerationOutcome {
     pub finish_reason: FinishReason,
 }
 
+/// Instrumentation for the spontaneous mid-word EOS class (persona-QA
+/// 2026-07-10: answers shipping "compression-t" / mid-`[Source:` tails —
+/// every observed cut was finish=stop, none finish=length). Logs a WARN
+/// receipt when a generation STOPS on a mid-word tail well under its token
+/// budget, labeled by loop, so soak runs can attribute frequency and path
+/// (mtp vs plain) BEFORE any guard is designed. Log-only; no behavior
+/// change. Some noise is acceptable — answers legitimately ending on a bare
+/// word without punctuation will fire; the tail in the log adjudicates.
+pub(crate) fn log_midword_stop(
+    loop_label: &str,
+    model_id: &str,
+    outcome: &GenerationOutcome,
+    request: &CompletionRequest,
+) {
+    if !matches!(outcome.finish_reason, FinishReason::Stop) {
+        return;
+    }
+    let text = outcome.text.trim_end();
+    if text.chars().count() < 80 {
+        return; // short answers end tersely all the time; not the class
+    }
+    let Some(last) = text.chars().last() else {
+        return;
+    };
+    if !(last.is_alphabetic() || last == '-') {
+        return;
+    }
+    // Near-budget stops are the LENGTH class wearing a stop mask; the
+    // spontaneous-EOS class fires with plenty of budget left.
+    if let Some(max) = request.max_tokens {
+        if outcome.completion_tokens as u32 >= (max as u32).saturating_mul(9) / 10 {
+            return;
+        }
+    }
+    let tail: String = text
+        .chars()
+        .rev()
+        .take(48)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    tracing::warn!(
+        target: "midword_stop",
+        loop_label,
+        model_id = %model_id,
+        completion_tokens = outcome.completion_tokens,
+        tail = %tail,
+        "generation stopped on a mid-word tail under budget"
+    );
+}
+
 // ── Forced-choice logprob elicitation (the reasoning-fidelity K-killer) ──
 //
 // The reasoning-fidelity harness needs a calibrated P(choice) over a
@@ -1316,12 +1368,14 @@ impl ModelSlot {
                     // exit branches; deferred until the verify-side
                     // acceptance-rate work settles.
                     let finish_reason = finish_reason_from_counts(request, completion_tokens);
-                    return Ok(GenerationOutcome {
+                    let outcome = GenerationOutcome {
                         text,
                         prompt_tokens,
                         completion_tokens,
                         finish_reason,
-                    });
+                    };
+                    log_midword_stop("mtp", model_id, &outcome, request);
+                    return Ok(outcome);
                 }
                 Err(e) => {
                     let msg = e.to_string();
@@ -2174,12 +2228,14 @@ impl ModelSlot {
             "inference: end-of-generation"
         );
 
-        Ok(GenerationOutcome {
+        let outcome = GenerationOutcome {
             text: output,
             prompt_tokens: tokens.len(),
             completion_tokens: n_generated,
             finish_reason: exit_reason,
-        })
+        };
+        log_midword_stop("plain", model_id, &outcome, request);
+        Ok(outcome)
     }
 
     /// **MTP speculative-decoding loop (Phase A).** Direct port of the
