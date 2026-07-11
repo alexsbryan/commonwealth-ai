@@ -559,9 +559,15 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
   if (terminal.event === "message-error")
     return { error: JSON.stringify(terminal.payload ?? {}).slice(0, 240), ttft, latencyMs, narration, seq: terminal.seq, messageId };
   const rc = terminal.payload?.metadata?.retrieved_chunks;
+  const prov = terminal.payload?.metadata?.provenance ?? {};
   return {
     answer: String(terminal.payload?.full_text ?? ""),
     chunks: Array.isArray(rc) ? rc : [],
+    // Truncation-arc instrumentation: finish_reason splits token-budget cuts
+    // ("length") from the MTP spontaneous-EOS class ("stop" on a mid-word
+    // tail). intent identifies the synthesis path.
+    finishReason: prov.finish_reason ?? null,
+    intent: prov.intent ?? terminal.payload?.metadata?.intent ?? null,
     ttft,
     latencyMs,
     narration,
@@ -609,6 +615,11 @@ import { classifyOutcome, GAP_FAMILY } from "./lib/classify.mjs";
 // ── one session ────────────────────────────────────────────────────
 let sessionCounter = 0;
 let runEndAt = Infinity; // set in main; enforced between TURNS, not just sessions
+// Runaway guard: when the daemon dies mid-run, every genGoal fails and the
+// session loop burned 985 session numbers in a tight skip-loop (overnight
+// 2026-07-10, daemon OOM at 22:31). Three consecutive skips = probe the
+// daemon and ABORT with receipts instead of spinning.
+let consecutiveSkips = 0;
 const tallies = {};
 const strand = { shown: 0, ignored: 0 };
 async function runSession(persona, corpora, corporaMeta) {
@@ -625,8 +636,10 @@ async function runSession(persona, corpora, corporaMeta) {
     // junk openers ("find something out") and pollute the study.
     record({ ts: Date.now(), kind: "agent_stumble", session, error: "brain returned no goal" });
     say(`session ${session}: brain returned no goal (${persona.id}/${stratum}) — skipped`);
+    consecutiveSkips += 1;
     return null;
   }
+  consecutiveSkips = 0;
   const convo = (await bridge.invoke("create_conversation", {})).id;
   if (SCOPE_GOAL && goalCorpus)
     await bridge
@@ -827,6 +840,9 @@ async function runSession(persona, corpora, corporaMeta) {
       question: message.slice(0, 2000),
       answer: t.answer != null ? t.answer.slice(0, 12000) : null,
       answerLen: t.answer?.length ?? null,
+      answerTail: t.answer != null && t.answer.length > 200 ? t.answer.slice(-80) : null,
+      finishReason: t.finishReason ?? null,
+      intent: t.intent ?? null,
       refined: refined ? refined.slice(0, 12000) : null,
       refinedChanged,
       ttftMs: t.ttft ?? null,
@@ -989,7 +1005,24 @@ async function main() {
           break;
         }
       }
-      await new Promise((r) => setTimeout(r, 2000 + rand() * 3000));
+      if (consecutiveSkips >= 3) {
+        // The brain (dev daemon) is gone — abort with receipts, don't spin.
+        let daemonUp = false;
+        try {
+          const r = await fetch(`${DAEMON}/healthz`, { signal: AbortSignal.timeout(5000) });
+          daemonUp = r.ok;
+        } catch {}
+        record({
+          ts: Date.now(),
+          kind: "run_abort",
+          reason: `brain unavailable (${consecutiveSkips} consecutive no-goal sessions)`,
+          daemonUp,
+        });
+        say(`✋ aborting run: brain unavailable ${consecutiveSkips}× (daemon ${daemonUp ? "responds but degraded" : "DOWN"})`);
+        break;
+      }
+      const backoffMs = consecutiveSkips > 0 ? 30_000 : 2000 + rand() * 3000;
+      await new Promise((r) => setTimeout(r, backoffMs));
     }
 
     record({
