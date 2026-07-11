@@ -205,6 +205,24 @@
     (metadata?.user_query as string | undefined) ?? "From your question",
   );
 
+  // Verification notes as a DISCLOSURE (SOVEREIGN_NOTE_AS_METADATA
+  // experiment): the gate's failed claims ride metadata.grounding_gate.
+  // When the runtime appended the legacy in-text note (experiment off),
+  // skip the disclosure — the text already carries it; rendering both
+  // would double the caveat. The disclosure keeps the audit trail
+  // honest while giving the model's own closing line back to the user
+  // (persona-QA: the appended note owned the answer's final words and
+  // zeroed the grace gate's agency/clean components).
+  let verificationNotes = $derived.by(() => {
+    const gg = metadata?.grounding_gate as
+      | { failed_claims?: string[] }
+      | undefined;
+    const claims = gg?.failed_claims ?? [];
+    if (claims.length === 0) return [];
+    if (content.includes("*Verification note:")) return []; // legacy in-text
+    return claims;
+  });
+
   // Set by chat.machine when the user redirected away from this
   // message's Propose banner. The bubble stays in history (so the
   // redirect decision is legible later) but renders de-emphasised.
@@ -515,6 +533,22 @@
     </div>
   {/if}
 
+  {#if verificationNotes.length > 0}
+    <details class="verification-notes" role="note">
+      <summary>
+        <span class="vn-mark" aria-hidden="true">⚠</span>
+        {verificationNotes.length}
+        statement{verificationNotes.length === 1 ? "" : "s"} could not be
+        verified against your sources
+      </summary>
+      <ul class="vn-items">
+        {#each verificationNotes as claim}
+          <li>{claim}</li>
+        {/each}
+      </ul>
+    </details>
+  {/if}
+
   {#if searchAugmentation}
     <div class="search-augmentation" class:aug-refining={refining} role="note">
       <div class="aug-header">
@@ -722,6 +756,30 @@
      the source URLs that fed the re-synthesis. Persistent: stays
      on the bubble for the lifetime of the conversation so a later
      reader can tell which answers were web-augmented. */
+  /* Verification-notes disclosure — the gate's audit trail, honest but
+     out of the prose channel (never the answer's final words). */
+  .verification-notes {
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    opacity: 0.75;
+  }
+  .verification-notes summary {
+    cursor: pointer;
+    user-select: none;
+    font-style: italic;
+  }
+  .verification-notes .vn-mark {
+    margin-right: 0.3rem;
+  }
+  .verification-notes .vn-items {
+    margin: 0.35rem 0 0 1.1rem;
+    padding: 0;
+    line-height: 1.4;
+  }
+  .verification-notes .vn-items li {
+    margin-bottom: 0.25rem;
+  }
+
   .search-augmentation {
     margin-top: 12px;
     padding: 10px 14px;
