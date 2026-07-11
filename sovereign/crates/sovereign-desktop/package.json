@@ -1,7 +1,7 @@
 {
   "name": "sovereign-desktop",
   "private": true,
-  "version": "0.1.19",
+  "version": "0.1.20",
   "type": "module",
   "scripts": {
     "meshapp:catalog": "node scripts/gen-meshapp-catalog.mjs",
