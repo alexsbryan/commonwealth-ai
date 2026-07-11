@@ -400,7 +400,13 @@ export type NarrationPhase =
   // Live synthesis heartbeat — the running held-token count while the
   // grounding gate holds the answer. Rendered as ONE live chip that the
   // store REPLACES (not appends) on each event; see routing.svelte.ts.
-  | { synthesis_progress: { tokens: number } };
+  | { synthesis_progress: { tokens: number } }
+  // EXPERIMENT (SOVEREIGN_DRAFT_STREAM=1): incremental UNVERIFIED draft
+  // text during the gated hold. Accumulated into `draftPreview` (never
+  // the narration log) and rendered as a visually-provisional section
+  // that collapses when the gated answer lands. The affordance contract:
+  // draft text must never be styled as final.
+  | { draft_delta: { delta: string } };
 
 export interface NarrationEvent {
   phase: NarrationPhase;

@@ -284,6 +284,20 @@ pub enum NarrationPhase {
     /// and the desktop REPLACES rather than appends it (one live chip,
     /// not a log entry). Cleared when the turn's terminal arrives.
     SynthesisProgress { tokens: u32 },
+
+    /// EXPERIMENT (`SOVEREIGN_DRAFT_STREAM=1`): live DRAFT text preview.
+    /// Streams the unverified draft's incremental text during the gated
+    /// hold so the desktop can render a visually-PROVISIONAL section
+    /// ("drafting — verifying…", thinking-section style) that collapses
+    /// when the gated answer arrives through the normal message stream.
+    /// Release semantics are UNCHANGED — message-chunks still emit only
+    /// after the gate verdict; this channel is additive perception, and
+    /// the affordance contract is that draft text must never be styled
+    /// as final. Throttled with the SynthesisProgress cadence; `delta`
+    /// is the text appended since the previous frame. TTFT-perceived
+    /// (first draft glyphs) drops to draft latency while the official
+    /// TTFT metric keeps measuring the gated stream honestly.
+    DraftDelta { delta: String },
 }
 
 /// One narration entry emitted in the model's voice during a long

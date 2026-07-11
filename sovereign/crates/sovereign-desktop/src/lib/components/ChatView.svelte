@@ -57,6 +57,7 @@
   import InterpretationBanner from "./InterpretationBanner.svelte";
   import ClarificationCard from "./ClarificationCard.svelte";
   import NarrationChip from "./NarrationChip.svelte";
+  import DraftPreview from "./DraftPreview.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
   import CorpusFilterStrip from "./CorpusFilterStrip.svelte";
   import AskScopeBar from "./AskScopeBar.svelte";
@@ -1441,6 +1442,11 @@
       <NarrationChip />
 
       {#if isLoading}
+        <!-- Draft-preview experiment: the unverified draft forming behind
+             the gate, explicitly provisional (see DraftPreview's affordance
+             contract). Unmounts when the gated answer starts streaming,
+             which reads as the draft collapsing into the real reply. -->
+        <DraftPreview />
         {#if docProgressText}
           <div class="doc-progress-indicator" aria-label="svrnmesh is processing document">
             <span class="progress-mark pulse">{"\u25C8"}</span>

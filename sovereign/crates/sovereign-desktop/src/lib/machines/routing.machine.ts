@@ -57,7 +57,9 @@ export function applyNarration(
   // hold and would flood the chip stack. They land in a separate
   // `synthesisProgress` context field via `applySynthesisProgress`; the
   // log is left untouched here.
-  if (isSynthesisProgress(phase)) {
+  if (isSynthesisProgress(phase) || isDraftDelta(phase)) {
+    // Heartbeat-cadence frames (token counts, draft deltas) would flood
+    // the chip stack — they land in dedicated context fields instead.
     return log;
   }
   if (
@@ -95,6 +97,32 @@ function isSynthesisProgress(
   );
 }
 
+/** Narrowing guard for the `draft_delta` struct variant (draft-preview
+ *  experiment — see types.ts). */
+function isDraftDelta(
+  phase: NarrationEvent["phase"],
+): phase is { draft_delta: { delta: string } } {
+  return typeof phase === "object" && phase !== null && "draft_delta" in phase;
+}
+
+/**
+ * Pure reducer for the `draftPreview` accumulator. `draft_delta` frames
+ * APPEND; every other frame leaves the preview untouched — the draft must
+ * stay visible while the gate verifies (the whole point is bridging that
+ * window), so only CLEAR_NARRATION (new user turn) resets it. ChatView
+ * owns the visual state transitions (drafting → verifying → collapsed).
+ */
+export function applyDraftPreview(
+  prev: string | null,
+  incoming: NarrationEvent,
+): string | null {
+  const phase = incoming.phase;
+  if (isDraftDelta(phase)) {
+    return (prev ?? "") + phase.draft_delta.delta;
+  }
+  return prev;
+}
+
 /** Live token-count heartbeat during a gated synthesis hold. */
 export interface SynthesisProgress {
   tokens: number;
@@ -122,6 +150,11 @@ export function applySynthesisProgress(
       elapsedMs: incoming.elapsed_ms,
     };
   }
+  // Draft-delta frames interleave with the heartbeat at the same cadence
+  // (each beat may carry both) — they must not clear the live counter.
+  if (isDraftDelta(phase)) {
+    return prev;
+  }
   return null;
 }
 
@@ -135,6 +168,11 @@ export interface RoutingContext {
    *  narration phase arrives or a new turn starts. `null` when no
    *  synthesis is actively holding tokens. */
   synthesisProgress: SynthesisProgress | null;
+  /** Draft-preview experiment: the accumulated UNVERIFIED draft text
+   *  during a gated hold (`draft_delta` frames appended in order). Stays
+   *  populated through the verify window; reset on CLEAR_NARRATION.
+   *  `null` = experiment off or no draft in flight. */
+  draftPreview: string | null;
   /** Set by submitRedirect's onDone to the `message_id` of the new
    *  assistant bubble the runtime just started streaming into.
    *  ChatView watches this and, on change, dispatches
@@ -237,6 +275,7 @@ export const routingMachine = setup({
     clarification: null,
     narrationLog: [],
     synthesisProgress: null,
+    draftPreview: null,
     lastRedirectedMessageId: null,
     lastClarifiedMessageId: null,
   },
@@ -396,12 +435,15 @@ export const routingMachine = setup({
                 context.synthesisProgress,
                 event.payload.event,
               ),
+            draftPreview: ({ context, event }) =>
+              applyDraftPreview(context.draftPreview, event.payload.event),
           }),
         },
         CLEAR_NARRATION: {
           actions: assign({
             narrationLog: () => [],
             synthesisProgress: () => null,
+            draftPreview: () => null,
           }),
         },
       },
