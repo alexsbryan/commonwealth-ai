@@ -36,6 +36,15 @@ import {
   SCORE_CLI,
 } from "./lib/harness.mjs";
 import { parseToml } from "./lib/toml.mjs";
+import { VARIANTS } from "./lib/judges.mjs";
+
+// Calibrated judge variant (calibrate-persona-judge.mjs, 2026-07-10):
+// v2 categorical PASSES the bank (sens 0.89 / spec 0.82); v1 numeric FAILED
+// spec at 0.45 — scale inversion flagged half the good answers (mostly
+// honest declines) as broken, which also drove phantom rephrase/abandon
+// behavior in earlier runs. Do not change variants without re-running the
+// calibration gate.
+const JUDGE = VARIANTS.v2;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JOURNAL = path.join(ARTIFACTS, "persona-journal.jsonl");
@@ -146,13 +155,28 @@ function pickWeighted(list) {
   return list[list.length - 1];
 }
 const STRATA = ["in_corpus", "adjacent", "out_of_corpus"];
-function pickStratum(p) {
+const stratumCounts = { in_corpus: 0, adjacent: 0, out_of_corpus: 0 };
+function pickStratum(p, session) {
+  // Coverage floor: persona goal_mixes lean out-of-corpus in aggregate, and
+  // small-N draws starved the in_corpus cell entirely (11-turn run with
+  // ZERO in_corpus goals). Every 3rd session takes the least-drawn stratum
+  // so each run exercises the full matrix; other sessions keep the persona's
+  // own mix.
+  if (session % 3 === 0) {
+    const least = STRATA.reduce((a, b) => (stratumCounts[a] <= stratumCounts[b] ? a : b));
+    stratumCounts[least] += 1;
+    return least;
+  }
   const mix = p.goal_mix;
   let r = rand() * (mix[0] + mix[1] + mix[2]);
   for (let i = 0; i < 3; i++) {
     r -= mix[i];
-    if (r <= 0) return STRATA[i];
+    if (r <= 0) {
+      stratumCounts[STRATA[i]] += 1;
+      return STRATA[i];
+    }
   }
+  stratumCounts.out_of_corpus += 1;
   return "out_of_corpus";
 }
 
@@ -202,8 +226,9 @@ async function genGoal(stratum, corpusMeta) {
   else if (stratum === "adjacent")
     prompt =
       `A person's knowledge app contains a collection called "${label}"${desc}. ` +
-      `State ONE specific thing in the SAME topic area that such a collection plausibly does NOT contain ` +
-      `(more current, more niche, or more practical than it would cover). One sentence, the goal only.`;
+      `State ONE specific QUESTION-shaped thing in the SAME subject area that such a collection plausibly ` +
+      `does NOT contain (more current or more niche than it would cover). Stay in that subject — no coding ` +
+      `tasks, no requests to produce artifacts. One sentence, the goal only.`;
   else
     prompt =
       `State ONE specific everyday thing a person wants to find out about ${pick(EVERYDAY_DOMAINS)}. ` +
@@ -277,34 +302,14 @@ async function genFollowup(persona, goal, transcript, reaction, challenge) {
 }
 
 // ── judges ─────────────────────────────────────────────────────────
-// User-seat judge — calibrated wording from chaos.mjs judgeAsUser, plus the
-// session goal so responsiveness is judged against what the USER wanted.
+// User-seat judge — prompt + parser live in lib/judges.mjs so the deployed
+// judge IS the calibrated one (see JUDGE above).
 async function personaJudge(question, answer, goal) {
-  const text = await brain(
-    [
-      {
-        role: "system",
-        content:
-          "You are a demanding, knowledgeable user judging the assistant's answer to YOUR question. " +
-          "A correct, coherent, complete, responsive answer scores LOW (good). Wrong, empty, cut off, " +
-          "incoherent, or hallucinated scores HIGH (broken). " +
-          "If the app genuinely lacks the sources, an honest decline is correct — but ONLY if GRACEFUL: " +
-          "brief, warm, pointing to a path forward. A graceful honest decline scores LOW. An abrasive, " +
-          "cold, or lecturing refusal scores HIGH even though honest. " +
-          'JSON only: {"broken":true|false,"score":0-10,"why":"<one line>"}. broken=true iff score>=6.',
-      },
-      {
-        role: "user",
-        content: `My goal: ${goal}\nMy question:\n${String(question).slice(0, 600)}\n\nThe app's answer:\n${String(
-          answer,
-        ).slice(0, 12000)}\n\nJudge it.`,
-      },
-    ],
-    { temperature: 0.2, maxTokens: 260 },
-  );
-  const j = firstJson(text);
-  if (!j || typeof j.score !== "number") return null;
-  return { broken: !!j.broken, score: Math.max(0, Math.min(10, j.score)), why: String(j.why ?? "").slice(0, 140) };
+  const text = await brain(JUDGE.messages(question, answer, goal), {
+    temperature: 0.2,
+    maxTokens: 260,
+  });
+  return JUDGE.parse(firstJson(text));
 }
 
 // Posture rubric (design §6) — scored on gap-family turns only.
@@ -482,7 +487,11 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
   const t0 = Date.now();
   let messageId;
   try {
-    const res = await bridge.invoke("send_message_stream", { message, conversationId: convo }, 60_000);
+    // 150s: the dispatch itself can block past 60s under prefill pressure
+    // (measured: two AbortError turn_errors in one run — a pasted wall of
+    // text and a long-thread turn). The turn deadline below still bounds
+    // the total wait.
+    const res = await bridge.invoke("send_message_stream", { message, conversationId: convo }, 150_000);
     messageId = res?.message_id ?? res;
   } catch (e) {
     // Same shape as every other return — a missing narration array crashed
@@ -642,7 +651,7 @@ const strand = { shown: 0, ignored: 0 };
 async function runSession(persona, corpora, corporaMeta) {
   sessionCounter += 1;
   const session = sessionCounter;
-  const stratum = pickStratum(persona);
+  const stratum = pickStratum(persona, session);
   const goalCorpus = ONLY_CORPORA.length
     ? pick(ONLY_CORPORA)
     : pick(corpora) ?? null;
