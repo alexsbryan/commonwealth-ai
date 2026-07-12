@@ -22,8 +22,32 @@ export function computeMetrics(rows) {
   const satisfied = sessions.filter((s) => s.endReason === "satisfied").length;
   const abandoned = sessions.filter((s) => s.endReason === "abandoned").length;
   const grounded = turns.filter((t) => t.outcome === "answered_grounded").length;
+  // grounded_rate over ALL answered turns is mix-dependent: when 2/3 of persona
+  // traffic is deliberately out-of-corpus (the escape-hatch study), evp=false
+  // turns can't be grounded by construction, so the raw rate is capped low no
+  // matter how competent grounding is. `grounded_when_answerable` isolates
+  // COMPETENCE from question mix — of turns the careful-reader presence judge
+  // says the evidence CAN answer, what fraction did we deliver grounded. This is
+  // the metric the synthesis-quality lever moves; the raw rate is the
+  // experience-mix headline. (2026-07-11: raw 0.19 vs answerable 0.52 pooled.)
+  const answerable = turns.filter((t) => t.evidencePresence === true);
+  const groundedAnswerable = answerable.filter(
+    (t) => t.outcome === "answered_grounded",
+  ).length;
   const rescued = turns.filter((t) => t.outcome === "rescued_by_web").length;
-  const hallucinations = turns.filter((t) => t.aligned?.verdict === "hallucination").length;
+  // The value-extraction scorer's "hallucination" verdict is only a CANDIDATE:
+  // it mislabels arithmetic-on-user-premise, conceptual paraphrase,
+  // matcher-missed-but-present values, and caveated OOD estimates as fabrication
+  // (4/5 flagged turns were these, all judge-good — 2026-07-11). A fabrication
+  // is counted only when the fabrication verifier CONFIRMS it. `fabrication ==
+  // null` (verifier unavailable, or a pre-verifier journal) falls back to the
+  // raw verdict so a dead judge never HIDES a fabrication — conservative for the
+  // zero-tolerance gate.
+  const hallucinations = turns.filter(
+    (t) =>
+      t.aligned?.verdict === "hallucination" &&
+      (t.fabrication == null ? true : t.fabrication.fabricated === true),
+  ).length;
   const flips = turns.filter((t) => t.flip?.flipped).length;
   const cancels = turns.filter((t) => t.outcome === "canceled_slow").length;
   const silentGaps = turns.filter((t) => t.outcome === "silent_gap").length;
@@ -70,6 +94,8 @@ export function computeMetrics(rows) {
     gfr: sessions.length ? satisfied / sessions.length : null,
     abandon_rate: sessions.length ? abandoned / sessions.length : null,
     grounded_rate: turns.length ? grounded / turns.length : null,
+    answerable_turns: answerable.length,
+    grounded_when_answerable: answerable.length ? groundedAnswerable / answerable.length : null,
     rescued,
     hallucinations,
     flips,

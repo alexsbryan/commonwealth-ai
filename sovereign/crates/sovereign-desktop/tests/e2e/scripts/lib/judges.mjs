@@ -75,3 +75,42 @@ export const VARIANTS = {
   v1: { messages: personaJudgeV1Messages, parse: parseV1 },
   v2: { messages: personaJudgeV2Messages, parse: parseV2 },
 };
+
+// Fabrication verifier — adjudicates a hallucination CANDIDATE (the value the
+// value-extraction scorer flagged as absent from evidence). That scorer is
+// value-extraction-shaped and mislabels four HONEST shapes as fabrication:
+// arithmetic on the user's OWN premise, a conceptual paraphrase, a value that
+// IS in the evidence its string-matcher missed, and explicitly-caveated
+// general knowledge. Receipts (2026-07-11): 4/5 flagged turns were these, all
+// judge-good. Only an UNcaveated specific factoid asserted as fact and absent
+// from the evidence is the cardinal sin. Runs ONLY on flagged turns (rare), so
+// cost is negligible; it keeps the zero-tolerance detector alive for real
+// fabrications while removing the artifact class that would otherwise pressure
+// the product to stop doing arithmetic, synthesis, and honest OOD estimates.
+// Kept parsimonious (first-match ladder) for the small judge's attention.
+export function fabricationVerifyMessages(question, answer, value, passages) {
+  return [
+    {
+      role: "system",
+      content:
+        "An answer asserts a specific VALUE. Decide if it is a fabrication. Pick ONE, first match wins:\n" +
+        "ok: the value is supported by the PASSAGES (even if worded differently); OR it is arithmetic or a derivation from numbers the USER supplied; OR it is a general concept or paraphrase, not a checkable fact; OR the answer flags it as outside the sources / general knowledge / an estimate.\n" +
+        "fabrication: a specific fact — a number, date, name, quantity, or event — stated as fact, NOT in the passages, NOT computed from the user's own numbers, and NOT flagged as general knowledge.\n" +
+        'JSON only: {"verdict":"ok|fabrication","why":"<one line>"}',
+    },
+    {
+      role: "user",
+      content:
+        `USER ASKED:\n${String(question).slice(0, 700)}\n\n` +
+        `THE VALUE IN QUESTION: ${String(value ?? "").slice(0, 300)}\n\n` +
+        `ANSWER:\n${String(answer).slice(0, 6000)}\n\n` +
+        `PASSAGES:\n${String(passages).slice(0, 24000)}`,
+    },
+  ];
+}
+
+export function parseFabrication(json) {
+  const v = String(json?.verdict ?? "").toLowerCase();
+  if (v !== "ok" && v !== "fabrication") return null;
+  return { fabricated: v === "fabrication", why: String(json?.why ?? "").slice(0, 140) };
+}
