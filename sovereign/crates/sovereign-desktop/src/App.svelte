@@ -12,6 +12,8 @@
   import { chatSeedStore } from "./lib/stores/chatSeed.svelte";
   import { outerWorkScopeStore } from "./lib/stores/outerWorkScope.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
+  import { meshMembership } from "./lib/stores/meshMembership.svelte";
+  import { toastStore } from "./lib/stores/toast.svelte";
   import type {
     StepDonePayload,
     TaskStep,
@@ -599,9 +601,17 @@
   <MeshJoinDialog
     link={pendingJoinLink}
     onClose={() => joinLinkStore.clear()}
-    onJoined={() => {
+    onJoined={(meshName) => {
       joinLinkStore.clear();
+      // Tell the settings surface the membership changed: an
+      // already-mounted MeshSettings re-pulls state immediately, and
+      // SettingsPanel lands on the Mesh tab instead of its default.
+      meshMembership.noteJoined();
       view = "settings";
+      toastStore.notify({
+        title: `Joined "${meshName}"`,
+        body: "You're connected — mesh members appear as they come online.",
+      });
     }}
   />
 {/if}

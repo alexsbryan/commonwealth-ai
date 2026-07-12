@@ -32,6 +32,7 @@
     HardwareInfo,
     SetupContextWindow,
   } from "../types";
+  import { meshMembership } from "../stores/meshMembership.svelte";
   import MeshSettings from "./MeshSettings.svelte";
   import MeshAppsSection from "./MeshAppsSection.svelte";
   import SharingSection from "./SharingSection.svelte";
@@ -56,6 +57,17 @@
     | "diagnostics"
     | "about";
   let activeTab: Tab = $state("models");
+
+  // A just-completed mesh join queues a navigation to the Mesh tab
+  // (see meshMembership.svelte.ts). Consume it whether this panel was
+  // already open when the join dialog closed or is mounting fresh —
+  // either way the user should land on the mesh state they just
+  // changed, not the default Models tab.
+  $effect(() => {
+    if (meshMembership.settingsNavPending && meshMembership.takeSettingsNav()) {
+      activeTab = "mesh";
+    }
+  });
 
   let config: DesktopConfig | null = $state(null);
   let saving = $state(false);
