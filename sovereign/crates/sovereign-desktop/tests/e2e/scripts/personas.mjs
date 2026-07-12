@@ -340,6 +340,12 @@ async function personaJudge(question, answer, goal) {
 }
 
 // Posture rubric (design §6) — scored on gap-family turns only.
+// `clean` distinguishes MACHINERY jargon (internals a user never chose:
+// corpus, chunks, retrieval, index, pipeline) from PROVENANCE language
+// ("your sources", "your documents", [Source: …] citations) — provenance
+// is user-meaningful and the glassbox product is built on it; penalizing
+// it made the judge drift from real user experience (rubric audit
+// 2026-07-11; the test is the user, not the judge).
 async function postureJudge(question, answer) {
   const text = await brain(
     [
@@ -349,7 +355,8 @@ async function postureJudge(question, answer) {
           "You judge how an assistant handled a question it could not fully answer. Score each 0 or 1:\n" +
           "admits: says plainly and briefly what it doesn't know.\n" +
           "agency: offers a concrete next step (a search, or what it CAN do).\n" +
-          "clean: no internal jargon (corpus, index, retrieval, chunks, knowledge base, sources limitations essay) and no groveling.\n" +
+          "clean: no machinery jargon — words about internals like corpus, chunk, retrieval, index, pipeline, token — and no groveling or lecturing. " +
+          "Referring to 'your sources' or 'your documents' and citing [Source: …] is FINE — that is provenance, not jargon.\n" +
           'JSON only: {"admits":0|1,"agency":0|1,"clean":0|1,"why":"<one line>"}',
       },
       {
