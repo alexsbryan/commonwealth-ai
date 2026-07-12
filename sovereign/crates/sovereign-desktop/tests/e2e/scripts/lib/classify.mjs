@@ -47,16 +47,32 @@ export function classifyOutcome(t) {
   // evp-false (genuine no-evidence decline) and judge-broken cases never
   // qualify, so honest graceful declines and real failures stay gaps.
   const groundedByOracles = judgeGood === true && t.evidencePresence === true;
+  const answerIsGrounded = judgeGood === true && (!declineShape || groundedByOracles);
   if (t.search?.clicked) {
-    if (t.search?.error || t.search?.blocked) return "search_blocked";
-    // The re-gate can revert (message-refined echoes the original) — never a
-    // rescue. rescued requires CHANGED content the user-judge accepts.
+    // Rescue outranks everything: the escape hatch materially improved the
+    // answer. The re-gate can revert (message-refined echoes the original) —
+    // never a rescue; rescued requires CHANGED content the user-judge accepts.
     if (t.refinedChanged && t.refinedJudge && !t.refinedJudge.broken && t.refinedJudge.score < 6)
       return "rescued_by_web";
-    return "search_futile";
+    // A good/grounded ORIGINAL answer is NOT demoted by a failed/futile search
+    // click — answer quality is primary; the click is orthogonal (the v2
+    // principle already applied to the gap card). Personas click search
+    // probabilistically or to challenge, not only on dissatisfaction, and DDG
+    // bot-blocking must not bury a good grounded answer as search_blocked.
+    // Receipts (2026-07-11 postguards2): "who walked on the moon" (aligned
+    // grounded, judge good) and the Hamilton/Madison Federalist summary (judge
+    // good) were both search_blocked purely because the skeptic clicked a
+    // DDG-blocked search after a good answer. Only a gap-shaped ORIGINAL answer
+    // makes the search OUTCOME the story.
+    if (!answerIsGrounded) {
+      if (t.search?.error || t.search?.blocked) return "search_blocked";
+      return "search_futile";
+    }
+    // else: good grounded answer + failed bonus search → fall through to
+    // answered_grounded below (the failed escape hatch is orthogonal metadata).
   }
   if (t.aligned?.verdict === "hallucination" && judgeGood !== false) return "answered_ungrounded";
-  if (judgeGood === true && (!declineShape || groundedByOracles)) return "answered_grounded";
+  if (answerIsGrounded) return "answered_grounded";
   if (declineShape) return t.card ? "gap_admitted_offered" : "gap_admitted_no_offer";
   if (judgeGood === false) return t.card ? "gap_admitted_offered" : "silent_gap";
   // No judge verdict and no decline shape — count it as grounded-by-default
