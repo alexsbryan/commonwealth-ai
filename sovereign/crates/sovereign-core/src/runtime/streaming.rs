@@ -1030,6 +1030,7 @@ impl Runtime {
             prompt_budget_note,
             folder_meta,
             meta_atlas_hits,
+            lessons,
         } = plan;
         let documents_found = chunks.len();
         // Answerable-context gate for the refusal-retry (KQ path), mirroring
@@ -1328,6 +1329,31 @@ impl Runtime {
                 v.rewritten
             };
 
+            // TEACHABLE P0 (rung 2): the term-avoid pass runs LAST —
+            // after the grounding gate and the quote guardrail, and
+            // (inside `apply_term_avoid`) skipping `[Source: …]` spans
+            // and code fences — so citation anchors and verified facts
+            // are structurally untouchable. In gate mode the held
+            // release frame below goes out post-transform; on gate-off
+            // turns only the durable copy changes (same live/durable
+            // divergence contract as quote verification above).
+            let crate::runtime::types::TurnLessons {
+                term_avoid: lesson_terms,
+                applied: mut lessons_applied,
+                first_application: mut lessons_first_application,
+                prompt_form: lesson_prompt_form,
+            } = lessons;
+            let (full_text, lesson_terms_hit) =
+                crate::lessons::apply_term_avoid(&full_text, &lesson_terms);
+            if !lesson_terms_hit {
+                // Record influence, not intent: a transform that
+                // changed nothing did not apply this turn.
+                lessons_applied.retain(|l| l.enforcement != "transform");
+                lessons_first_application.retain(|l| {
+                    l.payload.enforcement != crate::lessons::LessonEnforcement::Transform
+                });
+            }
+
             // Gate mode held every token — release the final
             // (gated, quote-verified) text as one frame now.
             if gate_on && !cancel_for_stream.is_cancelled() {
@@ -1393,6 +1419,18 @@ impl Runtime {
                 completion_tokens: Some(completion_tokens_val),
                 context_window: inference.effective_context_size(),
             };
+            // TEACHABLE whisper-once: stamp first applications and
+            // surface at most one `kept_lesson` on this message.
+            let kept_lesson = {
+                let first_refs: Vec<&crate::lessons::ActiveLesson> =
+                    lessons_first_application.iter().collect();
+                crate::lessons::note_first_applications(
+                    notes_for_outcome.as_deref(),
+                    &first_refs,
+                    now(),
+                )
+                .await
+            };
             let metadata_json = serde_json::json!({
                 "streamed": true,
                 "intent": "knowledge_query",
@@ -1401,6 +1439,11 @@ impl Runtime {
                 "result_quality": result_quality,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
+                // TEACHABLE P0 — which lessons influenced this turn
+                // (glassbox; the settings pane + QA harness read it)
+                // and the one-time first-application whisper.
+                "lessons_applied": lessons_applied,
+                "kept_lesson": kept_lesson,
                 // Glassbox for the production grounding gate:
                 // null when the gate is off / out of scope;
                 // otherwise {action, retried, violation_prob,
@@ -1621,6 +1664,10 @@ impl Runtime {
                 } else {
                     None
                 };
+                // TEACHABLE: the K=1 prompt lesson rides the refinement
+                // prompt too (today-anchor precedent) — a style lesson
+                // must survive a gap-check rewrite of the answer.
+                let collab_lesson_prompt = lesson_prompt_form.clone();
                 tokio::spawn(async move {
                     tracing::info!(
                         conversation_id = %collab_cid,
@@ -1641,6 +1688,7 @@ impl Runtime {
                         Some(collab_metadata),
                         collab_events,
                         collab_sid,
+                        collab_lesson_prompt,
                         collab_guard,
                     )
                     .await;
@@ -1860,6 +1908,12 @@ impl Runtime {
         let sources = kc.sources;
         let coverage = kc.coverage;
         let retrieved_chunks = kc.retrieved_chunks;
+        // TEACHABLE P0 — the context's lesson snapshot + a note-store
+        // handle ride into the spawn for the post-gate transform,
+        // metadata, and whisper-once stamping.
+        let lessons = kc.lessons;
+        let notes_for_lessons: Option<Arc<corpus_engine_notes::NoteStore>> =
+            self.note_store.clone();
         // Answerable-context gate for the refusal-retry: only retry a refusal
         // when evidence WAS retrieved (a genuine "no sources" must still be an
         // honest abstention, never force-answered).
@@ -2179,6 +2233,47 @@ impl Runtime {
                 }
                 v.rewritten
             };
+            // TEACHABLE P0 (rung 2) — same contract as the
+            // KnowledgeQuery spawn: the term-avoid pass runs after the
+            // gate and the quote guardrail, skipping `[Source: …]`
+            // spans and code fences; metadata records influence, not
+            // intent. metadata_json was assembled above, so the lesson
+            // keys are inserted in place here.
+            let crate::runtime::types::TurnLessons {
+                term_avoid: lesson_terms,
+                applied: mut lessons_applied,
+                first_application: mut lessons_first_application,
+                prompt_form: lesson_prompt_form,
+            } = lessons;
+            let (full_text, lesson_terms_hit) =
+                crate::lessons::apply_term_avoid(&full_text, &lesson_terms);
+            if !lesson_terms_hit {
+                lessons_applied.retain(|l| l.enforcement != "transform");
+                lessons_first_application.retain(|l| {
+                    l.payload.enforcement != crate::lessons::LessonEnforcement::Transform
+                });
+            }
+            let kept_lesson = {
+                let first_refs: Vec<&crate::lessons::ActiveLesson> =
+                    lessons_first_application.iter().collect();
+                crate::lessons::note_first_applications(
+                    notes_for_lessons.as_deref(),
+                    &first_refs,
+                    now(),
+                )
+                .await
+            };
+            let mut metadata_json = metadata_json;
+            if let Some(obj) = metadata_json.as_object_mut() {
+                obj.insert(
+                    "lessons_applied".to_string(),
+                    serde_json::json!(lessons_applied),
+                );
+                obj.insert(
+                    "kept_lesson".to_string(),
+                    kept_lesson.unwrap_or(serde_json::Value::Null),
+                );
+            }
             // Gate mode held every token — release the final text now.
             if deep_gate_on && !cancel_for_stream.is_cancelled() {
                 if tx.send(Ok(full_text.clone())).await.is_err() {
@@ -2245,6 +2340,9 @@ impl Runtime {
                 } else {
                     None
                 };
+                // TEACHABLE: the K=1 prompt lesson rides the
+                // refinement prompt (today-anchor precedent).
+                let collab_lesson_prompt = lesson_prompt_form.clone();
                 tokio::spawn(async move {
                     run_post_stream_refinement(
                         collab_inference.as_ref(),
@@ -2259,6 +2357,7 @@ impl Runtime {
                         Some(collab_metadata),
                         collab_events,
                         collab_sid,
+                        collab_lesson_prompt,
                         collab_guard,
                     )
                     .await;

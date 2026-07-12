@@ -330,6 +330,72 @@ export interface MessageRefinedPayload {
   new_content: string;
 }
 
+// ─── TEACHABLE lessons (coach in chat, own in settings) ───────
+
+/** Enforcement rung — where a lesson's intent is honored (TEACHABLE §7).
+ *  NEVER render these raw tokens; the pane maps them to user language
+ *  ("answer length" / "wording check" / "standing reminder"). */
+export type LessonEnforcement = "param" | "transform" | "prompt";
+
+/** Provenance: the teaching moment a lesson was saved from. */
+export interface LessonTaughtFrom {
+  excerpt: string;
+  conversation_id: string;
+  message_id: string;
+}
+
+/** Sent on `lesson-proposed` when a durative coaching turn produced a
+ *  draft lesson. Carries the FULL draft so consent is stateless: Save
+ *  passes this payload (display possibly edited) to `save_lesson`;
+ *  "Not this" calls nothing and nothing is stored. Mirrors
+ *  `sovereign_core::types::LessonProposedPayload` — `taught_from` is
+ *  the verbatim excerpt STRING on this wire shape (the saved row
+ *  carries the structured `LessonTaughtFrom`). */
+export interface LessonProposedPayload {
+  /** Draft uuid — journal correlation key, not the eventual note id. */
+  id: string;
+  conversation_id: string;
+  message_id: string;
+  display: string;
+  prompt_form: string;
+  enforcement: LessonEnforcement;
+  params: Record<string, unknown>;
+  taught_from: string;
+}
+
+/** One row from `list_lessons` — payload fields flattened with note
+ *  lifecycle fields. `retired_at != null` means superseded (render
+ *  struck-through); the SUCCESSOR row's `supersedes` points here, so
+ *  "replaced by" resolves client-side via
+ *  `rows.find(r => r.supersedes === row.id)`. */
+export interface LessonRow {
+  id: string;
+  display: string;
+  prompt_form: string;
+  enforcement: LessonEnforcement;
+  params: Record<string, unknown>;
+  scope: string[];
+  taught_from: LessonTaughtFrom;
+  enabled: boolean;
+  created: number;
+  first_applied_at: number | null;
+  last_affirmed: number | null;
+  /** Pre-edit draft sentence when the user edited the card before
+   *  saving — the consented correction pair (TEACHABLE §11). */
+  drafted_display: string | null;
+  retired_at: number | null;
+  retired_by: string | null;
+  supersedes: string | null;
+}
+
+/** Shape of `metadata.kept_lesson` — stamped by the runtime exactly
+ *  once, on the first message a saved lesson influenced. Renders as
+ *  the one-time "Kept: <rule>" whisper footer, then never again. */
+export interface KeptLesson {
+  id: string;
+  display: string;
+}
+
 // ─── Antifragile-routing size limits ─────────────────────────
 
 /** Mirror of `sovereign_core::runtime::MAX_TURN_MESSAGE_CHARS`.
@@ -364,6 +430,7 @@ export type NarrationPhase =
   | "primary_synthesis_start"
   | "grounding_verify_start"
   | "gap_check_fired"
+  | "lesson_drafted"
   | "routing_start"
   | "retrieval_start"
   | "curation_start"

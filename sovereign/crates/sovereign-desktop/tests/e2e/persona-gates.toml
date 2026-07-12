@@ -49,6 +49,23 @@ Trust is asymmetric: one confabulated specific outweighs many good answers
 tolerance — a count, not a rate. The chaos gate demonstrated
 hallucination-rate 0.00 is achievable on this stack."""
 
+[capture_precision]
+direction = "max"
+floor = 0
+target = 0
+min_n_turns = 15
+rationale = """
+Never silent learning — and never nagging (TEACHABLE §4/§8). The Learn-this
+card is a consent interruption: a fire on a non-coaching turn spends trust
+for nothing, and the explicit-durative detector ships precision-first
+precisely so this stays at zero. A COUNT, hallucinations-shaped: the six
+standing personas are the negative-control traffic and the tolerance is
+zero — a red here is a detector bug to fix in `sovereign-core/src/lessons.rs`
+(tighten the durative floor), never a threshold to loosen. Only the scripted
+coach teaching turn (turnKind="coach") is a legitimate fire and is excluded
+from the count. Judge-free (deterministic event observation), so comparable
+across judge versions."""
+
 [flips]
 direction = "max"
 floor = 0

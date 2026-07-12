@@ -30,6 +30,16 @@ export function computeMetrics(rows) {
   const selfIndicted = turns.filter((t) =>
     (t.answer ?? "").includes("which does not appear in the sources"),
   ).length;
+  // TEACHABLE §8 capture precision: "Learn this?" fires on NON-coaching
+  // turns. The scripted teaching turn (turnKind="coach") is the only
+  // legitimate positive; everything else — including the coach A/B's
+  // ordinary baseline/post questions — counts as a false fire. A COUNT,
+  // hallucinations-shaped (zero tolerance), judge-free (deterministic
+  // event observation). Pre-feature journals carry no lessonCard field
+  // → 0, honestly: the card could not fire.
+  const lessonFalseFires = turns.filter(
+    (t) => t.lessonCard?.fired && t.turnKind !== "coach",
+  ).length;
   const postured = turns.filter((t) => t.posture);
   const ttfts = turns.map((t) => t.ttftMs).filter((x) => x != null);
 
@@ -66,6 +76,7 @@ export function computeMetrics(rows) {
     cancels,
     silent_gap_rate: turns.length ? silentGaps / turns.length : null,
     self_indictment_rate: turns.length ? selfIndicted / turns.length : null,
+    capture_precision: lessonFalseFires,
     ttft_p50_s: ttfts.length ? quantile(ttfts, 0.5) / 1000 : null,
     ttft_p95_s: ttfts.length ? quantile(ttfts, 0.95) / 1000 : null,
     ttdraft_p50_s: (() => {

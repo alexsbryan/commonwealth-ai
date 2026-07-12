@@ -330,6 +330,37 @@ pub struct MessageRefinedPayload {
     pub new_content: String,
 }
 
+/// Fire-and-forget draft-lesson proposal (TEACHABLE P0 —
+/// `sovereign-desktop/TEACHABLE.md`). Emitted by the conation
+/// handler's detached capture spawn when a durative coaching turn
+/// produced a draft. Carries the FULL draft so consent is stateless:
+/// the desktop either passes this payload (possibly with an edited
+/// `display`) to the lesson-save command later, or does nothing —
+/// dismissal stores nothing and resolves no channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LessonProposedPayload {
+    /// Draft uuid — journal correlation key. NOT the eventual note id
+    /// (that is minted by the save command).
+    pub id: String,
+    pub conversation_id: String,
+    /// Prior assistant message the coaching referred to. Empty when
+    /// the conversation had no prior assistant turn.
+    pub message_id: String,
+    /// The rule as the user reads it (settings display sentence).
+    pub display: String,
+    /// Compiled minimal-token imperative; empty for param/transform
+    /// rungs, which never ride the prompt.
+    pub prompt_form: String,
+    /// Enforcement rung: `"param"` | `"transform"` | `"prompt"`.
+    pub enforcement: String,
+    /// Rung-specific parameters, e.g. `{"soft_target_cap":300}` or
+    /// `{"terms":["corpus","index"]}`. `{}` for prompt lessons.
+    #[serde(default)]
+    pub params: serde_json::Value,
+    /// Verbatim user coaching excerpt (provenance, truncated).
+    pub taught_from: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepInput {
     pub step_id: usize,

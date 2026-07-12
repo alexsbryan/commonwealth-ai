@@ -228,6 +228,14 @@
   // redirect decision is legible later) but renders de-emphasised.
   let redirectedAway = $derived(metadata?.redirected_away === true);
 
+  // TEACHABLE whisper-once: the runtime stamps `kept_lesson` on
+  // exactly ONE message — the first answer a saved lesson influenced.
+  // After that, silence (a good colleague writes it down once, then
+  // just does it). Metadata passthrough means hydration is free.
+  let keptLesson = $derived(
+    (metadata?.kept_lesson ?? null) as { id: string; display: string } | null,
+  );
+
   // PR3 — grounded next-step offers. Hide on streaming bubbles
   // (answer not done yet) and redirected-away bubbles (the user
   // already moved past this answer).
@@ -581,6 +589,15 @@
     </div>
   {/if}
 
+  {#if keptLesson}
+    <!-- One-time acknowledgment that a saved lesson took hold — the
+         emotional close of the teach → save → honor arc. -->
+    <div class="kept-lesson" role="note">
+      <span class="kept-mark" aria-hidden="true">◈</span>
+      <span class="kept-text">Kept: {keptLesson.display}</span>
+    </div>
+  {/if}
+
   <SourceAttribution {content} {retrievedChunks} />
 
   {#if cutoffInfo && !isStreaming}
@@ -813,6 +830,26 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     margin-bottom: 4px;
+  }
+
+  /* TEACHABLE whisper footer — quieter than the search-augmentation
+     block on purpose: one muted line, accent glyph, no border box.
+     It appears once per lesson, ever. */
+  .kept-lesson {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 8px;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .kept-lesson .kept-mark {
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+  .kept-lesson .kept-text {
+    font-style: italic;
   }
   .search-augmentation .aug-refining-status {
     display: flex;

@@ -46,6 +46,7 @@ import { produce } from "immer";
 import type {
   MessageEntry,
   InformationRequestPayload,
+  LessonProposedPayload,
   SearchAugmentation,
 } from "../types";
 
@@ -61,6 +62,10 @@ export interface ChatContext {
   streamingMessageId: string | null;
   /** Pending epistemic-humility information request, if any. */
   pendingInfoRequest: InformationRequestPayload | null;
+  /** Pending TEACHABLE lesson proposal (the "Learn this?" card), if
+   *  any. Fire-and-forget from the backend: clearing it is pure UI
+   *  dismissal — nothing is stored unless the card's Save ran. */
+  pendingLessonProposal: LessonProposedPayload | null;
 }
 
 export type ChatEvent =
@@ -138,6 +143,12 @@ export type ChatEvent =
    *  away; the submission itself is a Tauri command run by the
    *  component, not the machine. */
   | { type: "CLEAR_INFO" }
+
+  // ─── Lesson proposal (parallel region, TEACHABLE) ────────────
+  | { type: "LESSON_PROPOSED"; payload: LessonProposedPayload }
+  /** Card handled — saved OR dismissed. The save itself is a Tauri
+   *  command run by LessonCard; dismissal runs nothing. */
+  | { type: "CLEAR_LESSON" }
   /** Fired the moment the user submits a paste or kicks off a
    *  search from the InformationRequestCard. The bubble identified
    *  by `messageId` gets a `refining: true` flag so AssistantMessage
@@ -184,6 +195,7 @@ export const chatMachine = setup({
     messages: [],
     streamingMessageId: null,
     pendingInfoRequest: null,
+    pendingLessonProposal: null,
   },
   // Global event handlers (applicable in every state of every region).
   // Kept at the root so HYDRATE / RESET / MESSAGE_REFINED /
@@ -205,6 +217,7 @@ export const chatMachine = setup({
         messages: ({ event }) => event.messages,
         streamingMessageId: () => null,
         pendingInfoRequest: () => null,
+        pendingLessonProposal: () => null,
       }),
     },
     CONVERSATION_BOUND: {
@@ -218,6 +231,7 @@ export const chatMachine = setup({
         messages: () => [],
         streamingMessageId: () => null,
         pendingInfoRequest: () => null,
+        pendingLessonProposal: () => null,
       }),
     },
     MESSAGE_REFINED: {
@@ -371,6 +385,7 @@ export const chatMachine = setup({
                 messages: ({ event }) => event.messages,
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
             RESET: {
@@ -380,6 +395,7 @@ export const chatMachine = setup({
                 messages: () => [],
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
           },
@@ -497,6 +513,7 @@ export const chatMachine = setup({
                 messages: ({ event }) => event.messages,
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
             RESET: {
@@ -506,6 +523,7 @@ export const chatMachine = setup({
                 messages: () => [],
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
           },
@@ -550,6 +568,7 @@ export const chatMachine = setup({
                 messages: ({ event }) => event.messages,
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
             RESET: {
@@ -559,6 +578,64 @@ export const chatMachine = setup({
                 messages: () => [],
                 streamingMessageId: () => null,
                 pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
+              }),
+            },
+          },
+        },
+      },
+    },
+    lessonProposal: {
+      // TEACHABLE "Learn this?" card — same shape as `infoRequest`,
+      // but fully fire-and-forget: no backend channel pends on it, so
+      // clearing without saving stores nothing anywhere.
+      initial: "idle",
+      states: {
+        idle: {
+          on: {
+            LESSON_PROPOSED: {
+              target: "pending",
+              actions: assign({
+                pendingLessonProposal: ({ event }) => event.payload,
+              }),
+            },
+          },
+        },
+        pending: {
+          on: {
+            CLEAR_LESSON: {
+              target: "idle",
+              actions: assign({
+                pendingLessonProposal: () => null,
+              }),
+            },
+            // A second proposal while one is pending overwrites —
+            // last write wins (rare: two durative coachings back to
+            // back). The dropped draft was never stored anywhere.
+            LESSON_PROPOSED: {
+              actions: assign({
+                pendingLessonProposal: ({ event }) => event.payload,
+              }),
+            },
+            // Cross-conversation leak guard, same as the siblings.
+            HYDRATE: {
+              target: "idle",
+              actions: assign({
+                conversationId: ({ event }) => event.conversationId,
+                messages: ({ event }) => event.messages,
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
+              }),
+            },
+            RESET: {
+              target: "idle",
+              actions: assign({
+                conversationId: () => null,
+                messages: () => [],
+                streamingMessageId: () => null,
+                pendingInfoRequest: () => null,
+                pendingLessonProposal: () => null,
               }),
             },
           },

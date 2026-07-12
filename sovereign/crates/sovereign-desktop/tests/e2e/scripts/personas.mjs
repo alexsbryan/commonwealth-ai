@@ -11,11 +11,19 @@
 //   node tests/e2e/scripts/personas.mjs --attach --spawn [--minutes 30]
 //        [--sessions 0] [--personas id,id] [--corpora id,id]
 //        [--scope-goal-corpus] [--max-searches 40]
+//        [--coach [--coach-lesson N]]
 //
 //   --attach            drive the resident corpora via the dev daemon on :9741
 //                       (the study configuration; profile bakes auto_collaborate=ON)
 //   --scope-goal-corpus scope each conversation to the goal corpus (diagnostic;
 //                       default leaves corpus enablement at the app's real default)
+//   --coach             TEACHABLE coach A/B (§8): ordered two-session scenario —
+//                       baseline questions → durative teaching turn → save the
+//                       proposed lesson via the bridge → fresh session, same
+//                       questions → deterministic before/after REPORT (answerLen
+//                       medians + jargon leakage; grounding rides the turn rows).
+//                       Bypasses the weighted random picker entirely.
+//   --coach-lesson N    which COACH_BANK lesson to teach (default 0 = brevity)
 //
 // Journal: test-artifacts/persona-journal.jsonl (wiped on start — copy stamped
 // files per run, chaos.mjs convention). Live web search (DDG) is ON by design:
@@ -83,6 +91,10 @@ const SPAWN = argv.includes("--spawn");
 // measures ttdraft (first draft glyphs) alongside the official ttft.
 const DRAFT_STREAM = argv.includes("--draft-stream");
 if (DRAFT_STREAM) process.env.SOVEREIGN_DRAFT_STREAM = "1";
+// TEACHABLE coach A/B — see the usage header. Deterministic and ordered;
+// nothing about it goes through pickWeighted.
+const COACH = argv.includes("--coach");
+const COACH_LESSON = Number(flag("coach-lesson", "0"));
 
 // Seedless like chaos.mjs — every run is a fresh draw.
 const rand = () => Math.random();
@@ -584,6 +596,10 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     // tail). intent identifies the synthesis path.
     finishReason: prov.finish_reason ?? null,
     intent: prov.intent ?? terminal.payload?.metadata?.intent ?? null,
+    // TEACHABLE whisper (stamped by the runtime on the FIRST answer a
+    // saved lesson influenced) + the per-turn applied-lessons manifest.
+    keptLesson: terminal.payload?.metadata?.kept_lesson ?? null,
+    lessonsApplied: terminal.payload?.metadata?.lessons_applied ?? null,
     ttft,
     ttdraft,
     latencyMs,
@@ -714,6 +730,7 @@ async function runSession(persona, corpora, corporaMeta) {
     let search = null;
     let refined = null;
     let refinedJudge = null;
+    let lessonCard = null;
     if (t.answer != null) {
       const observeStart = Date.now();
       const cardRow = await awaitGapCard(
@@ -780,6 +797,29 @@ async function runSession(persona, corpora, corporaMeta) {
         } else {
           strand.ignored += 1; // policy said no, or the card arrived after the user left
         }
+      }
+
+      // TEACHABLE capture observation (§8 capture precision): journal
+      // whether a "Learn this?" card fired on this turn, on EVERY run —
+      // the existing persona mix is the negative-control traffic.
+      // Residual-only wait on the gap card's observe window: the ring
+      // scan catches a card that arrived DURING the gap wait, and the
+      // common no-fire case adds ~zero wall time (awaitEvent with a
+      // zero timeout still does one ring pass).
+      const lessonResidual = Math.max(0, CARD_OBSERVE_MS - (Date.now() - observeStart));
+      const lessonRow = await bridge.awaitEvent(
+        t.seq,
+        (r) => r.event === "lesson-proposed",
+        lessonResidual,
+      );
+      if (lessonRow?.payload) {
+        lessonCard = {
+          fired: true,
+          key: lessonRow.payload.id ?? null,
+          enforcement: lessonRow.payload.enforcement ?? null,
+          display: String(lessonRow.payload.display ?? "").slice(0, 200),
+        };
+        say(`  ◈ lesson card fired [${lessonCard.enforcement}] "${lessonCard.display.slice(0, 60)}"`);
       }
     }
 
@@ -876,6 +916,9 @@ async function runSession(persona, corpora, corporaMeta) {
       evidence,
       card,
       search,
+      lessonCard,
+      keptLesson: t.keptLesson ?? null,
+      lessonsApplied: t.lessonsApplied ?? null,
       gapCheckRan,
       outcome,
       posture,
@@ -935,6 +978,252 @@ async function runSession(persona, corpora, corporaMeta) {
   return convo;
 }
 
+// ── TEACHABLE coach scenario (§8) — ordered, deterministic A/B ─────
+// Session A: K frozen in-corpus questions (baseline) + ONE durative
+// teaching turn → await `lesson-proposed` → save the ACTUAL draft via
+// the bridge → verify via list_lessons. Session B: a FRESH conversation,
+// the SAME K questions verbatim (lesson persistence is app state, so the
+// pairing isolates the lesson's effect). Deltas are DETERMINISTIC —
+// answerLen medians + jargon-leakage counts — never a new judge
+// dimension; the grounding zero-regression guard rides the normal turn
+// rows (aligned verdicts feed the hallucinations/grounded gates).
+// REPORT, not gate: K is tiny and N is always stated (§8b discipline).
+//
+// Teaching messages live HERE, not in personas.toml — the shape-only
+// rule forbids message text in persona cards.
+const COACH_BANK = [
+  "From now on, keep your answers short — a paragraph at most unless I ask for more.",
+  "Stop mentioning corpora, indexes, or retrieval — from now on just answer plainly.",
+];
+
+function median(xs) {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+// One scripted coach turn: drive it, observe the lesson card (240s on
+// the teaching turn — capture drafts post-turn; 15s on ordinary turns,
+// where any fire is a false positive), run the aligned scorer + user
+// judge, and journal a standard `turn` row tagged with coachPhase.
+async function coachTurn({ convo, persona, session, coachPhase, turnKind, turn, message, goal, goalCorpus }) {
+  const t = await driveTurn({ convo, message, persona, canceledAlready: true });
+  let lessonCard = null;
+  let lessonPayload = null;
+  if (t.seq != null) {
+    const window = turnKind === "coach" ? 240_000 : 15_000;
+    const row = await bridge.awaitEvent(t.seq, (r) => r.event === "lesson-proposed", window);
+    if (row?.payload) {
+      lessonPayload = row.payload;
+      lessonCard = {
+        fired: true,
+        key: row.payload.id ?? null,
+        enforcement: row.payload.enforcement ?? null,
+        display: String(row.payload.display ?? "").slice(0, 200),
+      };
+    }
+  }
+  let aligned = null;
+  let judge = null;
+  let evidence = null;
+  if (t.answer != null && t.answer.length > 0) {
+    const chunkTexts = await resolveChunkTexts(t.chunks ?? []);
+    evidence = {
+      retrieved: t.chunks?.length ?? 0,
+      resolved: chunkTexts.length,
+      chars: chunkTexts.reduce((n, x) => n + x.length, 0),
+      text: chunkTexts.map((x) => x.slice(0, 12000)).join("\n---\n").slice(0, 300000),
+    };
+    [aligned, judge] = await Promise.all([
+      scoreAnswerAligned(message, t.answer, chunkTexts),
+      personaJudge(message, t.answer, goal),
+    ]);
+  }
+  const partial = {
+    canceled: t.canceled,
+    error: t.error,
+    timeout: t.timeout,
+    answer: t.answer,
+    aligned,
+    judge,
+    card: null,
+    search: null,
+    refined: null,
+    refinedChanged: false,
+    refinedJudge: null,
+  };
+  const outcome = classifyOutcome(partial);
+  const leakage = LEAKAGE_RE.test(t.answer ?? "");
+  record({
+    ts: Date.now(),
+    kind: "turn",
+    session,
+    persona: persona.id,
+    coachPhase,
+    stratum: "in_corpus",
+    goal,
+    goalCorpus,
+    scoped: SCOPE_GOAL,
+    turn,
+    turnKind,
+    question: message.slice(0, 2000),
+    answer: t.answer != null ? t.answer.slice(0, 12000) : null,
+    answerLen: t.answer?.length ?? null,
+    finishReason: t.finishReason ?? null,
+    intent: t.intent ?? null,
+    ttftMs: t.ttft ?? null,
+    latencyMs: t.latencyMs,
+    retrieved: t.chunks?.length ?? null,
+    aligned: aligned
+      ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
+      : null,
+    judge,
+    evidence,
+    lessonCard,
+    keptLesson: t.keptLesson ?? null,
+    lessonsApplied: t.lessonsApplied ?? null,
+    outcome,
+    leakageFlag: leakage,
+    error: t.error ?? null,
+  });
+  say(
+    `  ${turnKind === "coach" ? "◈" : "·"} coach s${session}t${turn} [${coachPhase}] ` +
+      `len=${t.answer?.length ?? "-"} leak=${leakage ? "Y" : "n"}` +
+      `${lessonCard ? ` CARD(${lessonCard.enforcement})` : ""}${t.keptLesson ? " KEPT" : ""}`,
+  );
+  return {
+    answerLen: t.answer?.length ?? null,
+    leakage,
+    aligned,
+    lessonCard,
+    lessonPayload,
+    keptLesson: t.keptLesson ?? null,
+  };
+}
+
+async function runCoachScenario(coach, corpora, corporaMeta, madeConvos) {
+  const lesson = COACH_BANK[COACH_LESSON] ?? COACH_BANK[0];
+  const goalCorpus = ONLY_CORPORA.length ? pick(ONLY_CORPORA) : (pick(corpora) ?? null);
+  const meta = corporaMeta.find((c) => c.id === goalCorpus) ?? { id: goalCorpus };
+  say(`coach scenario: lesson[${COACH_LESSON}] "${lesson.slice(0, 80)}" corpus=${goalCorpus ?? "-"}`);
+
+  // Freeze the K questions once — PAIRING is what must be deterministic,
+  // not generation.
+  const K = 3;
+  const questions = [];
+  for (let i = 0; i < K; i++) {
+    const goal = await genGoal("in_corpus", meta);
+    if (!goal) continue;
+    const opener = await genOpener(coach, goal);
+    if (opener) questions.push({ goal, message: opener });
+  }
+  if (!questions.length) {
+    record({ ts: Date.now(), kind: "coach_capture_miss", reason: "no questions generated" });
+    say("✗ coach: brain produced no questions — scenario skipped");
+    return;
+  }
+
+  // ── Session A: baseline + the teaching turn ──────────────────────
+  sessionCounter += 1;
+  const sessionA = sessionCounter;
+  const convoA = (await bridge.invoke("create_conversation", {})).id;
+  madeConvos.push(convoA);
+  const baseline = [];
+  for (const [i, q] of questions.entries())
+    baseline.push(
+      await coachTurn({
+        convo: convoA, persona: coach, session: sessionA, coachPhase: "baseline",
+        turnKind: "ask", turn: i + 1, message: q.message, goal: q.goal, goalCorpus,
+      }),
+    );
+
+  say(`coach: teaching turn — "${lesson}"`);
+  const teach = await coachTurn({
+    convo: convoA, persona: coach, session: sessionA, coachPhase: "teach",
+    turnKind: "coach", turn: questions.length + 1, message: lesson,
+    goal: "teach a standing preference", goalCorpus,
+  });
+  record({
+    ts: Date.now(), kind: "coach_session", session: sessionA, phase: "A",
+    turns: questions.length + 1, cardFired: !!teach.lessonCard,
+  });
+  if (!teach.lessonPayload) {
+    record({ ts: Date.now(), kind: "coach_capture_miss", session: sessionA, lesson });
+    say("✗ coach: no lesson-proposed card within 240s — the loop cannot close (that IS the finding)");
+    return;
+  }
+
+  // Save the ACTUAL drafted payload (unedited → drafted_display null),
+  // then verify it landed via list_lessons.
+  let noteId = null;
+  try {
+    noteId = await bridge.invoke(
+      "save_lesson",
+      { draft: { ...teach.lessonPayload, drafted_display: null } },
+      30_000,
+    );
+  } catch (e) {
+    record({ ts: Date.now(), kind: "coach_save_error", session: sessionA, error: String(e).slice(0, 240) });
+    say(`✗ coach: save_lesson failed — ${String(e).slice(0, 140)}`);
+    return;
+  }
+  let verified = false;
+  for (let i = 0; i < 3 && !verified; i++) {
+    const lessons = (await bridge.invoke("list_lessons", {}, 15_000).catch(() => [])) ?? [];
+    verified = lessons.some((l) => l.id === noteId);
+    if (!verified) await new Promise((r) => setTimeout(r, 1500));
+  }
+  record({
+    ts: Date.now(), kind: "lesson_saved", session: sessionA, noteId,
+    key: teach.lessonPayload.id, enforcement: teach.lessonPayload.enforcement, verified,
+  });
+  say(`✓ coach: lesson saved (${teach.lessonPayload.enforcement}) note=${noteId} listVerified=${verified}`);
+
+  // ── Session B: fresh conversation, same questions verbatim ───────
+  sessionCounter += 1;
+  const sessionB = sessionCounter;
+  const convoB = (await bridge.invoke("create_conversation", {})).id;
+  madeConvos.push(convoB);
+  const post = [];
+  for (const [i, q] of questions.entries())
+    post.push(
+      await coachTurn({
+        convo: convoB, persona: coach, session: sessionB, coachPhase: "post",
+        turnKind: "ask", turn: i + 1, message: q.message, goal: q.goal, goalCorpus,
+      }),
+    );
+  record({ ts: Date.now(), kind: "coach_session", session: sessionB, phase: "B", turns: questions.length });
+
+  // ── Deterministic report (never a gate; N is stated) ─────────────
+  const lens = (arr) => arr.map((t) => t.answerLen).filter((x) => x != null);
+  const leaks = (arr) => arr.filter((t) => t.leakage).length;
+  const hallucs = (arr) => arr.filter((t) => t.aligned?.verdict === "hallucination").length;
+  const report = {
+    ts: Date.now(),
+    kind: "coach_report",
+    lesson,
+    enforcement: teach.lessonPayload.enforcement,
+    noteId,
+    listVerified: verified,
+    n: questions.length,
+    baseline: { medianAnswerLen: median(lens(baseline)), leakage: leaks(baseline), hallucinations: hallucs(baseline) },
+    post: { medianAnswerLen: median(lens(post)), leakage: leaks(post), hallucinations: hallucs(post) },
+    keptLessonSeen: post.some((t) => t.keptLesson != null),
+  };
+  record(report);
+  console.log("\n══ coach A/B report (deterministic; REPORT, not a gate) ══");
+  console.log(`  lesson: "${lesson}" → ${report.enforcement} (note ${noteId}, list-verified=${verified})`);
+  console.log(`  N=${report.n} paired questions`);
+  console.log(
+    `  median answerLen: baseline=${report.baseline.medianAnswerLen ?? "-"} → post=${report.post.medianAnswerLen ?? "-"}`,
+  );
+  console.log(`  jargon leakage:   baseline=${report.baseline.leakage} → post=${report.post.leakage}`);
+  console.log(
+    `  hallucinations:   baseline=${report.baseline.hallucinations} → post=${report.post.hallucinations} (zero-regression guard)`,
+  );
+  console.log(`  whisper seen on a post turn: ${report.keptLessonSeen ? "yes" : "no"}`);
+}
+
 // ── main ───────────────────────────────────────────────────────────
 async function main() {
   const personas = loadPersonas();
@@ -968,6 +1257,7 @@ async function main() {
       "message-complete",
       "message-error",
       "information-request",
+      "lesson-proposed",
       "message-refined",
       "turn-narration",
       "backend-error",
@@ -1009,8 +1299,17 @@ async function main() {
 
     const endAt = Date.now() + MINUTES * 60_000;
     runEndAt = endAt;
-    while (Date.now() < endAt && (SESSIONS === 0 || sessionCounter < SESSIONS)) {
-      const persona = pickWeighted(personas);
+    if (COACH) {
+      const coach = personas.find((p) => p.id === "coach");
+      if (!coach) throw new Error("--coach requires the coach card in personas.toml");
+      await runCoachScenario(coach, corpora, corporaMeta, madeConvos);
+    }
+    // Weight-0 cards (the scripted coach) are structurally excluded from
+    // the random draw — behavior-preserving for the six standing personas.
+    const pool = personas.filter((p) => p.weight > 0);
+    if (!COACH && !pool.length) throw new Error("no drawable personas (all weight 0)");
+    while (!COACH && Date.now() < endAt && (SESSIONS === 0 || sessionCounter < SESSIONS)) {
+      const persona = pickWeighted(pool);
       try {
         const convo = await runSession(persona, corpora, corporaMeta);
         if (convo) madeConvos.push(convo);

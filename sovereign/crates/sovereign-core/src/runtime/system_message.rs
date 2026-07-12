@@ -750,6 +750,9 @@ impl Runtime {
             evidence,
             None,
             None,
+            // Legacy non-streaming caller — no lesson threading (the
+            // desktop rides the streaming path; CLI parity is P1).
+            None,
         )
         .await
         {
@@ -793,8 +796,10 @@ impl Runtime {
             // Test/CLI entrypoint: no live session_id available
             // here. The streaming-spawn path passes its own
             // routing_events + session_id so the user actually
-            // sees the gap-check chips — and its own
-            // RefinementGuard when the turn was gate-released.
+            // sees the gap-check chips — plus its lesson prompt
+            // and its own RefinementGuard when the turn was
+            // gate-released.
+            None,
             None,
             None,
             None,

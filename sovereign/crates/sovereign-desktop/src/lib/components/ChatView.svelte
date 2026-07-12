@@ -31,6 +31,7 @@
     DocumentAsset,
     DocumentOperationPayload,
     InformationRequestPayload,
+    LessonProposedPayload,
     MessageRefinedPayload,
     NextStepOffer,
     StarterQuestion,
@@ -54,6 +55,7 @@
   import TaskProgress from "./TaskProgress.svelte";
   import ApprovalCard from "./ApprovalCard.svelte";
   import InformationRequestCard from "./InformationRequestCard.svelte";
+  import LessonCard from "./LessonCard.svelte";
   import InterpretationBanner from "./InterpretationBanner.svelte";
   import ClarificationCard from "./ClarificationCard.svelte";
   import NarrationChip from "./NarrationChip.svelte";
@@ -495,6 +497,7 @@
   let messages = $derived($snapshot.context.messages);
   let streamingMessageId = $derived($snapshot.context.streamingMessageId);
   let pendingInfoRequest = $derived($snapshot.context.pendingInfoRequest);
+  let pendingLessonProposal = $derived($snapshot.context.pendingLessonProposal);
   let activeConversationId = $derived($snapshot.context.conversationId);
 
   // ── Screen-reader completion announcement (a11y) ──────────────
@@ -608,6 +611,7 @@
   let unlistenDocOp: UnlistenFn | null = null;
   let unlistenSkeletonRebuilt: UnlistenFn | null = null;
   let unlistenInfoRequest: UnlistenFn | null = null;
+  let unlistenLessonProposed: UnlistenFn | null = null;
   let unlistenMessageRefined: UnlistenFn | null = null;
 
   // Sync the external `conversationId` prop into the machine. `HYDRATE`
@@ -756,6 +760,18 @@
       },
     );
 
+    // TEACHABLE lesson capture — forwarded into the machine's
+    // parallel lessonProposal region; renders the "Learn this?"
+    // card. Fire-and-forget on the backend side: ignoring the card
+    // blocks nothing and stores nothing.
+    unlistenLessonProposed = await listen<LessonProposedPayload>(
+      "lesson-proposed",
+      (event) => {
+        send({ type: "LESSON_PROPOSED", payload: event.payload });
+        scrollToBottom();
+      },
+    );
+
     // Post-stream refinement. The machine's guard drops the event
     // when the conversation id has moved on (user switched chats
     // mid-refinement).
@@ -789,6 +805,7 @@
     unlistenDocOp?.();
     unlistenSkeletonRebuilt?.();
     unlistenInfoRequest?.();
+    unlistenLessonProposed?.();
     unlistenMessageRefined?.();
   });
 
@@ -1432,6 +1449,14 @@
             });
           }
         }}
+      />
+
+      <!-- TEACHABLE "Learn this?" consent card. Same flex column as
+           the info card so the lesson_drafted chip tethers into it
+           with the gap_check_fired geometry. -->
+      <LessonCard
+        proposal={pendingLessonProposal}
+        onHandled={() => send({ type: "CLEAR_LESSON" })}
       />
 
       <!-- Antifragile-routing UI. All three read from `routingStore`

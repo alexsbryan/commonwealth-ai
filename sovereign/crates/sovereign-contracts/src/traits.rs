@@ -1304,6 +1304,13 @@ pub trait ApprovalChannel: Send + Sync {
     /// default impl is a no-op — non-UI surfaces simply let the
     /// new content land in the store on the next read.
     fn emit_message_refined(&self, _payload: MessageRefinedPayload) {}
+
+    /// Surface a drafted lesson card (TEACHABLE P0). Fire-and-forget —
+    /// no pending map, no reply channel; the user's Save lands through
+    /// a separate desktop command and dismissal calls nothing, so the
+    /// originating turn never blocks. Default no-op keeps every non-UI
+    /// impl (CLI, server, tests, automation) unchanged.
+    fn emit_lesson_proposed(&self, _payload: LessonProposedPayload) {}
 }
 
 // ─── 7. Insight Storage ──────────────────────────────────────

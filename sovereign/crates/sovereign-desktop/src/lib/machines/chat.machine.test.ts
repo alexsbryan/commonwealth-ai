@@ -12,7 +12,11 @@
 import { describe, it, expect } from "vitest";
 import { createActor } from "xstate";
 import { chatMachine } from "./chat.machine";
-import type { MessageEntry, InformationRequestPayload } from "../types";
+import type {
+  MessageEntry,
+  InformationRequestPayload,
+  LessonProposedPayload,
+} from "../types";
 
 function userMsg(id: string, content = "hello"): MessageEntry {
   return {
@@ -530,5 +534,104 @@ describe("chatMachine — info-request parallel region", () => {
       payload: fakeInfoRequest("second"),
     });
     expect(actor.getSnapshot().context.pendingInfoRequest?.key).toBe("second");
+  });
+});
+
+// ─── TEACHABLE lesson-proposal parallel region ─────────────────────
+
+function fakeLessonProposal(id = "draft-1"): LessonProposedPayload {
+  return {
+    id,
+    conversation_id: "c1",
+    message_id: "m1",
+    display: "Keep answers short.",
+    prompt_form: "",
+    enforcement: "param",
+    params: { soft_target_cap: 300 },
+    taught_from: "keep answers shorter from now on",
+  };
+}
+
+describe("chatMachine — lesson-proposal parallel region", () => {
+  it("LESSON_PROPOSED puts the region into pending", () => {
+    const actor = startActor();
+    const proposal = fakeLessonProposal();
+    actor.send({ type: "LESSON_PROPOSED", payload: proposal });
+    expect(actor.getSnapshot().matches({ lessonProposal: "pending" })).toBe(
+      true,
+    );
+    expect(actor.getSnapshot().context.pendingLessonProposal).toEqual(
+      proposal,
+    );
+  });
+
+  it("CLEAR_LESSON returns to idle and clears the payload", () => {
+    const actor = startActor();
+    actor.send({ type: "LESSON_PROPOSED", payload: fakeLessonProposal() });
+    actor.send({ type: "CLEAR_LESSON" });
+    expect(actor.getSnapshot().matches({ lessonProposal: "idle" })).toBe(true);
+    expect(actor.getSnapshot().context.pendingLessonProposal).toBeNull();
+  });
+
+  it("survives a full streaming turn (parallel with `turn`)", () => {
+    const actor = startActor();
+    actor.send({ type: "SEND_INITIATED", userMessage: userMsg("u1") });
+    actor.send({ type: "SEND_START", assistantMessageId: "a1" });
+    actor.send({ type: "LESSON_PROPOSED", payload: fakeLessonProposal() });
+    actor.send({ type: "MESSAGE_CHUNK", messageId: "a1", text: "chunk" });
+    actor.send({
+      type: "MESSAGE_COMPLETE",
+      messageId: "a1",
+      fullText: "chunk",
+      pendingText: "",
+    });
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "idle" })).toBe(true);
+    expect(s.matches({ lessonProposal: "pending" })).toBe(true);
+    expect(s.context.pendingLessonProposal).not.toBeNull();
+  });
+
+  it("a second LESSON_PROPOSED overwrites the pending one (last wins)", () => {
+    const actor = startActor();
+    actor.send({
+      type: "LESSON_PROPOSED",
+      payload: fakeLessonProposal("first"),
+    });
+    actor.send({
+      type: "LESSON_PROPOSED",
+      payload: fakeLessonProposal("second"),
+    });
+    expect(actor.getSnapshot().context.pendingLessonProposal?.id).toBe(
+      "second",
+    );
+  });
+
+  it("HYDRATE while pending clears the card (no cross-conversation leak)", () => {
+    // Pins the enumerated-reset discipline: every HYDRATE/RESET assign
+    // must include pendingLessonProposal, or a card taught in one
+    // conversation would follow the user into the next.
+    const actor = startActor();
+    actor.send({ type: "LESSON_PROPOSED", payload: fakeLessonProposal() });
+    actor.send({ type: "HYDRATE", conversationId: "c2", messages: [] });
+    const s = actor.getSnapshot();
+    expect(s.matches({ lessonProposal: "idle" })).toBe(true);
+    expect(s.context.pendingLessonProposal).toBeNull();
+  });
+
+  it("coexists with a pending info-request (both cards at once)", () => {
+    // The only genuinely new region interaction: a gap card and a
+    // lesson card pending simultaneously must not clobber each other.
+    const actor = startActor();
+    actor.send({ type: "INFO_REQUEST_ARRIVED", payload: fakeInfoRequest() });
+    actor.send({ type: "LESSON_PROPOSED", payload: fakeLessonProposal() });
+    let s = actor.getSnapshot();
+    expect(s.matches({ infoRequest: "pending" })).toBe(true);
+    expect(s.matches({ lessonProposal: "pending" })).toBe(true);
+    // Clearing one leaves the other pending.
+    actor.send({ type: "CLEAR_LESSON" });
+    s = actor.getSnapshot();
+    expect(s.matches({ lessonProposal: "idle" })).toBe(true);
+    expect(s.matches({ infoRequest: "pending" })).toBe(true);
+    expect(s.context.pendingInfoRequest).not.toBeNull();
   });
 });

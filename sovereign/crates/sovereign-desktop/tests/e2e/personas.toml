@@ -137,3 +137,26 @@ you're gone. You never wait around for extra prompts or cards, and you never
 do a second step to get an answer."""
 followup_shape = """
 Rephrases get shorter, lower-effort, and visibly irritated."""
+
+# TEACHABLE coach (scripted — weight 0 keeps it OUT of the random session
+# mix; only the --coach scenario draws it). Teaching messages live in
+# personas.mjs COACH_BANK, not here: the shape-only rule forbids message
+# text in cards.
+[[persona]]
+id = "coach"
+weight = 0
+max_turns = 8
+satisfaction_threshold = 6
+abandon_after = 99
+cancel_ttft_ms = 0
+patience_ms = 240000
+search_click = "never"
+click_p = 0.0
+casual_typing_p = 0.0
+goal_mix = [1.0, 0.0, 0.0]
+shape = """
+You ask plain, direct questions about things your collection covers, and you
+state standing preferences about HOW the assistant should answer, using
+explicit durative language ("from now on", "always", "stop …ing"). You are
+patient and never abandon."""
+followup_shape = ""

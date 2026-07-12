@@ -40,6 +40,77 @@ pub(crate) struct KnowledgeContext {
     /// `ResponseProvenance.coverage` so the streaming and
     /// non-streaming paths surface the same chip data.
     pub(crate) coverage: Option<CoverageNote>,
+    /// TEACHABLE P0 — active-lesson snapshot taken when this context
+    /// was built (same discipline as `prompt_budget_note`: the spawn
+    /// records what the request was actually built from, so what
+    /// applied and what's in metadata cannot drift).
+    pub(crate) lessons: TurnLessons,
+}
+
+/// TEACHABLE P0 — what the active lessons contributed to this turn.
+/// Built once at prepare time from the same snapshot the request was
+/// assembled with; rides into the streaming spawn, which (a) runs the
+/// post-gate term-avoid pass over `term_avoid`, (b) records `applied`
+/// in `Message.metadata.lessons_applied` (dropping the transform entry
+/// when the pass changed nothing), (c) stamps `first_application`
+/// lessons and emits the one-time `kept_lesson` whisper, and (d)
+/// re-injects `prompt_form` into the refinement prompt (today-anchor
+/// precedent).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TurnLessons {
+    pub(crate) term_avoid: Vec<String>,
+    pub(crate) applied: Vec<crate::lessons::AppliedLessonMeta>,
+    pub(crate) first_application: Vec<crate::lessons::ActiveLesson>,
+    pub(crate) prompt_form: Option<String>,
+}
+
+impl TurnLessons {
+    /// Build the turn manifest from the loaded snapshot plus which
+    /// rungs actually engaged at prepare time. The transform rung is
+    /// tentative here — the streaming spawn drops it (from `applied`
+    /// AND `first_application`) when the post-gate pass changed
+    /// nothing, so metadata records influence, not intent.
+    pub(crate) fn from_snapshot(
+        set: &crate::lessons::ActiveLessonSet,
+        length_applied: bool,
+        prompt_injected: bool,
+    ) -> Self {
+        let mut applied = Vec::new();
+        let mut first_application = Vec::new();
+        let mut track = |lesson: &crate::lessons::ActiveLesson, enforcement: &'static str| {
+            applied.push(crate::lessons::AppliedLessonMeta {
+                id: lesson.note_id.clone(),
+                enforcement,
+            });
+            if lesson.payload.first_applied_at.is_none() {
+                first_application.push(lesson.clone());
+            }
+        };
+        if length_applied {
+            if let Some(l) = &set.length {
+                track(l, "param");
+            }
+        }
+        let term_avoid = set.term_list();
+        if !term_avoid.is_empty() {
+            if let Some(l) = &set.term_avoid {
+                track(l, "transform");
+            }
+        }
+        let mut prompt_form = None;
+        if prompt_injected {
+            if let Some(l) = &set.prompt {
+                track(l, "prompt");
+                prompt_form = Some(l.payload.prompt_form.clone());
+            }
+        }
+        Self {
+            term_avoid,
+            applied,
+            first_application,
+            prompt_form,
+        }
+    }
 }
 
 /// One meta-atlas anchor injection. The chat path logs a
@@ -119,6 +190,9 @@ pub(crate) struct KnowledgeQueryPlan {
     /// meta-atlas recognise and which stream did each anchor
     /// serve" — the fourth legibility lens.
     pub(crate) meta_atlas_hits: Vec<MetaAtlasHitRecord>,
+    /// TEACHABLE P0 — active-lesson snapshot taken when the plan was
+    /// built. See [`TurnLessons`].
+    pub(crate) lessons: TurnLessons,
 }
 
 /// Streaming handle returned by [`super::Runtime::handle_message_stream`].
