@@ -325,7 +325,7 @@ pub async fn bootstrap_with_progress(
         );
     };
 
-    let config = state.config.read().await.clone();
+    let mut config = state.config.read().await.clone();
 
     if !config.model_path.exists() {
         return Err(format!(
@@ -333,6 +333,14 @@ pub async fn bootstrap_with_progress(
             config.model_path.display()
         ));
     }
+
+    // CPU/arch compatibility gate. Before loading anything, substitute a dense
+    // model (or fail with a clear, in-app explanation) when the configured chat
+    // model is a recurrent architecture that SIGSEGVs in ggml's CPU prefill —
+    // so a model the machine can't run degrades gracefully instead of crashing
+    // the app on the first message. No-op on GPU machines. See
+    // `builders::model_compat`.
+    builders::model_compat::apply_cpu_compat_policy(&mut config, &state.approval.app_handle())?;
 
     // Load inference. We end up with two distinct provider Arcs:
     //

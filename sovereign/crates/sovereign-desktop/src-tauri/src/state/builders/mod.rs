@@ -26,6 +26,7 @@
 pub mod health;
 pub mod inference;
 pub mod knowledge_view;
+pub mod model_compat;
 pub mod store;
 
 #[cfg(test)]

@@ -75,6 +75,16 @@ pub(crate) async fn load_inference(
                 .map(|c| c.models.effective_context_size())
                 .unwrap_or(16384);
 
+            // If the GPU probe below forces a CPU fallback AND the configured
+            // chat model is a recurrent arch that crashes ggml's CPU prefill,
+            // we must swap in a dense model here too — otherwise the forced-CPU
+            // load walks straight into the SIGSEGV the probe was dodging. The
+            // common CPU-only machine is handled proactively in `model_compat`
+            // (with a user-facing notice) before we ever reach here; this
+            // closes the rarer path where a GPU exists but its probe crashes.
+            // Best-effort + logged.
+            let mut cpu_fallback_chat: Option<std::path::PathBuf> = None;
+
             // Crash-isolated smoke test: spawn ourselves with `--smoketest`
             // and run a 1-token decode against the chat slot's GGUF before
             // loading it in-process. If the child SIGSEGVs (e.g., Gemma 4 on
@@ -134,10 +144,62 @@ pub(crate) async fn load_inference(
                                 "smoketest: GPU path crashed — falling back to CPU. \
                                  Set SOVEREIGN_FORCE_CPU_CHAT=0 to disable this guard."
                             );
+                            // Capture the native crash as a durable, submittable
+                            // record (see `crate::crash_report`). Best-effort:
+                            // must never disrupt the fallback.
+                            let signal = match other {
+                                crate::smoketest::SmokeResult::Crashed { signal } => Some(*signal),
+                                _ => None,
+                            };
+                            let arch = sovereign_inference::gguf_meta::read_architecture(
+                                &config.model_path,
+                            )
+                            .ok()
+                            .flatten();
+                            crate::crash_report::record_native_crash(
+                                format!(
+                                    "a model's GPU probe crashed ({other}); fell back to CPU \
+                                     so nothing's blocked"
+                                ),
+                                Some(config.model_path.display().to_string()),
+                                arch,
+                                Some(smoke_gpu_layers),
+                                signal,
+                                None,
+                            );
                             // SAFETY: bootstrap runs once, single task, no
                             // concurrent env mutation. The var is read by
                             // sovereign-inference's chat-slot loader below.
                             std::env::set_var("SOVEREIGN_FORCE_CPU_CHAT", "1");
+
+                            // Now CPU-bound. If the configured chat model can't
+                            // run on CPU either, swap in a dense one discovered
+                            // alongside it — the same gate `model_compat` uses —
+                            // so the load below doesn't hit the recurrent-SET
+                            // crash the probe just caught.
+                            if let sovereign_inference::cpu_compat::ChatModelChoice::Substitute {
+                                path,
+                                unsafe_arch,
+                                safe_arch,
+                            } = sovereign_inference::cpu_compat::choose_cpu_safe_chat_model(
+                                &config.model_path,
+                                true,
+                                config
+                                    .model_path
+                                    .parent()
+                                    .unwrap_or_else(|| std::path::Path::new(".")),
+                            ) {
+                                tracing::warn!(
+                                    requested = %config.model_path.display(),
+                                    substitute = %path.display(),
+                                    unsafe_arch = %unsafe_arch,
+                                    safe_arch = %safe_arch,
+                                    "smoketest: forced CPU + configured chat model is \
+                                     CPU-incompatible — substituting a dense model so the CPU \
+                                     load avoids the recurrent-SET crash"
+                                );
+                                cpu_fallback_chat = Some(path);
+                            }
                         }
                         other => {
                             tracing::warn!(
@@ -152,10 +214,24 @@ pub(crate) async fn load_inference(
             }
 
             emit(BootstrapPhase::LoadingModel);
+            // Honour any GPU-probe-crash CPU-fallback substitution decided above.
+            let chat_path: &std::path::Path =
+                cpu_fallback_chat.as_deref().unwrap_or(&config.model_path);
+            // If we substituted for a CPU fallback, a recurrent PRIMARY (Slow)
+            // model would crash on the first synthesis turn — drop it (Slow then
+            // routes to the fast slot or a mesh peer), mirroring `model_compat`.
+            let primary_path: Option<&std::path::Path> = if cpu_fallback_chat.is_some() {
+                config
+                    .primary_model_path
+                    .as_deref()
+                    .filter(|&p| !path_is_cpu_incompatible(p))
+            } else {
+                config.primary_model_path.as_deref()
+            };
             let loaded = Arc::new(
                 EmbeddedLlamaCpp::load_full_with_families(
-                    &config.model_path,
-                    config.primary_model_path.as_deref(),
+                    chat_path,
+                    primary_path,
                     config.embed_model_path.as_deref(),
                     config.code_model_path.as_deref(),
                     effective_ctx,
@@ -168,7 +244,7 @@ pub(crate) async fn load_inference(
                 .map_err(|e| format!("Failed to load model: {e}"))?,
             );
 
-            if config.primary_model_path.is_some() {
+            if primary_path.is_some() {
                 // Configurable via `DesktopConfig.primary_idle_secs`
                 // (default 300s). Raise toward `u64::MAX` to pin the
                 // primary; lower for eager VRAM reclaim.
@@ -192,6 +268,17 @@ pub(crate) async fn load_inference(
         None => Arc::clone(&raw_inference),
     };
     Ok((raw_inference, inference))
+}
+
+/// True when the GGUF at `p` is a recurrent architecture that crashes ggml's
+/// CPU prefill (see `sovereign_inference::cpu_compat`). An unreadable/unknown
+/// header → `false`: we only drop a model we can positively classify as unsafe.
+fn path_is_cpu_incompatible(p: &std::path::Path) -> bool {
+    sovereign_inference::gguf_meta::read_architecture(p)
+        .ok()
+        .flatten()
+        .map(|a| sovereign_inference::cpu_compat::is_cpu_incompatible_arch(&a))
+        .unwrap_or(false)
 }
 
 /// Build the daemon-routing provider for Attach mode: a

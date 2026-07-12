@@ -37,6 +37,7 @@
   import SetupPlan from "./lib/setup/SetupPlan.svelte";
   import ConsentGate from "./lib/setup/ConsentGate.svelte";
   import ReconnectBanner from "./lib/components/ReconnectBanner.svelte";
+  import ModelNoticeBanner from "./lib/components/ModelNoticeBanner.svelte";
   import { getFirstMeshConsent } from "./lib/api";
   import { ensureSeededConversations } from "./lib/setup/seededConversations";
   import ToastHost from "./lib/components/ToastHost.svelte";
@@ -572,6 +573,12 @@
      Visible across every view, including setup/welcome — a daemon
      crash mid-setup deserves the same recovery surface. -->
 <ReconnectBanner />
+
+<!-- Boot-time notice when the configured chat model can't run on this
+     machine's CPU and a dense model was substituted (see model_compat.rs).
+     Informational + dismissible — the graceful alternative to a first-query
+     crash on an incompatible architecture. -->
+<ModelNoticeBanner />
 
 {#if attachedToDaemon}
   <!-- Pill anchored top-right; shows briefly on startup then fades out.

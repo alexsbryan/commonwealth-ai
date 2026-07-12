@@ -220,7 +220,7 @@ fn os_label() -> String {
     format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH)
 }
 
-fn desktop_dir() -> Option<PathBuf> {
+pub(crate) fn desktop_dir() -> Option<PathBuf> {
     // `dirs::desktop_dir()` honours the OS-specific path (XDG_DESKTOP_DIR
     // on Linux, ~/Desktop on macOS, the localized name on Windows).
     // Falls back to home if Desktop isn't configured.
@@ -234,7 +234,7 @@ fn desktop_dir() -> Option<PathBuf> {
 /// `alexsbryan` is the current code owner; update the URL if the repo moves.
 const GITHUB_ISSUES_URL: &str = "https://github.com/alexsbryan/commonwealth-ai/issues/new";
 
-fn issues_url() -> String {
+pub(crate) fn issues_url() -> String {
     GITHUB_ISSUES_URL.to_string()
 }
 
