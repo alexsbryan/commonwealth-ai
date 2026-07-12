@@ -580,12 +580,15 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     await new Promise((r) => setTimeout(r, 1200));
   }
   const latencyMs = Date.now() - t0;
+  // preSeq rides every return: lesson-proposed fires from a detached
+  // spawn typically BEFORE message-complete, so lesson-card observation
+  // must scan from the pre-send seq (`since`), not the terminal seq.
   if (canceled)
-    return { canceled: true, ttft, ttdraft, latencyMs, narration, seq: cursor, messageId };
+    return { canceled: true, ttft, ttdraft, latencyMs, narration, seq: cursor, preSeq: since, messageId };
   if (!terminal)
-    return { timeout: true, ttft, ttdraft, latencyMs, narration, seq: cursor, messageId };
+    return { timeout: true, ttft, ttdraft, latencyMs, narration, seq: cursor, preSeq: since, messageId };
   if (terminal.event === "message-error")
-    return { error: JSON.stringify(terminal.payload ?? {}).slice(0, 240), ttft, latencyMs, narration, seq: terminal.seq, messageId };
+    return { error: JSON.stringify(terminal.payload ?? {}).slice(0, 240), ttft, latencyMs, narration, seq: terminal.seq, preSeq: since, messageId };
   const rc = terminal.payload?.metadata?.retrieved_chunks;
   const prov = terminal.payload?.metadata?.provenance ?? {};
   return {
@@ -605,6 +608,7 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
     latencyMs,
     narration,
     seq: terminal.seq,
+    preSeq: since,
     messageId,
   };
 }
@@ -808,7 +812,10 @@ async function runSession(persona, corpora, corporaMeta) {
       // zero timeout still does one ring pass).
       const lessonResidual = Math.max(0, CARD_OBSERVE_MS - (Date.now() - observeStart));
       const lessonRow = await bridge.awaitEvent(
-        t.seq,
+        // Pre-send seq: the card is emitted by a detached spawn and
+        // usually lands BEFORE message-complete — scanning from the
+        // terminal seq misses it.
+        t.preSeq ?? t.seq,
         (r) => r.event === "lesson-proposed",
         lessonResidual,
       );
@@ -1012,7 +1019,8 @@ async function coachTurn({ convo, persona, session, coachPhase, turnKind, turn, 
   let lessonPayload = null;
   if (t.seq != null) {
     const window = turnKind === "coach" ? 240_000 : 15_000;
-    const row = await bridge.awaitEvent(t.seq, (r) => r.event === "lesson-proposed", window);
+    // Pre-send seq — see the lessonCard observation in runSession.
+    const row = await bridge.awaitEvent(t.preSeq ?? t.seq, (r) => r.event === "lesson-proposed", window);
     if (row?.payload) {
       lessonPayload = row.payload;
       lessonCard = {

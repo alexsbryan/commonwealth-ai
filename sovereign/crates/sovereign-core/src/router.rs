@@ -64,22 +64,36 @@ const SELF_ASSESSMENT_PROMPT: &str = include_str!("../assets/self_assessment_pro
 ///      persisted in `metadata.provenance.intent` or
 ///      `metadata.intent`.
 ///
-/// Purely structural — no lexical pattern matching on the current
-/// message. The earlier `looks_like_anaphoric_followup` keyed off a
-/// hand-maintained list of lead words ("Who"/"After"/"Going back to"
-/// fell outside it, dropping marathon turns onto the NotImplemented
-/// stall path). We replace that with the principle: if the prior
-/// turn was a knowledge answer, the next turn under the same
-/// conversation_id is part of the same knowledge thread until the
-/// downstream classifier produces strong evidence otherwise. This
-/// pre-check fires BEFORE the embed router, so the embed router's
-/// high-confidence non-knowledge verdicts (which run downstream of
-/// the personal-recall heuristic in the wider stack) never see the
-/// case where they'd otherwise hijack the thread.
+/// Structural, with ONE deterministic message-side escape. The earlier
+/// `looks_like_anaphoric_followup` keyed off a hand-maintained list of
+/// lead words ("Who"/"After"/"Going back to" fell outside it, dropping
+/// marathon turns onto the NotImplemented stall path). We replace that
+/// with the principle: if the prior turn was a knowledge answer, the
+/// next turn under the same conversation_id is part of the same
+/// knowledge thread until the downstream classifier produces strong
+/// evidence otherwise. This pre-check fires BEFORE the embed router,
+/// so the embed router's high-confidence non-knowledge verdicts (which
+/// run downstream of the personal-recall heuristic in the wider stack)
+/// never see the case where they'd otherwise hijack the thread.
+///
+/// The escape (TEACHABLE P0, preflight-lessons leg 2 2026-07-11):
+/// explicit durative coaching ("from now on…", "always…", "stop …ing")
+/// is standing instruction about HOW to answer, not thread content —
+/// and coaching is by nature a turn-2+ message in an active thread, so
+/// unconditional inheritance made the ConationQuery capture path
+/// structurally unreachable. `lessons::detect_durative` is the same
+/// precision-first lexical floor the capture uses (deterministic,
+/// survives model swaps), and the escape only UN-shortcuts: the embed
+/// router / coarse pass still decide the intent, so a durative-worded
+/// knowledge follow-up ("did it always work this way?") re-routes to
+/// knowledge via the exemplar bank rather than being forced anywhere.
 ///
 /// Surfaced by sovereign/bench/wikipedia_learn 2026-05-17 marathon
 /// (v9→v10).
-fn inherits_prior_knowledge_intent(context: &ConversationContext) -> Option<Intent> {
+fn inherits_prior_knowledge_intent(message: &str, context: &ConversationContext) -> Option<Intent> {
+    if crate::lessons::detect_durative(&message.to_lowercase()) {
+        return None;
+    }
     let prior_assistant = context
         .conversation
         .messages
@@ -1545,7 +1559,7 @@ impl Router for LlmRouter {
         // `prior_assistant.metadata.intent`, no lexical pattern
         // matching on the current message. See
         // `inherits_prior_knowledge_intent` for the full rationale.
-        if let Some(inherited) = inherits_prior_knowledge_intent(context) {
+        if let Some(inherited) = inherits_prior_knowledge_intent(message, context) {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
             let intent_str = format!("{inherited:?}");
@@ -2071,6 +2085,81 @@ mod tests {
         // The matched tool's cosine exceeds the orthogonal alternative (0.0),
         // i.e. it would clear the relative `tool_sim > top_sim` rule.
         assert!(sim > 0.0);
+    }
+
+    #[test]
+    fn thread_inherit_yields_to_durative_coaching() {
+        // Pins the TEACHABLE escape on the knowledge-thread shortcut:
+        // an ordinary follow-up inherits the prior turn's knowledge
+        // intent; explicit durative coaching does NOT — it must fall
+        // through to the real classifier (which the conation exemplar
+        // bank then catches). Without the escape, coaching in an
+        // active thread inherited DeepQuery and the capture spawn was
+        // structurally unreachable (preflight-lessons leg 2,
+        // 2026-07-11).
+        fn ctx_with_prior_intent(intent: &str) -> ConversationContext {
+            ConversationContext {
+                conversation: Conversation {
+                    id: "c1".to_string(),
+                    title: None,
+                    messages: vec![Message {
+                        id: "a1".to_string(),
+                        conversation_id: "c1".to_string(),
+                        role: Role::Assistant,
+                        content: "a knowledge answer".to_string(),
+                        created_at: 0,
+                        metadata: Some(serde_json::json!({ "intent": intent })),
+                        version: 0,
+                    }],
+                    created_at: 0,
+                    updated_at: 0,
+                    version: 0,
+                    deleted_at: None,
+                    skill_id: None,
+                    enabled_corpora: None,
+                    searched_sources: None,
+                },
+                memories: Vec::new(),
+                working_memory: None,
+                installed_corpora: vec![],
+                corpus_ceiling: None,
+                document_session: None,
+                topic_context: None,
+                knowledge_view_digests: None,
+                temporal_tensions: Vec::new(),
+                compacted_history: None,
+                history_retrieval_hits: None,
+                tool_dossier: None,
+                intent_policy: None,
+            }
+        }
+
+        let ctx = ctx_with_prior_intent("deep_query");
+        // Ordinary follow-up: inherits.
+        assert_eq!(
+            inherits_prior_knowledge_intent("why does that happen", &ctx),
+            Some(Intent::DeepQuery),
+        );
+        // Durative coaching: never inherits — un-shortcuts to the
+        // classifier stack.
+        assert_eq!(
+            inherits_prior_knowledge_intent(
+                "From now on, keep your answers short — a paragraph at most.",
+                &ctx,
+            ),
+            None,
+        );
+        assert_eq!(
+            inherits_prior_knowledge_intent("stop mentioning your sources", &ctx),
+            None,
+        );
+        // Deictic conation is NOT the escape's job (pre-existing
+        // behavior preserved: it inherits here and the downstream
+        // stack owns any future improvement).
+        assert_eq!(
+            inherits_prior_knowledge_intent("make this shorter", &ctx),
+            Some(Intent::DeepQuery),
+        );
     }
 
     #[test]

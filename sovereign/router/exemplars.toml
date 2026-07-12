@@ -14,8 +14,10 @@
 #   - comparison_query   — bounded two-entity contrast
 #   - metalingual_query  — about how the system or conversation uses
 #                          a word ("in this codebase", "earlier you said")
-#   - conation_query     — short imperative directed at the assistant
-#                          ("stop", "shorter please", "try again")
+#   - conation_query     — imperative directed at the assistant: one-shot
+#                          ("stop", "shorter please", "try again") or
+#                          durative coaching ("from now on, keep answers
+#                          short" — the TEACHABLE capture frame)
 #   - commissive_query   — first-person future commitment
 #                          ("remind me to X", "I'll do Y tomorrow")
 #   - expressive_query   — emotional / relational disclosure
@@ -425,6 +427,43 @@ query = "Halt — wrong direction."
 [[example]]
 intent = "conation_query"
 query = "Faster, just the headline."
+
+# ── Durative-coaching shape (2026-07-11, TEACHABLE P0) ──
+# Standing preferences about HOW the assistant answers ("from now
+# on…", "always…", "stop …ing") are CONATION — the same conative
+# frame as the one-shot imperatives above, just durative aspect.
+# The cell previously held only deictic shapes, so a real coaching
+# sentence ("From now on, keep your answers short — a paragraph at
+# most unless I ask for more.") embedded closer to knowledge asks
+# and routed DeepQuery (caught live by preflight-lessons.mjs leg 2,
+# 2026-07-11) — which meant the TEACHABLE capture spawn in
+# handle_conation_query never saw coaching at all. Shapes only —
+# worded apart from both the routing bench items and the coach
+# harness bank.
+
+[[example]]
+intent = "conation_query"
+query = "From now on, keep your answers shorter."
+
+[[example]]
+intent = "conation_query"
+query = "Keep it to one paragraph from now on unless I ask for more."
+
+[[example]]
+intent = "conation_query"
+query = "Always give me more detail unless I say otherwise."
+
+[[example]]
+intent = "conation_query"
+query = "Stop mentioning your sources every time you answer."
+
+[[example]]
+intent = "conation_query"
+query = "Never use technical jargon with me."
+
+[[example]]
+intent = "conation_query"
+query = "Going forward, explain things like I'm five."
 
 # ── Memory-reference shape (expressive cluster) ──
 # When the substring looks_like_memory_reference heuristic was

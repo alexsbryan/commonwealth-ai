@@ -49,7 +49,12 @@ async function sendAndComplete(convo, message, timeoutMs = 300_000) {
     (r) => r.event === "message-complete" && r.payload?.message_id === messageId,
     timeoutMs,
   );
-  return { messageId, done, seq: done?.seq ?? since };
+  // preSeq: lesson-proposed is emitted by a detached spawn the moment
+  // the conation handler runs — typically BEFORE the turn's
+  // message-complete relay. Card observation must scan from the
+  // PRE-SEND seq, not the terminal seq, or an early card is invisible
+  // (cost a full preflight iteration to learn, 2026-07-11).
+  return { messageId, done, seq: done?.seq ?? since, preSeq: since };
 }
 
 async function main() {
@@ -159,7 +164,7 @@ async function main() {
         : "no message-complete in 300s",
     });
     const cardRow = teach.done
-      ? await bridge.awaitEvent(teach.seq, (r) => r.event === "lesson-proposed", 240_000)
+      ? await bridge.awaitEvent(teach.preSeq, (r) => r.event === "lesson-proposed", 240_000)
       : null;
     report.push({
       signal: "lesson-proposed fires on a durative coaching turn",
@@ -222,7 +227,7 @@ async function main() {
     madeConvos.push(convo2);
     const plain = await sendAndComplete(convo2, "best time of year to visit yellowstone to avoid crowds?");
     const falseFire = plain.done
-      ? await bridge.awaitEvent(plain.seq, (r) => r.event === "lesson-proposed", 20_000)
+      ? await bridge.awaitEvent(plain.preSeq, (r) => r.event === "lesson-proposed", 20_000)
       : null;
     report.push({
       signal: "no lesson-proposed on a non-coaching turn (capture precision)",
