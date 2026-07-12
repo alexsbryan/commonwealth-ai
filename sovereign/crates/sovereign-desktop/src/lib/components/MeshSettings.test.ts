@@ -42,6 +42,26 @@ vi.mock("../api", () => ({
 }));
 
 const { joinLinkStore } = await import("../stores/joinLink.svelte");
+const { meshMembership } = await import("../stores/meshMembership.svelte");
+const api = await import("../api");
+
+/** Minimal joined-mesh state — enough for the active-mesh status card
+ *  (`meshState.status.name` heading + member counts) to render. */
+const JOINED_STATE = {
+  status: {
+    name: "Lab Squad",
+    members_online: 2,
+    members_total: 3,
+    model_name: null,
+    knowledge_corpora: [],
+    is_connected: true,
+    join_link: null,
+    join_key: null,
+  },
+  members: [],
+  corpora: [],
+  contribution: null,
+};
 
 describe("MeshSettings — paste join link", () => {
   beforeEach(() => {
@@ -81,5 +101,59 @@ describe("MeshSettings — paste join link", () => {
     await fireEvent.click(preview);
 
     expect(joinLinkStore.pending).toBe(valid);
+  });
+});
+
+// Regression guard for the stale-page bug: a MeshSettings instance
+// that mounted before a join kept `running = false` forever — the 5s
+// poll early-returned on `!running` and nothing else re-pulled state,
+// so the user kept seeing the pre-join "Create a mesh" landing state
+// until they navigated away and back.
+describe("MeshSettings — refresh after membership change", () => {
+  beforeEach(() => {
+    joinLinkStore.clear();
+    meshMembership.clear();
+    vi.mocked(api.meshIsRunning).mockResolvedValue(false);
+    vi.mocked(api.meshGetState).mockResolvedValue(null);
+  });
+
+  it("re-pulls mesh state when meshMembership.noteJoined() fires while mounted", async () => {
+    render(MeshSettings);
+    // Mounted pre-join: idle landing state is showing.
+    expect(
+      await screen.findByRole("button", { name: /create a mesh/i }),
+    ).toBeInTheDocument();
+
+    // A join completes elsewhere (MeshJoinDialog in App.svelte).
+    vi.mocked(api.meshIsRunning).mockResolvedValue(true);
+    vi.mocked(api.meshGetState).mockResolvedValue(JOINED_STATE as never);
+    meshMembership.noteJoined();
+
+    // The already-mounted page flips to the joined view on its own —
+    // no unmount/remount, no waiting for a poll tick.
+    expect(await screen.findByText("Lab Squad")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create a mesh/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("poll re-probes meshIsRunning while idle, catching joins made outside the app", async () => {
+    vi.useFakeTimers();
+    try {
+      render(MeshSettings);
+      // Flush the mount-time refresh chain.
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Mesh appears underneath us (e.g. CLI `svrn mesh join`) — no
+      // epoch bump, only the poll can notice.
+      vi.mocked(api.meshIsRunning).mockResolvedValue(true);
+      vi.mocked(api.meshGetState).mockResolvedValue(JOINED_STATE as never);
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(screen.getByText("Lab Squad")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

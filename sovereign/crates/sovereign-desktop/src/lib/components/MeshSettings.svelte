@@ -26,6 +26,7 @@
     suggestNodeName,
   } from "../api";
   import { joinLinkStore } from "../stores/joinLink.svelte";
+  import { meshMembership } from "../stores/meshMembership.svelte";
   import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
   import type {
     CreateMeshResponse,
@@ -243,6 +244,20 @@
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
 
+  // Membership changes performed elsewhere in the app (the deep-link
+  // MeshJoinDialog lives in App.svelte, not here) bump
+  // `meshMembership.epoch`. Re-pull immediately so a user who accepts
+  // an invite while this page is open sees the joined state the
+  // moment the dialog closes — not the pre-join "Create a mesh"
+  // landing state until they navigate away and back.
+  let seenMembershipEpoch = meshMembership.epoch;
+  $effect(() => {
+    const epoch = meshMembership.epoch;
+    if (epoch === seenMembershipEpoch) return;
+    seenMembershipEpoch = epoch;
+    void refresh();
+  });
+
   // ── Lifecycle ──────────────────────────────────────────
   onMount(async () => {
     await refresh();
@@ -256,7 +271,19 @@
     // off the same tick — one source of truth for "how often the
     // mesh-health view ages."
     pollHandle = setInterval(async () => {
-      if (!running) return;
+      if (!running) {
+        // A mesh can appear underneath us while this page sits on the
+        // idle state (CLI `svrn mesh join`, or any join path that
+        // doesn't bump `meshMembership.epoch`). Re-probe instead of
+        // returning, so `running` can't stay stale-false forever.
+        try {
+          if (!(await meshIsRunning())) return;
+        } catch {
+          return;
+        }
+        await refresh();
+        return;
+      }
       try {
         meshState = await meshGetState();
       } catch (e) {
