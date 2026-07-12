@@ -282,7 +282,15 @@ pub enum CompiledDirective {
     Prompt,
 }
 
-const SHORTER_CUES: &[&str] = &["shorter", "terse", "concise", "tldr", "brief", "briefer"];
+// "short" (the canonical coaching adjective: "keep your answers short")
+// is included alongside the comparative forms — these cues only run on
+// messages that already passed the durative floor AND routed to
+// ConationQuery, so plain-"short" false positives ("in short, …") are
+// not reachable shapes here. Caught live by preflight-lessons leg 2
+// (2026-07-11): the flagship phrase fell through to the drafter.
+const SHORTER_CUES: &[&str] = &[
+    "shorter", "short", "terse", "concise", "tldr", "brief", "briefer",
+];
 const LONGER_CUES: &[&str] = &["longer", "more detail", "expand", "elaborate", "more depth"];
 
 /// Verb phrases whose object names the terms to avoid. Ordered longest
@@ -974,6 +982,16 @@ mod tests {
                 assert_eq!(params["soft_target_cap"], SHORT_SOFT_TARGET_CAP);
             }
             other => panic!("expected Param, got {other:?}"),
+        }
+        // The canonical coaching adjective — plain "short" — must hit
+        // the param rung deterministically, not the drafter.
+        match compile_directive(
+            "from now on, keep your answers short — a paragraph at most unless i ask for more.",
+        ) {
+            CompiledDirective::Param { params, .. } => {
+                assert_eq!(params["soft_target_cap"], SHORT_SOFT_TARGET_CAP);
+            }
+            other => panic!("expected Param for plain 'short', got {other:?}"),
         }
         match compile_directive("always give more detail") {
             CompiledDirective::Param { params, .. } => {
