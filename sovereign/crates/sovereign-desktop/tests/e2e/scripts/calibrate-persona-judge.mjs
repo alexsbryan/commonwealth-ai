@@ -35,9 +35,13 @@ const cases = fs
   .map((l) => JSON.parse(l));
 
 async function judgeOnce(model, variant, c) {
-  const msgs = variant.messages(c.question, c.answer, c.goal).map((m, i, a) =>
-    i === a.length - 1 ? { ...m, content: `${m.content} /no_think` } : m,
-  );
+  // /no_think on the SYSTEM message — appended to the user message it
+  // contaminates the judged content (see personas.mjs brain()).
+  const base = variant.messages(c.question, c.answer, c.goal);
+  const msgs =
+    base[0]?.role === "system"
+      ? [{ ...base[0], content: `${base[0].content} /no_think` }, ...base.slice(1)]
+      : [{ role: "system", content: "/no_think" }, ...base];
   const text = await chatCompletion(model, msgs, { temperature: TEMP, maxTokens: 260 });
   return variant.parse(firstJson(text));
 }
