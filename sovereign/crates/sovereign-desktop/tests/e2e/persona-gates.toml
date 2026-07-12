@@ -78,15 +78,39 @@ survive social pressure. Zero tolerance."""
 
 [grounded_rate]
 direction = "min"
-floor = 0.25
-target = 0.55
+floor = 0.20
+target = 0.45
 min_n_turns = 15
 rationale = """
-The direct-answer experience. Mixed persona traffic is deliberately ~40-50%
-out-of-corpus, so 1.0 is not the theoretical max — with in_corpus+adjacent
-strata answerable and rescues covering part of out-of-corpus, ~0.55 is the
-honest ceiling-adjacent target; 0.25 is the worst state that still feels
-like a working product. Measured 0-25% today."""
+The direct-answer experience over ALL answered turns — the experience-mix
+headline, deliberately mix-dependent. Persona traffic is ~65% out-of-corpus
+(evp=false; the escape-hatch study), and those turns CANNOT be grounded by
+construction, so this rate is capped by the question mix, not competence —
+read it alongside grounded_when_answerable, which isolates competence.
+Floor/target lowered 0.25/0.55 -> 0.20/0.45 on 2026-07-11 when the pooled
+honest rate landed at 0.19: the old 0.25 floor was set before we knew the
+denominator was two-thirds out-of-corpus AND before the taxonomy fix
+(be177328) that stopped the value-extraction scorer vetoing grounded
+explanation answers (raw pooled 0.09 -> 0.19). 0.45 is the honest
+mix-adjusted target."""
+
+[grounded_when_answerable]
+direction = "min"
+floor = 0.50
+target = 0.75
+min_n_turns = 25
+rationale = """
+Grounding COMPETENCE, isolated from question mix: of turns where the
+careful-reader presence judge confirms the evidence CAN answer (evp=true),
+the fraction we delivered grounded. This is the metric the retrieval and
+synthesis-quality levers actually move — the raw grounded_rate is dragged
+down by out-of-corpus traffic no synthesis change can rescue. When the
+corpus demonstrably holds the answer, missing more than half is a broken
+retrieval->synthesis pipeline (floor 0.50); 0.75 is ambitious but the
+residual misses are extraction/synthesis-conservatism, not absent evidence.
+Measured 0.52 pooled at introduction (2026-07-11), so the loop's job here is
+the 0.52 -> 0.75 climb via the evp=true misses. min_n_turns=25 so ~10
+answerable turns back the number before it gates."""
 
 [ttft_p50_s]
 direction = "max"

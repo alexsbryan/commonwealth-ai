@@ -52,6 +52,10 @@ for (const f of files) {
     gfr: m.gfr == null ? "—" : `${Math.round(m.gfr * 100)}%`,
     abandon: m.abandon_rate == null ? "—" : `${Math.round(m.abandon_rate * 100)}%`,
     grounded: m.grounded_rate == null ? "—" : `${Math.round(m.grounded_rate * 100)}%`,
+    grnd_ans:
+      m.grounded_when_answerable == null
+        ? "—"
+        : `${Math.round(m.grounded_when_answerable * 100)}% (${m.answerable_turns})`,
     rescued: `${m.rescued}`,
     halluc: `${m.hallucinations}`,
     flips: `${m.flips}`,
@@ -75,6 +79,7 @@ const COLS = [
   ["gfr", "GFR"],
   ["abandon", "abandon"],
   ["grounded", "grounded"],
+  ["grnd_ans", "grnd|answerable"],
   ["rescued", "rescued"],
   ["halluc", "halluc"],
   ["flips", "flips"],

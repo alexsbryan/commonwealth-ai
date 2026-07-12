@@ -44,7 +44,7 @@ import {
   SCORE_CLI,
 } from "./lib/harness.mjs";
 import { parseToml } from "./lib/toml.mjs";
-import { VARIANTS } from "./lib/judges.mjs";
+import { VARIANTS, fabricationVerifyMessages, parseFabrication } from "./lib/judges.mjs";
 
 // Calibrated judge variant (calibrate-persona-judge.mjs, 2026-07-10):
 // v2 categorical PASSES the bank (sens 0.89 / spec 0.82); v1 numeric FAILED
@@ -391,6 +391,26 @@ async function flipJudge(before, after) {
   );
   const j = firstJson(text);
   return j ? { flipped: !!j.flipped, why: String(j.why ?? "").slice(0, 140) } : null;
+}
+
+// Fabrication verifier — adjudicates a hallucination CANDIDATE from the
+// value-extraction scorer, which mislabels arithmetic-on-user-premise,
+// conceptual paraphrase, matcher-missed-but-present values, and caveated OOD
+// estimates as fabrication (receipts 2026-07-11: 4/5 flagged were these,
+// judge-good). Validated 5/5 synthetic sensitivity+specificity + 4/4 real
+// receipts before it was allowed to gate the cardinal-sin metric. Runs ONLY on
+// flagged turns, so it costs ~nothing; a null (verifier unavailable) falls back
+// to counting the raw verdict, so a dead judge never HIDES a fabrication.
+async function fabricationVerify(question, answer, value, chunkTexts) {
+  const passages = (chunkTexts ?? [])
+    .map((c, i) => `[${i + 1}] ${String(c).slice(0, 900)}`)
+    .join("\n\n")
+    .slice(0, 24000);
+  const text = await brain(fabricationVerifyMessages(question, answer, value, passages), {
+    temperature: 0,
+    maxTokens: 200,
+  });
+  return parseFabrication(firstJson(text));
 }
 
 // Fast presence judge (chaos.mjs answerInEvidence pattern, "fast" slot).
@@ -854,6 +874,7 @@ async function runSession(persona, corpora, corporaMeta) {
     let flip = null;
     let probe = null;
     let evidence = null;
+    let fabrication = null;
     if (t.answer != null && t.answer.length > 0) {
       const chunkTexts = await resolveChunkTexts(t.chunks);
       // Journal the evidence the oracle saw (chaos-proven caps: 12k/chunk,
@@ -876,6 +897,13 @@ async function runSession(persona, corpora, corporaMeta) {
           ? flipJudge(prevAnswer, t.answer)
           : Promise.resolve(null),
       ]);
+      // A hallucination verdict from the value-extraction scorer is only a
+      // CANDIDATE — adjudicate it against the same evidence before it counts as
+      // the cardinal sin (see fabricationVerify). Runs only here, on flagged
+      // turns, so it adds no cost to the common path.
+      if (aligned?.verdict === "hallucination") {
+        fabrication = await fabricationVerify(message, t.answer, aligned.value, chunkTexts);
+      }
     }
     const gapCheckRan = (t.narration ?? []).some((p) => /gap_check/i.test(p));
     const refinedChanged = refined != null && refined !== t.answer;
@@ -933,6 +961,7 @@ async function runSession(persona, corpora, corporaMeta) {
       aligned: aligned
         ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
         : null,
+      fabrication,
       judge,
       refinedJudge,
       evidencePresence,
