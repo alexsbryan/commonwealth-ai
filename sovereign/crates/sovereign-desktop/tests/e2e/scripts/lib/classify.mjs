@@ -32,6 +32,21 @@ export function classifyOutcome(t) {
     t.aligned?.verdict === "honest_abstention" ||
     t.aligned?.verdict === "caveated_ood" ||
     (t.aligned == null && DECLINE_RE.test(t.answer ?? ""));
+  // The `aligned` scorer (bench score-answer → assess_asserted_value) is
+  // VALUE-EXTRACTION-shaped: it returns honest_abstention / caveated_ood
+  // whenever an answer asserts no single checkable atomic value. But that is
+  // the NORMAL shape of a grounded process/explanation answer ("how does
+  // photosynthesis work", a source-cited argumentative correction) — no single
+  // "value", yet fully grounded and answered. Two INDEPENDENT oracles catch
+  // this: the persona judge (did the persona get a satisfying answer) and the
+  // careful-reader presence judge (does the evidence actually answer it). When
+  // BOTH vouch, a substantive grounded answer must not be vetoed into the gap
+  // family by the mis-applied extraction scorer. Receipts (2026-07-11): 3/12
+  // gap-family turns were judge-good + evp-true explanations mis-bucketed as
+  // gaps — grounded_rate was near-zero for TAXONOMY reasons, not product ones.
+  // evp-false (genuine no-evidence decline) and judge-broken cases never
+  // qualify, so honest graceful declines and real failures stay gaps.
+  const groundedByOracles = judgeGood === true && t.evidencePresence === true;
   if (t.search?.clicked) {
     if (t.search?.error || t.search?.blocked) return "search_blocked";
     // The re-gate can revert (message-refined echoes the original) — never a
@@ -41,7 +56,7 @@ export function classifyOutcome(t) {
     return "search_futile";
   }
   if (t.aligned?.verdict === "hallucination" && judgeGood !== false) return "answered_ungrounded";
-  if (judgeGood === true && !declineShape) return "answered_grounded";
+  if (judgeGood === true && (!declineShape || groundedByOracles)) return "answered_grounded";
   if (declineShape) return t.card ? "gap_admitted_offered" : "gap_admitted_no_offer";
   if (judgeGood === false) return t.card ? "gap_admitted_offered" : "silent_gap";
   // No judge verdict and no decline shape — count it as grounded-by-default
@@ -68,6 +83,7 @@ export function reclassifyRow(row) {
     answer: row.answer,
     judge: row.judge,
     aligned: row.aligned,
+    evidencePresence: row.evidencePresence,
     card: row.card,
     search: row.search,
     refinedChanged: row.refinedChanged,
