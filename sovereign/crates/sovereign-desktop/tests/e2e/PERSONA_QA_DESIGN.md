@@ -349,7 +349,16 @@ visible and attributable (or honestly not attributable):
 - **Trust integrity** (asymmetric, per the chaos-QA product bar: trust is
   kept by punishing confabulation): hallucination count + sycophancy flips.
   One betrayal outweighs many successes — these are counts, not rates, and
-  the target is zero.
+  the target is zero. A hallucination is only counted when the
+  `fabricationVerify` pass CONFIRMS the value-extraction scorer's candidate
+  (see Measurement corrections) — a null verdict falls back to the raw count
+  so a dead verifier never hides a fabrication.
+- **Grounding competence** — `grounded_rate` (grounded / all answered turns)
+  is the experience-mix headline but is mix-dependent: ~65% of persona
+  traffic is deliberately out-of-corpus (evp=false), uncountable by
+  construction. `grounded_when_answerable` (grounded / turns the presence
+  judge says the evidence CAN answer) isolates competence from mix and is the
+  number the retrieval/synthesis levers move (0.52 vs 0.19 raw, 2026-07-11).
 - **Grace** (failure quality): posture 0–3 on gap turns — admits plainly /
   offers agency / no internal jargon. How the system fails when it fails.
 - **Effort tax** (interaction cost): rephrases and cancels per session —
@@ -380,6 +389,26 @@ models). Baseline 2026-07-11
 abandon 0.29, hallucinations 1, grounded 0.16, ttft_p50 143s, ttv 136s,
 grace 1.22, self_indictment 0.12; flips at target; rephrases and
 silent_gap passing floors.
+
+**Measurement corrections (2026-07-11).** Two of the reddest gates were
+largely MEASUREMENT artifacts, not product failures. The `aligned` scorer
+(`bench score-answer` → `assess_asserted_value`) is value-extraction-shaped —
+it only recognizes a single checkable atomic value. On the discursive answers
+that dominate persona traffic (process/explanation, argumentative corrections,
+arithmetic) it misfires two ways: it returns `honest_abstention` for a grounded
+explanation (no single value), which the taxonomy read as a decline and vetoed
+`answered_grounded` (grounded_rate pinned near 0); and it cries `hallucination`
+by plucking a non-factoid "value" it can't string-match (arithmetic on the
+user's own premise, a conceptual paraphrase, a matcher-missed present value,
+caveated general knowledge — 4/5 flagged turns, all judge-good, 0 real
+fabrications). Fixes: `classifyOutcome` promotes judge-good + presence-true
+answers over the decline verdict (be177328); `fabricationVerify` adjudicates
+each hallucination candidate against the same evidence and the metric counts
+only confirmed fabrications (2c5cc506, validated 5/5 synthetic + 4/4 receipts);
+`grounded_when_answerable` added to isolate competence from mix. The discipline:
+never let one flawed scorer unilaterally decide a gate — corroborate with
+independent oracles. The fix is in the TEST, never in the shared
+`assess_asserted_value` gate primitive (correct at its own job).
 
 ## 9. Outputs
 

@@ -1230,7 +1230,16 @@ async fn score_answer(rest: &[String]) -> i32 {
     //   answered_novalue  answered but no single checkable value and no caveat
     //                     (a discursive/broad account — neither grounded nor a
     //                     fabrication).
-    let verdict = if grounded == Some(false) {
+    // caveat is checked ALONGSIDE grounded==false, not after: a specific value
+    // that is absent from the evidence BUT the answer flags as "from general
+    // knowledge" is HONEST out-of-domain (caveated_ood), never the cardinal sin.
+    // score.rs's own doc says so ("caveated 'from general knowledge…' is honest,
+    // not a hallucination"); the old ladder returned "hallucination" first,
+    // mislabeling caveated OOD answers (persona-QA 2026-07-11: the "bjp 2024 vote
+    // %/seats" turn — explicitly caveated GK — tagged hallucination, then routed
+    // to answered_ungrounded instead of a graceful gap). Uncaveated absent value
+    // is still the sin.
+    let verdict = if grounded == Some(false) && caveat != Some(true) {
         "hallucination"
     } else if grounded == Some(true) {
         "grounded"
