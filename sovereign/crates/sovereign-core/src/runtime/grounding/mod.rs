@@ -708,8 +708,13 @@ pub(crate) async fn gate_answer(
 /// read of a disclaimer-led head disappears structurally. Like
 /// GK_CAVEAT_PREFIX, assistant_prefix is decode-commit only — the
 /// caller must prepend it to the returned text.
-pub const LONGFORM_REWRITE_PREFIX: &str =
-    "From the retrieved sources, here is what can be established:\n\n";
+/// User-facing wording (grace audit 2026-07-11): the previous prefix
+/// ("From the retrieved sources, here is what can be established:")
+/// injected auditor-speak as the OPENING of every rewritten answer — a
+/// structural jargon hit on the grace gate's `clean` component. The
+/// prefix's decode-commit job (force continuation into the supported
+/// account) needs no machinery reference.
+pub const LONGFORM_REWRITE_PREFIX: &str = "Here's what I can say with confidence:\n\n";
 
 /// Rewrite-request system note: every failed claim, each with the
 /// passages its targeted corpus search returned (when any). The

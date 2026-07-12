@@ -126,9 +126,18 @@ function daemonRssMb() {
 // and gives budgets headroom so a leaked reasoning prefix can't starve the
 // actual answer.
 function brain(messages, opts = {}) {
-  const msgs = messages.map((m, i) =>
-    i === messages.length - 1 ? { ...m, content: `${m.content} /no_think` } : m,
-  );
+  // /no_think rides the SYSTEM message. Appended to the last user message
+  // it sat directly after the content under judgment, and judges
+  // attributed the switch token to the ANSWER ("internal jargon
+  // '/no_think'") — instrument contamination caught by the clean-rubric
+  // audit (2026-07-11).
+  const msgs =
+    messages[0]?.role === "system"
+      ? [
+          { ...messages[0], content: `${messages[0].content} /no_think` },
+          ...messages.slice(1),
+        ]
+      : [{ role: "system", content: "/no_think" }, ...messages];
   return chatCompletion(BRAIN, msgs, opts);
 }
 
