@@ -23,6 +23,8 @@ fn parse_args() -> Option<Args> {
     let mut stream = false;
     let mut max_tokens = 256usize;
     let mut temperature = 0.7f32;
+    let mut ctx = 2048u32;
+    let mut gpu_layers: Option<u32> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -46,6 +48,14 @@ fn parse_args() -> Option<Args> {
                 i += 1;
                 temperature = args.get(i)?.parse().ok()?;
             }
+            "--ctx" => {
+                i += 1;
+                ctx = args.get(i)?.parse().ok()?;
+            }
+            "--gpu-layers" => {
+                i += 1;
+                gpu_layers = Some(args.get(i)?.parse().ok()?);
+            }
             _ => {
                 eprintln!("Unknown argument: {}", args[i]);
                 return None;
@@ -60,6 +70,8 @@ fn parse_args() -> Option<Args> {
         stream,
         max_tokens,
         temperature,
+        ctx,
+        gpu_layers,
     })
 }
 
@@ -69,6 +81,8 @@ struct Args {
     stream: bool,
     max_tokens: usize,
     temperature: f32,
+    ctx: u32,
+    gpu_layers: Option<u32>,
 }
 
 #[tokio::main]
@@ -91,8 +105,14 @@ async fn main() {
         }
     };
 
-    eprintln!("Loading model: {}", args.model.display());
-    let provider = match EmbeddedLlamaCpp::load(&args.model) {
+    eprintln!(
+        "Loading model: {} (ctx={}, gpu_layers={:?})",
+        args.model.display(),
+        args.ctx,
+        args.gpu_layers
+    );
+    let provider = match EmbeddedLlamaCpp::load_full(&args.model, None, None, args.ctx, args.gpu_layers)
+    {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Failed to load model: {e}");

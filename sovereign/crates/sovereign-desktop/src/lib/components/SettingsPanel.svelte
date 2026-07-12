@@ -38,6 +38,7 @@
   import ModelSelector from "../setup/ModelSelector.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
   import SetupReportCard from "./SetupReportCard.svelte";
+  import CrashRecordsPanel from "./CrashRecordsPanel.svelte";
 
   interface Props {
     onClose: () => void;
@@ -52,6 +53,7 @@
     | "tools"
     | "paths"
     | "mobile"
+    | "diagnostics"
     | "about";
   let activeTab: Tab = $state("models");
 
@@ -518,6 +520,7 @@
     { id: "mesh",            label: "Mesh",             group: "operator", keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
     { id: "sharing",         label: "Activity & Sharing", group: "operator", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
     { id: "mobile",          label: "Mobile access",    group: "operator", keywords: ["mobile", "phone", "ios", "android", "app", "pair", "pairing", "tailnet", "tailscale", "token", "host"] },
+    { id: "diagnostics",     label: "Diagnostics",      group: "operator", keywords: ["diagnostics", "crash", "panic", "error", "bug", "report", "log", "backtrace", "signal", "sigsegv", "incident"] },
   ];
 
   const TAB_GROUPS: { id: "general" | "operator"; label: string }[] = [
@@ -1420,6 +1423,11 @@
             <p class="doc-body" style="color:var(--danger, #e5837a);">{mobileError}</p>
           {/if}
         </section>
+      {/if}
+
+      <!-- ──────────── DIAGNOSTICS (crash & panic records) ──────────── -->
+      {#if activeTab === "diagnostics"}
+        <CrashRecordsPanel />
       {/if}
 
       <!-- ──────────── ABOUT (version + updater) ──────────── -->

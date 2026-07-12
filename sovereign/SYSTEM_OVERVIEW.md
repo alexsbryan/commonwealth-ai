@@ -852,6 +852,32 @@ management, sibling pool, decode paths, MTP, OICP scoring, harness
 adapters, cutoff legibility, conversation-history compaction — in
 [`docs/inference.md`](./docs/inference.md).
 
+**CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
+linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),
+Mamba/SSM, RWKV — drive an out-of-bounds write in ggml's recurrent
+`ggml_compute_forward_set` during **CPU** prefill (an upstream llama.cpp bug;
+disabling the fused chunked kernel does not help, and there is no toggle that
+avoids it). They run fine on GPU. Two layers keep a user's first message from
+hard-crashing the app:
+
+- **Proactive substitution** — `sovereign-inference::gguf_meta::read_architecture`
+  reads `general.architecture` straight from the GGUF header (zero weight load),
+  and `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
+  `NoSafeModel`. At desktop boot (`state/builders/model_compat.rs`, run before
+  `inference::load_inference`) a CPU machine whose configured chat model is an
+  unsafe arch gets a **dense** substitute discovered alongside it (largest
+  non-embedder GGUF) and a non-fatal `model-notice` banner; with no substitute,
+  boot fails with a clear in-app `backend-error` rather than a silent SIGSEGV.
+  GPU machines are a no-op.
+- **Backstop + capture** — the pre-load subprocess smoketest (`smoketest.rs`)
+  still guards the GPU path; on a native crash it records a durable, submittable
+  `CrashRecord` (`crash_report.rs` → `~/.sovereign/crashes/*.json`). A
+  process-wide panic hook captures Rust panics the same way. Records are
+  local-first and **never auto-uploaded**: the in-app Diagnostics surface lists /
+  views / deletes them, and one-click `export_crash_record` writes a redacted
+  markdown copy to the Desktop + hands back the GitHub Issues URL — mirroring the
+  daemon-crash flow in `crash_bundle.rs`.
+
 ### Tools
 
 | Tool                    | Purpose                                                      |

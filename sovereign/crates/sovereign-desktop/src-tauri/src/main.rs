@@ -6,6 +6,7 @@ mod bootstrap;
 mod command_bridge;
 mod commands;
 mod crash_bundle;
+mod crash_report;
 mod dev_flags;
 mod enrich_commands;
 mod error;
@@ -29,6 +30,21 @@ mod tray;
 mod update_commands;
 mod watched_folder_commands;
 mod workflow_commands;
+
+/// Shared test-only support. Lives in the crate root so every module's
+/// `#[cfg(test)]` code can reach it via `crate::test_support`.
+#[cfg(test)]
+pub(crate) mod test_support {
+    /// One process-wide lock for tests that mutate the **global** `HOME` env
+    /// var. Both `crash_report` and `smoketest` derive their on-disk store
+    /// from `home_dir()`, and their tests point `HOME` at a tempdir to isolate.
+    /// They compile into the SAME test binary and run concurrently — so each
+    /// having its own private mutex is not mutual exclusion at all: one test
+    /// swaps `HOME` out from under another mid-closure, and the victim reads
+    /// the wrong directory. This single shared lock is the actual guard. Any
+    /// new HOME-mutating test in this crate must take it too.
+    pub static HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+}
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -84,6 +100,14 @@ fn main() -> ExitCode {
             }),
         )
         .init();
+
+    // Capture Rust panics into a durable, local crash record (with a
+    // backtrace) before delegating to the default hook. svrnmesh is
+    // decentralized — there is no central error pipeline — so a panic on a
+    // user's machine must be captured *there*, viewable and submittable. See
+    // `crate::crash_report`. Native (SIGSEGV) model crashes are captured
+    // separately via the crash-isolation subprocess.
+    crash_report::install_panic_hook();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -459,6 +483,10 @@ fn main() -> ExitCode {
             commands::get_activity_recent,
             commands::get_chat_activity,
             commands::prepare_crash_report,
+            crash_report::list_crash_records,
+            crash_report::read_crash_record,
+            crash_report::delete_crash_record,
+            crash_report::export_crash_record,
             commands::get_first_mesh_consent,
             commands::record_first_mesh_consent,
             commands::get_storage_budget,

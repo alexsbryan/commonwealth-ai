@@ -306,9 +306,12 @@ mod verdict_cache_tests {
 
     fn with_cache_env<T>(dir: &std::path::Path, f: impl FnOnce() -> T) -> T {
         // Route the cache into a tempdir via HOME — the path helper
-        // derives from home_dir(). Serialise: env is process-global.
-        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _g = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        // derives from home_dir(). Serialise on the crate-wide HOME lock
+        // (NOT a private one): crash_report's tests mutate HOME too, and a
+        // per-module lock lets them race us. See `crate::test_support`.
+        let _g = crate::test_support::HOME_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let old = std::env::var_os("HOME");
         std::env::set_var("HOME", dir);
         let out = f();

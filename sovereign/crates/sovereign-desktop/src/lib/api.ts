@@ -2293,6 +2293,64 @@ export async function prepareCrashReport(): Promise<CrashReportInfo> {
   return invoke("prepare_crash_report");
 }
 
+// ─── Crash & panic records (in-app Diagnostics) ───────────────
+// Mirrors `crate::crash_report::CrashRecord`. Local-first: records live
+// in ~/.sovereign/crashes/*.json and are NEVER auto-uploaded. The user
+// lists, reviews, and (one click) exports a redacted copy to share.
+
+export type CrashKind = "panic" | "native-crash";
+
+export interface CrashRecord {
+  schema_version: number;
+  /** Sortable unique id (`<unix_millis>-<seq>`). */
+  id: string;
+  captured_at_unix: number;
+  kind: CrashKind;
+  app_version: string;
+  os: string;
+  cpu_arch: string;
+  /** One-line human-readable summary (shown in the list). */
+  summary: string;
+  /** Backtrace (panic) or captured subprocess stderr tail (native crash). */
+  detail?: string | null;
+  model_path?: string | null;
+  model_arch?: string | null;
+  gpu_layers?: number | null;
+  /** Unix signal number, for native crashes. */
+  signal?: number | null;
+}
+
+/** Result of {@link exportCrashRecord}. */
+export interface ExportedCrashRecord {
+  /** Absolute path of the redacted markdown report on the Desktop. */
+  report_path: string;
+  /** The project's GitHub Issues URL — open with tauri-plugin-shell. */
+  issues_url: string;
+}
+
+/** All captured crash/panic records, newest first. */
+export async function listCrashRecords(): Promise<CrashRecord[]> {
+  return invoke("list_crash_records");
+}
+
+/** Full detail (backtrace / stderr) for one record. */
+export async function readCrashRecord(id: string): Promise<CrashRecord | null> {
+  return invoke("read_crash_record", { id });
+}
+
+/** Discard a record the user doesn't want to keep or share. */
+export async function deleteCrashRecord(id: string): Promise<boolean> {
+  return invoke("delete_crash_record", { id });
+}
+
+/** One-click "share this crash": writes a redacted markdown copy to the
+ *  Desktop and returns its path + the GitHub Issues URL. NO auto-upload. */
+export async function exportCrashRecord(
+  id: string,
+): Promise<ExportedCrashRecord> {
+  return invoke("export_crash_record", { id });
+}
+
 // ─── Auto-updater ────────────────────────────────────────────
 // Backed by tauri-plugin-updater. Manifest served from svrnme.sh,
 // which queries GitHub Releases for the latest desktop-v* tag.
