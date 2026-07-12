@@ -23,7 +23,11 @@ END=$(( $(date +%s) + TOTAL_MIN * 60 ))
 i=0
 empty_streak=0
 rm -f "$ART/$PREFIX.DONE"
-while [ "$(date +%s)" -lt "$END" ]; do
+while [ $(( $(date +%s) + SEG_MIN * 60 )) -le "$END" ]; do
+  # A segment starts only if it FITS the remaining budget — checking at
+  # loop-top let a segment starting at minute 99 of 100 run 45 min past
+  # END (observed 2026-07-11: silent 15-min overrun before the operator
+  # asked). Same boundary bug as the driver's per-turn cap, one level up.
   i=$((i + 1))
   # Wait (up to 5 min) for a healthy daemon — a supervised restart may be
   # in flight. No health after 5 min = abort loudly.
