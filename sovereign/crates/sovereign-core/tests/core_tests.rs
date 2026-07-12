@@ -1898,3 +1898,471 @@ async fn cutoff_missing_finish_reason_serializes_absent() {
         "finish_reason must be absent when provider didn't supply one, got: {provenance:?}"
     );
 }
+
+// ─── TEACHABLE lesson capture (conation handler) ───────────────────
+//
+// Pins the capture contract from TEACHABLE.md §4: durative coaching
+// forks a detached `lesson-proposed` draft while the turn's normal
+// conation behavior (cancel / transform) stays byte-identical; deictic
+// conation never captures. The spy overrides the fire-and-forget
+// `emit_lesson_proposed` default and forwards payloads over an mpsc so
+// tests can await the detached spawn.
+
+struct ConationRouter;
+
+#[async_trait]
+impl Router for ConationRouter {
+    async fn classify(
+        &self,
+        _message: &str,
+        _context: &ConversationContext,
+        _available_tools: &[ToolDescriptor],
+    ) -> Result<RouterClassification> {
+        Ok(RouterClassification {
+            primary: IntentCandidate {
+                intent: Intent::ConationQuery,
+                confidence: 1.0,
+            },
+            alternatives: Vec::new(),
+            rationale: None,
+            coarse_intent: None,
+            self_assessment: None,
+            timing: None,
+            scope: None,
+        })
+    }
+}
+
+struct SpyLessonChannel {
+    tx: tokio::sync::mpsc::UnboundedSender<sovereign_core::types::LessonProposedPayload>,
+}
+
+#[async_trait]
+impl ApprovalChannel for SpyLessonChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(true)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok(String::new())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+    fn emit_lesson_proposed(&self, payload: sovereign_core::types::LessonProposedPayload) {
+        let _ = self.tx.send(payload);
+    }
+}
+
+fn build_conation_runtime(
+    response: &str,
+) -> (
+    Runtime,
+    Arc<MockStore>,
+    tokio::sync::mpsc::UnboundedReceiver<sovereign_core::types::LessonProposedPayload>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let store = Arc::new(MockStore::new());
+    let runtime = Runtime::new(
+        Arc::new(MockInference::new(response)),
+        Box::new(ConationRouter),
+        Box::new(NoOpPlanner),
+        Arc::new(ToolRegistry::new()),
+        store.clone(),
+        Arc::new(SkillRegistry::new()),
+        Arc::new(SpyLessonChannel { tx }),
+        sovereign_core::types::InferenceConfig::default(),
+    );
+    (runtime, store, rx)
+}
+
+/// Seed a prior assistant reply directly — the non-streaming conation
+/// path doesn't persist handler responses (the desktop streaming path
+/// saves them at its own persist point), so a real prior turn can't be
+/// simulated through `handle_message` alone.
+async fn seed_prior_assistant(store: &MockStore, conversation_id: &str) {
+    store
+        .save_message(&Message {
+            id: "prior-1".to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: "a prior reply to transform".to_string(),
+            created_at: 0,
+            metadata: None,
+            version: 0,
+        })
+        .await
+        .unwrap();
+}
+
+async fn recv_lesson(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<sovereign_core::types::LessonProposedPayload>,
+) -> Option<sovereign_core::types::LessonProposedPayload> {
+    tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .ok()
+        .flatten()
+}
+
+#[tokio::test]
+async fn conation_durative_captures_param_lesson_and_answers_normally() {
+    let (runtime, store, mut rx) = build_conation_runtime("shortened reply");
+    seed_prior_assistant(&store, "c1").await;
+
+    let response = runtime
+        .handle_message("keep answers shorter from now on", "c1")
+        .await
+        .unwrap();
+    // The turn itself is the normal conation transform — unchanged.
+    assert_eq!(response.message.content, "shortened reply");
+
+    let payload = recv_lesson(&mut rx)
+        .await
+        .expect("durative coaching must propose a lesson");
+    assert_eq!(payload.enforcement, "param");
+    assert_eq!(payload.conversation_id, "c1");
+    assert_eq!(payload.params["soft_target_cap"], 300);
+    assert!(payload.prompt_form.is_empty(), "param rung never rides the prompt");
+    assert!(payload.taught_from.contains("from now on"));
+    assert_eq!(
+        payload.message_id, "prior-1",
+        "provenance points at the prior assistant reply"
+    );
+}
+
+#[tokio::test]
+async fn conation_deictic_does_not_capture() {
+    let (runtime, store, mut rx) = build_conation_runtime("shortened reply");
+    seed_prior_assistant(&store, "c1").await;
+
+    let response = runtime.handle_message("make this shorter", "c1").await.unwrap();
+    assert_eq!(response.message.content, "shortened reply");
+
+    // Deictic adjustment: obey and forget — no card, nothing stored.
+    let quiet = tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv()).await;
+    assert!(quiet.is_err(), "deictic conation must not propose a lesson");
+}
+
+#[tokio::test]
+async fn conation_durative_stop_cancels_and_captures_transform_lesson() {
+    let (runtime, _store, mut rx) = build_conation_runtime("unused");
+    // "stop mentioning the corpus" takes the cancel sub-shape today
+    // (accepted P0 quirk — TEACHABLE §9) AND proposes the term-avoid
+    // lesson. Bare "stop" cancels without capturing.
+    let response = runtime
+        .handle_message("stop mentioning the corpus", "c1")
+        .await
+        .unwrap();
+    assert_eq!(response.message.content, "Stopped.");
+
+    let payload = recv_lesson(&mut rx)
+        .await
+        .expect("durative stop must propose a transform lesson");
+    assert_eq!(payload.enforcement, "transform");
+    assert_eq!(payload.params["terms"][0], "corpus");
+    assert!(payload.display.starts_with("Don't use:"));
+
+    let response = runtime.handle_message("stop", "c1").await.unwrap();
+    assert_eq!(response.message.content, "Stopped.");
+    let quiet = tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv()).await;
+    assert!(quiet.is_err(), "bare cancel must not propose a lesson");
+}
+
+#[tokio::test]
+async fn conation_prompt_rung_drafts_via_fast_slot_with_guarded_parse() {
+    // Free-form durative coaching falls to the prompt rung; the mock
+    // inference doubles as the drafter, returning the draft JSON.
+    let draft = r#"{"display": "Explain things simply.", "prompt_form": "Explain like I'm five."}"#;
+    let (runtime, store, mut rx) = build_conation_runtime(draft);
+    seed_prior_assistant(&store, "c1").await;
+
+    runtime
+        .handle_message("from now on explain things like i am five", "c1")
+        .await
+        .unwrap();
+    let payload = recv_lesson(&mut rx)
+        .await
+        .expect("prompt-rung coaching must propose a drafted lesson");
+    assert_eq!(payload.enforcement, "prompt");
+    assert_eq!(payload.prompt_form, "Explain like I'm five.");
+    assert_eq!(payload.display, "Explain things simply.");
+}
+
+// ─── TEACHABLE lesson enforcement (rungs 1/2/4 + whisper) ───────────
+//
+// Pins TEACHABLE.md §7: a param lesson lowers the length DIRECTIVE (never
+// the max_tokens ceiling), the K=1 prompt lesson rides the system message
+// outermost, the term-avoid transform mutates the PERSISTED answer while
+// `[Source: …]` spans survive, `lessons_applied` records influence, and
+// the `kept_lesson` whisper fires exactly once per lesson.
+
+/// Inference mock that records `(system_message, prompt)` per request —
+/// visibility into what the synthesis request actually carried.
+struct RecordingInference {
+    response_text: String,
+    requests: std::sync::Mutex<Vec<(Option<String>, String)>>,
+}
+
+impl RecordingInference {
+    fn new(text: &str) -> Self {
+        Self {
+            response_text: text.to_string(),
+            requests: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for RecordingInference {
+    async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        self.requests
+            .lock()
+            .unwrap()
+            .push((request.system_message.clone(), request.prompt.clone()));
+        Ok(CompletionResponse {
+            text: self.response_text.clone(),
+            tokens_used: 10,
+            prompt_tokens: 0,
+            model_id: "mock".to_string(),
+            latency_ms: 1,
+            oicp_meta: None,
+            finish_reason: None,
+            completion_tokens: None,
+        })
+    }
+
+    // Working single-chunk stream (unlike MockInference, which errors) —
+    // the lesson streaming test drives the real deep/simple spawn.
+    async fn complete_stream(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        self.requests
+            .lock()
+            .unwrap()
+            .push((request.system_message.clone(), request.prompt.clone()));
+        let text = self.response_text.clone();
+        Ok(Box::pin(futures::stream::once(async move { Ok(text) })))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Err(Error::NotImplemented("mock".to_string()))
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 2048,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+}
+
+async fn lesson_note_store(
+    payloads: &[serde_json::Value],
+) -> (tempfile::TempDir, Arc<corpus_engine_notes::NoteStore>) {
+    let dir = tempfile::tempdir().unwrap();
+    let store =
+        Arc::new(corpus_engine_notes::NoteStore::open(&dir.path().join("notes.db")).unwrap());
+    for payload in payloads {
+        store
+            .write_note_full(
+                "lesson",
+                payload["display"].as_str().unwrap_or("lesson"),
+                vec![],
+                vec![],
+                "s1",
+                corpus_engine_notes::NoteScope::Global,
+                None,
+                None,
+                corpus_engine_notes::NoteSource::Agent,
+                None,
+                Some(&payload.to_string()),
+            )
+            .await
+            .unwrap();
+    }
+    (dir, store)
+}
+
+fn param_lesson_payload() -> serde_json::Value {
+    serde_json::json!({
+        "display": "Keep answers short.",
+        "prompt_form": "",
+        "enforcement": "param",
+        "params": {"soft_target_cap": 300},
+        "taught_from": {"excerpt": "keep answers shorter from now on",
+                        "conversation_id": "c1", "message_id": ""},
+        "created": 1
+    })
+}
+
+fn prompt_lesson_payload() -> serde_json::Value {
+    serde_json::json!({
+        "display": "Explain things simply.",
+        "prompt_form": "Explain like I'm five.",
+        "enforcement": "prompt",
+        "params": {},
+        "taught_from": {"excerpt": "always explain like I'm five",
+                        "conversation_id": "c1", "message_id": ""},
+        "created": 2
+    })
+}
+
+fn transform_lesson_payload() -> serde_json::Value {
+    serde_json::json!({
+        "display": "Don't use: corpus.",
+        "prompt_form": "",
+        "enforcement": "transform",
+        "params": {"terms": ["corpus"]},
+        "taught_from": {"excerpt": "stop mentioning the corpus",
+                        "conversation_id": "c1", "message_id": ""},
+        "created": 3
+    })
+}
+
+#[tokio::test]
+async fn lessons_shape_the_synthesis_request() {
+    // Param lesson caps the length directive; prompt lesson rides the
+    // system message outermost. Verified on the non-streaming
+    // SimpleQuery path, which shares `prepare_knowledge_context` with
+    // the streaming path by construction.
+    let (_dir, notes) =
+        lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
+    let recording = Arc::new(RecordingInference::new("a fine answer"));
+    let runtime = Runtime::new(
+        recording.clone(),
+        Box::new(PassthroughRouter),
+        Box::new(NoOpPlanner),
+        Arc::new(ToolRegistry::new()),
+        Arc::new(MockStore::new()),
+        Arc::new(SkillRegistry::new()),
+        Arc::new(AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+    )
+    .with_note_store(notes);
+
+    runtime
+        .handle_message("what is the meaning of x", "c1")
+        .await
+        .unwrap();
+
+    let requests = recording.requests.lock().unwrap();
+    let synth = requests
+        .iter()
+        .find_map(|(sys, _)| sys.as_deref().filter(|s| s.contains("standing rule")))
+        .expect("a synthesis request must carry the K=1 lesson block");
+    assert!(
+        synth.contains("Explain like I'm five."),
+        "compiled prompt_form must ride the system message: {synth}"
+    );
+    assert!(
+        synth.contains("unless it conflicts with a safety or grounding rule"),
+        "the lesson block must stay subordinate to the gate"
+    );
+    assert!(
+        synth.contains("approximately 300 tokens"),
+        "the length directive must reflect the lesson cap (default config \
+         is 2048; the param lesson caps the soft target at 300): {synth}"
+    );
+}
+
+/// Drain a stream handle fully (the spawn persists the message before
+/// the channel closes, so the store is consistent after this returns).
+async fn drain(handle: sovereign_core::runtime::StreamHandle) {
+    use futures::StreamExt;
+    let mut stream = handle.stream;
+    while stream.next().await.is_some() {}
+}
+
+#[tokio::test]
+async fn streaming_turn_applies_term_avoid_and_whispers_once() {
+    let (_dir, notes) = lesson_note_store(&[transform_lesson_payload()]).await;
+    let mock_answer = "The corpus helps here. [Source: Corpus Handbook] More corpus talk.";
+    let store = Arc::new(MockStore::new());
+    let runtime = Runtime::new(
+        Arc::new(RecordingInference::new(mock_answer)),
+        Box::new(PassthroughRouter),
+        Box::new(NoOpPlanner),
+        Arc::new(ToolRegistry::new()),
+        store.clone(),
+        Arc::new(SkillRegistry::new()),
+        Arc::new(AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+    )
+    .with_note_store(notes);
+
+    // Turn 1: transform applies, whisper fires.
+    drain(
+        runtime
+            .handle_message_stream("tell me about it", "c1")
+            .await
+            .unwrap(),
+    )
+    .await;
+    let (content, metadata) = {
+        let msgs = store.messages.read().await;
+        let assistant = msgs
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .expect("streamed turn must persist an assistant message");
+        (
+            assistant.content.clone(),
+            assistant.metadata.clone().expect("metadata must be stamped"),
+        )
+    };
+    assert!(
+        content.contains("[Source: Corpus Handbook]"),
+        "citation span must survive the transform: {content}"
+    );
+    assert!(
+        !content.replace("[Source: Corpus Handbook]", "").contains("corpus"),
+        "banned term must be stripped outside citations: {content}"
+    );
+    assert_eq!(
+        metadata["lessons_applied"][0]["enforcement"], "transform",
+        "metadata must record the transform's influence: {metadata}"
+    );
+    assert_eq!(
+        metadata["kept_lesson"]["display"], "Don't use: corpus.",
+        "first application must whisper: {metadata}"
+    );
+
+    // Turn 2: still applied, but the whisper fires exactly once.
+    drain(
+        runtime
+            .handle_message_stream("tell me more", "c1")
+            .await
+            .unwrap(),
+    )
+    .await;
+    let metadata2 = {
+        let msgs = store.messages.read().await;
+        msgs.iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .and_then(|m| m.metadata.clone())
+            .expect("second turn metadata")
+    };
+    assert_eq!(metadata2["lessons_applied"][0]["enforcement"], "transform");
+    assert!(
+        metadata2["kept_lesson"].is_null(),
+        "the whisper must fire exactly once: {metadata2}"
+    );
+}
+
+#[tokio::test]
+async fn conation_prompt_rung_drops_malformed_draft_silently() {
+    // Drafter output that fails the parse guards produces NO card —
+    // no card at all beats a wrong card (TEACHABLE §4).
+    let (runtime, store, mut rx) = build_conation_runtime("not json at all");
+    seed_prior_assistant(&store, "c1").await;
+
+    let response = runtime
+        .handle_message("from now on explain things like i am five", "c1")
+        .await
+        .unwrap();
+    // The turn still answers normally (the transform reply).
+    assert_eq!(response.message.content, "not json at all");
+    let quiet = tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv()).await;
+    assert!(quiet.is_err(), "malformed draft must drop silently");
+}

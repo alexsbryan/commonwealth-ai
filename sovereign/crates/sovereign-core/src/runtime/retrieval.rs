@@ -3918,8 +3918,14 @@ impl Runtime {
         // budget instead of opening a multi-section essay that gets
         // cut off mid-paragraph (the bug the cutoff chip surfaces on
         // the desktop side).
-        let budget_note =
-            crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
+        // TEACHABLE P0 (rung 1): the active length lesson clamps the
+        // directive target — the length DIRECTIVE only; the request's
+        // max_tokens ceiling downstream is untouched. Same one-read
+        // snapshot then drives the prompt block + transform + metadata.
+        let active_lessons = crate::lessons::load_active_lessons(self.note_store.as_deref()).await;
+        let (directive_target, lesson_length_applied) =
+            active_lessons.adjust_soft_target(self.inference_config.max_tokens);
+        let budget_note = crate::runtime::build_response_length_directive(directive_target);
         let system = if !all_chunks.is_empty() {
             // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
             // is a `<think>`-block contract — it guides the model's HIDDEN
@@ -3942,6 +3948,23 @@ impl Runtime {
                 context,
             )
         };
+        // TEACHABLE P0 (rung 4): K=1 prompt lesson, OUTERMOST — after
+        // the custom-instructions layer `build_*_system_message`
+        // appended. The relational witness arm in `handle_simple`
+        // rebuilds its own system message and deliberately does NOT
+        // re-add the block (witness voice is out of P0 scope).
+        let mut system = system;
+        if let Some(lesson) = &active_lessons.prompt {
+            system.push_str("\n\n");
+            system.push_str(&crate::lessons::render_lesson_block(
+                &lesson.payload.prompt_form,
+            ));
+        }
+        let turn_lessons = crate::runtime::types::TurnLessons::from_snapshot(
+            &active_lessons,
+            lesson_length_applied,
+            active_lessons.prompt.is_some(),
+        );
 
         // 7. Speed: the named intent→slot decision (one home for the
         // ladder; see `evidence::speed_for_retrieval_intent`).
@@ -3963,6 +3986,7 @@ impl Runtime {
             sources,
             retrieved_chunks,
             coverage,
+            lessons: turn_lessons,
         }
     }
     /// Summarize the dropped tail of the conversation so the

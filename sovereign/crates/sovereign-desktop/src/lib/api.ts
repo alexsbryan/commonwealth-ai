@@ -341,6 +341,40 @@ export async function submitInformationSearch(
   });
 }
 
+// ─── TEACHABLE lessons ────────────────────────────────────────
+
+/** All saved lessons, newest first, INCLUDING superseded (retired)
+ *  rows so the settings pane can render the full chain. */
+export async function listLessons(): Promise<import("./types").LessonRow[]> {
+  return invoke("list_lessons");
+}
+
+/** Persist a kept lesson from the Learn-this card. `draftedDisplay`
+ *  carries the pre-edit sentence ONLY when the user edited before
+ *  saving (the consented correction pair). Returns the new note id.
+ *  Dismissing the card calls nothing — dismissals are never stored. */
+export async function saveLesson(
+  proposal: import("./types").LessonProposedPayload,
+  draftedDisplay?: string | null,
+): Promise<string> {
+  return invoke("save_lesson", {
+    draft: { ...proposal, drafted_display: draftedDisplay ?? null },
+  });
+}
+
+/** Toggle a lesson without deleting it. */
+export async function setLessonEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<boolean> {
+  return invoke("set_lesson_enabled", { id, enabled });
+}
+
+/** Hard delete — real deletion, matching the backend contract. */
+export async function deleteLesson(id: string): Promise<boolean> {
+  return invoke("delete_lesson", { id });
+}
+
 export async function listSkills(): Promise<SkillEntry[]> {
   return invoke("list_skills");
 }

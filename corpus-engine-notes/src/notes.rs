@@ -42,8 +42,8 @@ use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 use crate::notes_schema::{
-    MIGRATION_V1, MIGRATION_V10, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5,
-    MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
+    MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4,
+    MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
 };
 
 /// Propagation event shipped on the mesh wire for a single note.
@@ -1023,6 +1023,23 @@ impl NoteStore {
         if version < 10 {
             conn.execute_batch(MIGRATION_V10).map_err(|e| {
                 Error::Io(std::io::Error::other(format!("NoteStore migrate v10: {e}")))
+            })?;
+        }
+
+        // v10 → v11: TEACHABLE lesson lane. One new kind — `lesson` —
+        // so the CHECK constraint changes. NOT the V8 rename-first
+        // dance: since v9, `note_embeddings` / `note_entities`
+        // REFERENCE notes(id), and renaming `notes` first would let
+        // SQLite ≥ 3.25 rewrite those child REFERENCES to the temp
+        // name (which then gets dropped). MIGRATION_V11 uses
+        // create-copy-drop-rename instead — the final rename's target
+        // has no inbound references, so nothing is rewritten.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 11 {
+            conn.execute_batch(MIGRATION_V11).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v11: {e}")))
             })?;
         }
 
@@ -3286,6 +3303,31 @@ impl NoteStore {
         Ok(affected > 0)
     }
 
+    // ── Note payload update ────────────────────────────────────────────────
+
+    /// Overwrite a note's `payload_json` in place (and bump `updated_at`).
+    ///
+    /// The FTS index is unaffected — `payload_json` is not indexed (FTS
+    /// carries content + kind only). No propagation event fires: the P0
+    /// consumer is TEACHABLE lesson enable/disable toggles, which are
+    /// node-local state; mesh gossip of lessons is a later phase.
+    ///
+    /// Returns `true` if the row existed, `false` otherwise.
+    pub async fn update_note_payload(&self, id: &str, payload_json: &str) -> Result<bool> {
+        let now = unix_now();
+        let conn = self.conn.lock().await;
+        let affected = conn
+            .execute(
+                "UPDATE notes SET payload_json = ?1, updated_at = ?2 WHERE id = ?3",
+                params![payload_json, now, id],
+            )
+            .map_err(sqlite_err)?;
+        if affected > 0 {
+            bump_notes_version(&conn)?;
+        }
+        Ok(affected > 0)
+    }
+
     // ── Todo summary ───────────────────────────────────────────────────────
 
     /// Return the most recent open `todo` notes (for the startup summary).
@@ -4422,6 +4464,215 @@ mod tests {
             .unwrap();
         let rows = store.tool_call_log_rows(0, 10).await.unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+    // ── TEACHABLE lesson-kind migration + payload tests (v11) ────────────
+
+    #[tokio::test]
+    async fn migration_v10_to_v11_preserves_children_and_admits_lesson() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a REAL v10 database by running the actual ladder, then
+        // populate the v9/v10 child tables so the v11 rebuild has live
+        // `REFERENCES notes(id)` rows to preserve — the exact hazard the
+        // create-copy-drop-rename order exists to avoid.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            conn.execute_batch(SCHEMA_NEW).unwrap();
+            for m in [
+                MIGRATION_V2,
+                MIGRATION_V3,
+                MIGRATION_V4,
+                MIGRATION_V5,
+                MIGRATION_V6,
+                MIGRATION_V7,
+                MIGRATION_V8,
+                MIGRATION_V9,
+                MIGRATION_V10,
+            ] {
+                conn.execute_batch(m).unwrap();
+            }
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(v, 10, "handcrafted DB must sit at v10");
+
+            conn.execute_batch(
+                "INSERT INTO notes (id, kind, content, session_id, created_at, updated_at)
+                 VALUES ('id-1', 'todo', 'old prelesson note', 's0', 1000, 1000);
+                 INSERT INTO note_embeddings (note_id, embedding, model_id, dim, created_at)
+                 VALUES ('id-1', X'00000000', 'test-model', 1, 1000);
+                 INSERT INTO note_entities (note_id, entity, kind, salience, created_at)
+                 VALUES ('id-1', 'Rust', 'Tech', 1.0, 1000);",
+            )
+            .unwrap();
+        }
+
+        // Open with NoteStore — the v11 migration runs.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Old note preserved and readable.
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].content, "old prelesson note");
+
+        // The new kind is admitted…
+        let lesson_id = store
+            .write_note("lesson", "Keep answers short.", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        assert!(!lesson_id.is_empty());
+        // …and a bogus kind still fails the CHECK.
+        assert!(store
+            .write_note("bogus_kind", "nope", vec![], vec![], "s1")
+            .await
+            .is_err());
+
+        drop(store);
+
+        // Child tables, FK integrity, and FTS survived the rebuild.
+        let conn = Connection::open(&db_path).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 11);
+        let emb: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_embeddings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(emb, 1, "note_embeddings rows must survive the rebuild");
+        let ent: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_entities", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(ent, 1, "note_entities rows must survive the rebuild");
+        let fk_violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            fk_violations, 0,
+            "v11 rebuild must not orphan child FKs (rename-rewrite hazard)"
+        );
+        let fts_hits: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH 'prelesson'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fts_hits, 1, "FTS must be rebuilt over the copied rows");
+    }
+
+    #[tokio::test]
+    async fn fresh_db_accepts_lesson_kind() {
+        let store = make_store().await;
+        let id = store
+            .write_note("lesson", "Keep answers short.", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert_eq!(row.kind, "lesson");
+        // Durable, not operational exhaust: Global scope must stick (the
+        // write chokepoint forces EPHEMERAL_KINDS to Session; `lesson`
+        // must never be in that list).
+        assert_eq!(row.scope, "global");
+    }
+
+    #[tokio::test]
+    async fn update_note_payload_roundtrip_and_bumps_version() {
+        let store = make_store().await;
+        let id = store
+            .write_note_full(
+                "lesson",
+                "Keep answers short.",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                Some(r#"{"enabled":true}"#),
+            )
+            .await
+            .unwrap();
+
+        let before = store.notes_version().await.unwrap();
+        assert!(store
+            .update_note_payload(&id, r#"{"enabled":false}"#)
+            .await
+            .unwrap());
+        let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert_eq!(row.payload_json.as_deref(), Some(r#"{"enabled":false}"#));
+        let after = store.notes_version().await.unwrap();
+        assert!(after > before, "payload update must bump notes_version");
+
+        // Unknown id → Ok(false), never an error.
+        assert!(!store.update_note_payload("no-such-id", "{}").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn lesson_supersede_retires_and_new_head_wins() {
+        let store = make_store().await;
+        let a = store
+            .write_note_full(
+                "lesson",
+                "Keep answers short.",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let b = store
+            .write_note_full(
+                "lesson",
+                "Keep answers very short.",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                Some(&a),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(store
+            .retire_by_id(&a, &format!("superseded by {b}"))
+            .await
+            .unwrap());
+
+        // Active listing (the enforcement loader's view): only the head.
+        let active = store
+            .read_notes(None, &[], &[], &["lesson".to_string()], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, b);
+        assert_eq!(active[0].supersedes.as_deref(), Some(a.as_str()));
+
+        // include_retired (the settings pane's view): the full chain, so
+        // the superseded row can render struck-through with "replaced by".
+        let all = store
+            .read_notes(None, &[], &[], &["lesson".to_string()], 10, true)
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 2);
     }
 
     // ── ATOS scope tests (M1.1) ──────────────────────────────────────────

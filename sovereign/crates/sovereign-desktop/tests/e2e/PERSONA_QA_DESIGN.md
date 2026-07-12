@@ -150,7 +150,7 @@ Per session:
    `set_conversation_enabled_corpora`.
 2. **Subscribe before the first turn**: `POST /listen` for
    `information-request`, `message-refined`, `turn-narration` (none are in
-   `STICKY_EVENTS` — subscribing late loses the gap signal; the 4096-entry
+   `STICKY_EVENTS` — subscribing late loses the gap signal; the 8192-entry
    recent ring is the backstop, not the plan).
 3. User-brain (on-box 35B, temp 1.0 — same slot as the chaos brain)
    composes the next message from persona card + goal + transcript so far.

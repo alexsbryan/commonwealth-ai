@@ -60,6 +60,7 @@ for (const f of files) {
     cancels: `${m.cancels}`,
     posture: m.grace_mean == null ? "—" : m.grace_mean.toFixed(1),
     rephr_per_sess: m.rephrases_per_session == null ? "—" : m.rephrases_per_session.toFixed(1),
+    lesson_fires: `${m.capture_precision ?? 0}`,
     rss_gb:
       runStart.daemonRssMb && runEnd.daemonRssMb
         ? `+${((runEnd.daemonRssMb - runStart.daemonRssMb) / 1024).toFixed(0)}`
@@ -82,6 +83,7 @@ const COLS = [
   ["cancels", "cancel"],
   ["posture", "grace/3"],
   ["rephr_per_sess", "rephr/s"],
+  ["lesson_fires", "lesson✗"],
   ["rss_gb", "ΔRSS GB"],
 ];
 console.log(`| ${COLS.map(([, h]) => h).join(" | ")} |`);

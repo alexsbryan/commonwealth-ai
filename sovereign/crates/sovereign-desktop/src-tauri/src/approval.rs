@@ -266,4 +266,12 @@ impl ApprovalChannel for TauriApprovalChannel {
         // replaces the existing bubble's content with `new_content`.
         self.emit("message-refined", payload);
     }
+
+    fn emit_lesson_proposed(&self, payload: LessonProposedPayload) {
+        // TEACHABLE P0: ChatView listens for "lesson-proposed" and
+        // renders the Learn-this card. Fire-and-forget — Save calls
+        // the `save_lesson` command with this payload later; "Not
+        // this" calls nothing. No pending map, nothing blocks.
+        self.emit("lesson-proposed", payload);
+    }
 }

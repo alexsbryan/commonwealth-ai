@@ -651,6 +651,154 @@ PRAGMA user_version = 10;
 COMMIT;
 ";
 
+// ─── Schema migration v10 → v11 (TEACHABLE: lesson kind) ────────────────────
+
+/// Applied to databases at `user_version = 10`. Adds a single new
+/// `kind` value — `lesson` — the behavior lane of the TEACHABLE
+/// feature (`sovereign-desktop/TEACHABLE.md`). Lesson structure
+/// (display / prompt_form / enforcement / taught_from / enabled /
+/// compiler_version) rides the existing v7 `payload_json` column;
+/// only the CHECK constraint changes here.
+///
+/// NOT the V8 rename-first pattern. Since v9, `note_embeddings` and
+/// `note_entities` carry `REFERENCES notes(id) ON DELETE CASCADE`;
+/// on SQLite ≥ 3.25, `ALTER TABLE notes RENAME TO notes_v10` would
+/// rewrite those child REFERENCES clauses to point at the renamed
+/// temp table — which then gets dropped, corrupting the child
+/// schema. Create-copy-drop-rename avoids this under every SQLite
+/// rename behavior: the final rename's target (`notes_v11`) has no
+/// inbound references, so nothing is rewritten.
+///
+/// The script must also disable foreign keys for its duration: the
+/// bundled libsqlite3-sys compiles with SQLITE_DEFAULT_FOREIGN_KEYS,
+/// so connections open FK-ON, and under FK-ON `DROP TABLE notes`
+/// performs an implicit DELETE that fires `ON DELETE CASCADE` into
+/// the child tables — silently emptying `note_embeddings` /
+/// `note_entities` (caught by the migration test). The pragma is a
+/// no-op inside a transaction, so it brackets the BEGIN/COMMIT, and
+/// is restored to ON afterwards (the store's operating mode —
+/// `delete_note` relies on the cascade for embedding cleanup). All
+/// child rows point at ids the copy preserves — the migration test
+/// asserts `pragma_foreign_key_check` is empty afterwards.
+///
+/// FTS5 + triggers are rebuilt because they reference `notes` by
+/// name; the index list is the UNION of V8's nine and v9's three
+/// (dropping `notes` drops them all).
+///
+/// Idempotent: gated by `PRAGMA user_version < 11` in
+/// `NoteStore::open`.
+pub(crate) const MIGRATION_V11: &str = "
+PRAGMA foreign_keys=OFF;
+
+BEGIN;
+
+CREATE TABLE notes_v11 (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation','commitment','follow_up','goal',
+        'research_finding','capability_request','recipe_issue',
+        'checkpoint','checkpoint_restored','deferred_question',
+        'tool_decision','lesson'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT,
+    related_entity TEXT,
+    source        TEXT    NOT NULL DEFAULT 'agent',
+    supersedes    TEXT,
+    payload_json  TEXT,
+    private        INTEGER NOT NULL DEFAULT 0,
+    origin_node_id TEXT,
+    tombstone      INTEGER NOT NULL DEFAULT 0,
+    content_hash   TEXT,
+    fork_of        TEXT
+);
+
+INSERT INTO notes_v11 (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, payload_json,
+    private, origin_node_id, tombstone, content_hash, fork_of
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, payload_json,
+    private, origin_node_id, tombstone, content_hash, fork_of
+FROM notes;
+
+DROP TABLE IF EXISTS notes_fts;
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+DROP TABLE notes;
+
+ALTER TABLE notes_v11 RENAME TO notes;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind            ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created         ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name       ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at      ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature   ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_related_entity
+    ON notes(related_entity) WHERE related_entity IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_source_created
+    ON notes(source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_supersedes
+    ON notes(supersedes) WHERE supersedes IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_propagation
+    ON notes(scope, private, created_at DESC)
+    WHERE private = 0 AND tombstone = 0;
+CREATE INDEX IF NOT EXISTS idx_notes_content_hash
+    ON notes(content_hash)
+    WHERE content_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_fork_of
+    ON notes(fork_of)
+    WHERE fork_of IS NOT NULL;
+
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 11;
+
+COMMIT;
+
+PRAGMA foreign_keys=ON;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 

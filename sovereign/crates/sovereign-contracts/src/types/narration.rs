@@ -185,6 +185,11 @@ pub enum NarrationPhase {
     /// Grounding gate is verifying the drafted answer against the
     /// retrieved passages before releasing it (the stream is held).
     GroundingVerifyStart,
+    /// A durative coaching turn produced a draft lesson card
+    /// (TEACHABLE P0). The chip tethers into the Learn-this card the
+    /// same way `GapCheckFired` tethers into the information-request
+    /// card.
+    LessonDrafted,
 
     // ── Team-pipeline stage frames ────────────────────────────
     /// Router invocation began. Pairs with `RoutingComplete`.

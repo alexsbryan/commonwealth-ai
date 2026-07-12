@@ -40,6 +40,7 @@
   import UpdatesSection from "./UpdatesSection.svelte";
   import SetupReportCard from "./SetupReportCard.svelte";
   import CrashRecordsPanel from "./CrashRecordsPanel.svelte";
+  import LessonsPanel from "./LessonsPanel.svelte";
 
   interface Props {
     onClose: () => void;
@@ -52,6 +53,7 @@
     | "mesh"
     | "sharing"
     | "tools"
+    | "lessons"
     | "paths"
     | "mobile"
     | "diagnostics"
@@ -527,6 +529,7 @@
   const ALL_TABS: { id: Tab; label: string; keywords: string[]; group: "general" | "operator" }[] = [
     { id: "models",          label: "Models",          group: "general",  keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
     { id: "tools",           label: "Web Search",       group: "general",  keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
+    { id: "lessons",         label: "What I've learned", group: "general", keywords: ["lesson", "learned", "learn", "teach", "taught", "rule", "preference", "behavior", "remember", "coach", "shorter", "wording"] },
     { id: "paths",           label: "Paths",            group: "general",  keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "about",           label: "About",            group: "general",  keywords: ["about", "version", "update", "updates", "upgrade", "check", "release"] },
     { id: "mesh",            label: "Mesh",             group: "operator", keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
@@ -1440,6 +1443,11 @@
       <!-- ──────────── DIAGNOSTICS (crash & panic records) ──────────── -->
       {#if activeTab === "diagnostics"}
         <CrashRecordsPanel />
+      {/if}
+
+      <!-- ──────────── WHAT I'VE LEARNED (TEACHABLE lessons) ──────────── -->
+      {#if activeTab === "lessons"}
+        <LessonsPanel />
       {/if}
 
       <!-- ──────────── ABOUT (version + updater) ──────────── -->

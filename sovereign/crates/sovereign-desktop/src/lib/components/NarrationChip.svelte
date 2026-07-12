@@ -43,6 +43,7 @@
     presentation_start: "❧",
     presentation_complete: "❧",
     gap_check_fired: "?",
+    lesson_drafted: "◈",
     tool_invocation_start: "⌕",
     tool_invocation_complete: "✓",
     stage_error: "!",
@@ -68,10 +69,11 @@
     {#each entries as entry, i (entry.elapsed_ms + "-" + i)}
       {@const isLatest = i === entries.length - 1}
       {@const isGapFired = phaseLabel(entry.phase) === "gap_check_fired"}
+      {@const isLessonDrafted = phaseLabel(entry.phase) === "lesson_drafted"}
       <div
         class="narration-chip"
         class:latest={isLatest}
-        class:bridging={isLatest && isGapFired}
+        class:bridging={isLatest && (isGapFired || isLessonDrafted)}
         data-phase={phaseLabel(entry.phase)}
         title="Phase: {phaseLabel(entry.phase)}"
         style:--age-step={entries.length - 1 - i}

@@ -740,6 +740,32 @@ from the search-shaped `{tool, query}` loop in `executor.rs` that
 tool calls go straight to `tool.execute`, bypassing the idempotency ledger
 above — threading #4 into the worker loop is a follow-on.)
 
+**TEACHABLE lessons — coach in chat, own in settings** (design:
+`sovereign-desktop/TEACHABLE.md`). The behavior lane: a durative
+coaching turn ("keep answers shorter **from now on**") routed to
+ConationQuery forks a detached capture spawn
+(`runtime/handlers/conation.rs` → `sovereign-core/src/lessons.rs`) that
+compiles the intent DETERMINISTICALLY to the cheapest enforcement rung
+(param → transform → prompt; the fast slot phrases only prompt-rung
+lessons) and emits a fire-and-forget `lesson-proposed` card — consent
+is stateless, dismissals store nothing. Saved lessons are notes
+(`kind = "lesson"`, corpus-engine-notes MIGRATION_V11; payload schema =
+`lessons::LessonPayload`, source fields `{display, taught_from}` vs
+derived `{prompt_form, enforcement, params}` stamped
+`compiler_version`), one ACTIVE lesson per rung (the desktop
+`save_lesson` command supersedes-and-retires). Enforcement: rung 1
+clamps the output-budget SOFT target (never `max_tokens`); rung 2 is a
+whole-word term-avoid pass running post-grounding-gate and
+post-citation (structurally unable to touch `[Source: …]` anchors);
+rung 4 appends ONE compiled sentence outermost on the system + refine
+prompts of primary synthesis intents only. Every influenced turn
+records `metadata.lessons_applied`; the first records
+`metadata.kept_lesson` exactly once (the whisper). No rung touches the
+grounding gate — facts are scored by evidence provenance, never
+preference. Settings surface: `LessonsPanel.svelte` ("What I've
+learned"); measurement: `personas.mjs --coach` A/B report + the
+zero-tolerance `capture_precision` gate.
+
 The router emits **facts**; the runtime applies **policy**.
 Splitting them keeps classification testable without a model and
 lets thresholds calibrate without touching the trait.

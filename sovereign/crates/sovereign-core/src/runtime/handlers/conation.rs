@@ -24,6 +24,46 @@ impl Runtime {
         let lower = message.to_lowercase();
         let lower_tr = lower.trim();
 
+        // TEACHABLE P0 capture: durative coaching ("always…", "keep
+        // answers shorter from now on", "stop <gerund>…") forks a
+        // detached lesson draft — see `crate::lessons`. The turn's
+        // normal behavior below (cancel / empty-state / transform) is
+        // byte-identical: the spawn never blocks or fails the turn,
+        // and deictic conation ("make this shorter") carries no
+        // durative marker so it never reaches the spawn. Consent
+        // happens later on the card; nothing is stored here.
+        if crate::lessons::detect_durative(&lower) {
+            let prior_id = context
+                .conversation
+                .messages
+                .iter()
+                .rev()
+                .find(|m| m.role == Role::Assistant)
+                .map(|m| m.id.clone())
+                .unwrap_or_default();
+            let session_id = self
+                .sessions
+                .latest_for_conversation(conversation_id)
+                .map(|s| s.id.clone());
+            let inference = std::sync::Arc::clone(&self.inference);
+            let approval = std::sync::Arc::clone(&self.approval);
+            let routing_events = std::sync::Arc::clone(&self.routing_events);
+            let cid = conversation_id.to_string();
+            let msg = message.to_string();
+            tokio::spawn(async move {
+                crate::lessons::capture_lesson(
+                    inference,
+                    approval,
+                    routing_events,
+                    session_id,
+                    cid,
+                    prior_id,
+                    msg,
+                )
+                .await;
+            });
+        }
+
         // Cancel sub-shape — short-circuits without synthesis.
         let is_cancel = ["stop", "cancel", "abort", "halt"].iter().any(|k| {
             lower_tr == *k

@@ -118,6 +118,12 @@ pub(crate) async fn run_collaboration(
     // synchronous callers without a live streaming session).
     routing_events: Option<Arc<dyn RoutingEventSink>>,
     session_id: Option<String>,
+    // TEACHABLE P0: the turn's K=1 compiled prompt lesson. When Some,
+    // it is re-appended to the refinement system message (today-anchor
+    // precedent: injected into system AND refinement prompts) so a
+    // style lesson survives a gap-check rewrite. `None` = no lesson /
+    // legacy callers — byte-identical behavior.
+    lesson_prompt: Option<String>,
 ) -> RefinementOutcome {
     if !inference_config.auto_collaborate {
         return RefinementOutcome::NotAttempted;
@@ -233,7 +239,7 @@ pub(crate) async fn run_collaboration(
     // though it was already May 2026. Date-reasoning discipline is
     // shape-level per `feedback_no_teaching_to_test.md`.
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let refine_system = format!(
+    let mut refine_system = format!(
         "Current date: {today}. When integrating user-provided \
          sources, compare their publication date or context to \
          today's date. If a source predicts an event for a date \
@@ -244,6 +250,12 @@ pub(crate) async fn run_collaboration(
          dates may still be stale; flag uncertainty when the answer \
          depends on time-sensitive facts."
     );
+    // TEACHABLE: the K=1 prompt lesson survives refinement (see the
+    // `lesson_prompt` parameter doc).
+    if let Some(pf) = &lesson_prompt {
+        refine_system.push_str("\n\n");
+        refine_system.push_str(&crate::lessons::render_lesson_block(pf));
+    }
     let refine_prompt = format!(
         "The user asked: {question}\n\n\
          Your initial answer (drawn from the local corpus):\n{response}\n\n\
@@ -381,6 +393,8 @@ pub(crate) async fn run_post_stream_refinement(
     // / test callers pass `None`.
     routing_events: Option<Arc<dyn RoutingEventSink>>,
     session_id: Option<String>,
+    // TEACHABLE P0: forwarded to `run_collaboration` — see its doc.
+    lesson_prompt: Option<String>,
     grounding_guard: Option<RefinementGuard>,
 ) -> Option<String> {
     let outcome = run_collaboration(
@@ -393,6 +407,7 @@ pub(crate) async fn run_post_stream_refinement(
         evidence,
         routing_events,
         session_id,
+        lesson_prompt,
     )
     .await;
 

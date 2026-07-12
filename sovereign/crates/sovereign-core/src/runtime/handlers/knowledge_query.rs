@@ -448,6 +448,9 @@ impl Runtime {
                 prompt_budget_note: None,
                 folder_meta: std::collections::HashMap::new(),
                 meta_atlas_hits,
+                // Zero-retrieval parametric decline — a short honest
+                // "no sources" answer; lessons don't engage here.
+                lessons: crate::runtime::types::TurnLessons::default(),
             };
         }
 
@@ -497,6 +500,20 @@ impl Runtime {
         // max_tokens net that the auto-continue backstops — replacing the
         // per-route static caps that truncated long fast-path answers.
         let output_budget = resolve_output_budget(&intent, &shape);
+        // TEACHABLE P0 (rung 1): the active length lesson clamps the
+        // SOFT target only — the hard ceiling stays a safety net, so
+        // the truncation-bug class the output-budget redesign killed
+        // cannot regress. One NoteStore read per turn; the SAME
+        // snapshot later drives the prompt block, the post-gate
+        // transform, and the metadata, so what applied and what's
+        // recorded cannot drift.
+        let active_lessons = crate::lessons::load_active_lessons(self.note_store.as_deref()).await;
+        let (lesson_soft_target, lesson_length_applied) =
+            active_lessons.adjust_soft_target(output_budget.soft_target);
+        let output_budget = crate::runtime::evidence::OutputBudget {
+            soft_target: lesson_soft_target,
+            hard_ceiling: output_budget.hard_ceiling,
+        };
         // MECE operation axis (QUERY_TAXONOMY_MECE.md) — emitted alongside the
         // legacy route for glassbox legibility. Naming-only today: nothing
         // routes on `operation` yet (Step 2 will wire effort → tier); the
@@ -987,6 +1004,26 @@ impl Runtime {
             }
         };
 
+        // TEACHABLE P0 (rung 4): the K=1 prompt lesson rides OUTERMOST
+        // on the system message — after custom instructions, and BEFORE
+        // the prompt-budget guard below so the block is measured and
+        // degradable by existing machinery. Only primary synthesis
+        // surfaces pass through here; tiny-prompt handlers (conation /
+        // metalingual) never carry the block.
+        if let (Some(lesson), Some(system)) =
+            (&active_lessons.prompt, request.system_message.as_mut())
+        {
+            system.push_str("\n\n");
+            system.push_str(&crate::lessons::render_lesson_block(
+                &lesson.payload.prompt_form,
+            ));
+        }
+        let turn_lessons = crate::runtime::types::TurnLessons::from_snapshot(
+            &active_lessons,
+            lesson_length_applied,
+            active_lessons.prompt.is_some() && request.system_message.is_some(),
+        );
+
         // Structural general-knowledge caveat. When the agentic loop
         // judged the evidence insufficient after its second retrieval
         // round AND the question shares no vocabulary with any enabled
@@ -1157,6 +1194,7 @@ impl Runtime {
             prompt_budget_note,
             folder_meta,
             meta_atlas_hits,
+            lessons: turn_lessons,
         }
     }
 
