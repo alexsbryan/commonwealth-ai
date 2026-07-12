@@ -222,6 +222,9 @@ local gate with one summary table; `lint-gate` (clippy-count ratchet)
 and `api-gate` (public-API surface diffs on the pinned nightly from
 `quality/nightly-pin.txt`) run on their own cadence — locally and in
 the weekly CI lane, never on the PR critical path.
+`quality/CLEANUP.md` is the prioritized cleanup backlog derived from
+this instrumentation (arch-report census + lint counts + temporal
+coupling), with per-item done-metrics.
 
 ### sovereign-recipes
 
