@@ -32,9 +32,11 @@ while :; do
     echo "$(date -Is) supervisor: stop sentinel present — exiting" >> "$LOG_DIR/supervisor.log"
     break
   fi
-  if [ "$code" -eq 0 ]; then
-    echo "$(date -Is) supervisor: clean exit — not restarting" >> "$LOG_DIR/supervisor.log"
-    break
-  fi
+  # SENTINEL-ONLY exit (2026-07-11 incident): treating exit-0 as "clean,
+  # don't restart" collided with operational `daemon stop` — one manual
+  # restart ended supervision silently, and every daemon after it ran
+  # unsupervised AND without the RSS env, straight into a kernel OOM kill.
+  # Deliberate shutdown is: touch ~/.sovereign/supervised.stop && daemon stop.
+  echo "$(date -Is) supervisor: daemon exited (code=$code) — restarting" >> "$LOG_DIR/supervisor.log"
   sleep 8
 done
