@@ -886,6 +886,7 @@ async function runSession(persona, corpora, corporaMeta) {
       answer: t.answer,
       aligned,
       judge,
+      evidencePresence,
       card,
       search,
       refined,
