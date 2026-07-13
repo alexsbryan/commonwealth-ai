@@ -110,19 +110,19 @@ pub async fn upload_document_asset(
             .await
         {
             Ok(completed) => {
-                eprintln!(
-                    "[document_asset] Ingest complete: {} ({} chunks, {} entities)",
-                    completed.filename,
-                    completed.chunk_count,
-                    completed
+                tracing::info!(
+                    filename = %completed.filename,
+                    chunks = completed.chunk_count,
+                    entities = completed
                         .skeleton
                         .as_ref()
                         .map(|s| s.main_entities.len())
                         .unwrap_or(0),
+                    "document asset ingest complete",
                 );
             }
             Err(e) => {
-                eprintln!("[document_asset] Ingest failed: {e}");
+                tracing::warn!("document asset ingest failed: {e}");
             }
         }
     });

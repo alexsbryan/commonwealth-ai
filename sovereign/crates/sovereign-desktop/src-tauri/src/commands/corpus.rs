@@ -639,7 +639,7 @@ pub async fn ingest_document(
         .unwrap_or(&file_path)
         .to_string();
 
-    eprintln!("[ingest] {} -> {} chunks", source, chunks_created);
+    tracing::info!(source = %source, chunks = chunks_created, "document ingested");
 
     Ok(IngestDocumentResult {
         source,
