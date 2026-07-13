@@ -25,7 +25,7 @@
 //!
 //! ## The fix
 //!
-//! The coordinator now stamps a [`WatcherHeartbeat`](corpus_engine::WatcherHeartbeat)
+//! The coordinator now stamps a [`WatcherHeartbeat`](corpus_engine_watchers::WatcherHeartbeat)
 //! every loop iteration. This module turns (heartbeat, configured?,
 //! run-in-progress?, last-run-age) into a single [`WatcherReason`] that:
 //!
@@ -39,7 +39,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use corpus_engine::WatcherHeartbeat;
+use corpus_engine_watchers::WatcherHeartbeat;
 use serde_json::{json, Value};
 
 /// The coordinator stamps its heartbeat every `debounce/2` (sub-second

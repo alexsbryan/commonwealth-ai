@@ -42,8 +42,8 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::test_results::{TestResultKind, TestResultStore};
-use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
-use crate::yield_hook::YieldHook;
+use crate::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use corpus_engine_yield::YieldHook;
 
 /// Default cooldown after a subprocess completes before consuming a
 /// queued rerun. See `lint_watcher::DEFAULT_RERUN_COOLDOWN_MS` for

@@ -39,7 +39,8 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
-use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
+use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use sovereign_cli_shared::{
@@ -251,7 +252,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // `with_workspace_root` enables per-file freshness queries
     // (`lint_status --files <paths>` and `lint_status --changed`).
     let heartbeat_reader =
-        corpus_engine::WatcherHeartbeat::reader(flat_stores_dir.join("watcher-heartbeat"));
+        corpus_engine_watchers::WatcherHeartbeat::reader(flat_stores_dir.join("watcher-heartbeat"));
     // Read the same runner config the daemon does so `configured` (and
     // the displayed scope) is correct per tool — the heartbeat is shared
     // across lint+test, so a live coordinator alone doesn't tell us

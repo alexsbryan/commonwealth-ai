@@ -30,7 +30,7 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use corpus_engine::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use corpus_engine_watchers::{BackgroundWatcher, WatcherStatus};
 
 use crate::config::WorkAtlasConfig;
 use crate::model::{AgentKind, ObservationRecord, ObservationSource, Privacy, SessionRecord};

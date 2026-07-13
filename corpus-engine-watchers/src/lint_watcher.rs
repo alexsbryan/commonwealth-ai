@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Lint-runner as a [`BackgroundWatcher`] plugin.
 //!
-//! Nearly identical to [`super::test_watcher::TestWatcher`] — the differences
+//! Nearly identical to [`crate::test_watcher::TestWatcher`] — the differences
 //! are the Tier 2 event schema (adds `warn` kind, `line`/`col` fields) and the
 //! tighter output truncation (500 chars).
 //!
@@ -29,8 +29,8 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::lint_results::{LintResultKind, LintResultStore};
-use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
-use crate::yield_hook::YieldHook;
+use crate::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use corpus_engine_yield::YieldHook;
 
 /// Default cooldown after a subprocess completes before consuming a
 /// queued rerun. Coalesces bursts of file edits arriving during the

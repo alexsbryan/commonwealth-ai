@@ -21,6 +21,14 @@ members = [
     # Git archaeology — commit-history mining, rough-edge surfacing,
     # atom-provenance evaluation. Step 4 of the decomposition.
     "corpus-engine-archaeology",
+    # YieldHook — the cooperative foreground-yield contract shared by
+    # the data plane and the watchers. Tier-0 leaf extracted during
+    # Step 1 (watchers) so both crates share one trait identity.
+    "corpus-engine-yield",
+    # Lint/test/project-index watchers + result stores. Step 1 of the
+    # decomposition — cuts watcher-edit rebuild blast from 18 crates to
+    # ~6. See DECOMPOSITION.md.
+    "corpus-engine-watchers",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
     "sovereign/crates/sovereign-contracts",
@@ -151,6 +159,8 @@ corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
+corpus-engine-yield = { path = "corpus-engine-yield" }
+corpus-engine-watchers = { path = "corpus-engine-watchers" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }

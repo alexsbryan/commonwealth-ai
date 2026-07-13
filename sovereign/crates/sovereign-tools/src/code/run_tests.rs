@@ -22,7 +22,7 @@ use sovereign_core::error::Result;
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::update::test_watcher::TestWatcher;
+use corpus_engine_watchers::TestWatcher;
 
 pub struct RunTestsTool {
     watcher: Arc<TestWatcher>,

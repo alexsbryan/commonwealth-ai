@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use corpus_engine::ActivityCallback;
+use corpus_engine_watchers::ActivityCallback;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivityLevel {
@@ -185,7 +185,7 @@ impl ActivityCallback for ActivityReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::ActivityCallback;
+    use corpus_engine_watchers::ActivityCallback;
 
     fn reporter() -> Arc<ActivityReporter> {
         // Point at a port that doesn't exist — HTTP errors are silently ignored.

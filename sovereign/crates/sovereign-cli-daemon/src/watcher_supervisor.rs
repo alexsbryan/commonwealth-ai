@@ -27,7 +27,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::{BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat};
+use corpus_engine_watchers::{
+    BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat,
+};
 use tokio::task::JoinHandle;
 
 /// How often the monitor re-checks coordinator liveness.
@@ -71,7 +73,7 @@ impl WatcherSupervisor {
     /// Build and start one coordinator instance, sharing the supervisor's
     /// heartbeat so both this monitor and the status tools observe the
     /// same liveness.
-    async fn start_once(&self) -> corpus_engine::error::Result<CoordinatorHandle> {
+    async fn start_once(&self) -> corpus_engine_watchers::Result<CoordinatorHandle> {
         let mut coordinator =
             WatcherCoordinator::new(self.debounce_ms).with_heartbeat(Arc::clone(&self.heartbeat));
         for w in &self.watchers {
@@ -156,7 +158,7 @@ impl WatcherSupervisor {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use corpus_engine::WatcherStatus;
+    use corpus_engine_watchers::WatcherStatus;
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
 

@@ -1,9 +1,11 @@
 # Prioritized cleanup list
 
-**Status 2026-07-12: P0 #1-5 and P1 #7-11 executed** (see the Execution
-record at the bottom). Remaining live: P1 #6 (fresh census — needs a
-committed tree for the SCIP re-index), P1 #12 first slice, api snapshots
-for the 4 hub crates (parked on a rustc ICE — see record), and all of P2.
+**Status 2026-07-13: P0 #1-5, P1 #6-11 executed** (see the two Execution
+records at the bottom). The fresh census (P1 #6) is done — it froze the R3
+carve line and re-scoped P1 #12 (see the 07-13 record). Remaining live: the
+R3/R4 structural roadmap (P2 #13-14), api snapshots for the 4 hub crates
+(parked on a rustc ICE — see record), the exception-retirement + ratchet
+burn-downs (P2 #15-17), and the month-later blocking flips (P2 #18).
 
 Generated 2026-07-11 from the quality-program instrumentation:
 `sovereign code arch-report` (SCIP census + declared↔observed deltas + git
@@ -71,3 +73,42 @@ after the next re-index (commit + clean tree → daemon reindexes).
 | P1 #12 SCC first slice | ⏳ Deferred to the fresh census (error.rs out-edge analysis). |
 | P0 #5 api snapshots | ◐ 3 of 7 banked (oicp-types, oicp-client, sovereign-contracts — 7,217 surface lines committed; api-gate green). The 4 hub crates are PARKED: rustc nightly-2026-07-01 ICEs compiling `lance-index-4.0.0` (opaque-type trait-selection panic). Un-park: bump quality/nightly-pin.txt to a nightly that builds lance-index, uncomment the crates in xtask api_gate.rs, `api-gate --update-baseline`. |
 | Post-batch reconciliation | lint-gate: 60 pairs cleared + 3 lowered by the batch; final baseline 1,637 warnings across 153 pairs (was 2,555/211). Growth in sovereign-core/-inference (+17) was YOUR new code landed since the 07-11 snapshot (state_cartridge_spike, lessons.rs, core_tests/harness, cpu_compat) — accepted explicitly. fan-in caps: 3 lowered (dead-edge cuts). oversized: retrieval.rs + sqlite.rs + oicp-types lib.rs cleared; 6 entries grown by your recent commits re-accepted (notes.rs 6363, streaming.rs 3275, router.rs 2710, model_slot.rs 3712, core_tests.rs 2378, lessons.rs 1318 NEW — candidates for §10 rows). All 5 gates + api-gate green at batch close; fmt clean. |
+
+---
+
+## Execution record — 2026-07-13 (P1 #6 fresh census + R3 freeze)
+
+**Re-index prerequisite (bit us first, will bite new contributors):** the
+SCIP call-graph rebuild shells out to `rust-analyzer scip …`
+(`corpus-engine-scip/src/scip_export.rs:52`). `~/.cargo/bin/rust-analyzer` is
+a rustup *proxy shim*; the pinned toolchain (`1.95.0`, via
+`rust-toolchain.toml`) had **no `rust-analyzer` component**, so the export
+errored — and a failed export **wipes the graph to 0 symbols** (it is
+destructive, not a no-op; observed 164,995 → 0). Fix: `rustup component add
+rust-analyzer`, then `sovereign project refresh`. Worth a bootstrap-script
+line. (Aside: this repo is not `sovereign project register`-ed, so refresh
+runs a local in-process rebuild and there is no lint/test watcher — use
+`scripts/sovereign-{lint,test}.sh --human`.)
+
+Fresh census: HEAD `bfe0aabd`, clean tree → 181,603 symbols / 1,002,549 refs
+(61,609 cross-crate) across 49 crates. Persisted to
+`~/.sovereign/arch/commonwealth-ai/` (`arch_posture` now reads fresh inputs).
+
+| Item | Outcome |
+|---|---|
+| P1 #6 fresh census | ✅ Done. Carve-outs confirmed landed as separate crates (corpus-engine-{notes 12 fan-in, atos 5, scip 9, archaeology 2}). **Layer map: 0 SCIP-observed violations.** **Dead Cargo edges: 0 removable** — the deltas section is now entirely `observed-not-declared` (benign re-export coupling: contracts/oicp-types reached through re-export chains Cargo can't see). P0 #1 + layer-gate effectively closed. |
+| R3 carve-line **FREEZE** (input to P2 #13) | ✅ The old census's `sovereign-tools → sovereign-core` 7,169-ref edge **re-attributed to `sovereign-contracts`** on the fresh index exactly as P1 #6 predicted. Fresh sovereign-tools external coupling: **→ sovereign-contracts 5,566 refs** (`Error` 491, `Result` 348, `StepOutput` 183, `Tool`/`ToolDescriptor` 118 each) — a stable leaf (instability 0.05), **HEALTHY, do not touch**; **→ corpus-engine 2,931 refs** (`AtomEnvelope` 168, `CorpusEngine` 79, `AtomType`/`AtomId`/`EdgeType`) — **the carve target**. So R3 = carve the SCIP-backed `code/` tool family + isolate the corpus-engine atom-type dependency; keep the contracts coupling. sovereign-tools is the workspace's only two-way hub (fan-in 8 / fan-out 14). |
+| P1 #12 **RE-SCOPED** (was: "split the error enum") | ⚠️ Corrected. The corpus-engine SCC is now **222 files** (grew from 217), anchored by `lib.rs` (fan-in **176**, fan-out **77** — a crate-root re-export god-module) and `error.rs` (fan-in 134, fan-out **0**). Splitting a zero-fan-out leaf cannot break the cycle, and `DECOMPOSITION.md` explicitly lists "Don't create a `corpus-engine-error` crate" as a NON-goal (per-crate narrow errors + `From` at boundaries is the pattern). The cycle is driven by crate-root re-export (`lib.rs`) + `use corpus_engine::{…}` intra-crate imports; within one crate this is a **legibility** problem, not a compile-time one. **Real fix = R4 crate carve-outs** (each carve peels its own error, shrinking the enum naturally). P1 #12 folds into **P2 #14 R4 Step 1 (watchers — "plan drafted; ready to execute")**. |
+| New hidden-coupling clusters (fresh git temporal) | 📋 Logged for future extraction. (a) **atlas_traversal ⇄ enrichment/atlas** — `engine.rs`⇄`schema_validation.rs` r=0.92, `brief.rs`⇄`schema_validation.rs` r=0.85, `classifier.rs`⇄`cross_corpus.rs` r=0.90, `engine.rs`⇄`analysis/configuration.rs` r=0.85 — a NEW cluster, no structural edge (candidate: a shared atlas-schema contract). (b) **executor.rs ⇄ planner.rs** still 26 joint commits (r=0.63) — P1 #9 extracted the handler trio but not this pair. (c) **commonwealth-api middleware**: `session_briefing.rs` is now a co-change partner of `approval_gate` (r=0.78) and `decision_extractor` (r=0.80) — P1 #10's `middleware/shared.rs` didn't absorb it. |
+| New file-size offenders (not yet in §10) | 📋 108 total >1200 lines. Biggest un-ledgered: `sovereign-cli-dev/src/project_cmd.rs` **7,102**, `commonwealth-api/src/frontdoor.rs` 5,774, `corpus-engine/src/enrichment/atlas/resolution.rs` 5,173, `sovereign-cli-dev/src/atos_cmd/run.rs` 4,704, `corpus-engine/src/recipe.rs` 4,234. (notes.rs 6,363 now lives in corpus-engine-notes.) project_cmd.rs is a clean contained split candidate — same shape as the sqlite.rs/retrieval.rs wins. |
+
+### P2 #14 R4 Step 1 — `corpus-engine-watchers` carve (2026-07-13, branch `carve/corpus-engine-watchers`, NOT committed)
+
+| Item | Outcome |
+|---|---|
+| Carve | ✅ 6 files / 3,172 LOC → `corpus-engine-watchers` (lint/test result stores + watcher_coordinator + lint/test/project-index watchers). SCIP `CodeWatcher` + newsworthy stay. Narrow `Io`-only Error; NO `From` bridge (zero corpus-engine-internal consumers). |
+| Shared-trait leaf | ✅ Extracted `corpus-engine-yield` (Tier-0, one trait) for `YieldHook` — shared identity between the data plane + watchers (daemon installs one `Arc<dyn YieldHook>` on both). corpus-engine keeps a root re-export (legit API, single-source type). commonwealth-api/sovereign-mesh unchanged. |
+| Vestigial gate | ✅ The `treesitter` gate on the watcher impls was dead (grep-proven: no tree-sitter use) → new crate compiles unconditionally, fixing sovereign-tools' latent feature-unification wart. DECOMPOSITION lessons #6, #7 added. |
+| Consumers | ✅ 5 migrated (daemon, cli-dev, tools, server, work-atlas). work-atlas dropped its **direct** corpus-engine dep (still transitive via sovereign-core). Caught: brace-group splits + a `start_once` return-type identity break the symbol-grep missed. |
+| Verified | ✅ lint `pass 1/fail 0` (warn 176 = unchanged baseline); tests `pass 7647/fail 0` (new crate's moved test modules ran & passed). **Measured win: watcher-edit rebuild set 22→12 crates** (the 18→5 estimate was optimistic — sovereign-tools consumes the stores + is a hub; R3 shrinks it further). |
+| Receipt caveat | ⏳ After-census (arch_report) not re-run — the SCIP index tracks committed HEAD, and the reindexer gates on a clean tree. Re-run `sovereign project refresh && sovereign code arch-report` after this branch lands to capture the observed fan-in drop (work-atlas→corpus-engine now 0). |

@@ -41,6 +41,7 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-atos = { workspace = true }
+corpus-engine-watchers = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }

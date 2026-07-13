@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, LintResultStore, TestResultStore};
+use corpus_engine::CorpusEngine;
+use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_engine_notes::NoteStore;
 use sovereign_core::ToolRegistry;
 
@@ -16,10 +17,10 @@ pub(super) async fn build_tool_registry(
     notes: Arc<NoteStore>,
     lint_store: Arc<LintResultStore>,
     test_store: Arc<TestResultStore>,
-    test_watcher: Option<Arc<corpus_engine::TestWatcher>>,
+    test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
     watched_lint_scope: Option<String>,
     watched_test_scope: Option<String>,
-    watcher_heartbeat: Arc<corpus_engine::WatcherHeartbeat>,
+    watcher_heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
     workspace_dir: Option<PathBuf>,
     work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,

@@ -12,6 +12,12 @@ description = "Shared corpus ingestion and index management for Sovereign and Co
 # depends only on oicp-types + serde), no cycle.
 sovereign-contracts = { workspace = true }
 
+# YieldHook contract (Tier-0 leaf, zero deps). Extracted from
+# corpus-engine/src/yield_hook.rs during the watchers carve-out so the
+# data plane and corpus-engine-watchers share one trait identity.
+# Non-optional: CorpusEngine::set_yield_hook is core, always-compiled API.
+corpus-engine-yield = { workspace = true }
+
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -174,18 +180,19 @@ corpus-engine-notes    = { workspace = true, optional = true }
 [features]
 # `stores` is in the default set because every downstream sovereign +
 # commonwealth crate touches at least one rusqlite-backed module
-# (NoteStore / FeatureStore / ProjectDocsStore / lint_results /
-# test_results / wikipedia_graph). Pre-2026-05-22 these lived under
-# `treesitter` because rusqlite happened to be declared there — that
-# wart forced 5 tree-sitter grammar crates into every binary that
-# only needed a notes table. The two are split now: `stores` is the
-# SQLite layer, `treesitter` is grammars + SCIP.
+# (wikipedia_graph + the notes_sync bridge here; NoteStore /
+# ProjectDocsStore reached through the pulled-in `corpus-engine-notes`).
+# Pre-2026-05-22 these lived under `treesitter` because rusqlite happened
+# to be declared there — that wart forced 5 tree-sitter grammar crates
+# into every binary that only needed a notes table. The two are split
+# now: `stores` is the SQLite layer, `treesitter` is grammars + SCIP.
+# (lint/test result stores moved to `corpus-engine-watchers` 2026-07-13.)
 default = ["markdown", "stores"]
 markdown = ["dep:pulldown-cmark"]
-# `stores` unlocks every rusqlite-backed module (NoteStore,
-# FeatureStore, ProjectDocsStore, lint_results, test_results,
-# wikipedia_graph, plan_items, notes_sync). Cheap to enable —
-# rusqlite is bundled (no system dep) and SQLite itself is small.
+# `stores` unlocks the remaining rusqlite-backed modules in this crate
+# (wikipedia_graph, wikipedia_columnar, notes_sync) and pulls in
+# `corpus-engine-notes` for the internal NoteStore users. Cheap to
+# enable — rusqlite is bundled (no system dep) and SQLite is small.
 stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes"]
 treesitter = [
     "stores",
