@@ -76,6 +76,18 @@ across several machines; these keep them consistent.)
   native C++ either way). Release is ~5× slower to compile — reserve it
   for a named perf need (e.g. OCR). Run e2e via `target/debug/<sibling>`
   directly; the `sovereign` symlink may point at release.
+- **Rebuild the WHOLE workspace, not one binary.** After editing a shared
+  crate (esp. `sovereign-core`), run a plain full `cargo build --workspace
+  --features corpus-engine/treesitter` so every binary is fresh. A scoped
+  `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
+  and the chat e2e repro (`repro-defects.mjs` / `chaos.mjs`) exercises the
+  DESKTOP binary, which runs the KnowledgeQuery / grounding pipeline
+  in-process (the daemon it attaches to only serves inference + fan-out).
+  Rebuild just the daemon and you validate old code. Verify what actually
+  runs via `readlink -f /proc/<pid>/exe` + mtime, never `strings` on a big
+  debug binary (it silently misses many `&str`s). The chat pipeline logs to
+  the desktop app log (`test-artifacts/repro-defects-app.log`), not
+  `daemon.err`.
 - **Observability before hypothesis.** When a deployed-path behavior is
   wrong and one signal can't explain it, make the real decision *visible*
   first (tracing at a captured target + `RUST_LOG`, or a trace file) and

@@ -228,6 +228,110 @@ pub(crate) fn compute_entity_anchored(
     question_is_entity_anchored(&question_keywords(message), &lookup_ids)
 }
 
+/// Catalog-only retrieval: every retrieved chunk is a CATALOG metadata hit
+/// (title/author/subject/year), with NO ingested full-text body behind it.
+///
+/// Such a turn can only draw on the metadata plus the model's parametric
+/// memory — so a confident SPECIFIC ("the 1938 Washburn Ichabods went 0–7–0
+/// under coach John J. Bowers") is exactly a GK fabrication the thin catalog
+/// metadata cannot ground (observed gen-ceiling steps 373/519/535: an invented
+/// coach, the wrong Ranji winner, non-existent 1946 Soviet opposition parties —
+/// all shipped under an honest "based on general knowledge:" caveat). The
+/// caveat is the same "fabrication in honest clothing" shape the gazetteer
+/// entity-anchor check was built to close (`question_is_entity_anchored`), but
+/// catalog corpora carry NO atlas, so that check returns false and the
+/// exemption stays open. Treat catalog-only retrieval as entity-anchored so the
+/// gate strips the caveat and verifies the specific — finding no support in the
+/// metadata, it abstains with the ingest offer instead of shipping the guess.
+///
+/// Empty retrieval is deliberately NOT catalog-only: the zero-chunk structural
+/// GK-caveat path owns that, and `gate_on` requires `documents_found > 0`
+/// anyway. A MIXED turn (some full-text) is not catalog-only either — the body
+/// chunks can ground a real answer, so the honest GK path stays open there.
+pub(crate) fn retrieval_is_catalog_only(
+    chunks: &[corpus_engine::ScoredChunk],
+    kinds: &std::collections::HashMap<String, corpus_engine::CorpusKind>,
+) -> bool {
+    !chunks.is_empty()
+        && chunks
+            .iter()
+            .all(|c| kinds.get(&c.corpus_id) == Some(&corpus_engine::CorpusKind::Catalog))
+}
+
+/// Retrieval-derived entity anchor: does the question name a SPECIFIC
+/// entity that one retrieved chunk's TITLE identifies? A per-turn anchor
+/// that complements the atlas gazetteer (`question_is_entity_anchored`)
+/// and the catalog-only net (`retrieval_is_catalog_only`).
+///
+/// It fires on MIXED or full-text-miss retrieval — the gap the catalog-only
+/// net leaves open. `retrieval_is_catalog_only` requires EVERY chunk be a
+/// catalog hit, so a single tangential full-text chunk (a "Darlington"
+/// geography article, a "by-election" explainer) riding along with the
+/// catalog title disables it, and the atlas has no such obscure entity, so
+/// `question_is_entity_anchored` is false too — both nets miss and a
+/// GK-caveated confident specific ships (measured 2026-07-13, validation
+/// step 179: "Who won the 1926 Darlington by-election?" retrieved the
+/// catalog title "1926 Darlington by-election" yet answered "from general
+/// knowledge: … Robert Gascoyne-Cecil … Conservative Party" — the real
+/// winner was Labour). When the entity the question asks about lives in a
+/// retrieved TITLE but no ingested body grounds the specific, treat the
+/// question as entity-anchored so the gate strips the caveat, verifies the
+/// specific, and abstains rather than launder the guess.
+///
+/// The match is deliberately TIGHT so it cannot over-gate a grounded
+/// answer: a title anchors the question only when it carries ≥2 significant
+/// words (`MIN_TITLE_SIG`) AND ≥70% of them appear (stemmed) in the
+/// question (`TITLE_MATCH_FLOOR`). That rejects the generic-word coattail —
+/// in step 179 twelve distractor election titles ("1866 New Brunswick
+/// general election", …) share only "election" (≤1/4 of their words) and
+/// correctly do NOT anchor, while "1926 Darlington by-election" (3/3 words
+/// present in the question) does. Anchoring only changes behaviour when the
+/// specific is UNgrounded: a grounded answer still passes `verify_grounding`
+/// because the body supplies the support.
+pub(crate) fn question_anchors_retrieved_title(
+    message: &str,
+    chunks: &[corpus_engine::ScoredChunk],
+) -> bool {
+    const MIN_TITLE_SIG: usize = 2;
+    const TITLE_MATCH_FLOOR: f32 = 0.70;
+    // Full stemmed content-word set of the question. Deliberately NOT the
+    // capped-6 `question_keywords` — a specific title's words can fall past
+    // that cap in a long question, and here we want maximal recall on the
+    // question side, paced by the tight title-side floor below.
+    let q_stems: HashSet<String> = message
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= 4)
+        .map(|t| stem(&t.to_lowercase()).to_string())
+        .collect();
+    if q_stems.is_empty() {
+        return false;
+    }
+    for c in chunks {
+        let Some(title) = c.title.as_deref() else {
+            continue;
+        };
+        let title_sig: Vec<String> = title
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|t| t.len() >= 4)
+            .map(|t| stem(&t.to_lowercase()).to_string())
+            .collect();
+        if title_sig.len() < MIN_TITLE_SIG {
+            continue;
+        }
+        let present = title_sig.iter().filter(|s| q_stems.contains(*s)).count();
+        let frac = present as f32 / title_sig.len() as f32;
+        if frac >= TITLE_MATCH_FLOOR {
+            dbg(&format!(
+                "title_anchor: q_stems_n={} title={title:?} matched={present}/{} frac={frac:.2} HIT",
+                q_stems.len(),
+                title_sig.len()
+            ));
+            return true;
+        }
+    }
+    false
+}
+
 /// Corpus-DEICTIC question: it refers to the corpus's own material by
 /// deixis ("the story", "this document") rather than by entity name,
 /// so the lexical gazetteer check misses it — yet outside knowledge
@@ -1109,5 +1213,111 @@ mod tests {
     fn agentic_kq_default_off() {
         std::env::remove_var("SOVEREIGN_AGENTIC_KQ");
         assert!(!super::agentic_kq_enabled());
+    }
+
+    fn chunk(corpus_id: &str) -> corpus_engine::ScoredChunk {
+        corpus_engine::ScoredChunk {
+            content: String::new(),
+            title: None,
+            url: None,
+            corpus_id: corpus_id.to_string(),
+            score: 1.0,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    #[test]
+    fn catalog_only_closes_the_gk_exemption() {
+        use corpus_engine::CorpusKind;
+        let kinds = std::collections::HashMap::from([
+            ("wikipedia-catalog".to_string(), CorpusKind::Catalog),
+            ("sep".to_string(), CorpusKind::Knowledge),
+        ]);
+        // All hits catalog → catalog-only (steps 373/519/535).
+        assert!(super::retrieval_is_catalog_only(
+            &[chunk("wikipedia-catalog"), chunk("wikipedia-catalog")],
+            &kinds,
+        ));
+        // A single full-text hit means the body can ground an answer → NOT
+        // catalog-only, keep the honest GK path.
+        assert!(!super::retrieval_is_catalog_only(
+            &[chunk("wikipedia-catalog"), chunk("sep")],
+            &kinds,
+        ));
+        // Empty retrieval is owned by the zero-chunk GK-caveat path, not here.
+        assert!(!super::retrieval_is_catalog_only(&[], &kinds));
+        // Unknown corpus (kinds map empty / index list errored) → not catalog,
+        // falls back to prior behaviour.
+        assert!(!super::retrieval_is_catalog_only(
+            &[chunk("wikipedia-catalog")],
+            &std::collections::HashMap::new(),
+        ));
+    }
+
+    fn titled(corpus_id: &str, title: &str) -> corpus_engine::ScoredChunk {
+        let mut c = chunk(corpus_id);
+        c.title = Some(title.to_string());
+        c
+    }
+
+    #[test]
+    fn retrieved_title_anchors_the_specific_question() {
+        // Step 179: MIXED retrieval — one tangential full-text body chunk rides
+        // along with the catalog title, so `retrieval_is_catalog_only` is false,
+        // yet the question names exactly the retrieved title. The title anchor
+        // must fire here (this is the whole point of #10).
+        let mixed = [
+            titled("wikipedia-catalog", "1926 Darlington by-election"),
+            titled("wikipedia", "Darlington"), // tangential full-text distractor
+            titled("wikipedia-catalog", "1866 New Brunswick general election"),
+            titled("wikipedia-catalog", "List of United Kingdom by-elections"),
+        ];
+        assert!(super::question_anchors_retrieved_title(
+            "Who won the 1926 Darlington by-election?",
+            &mixed,
+        ));
+    }
+
+    #[test]
+    fn generic_shared_word_does_not_anchor() {
+        // The distractor titles share ONLY "election" with the question — a
+        // single generic word must not anchor (else every election question
+        // over-gates). Drop the exact title so only the coattail remains.
+        let distractors_only = [
+            titled("wikipedia-catalog", "1866 New Brunswick general election"),
+            titled("wikipedia-catalog", "List of United Kingdom by-elections"),
+            titled("wikipedia", "Electoral reform"),
+        ];
+        assert!(!super::question_anchors_retrieved_title(
+            "Who won the 1926 Darlington by-election?",
+            &distractors_only,
+        ));
+    }
+
+    #[test]
+    fn world_general_question_with_no_matching_title_does_not_anchor() {
+        // Control (photosynthesis-class): a grounded/world-general question whose
+        // retrieved titles are topically unrelated must keep the honest GK path.
+        let unrelated = [
+            titled("wikipedia", "Cellular respiration"),
+            titled("wikipedia", "Calvin cycle"),
+        ];
+        assert!(!super::question_anchors_retrieved_title(
+            "Who won the 1926 Darlington by-election?",
+            &unrelated,
+        ));
+        // A one-significant-word title cannot anchor (below MIN_TITLE_SIG).
+        assert!(!super::question_anchors_retrieved_title(
+            "Tell me about Darlington.",
+            &[titled("wikipedia", "Darlington")],
+        ));
+        // No titles at all (bodies only) → nothing to anchor on.
+        assert!(!super::question_anchors_retrieved_title(
+            "Who won the 1926 Darlington by-election?",
+            &[chunk("wikipedia-catalog")],
+        ));
     }
 }
