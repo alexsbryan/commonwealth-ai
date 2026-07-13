@@ -145,7 +145,7 @@ fn strip_trailing(rule: &FoldRule, folded: &str) -> String {
         // Two-word trailing qualifier (e.g. "new mexico").
         if toks.len() >= 3 {
             let last2 = format!("{} {}", toks[toks.len() - 2], toks[toks.len() - 1]);
-            if rule.trailing_qualifiers.iter().any(|q| *q == last2) {
+            if rule.trailing_qualifiers.contains(&last2) {
                 toks.truncate(toks.len() - 2);
                 continue;
             }

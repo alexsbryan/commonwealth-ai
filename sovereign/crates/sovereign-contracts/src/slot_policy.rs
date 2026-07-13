@@ -55,22 +55,31 @@ pub enum Workload {
 /// mechanically enforced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RequirementBundle {
+    /// OICP latency class the workload declares — what `latency_to_speed` shadows into `preferred_speed`.
     pub latency: LatencyClass,
+    /// §3 guidance output cap; call sites still own their honest budgets (§2.3).
     pub max_output_cap: Option<u32>,
+    /// Think-block budget `for_workload` applies; `None` = the class doesn't constrain it.
     pub think_budget: Option<usize>,
+    /// The class's structured-output expectation — documented for review, not mechanically enforced.
     pub constraint: ConstraintExpectation,
 }
 
 /// The §3 structured-output expectation per class.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstraintExpectation {
+    /// No structured output expected.
     None,
+    /// Schema-constrained where the call produces structured output; free text otherwise.
     SchemaWhereStructured,
+    /// Every call in this class must carry a schema.
     SchemaRequired,
+    /// Calls must be grammar-constrained (lark).
     GrammarRequired,
 }
 
 impl Workload {
+    /// Every workload class — for table tests and exhaustive iteration.
     pub const ALL: [Workload; 7] = [
         Workload::Route,
         Workload::Housekeep,
@@ -81,6 +90,7 @@ impl Workload {
         Workload::Passthrough,
     ];
 
+    /// Canonical kebab-case name, used in tracing events and request-id tags.
     pub const fn as_str(self) -> &'static str {
         match self {
             Workload::Route => "route",

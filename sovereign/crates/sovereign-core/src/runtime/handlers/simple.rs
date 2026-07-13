@@ -130,27 +130,16 @@ impl Runtime {
         // streaming KQ path — see the comment block at the
         // streaming dispatch site for the rationale.
         let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
+        // Shared synthesis-request core (`synthesis_common`); this
+        // surface overrides retrieval-derived speed, the witness
+        // budget/thinking pair, and the Tier-2 allowlist.
         let request = CompletionRequest {
-            prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
             max_tokens: Some(final_max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
-            structured_output: None,
-            top_k: self.inference_config.top_k,
-            top_p: None,
-            oicp,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
             enable_thinking: final_enable_thinking,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
             evidence_id_allowlist,
-            lark_grammar: None,
+            ..self.synthesis_request(kc.prompt, oicp)
         };
 
         let synth_start = std::time::Instant::now();
@@ -225,26 +214,16 @@ impl Runtime {
             .maybe_collaborate(conversation_id, message, &response_text, &evidence)
             .await;
 
+        // Completion-telemetry tail comes from the shared helper
+        // (`synthesis_common`); only surface-varying fields here.
         let provenance = ResponseProvenance {
-            intent: format!("{intent:?}"),
             search_method: kc.search_method,
             sources: kc.sources,
-            inference_backend: completion.model_id.clone(),
-            oicp_match: completion
-                .oicp_meta
-                .as_ref()
-                .and_then(|m| m.match_quality.as_ref())
-                .map(|q| format!("{q:?}")),
-            total_latency_ms: completion.latency_ms,
-            tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
             routing_trigger,
             coverage: kc.coverage,
-            finish_reason: completion.finish_reason.clone(),
-            max_tokens_budget: Some(self.inference_config.max_tokens),
-            completion_tokens: completion.completion_tokens,
-            context_window: self.inference.effective_context_size(),
+            ..self.synthesis_provenance(format!("{intent:?}"), &completion)
         };
 
         // Phase 3b: include recalled memories on the relational

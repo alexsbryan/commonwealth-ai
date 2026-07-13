@@ -111,7 +111,7 @@ impl Runtime {
         // Project the narrowed tool descriptors into the OpenAI ToolSchema
         // shape the embedded chat-template path consumes (shared with the
         // delegate worker loop — see `crate::tool_loop`).
-        let tool_schemas = tool_schemas_for(&tool_descriptors);
+        let tool_schemas = tool_schemas_for(tool_descriptors);
 
         // Lark alternation grammar for the per-iteration completion.
         // Built once outside the loop — the schema is stable for the

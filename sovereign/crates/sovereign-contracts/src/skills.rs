@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//! Skill definitions (`skill.toml` manifests) and the `SkillRegistry` that
+//! tracks activation state and merges the active skills' contributions
+//! (planner templates, prompt overrides, memory rules, inference envelopes).
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -31,16 +34,23 @@ use crate::types::{compute_trust_level, Intent, TrustLevel};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ActivationKind {
+    /// A surface the user explicitly navigates into; the most-recently-activated workspace skill owns the conversation.
     Workspace,
+    /// A passive register that contributes but never owns the conversation; loses to any Workspace skill. The default.
     #[default]
     Background,
 }
 
+/// A loaded skill: what a `skill.toml` manifest becomes in memory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
+    /// Stable skill id — what activation, memory scoping, and conversation tagging key on.
     pub id: String,
+    /// Human-readable display name.
     pub name: String,
+    /// Manifest version string (informational).
     pub version: String,
+    /// Short description for listings; empty when the manifest omits it.
     #[serde(default)]
     pub description: String,
     /// Activation surface kind. Workspace skills win over Background
@@ -51,20 +61,25 @@ pub struct Skill {
     /// is active and the user's goal matches a template's trigger.
     /// Consumed by `planner.rs::plan` for ComplexTask flows.
     pub planner_templates: Vec<PlanTemplate>,
+    /// Required/optional tools and per-tool settings this skill wants available.
     pub tool_config: ToolPreferences,
     /// Synthesis prompt overrides — concatenated by
     /// `SkillRegistry::prompt_overrides()` and prepended to the
     /// executor's ReasonWithTools / reasoning step system message
     /// for ComplexTask flows. Read at `executor.rs:461,1020`.
     pub prompts: PromptOverrides,
+    /// Skill-specific memory extraction/decay overrides.
     pub memory_rules: MemoryConfig,
     /// OICP inference requirements for this skill.
     #[serde(default)]
     pub inference: SkillInferenceConfig,
+    /// Detached signature over the manifest; `None` = unsigned.
     #[serde(default)]
     pub signature: Option<String>,
+    /// Signer identity for `signature`.
     #[serde(default)]
     pub signed_by: Option<String>,
+    /// Derived from `signature`/`signed_by` via `compute_trust_level` at load time.
     #[serde(default)]
     pub trust_level: TrustLevel,
 }
@@ -129,8 +144,10 @@ pub struct SkillInferenceConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SkillRegister {
+    /// The established epistemic contract (`PRIMARY_BASE_SYSTEM_PROMPT`). The default.
     #[default]
     Factual,
+    /// The situated glass-box voice contract — see type doc.
     Relational,
 }
 
@@ -144,28 +161,40 @@ pub enum SkillRegister {
 // do not need router hints because the user explicitly enters
 // their surfaces.
 
+/// A planner hint: a canned step outline injected when the user's goal matches `trigger`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanTemplate {
+    /// Template name, for logs and diagnostics.
     pub name: String,
+    /// What kind of goal this template applies to; the planner matches the user's goal against it.
     pub trigger: String,
+    /// The step outline itself, spliced into the planning prompt as text.
     pub steps: String,
 }
 
+/// Tools a skill declares it needs or benefits from.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolPreferences {
+    /// Tool ids the skill cannot function without.
     pub required: Vec<String>,
+    /// Tool ids that improve the skill when present.
     pub optional: Vec<String>,
+    /// Per-tool configuration blobs, keyed by tool id.
     #[serde(default)]
     pub tool_settings: HashMap<String, serde_json::Value>,
 }
 
+/// Skill-authored additions to synthesis prompts.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PromptOverrides {
+    /// Prepended to the executor's reasoning/synthesis system message while the skill is active.
     pub synthesis: Option<String>,
 }
 
+/// Skill-level knobs for memory extraction and decay.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemoryConfig {
+    /// Extra instructions appended to the memory-extraction prompt.
     pub extract_prompt_addendum: Option<String>,
     /// Override the default 10% monthly decay rate (e.g., 0.05 for 5%/month).
     pub confidence_decay_per_month: Option<f64>,
@@ -179,8 +208,10 @@ pub struct MemoryConfig {
 // trigger-phrase splice in router.rs. No production consumers
 // remain.
 
+/// Union of the active skills' `MemoryConfig`s — see `SkillRegistry::memory_rules` for the merge rules.
 #[derive(Debug, Clone, Default)]
 pub struct MergedMemoryConfig {
+    /// All active skills' extraction addenda, in activation order.
     pub extraction_addenda: Vec<String>,
     /// Lowest decay rate wins (most conservative — slowest decay).
     pub confidence_decay_per_month: Option<f64>,
@@ -418,6 +449,9 @@ pub fn load_from_directory(dir: &Path) -> Vec<Skill> {
 
 // ─── SkillRegistry ─────────────────────────────────────────────
 
+/// Registered skills plus which of them are active. The merge-style accessors
+/// (`prompt_overrides`, `memory_rules`, `planner_templates`, ...) aggregate
+/// over the active set in activation order.
 pub struct SkillRegistry {
     skills: Vec<Skill>,
     /// Activated skill ids in **activation order** (oldest first,
@@ -433,6 +467,7 @@ pub struct SkillRegistry {
 }
 
 impl SkillRegistry {
+    /// Empty registry — nothing registered, nothing active.
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
@@ -508,10 +543,12 @@ impl SkillRegistry {
         }
     }
 
+    /// Remove a skill from the active set (no-op when it wasn't active).
     pub fn deactivate(&mut self, skill_id: &str) {
         self.active.retain(|id| id != skill_id);
     }
 
+    /// Every registered skill, in registration order.
     pub fn list(&self) -> &[Skill] {
         &self.skills
     }
@@ -621,6 +658,7 @@ impl SkillRegistry {
     // was retired; the trigger-phrase wisdom migrated to the embed-
     // exemplar bank.
 
+    /// Plan templates contributed by the active skills. Currently unfiltered — the `_intent` parameter is reserved.
     pub fn planner_templates(&self, _intent: &Intent) -> Vec<&PlanTemplate> {
         self.active_skills()
             .iter()
@@ -628,6 +666,7 @@ impl SkillRegistry {
             .collect()
     }
 
+    /// Concatenated synthesis-prompt overrides from the active skills; `None` when none declares one.
     pub fn prompt_overrides(&self, _intent: &Intent) -> Option<String> {
         let overrides: Vec<&str> = self
             .active_skills()
@@ -724,6 +763,8 @@ impl SkillRegistry {
         req
     }
 
+    /// Merge the active skills' memory configs: addenda accumulate; the most
+    /// conservative value wins for decay rate and prune threshold (lowest each).
     pub fn memory_rules(&self) -> MergedMemoryConfig {
         let mut merged = MergedMemoryConfig::default();
         for skill in self.active_skills() {
@@ -748,6 +789,7 @@ impl SkillRegistry {
         merged
     }
 
+    /// Trust level of a registered skill; `Unsigned` when the id is unknown.
     pub fn trust_level(&self, skill_id: &str) -> TrustLevel {
         self.skills
             .iter()

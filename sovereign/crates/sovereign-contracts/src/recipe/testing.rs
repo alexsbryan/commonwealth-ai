@@ -43,7 +43,9 @@ pub struct RecipeTestParams {
 /// Schema / regex / placeholder validation outcome.
 #[derive(Debug, Clone, Default)]
 pub struct ValidationOutcome {
+    /// Fatal problems; non-empty fails validation.
     pub errors: Vec<String>,
+    /// Non-fatal observations — surfaced, but not failing.
     pub warnings: Vec<String>,
 }
 
@@ -51,16 +53,22 @@ pub struct ValidationOutcome {
 /// failed.
 #[derive(Debug, Clone)]
 pub struct ExtractionOutcome {
+    /// Sample records acquisition fed to the extractor.
     pub records_attempted: usize,
+    /// Records the extractor produced output for.
     pub records_succeeded: usize,
+    /// `succeeded / attempted`, 0.0–1.0 (the pass bar is >= 0.80).
     pub extraction_rate: f32,
 }
 
 /// One section the `html_sections` extractor expected but did not find.
 #[derive(Debug, Clone)]
 pub struct SectionMiss {
+    /// Input file the section was expected in.
     pub file: String,
+    /// The expected section's identifier.
     pub section: String,
+    /// The section's description from the recipe config.
     pub description: String,
     /// 200-char snippet near where the section was expected; `None`/empty on
     /// empty inputs.
@@ -70,8 +78,11 @@ pub struct SectionMiss {
 /// Everything the authoring tools render from a test run.
 #[derive(Debug, Clone)]
 pub struct RecipeTestOutcome {
+    /// Schema / regex / placeholder validation result.
     pub validation: ValidationOutcome,
+    /// Extraction counts; `None` when `sample_size == 0` or acquisition failed.
     pub extraction: Option<ExtractionOutcome>,
+    /// Expected-but-missing sections from the `html_sections` extractor.
     pub section_misses: Vec<SectionMiss>,
     /// Precomputed `TestReport::passed()` — the merge-ready verdict (no
     /// validation errors AND extraction rate ≥ 0.80 AND no over-limit chunks
@@ -109,6 +120,7 @@ impl RecipeTestOutcome {
 /// documented behavior change.
 #[async_trait]
 pub trait RecipeTester: Send + Sync {
+    /// Run the harness on the recipe at `recipe_path` — the real on-disk path, not staged TOML (see trait doc).
     async fn test(
         &self,
         recipe_path: &Path,

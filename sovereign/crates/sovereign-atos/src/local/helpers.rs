@@ -65,10 +65,8 @@ pub(super) fn extract_id_and_title(charter_md: &str) -> Result<(String, String)>
             }) => {
                 in_h1 = true;
             }
-            Event::End(TagEnd::Heading(HeadingLevel::H1)) => {
-                if in_h1 {
-                    break;
-                }
+            Event::End(TagEnd::Heading(HeadingLevel::H1)) if in_h1 => {
+                break;
             }
             Event::Text(t) if in_h1 => buf.push_str(&t),
             Event::Code(c) if in_h1 => buf.push_str(&c),

@@ -156,7 +156,7 @@ fn serde_str(attrs: &[Attribute]) -> String {
         .join(" ")
 }
 
-fn capture<'a>(re: &str, hay: &'a str) -> Option<String> {
+fn capture(re: &str, hay: &str) -> Option<String> {
     regex::Regex::new(re)
         .ok()?
         .captures(hay)

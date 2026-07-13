@@ -186,7 +186,11 @@ pub async fn set_lesson_enabled(
     enabled: bool,
 ) -> Result<bool, String> {
     let notes = notes_handle(&state).await?;
-    let Some(row) = notes.read_note_by_id(&id).await.map_err(|e| e.to_string())? else {
+    let Some(row) = notes
+        .read_note_by_id(&id)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(false);
     };
     let raw = row.payload_json.unwrap_or_else(|| "{}".to_string());

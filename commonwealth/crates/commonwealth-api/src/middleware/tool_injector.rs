@@ -137,45 +137,11 @@ fn render_descriptors(descriptors: &[ToolDescriptor]) -> Vec<ToolDefinition> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
     use serde_json::json;
 
-    fn minimal_request() -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: None,
-            messages: vec![ChatMessage::new("user", "hi")],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        }
-    }
-
     fn ctx() -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: Some("fx".into()),
-            session_id: Some("s".into()),
-            repo_root: std::env::temp_dir(),
-        }
+        ctx_with(Some("fx"), std::env::temp_dir())
     }
 
     /// Build a fixture descriptor with the given id. The injector

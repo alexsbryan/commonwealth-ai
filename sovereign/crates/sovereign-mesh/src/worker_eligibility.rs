@@ -248,7 +248,7 @@ impl WorkerEligibility {
                 (false, true) => {
                     // Appeared. If the quarantine has elapsed, (re)enter probation;
                     // if still quarantined, stay quarantined (just mark present).
-                    if !st.quarantined_until.is_some_and(|d| d > now) {
+                    if st.quarantined_until.is_none_or(|d| d <= now) {
                         st.quarantined_until = None;
                         st.present_since = Some(now);
                         st.eligible_since = None;
@@ -261,7 +261,7 @@ impl WorkerEligibility {
                     st.record_flap(now, &self.config);
                 }
                 (true, true) => {
-                    let not_quarantined = !st.quarantined_until.is_some_and(|d| d > now);
+                    let not_quarantined = st.quarantined_until.is_none_or(|d| d <= now);
                     // Start the settle clock if we don't have one yet and we're not
                     // quarantined — e.g. the worker stayed present THROUGH a
                     // quarantine that has now expired; it re-enters probation from

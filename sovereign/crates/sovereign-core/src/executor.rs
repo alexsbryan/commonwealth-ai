@@ -294,62 +294,13 @@ impl ApprovalChannel for AutoApprovalChannel {
 }
 
 // ─── Input Resolution ──────────────────────────────────────────
+//
+// The `{N.key}` substitution grammar is shared with the planner's
+// prompt (which teaches the model to emit it) — both halves live in
+// `crate::plan_grammar`. Re-exported here so the executor's public
+// surface is unchanged.
 
-pub fn resolve_inputs(
-    template: &str,
-    inputs: &[StepInput],
-    completed: &HashMap<usize, StepOutput>,
-) -> Result<String> {
-    let mut result = template.to_string();
-
-    for input in inputs {
-        let output = completed.get(&input.step_id).ok_or_else(|| {
-            Error::Execution(format!(
-                "Step {} references incomplete step {}",
-                input.step_id, input.step_id
-            ))
-        })?;
-
-        let value = match output {
-            StepOutput::Text(s) => s.clone(),
-            StepOutput::Json(v) => {
-                if input.key == "output" {
-                    serde_json::to_string_pretty(v).unwrap_or_default()
-                } else {
-                    // Composition glassbox (per ARCH_PRINCIPLES §9):
-                    // pulling a key that isn't in the Json output
-                    // used to silently resolve to "". That breaks
-                    // compositions in ways operators can't see. Now
-                    // we emit a tracing::warn! naming the missing
-                    // key and the step it came from.
-                    match v.get(&input.key) {
-                        Some(val) => val.to_string(),
-                        None => {
-                            tracing::warn!(
-                                from_step = input.step_id,
-                                key = %input.key,
-                                available = ?v.as_object().map(|o| o.keys().collect::<Vec<_>>()),
-                                "resolve_inputs: key not present in upstream Json output — \
-                                 downstream template will see an empty string. Check the \
-                                 upstream tool's `output_schema` for the correct key."
-                            );
-                            String::new()
-                        }
-                    }
-                }
-            }
-            StepOutput::ReasonWithToolsResult { ref text, .. } => text.clone(),
-            StepOutput::Jump(_) | StepOutput::Skipped => String::new(),
-        };
-
-        let placeholder_output = format!("{{{}.output}}", input.step_id);
-        let placeholder_key = format!("{{{}.{}}}", input.step_id, input.key);
-        result = result.replace(&placeholder_output, &value);
-        result = result.replace(&placeholder_key, &value);
-    }
-
-    Ok(result)
-}
+pub use crate::plan_grammar::resolve_inputs;
 
 // ─── Skip Propagation ──────────────────────────────────────────
 
@@ -710,27 +661,17 @@ impl Executor {
                 let budget = self.compute_budget(difficulty, step);
 
                 let effective_speed = budget.speed_override.unwrap_or(*speed);
+                // Unset knobs take `CompletionRequest`'s derived
+                // defaults (all `None`) — new request fields no
+                // longer require a mirrored edit here.
                 let request = CompletionRequest {
                     prompt: resolved.clone(),
                     system_message: Some(system_message),
                     preferred_speed: effective_speed,
                     max_tokens: Some(budget.max_tokens),
                     temperature: Some(0.7),
-                    structured_output: None,
-                    think_budget: None,
-                    top_k: None,
-                    top_p: None,
                     oicp,
-                    tools: None,
-                    tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
+                    ..Default::default()
                 };
 
                 // Best-of-N sampling or single completion.
@@ -1197,21 +1138,7 @@ impl Executor {
                 preferred_speed: speed,
                 max_tokens: Some(2048),
                 temperature: Some(0.3),
-                structured_output: None,
-                think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
+                ..Default::default()
             };
 
             let response = self.inference.complete(&request).await?;
@@ -1289,21 +1216,7 @@ impl Executor {
                         preferred_speed: speed,
                         max_tokens: Some(2048),
                         temperature: Some(0.3),
-                        structured_output: None,
-                        think_budget: None,
-                        top_k: None,
-                        top_p: None,
-                        oicp: None,
-                        tools: None,
-                        tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-                        sampling_mode: None,
-                        assistant_prefix: None,
-                        cmd_prefix: None,
-                        url_allowlist: None,
-                        evidence_id_allowlist: None,
-                        lark_grammar: None,
+                        ..Default::default()
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 
@@ -1652,72 +1565,8 @@ When ready to answer (without a <tool_call>):
 mod tests {
     use super::*;
 
-    #[test]
-    fn resolve_inputs_simple() {
-        let mut completed = HashMap::new();
-        completed.insert(0, StepOutput::Text("hello world".to_string()));
-
-        let inputs = vec![StepInput {
-            step_id: 0,
-            key: "output".to_string(),
-        }];
-        let result = resolve_inputs("Previous said: {0.output}", &inputs, &completed).unwrap();
-        assert_eq!(result, "Previous said: hello world");
-    }
-
-    #[test]
-    fn resolve_inputs_multiple() {
-        let mut completed = HashMap::new();
-        completed.insert(0, StepOutput::Text("Python is great".to_string()));
-        completed.insert(1, StepOutput::Text("Rust is fast".to_string()));
-
-        let inputs = vec![
-            StepInput {
-                step_id: 0,
-                key: "output".to_string(),
-            },
-            StepInput {
-                step_id: 1,
-                key: "output".to_string(),
-            },
-        ];
-        let result =
-            resolve_inputs("Compare: {0.output} vs {1.output}", &inputs, &completed).unwrap();
-        assert_eq!(result, "Compare: Python is great vs Rust is fast");
-    }
-
-    #[test]
-    fn resolve_inputs_missing_step() {
-        let completed = HashMap::new();
-        let inputs = vec![StepInput {
-            step_id: 5,
-            key: "output".to_string(),
-        }];
-        assert!(resolve_inputs("test {5.output}", &inputs, &completed).is_err());
-    }
-
-    #[test]
-    fn resolve_inputs_json_key() {
-        let mut completed = HashMap::new();
-        completed.insert(
-            0,
-            StepOutput::Json(serde_json::json!({"name": "Alice", "age": 30})),
-        );
-
-        let inputs = vec![StepInput {
-            step_id: 0,
-            key: "name".to_string(),
-        }];
-        let result = resolve_inputs("Hello {0.name}", &inputs, &completed).unwrap();
-        assert_eq!(result, "Hello \"Alice\"");
-    }
-
-    #[test]
-    fn resolve_inputs_no_inputs() {
-        let completed = HashMap::new();
-        let result = resolve_inputs("no placeholders here", &[], &completed).unwrap();
-        assert_eq!(result, "no placeholders here");
-    }
+    // `resolve_inputs` round-trip tests live with the grammar in
+    // `crate::plan_grammar::tests`.
 
     #[test]
     fn propagate_skips_branch() {

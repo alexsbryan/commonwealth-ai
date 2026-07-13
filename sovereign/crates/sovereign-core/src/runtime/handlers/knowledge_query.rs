@@ -493,13 +493,13 @@ impl Runtime {
         // legacy truth table — so "why did THIS query hit the fast/primary
         // slot?" is answerable at one site (it was mis-identified three times
         // when this was inlined). `decision.reason` is surfaced in the trace.
-        let decision = resolve_synthesis_route(&intent, has_atom_enum, &shape);
+        let decision = resolve_synthesis_route(intent, has_atom_enum, &shape);
         let route = decision.route;
         // Output budget sized to the task (intent depth + evidence breadth):
         // `soft_target` steers the prompt, `hard_ceiling` is a generous
         // max_tokens net that the auto-continue backstops — replacing the
         // per-route static caps that truncated long fast-path answers.
-        let output_budget = resolve_output_budget(&intent, &shape);
+        let output_budget = resolve_output_budget(intent, &shape);
         // TEACHABLE P0 (rung 1): the active length lesson clamps the
         // SOFT target only — the hard ceiling stays a safety net, so
         // the truncation-bug class the output-budget redesign killed
@@ -518,7 +518,7 @@ impl Runtime {
         // legacy route for glassbox legibility. Naming-only today: nothing
         // routes on `operation` yet (Step 2 will wire effort → tier); the
         // `route` field remains the load-bearing decision.
-        let operation = operation_of(&intent, has_atom_enum);
+        let operation = operation_of(intent, has_atom_enum);
         tracing::info!(
             count = shape.count,
             top1 = shape.top1_score,

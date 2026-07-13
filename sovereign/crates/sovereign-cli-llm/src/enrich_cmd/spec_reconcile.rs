@@ -1020,7 +1020,7 @@ async fn embed_all(
             };
             if let Some(total) = progress_total {
                 let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                if n % 1000 == 0 || n == total {
+                if n.is_multiple_of(1000) || n == total {
                     eprintln!("  embedded {n}/{total} {label}s");
                 }
             }

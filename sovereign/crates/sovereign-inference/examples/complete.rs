@@ -111,14 +111,14 @@ async fn main() {
         args.ctx,
         args.gpu_layers
     );
-    let provider = match EmbeddedLlamaCpp::load_full(&args.model, None, None, args.ctx, args.gpu_layers)
-    {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to load model: {e}");
-            std::process::exit(1);
-        }
-    };
+    let provider =
+        match EmbeddedLlamaCpp::load_full(&args.model, None, None, args.ctx, args.gpu_layers) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Failed to load model: {e}");
+                std::process::exit(1);
+            }
+        };
 
     let caps = provider.capabilities();
     eprintln!(

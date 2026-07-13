@@ -217,7 +217,7 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
                     continue;
                 }
             };
-            for ((chunk_id, _), mentions) in batch.iter().zip(result.into_iter()) {
+            for ((chunk_id, _), mentions) in batch.iter().zip(result) {
                 for m in mentions {
                     conv_rows.push(m.into_row(
                         &parsed.corpus_id,

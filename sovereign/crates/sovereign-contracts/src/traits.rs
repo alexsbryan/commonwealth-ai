@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//! The behavioural contracts of the system: inference, routing, planning,
+//! tools, the storage sub-traits (+ `StateStore` supertrait), the approval
+//! channel, and the optional oracles a `Runtime` can be wired with. Every
+//! item is declared explicitly (no glob re-exports) — see lib.rs.
 use std::pin::Pin;
 
 use async_trait::async_trait;
@@ -27,6 +31,9 @@ pub use crate::observer::{
 /// calls `splice_landscape_digests` after resolving the active skill.
 #[async_trait]
 pub trait LandscapeDigestProvider: Send + Sync {
+    /// Compute and attach the per-view digests to `ctx.knowledge_view_digests`
+    /// for the resolved `active_skill`. Must leave the field `Some` (possibly
+    /// empty) — see the type-level invariant on `ConversationContext`.
     async fn splice_landscape_digests(
         &self,
         ctx: &mut ConversationContext,
@@ -181,6 +188,7 @@ impl FolderMetadataOracle for NoFolderMetadata {
 /// we only need the entity STRING for set-overlap (jaccard), not its
 /// type. Implementations should dedupe before returning.
 pub trait EntityExtractor: Send + Sync {
+    /// Unique, lower-cased entity strings found in `text`, deduped; labels are elided (see trait doc).
     fn extract_entities(&self, text: &str) -> Vec<String>;
 }
 
@@ -209,6 +217,7 @@ pub trait CorpusInstaller: Send + Sync {
 /// Result of [`CorpusInstaller::ensure_installed`].
 #[derive(Debug, Clone)]
 pub struct InstallOutcome {
+    /// Id of the installed/updated corpus — what downstream workflow steps consume.
     pub corpus_id: String,
     /// A short status token: `complete` | `already_installed` | `installing`.
     pub status: String,
@@ -216,10 +225,17 @@ pub struct InstallOutcome {
 
 // ─── 1. Inference ──────────────────────────────────────────────
 
+/// The inference backend contract: completions (one-shot, streaming, batch),
+/// embeddings, optional rerank, plus slot/model introspection. Implemented by
+/// the embedded llama.cpp engine, remote HTTP forwarders, mesh-peer wrappers,
+/// and test stubs — the many defaulted methods keep those impls minimal.
 #[async_trait]
 pub trait InferenceProvider: Send + Sync {
+    /// One-shot completion (no streaming).
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse>;
 
+    /// Stream the completion as plain text chunks. Carries no metadata — the
+    /// `_with_id` / `_with_finish` variants below add provenance and finish reasons.
     async fn complete_stream(
         &self,
         request: &CompletionRequest,
@@ -330,6 +346,8 @@ pub trait InferenceProvider: Send + Sync {
         Ok((stream, self.model_id_for(request.preferred_speed)))
     }
 
+    /// Document-side embedding of `text`. Query-side callers should use
+    /// `embed_query`, which instruction-aware models prefix differently.
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
     /// Embed a batch of texts in a single forward pass when the backend supports it.
@@ -505,6 +523,7 @@ pub trait InferenceProvider: Send + Sync {
         Ok(())
     }
 
+    /// Descriptive metadata (models, relative speed/reasoning, feature support) for display and coarse routing.
     fn capabilities(&self) -> ProviderCapabilities;
 
     /// Add (or replace) an operator-declared additional chat slot at
@@ -555,8 +574,12 @@ pub trait InferenceProvider: Send + Sync {
 
 // ─── 2. Routing ────────────────────────────────────────────────
 
+/// Intent classification: turns a user message (plus conversation context and
+/// the tool inventory) into a `RouterClassification`. Pure witness — acting on
+/// the classification is `decide_policy`'s job.
 #[async_trait]
 pub trait Router: Send + Sync {
+    /// Classify `message` into intent candidates with confidences. Must not mutate state or enact anything.
     async fn classify(
         &self,
         message: &str,
@@ -584,8 +607,11 @@ pub trait Router: Send + Sync {
 /// surface.
 #[async_trait]
 pub trait RoutingEventSink: Send + Sync {
+    /// Moderate-confidence banner: "interpreting as X", streamed alongside the answer so the user can cheaply redirect.
     async fn emit_interpretation_proposed(&self, payload: InterpretationProposed);
+    /// Low-confidence ask: synthesis is suppressed until the user picks an alternative or types freeform.
     async fn emit_clarification_request(&self, payload: ClarificationRequest);
+    /// Model-voice narration at a phase boundary of a long turn.
     async fn emit_turn_narration(&self, payload: TurnNarration);
 }
 
@@ -604,8 +630,10 @@ impl RoutingEventSink for NoOpRoutingEventSink {
 
 // ─── 3. Planning ───────────────────────────────────────────────
 
+/// Decomposes a goal into an executable `Plan`, and repairs plans after step failures.
 #[async_trait]
 pub trait Planner: Send + Sync {
+    /// Produce a step DAG for `goal`, choosing among `available_tools`.
     async fn plan(
         &self,
         goal: &str,
@@ -613,6 +641,7 @@ pub trait Planner: Send + Sync {
         available_tools: &[ToolDescriptor],
     ) -> Result<Plan>;
 
+    /// Produce a recovery plan after `failure`, given the original plan and the step outputs already banked in `completed`.
     async fn replan(
         &self,
         original: &Plan,
@@ -623,13 +652,19 @@ pub trait Planner: Send + Sync {
 
 // ─── 4. Tool Execution ────────────────────────────────────────
 
+/// An invocable capability registered in the `ToolRegistry`: a descriptor for
+/// routing/planning, permissions for the consent layer, `execute` for the work.
 #[async_trait]
 pub trait Tool: Send + Sync {
+    /// Static metadata (id, parameter schema, behavioural properties) used for registry listing, routing, and planning.
     fn descriptor(&self) -> ToolDescriptor;
+    /// Permissions the consent layer must hold before `execute` may run.
     fn required_permissions(&self) -> Vec<Permission>;
 
+    /// Run the tool. `params` should already have passed `validate`; `ctx` carries conversation-scoped context.
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput>;
 
+    /// Cheap pre-execution parameter check. Default accepts everything; override to reject malformed params before any side effect.
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
         let _ = params;
         Ok(())
@@ -661,12 +696,19 @@ pub trait Tool: Send + Sync {
 
 // ─── 5. Storage (sub-traits) ──────────────────────────────────
 
+/// Persistence for conversations and their messages, plus the per-conversation
+/// settings columns (skill tag, corpus allow-list, searched-sources registry).
 #[async_trait]
 pub trait ConversationStore: Send + Sync {
+    /// Append `msg` to its conversation.
     async fn save_message(&self, msg: &Message) -> Result<()>;
+    /// Load a conversation, with its message history, by id.
     async fn get_conversation(&self, id: &str) -> Result<Conversation>;
+    /// Page through stored conversations (`limit`/`offset`).
     async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>>;
+    /// Full-text search across messages in all conversations.
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>>;
+    /// Soft-delete a conversation (tombstoned for sync-readiness, not physically removed).
     async fn delete_conversation(&self, id: &str) -> Result<()>;
     /// Update the conversation's display title and bump `updated_at`.
     /// Used by both auto-title generation and user rename actions.
@@ -750,9 +792,12 @@ pub trait ConversationStore: Send + Sync {
     }
 }
 
+/// Whole-task snapshot persistence. Contrast `StepExecutionStore`, the per-attempt ledger (ARCH §5.3).
 #[async_trait]
 pub trait TaskStore: Send + Sync {
+    /// Insert or update the full task snapshot.
     async fn save_task(&self, task: &Task) -> Result<()>;
+    /// Load a task by id.
     async fn get_task(&self, id: &str) -> Result<Task>;
 }
 
@@ -778,6 +823,7 @@ pub enum MemoryScope {
 }
 
 impl MemoryScope {
+    /// Derive the scope from a conversation's `skill_id`: non-empty `Some` → `Scoped`, otherwise `General`.
     pub fn from_conversation_skill(skill_id: Option<&str>) -> Self {
         match skill_id {
             Some(id) if !id.is_empty() => Self::Scoped(id.to_string()),
@@ -797,13 +843,22 @@ impl MemoryScope {
     }
 }
 
+/// Persistence and recall for extracted memories, including the scoped-recall
+/// wall and the memory-RAPTOR tree tiers (all tree methods default so
+/// non-persistent stores compile).
 #[async_trait]
 pub trait MemoryStore: Send + Sync {
+    /// Insert or update a memory row.
     async fn save_memory(&self, memory: &Memory) -> Result<()>;
+    /// Recall up to `limit` memories relevant to `context`. Unscoped — the wall-enforcing variant is `get_relevant_memories_for_scope`.
     async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>>;
+    /// Every stored memory row, unfiltered.
     async fn get_all_memories(&self) -> Result<Vec<Memory>>;
+    /// Soft-delete a memory (user revocation; tombstoned for sync-readiness).
     async fn delete_memory(&self, id: &str) -> Result<()>;
+    /// Overwrite a memory's `confidence` value.
     async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()>;
+    /// Refresh `last_used` to `timestamp` — resets the decay clock after a recall.
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()>;
 
     /// Persist a memory's content embedding (T1 tier of the memory-pool
@@ -965,8 +1020,11 @@ fn filter_memories_for_scope(
         .collect()
 }
 
+/// Persistence for the routing log: per-message classifications, correctness
+/// feedback, and redirect signals that feed threshold calibration.
 #[async_trait]
 pub trait RoutingStore: Send + Sync {
+    /// Record one classification: the message's hash, the chosen intent label, and classification latency.
     async fn log_routing(
         &self,
         message_hash: &str,
@@ -984,7 +1042,9 @@ pub trait RoutingStore: Send + Sync {
         let _ = (message_hash, coarse_intent, self_assessment);
         Ok(())
     }
+    /// Most recent user-flagged misclassifications (rows with `was_correct = false`) — the router's avoid-list.
     async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>>;
+    /// Record the user's verdict on the classification previously logged for `message_hash`.
     async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()>;
     /// PR4 — record an explicit user redirect away from a
     /// Propose-tier commit. Sets `routing_log.was_redirected = 1`
@@ -998,15 +1058,21 @@ pub trait RoutingStore: Send + Sync {
     }
 }
 
+/// Persistence and hybrid retrieval for `DocumentChunk`s.
 #[async_trait]
 pub trait DocumentStore: Send + Sync {
+    /// Persist a batch of chunks.
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()>;
+    /// Retrieve the `limit` best chunks for a query, given both its embedding (vector side) and raw text (FTS side).
     async fn search_documents(
         &self,
         query_embedding: &[f32],
         query_text: &str,
         limit: usize,
     ) -> Result<Vec<DocumentChunk>>;
+    /// Scored variant of `search_documents`. The default impl returns the
+    /// same hits with a placeholder `score: 0.0` — score-aware callers only
+    /// see real relevance on stores that override this.
     async fn search_documents_scored(
         &self,
         query_embedding: &[f32],
@@ -1024,24 +1090,37 @@ pub trait DocumentStore: Send + Sync {
             })
             .collect())
     }
+    /// All chunks belonging to one document, by its `source` key.
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
+    /// Remove every chunk of a corpus; returns how many rows were removed.
     async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64>;
+    /// Distinct `source` keys currently stored.
     async fn list_sources(&self) -> Result<Vec<String>>;
 }
 
+/// Persistence for `CorpusState` rows (the `corpus_state` table).
 #[async_trait]
 pub trait CorpusStateStore: Send + Sync {
+    /// Insert or update a corpus's state row.
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()>;
+    /// Load one corpus's state by id.
     async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState>;
+    /// State rows for every installed corpus.
     async fn list_corpus_states(&self) -> Result<Vec<CorpusState>>;
+    /// Soft-delete a corpus's state row (uninstall).
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()>;
+    /// Flip `CorpusState::vector_index_ready` once an IVF-PQ build finishes (or back to false on invalidation).
     async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()>;
+    /// Whether vector search may be used for this corpus; false = FTS-only fallback.
     async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool>;
 }
 
+/// Persistence for per-backend web-search quotas.
 #[async_trait]
 pub trait BudgetStore: Send + Sync {
+    /// Budget row for `backend`; `None` when none has been created yet.
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>>;
+    /// Upsert the budget row (usage increments and monthly resets).
     async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()>;
 }
 
@@ -1063,11 +1142,17 @@ pub trait BudgetStore: Send + Sync {
 /// consequence of fan-out also searching locally.
 #[derive(Debug, Clone)]
 pub struct MeshScoredChunk {
+    /// Chunk text as returned by the serving index.
     pub content: String,
+    /// Document/article title, when the producing index knows it.
     pub title: Option<String>,
+    /// Corpus the hit came from, as named on the serving peer.
     pub corpus_id: String,
+    /// Source URL, when the corpus carries one.
     pub url: Option<String>,
+    /// Relevance score assigned by the serving index.
     pub score: f32,
+    /// Peer that served the hit; `None` = our own local index (see type doc).
     pub peer_name: Option<String>,
     /// Stable chunk id from the producing peer's index. Forwarded
     /// from `KnowledgeResult.chunk_id` so the desktop reading
@@ -1076,9 +1161,12 @@ pub struct MeshScoredChunk {
     /// pre-built only for local citations in v1, but the id needs
     /// to round-trip so we don't silently lose it).
     pub chunk_id: Option<u64>,
+    /// Stable id of the chunk's parent document on the producing peer, when known.
     pub source_doc_id: Option<String>,
 }
 
+/// Optional mesh retrieval seam — injected by `sovereign-mesh` so the no-mesh
+/// build keeps zero mesh dependencies (see the section comment above).
 #[async_trait]
 pub trait MeshKnowledgeSource: Send + Sync {
     /// Query the mesh for knowledge. Returns an empty vec when the
@@ -1104,9 +1192,12 @@ pub trait MeshKnowledgeSource: Send + Sync {
     ) -> Vec<MeshScoredChunk>;
 }
 
+/// Persistence for per-tool consent grants.
 #[async_trait]
 pub trait PermissionStore: Send + Sync {
+    /// Stored grant for `(tool_id, scope)`: `Some(true/false)` = the user decided, `None` = never asked.
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>>;
+    /// Record the user's grant or denial for `(tool_id, scope)`.
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()>;
 }
 
@@ -1160,19 +1251,26 @@ pub trait StepExecutionStore: Send + Sync {
     }
 }
 
+/// Persistence for health reports and pending repair decisions. Every method
+/// defaults to a no-op so stores without health tables compile unchanged.
 #[async_trait]
 pub trait HealthStore: Send + Sync {
+    /// Persist the latest health report for a component.
     async fn save_health_report(&self, report: &crate::health::HealthReport) -> Result<()> {
         let _ = report;
         Ok(())
     }
+    /// Persist a repair decision awaiting user input; the store assigns
+    /// `PendingDecision::id`.
     async fn save_pending_decision(&self, d: &crate::health::PendingDecision) -> Result<()> {
         let _ = d;
         Ok(())
     }
+    /// All decisions still awaiting user input.
     async fn list_pending_decisions(&self) -> Result<Vec<crate::health::PendingDecision>> {
         Ok(vec![])
     }
+    /// Record the user's choice for decision `id` and clear it from the pending set.
     async fn resolve_pending_decision(
         &self,
         id: i64,
@@ -1183,19 +1281,25 @@ pub trait HealthStore: Send + Sync {
     }
 }
 
+/// Persistence for `DocumentSession`s (uploaded-document map/reduce sessions).
 #[async_trait]
 pub trait DocumentSessionStore: Send + Sync {
+    /// Persist a new session after upload + planning.
     async fn create_document_session(&self, session: &DocumentSession) -> Result<()>;
+    /// Load a session by its id.
     async fn get_document_session(&self, session_id: &str) -> Result<Option<DocumentSession>>;
+    /// Look up the session belonging to `conversation_id`, if any.
     async fn get_document_session_by_conversation(
         &self,
         conversation_id: &str,
     ) -> Result<Option<DocumentSession>>;
+    /// Overwrite a session (new `last_output`, appended `history`).
     async fn update_document_session(&self, session: &DocumentSession) -> Result<()>;
 }
 
 // ─── Document Asset Store ────────────────────────────────────
 
+/// Persistence for document assets and their derived artifacts: skeletons, RAPTOR trees, motif indexes, operation records.
 #[async_trait]
 pub trait DocumentAssetStore: Send + Sync {
     /// Persist a new document asset. Called immediately after parsing
@@ -1261,6 +1365,10 @@ pub trait DocumentAssetStore: Send + Sync {
 
 // ─── 6. Storage (supertrait) ──────────────────────────────────
 
+/// The whole-store supertrait: one object implementing every storage sub-trait.
+/// The production stores (`SqliteStateStore`, `PostgresStateStore`,
+/// `InMemoryStateStore`) implement it; callers that need everything hold
+/// `Arc<dyn StateStore>`, narrower callers name just the sub-trait they use.
 #[async_trait]
 pub trait StateStore:
     ConversationStore
@@ -1280,10 +1388,16 @@ pub trait StateStore:
 
 // ─── Approval Channel ─────────────────────────────────────────
 
+/// The executor's line to the user: approval prompts, questions, progress, and
+/// UI-refresh notifications. Implemented per surface (desktop Tauri events,
+/// server SSE, CLI prompt); dropped prompts surface as `Error::Cancelled`.
 #[async_trait]
 pub trait ApprovalChannel: Send + Sync {
+    /// Ask the user to approve `step` before it runs, showing `preview`. `Ok(false)` = declined.
     async fn request_approval(&self, step: &Step, preview: &ActionPreview) -> Result<bool>;
+    /// Put a `UserInput` step's question to the user and return their free-form reply.
     async fn ask_user(&self, question: &str) -> Result<String>;
+    /// Fire-and-forget per-step progress notification. Sync — must not block the executor.
     fn emit_progress(&self, step: &Step, output: &StepOutput);
 
     /// Surface a structured information request to the user and wait
@@ -1362,9 +1476,14 @@ pub trait InsightStore: Send + Sync {
 /// the sync architecture is in place when Obsidian sync is built.
 #[async_trait]
 pub trait InsightSink: Send + Sync {
+    /// Stable machine id of the sink (its config key).
     fn id(&self) -> &str;
+    /// Human-readable sink name for the settings UI.
     fn display_name(&self) -> &str;
+    /// Whether the sink is currently reachable/authorised.
     async fn is_connected(&self) -> bool;
+    /// Send one node to the sink.
     async fn push(&self, node: &InsightNode) -> Result<()>;
+    /// Send many nodes in one operation (sync catch-up).
     async fn push_batch(&self, nodes: &[InsightNode]) -> Result<()>;
 }

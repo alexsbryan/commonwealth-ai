@@ -414,7 +414,7 @@ async fn compute_confidences(
 
     let mut confidences: HashMap<u64, f32> = HashMap::with_capacity(chunk_ids.len());
     let mut noise_best: HashMap<u64, i32> = HashMap::new();
-    for (chunk_id, embedding) in chunk_ids.into_iter().zip(embeddings.into_iter()) {
+    for (chunk_id, embedding) in chunk_ids.into_iter().zip(embeddings) {
         let Some(assigned_cid) = cluster_result.assignments.get(&chunk_id) else {
             continue;
         };

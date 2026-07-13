@@ -195,7 +195,7 @@ impl GlinerChunkExtractor {
                 }
             };
             let mut conv_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
-            for (chunk, mentions) in delta.iter().zip(mention_batches.into_iter()) {
+            for (chunk, mentions) in delta.iter().zip(mention_batches) {
                 for m in mentions {
                     conv_rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), now));
                 }
@@ -308,7 +308,7 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
             }
         };
         let mut rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
-        for (chunk, mentions) in chunks.iter().zip(mention_batches.into_iter()) {
+        for (chunk, mentions) in chunks.iter().zip(mention_batches) {
             for m in mentions {
                 rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), extracted_at));
             }

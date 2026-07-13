@@ -405,9 +405,8 @@ pub(crate) fn align_citation_values(
                     let nt = normalize(title);
                     // Chunks this label names. Skip when it names none (not
                     // ours to judge) or all (corpus-id — vacuous).
-                    let cited: Vec<usize> = (0..n)
-                        .filter(|&k| norm_labels[k].iter().any(|l| *l == nt))
-                        .collect();
+                    let cited: Vec<usize> =
+                        (0..n).filter(|&k| norm_labels[k].contains(&nt)).collect();
                     let seg: String = chars[seg_start.max(i.saturating_sub(SEGMENT_CHARS))..i]
                         .iter()
                         .collect();

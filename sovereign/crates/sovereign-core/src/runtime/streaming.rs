@@ -295,7 +295,7 @@ async fn run_synthesis_stream(
         max_tokens = ?request.max_tokens,
         think_budget = ?request.think_budget,
         answer_chars = full_text.chars().count(),
-        answer_tail = %tail_chars(&full_text, 48),
+        answer_tail = %tail_chars(full_text, 48),
         "{}: synth draft complete",
         log_tag
     );
@@ -1359,10 +1359,11 @@ impl Runtime {
 
             // Gate mode held every token — release the final
             // (gated, quote-verified) text as one frame now.
-            if gate_on && !cancel_for_stream.is_cancelled() {
-                if tx.send(Ok(full_text.clone())).await.is_err() {
-                    return;
-                }
+            if gate_on
+                && !cancel_for_stream.is_cancelled()
+                && tx.send(Ok(full_text.clone())).await.is_err()
+            {
+                return;
             }
 
             // Persist final assistant message with full KQ metadata
@@ -1746,7 +1747,7 @@ impl Runtime {
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
-        return Ok(StreamHandle { message_id, stream });
+        Ok(StreamHandle { message_id, stream })
     }
 
     /// DeepQuery / SimpleQuery streaming turn. Lifted verbatim from
@@ -2283,10 +2284,11 @@ impl Runtime {
                 );
             }
             // Gate mode held every token — release the final text now.
-            if deep_gate_on && !cancel_for_stream.is_cancelled() {
-                if tx.send(Ok(full_text.clone())).await.is_err() {
-                    return;
-                }
+            if deep_gate_on
+                && !cancel_for_stream.is_cancelled()
+                && tx.send(Ok(full_text.clone())).await.is_err()
+            {
+                return;
             }
             let assistant_msg = Message {
                 id: message_id_owned.clone(),

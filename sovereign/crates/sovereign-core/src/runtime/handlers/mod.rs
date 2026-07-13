@@ -24,3 +24,4 @@ mod knowledge_query;
 mod metalingual;
 mod recipe_author;
 mod simple;
+mod synthesis_common;

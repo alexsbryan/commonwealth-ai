@@ -26,10 +26,15 @@ use regex::Regex;
 /// structured columns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DetectedSection {
+    /// Detector-assigned section id, unique within the document.
     pub id: String,
+    /// Heading text as matched in the document.
     pub title: String,
+    /// Byte offset where the section *body* starts (after the heading).
     pub start_byte: usize,
+    /// Byte offset where the body ends (next heading or EOF).
     pub end_byte: usize,
+    /// Detector-specific extras the `ChapterManifest` builder can promote to columns.
     pub metadata: HashMap<String, String>,
 }
 
@@ -40,6 +45,7 @@ pub struct DetectedSection {
 /// `Box<dyn SectionDetector>` and pass it to `SectionedChunker`
 /// unchanged, thanks to the blanket `Box` impl below.
 pub trait SectionDetector: Send + Sync {
+    /// Locate sections in `text`, returned in document order.
     fn detect(&self, text: &str) -> Vec<DetectedSection>;
 }
 
@@ -78,13 +84,16 @@ pub struct ChapterRegexDetector {
 }
 
 impl ChapterRegexDetector {
+    /// Line-anchored `Chapter`/`Part` heading pattern (Roman or Arabic numerals).
     pub const DEFAULT_PATTERN: &'static str =
         r"(?m)^\s*(Chapter|CHAPTER|Part|PART)\s+([IVXLCMivxlcm\d]+)\b.*$";
 
+    /// Detector with `DEFAULT_PATTERN` and no body-length filter.
     pub fn new() -> Self {
         Self::with_pattern(Self::DEFAULT_PATTERN).expect("DEFAULT_PATTERN must compile")
     }
 
+    /// Detector with a caller-supplied line-anchored regex; `Err` when the regex doesn't compile.
     pub fn with_pattern(pat: &str) -> Result<Self, regex::Error> {
         Ok(Self {
             pattern: Regex::new(pat)?,
@@ -187,13 +196,17 @@ pub struct TocAnchoredDetector {
 }
 
 impl TocAnchoredDetector {
+    /// Default marker opening the inlined table-of-contents block.
     pub const DEFAULT_START: &'static str = "[[CONTENTS]]";
+    /// Default marker closing the inlined table-of-contents block.
     pub const DEFAULT_END: &'static str = "[[/CONTENTS]]";
 
+    /// Detector using the default `[[CONTENTS]]` markers.
     pub fn new() -> Self {
         Self::with_markers(Self::DEFAULT_START, Self::DEFAULT_END)
     }
 
+    /// Detector with caller-supplied start/end markers.
     pub fn with_markers(start: impl Into<String>, end: impl Into<String>) -> Self {
         Self {
             start_marker: start.into(),

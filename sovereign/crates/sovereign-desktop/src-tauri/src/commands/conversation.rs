@@ -1014,7 +1014,7 @@ fn strip_markdown_light(s: &str) -> String {
     let mut lines = Vec::new();
     for line in s.lines() {
         let l = line.trim_start();
-        let l = l.trim_start_matches(|c| c == '#' || c == '>').trim_start();
+        let l = l.trim_start_matches(['#', '>']).trim_start();
         let cleaned = l.replace("**", "").replace("__", "").replace('`', "");
         lines.push(cleaned.trim_end().to_string());
     }

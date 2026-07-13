@@ -465,7 +465,7 @@ pub fn graph_nodes(g: &Graph, node_type: Option<&str>, limit: usize) -> Vec<Grap
     let mut nodes: Vec<GraphNodeDto> = g
         .entities
         .iter()
-        .filter(|e| node_type.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
+        .filter(|e| node_type.is_none_or(|t| e.entity_type.eq_ignore_ascii_case(t)))
         .map(|e| to_graph_node(e, &deg))
         .collect();
     nodes.sort_by(|a, b| {
@@ -523,7 +523,7 @@ pub fn findings(g: &Graph, pattern: Option<&str>) -> Vec<FindingDto> {
     let by_id: HashMap<&str, &InvEntity> = g.entities.iter().map(|e| (e.id.as_str(), e)).collect();
     g.findings
         .iter()
-        .filter(|f| pattern.map_or(true, |p| f.pattern_name.as_str() == p))
+        .filter(|f| pattern.is_none_or(|p| f.pattern_name.as_str() == p))
         .map(|f| FindingDto {
             entities: f
                 .entity_ids
@@ -562,7 +562,7 @@ pub fn search_entities(
     let mut out: Vec<GraphNodeDto> = g
         .entities
         .iter()
-        .filter(|e| node_type.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
+        .filter(|e| node_type.is_none_or(|t| e.entity_type.eq_ignore_ascii_case(t)))
         .filter(|e| {
             e.canonical_name.to_lowercase().contains(&q)
                 || e.aliases.iter().any(|a| a.to_lowercase().contains(&q))

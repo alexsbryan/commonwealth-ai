@@ -12,15 +12,18 @@
 #   - check+test (one job, one compile) / mesh-dst / fmt are BLOCKING — the
 #     real quality gates (fmt flipped 2026-07-02 after the workspace-wide
 #     `cargo fmt --all` sweep; it runs in seconds and cannot flake).
-#   - clippy + arch-gate are ADVISORY (continue-on-error):
-#       clippy → add `-- -D warnings` + drop continue-on-error after the
-#                unused-import / dead-code sweep (the per-handler import blocks
-#                in sovereign-core/runtime/handlers/ are the bulk).
-#       arch-gate → the §3.1 file-size ratchet is internal code-health
-#                discipline, not a contributor bar; a stale baseline was
-#                red-Xing unrelated commits (58 findings, 2026-07-02).
-#                Re-baselined + advisory; revisit blocking once the §10
-#                roadmap burns the ledger down.
+#   - clippy + the new quality gates are ADVISORY (continue-on-error) for
+#     their burn-in month (quality program, 2026-07); each flips blocking by
+#     deleting its continue-on-error line after ~4 clean weeks.
+#       clippy → lint-gate (the count ratchet vs quality/baselines/
+#                clippy_counts.tsv) SUBSUMES `-D warnings`: any NEW warning
+#                anywhere is a 0→1 count growth and fails the gate, while
+#                the grandfathered stock burns down via --tighten. The
+#                2026-07-12 sweep (`cargo clippy --fix` + agents) cleared
+#                the mechanical debt.
+#       arch-gate → the §3.1 file-size ratchet; re-baselined under the
+#                quality/baselines/ lifecycle (weekly --tighten auto-PR
+#                prevents the stale-baseline rot that demoted it in July).
 #   (docs-gate lives in docs-reconcile.yml and stays blocking: it is
 #   deterministic path-resolution, never flaky, and backs the README badge.)
 

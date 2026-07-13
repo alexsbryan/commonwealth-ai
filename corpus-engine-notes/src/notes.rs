@@ -2802,7 +2802,7 @@ impl NoteStore {
                 );
                 let mut params_owned: Vec<rusqlite::types::Value> = Vec::new();
                 params_owned.push(rusqlite::types::Value::Text(q.to_string()));
-                params_owned.extend(bound.into_iter());
+                params_owned.extend(bound);
                 params_owned.push(rusqlite::types::Value::Integer(fetch_limit as i64));
                 let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
                 let mapped = stmt

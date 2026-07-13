@@ -299,7 +299,7 @@ fn csr_offsets(n_atoms: u32, sorted: &[LocalEdge], key: impl Fn(&LocalEdge) -> u
 }
 
 fn pad_to_4(buf: &mut Vec<u8>) {
-    while buf.len() % 4 != 0 {
+    while !buf.len().is_multiple_of(4) {
         buf.push(0);
     }
 }
@@ -987,7 +987,7 @@ mod tests {
         p += n_edges as usize;
         let prov: Vec<u8> = bytes[p..p + n_edges as usize].to_vec();
         p += n_edges as usize;
-        while p % 4 != 0 {
+        while !p.is_multiple_of(4) {
             p += 1;
         }
         let mut conf = Vec::with_capacity(n_edges as usize);

@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// INGEST_LOCK intentionally spans awaits: it serializes whole test bodies
+// (they share the LanceDB ingest path), and each #[tokio::test] owns its
+// runtime, so a contending sibling parks a thread — serialization, never
+// deadlock (P0.3 lock audit, 2026-07-12).
+#![allow(clippy::await_holding_lock)]
 //! End-to-end tests for the `KnowledgeView` pipeline.
 //!
 //! Covers the full round-trip:

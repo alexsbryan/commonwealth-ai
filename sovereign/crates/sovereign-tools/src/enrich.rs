@@ -555,6 +555,12 @@ fn is_noise(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    // The e2e test lock intentionally spans awaits: the guard serializes
+    // whole test bodies (they spawn fake-CLI subprocesses sharing env), and
+    // each #[tokio::test] owns its runtime, so a contending sibling parks a
+    // thread — serialization, never deadlock (P0.3 lock audit, 2026-07-12).
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
 
     #[test]

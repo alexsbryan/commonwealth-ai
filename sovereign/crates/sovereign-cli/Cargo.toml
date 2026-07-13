@@ -29,8 +29,6 @@ sovereign-agent-bench = { workspace = true, optional = true }
 # builds skip this; only `--features awareness` pulls it in.
 sovereign-tools = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }

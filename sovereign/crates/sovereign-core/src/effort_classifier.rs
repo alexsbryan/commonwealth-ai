@@ -106,8 +106,7 @@ impl EffortClassifier {
 
         let centroid_high =
             compute_centroid(&parsed.high.examples, &*inference, cache.as_deref_mut()).await?;
-        let centroid_low =
-            compute_centroid(&parsed.low.examples, &*inference, cache.as_deref_mut()).await?;
+        let centroid_low = compute_centroid(&parsed.low.examples, &*inference, cache).await?;
         if centroid_high.len() != centroid_low.len() {
             return Err(Error::InvalidInput(format!(
                 "effort centroid dim mismatch: high={} low={}",

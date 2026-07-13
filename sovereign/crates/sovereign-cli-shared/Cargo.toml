@@ -13,7 +13,6 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 # crates) can skip the transitive cost.
 
 [dependencies]
-corpus-engine = { workspace = true, optional = true }
 corpus-engine-scip = { workspace = true, optional = true }
 dirs = "5"
 serde = { workspace = true }

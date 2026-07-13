@@ -161,7 +161,11 @@ impl Planner for LlmPlanner {
 
 // ─── Prompt Templates ──────────────────────────────────────────
 
-const PLAN_SYSTEM_PROMPT: &str = r#"You are a planning assistant. Given a goal, create a step-by-step execution plan as a JSON object.
+/// The plan-language contract shown to the model. The `{N.output}`
+/// placeholder syntax it documents is owned by `crate::plan_grammar`
+/// (which also owns the executor-side resolver); a grammar-sync unit
+/// test there fails if this prompt and the resolver drift apart.
+pub(crate) const PLAN_SYSTEM_PROMPT: &str = r#"You are a planning assistant. Given a goal, create a step-by-step execution plan as a JSON object.
 
 SCHEMA:
 {
@@ -584,7 +588,7 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                             key: obj
                                 .get("key")
                                 .and_then(|v| v.as_str())
-                                .unwrap_or("output")
+                                .unwrap_or(crate::plan_grammar::DEFAULT_OUTPUT_KEY)
                                 .to_string(),
                         })
                     })

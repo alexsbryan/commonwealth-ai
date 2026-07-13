@@ -169,7 +169,7 @@ pub async fn recall_relevant_memories_embed_scored(
             .collect();
         match inference.embed_batch(&texts).await {
             Ok(fresh) if fresh.len() == texts.len() => {
-                for (&i, emb) in missing_idx.iter().zip(fresh.into_iter()) {
+                for (&i, emb) in missing_idx.iter().zip(fresh) {
                     // Lazy backfill — best-effort: a failed write just
                     // means this row re-embeds next turn.
                     if model_known && !emb.is_empty() {
@@ -282,7 +282,7 @@ pub async fn recall_relevant_memories_embed_scored(
     let in_scope = all.len();
     let mut scored: Vec<(f32, Memory)> = embs
         .into_iter()
-        .zip(all.into_iter())
+        .zip(all)
         .filter_map(|(emb, m)| {
             // Same confidence-decay floor as FTS path
             // (sqlite::get_relevant_memories): drop memories whose
@@ -348,7 +348,7 @@ pub async fn recall_relevant_memories_embed_reranked(
     // pointwise 0.6B cross-encoders could not discriminate within a
     // journal of emotionally-adjacent entries, while an LLM reading
     // the pool solved the deep-buried callbacks.
-    if std::env::var("SOVEREIGN_MEM_PICK").map_or(false, |v| v == "1") {
+    if std::env::var("SOVEREIGN_MEM_PICK").is_ok_and(|v| v == "1") {
         return recall_llm_picked(inference, store, scope, query, limit).await;
     }
 
@@ -360,7 +360,7 @@ pub async fn recall_relevant_memories_embed_reranked(
     // stays for bench measurement of future rerankers; production
     // memory recall stays bi-encoder until one measures well here.
     let rerank_enabled =
-        rerank_fn.is_some() && std::env::var("SOVEREIGN_MEM_RERANK").map_or(false, |v| v == "1");
+        rerank_fn.is_some() && std::env::var("SOVEREIGN_MEM_RERANK").is_ok_and(|v| v == "1");
     let Some(rerank_fn) = rerank_fn.filter(|_| rerank_enabled) else {
         return recall_relevant_memories_embed(inference, store, scope, query, limit).await;
     };

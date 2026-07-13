@@ -18,6 +18,10 @@
 //! Honest limitations, stated once:
 //! - SCIP misses macro-expanded references and some dynamic trait dispatch,
 //!   so `DeclaredNeverObserved` is a CANDIDATE, never an auto-fail.
+//!   Measured miss rate from the 2026-07-12 dead-edge cleanup: 3 of 13
+//!   candidates were real edges the index missed — all function-scoped or
+//!   single-handler `use` imports (`use dep::Item;` consumed in one spot).
+//!   Grep before cutting.
 //! - Cycles here are file-level *reference* cycles within a crate (Tarjan
 //!   SCC over the intra-crate file graph) — `use`-only and type-only cycles
 //!   that produce no resolved reference are invisible; `cargo modules

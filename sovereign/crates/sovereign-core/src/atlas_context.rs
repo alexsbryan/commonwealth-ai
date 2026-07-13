@@ -1091,7 +1091,7 @@ pub async fn atlas_navigate_ann(
     // Merge vector + name seeds, dedup by (corpus_id, atom_id), keep the max
     // score. Name additions are an intentional broadening beyond max_seeds.
     let mut merged: HashMap<(String, String), f32> = HashMap::new();
-    for (cid, aid, s) in primary_seeds.into_iter().chain(name_seeds.into_iter()) {
+    for (cid, aid, s) in primary_seeds.into_iter().chain(name_seeds) {
         merged
             .entry((cid, aid))
             .and_modify(|e| {

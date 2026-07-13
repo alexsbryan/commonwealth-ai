@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//! The `ToolRegistry` — the daemon's tool inventory and dispatch point.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -7,6 +8,8 @@ use crate::tool_result_cache::{wrap_cached, CacheKey, ToolResultCache};
 use crate::traits::Tool;
 use crate::types::{Idempotency, StepOutput, ToolContext, ToolDescriptor};
 
+/// Owns every registered `Tool`: lookup for dispatch, descriptor listing for
+/// prompts, per-tool call counters, and the optional Tier-4 result cache.
 pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
     call_counts: Mutex<HashMap<String, u64>>,
@@ -19,6 +22,7 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
+    /// Empty registry, no cache wired.
     pub fn new() -> Self {
         Self {
             tools: Vec::new(),
@@ -37,10 +41,14 @@ impl ToolRegistry {
         self
     }
 
+    /// Add a tool. No dedupe — on duplicate ids the first registered wins at `get`.
     pub fn register(&mut self, tool: Box<dyn Tool>) {
         self.tools.push(tool);
     }
 
+    /// Look up by id: exact match first, then case-insensitive (models sometimes
+    /// capitalize tool names). `Error::ToolNotFound` — with a warn log listing
+    /// what exists — when absent.
     pub fn get(&self, tool_id: &str) -> Result<&dyn Tool> {
         // Try exact match first, then case-insensitive. Models sometimes
         // capitalize tool names ("Document" vs "document").
@@ -63,10 +71,12 @@ impl ToolRegistry {
             })
     }
 
+    /// Every registered tool's descriptor — the router/planner catalog.
     pub fn descriptors(&self) -> Vec<ToolDescriptor> {
         self.tools.iter().map(|t| t.descriptor()).collect()
     }
 
+    /// Number of registered tools.
     pub fn count(&self) -> usize {
         self.tools.len()
     }

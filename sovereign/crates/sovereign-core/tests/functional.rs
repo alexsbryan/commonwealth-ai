@@ -817,19 +817,22 @@ async fn ingest_emits_progress_under_the_prepared_asset_id() {
     );
     assert!(matches!(completed.state, AssetState::Ready));
 
-    let ids = seen_ids.lock().unwrap();
-    assert!(
-        !ids.is_empty(),
-        "at least the Started + Ready events should have fired"
-    );
-    for id in ids.iter() {
-        assert_eq!(
-            id, &expected_id,
-            "every progress event must carry the prepared asset id — \
-             a different id is the dual-asset bug regressing"
+    // Block-scoped: the guard must not (even lexically) span the await
+    // below — clippy::await_holding_lock is scope-based, not drop-based.
+    {
+        let ids = seen_ids.lock().unwrap();
+        assert!(
+            !ids.is_empty(),
+            "at least the Started + Ready events should have fired"
         );
+        for id in ids.iter() {
+            assert_eq!(
+                id, &expected_id,
+                "every progress event must carry the prepared asset id — \
+                 a different id is the dual-asset bug regressing"
+            );
+        }
     }
-    drop(ids);
 
     // Exactly one record for this id; run_ingest minted no duplicate.
     let reloaded = h

@@ -125,45 +125,39 @@ fn extract_sections(
                     depth += 1;
                 }
             }
-            Ok(Event::End(e)) => {
-                if depth > 0 {
-                    depth -= 1;
-                    let local = e.local_name();
-                    if depth == 0 && local.as_ref() == element_bytes {
-                        let content = normalise_whitespace(&buffer);
-                        if !content.is_empty() {
-                            emit_count += 1;
-                            let source_id = derive_source_id(path, title.as_deref(), emit_count);
-                            docs.push(ExtractedDoc {
-                                title: title.clone(),
-                                content,
-                                url: None,
-                                source_id,
-                                metadata: None,
-                                source_file: path
-                                    .file_name()
-                                    .and_then(|s| s.to_str())
-                                    .map(|s| s.to_string()),
-                                embed_text: None,
-                            });
-                        }
+            Ok(Event::End(e)) if depth > 0 => {
+                depth -= 1;
+                let local = e.local_name();
+                if depth == 0 && local.as_ref() == element_bytes {
+                    let content = normalise_whitespace(&buffer);
+                    if !content.is_empty() {
+                        emit_count += 1;
+                        let source_id = derive_source_id(path, title.as_deref(), emit_count);
+                        docs.push(ExtractedDoc {
+                            title: title.clone(),
+                            content,
+                            url: None,
+                            source_id,
+                            metadata: None,
+                            source_file: path
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string()),
+                            embed_text: None,
+                        });
                     }
                 }
             }
-            Ok(Event::Text(t)) => {
-                if depth > 0 {
-                    if let Ok(s) = t.unescape() {
-                        buffer.push_str(&s);
-                        buffer.push(' ');
-                    }
-                }
-            }
-            Ok(Event::CData(t)) => {
-                if depth > 0 {
-                    let s = String::from_utf8_lossy(t.as_ref());
+            Ok(Event::Text(t)) if depth > 0 => {
+                if let Ok(s) = t.unescape() {
                     buffer.push_str(&s);
                     buffer.push(' ');
                 }
+            }
+            Ok(Event::CData(t)) if depth > 0 => {
+                let s = String::from_utf8_lossy(t.as_ref());
+                buffer.push_str(&s);
+                buffer.push(' ');
             }
             Ok(Event::Eof) => break,
             Err(e) => {

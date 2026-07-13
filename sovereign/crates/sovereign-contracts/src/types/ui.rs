@@ -8,14 +8,24 @@ use serde::{Deserialize, Serialize};
 
 // ─── Response Provenance ──────────────────────────────────────
 
+/// Glassbox provenance attached to an assistant message — how the answer was
+/// produced (route, sources, backend, cost). Rendered by the desktop
+/// `RoutingMeta` footer; stored in message metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseProvenance {
+    /// Serialized intent label the turn was routed as.
     pub intent: String,
+    /// Free-form label of the retrieval path used (e.g. `"CorpusEngine"`, `"document"`); `None` when nothing was retrieved.
     pub search_method: Option<String>,
+    /// Per-corpus retrieval contributions, for the sources line.
     pub sources: Vec<SourceSummary>,
+    /// `model_id` of the completion that served the turn — peer-attributed on mesh routes (e.g. `"Qwen3.5-9B @ peer mac-peer"`).
     pub inference_backend: String,
+    /// Debug-rendered OICP `match_quality` from the completion's `oicp_meta`; `None` when no OICP metadata was attached.
     pub oicp_match: Option<String>,
+    /// Whole-turn wall clock, milliseconds.
     pub total_latency_ms: u64,
+    /// Total tokens the turn consumed, as reported by the provider.
     pub tokens_used: usize,
     /// Coarse router classification ("SIMPLE", "LOOKUP", "REASONING", "ACTION").
     /// `None` for old messages that predate this field.
@@ -76,9 +86,12 @@ pub struct ResponseProvenance {
     pub context_window: Option<u32>,
 }
 
+/// One corpus's contribution to a response — the unit of the provenance sources line.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceSummary {
+    /// Corpus id or origin label the hits came from.
     pub origin: String,
+    /// How many retrieved chunks came from this origin.
     pub count: usize,
     /// When set, this corpus's hits came from a mesh peer — the
     /// string is the peer's human-readable `node_name` (matching what
@@ -107,15 +120,22 @@ pub struct SourceSummary {
 /// is fine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageNote {
+    /// `"thin"` today; `"ok"` reserved (see type doc — fine coverage omits the note entirely).
     pub kind: String,
+    /// Chunk-count floor below which a contributing folder counts as thin.
     pub thin_threshold: usize,
+    /// The folder corpora that came back thin.
     pub thin_folders: Vec<ThinFolder>,
 }
 
+/// One under-served watched-folder corpus in a `CoverageNote`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThinFolder {
+    /// The folder corpus id.
     pub corpus_id: String,
+    /// User-typed folder display name (what the chip shows).
     pub display_name: String,
+    /// Chunks this folder contributed to the turn (below `thin_threshold`).
     pub chunks: usize,
     /// Files in this folder whose extension isn't in the watcher's
     /// accept list (e.g. `.pages`, `.key`). When non-zero, surfaces
@@ -129,10 +149,15 @@ pub struct ThinFolder {
 
 // ─── Action Preview (for approval) ────────────────────────────
 
+/// What the user is asked to approve before a write-effectful tool step runs
+/// (see `ApprovalChannel::request_approval`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionPreview {
+    /// Tool about to run.
     pub tool_id: ToolId,
+    /// Human-readable summary of the pending action.
     pub description: String,
+    /// The exact params the tool will receive — shown so consent is informed.
     pub params: serde_json::Value,
 }
 
@@ -142,6 +167,7 @@ pub struct ActionPreview {
 /// Created when the user clips a paragraph from a conversation response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsightNode {
+    /// Node id, minted at clip time.
     pub id: uuid::Uuid,
     /// The clipped paragraph text (verbatim).
     pub clipped_text: String,
@@ -163,29 +189,43 @@ pub struct InsightNode {
     pub sink_state: InsightSinkState,
 }
 
+/// Provenance of a clipped insight: which corpus/article it surfaced from and the conversation it was clipped in.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsightSource {
+    /// Corpus the source passage came from; `None` when the reply wasn't corpus-grounded.
     pub corpus_id: Option<String>,
+    /// Article/document title within the corpus, when known.
     pub article_title: Option<String>,
+    /// Conversation the clip was made in.
     pub conversation_id: uuid::Uuid,
 }
 
+/// A position badge on an insight (the SEP field-model attribution, e.g. a free-will stance).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsightPosition {
+    /// Position name as displayed on the badge.
     pub name: String,
+    /// Badge colour styling.
     pub style: PositionStyle,
 }
 
+/// Badge styling for a field-model position. Pre-defined variants carry their own colours.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PositionStyle {
+    /// Pre-defined free-will-debate position badge.
     Compatibilism,
+    /// Pre-defined free-will-debate position badge.
     HardIncompatibilism,
+    /// Pre-defined free-will-debate position badge.
     Libertarianism,
     /// For future field model positions not in the pre-defined set.
     /// Rendered with a neutral gray badge.
     Custom {
+        /// CSS background colour.
         bg: String,
+        /// CSS text colour.
         text: String,
+        /// CSS border colour.
         border: String,
     },
 }
@@ -199,9 +239,16 @@ pub enum InsightSinkState {
     PendingSync,
     /// Successfully synced to an external sink.
     Synced {
+        /// Sink that accepted the node.
         sink_id: String,
+        /// When the sync completed (UTC).
         synced_at: chrono::DateTime<chrono::Utc>,
     },
     /// Sync attempted but failed.
-    SyncFailed { sink_id: String, error: String },
+    SyncFailed {
+        /// Sink the push was attempted against.
+        sink_id: String,
+        /// Why the push failed.
+        error: String,
+    },
 }

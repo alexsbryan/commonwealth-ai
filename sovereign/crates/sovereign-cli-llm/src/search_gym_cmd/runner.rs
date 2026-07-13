@@ -519,15 +519,11 @@ fn render_conversation(request: &Value, final_message: &str) -> String {
             let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
             let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
             match role {
-                "user" => {
-                    if !content.is_empty() {
-                        out.push_str(&format!("User: {content}\n"));
-                    }
+                "user" if !content.is_empty() => {
+                    out.push_str(&format!("User: {content}\n"));
                 }
-                "assistant" => {
-                    if !content.is_empty() {
-                        out.push_str(&format!("Assistant: {content}\n"));
-                    }
+                "assistant" if !content.is_empty() => {
+                    out.push_str(&format!("Assistant: {content}\n"));
                 }
                 _ => {} // system, tool — skip
             }

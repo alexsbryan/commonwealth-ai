@@ -30,6 +30,7 @@ use corpus_engine_notes::{NoteStore, ScopeFilter};
 
 use sovereign_atos::session::{ArtifactDelta, MilestonePassEvent};
 
+use super::shared::{features_db_path, notes_db_path};
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};
 use crate::openai_types::ChatCompletionRequest;
 
@@ -99,7 +100,7 @@ async fn compute_delta(repo_root: &Path, feature_id: &str, since: i64) -> Artifa
     let mut delta = ArtifactDelta::default();
 
     // ── Notes written since `since` ──────────────────────────────
-    let notes_db = repo_root.join(".sovereign").join("notes.db");
+    let notes_db = notes_db_path(repo_root);
     if let Ok(store) = NoteStore::open(&notes_db) {
         let filter = ScopeFilter {
             scopes: vec![
@@ -135,7 +136,7 @@ async fn compute_delta(repo_root: &Path, feature_id: &str, since: i64) -> Artifa
     }
 
     // ── Milestones that flipped to stop_passed ───────────────────
-    let features_db = repo_root.join(".sovereign").join("features.db");
+    let features_db = features_db_path(repo_root);
     if let Ok(store) = corpus_engine_atos::FeatureStore::open(&features_db) {
         if let Ok(runs) = store.list_runs_for_feature(feature_id).await {
             let milestones = store.list_milestones(feature_id).await.unwrap_or_default();
@@ -207,6 +208,7 @@ fn rfc3339_to_unix(s: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::middleware::shared::fixtures::ctx_with;
 
     #[test]
     fn rfc3339_parses_utc() {
@@ -236,14 +238,7 @@ mod tests {
     async fn no_feature_id_is_noop() {
         let surface = ArtifactSurface::new();
         let mut session = MiddlewareSession::default();
-        let ctx = PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "m".into(),
-            context_config: Default::default(),
-            feature_id: None,
-            session_id: Some("s".into()),
-            repo_root: std::env::temp_dir(),
-        };
+        let ctx = ctx_with(None, std::env::temp_dir());
         let view = ResponseView {
             content: "",
             finish_reason: Some("stop"),
@@ -263,7 +258,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".sovereign")).unwrap();
-        let notes_db = repo.join(".sovereign").join("notes.db");
+        let notes_db = notes_db_path(repo);
         let store = NoteStore::open(&notes_db).unwrap();
 
         // Seed a note FIRST with current timestamp, then set
@@ -293,14 +288,7 @@ mod tests {
             last_seen_at: since,
             ..Default::default()
         };
-        let ctx = PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "m".into(),
-            context_config: Default::default(),
-            feature_id: Some("fx".into()),
-            session_id: Some("s".into()),
-            repo_root: repo.to_path_buf(),
-        };
+        let ctx = ctx_with(Some("fx"), repo.to_path_buf());
         let view = ResponseView {
             content: "",
             finish_reason: Some("stop"),

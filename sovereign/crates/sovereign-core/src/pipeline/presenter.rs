@@ -31,7 +31,7 @@ use crate::skills::SkillRegister;
 use crate::slot_policy::Workload;
 use crate::title::strip_thinking_response;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
+use crate::types::CompletionRequest;
 
 /// What the Presenter returns. The text is the user-visible reply
 /// the SSE bridge will stream; `register` is propagated so the
@@ -995,7 +995,7 @@ mod tests {
         // voice mid-turn AND put the witness contract on a smaller
         // model that couldn't hold it.
         let req = present_request("user q", "d", SkillRegister::Factual, 128);
-        assert!(matches!(req.preferred_speed, Speed::Slow));
+        assert!(matches!(req.preferred_speed, crate::types::Speed::Slow));
     }
 
     #[test]

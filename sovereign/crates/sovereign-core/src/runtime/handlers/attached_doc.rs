@@ -201,28 +201,10 @@ impl Runtime {
         loop {
             let conversation =
                 render_attached_doc_conversation(&conversation_header, &conversation_segments);
-            let request = CompletionRequest {
-                prompt: conversation,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(self.inference_config.max_tokens),
-                temperature: Some(self.inference_config.temperature),
-                structured_output: None,
-                think_budget: Some(self.inference_config.think_budget),
-                top_k: self.inference_config.top_k,
-                top_p: None,
-                oicp: self.build_oicp(&Intent::ComplexTask),
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            };
+            // Shared synthesis-request core (`synthesis_common`);
+            // system prompt is baked into the rendered conversation.
+            let request =
+                self.synthesis_request(conversation, self.build_oicp(&Intent::ComplexTask));
 
             let completion = self.inference.complete(&request).await?;
             let response_text = completion.text.trim().to_string();
@@ -507,28 +489,8 @@ impl Runtime {
         // ── Cap hit: force one more completion to synthesize ────
         let final_conversation =
             render_attached_doc_conversation(&conversation_header, &conversation_segments);
-        let final_request = CompletionRequest {
-            prompt: final_conversation,
-            system_message: None,
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(self.inference_config.max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            structured_output: None,
-            think_budget: Some(self.inference_config.think_budget),
-            top_k: self.inference_config.top_k,
-            top_p: None,
-            oicp: self.build_oicp(&Intent::ComplexTask),
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
+        let final_request =
+            self.synthesis_request(final_conversation, self.build_oicp(&Intent::ComplexTask));
         let final_completion = self.inference.complete(&final_request).await?;
         let mut final_text = final_completion.text.trim().to_string();
         // Last-resort honesty gate. If the iteration cap was hit
@@ -654,16 +616,14 @@ impl Runtime {
                 },
                 _ => None,
             };
-        let evidence = crate::runtime::grounding::EvidenceContext {
-            chunks: retrieved_tool_results.to_vec(),
-            // Tool-result transcripts, not retrieved chunks — no source labels; the
-            // citation check runs body-only here.
-            source_labels: Vec::new(),
-            chunk_labels: Vec::new(),
+        // Tool-result transcripts, not retrieved chunks —
+        // transcript-shaped evidence (body-only citation check),
+        // widened only within the asset's own sealed searcher.
+        let evidence = super::synthesis_common::transcript_gate_evidence(
+            retrieved_tool_results.to_vec(),
             searcher,
             entity_anchored,
-            top_similarity: None,
-        };
+        );
         let outcome = crate::runtime::grounding::gate_answer(
             &self.inference,
             question,
@@ -1333,8 +1293,9 @@ impl Runtime {
             ))
         };
 
+        // Completion-telemetry tail comes from the shared helper
+        // (`synthesis_common`); only surface-varying fields here.
         let provenance = ResponseProvenance {
-            intent: "AttachedDoc".to_string(),
             search_method,
             sources: tool_ids_invoked
                 .iter()
@@ -1345,22 +1306,7 @@ impl Runtime {
                     display_name: None,
                 })
                 .collect(),
-            inference_backend: completion.model_id.clone(),
-            oicp_match: completion
-                .oicp_meta
-                .as_ref()
-                .and_then(|m| m.match_quality.as_ref())
-                .map(|q| format!("{q:?}")),
-            total_latency_ms: completion.latency_ms,
-            tokens_used: completion.tokens_used,
-            coarse_intent: None,
-            self_assessment: None,
-            routing_trigger: None,
-            coverage: None,
-            finish_reason: completion.finish_reason.clone(),
-            max_tokens_budget: Some(self.inference_config.max_tokens),
-            completion_tokens: completion.completion_tokens,
-            context_window: self.inference.effective_context_size(),
+            ..self.synthesis_provenance("AttachedDoc", completion)
         };
 
         let mut metadata = serde_json::json!({

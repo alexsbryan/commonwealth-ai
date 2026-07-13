@@ -705,8 +705,14 @@ User message
 
 `Plan` is a flat JSON DAG (`steps`, `edges`). `StepKind`: `Reason`,
 `Tool`, `UserInput`, `Branch`, `ReasonWithTools`, `AwaitUserInfo`,
-`Delegate`. Planner emits `[sample:N:method]` / `[eval:name]`
-annotations; the executor parses them into config.
+`Delegate`. `Step.sampling`/`Step.evaluation` are typed fields (the
+planner leaves them `None` today; the executor synthesizes defaults in
+`compute_budget`). The one textual grammar the planner and executor
+share is the `{N.key}` step-output placeholder, owned end-to-end
+(emit + parse + prompt-sync test) by `sovereign-core/src/plan_grammar.rs`.
+(A previous revision of this paragraph described `[sample:N:method]` /
+`[eval:name]` annotations — that grammar never existed in code; the
+2026-07-12 hidden-coupling audit corrected it.)
 
 **Idempotency ledger (executor replay-safety).** Before a
 `NonIdempotent` tool step runs, the executor writes a durable `Started`
@@ -888,8 +894,10 @@ code, and both pipelines share `shared_head_steps()` — which knowledge
 sources exist is a property of the install, not of the intent label. The
 injection helpers themselves (`apply_atlas_grounding`,
 `apply_raptor_grounding`, `meta_atlas_boost`, `fan_out_decomposed_queries`,
-`expand_from_top_sources`, …) are unchanged `impl Runtime` methods in
-`retrieval.rs`; both handlers build a `PipelineState` and call
+`expand_from_top_sources`, …) are unchanged `impl Runtime` methods under
+`runtime/retrieval/` (the 2026-07-12 split of the former 5,000-line
+`retrieval.rs` into 11 concern modules); both handlers build a
+`PipelineState` and call
 `pipeline.run(...)`, then keep their post-pipeline concerns (evidence-shape
 routing + route-aware expansion + prompt/request assembly on the KQ side;
 provenance + prompt/history assembly + seal audit on the deep side).
@@ -2138,10 +2146,9 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
-| `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3,900 lines) | `StateStore` trait-impl hotel — 12 sub-trait impls (+ the `StateStore` aggregate), one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines (it is ~90 lines away). |
+| `sqlite/conv_tiered.rs` residual (was the `sqlite.rs` split) | `sovereign-store/src/sqlite/conv_tiered.rs` (~1,100 lines) | The 2026-07-12 split landed `sqlite.rs` (4,097 lines) as a 582-line parent + 14 per-concern modules; the largest child holds the ConvTieredReader + skeleton/RAPTOR/motif methods. Next growth splits the chunk-entity methods out. |
 | `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
 | `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
-| `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~5,000 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `sovereign project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |

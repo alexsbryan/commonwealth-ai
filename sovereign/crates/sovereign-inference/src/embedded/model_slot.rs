@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
+use super::prefix_state::{PrefixPlan, PrefixStateCache};
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
@@ -23,7 +24,6 @@ use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
 use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
-use super::prefix_state::{PrefixPlan, PrefixStateCache};
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
@@ -271,7 +271,7 @@ impl SlotContext {
         // slot is wedged anyway, but at least the error is loud and
         // diagnosable rather than silent.
         let new_target =
-            build_target_ctx_for_slot(&self._model, rebuild, &model_id).map_err(|e| {
+            build_target_ctx_for_slot(&self._model, rebuild, model_id).map_err(|e| {
                 Error::Inference(format!(
                     "demote_to_single_token: failed to rebuild target ctx: {e}"
                 ))
@@ -1599,9 +1599,9 @@ impl ModelSlot {
                 ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
                 let path = prefix_state.entry_path(key);
                 let t0 = Instant::now();
-                let loaded = path.as_ref().and_then(|p| {
-                    ctx.load_session_file(p, ctx.n_ctx() as usize).ok()
-                });
+                let loaded = path
+                    .as_ref()
+                    .and_then(|p| ctx.load_session_file(p, ctx.n_ctx() as usize).ok());
                 match loaded {
                     Some(restored) if restored.len() == prefix_len => {
                         lcp = prefix_len;
@@ -1631,11 +1631,11 @@ impl ModelSlot {
             }
             PrefixPlan::Learn { key, pin_len } => {
                 ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
-                // Stage-1: prefill the pin prefix with NO outputs (a
-                // logits-bearing save balloons the state file by
-                // n_outputs × n_vocab), save the state, then let the
-                // ordinary tail code below prefill the rest from
-                // position pin_len.
+                                      // Stage-1: prefill the pin prefix with NO outputs (a
+                                      // logits-bearing save balloons the state file by
+                                      // n_outputs × n_vocab), save the state, then let the
+                                      // ordinary tail code below prefill the rest from
+                                      // position pin_len.
                 let mut stage1 = LlamaBatch::new(n_batch, 1);
                 let mut stage1_ok = true;
                 for (i, &tok) in tokens[..pin_len].iter().enumerate() {

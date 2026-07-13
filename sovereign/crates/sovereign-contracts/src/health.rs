@@ -28,6 +28,7 @@ pub enum Component {
 }
 
 impl Component {
+    /// Stable human-readable name in `kind/id` form (e.g. `corpus-index/sep`), for logs and UI listings.
     pub fn display_name(&self) -> String {
         match self {
             Self::CorpusIndex(id) => format!("corpus-index/{id}"),
@@ -44,8 +45,11 @@ impl Component {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HealthStatus {
+    /// No issues, or advisory-only ones (`UpdateAvailable`).
     Healthy,
+    /// Operational but impaired — the component still serves, repairs may be queued.
     Degraded,
+    /// Hard failure; results from the component can't be trusted until repaired.
     Unhealthy,
 }
 
@@ -61,9 +65,13 @@ pub fn worst_status(statuses: impl IntoIterator<Item = HealthStatus>) -> HealthS
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SlotName {
+    /// The main chat/completion slot.
     Primary,
+    /// The embedding slot.
     Embed,
+    /// The fallback completion slot that serves while the primary circuit is open.
     Fallback,
+    /// Any other slot, carrying its configured name.
     Custom(String),
 }
 
@@ -72,8 +80,11 @@ pub enum SlotName {
 /// Counts of how many documents would change in an update.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateDelta {
+    /// Documents upstream that are absent locally.
     pub new_documents: usize,
+    /// Documents whose upstream content changed.
     pub updated_documents: usize,
+    /// Local documents removed upstream.
     pub deleted_documents: usize,
 }
 
@@ -86,82 +97,121 @@ pub enum HealthIssue {
     // ── Corpus index issues ──────────────────────────────────────────────────
     /// Ingest was interrupted; fewer chunks were written than expected.
     PartialIngestion {
+        /// Corpus whose ingest was interrupted.
         corpus_id: String,
+        /// Chunks actually written before the interruption.
         chunks_indexed: u64,
+        /// Chunks the ingest planned to write.
         chunks_expected: u64,
+        /// Saved ingest cursor to resume at; `None` = restart from scratch.
         resume_from: Option<String>,
     },
     /// The active embed slot's model / dimensions differ from what the index
     /// was built with.
     EmbedModelMismatch {
+        /// Corpus whose index carries the mismatch.
         corpus_id: String,
+        /// Embed model the index was built with.
         index_model: String,
+        /// Embed model currently active in the embed slot.
         active_model: String,
+        /// Vector dimensions stored in the index.
         index_dims: usize,
+        /// Vector dimensions the active model produces.
         active_dims: usize,
     },
     /// A sample of stored embeddings contains all-zero or non-finite vectors.
     CorruptEmbeddings {
+        /// Corpus containing the bad vectors.
         corpus_id: String,
+        /// Chunk ids from the sample whose vectors are all-zero or non-finite (not exhaustive).
         bad_chunk_ids: Vec<u64>,
     },
     /// The full-text search index is out of sync with the chunk store.
     FtsDesync {
+        /// Corpus with the desynced FTS index.
         corpus_id: String,
+        /// Rows in the FTS index.
         fts_count: u64,
+        /// Rows in the chunk store (the source of truth the FTS index should mirror).
         chunk_count: u64,
     },
     /// A newer version of the corpus dataset is available upstream.
     UpdateAvailable {
+        /// Corpus with an upstream update.
         corpus_id: String,
+        /// Installed dataset version.
         current_version: String,
+        /// Newest version available upstream.
         latest_version: String,
+        /// How many documents the update would add/change/delete.
         delta: UpdateDelta,
     },
 
     // ── Enrichment issues ────────────────────────────────────────────────────
     /// Some claims reference chunks whose content has changed.
     StaleEnrichment {
+        /// Corpus whose enrichment is stale.
         corpus_id: String,
+        /// Claims whose source chunk content changed since they were extracted.
         stale_claim_count: u64,
     },
     /// Some claims reference chunk IDs that no longer exist.
     OrphanedEnrichment {
+        /// Corpus with the orphaned claims.
         corpus_id: String,
+        /// Claims pointing at chunk ids that no longer exist.
         orphan_claim_count: u64,
     },
     /// Fewer chunks have been enriched than the coverage threshold requires.
     LowEnrichmentCoverage {
+        /// Corpus below its coverage threshold.
         corpus_id: String,
+        /// Chunks the enrichment pipeline has processed.
         enriched_chunks: u64,
+        /// All chunks in the corpus.
         total_chunks: u64,
+        /// Measured coverage, percent.
         coverage_pct: f32,
+        /// Configured minimum coverage, percent.
         threshold_pct: f32,
     },
 
     // ── Router issues ────────────────────────────────────────────────────────
     /// The circuit breaker for the primary LLM slot is open.
     RouterCircuitOpen {
+        /// Consecutive failures that tripped the breaker.
         failure_count: u32,
+        /// Most recent failure message — why the circuit opened.
         last_error: String,
+        /// True when a fallback slot is serving; `false` makes this issue urgent (`is_urgent`).
         fallback_active: bool,
     },
 
     // ── Model integrity issues ───────────────────────────────────────────────
     /// A locally-cached model file's checksum does not match the manifest.
     ModelChecksumFailure {
+        /// Slot whose cached model failed verification.
         slot: SlotName,
+        /// Model whose file failed the check.
         model_id: String,
+        /// Checksum the manifest declares.
         expected_hash: String,
+        /// Checksum computed from the file on disk.
         actual_hash: String,
     },
 
     // ── State-store issues ───────────────────────────────────────────────────
     /// SQLite `PRAGMA integrity_check` returned a non-`ok` result.
-    StateStoreCorruption { detail: String },
+    StateStoreCorruption {
+        /// The non-`ok` result text the integrity check returned.
+        detail: String,
+    },
     /// The SQLite WAL file has grown past the safe threshold.
     WalOvergrowth {
+        /// Current WAL size.
         wal_size_bytes: u64,
+        /// Configured safe ceiling the WAL exceeded.
         threshold_bytes: u64,
     },
 }
@@ -231,24 +281,41 @@ impl HealthIssue {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum RecoveryAction {
     /// Re-embed all chunks in a corpus with the active model.
-    ReEmbed { corpus_id: String },
+    ReEmbed {
+        /// Corpus to re-embed.
+        corpus_id: String,
+    },
     /// Rebuild the FTS index for a corpus.
-    RebuildFts { corpus_id: String },
+    RebuildFts {
+        /// Corpus whose FTS index is rebuilt.
+        corpus_id: String,
+    },
     /// Resume an interrupted ingest from the saved cursor.
     ResumeIngestion {
+        /// Corpus whose ingest is resumed.
         corpus_id: String,
+        /// Saved cursor, from `HealthIssue::PartialIngestion::resume_from`.
         resume_from: String,
     },
     /// Delete stale / orphaned claim rows and re-enqueue extraction.
-    RefreshEnrichment { corpus_id: String },
+    RefreshEnrichment {
+        /// Corpus whose claims are refreshed.
+        corpus_id: String,
+    },
     /// Apply a corpus dataset update (delta or full).
-    ApplyCorpusUpdate { corpus_id: String },
+    ApplyCorpusUpdate {
+        /// Corpus to update.
+        corpus_id: String,
+    },
     /// Probe the router to see if the circuit should be closed.
     ProbeRouter,
     /// Run `PRAGMA wal_checkpoint(TRUNCATE)` on the SQLite database.
     CheckpointWal,
     /// No automated repair available; requires user action.
-    UserActionRequired { guidance: String },
+    UserActionRequired {
+        /// What the user should do, in plain instructions.
+        guidance: String,
+    },
 }
 
 // ─── RepairKind ──────────────────────────────────────────────────────────────
@@ -257,13 +324,21 @@ pub enum RecoveryAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepairKind {
+    /// Re-embed a corpus with the active model.
     ReEmbed,
+    /// Rebuild a corpus's FTS index.
     RebuildFts,
+    /// Resume an interrupted ingest from its saved cursor.
     ResumeIngestion,
+    /// Drop stale/orphaned claims and re-enqueue extraction.
     RefreshEnrichment,
+    /// Apply an available corpus dataset update.
     ApplyCorpusUpdate,
+    /// Probe whether the router circuit can be closed.
     ProbeRouter,
+    /// Checkpoint-truncate the SQLite WAL.
     CheckpointWal,
+    /// No repair — the user chose to dismiss the issue.
     Dismiss,
 }
 
@@ -272,8 +347,11 @@ pub enum RepairKind {
 /// A choice presented to the user when a repair requires authorisation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserOption {
+    /// Which repair choosing this option triggers (`Dismiss` = do nothing).
     pub kind: RepairKind,
+    /// Short button text.
     pub label: String,
+    /// What the option will do, in a sentence the user can act on.
     pub description: String,
 }
 
@@ -282,7 +360,9 @@ pub struct UserOption {
 /// A user's response to a pending decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDecision {
+    /// Row id of the `PendingDecision` being answered (its persisted `id`).
     pub decision_id: i64,
+    /// The option the user picked.
     pub chosen: RepairKind,
 }
 
@@ -291,8 +371,11 @@ pub struct UserDecision {
 /// A repair that has been approved and queued for execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledRepair {
+    /// Component the repair targets.
     pub component: Component,
+    /// The issue that motivated the repair.
     pub issue: HealthIssue,
+    /// The concrete recovery action to run.
     pub action: RecoveryAction,
     /// Unix timestamp (seconds) when the repair was enqueued.
     pub enqueued_at: i64,
@@ -303,9 +386,13 @@ pub struct ScheduledRepair {
 /// In-flight progress for a running repair.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepairProgress {
+    /// Component being repaired.
     pub component: Component,
+    /// Machine-readable tag of the running action.
     pub action_tag: String,
+    /// Completion measure for progress bars. Declared for UI use — no checker emits progress yet.
     pub pct_complete: f32,
+    /// Human-readable progress line.
     pub message: String,
 }
 
@@ -318,13 +405,22 @@ pub enum RepairOutcome {
     /// The issue was fully resolved.
     Resolved,
     /// Some progress was made; another check-cycle will determine if more is needed.
-    PartialProgress { detail: String },
+    PartialProgress {
+        /// What was accomplished and what remains.
+        detail: String,
+    },
     /// The repair failed; the issue persists.
-    Failed { reason: String },
+    Failed {
+        /// Why the repair failed.
+        reason: String,
+    },
     /// This repair requires a user decision before it can proceed.
     NeedsUserDecision {
+        /// The question put to the user.
         question: String,
+        /// The choices offered; each maps to a `RepairKind`.
         options: Vec<UserOption>,
+        /// The stakes, shown alongside the question (e.g. "Data loss is possible if the database is corrupt.").
         consequence: String,
     },
 }
@@ -334,15 +430,20 @@ pub enum RepairOutcome {
 /// The full output of a single health-check run for one component.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthReport {
+    /// Component that was checked.
     pub component: Component,
+    /// Worst implied status across `issues` (see `worst_status`).
     pub status: HealthStatus,
+    /// Concrete problems found; empty when healthy.
     pub issues: Vec<HealthIssue>,
+    /// One-line human summary: issue count plus tags.
     pub summary: String,
     /// Unix timestamp (seconds) when the check completed.
     pub measured_at: i64,
 }
 
 impl HealthReport {
+    /// All-clear report: `Healthy`, no issues, `measured_at` stamped now.
     pub fn healthy(component: Component) -> Self {
         let measured_at = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -357,6 +458,8 @@ impl HealthReport {
         }
     }
 
+    /// Build a report from found issues: status is the worst `implied_status`,
+    /// the summary lists issue tags, `measured_at` is stamped now.
     pub fn from_issues(component: Component, issues: Vec<HealthIssue>) -> Self {
         let measured_at = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -393,10 +496,15 @@ impl HealthReport {
 pub struct PendingDecision {
     /// Set after the decision is persisted to the store.
     pub id: Option<i64>,
+    /// Component the decision concerns.
     pub component: Component,
+    /// The issue awaiting a decision.
     pub issue: HealthIssue,
+    /// The question shown to the user.
     pub question: String,
+    /// The offered choices.
     pub options: Vec<UserOption>,
+    /// The stakes of leaving the issue unaddressed.
     pub consequence: String,
     /// Unix timestamp (seconds) when this decision was surfaced.
     pub surfaced_at_secs: i64,
@@ -406,6 +514,9 @@ pub struct PendingDecision {
 }
 
 impl PendingDecision {
+    /// Same component and same issue *variant* (`tag()`), payload ignored —
+    /// the dedupe test that stops the monitor re-surfacing a decision it
+    /// already asked.
     pub fn matches(&self, component: &Component, issue: &HealthIssue) -> bool {
         &self.component == component && self.issue.tag() == issue.tag()
     }

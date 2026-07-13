@@ -20,6 +20,7 @@ pub mod effort_classifier;
 pub mod gap;
 pub mod lessons;
 pub mod pipeline;
+pub mod plan_grammar;
 pub mod planner;
 pub mod query_session;
 pub mod role;

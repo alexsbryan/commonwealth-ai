@@ -71,18 +71,13 @@ pub enum CandidateSource {
 /// compatible rules on one topic are as similar as two conflicting ones,
 /// so the selector cannot itself gate precision — that is the
 /// classifier's job. Measured on the Maple House governance fixture.)
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum TensionStrategy {
     /// Cluster + entity-overlap + chunk-co-occurrence (the default).
+    #[default]
     Graph,
     /// Top-K nearest claims by embedding cosine, floored at `floor`.
     EmbeddingTopK { k: usize, floor: f32 },
-}
-
-impl Default for TensionStrategy {
-    fn default() -> Self {
-        Self::Graph
-    }
 }
 
 /// A pair of atoms flagged for LLM tension classification. The

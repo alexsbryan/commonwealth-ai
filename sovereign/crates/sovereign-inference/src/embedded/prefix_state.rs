@@ -298,7 +298,11 @@ mod tests {
         let PrefixPlan::Learn { key, pin_len } = plan else {
             panic!("expected Learn, got {plan:?}");
         };
-        assert_eq!(pin_len, PROBE_TOKENS + 200, "pin lands at the divergence point");
+        assert_eq!(
+            pin_len,
+            PROBE_TOKENS + 200,
+            "pin lands at the divergence point"
+        );
 
         // Commit the pin; a third member restores.
         cache.commit(key, b[..pin_len].to_vec(), cache.state_path(key));

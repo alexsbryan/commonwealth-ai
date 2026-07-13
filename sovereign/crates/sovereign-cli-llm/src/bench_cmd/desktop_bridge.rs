@@ -72,10 +72,7 @@ impl BridgeClient {
             .await
             .map_err(|e| format!("bridge invoke {cmd}: bad response body: {e}"))?;
         if body["ok"].as_bool() != Some(true) {
-            return Err(format!(
-                "bridge invoke {cmd} failed: {}",
-                body["error"].to_string()
-            ));
+            return Err(format!("bridge invoke {cmd} failed: {}", body["error"]));
         }
         serde_json::from_value(body["result"].clone())
             .map_err(|e| format!("bridge invoke {cmd}: result shape: {e}"))

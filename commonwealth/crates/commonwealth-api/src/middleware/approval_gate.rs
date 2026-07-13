@@ -20,7 +20,7 @@
 //!    `session.pending_deviation_ack = true` (ContextInjector
 //!    surfaces it on next turn). Does NOT fail the request.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -28,6 +28,7 @@ use async_trait::async_trait;
 use corpus_engine_notes::{NoteScope, NoteStore};
 use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval, FeatureApproval};
 
+use super::shared::notes_db_path;
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::ChatCompletionRequest;
 
@@ -249,10 +250,6 @@ fn request_has_write_intent(request: &ChatCompletionRequest) -> bool {
     false
 }
 
-fn notes_db_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".sovereign").join("notes.db")
-}
-
 fn short_hash(h: &str) -> String {
     h.chars().take(8).collect()
 }
@@ -260,47 +257,8 @@ fn short_hash(h: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openai_types::{
-        ChatCompletionRequest, ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction,
-    };
-
-    fn minimal_request() -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: None,
-            messages: vec![ChatMessage::new("user", "hi")],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        }
-    }
-
-    fn ctx_with(feature_id: Option<&str>, repo: PathBuf) -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: feature_id.map(String::from),
-            session_id: Some("sess-1".into()),
-            repo_root: repo,
-        }
-    }
+    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
+    use crate::openai_types::{ChatMessage, FunctionCall, ToolCall, ToolDefinition, ToolFunction};
 
     #[tokio::test]
     async fn no_feature_id_is_noop() {

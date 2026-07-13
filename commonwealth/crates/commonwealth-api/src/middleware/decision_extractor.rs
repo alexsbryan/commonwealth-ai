@@ -42,13 +42,12 @@
 //! back, so it's higher confidence than a blind regex pass over
 //! the transcript.
 
-use std::path::{Path, PathBuf};
-
 use async_trait::async_trait;
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_tools::notes::response_mine;
 
+use super::shared::notes_db_path;
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};
 use crate::openai_types::{ChatCompletionRequest, ChatMessage};
 
@@ -204,12 +203,6 @@ impl Middleware for DecisionExtractor {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-/// Mirror `approval_gate::notes_db_path`. Same convention so both
-/// middleware pick up the same file.
-fn notes_db_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".sovereign").join("notes.db")
-}
-
 /// Last user-role message body, if any. Used to detect a
 /// correction phrase on the next turn.
 fn last_user_text(request: &ChatCompletionRequest) -> Option<&str> {
@@ -266,47 +259,13 @@ fn truncate_for_audit_line(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openai_types::ChatMessage;
+    use crate::middleware::shared::fixtures::{ctx_with, request_with_messages as req_with};
 
     fn ctx() -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: Some("foo".into()),
-            session_id: Some("sess-1".into()),
-            repo_root: tempfile::tempdir().unwrap().path().to_path_buf(),
-        }
-    }
-
-    fn req_with(messages: &[(&str, &str)]) -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: None,
-            messages: messages
-                .iter()
-                .map(|(role, content)| ChatMessage::new(*role, *content))
-                .collect(),
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        }
+        ctx_with(
+            Some("foo"),
+            tempfile::tempdir().unwrap().path().to_path_buf(),
+        )
     }
 
     /// `post_process` mines the assistant response and stages a
@@ -418,8 +377,7 @@ mod tests {
         assert!(sys.content.contains("BTreeMap"));
 
         // Note persisted with source='extracted'.
-        let store = NoteStore::open(&tmp.path().join(".sovereign").join("notes.db"))
-            .expect("notes DB exists");
+        let store = NoteStore::open(&notes_db_path(tmp.path())).expect("notes DB exists");
         let rows = store
             .read_notes(None, &[], &[], &["decision".into()], 100, false)
             .await

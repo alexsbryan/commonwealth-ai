@@ -178,7 +178,7 @@ fn pass_frac<'a>(
     rows: impl Iterator<Item = &'a ResultRow>,
     pick: impl Fn(&ResultRow) -> Option<bool>,
 ) -> (f64, usize) {
-    let vals: Vec<bool> = rows.filter_map(|r| pick(r)).collect();
+    let vals: Vec<bool> = rows.filter_map(pick).collect();
     if vals.is_empty() {
         return (f64::NAN, 0);
     }

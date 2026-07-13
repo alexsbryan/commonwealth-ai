@@ -369,11 +369,7 @@ pub fn compile_directive(lower_message: &str) -> CompiledDirective {
 pub fn extract_avoid_terms(lower_message: &str) -> Option<Vec<String>> {
     let (head_end, _) = AVOID_HEADS
         .iter()
-        .filter_map(|h| {
-            lower_message
-                .find(h)
-                .map(|pos| (pos + h.len(), h.len()))
-        })
+        .filter_map(|h| lower_message.find(h).map(|pos| (pos + h.len(), h.len())))
         // First occurrence in the message; longest head on ties (the
         // AVOID_HEADS ordering already prefers longer variants, and
         // max_by_key on (−pos, len) keeps that stable).
@@ -919,8 +915,9 @@ pub(crate) async fn capture_lesson(
                 conversation_id,
                 event: NarrationEvent {
                     phase: NarrationPhase::LessonDrafted,
-                    text: "That sounds like a standing preference — drafting a lesson you can save."
-                        .to_string(),
+                    text:
+                        "That sounds like a standing preference — drafting a lesson you can save."
+                            .to_string(),
                     elapsed_ms: 0,
                 },
             })
@@ -969,7 +966,10 @@ mod tests {
             assert!(!detect_durative(msg), "should NOT fire: {msg}");
         }
         // A long paste containing "always" is content, not coaching.
-        let paste = format!("please review this: {}", "lorem ipsum ".repeat(30) + "always");
+        let paste = format!(
+            "please review this: {}",
+            "lorem ipsum ".repeat(30) + "always"
+        );
         assert!(!detect_durative(&paste.to_lowercase()));
     }
 
@@ -1047,8 +1047,10 @@ mod tests {
 
     #[test]
     fn term_avoid_strips_whole_words_only() {
-        let (out, changed) =
-            apply_term_avoid("The corpus index helps. Indexing continues.", &terms(&["index"]));
+        let (out, changed) = apply_term_avoid(
+            "The corpus index helps. Indexing continues.",
+            &terms(&["index"]),
+        );
         assert!(changed);
         assert_eq!(out, "The corpus helps. Indexing continues.");
     }
@@ -1058,15 +1060,24 @@ mod tests {
         let text = "Facts here [Source: Corpus Handbook] and more corpus talk.\n```\nlet corpus = 1;\n```\nEnd corpus.";
         let (out, changed) = apply_term_avoid(text, &terms(&["corpus"]));
         assert!(changed);
-        assert!(out.contains("[Source: Corpus Handbook]"), "citation span must survive: {out}");
-        assert!(out.contains("let corpus = 1;"), "code fence must survive: {out}");
+        assert!(
+            out.contains("[Source: Corpus Handbook]"),
+            "citation span must survive: {out}"
+        );
+        assert!(
+            out.contains("let corpus = 1;"),
+            "code fence must survive: {out}"
+        );
         assert!(!out.contains("corpus talk"));
         assert!(out.ends_with("End."), "trailing removal tidied: {out}");
     }
 
     #[test]
     fn term_avoid_is_idempotent_and_tidies_punctuation() {
-        let (once, _) = apply_term_avoid("We searched the corpus, then answered.", &terms(&["corpus"]));
+        let (once, _) = apply_term_avoid(
+            "We searched the corpus, then answered.",
+            &terms(&["corpus"]),
+        );
         assert_eq!(once, "We searched the, then answered.");
         let (twice, changed) = apply_term_avoid(&once, &terms(&["corpus"]));
         assert!(!changed);
@@ -1107,9 +1118,7 @@ mod tests {
             parse_draft_response(&format!(r#"{{"display": "d", "prompt_form": "{long}"}}"#))
                 .is_none()
         );
-        assert!(
-            parse_draft_response(r#"{"display": "d", "prompt_form": "should I?"}"#).is_none()
-        );
+        assert!(parse_draft_response(r#"{"display": "d", "prompt_form": "should I?"}"#).is_none());
         assert!(parse_draft_response("not json at all").is_none());
     }
 
@@ -1163,14 +1172,18 @@ mod tests {
         assert_eq!(set.adjust_soft_target(800), (300, true));
         assert_eq!(set.adjust_soft_target(250), (250, false));
 
-        set.length = Some(length_lesson(serde_json::json!({"soft_target_floor": 1200})));
+        set.length = Some(length_lesson(
+            serde_json::json!({"soft_target_floor": 1200}),
+        ));
         assert_eq!(set.adjust_soft_target(800), (1200, true));
         assert_eq!(set.adjust_soft_target(1500), (1500, false));
     }
 
     // ── Loader + whisper against a real NoteStore ─────────────────
 
-    async fn store_with_lesson(payload: &LessonPayload) -> (tempfile::TempDir, corpus_engine_notes::NoteStore, String) {
+    async fn store_with_lesson(
+        payload: &LessonPayload,
+    ) -> (tempfile::TempDir, corpus_engine_notes::NoteStore, String) {
         let dir = tempfile::tempdir().unwrap();
         let store = corpus_engine_notes::NoteStore::open(&dir.path().join("notes.db")).unwrap();
         let json = serde_json::to_string(payload).unwrap();

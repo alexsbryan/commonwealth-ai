@@ -19,19 +19,28 @@ use serde::{Deserialize, Serialize};
 /// structurally analysed. Created by `DocumentAssetManager::ingest`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentAsset {
+    /// Store primary key; `source_key()` derives the chunk-lookup key from it.
     pub id: String,
+    /// Display title shown in the document library.
     pub title: String,
+    /// Original uploaded filename.
     pub filename: String,
+    /// Original file size, megabytes.
     pub file_size_mb: f32,
+    /// Word count of the extracted text.
     pub word_count: usize,
+    /// How many chunks the ingest produced.
     pub chunk_count: usize,
+    /// Coarse genre classification — drives skeleton prompts and starter chips.
     pub document_type: DocumentTypeTag,
+    /// When the ingest ran (UTC).
     pub ingested_at: chrono::DateTime<chrono::Utc>,
     /// LanceDB index ID for this document's embedded chunks.
     pub index_id: String,
     /// Structural skeleton — built during ingest, stored permanently.
     /// None until the skeleton phase completes.
     pub skeleton: Option<DocumentSkeleton>,
+    /// Processing state; drives the progress UI and which operations are unlocked.
     pub state: AssetState,
     /// The principal that uploaded this document on a multi-user hub. `None`
     /// for single-user / pre-multi-tenant documents — visible to everyone
@@ -83,7 +92,9 @@ pub enum AssetState {
     Pending,
     /// Embedding chunks into LanceDB. RAG not yet available.
     Indexing {
+        /// Chunks embedded so far.
         chunks_done: usize,
+        /// Total chunks to embed.
         chunks_total: usize,
     },
     /// T1 done. Embeddings persisted; cosine retrieval works. T2
@@ -93,7 +104,9 @@ pub enum AssetState {
     /// is implicit in the surrounding state-machine flow (T2 fires
     /// before MultiHopReady; T3 fires after).
     BuildingSkeleton {
+        /// Chunks enriched so far in the current phase.
         chunks_done: usize,
+        /// Total chunks in the current enrichment phase.
         chunks_total: usize,
     },
     /// T2 done. Entity index + action atoms available; PPR multi-hop
@@ -102,7 +115,10 @@ pub enum AssetState {
     /// T3 done. All operations available.
     Ready,
     /// Ingest failed.
-    Failed { reason: String },
+    Failed {
+        /// What broke, surfaced in the library UI.
+        reason: String,
+    },
 }
 
 impl AssetState {
@@ -185,6 +201,7 @@ pub enum DocumentTypeTag {
 }
 
 impl DocumentTypeTag {
+    /// UI display label; `Unknown` renders as the neutral "Document".
     pub fn label(&self) -> &'static str {
         match self {
             DocumentTypeTag::Narrative => "Narrative",
@@ -253,6 +270,7 @@ pub struct DocumentSkeleton {
     /// old `skeleton_json` rows deserialising cleanly.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub segments: Vec<DocumentSegment>,
+    /// When skeleton extraction completed (UTC).
     pub built_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -269,6 +287,7 @@ pub struct DocumentSegment {
     /// `[start, end]` (both endpoints inclusive) — segments are
     /// guaranteed to be at least 1 chunk.
     pub chunk_start: usize,
+    /// Inclusive end of the chunk range (see `chunk_start`).
     pub chunk_end: usize,
     /// Short, doc-type-aware title in the document's own
     /// register. Free-form so a narrative gets "Heat searches
@@ -312,8 +331,11 @@ pub struct ActionAtom {
 /// A chunk annotated with its structural role in the document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectionAnnotation {
+    /// Chunk this annotation describes.
     pub chunk_index: usize,
+    /// Structural role the chunk plays.
     pub function: SectionFunction,
+    /// Entities active in this chunk.
     pub key_entities: Vec<String>,
     /// What this section establishes, advances, or resolves.
     pub establishes: String,
@@ -322,15 +344,22 @@ pub struct SectionAnnotation {
 /// The narrative/argumentative role a section plays.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SectionFunction {
+    /// Brings a new entity, concept, or thread on stage.
     Introduces,
+    /// Advances an established thread.
     Develops,
+    /// Adds tension, a contradiction, or a counter-force.
     Complicates,
+    /// Settles a previously opened thread.
     Resolves,
+    /// Bridges between threads or settings.
     Transitions,
+    /// Supplies support for a claim made elsewhere.
     Evidences,
 }
 
 impl SectionFunction {
+    /// UI display label for the function.
     pub fn label(&self) -> &'static str {
         match self {
             SectionFunction::Introduces => "Introduces",
@@ -346,7 +375,9 @@ impl SectionFunction {
 /// An entity ranked by how prominently it appears in the document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedEntity {
+    /// Canonical entity name — the `DocumentSkeleton::entity_index` key.
     pub name: String,
+    /// What sort of entity this is.
     pub kind: EntityKind,
     /// Fraction of sections where this entity appears (0.0–1.0).
     pub presence_rate: f32,
@@ -359,17 +390,26 @@ pub struct RankedEntity {
 /// Classification of an entity found in a document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EntityKind {
+    /// A fictional actor (narrative documents).
     Character,
+    /// A line of argument being advanced.
     Argument,
+    /// An abstract idea the document works with.
     Concept,
+    /// A specific assertion under discussion.
     Claim,
+    /// A piece of support cited for a claim.
     Evidence,
+    /// A recurring motif or subject.
     Theme,
+    /// A real person (non-fiction documents).
     Person,
+    /// A discrete happening.
     Event,
 }
 
 impl EntityKind {
+    /// UI display label for the kind.
     pub fn label(&self) -> &'static str {
         match self {
             EntityKind::Character => "Character",
@@ -387,6 +427,7 @@ impl EntityKind {
 /// Where an entity appears in the document, with sample quotes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityAppearances {
+    /// Chunks where the entity appears.
     pub chunk_indices: Vec<usize>,
     /// Up to 3 representative quotes from the entity's appearances.
     pub quote_samples: Vec<String>,
@@ -396,6 +437,7 @@ pub struct EntityAppearances {
 /// point, key revelation, or major transition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructuralMoment {
+    /// Chunk where the moment occurs.
     pub chunk_index: usize,
     /// Short description: "Shevek departs Anarres", "Author
     /// concedes the counterargument".
@@ -457,6 +499,7 @@ pub struct RaptorNode {
     /// centroid. Drives the briefing's coherence-weighted budget so
     /// tight clusters earn their slot in the prompt.
     pub cluster_coherence: f32,
+    /// When the node was built (UTC).
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -466,9 +509,13 @@ pub struct RaptorNode {
 /// round-trip to the chunk store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuoteSpan {
+    /// Chunk the span was pulled from.
     pub chunk_id: u32,
+    /// Span start — character offset within the chunk.
     pub char_start: u32,
+    /// Span end — character offset within the chunk.
     pub char_end: u32,
+    /// The verbatim span text, stored inline (see type doc).
     pub text: String,
 }
 
@@ -493,6 +540,7 @@ pub struct MemRaptorNodeRow {
     pub summary_embedding: Vec<f32>,
     /// Centroid in the input space (memory embeddings at level 0).
     pub centroid_embedding: Vec<f32>,
+    /// Child node ids; empty at level 0.
     pub children_node_ids: Vec<String>,
     /// Memory ids directly in this cluster. Populated only at level 0.
     pub direct_member_memory_ids: Vec<String>,
@@ -506,6 +554,7 @@ pub struct MemRaptorNodeRow {
     /// embeddings — the same staleness guard as `memories.embedding_model`;
     /// recall ignores tier nodes whose model doesn't match the live one.
     pub embedding_model: String,
+    /// Build time (Unix timestamp; plain `i64` here, unlike `RaptorNode`'s chrono type).
     pub created_at: i64,
 
     // ── Incremental-tree state (Phase 3, `mem_tree`) ─────────────
@@ -553,6 +602,7 @@ pub struct MemRaptorNodeRow {
 /// load-bearing for thematic-tier questions).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetMotif {
+    /// The recurring word or phrase itself.
     pub term: String,
     /// TF-IDF score against an English-baseline IDF.
     pub tf_idf_score: f32,
@@ -573,22 +623,33 @@ pub struct AssetMotif {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DocumentAssetOperation {
     /// Retrieved specific passages matching the query.
-    Rag { query: String },
+    Rag {
+        /// The retrieval query that was run.
+        query: String,
+    },
     /// Synthesised across the full document, tracing entities or
     /// themes through multiple sections.
     Synthesis {
+        /// What the synthesis was asked to trace.
         focus: String,
+        /// Entities traced through the document.
         entities: Vec<String>,
     },
     /// Searched every section for all instances of a pattern.
-    Aggregation { query: String },
+    Aggregation {
+        /// The pattern every section was searched for.
+        query: String,
+    },
     /// Applied a transformation (edit, rewrite, extract).
     Transformation,
     /// The question had no clear connection to the attached document, so the
     /// system answered from general knowledge rather than retrieving passages.
     /// `reason` is a short phrase for the UI explanation ("unrelated domain",
     /// "retrieval found nothing", etc.).
-    OffTopic { reason: String },
+    OffTopic {
+        /// Short phrase for the UI explanation ("unrelated domain", ...).
+        reason: String,
+    },
 }
 
 impl DocumentAssetOperation {

@@ -1,0 +1,1356 @@
+# api-gate snapshot — public API surface of `oicp-types` (cargo public-api,
+# nightly-2026-07-01). MACHINE-WRITTEN; regenerate after an INTENTIONAL API change:
+#   cargo run -p xtask -- api-gate --update-baseline
+# The PR diff of this file IS the API review artifact.
+impl core::clone::Clone for oicp_types::capability::Capability
+impl core::clone::Clone for oicp_types::capability::CapabilityClaim
+impl core::clone::Clone for oicp_types::capability::CapabilityHint
+impl core::clone::Clone for oicp_types::capability::InvalidCapabilityHint
+impl core::clone::Clone for oicp_types::capability::LatencyClass
+impl core::clone::Clone for oicp_types::ingest::CorpusIngestProgress
+impl core::clone::Clone for oicp_types::ingest::CorpusInstallRequest
+impl core::clone::Clone for oicp_types::ingest::CorpusInstallResponse
+impl core::clone::Clone for oicp_types::ingest::CorpusProgressResponse
+impl core::clone::Clone for oicp_types::ingest::IngestEndpoints
+impl core::clone::Clone for oicp_types::ingest::IngestPhase
+impl core::clone::Clone for oicp_types::ingest::RecipeStageReport
+impl core::clone::Clone for oicp_types::ingest::RecipeTestOptions
+impl core::clone::Clone for oicp_types::ingest::RecipeTestReport
+impl core::clone::Clone for oicp_types::ingest::RecipeTestRequest
+impl core::clone::Clone for oicp_types::knowledge::KnowledgeResult
+impl core::clone::Clone for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::clone::Clone for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::clone::Clone for oicp_types::knowledge::LandscapeDigestEntry
+impl core::clone::Clone for oicp_types::knowledge::LandscapeDigestRequest
+impl core::clone::Clone for oicp_types::knowledge::LandscapeDigestResponse
+impl core::clone::Clone for oicp_types::manifest::CorpusDescriptor
+impl core::clone::Clone for oicp_types::manifest::EmbedModelInfo
+impl core::clone::Clone for oicp_types::manifest::FederationManifest
+impl core::clone::Clone for oicp_types::manifest::KnowledgeManifest
+impl core::clone::Clone for oicp_types::manifest::ModelStatus
+impl core::clone::Clone for oicp_types::manifest::NormalizationStrategy
+impl core::clone::Clone for oicp_types::manifest::PeerDescriptor
+impl core::clone::Clone for oicp_types::manifest::PoolingStrategy
+impl core::clone::Clone for oicp_types::manifest::ProviderInfo
+impl core::clone::Clone for oicp_types::manifest::ProviderManifest
+impl core::clone::Clone for oicp_types::manifest::ProviderModel
+impl core::clone::Clone for oicp_types::manifest::ProviderType
+impl core::clone::Clone for oicp_types::registry::ExtensionRegistry
+impl core::clone::Clone for oicp_types::registry::ExtensionStats
+impl core::clone::Clone for oicp_types::requirements::InferenceRequirements
+impl core::clone::Clone for oicp_types::requirements::PrivacyRequirements
+impl core::clone::Clone for oicp_types::requirements::ShardingPrivacy
+impl core::clone::Clone for oicp_types::response::MatchQuality
+impl core::clone::Clone for oicp_types::response::OicpResponseMeta
+impl core::clone::Clone for oicp_types::scoring::BenchmarkResult
+impl core::clone::Clone for oicp_types::scoring::NodeLocality
+impl core::clone::Clone for oicp_types::scoring::NodeObservations
+impl core::clone::Clone for oicp_types::scoring::ScoreBreakdown
+impl core::clone::Clone for oicp_types::scoring::ScoredClaim
+impl core::cmp::Eq for oicp_types::capability::Capability
+impl core::cmp::Eq for oicp_types::capability::CapabilityHint
+impl core::cmp::Eq for oicp_types::capability::InvalidCapabilityHint
+impl core::cmp::Eq for oicp_types::capability::LatencyClass
+impl core::cmp::Eq for oicp_types::ingest::IngestPhase
+impl core::cmp::Eq for oicp_types::manifest::EmbedModelInfo
+impl core::cmp::Eq for oicp_types::manifest::NormalizationStrategy
+impl core::cmp::Eq for oicp_types::manifest::PoolingStrategy
+impl core::cmp::Eq for oicp_types::manifest::ProviderType
+impl core::cmp::Eq for oicp_types::registry::ExtensionStats
+impl core::cmp::Eq for oicp_types::requirements::ShardingPrivacy
+impl core::cmp::Eq for oicp_types::response::MatchQuality
+impl core::cmp::Eq for oicp_types::scoring::NodeLocality
+impl core::cmp::PartialEq for oicp_types::capability::Capability
+impl core::cmp::PartialEq for oicp_types::capability::CapabilityHint
+impl core::cmp::PartialEq for oicp_types::capability::InvalidCapabilityHint
+impl core::cmp::PartialEq for oicp_types::capability::LatencyClass
+impl core::cmp::PartialEq for oicp_types::ingest::IngestPhase
+impl core::cmp::PartialEq for oicp_types::manifest::EmbedModelInfo
+impl core::cmp::PartialEq for oicp_types::manifest::NormalizationStrategy
+impl core::cmp::PartialEq for oicp_types::manifest::PoolingStrategy
+impl core::cmp::PartialEq for oicp_types::manifest::ProviderType
+impl core::cmp::PartialEq for oicp_types::registry::ExtensionStats
+impl core::cmp::PartialEq for oicp_types::requirements::ShardingPrivacy
+impl core::cmp::PartialEq for oicp_types::response::MatchQuality
+impl core::cmp::PartialEq for oicp_types::scoring::BenchmarkResult
+impl core::cmp::PartialEq for oicp_types::scoring::NodeLocality
+impl core::cmp::PartialEq for oicp_types::scoring::ScoreBreakdown
+impl core::cmp::PartialEq for oicp_types::scoring::ScoredClaim
+impl core::default::Default for oicp_types::capability::LatencyClass
+impl core::default::Default for oicp_types::ingest::CorpusProgressResponse
+impl core::default::Default for oicp_types::ingest::RecipeTestOptions
+impl core::default::Default for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::default::Default for oicp_types::knowledge::LandscapeDigestRequest
+impl core::default::Default for oicp_types::knowledge::LandscapeDigestResponse
+impl core::default::Default for oicp_types::manifest::ProviderInfo
+impl core::default::Default for oicp_types::registry::ExtensionRegistry
+impl core::default::Default for oicp_types::requirements::InferenceRequirements
+impl core::default::Default for oicp_types::requirements::PrivacyRequirements
+impl core::default::Default for oicp_types::requirements::ShardingPrivacy
+impl core::default::Default for oicp_types::response::OicpResponseMeta
+impl core::default::Default for oicp_types::scoring::NodeLocality
+impl core::default::Default for oicp_types::scoring::NodeObservations
+impl core::error::Error for oicp_types::capability::InvalidCapabilityHint
+impl core::fmt::Debug for oicp_types::capability::Capability
+impl core::fmt::Debug for oicp_types::capability::CapabilityClaim
+impl core::fmt::Debug for oicp_types::capability::CapabilityHint
+impl core::fmt::Debug for oicp_types::capability::InvalidCapabilityHint
+impl core::fmt::Debug for oicp_types::capability::LatencyClass
+impl core::fmt::Debug for oicp_types::ingest::CorpusIngestProgress
+impl core::fmt::Debug for oicp_types::ingest::CorpusInstallRequest
+impl core::fmt::Debug for oicp_types::ingest::CorpusInstallResponse
+impl core::fmt::Debug for oicp_types::ingest::CorpusProgressResponse
+impl core::fmt::Debug for oicp_types::ingest::IngestEndpoints
+impl core::fmt::Debug for oicp_types::ingest::IngestPhase
+impl core::fmt::Debug for oicp_types::ingest::RecipeStageReport
+impl core::fmt::Debug for oicp_types::ingest::RecipeTestOptions
+impl core::fmt::Debug for oicp_types::ingest::RecipeTestReport
+impl core::fmt::Debug for oicp_types::ingest::RecipeTestRequest
+impl core::fmt::Debug for oicp_types::knowledge::KnowledgeResult
+impl core::fmt::Debug for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::fmt::Debug for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::fmt::Debug for oicp_types::knowledge::LandscapeDigestEntry
+impl core::fmt::Debug for oicp_types::knowledge::LandscapeDigestRequest
+impl core::fmt::Debug for oicp_types::knowledge::LandscapeDigestResponse
+impl core::fmt::Debug for oicp_types::manifest::CorpusDescriptor
+impl core::fmt::Debug for oicp_types::manifest::EmbedModelInfo
+impl core::fmt::Debug for oicp_types::manifest::FederationManifest
+impl core::fmt::Debug for oicp_types::manifest::KnowledgeManifest
+impl core::fmt::Debug for oicp_types::manifest::ModelStatus
+impl core::fmt::Debug for oicp_types::manifest::NormalizationStrategy
+impl core::fmt::Debug for oicp_types::manifest::PeerDescriptor
+impl core::fmt::Debug for oicp_types::manifest::PoolingStrategy
+impl core::fmt::Debug for oicp_types::manifest::ProviderInfo
+impl core::fmt::Debug for oicp_types::manifest::ProviderManifest
+impl core::fmt::Debug for oicp_types::manifest::ProviderModel
+impl core::fmt::Debug for oicp_types::manifest::ProviderType
+impl core::fmt::Debug for oicp_types::registry::ExtensionRegistry
+impl core::fmt::Debug for oicp_types::registry::ExtensionStats
+impl core::fmt::Debug for oicp_types::requirements::InferenceRequirements
+impl core::fmt::Debug for oicp_types::requirements::PrivacyRequirements
+impl core::fmt::Debug for oicp_types::requirements::ShardingPrivacy
+impl core::fmt::Debug for oicp_types::response::MatchQuality
+impl core::fmt::Debug for oicp_types::response::OicpResponseMeta
+impl core::fmt::Debug for oicp_types::scoring::BenchmarkResult
+impl core::fmt::Debug for oicp_types::scoring::NodeLocality
+impl core::fmt::Debug for oicp_types::scoring::NodeObservations
+impl core::fmt::Debug for oicp_types::scoring::ScoreBreakdown
+impl core::fmt::Debug for oicp_types::scoring::ScoredClaim
+impl core::fmt::Display for oicp_types::capability::CapabilityHint
+impl core::fmt::Display for oicp_types::capability::InvalidCapabilityHint
+impl core::hash::Hash for oicp_types::capability::Capability
+impl core::hash::Hash for oicp_types::capability::CapabilityHint
+impl core::hash::Hash for oicp_types::capability::LatencyClass
+impl core::hash::Hash for oicp_types::manifest::EmbedModelInfo
+impl core::hash::Hash for oicp_types::manifest::NormalizationStrategy
+impl core::hash::Hash for oicp_types::manifest::PoolingStrategy
+impl core::hash::Hash for oicp_types::scoring::NodeLocality
+impl core::marker::Copy for oicp_types::capability::Capability
+impl core::marker::Copy for oicp_types::capability::LatencyClass
+impl core::marker::Copy for oicp_types::ingest::IngestPhase
+impl core::marker::Copy for oicp_types::manifest::NormalizationStrategy
+impl core::marker::Copy for oicp_types::manifest::PoolingStrategy
+impl core::marker::Copy for oicp_types::manifest::ProviderType
+impl core::marker::Copy for oicp_types::requirements::ShardingPrivacy
+impl core::marker::Copy for oicp_types::response::MatchQuality
+impl core::marker::Copy for oicp_types::scoring::NodeLocality
+impl core::marker::Freeze for oicp_types::capability::Capability
+impl core::marker::Freeze for oicp_types::capability::CapabilityClaim
+impl core::marker::Freeze for oicp_types::capability::CapabilityHint
+impl core::marker::Freeze for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::Freeze for oicp_types::capability::LatencyClass
+impl core::marker::Freeze for oicp_types::ingest::CorpusIngestProgress
+impl core::marker::Freeze for oicp_types::ingest::CorpusInstallRequest
+impl core::marker::Freeze for oicp_types::ingest::CorpusInstallResponse
+impl core::marker::Freeze for oicp_types::ingest::CorpusProgressResponse
+impl core::marker::Freeze for oicp_types::ingest::IngestEndpoints
+impl core::marker::Freeze for oicp_types::ingest::IngestPhase
+impl core::marker::Freeze for oicp_types::ingest::RecipeStageReport
+impl core::marker::Freeze for oicp_types::ingest::RecipeTestOptions
+impl core::marker::Freeze for oicp_types::ingest::RecipeTestReport
+impl core::marker::Freeze for oicp_types::ingest::RecipeTestRequest
+impl core::marker::Freeze for oicp_types::knowledge::KnowledgeResult
+impl core::marker::Freeze for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::marker::Freeze for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::marker::Freeze for oicp_types::knowledge::LandscapeDigestEntry
+impl core::marker::Freeze for oicp_types::knowledge::LandscapeDigestRequest
+impl core::marker::Freeze for oicp_types::knowledge::LandscapeDigestResponse
+impl core::marker::Freeze for oicp_types::manifest::CorpusDescriptor
+impl core::marker::Freeze for oicp_types::manifest::EmbedModelInfo
+impl core::marker::Freeze for oicp_types::manifest::FederationManifest
+impl core::marker::Freeze for oicp_types::manifest::KnowledgeManifest
+impl core::marker::Freeze for oicp_types::manifest::ModelStatus
+impl core::marker::Freeze for oicp_types::manifest::NormalizationStrategy
+impl core::marker::Freeze for oicp_types::manifest::PeerDescriptor
+impl core::marker::Freeze for oicp_types::manifest::PoolingStrategy
+impl core::marker::Freeze for oicp_types::manifest::ProviderInfo
+impl core::marker::Freeze for oicp_types::manifest::ProviderManifest
+impl core::marker::Freeze for oicp_types::manifest::ProviderModel
+impl core::marker::Freeze for oicp_types::manifest::ProviderType
+impl core::marker::Freeze for oicp_types::registry::ExtensionRegistry
+impl core::marker::Freeze for oicp_types::registry::ExtensionStats
+impl core::marker::Freeze for oicp_types::requirements::InferenceRequirements
+impl core::marker::Freeze for oicp_types::requirements::PrivacyRequirements
+impl core::marker::Freeze for oicp_types::requirements::ShardingPrivacy
+impl core::marker::Freeze for oicp_types::response::MatchQuality
+impl core::marker::Freeze for oicp_types::response::OicpResponseMeta
+impl core::marker::Freeze for oicp_types::scoring::BenchmarkResult
+impl core::marker::Freeze for oicp_types::scoring::NodeLocality
+impl core::marker::Freeze for oicp_types::scoring::NodeObservations
+impl core::marker::Freeze for oicp_types::scoring::ScoreBreakdown
+impl core::marker::Freeze for oicp_types::scoring::ScoredClaim
+impl core::marker::Send for oicp_types::capability::Capability
+impl core::marker::Send for oicp_types::capability::CapabilityClaim
+impl core::marker::Send for oicp_types::capability::CapabilityHint
+impl core::marker::Send for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::Send for oicp_types::capability::LatencyClass
+impl core::marker::Send for oicp_types::ingest::CorpusIngestProgress
+impl core::marker::Send for oicp_types::ingest::CorpusInstallRequest
+impl core::marker::Send for oicp_types::ingest::CorpusInstallResponse
+impl core::marker::Send for oicp_types::ingest::CorpusProgressResponse
+impl core::marker::Send for oicp_types::ingest::IngestEndpoints
+impl core::marker::Send for oicp_types::ingest::IngestPhase
+impl core::marker::Send for oicp_types::ingest::RecipeStageReport
+impl core::marker::Send for oicp_types::ingest::RecipeTestOptions
+impl core::marker::Send for oicp_types::ingest::RecipeTestReport
+impl core::marker::Send for oicp_types::ingest::RecipeTestRequest
+impl core::marker::Send for oicp_types::knowledge::KnowledgeResult
+impl core::marker::Send for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::marker::Send for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::marker::Send for oicp_types::knowledge::LandscapeDigestEntry
+impl core::marker::Send for oicp_types::knowledge::LandscapeDigestRequest
+impl core::marker::Send for oicp_types::knowledge::LandscapeDigestResponse
+impl core::marker::Send for oicp_types::manifest::CorpusDescriptor
+impl core::marker::Send for oicp_types::manifest::EmbedModelInfo
+impl core::marker::Send for oicp_types::manifest::FederationManifest
+impl core::marker::Send for oicp_types::manifest::KnowledgeManifest
+impl core::marker::Send for oicp_types::manifest::ModelStatus
+impl core::marker::Send for oicp_types::manifest::NormalizationStrategy
+impl core::marker::Send for oicp_types::manifest::PeerDescriptor
+impl core::marker::Send for oicp_types::manifest::PoolingStrategy
+impl core::marker::Send for oicp_types::manifest::ProviderInfo
+impl core::marker::Send for oicp_types::manifest::ProviderManifest
+impl core::marker::Send for oicp_types::manifest::ProviderModel
+impl core::marker::Send for oicp_types::manifest::ProviderType
+impl core::marker::Send for oicp_types::registry::ExtensionRegistry
+impl core::marker::Send for oicp_types::registry::ExtensionStats
+impl core::marker::Send for oicp_types::requirements::InferenceRequirements
+impl core::marker::Send for oicp_types::requirements::PrivacyRequirements
+impl core::marker::Send for oicp_types::requirements::ShardingPrivacy
+impl core::marker::Send for oicp_types::response::MatchQuality
+impl core::marker::Send for oicp_types::response::OicpResponseMeta
+impl core::marker::Send for oicp_types::scoring::BenchmarkResult
+impl core::marker::Send for oicp_types::scoring::NodeLocality
+impl core::marker::Send for oicp_types::scoring::NodeObservations
+impl core::marker::Send for oicp_types::scoring::ScoreBreakdown
+impl core::marker::Send for oicp_types::scoring::ScoredClaim
+impl core::marker::StructuralPartialEq for oicp_types::capability::Capability
+impl core::marker::StructuralPartialEq for oicp_types::capability::CapabilityHint
+impl core::marker::StructuralPartialEq for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::StructuralPartialEq for oicp_types::capability::LatencyClass
+impl core::marker::StructuralPartialEq for oicp_types::ingest::IngestPhase
+impl core::marker::StructuralPartialEq for oicp_types::manifest::EmbedModelInfo
+impl core::marker::StructuralPartialEq for oicp_types::manifest::NormalizationStrategy
+impl core::marker::StructuralPartialEq for oicp_types::manifest::PoolingStrategy
+impl core::marker::StructuralPartialEq for oicp_types::manifest::ProviderType
+impl core::marker::StructuralPartialEq for oicp_types::registry::ExtensionStats
+impl core::marker::StructuralPartialEq for oicp_types::requirements::ShardingPrivacy
+impl core::marker::StructuralPartialEq for oicp_types::response::MatchQuality
+impl core::marker::StructuralPartialEq for oicp_types::scoring::BenchmarkResult
+impl core::marker::StructuralPartialEq for oicp_types::scoring::NodeLocality
+impl core::marker::StructuralPartialEq for oicp_types::scoring::ScoreBreakdown
+impl core::marker::StructuralPartialEq for oicp_types::scoring::ScoredClaim
+impl core::marker::Sync for oicp_types::capability::Capability
+impl core::marker::Sync for oicp_types::capability::CapabilityClaim
+impl core::marker::Sync for oicp_types::capability::CapabilityHint
+impl core::marker::Sync for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::Sync for oicp_types::capability::LatencyClass
+impl core::marker::Sync for oicp_types::ingest::CorpusIngestProgress
+impl core::marker::Sync for oicp_types::ingest::CorpusInstallRequest
+impl core::marker::Sync for oicp_types::ingest::CorpusInstallResponse
+impl core::marker::Sync for oicp_types::ingest::CorpusProgressResponse
+impl core::marker::Sync for oicp_types::ingest::IngestEndpoints
+impl core::marker::Sync for oicp_types::ingest::IngestPhase
+impl core::marker::Sync for oicp_types::ingest::RecipeStageReport
+impl core::marker::Sync for oicp_types::ingest::RecipeTestOptions
+impl core::marker::Sync for oicp_types::ingest::RecipeTestReport
+impl core::marker::Sync for oicp_types::ingest::RecipeTestRequest
+impl core::marker::Sync for oicp_types::knowledge::KnowledgeResult
+impl core::marker::Sync for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::marker::Sync for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::marker::Sync for oicp_types::knowledge::LandscapeDigestEntry
+impl core::marker::Sync for oicp_types::knowledge::LandscapeDigestRequest
+impl core::marker::Sync for oicp_types::knowledge::LandscapeDigestResponse
+impl core::marker::Sync for oicp_types::manifest::CorpusDescriptor
+impl core::marker::Sync for oicp_types::manifest::EmbedModelInfo
+impl core::marker::Sync for oicp_types::manifest::FederationManifest
+impl core::marker::Sync for oicp_types::manifest::KnowledgeManifest
+impl core::marker::Sync for oicp_types::manifest::ModelStatus
+impl core::marker::Sync for oicp_types::manifest::NormalizationStrategy
+impl core::marker::Sync for oicp_types::manifest::PeerDescriptor
+impl core::marker::Sync for oicp_types::manifest::PoolingStrategy
+impl core::marker::Sync for oicp_types::manifest::ProviderInfo
+impl core::marker::Sync for oicp_types::manifest::ProviderManifest
+impl core::marker::Sync for oicp_types::manifest::ProviderModel
+impl core::marker::Sync for oicp_types::manifest::ProviderType
+impl core::marker::Sync for oicp_types::registry::ExtensionRegistry
+impl core::marker::Sync for oicp_types::registry::ExtensionStats
+impl core::marker::Sync for oicp_types::requirements::InferenceRequirements
+impl core::marker::Sync for oicp_types::requirements::PrivacyRequirements
+impl core::marker::Sync for oicp_types::requirements::ShardingPrivacy
+impl core::marker::Sync for oicp_types::response::MatchQuality
+impl core::marker::Sync for oicp_types::response::OicpResponseMeta
+impl core::marker::Sync for oicp_types::scoring::BenchmarkResult
+impl core::marker::Sync for oicp_types::scoring::NodeLocality
+impl core::marker::Sync for oicp_types::scoring::NodeObservations
+impl core::marker::Sync for oicp_types::scoring::ScoreBreakdown
+impl core::marker::Sync for oicp_types::scoring::ScoredClaim
+impl core::marker::Unpin for oicp_types::capability::Capability
+impl core::marker::Unpin for oicp_types::capability::CapabilityClaim
+impl core::marker::Unpin for oicp_types::capability::CapabilityHint
+impl core::marker::Unpin for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::Unpin for oicp_types::capability::LatencyClass
+impl core::marker::Unpin for oicp_types::ingest::CorpusIngestProgress
+impl core::marker::Unpin for oicp_types::ingest::CorpusInstallRequest
+impl core::marker::Unpin for oicp_types::ingest::CorpusInstallResponse
+impl core::marker::Unpin for oicp_types::ingest::CorpusProgressResponse
+impl core::marker::Unpin for oicp_types::ingest::IngestEndpoints
+impl core::marker::Unpin for oicp_types::ingest::IngestPhase
+impl core::marker::Unpin for oicp_types::ingest::RecipeStageReport
+impl core::marker::Unpin for oicp_types::ingest::RecipeTestOptions
+impl core::marker::Unpin for oicp_types::ingest::RecipeTestReport
+impl core::marker::Unpin for oicp_types::ingest::RecipeTestRequest
+impl core::marker::Unpin for oicp_types::knowledge::KnowledgeResult
+impl core::marker::Unpin for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::marker::Unpin for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::marker::Unpin for oicp_types::knowledge::LandscapeDigestEntry
+impl core::marker::Unpin for oicp_types::knowledge::LandscapeDigestRequest
+impl core::marker::Unpin for oicp_types::knowledge::LandscapeDigestResponse
+impl core::marker::Unpin for oicp_types::manifest::CorpusDescriptor
+impl core::marker::Unpin for oicp_types::manifest::EmbedModelInfo
+impl core::marker::Unpin for oicp_types::manifest::FederationManifest
+impl core::marker::Unpin for oicp_types::manifest::KnowledgeManifest
+impl core::marker::Unpin for oicp_types::manifest::ModelStatus
+impl core::marker::Unpin for oicp_types::manifest::NormalizationStrategy
+impl core::marker::Unpin for oicp_types::manifest::PeerDescriptor
+impl core::marker::Unpin for oicp_types::manifest::PoolingStrategy
+impl core::marker::Unpin for oicp_types::manifest::ProviderInfo
+impl core::marker::Unpin for oicp_types::manifest::ProviderManifest
+impl core::marker::Unpin for oicp_types::manifest::ProviderModel
+impl core::marker::Unpin for oicp_types::manifest::ProviderType
+impl core::marker::Unpin for oicp_types::registry::ExtensionRegistry
+impl core::marker::Unpin for oicp_types::registry::ExtensionStats
+impl core::marker::Unpin for oicp_types::requirements::InferenceRequirements
+impl core::marker::Unpin for oicp_types::requirements::PrivacyRequirements
+impl core::marker::Unpin for oicp_types::requirements::ShardingPrivacy
+impl core::marker::Unpin for oicp_types::response::MatchQuality
+impl core::marker::Unpin for oicp_types::response::OicpResponseMeta
+impl core::marker::Unpin for oicp_types::scoring::BenchmarkResult
+impl core::marker::Unpin for oicp_types::scoring::NodeLocality
+impl core::marker::Unpin for oicp_types::scoring::NodeObservations
+impl core::marker::Unpin for oicp_types::scoring::ScoreBreakdown
+impl core::marker::Unpin for oicp_types::scoring::ScoredClaim
+impl core::marker::UnsafeUnpin for oicp_types::capability::Capability
+impl core::marker::UnsafeUnpin for oicp_types::capability::CapabilityClaim
+impl core::marker::UnsafeUnpin for oicp_types::capability::CapabilityHint
+impl core::marker::UnsafeUnpin for oicp_types::capability::InvalidCapabilityHint
+impl core::marker::UnsafeUnpin for oicp_types::capability::LatencyClass
+impl core::marker::UnsafeUnpin for oicp_types::ingest::CorpusIngestProgress
+impl core::marker::UnsafeUnpin for oicp_types::ingest::CorpusInstallRequest
+impl core::marker::UnsafeUnpin for oicp_types::ingest::CorpusInstallResponse
+impl core::marker::UnsafeUnpin for oicp_types::ingest::CorpusProgressResponse
+impl core::marker::UnsafeUnpin for oicp_types::ingest::IngestEndpoints
+impl core::marker::UnsafeUnpin for oicp_types::ingest::IngestPhase
+impl core::marker::UnsafeUnpin for oicp_types::ingest::RecipeStageReport
+impl core::marker::UnsafeUnpin for oicp_types::ingest::RecipeTestOptions
+impl core::marker::UnsafeUnpin for oicp_types::ingest::RecipeTestReport
+impl core::marker::UnsafeUnpin for oicp_types::ingest::RecipeTestRequest
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::KnowledgeResult
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::LandscapeDigestEntry
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::LandscapeDigestRequest
+impl core::marker::UnsafeUnpin for oicp_types::knowledge::LandscapeDigestResponse
+impl core::marker::UnsafeUnpin for oicp_types::manifest::CorpusDescriptor
+impl core::marker::UnsafeUnpin for oicp_types::manifest::EmbedModelInfo
+impl core::marker::UnsafeUnpin for oicp_types::manifest::FederationManifest
+impl core::marker::UnsafeUnpin for oicp_types::manifest::KnowledgeManifest
+impl core::marker::UnsafeUnpin for oicp_types::manifest::ModelStatus
+impl core::marker::UnsafeUnpin for oicp_types::manifest::NormalizationStrategy
+impl core::marker::UnsafeUnpin for oicp_types::manifest::PeerDescriptor
+impl core::marker::UnsafeUnpin for oicp_types::manifest::PoolingStrategy
+impl core::marker::UnsafeUnpin for oicp_types::manifest::ProviderInfo
+impl core::marker::UnsafeUnpin for oicp_types::manifest::ProviderManifest
+impl core::marker::UnsafeUnpin for oicp_types::manifest::ProviderModel
+impl core::marker::UnsafeUnpin for oicp_types::manifest::ProviderType
+impl core::marker::UnsafeUnpin for oicp_types::registry::ExtensionRegistry
+impl core::marker::UnsafeUnpin for oicp_types::registry::ExtensionStats
+impl core::marker::UnsafeUnpin for oicp_types::requirements::InferenceRequirements
+impl core::marker::UnsafeUnpin for oicp_types::requirements::PrivacyRequirements
+impl core::marker::UnsafeUnpin for oicp_types::requirements::ShardingPrivacy
+impl core::marker::UnsafeUnpin for oicp_types::response::MatchQuality
+impl core::marker::UnsafeUnpin for oicp_types::response::OicpResponseMeta
+impl core::marker::UnsafeUnpin for oicp_types::scoring::BenchmarkResult
+impl core::marker::UnsafeUnpin for oicp_types::scoring::NodeLocality
+impl core::marker::UnsafeUnpin for oicp_types::scoring::NodeObservations
+impl core::marker::UnsafeUnpin for oicp_types::scoring::ScoreBreakdown
+impl core::marker::UnsafeUnpin for oicp_types::scoring::ScoredClaim
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::capability::Capability
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::capability::CapabilityClaim
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::capability::CapabilityHint
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::capability::InvalidCapabilityHint
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::capability::LatencyClass
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::CorpusIngestProgress
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::CorpusInstallRequest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::CorpusInstallResponse
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::CorpusProgressResponse
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::IngestEndpoints
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::IngestPhase
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::RecipeStageReport
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::RecipeTestOptions
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::RecipeTestReport
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::ingest::RecipeTestRequest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::KnowledgeResult
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::LandscapeDigestEntry
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::LandscapeDigestRequest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::knowledge::LandscapeDigestResponse
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::CorpusDescriptor
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::EmbedModelInfo
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::FederationManifest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::KnowledgeManifest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::ModelStatus
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::NormalizationStrategy
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::PeerDescriptor
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::PoolingStrategy
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::ProviderInfo
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::ProviderManifest
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::ProviderModel
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::manifest::ProviderType
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::registry::ExtensionRegistry
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::registry::ExtensionStats
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::requirements::InferenceRequirements
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::requirements::PrivacyRequirements
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::requirements::ShardingPrivacy
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::response::MatchQuality
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::response::OicpResponseMeta
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::scoring::BenchmarkResult
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::scoring::NodeLocality
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::scoring::NodeObservations
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::scoring::ScoreBreakdown
+impl core::panic::unwind_safe::RefUnwindSafe for oicp_types::scoring::ScoredClaim
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::capability::Capability
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::capability::CapabilityClaim
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::capability::CapabilityHint
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::capability::InvalidCapabilityHint
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::capability::LatencyClass
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::CorpusIngestProgress
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::CorpusInstallRequest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::CorpusInstallResponse
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::CorpusProgressResponse
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::IngestEndpoints
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::IngestPhase
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::RecipeStageReport
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::RecipeTestOptions
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::RecipeTestReport
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::ingest::RecipeTestRequest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::KnowledgeResult
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::KnowledgeSearchRequest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::KnowledgeSearchResponse
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::LandscapeDigestEntry
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::LandscapeDigestRequest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::knowledge::LandscapeDigestResponse
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::CorpusDescriptor
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::EmbedModelInfo
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::FederationManifest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::KnowledgeManifest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::ModelStatus
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::NormalizationStrategy
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::PeerDescriptor
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::PoolingStrategy
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::ProviderInfo
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::ProviderManifest
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::ProviderModel
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::manifest::ProviderType
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::registry::ExtensionRegistry
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::registry::ExtensionStats
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::requirements::InferenceRequirements
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::requirements::PrivacyRequirements
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::requirements::ShardingPrivacy
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::response::MatchQuality
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::response::OicpResponseMeta
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::scoring::BenchmarkResult
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::scoring::NodeLocality
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::scoring::NodeObservations
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::scoring::ScoreBreakdown
+impl core::panic::unwind_safe::UnwindSafe for oicp_types::scoring::ScoredClaim
+impl oicp_types::capability::CapabilityClaim
+impl oicp_types::capability::CapabilityHint
+impl oicp_types::ingest::IngestPhase
+impl oicp_types::knowledge::KnowledgeSearchRequest
+impl oicp_types::manifest::ProviderManifest
+impl oicp_types::registry::ExtensionRegistry
+impl oicp_types::requirements::InferenceRequirements
+impl serde_core::ser::Serialize for oicp_types::capability::Capability
+impl serde_core::ser::Serialize for oicp_types::capability::CapabilityClaim
+impl serde_core::ser::Serialize for oicp_types::capability::CapabilityHint
+impl serde_core::ser::Serialize for oicp_types::capability::LatencyClass
+impl serde_core::ser::Serialize for oicp_types::ingest::CorpusIngestProgress
+impl serde_core::ser::Serialize for oicp_types::ingest::CorpusInstallRequest
+impl serde_core::ser::Serialize for oicp_types::ingest::CorpusInstallResponse
+impl serde_core::ser::Serialize for oicp_types::ingest::CorpusProgressResponse
+impl serde_core::ser::Serialize for oicp_types::ingest::IngestEndpoints
+impl serde_core::ser::Serialize for oicp_types::ingest::IngestPhase
+impl serde_core::ser::Serialize for oicp_types::ingest::RecipeStageReport
+impl serde_core::ser::Serialize for oicp_types::ingest::RecipeTestOptions
+impl serde_core::ser::Serialize for oicp_types::ingest::RecipeTestReport
+impl serde_core::ser::Serialize for oicp_types::ingest::RecipeTestRequest
+impl serde_core::ser::Serialize for oicp_types::knowledge::KnowledgeResult
+impl serde_core::ser::Serialize for oicp_types::knowledge::KnowledgeSearchRequest
+impl serde_core::ser::Serialize for oicp_types::knowledge::KnowledgeSearchResponse
+impl serde_core::ser::Serialize for oicp_types::knowledge::LandscapeDigestEntry
+impl serde_core::ser::Serialize for oicp_types::knowledge::LandscapeDigestRequest
+impl serde_core::ser::Serialize for oicp_types::knowledge::LandscapeDigestResponse
+impl serde_core::ser::Serialize for oicp_types::manifest::CorpusDescriptor
+impl serde_core::ser::Serialize for oicp_types::manifest::EmbedModelInfo
+impl serde_core::ser::Serialize for oicp_types::manifest::FederationManifest
+impl serde_core::ser::Serialize for oicp_types::manifest::KnowledgeManifest
+impl serde_core::ser::Serialize for oicp_types::manifest::ModelStatus
+impl serde_core::ser::Serialize for oicp_types::manifest::NormalizationStrategy
+impl serde_core::ser::Serialize for oicp_types::manifest::PeerDescriptor
+impl serde_core::ser::Serialize for oicp_types::manifest::PoolingStrategy
+impl serde_core::ser::Serialize for oicp_types::manifest::ProviderInfo
+impl serde_core::ser::Serialize for oicp_types::manifest::ProviderManifest
+impl serde_core::ser::Serialize for oicp_types::manifest::ProviderModel
+impl serde_core::ser::Serialize for oicp_types::manifest::ProviderType
+impl serde_core::ser::Serialize for oicp_types::requirements::InferenceRequirements
+impl serde_core::ser::Serialize for oicp_types::requirements::PrivacyRequirements
+impl serde_core::ser::Serialize for oicp_types::requirements::ShardingPrivacy
+impl serde_core::ser::Serialize for oicp_types::response::MatchQuality
+impl serde_core::ser::Serialize for oicp_types::response::OicpResponseMeta
+impl serde_core::ser::Serialize for oicp_types::scoring::BenchmarkResult
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::capability::Capability
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::capability::CapabilityClaim
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::capability::CapabilityHint
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::capability::LatencyClass
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::CorpusIngestProgress
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::CorpusInstallRequest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::CorpusInstallResponse
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::CorpusProgressResponse
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::IngestEndpoints
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::IngestPhase
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::RecipeStageReport
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::RecipeTestOptions
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::RecipeTestReport
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::ingest::RecipeTestRequest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::KnowledgeResult
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::KnowledgeSearchRequest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::KnowledgeSearchResponse
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::LandscapeDigestEntry
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::LandscapeDigestRequest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::knowledge::LandscapeDigestResponse
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::CorpusDescriptor
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::EmbedModelInfo
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::FederationManifest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::KnowledgeManifest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::ModelStatus
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::NormalizationStrategy
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::PeerDescriptor
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::PoolingStrategy
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::ProviderInfo
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::ProviderManifest
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::ProviderModel
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::manifest::ProviderType
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::requirements::InferenceRequirements
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::requirements::PrivacyRequirements
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::requirements::ShardingPrivacy
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::response::MatchQuality
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::response::OicpResponseMeta
+impl<'de> serde_core::de::Deserialize<'de> for oicp_types::scoring::BenchmarkResult
+pub const oicp_types::COLD_START_MIN_WEIGHT: f32
+pub const oicp_types::COLD_START_SAMPLES: u32
+pub const oicp_types::CONFIDENCE_SAMPLES: u32
+pub const oicp_types::HINT_GENERAL_FALLBACK_SCORE: f32
+pub const oicp_types::LATENCY_ADJACENT_SCORE: f32
+pub const oicp_types::LATENCY_TWO_CLASS_SCORE: f32
+pub const oicp_types::LOAD_COEFFICIENT: f32
+pub const oicp_types::LOCALITY_FAR_BONUS: f32
+pub const oicp_types::LOCALITY_LOCAL_BONUS: f32
+pub const oicp_types::LOCALITY_NEAR_BONUS: f32
+pub const oicp_types::OICP_VERSION: &str
+pub const oicp_types::SCORING_EPSILON: f32
+pub const oicp_types::THROUGHPUT_EWMA_ALPHA: f64
+pub const oicp_types::THROUGHPUT_FLOOR: f32
+pub const oicp_types::THROUGHPUT_OBSERVATION_THRESHOLD: u32
+pub const oicp_types::THROUGHPUT_REFERENCE_TG_TOK_S: f32
+pub const oicp_types::capability::CapabilityHint::CODE: &'static str
+pub const oicp_types::capability::CapabilityHint::EXTENSION_PREFIX: &'static str
+pub const oicp_types::capability::CapabilityHint::GENERAL: &'static str
+pub const oicp_types::capability::CapabilityHint::STANDARDIZED: &'static [&'static str]
+pub const oicp_types::features::CONSTRAINT_ALLOWLIST_CMD_PREFIX: &str
+pub const oicp_types::features::CONSTRAINT_ALLOWLIST_EVIDENCE_ID: &str
+pub const oicp_types::features::CONSTRAINT_ALLOWLIST_URL: &str
+pub const oicp_types::features::CONSTRAINT_JSON_OBJECT: &str
+pub const oicp_types::features::CONSTRAINT_JSON_SCHEMA: &str
+pub const oicp_types::features::CONSTRAINT_LARK: &str
+pub const oicp_types::features::EXTENSION_PREFIX: &str
+pub const oicp_types::features::INGEST_RECIPE_TEST: &str
+pub const oicp_types::features::INGEST_V1: &str
+pub const oicp_types::features::MODEL_FINGERPRINT: &str
+pub const oicp_types::features::OICP_REQUEST_PROPERTIES: &str
+pub const oicp_types::features::REGISTERED: &[&str]
+pub const oicp_types::features::THINK_BUDGET: &str
+pub const oicp_types::features::X_FORCED_CHOICE: &str
+pub const oicp_types::knowledge::KnowledgeSearchRequest::DEFAULT_LIMIT: u32
+pub const oicp_types::manifest::features::CONSTRAINT_ALLOWLIST_CMD_PREFIX: &str
+pub const oicp_types::manifest::features::CONSTRAINT_ALLOWLIST_EVIDENCE_ID: &str
+pub const oicp_types::manifest::features::CONSTRAINT_ALLOWLIST_URL: &str
+pub const oicp_types::manifest::features::CONSTRAINT_JSON_OBJECT: &str
+pub const oicp_types::manifest::features::CONSTRAINT_JSON_SCHEMA: &str
+pub const oicp_types::manifest::features::CONSTRAINT_LARK: &str
+pub const oicp_types::manifest::features::EXTENSION_PREFIX: &str
+pub const oicp_types::manifest::features::INGEST_RECIPE_TEST: &str
+pub const oicp_types::manifest::features::INGEST_V1: &str
+pub const oicp_types::manifest::features::MODEL_FINGERPRINT: &str
+pub const oicp_types::manifest::features::OICP_REQUEST_PROPERTIES: &str
+pub const oicp_types::manifest::features::REGISTERED: &[&str]
+pub const oicp_types::manifest::features::THINK_BUDGET: &str
+pub const oicp_types::manifest::features::X_FORCED_CHOICE: &str
+pub const oicp_types::scoring::COLD_START_MIN_WEIGHT: f32
+pub const oicp_types::scoring::COLD_START_SAMPLES: u32
+pub const oicp_types::scoring::CONFIDENCE_SAMPLES: u32
+pub const oicp_types::scoring::HINT_GENERAL_FALLBACK_SCORE: f32
+pub const oicp_types::scoring::LATENCY_ADJACENT_SCORE: f32
+pub const oicp_types::scoring::LATENCY_TWO_CLASS_SCORE: f32
+pub const oicp_types::scoring::LOAD_COEFFICIENT: f32
+pub const oicp_types::scoring::LOCALITY_FAR_BONUS: f32
+pub const oicp_types::scoring::LOCALITY_LOCAL_BONUS: f32
+pub const oicp_types::scoring::LOCALITY_NEAR_BONUS: f32
+pub const oicp_types::scoring::SCORING_EPSILON: f32
+pub const oicp_types::scoring::THROUGHPUT_EWMA_ALPHA: f64
+pub const oicp_types::scoring::THROUGHPUT_FLOOR: f32
+pub const oicp_types::scoring::THROUGHPUT_OBSERVATION_THRESHOLD: u32
+pub const oicp_types::scoring::THROUGHPUT_REFERENCE_TG_TOK_S: f32
+pub const oicp_types::version::OICP_VERSION: &str
+pub enum oicp_types::Capability
+pub enum oicp_types::IngestPhase
+pub enum oicp_types::InvalidCapabilityHint
+pub enum oicp_types::LatencyClass
+pub enum oicp_types::MatchQuality
+pub enum oicp_types::NodeLocality
+pub enum oicp_types::NormalizationStrategy
+pub enum oicp_types::PoolingStrategy
+pub enum oicp_types::ProviderType
+pub enum oicp_types::ShardingPrivacy
+pub enum oicp_types::capability::Capability
+pub enum oicp_types::capability::InvalidCapabilityHint
+pub enum oicp_types::capability::LatencyClass
+pub enum oicp_types::ingest::IngestPhase
+pub enum oicp_types::manifest::NormalizationStrategy
+pub enum oicp_types::manifest::PoolingStrategy
+pub enum oicp_types::manifest::ProviderType
+pub enum oicp_types::requirements::ShardingPrivacy
+pub enum oicp_types::response::MatchQuality
+pub enum oicp_types::scoring::NodeLocality
+pub fn oicp_types::best_claim_for_request(&oicp_types::manifest::ProviderManifest, &oicp_types::requirements::InferenceRequirements) -> core::option::Option<oicp_types::scoring::ScoredClaim>
+pub fn oicp_types::capability::Capability::clone(&self) -> oicp_types::capability::Capability
+pub fn oicp_types::capability::Capability::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::capability::Capability::eq(&self, &oicp_types::capability::Capability) -> bool
+pub fn oicp_types::capability::Capability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::capability::Capability::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::capability::Capability::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::capability::CapabilityClaim::clone(&self) -> oicp_types::capability::CapabilityClaim
+pub fn oicp_types::capability::CapabilityClaim::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::capability::CapabilityClaim::effective_affinity(&self) -> f32
+pub fn oicp_types::capability::CapabilityClaim::fits(&self, u32, u32) -> bool
+pub fn oicp_types::capability::CapabilityClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::capability::CapabilityClaim::new(oicp_types::capability::CapabilityHint, oicp_types::capability::LatencyClass, u32, u32, f32) -> Self
+pub fn oicp_types::capability::CapabilityClaim::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::capability::CapabilityHint::as_str(&self) -> &str
+pub fn oicp_types::capability::CapabilityHint::clone(&self) -> oicp_types::capability::CapabilityHint
+pub fn oicp_types::capability::CapabilityHint::code() -> Self
+pub fn oicp_types::capability::CapabilityHint::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub fn oicp_types::capability::CapabilityHint::eq(&self, &oicp_types::capability::CapabilityHint) -> bool
+pub fn oicp_types::capability::CapabilityHint::extension(impl core::convert::AsRef<str>) -> core::result::Result<Self, oicp_types::capability::InvalidCapabilityHint>
+pub fn oicp_types::capability::CapabilityHint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::capability::CapabilityHint::general() -> Self
+pub fn oicp_types::capability::CapabilityHint::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::capability::CapabilityHint::is_extension(&self) -> bool
+pub fn oicp_types::capability::CapabilityHint::is_standardized(&self) -> bool
+pub fn oicp_types::capability::CapabilityHint::is_unknown_bare(&self) -> bool
+pub fn oicp_types::capability::CapabilityHint::parse(impl core::convert::AsRef<str>) -> core::result::Result<Self, oicp_types::capability::InvalidCapabilityHint>
+pub fn oicp_types::capability::CapabilityHint::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+pub fn oicp_types::capability::InvalidCapabilityHint::clone(&self) -> oicp_types::capability::InvalidCapabilityHint
+pub fn oicp_types::capability::InvalidCapabilityHint::eq(&self, &oicp_types::capability::InvalidCapabilityHint) -> bool
+pub fn oicp_types::capability::InvalidCapabilityHint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::capability::LatencyClass::clone(&self) -> oicp_types::capability::LatencyClass
+pub fn oicp_types::capability::LatencyClass::default() -> oicp_types::capability::LatencyClass
+pub fn oicp_types::capability::LatencyClass::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::capability::LatencyClass::eq(&self, &oicp_types::capability::LatencyClass) -> bool
+pub fn oicp_types::capability::LatencyClass::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::capability::LatencyClass::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::capability::LatencyClass::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::capability::infer_hint_from_profile(&oicp_types::capability::CapabilityProfile) -> oicp_types::capability::CapabilityHint
+pub fn oicp_types::capability::proficiency(&oicp_types::capability::CapabilityProfile, oicp_types::capability::Capability) -> oicp_types::capability::ProficiencyLevel
+pub fn oicp_types::cold_start_weight(u32) -> f32
+pub fn oicp_types::effective_affinity(f32, &oicp_types::scoring::NodeObservations) -> f32
+pub fn oicp_types::features::is_valid(&str) -> bool
+pub fn oicp_types::hint_match_score(&oicp_types::capability::CapabilityHint, &oicp_types::capability::CapabilityHint) -> f32
+pub fn oicp_types::infer_hint_from_profile(&oicp_types::capability::CapabilityProfile) -> oicp_types::capability::CapabilityHint
+pub fn oicp_types::ingest::CorpusIngestProgress::clone(&self) -> oicp_types::ingest::CorpusIngestProgress
+pub fn oicp_types::ingest::CorpusIngestProgress::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::CorpusIngestProgress::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::CorpusIngestProgress::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::CorpusInstallRequest::clone(&self) -> oicp_types::ingest::CorpusInstallRequest
+pub fn oicp_types::ingest::CorpusInstallRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::CorpusInstallRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::CorpusInstallRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::CorpusInstallResponse::clone(&self) -> oicp_types::ingest::CorpusInstallResponse
+pub fn oicp_types::ingest::CorpusInstallResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::CorpusInstallResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::CorpusInstallResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::CorpusProgressResponse::clone(&self) -> oicp_types::ingest::CorpusProgressResponse
+pub fn oicp_types::ingest::CorpusProgressResponse::default() -> oicp_types::ingest::CorpusProgressResponse
+pub fn oicp_types::ingest::CorpusProgressResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::CorpusProgressResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::CorpusProgressResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::IngestEndpoints::clone(&self) -> oicp_types::ingest::IngestEndpoints
+pub fn oicp_types::ingest::IngestEndpoints::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::IngestEndpoints::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::IngestEndpoints::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::IngestPhase::clone(&self) -> oicp_types::ingest::IngestPhase
+pub fn oicp_types::ingest::IngestPhase::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::IngestPhase::eq(&self, &oicp_types::ingest::IngestPhase) -> bool
+pub fn oicp_types::ingest::IngestPhase::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::IngestPhase::is_terminal(self) -> bool
+pub fn oicp_types::ingest::IngestPhase::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::RecipeStageReport::clone(&self) -> oicp_types::ingest::RecipeStageReport
+pub fn oicp_types::ingest::RecipeStageReport::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::RecipeStageReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::RecipeStageReport::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::RecipeTestOptions::clone(&self) -> oicp_types::ingest::RecipeTestOptions
+pub fn oicp_types::ingest::RecipeTestOptions::default() -> oicp_types::ingest::RecipeTestOptions
+pub fn oicp_types::ingest::RecipeTestOptions::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::RecipeTestOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::RecipeTestOptions::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::RecipeTestReport::clone(&self) -> oicp_types::ingest::RecipeTestReport
+pub fn oicp_types::ingest::RecipeTestReport::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::RecipeTestReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::RecipeTestReport::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::ingest::RecipeTestRequest::clone(&self) -> oicp_types::ingest::RecipeTestRequest
+pub fn oicp_types::ingest::RecipeTestRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::ingest::RecipeTestRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::ingest::RecipeTestRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::KnowledgeResult::clone(&self) -> oicp_types::knowledge::KnowledgeResult
+pub fn oicp_types::knowledge::KnowledgeResult::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::KnowledgeResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::KnowledgeResult::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::KnowledgeSearchRequest::clone(&self) -> oicp_types::knowledge::KnowledgeSearchRequest
+pub fn oicp_types::knowledge::KnowledgeSearchRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::KnowledgeSearchRequest::effective_limit(&self) -> u32
+pub fn oicp_types::knowledge::KnowledgeSearchRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::KnowledgeSearchRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::KnowledgeSearchResponse::clone(&self) -> oicp_types::knowledge::KnowledgeSearchResponse
+pub fn oicp_types::knowledge::KnowledgeSearchResponse::default() -> oicp_types::knowledge::KnowledgeSearchResponse
+pub fn oicp_types::knowledge::KnowledgeSearchResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::KnowledgeSearchResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::KnowledgeSearchResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::LandscapeDigestEntry::clone(&self) -> oicp_types::knowledge::LandscapeDigestEntry
+pub fn oicp_types::knowledge::LandscapeDigestEntry::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::LandscapeDigestEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::LandscapeDigestEntry::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::LandscapeDigestRequest::clone(&self) -> oicp_types::knowledge::LandscapeDigestRequest
+pub fn oicp_types::knowledge::LandscapeDigestRequest::default() -> oicp_types::knowledge::LandscapeDigestRequest
+pub fn oicp_types::knowledge::LandscapeDigestRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::LandscapeDigestRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::LandscapeDigestRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::knowledge::LandscapeDigestResponse::clone(&self) -> oicp_types::knowledge::LandscapeDigestResponse
+pub fn oicp_types::knowledge::LandscapeDigestResponse::default() -> oicp_types::knowledge::LandscapeDigestResponse
+pub fn oicp_types::knowledge::LandscapeDigestResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::knowledge::LandscapeDigestResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::knowledge::LandscapeDigestResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::latency_match_score(oicp_types::capability::LatencyClass, oicp_types::capability::LatencyClass) -> f32
+pub fn oicp_types::load_penalty(&oicp_types::scoring::NodeObservations) -> f32
+pub fn oicp_types::locality_bonus(oicp_types::scoring::NodeLocality) -> f32
+pub fn oicp_types::manifest::CorpusDescriptor::clone(&self) -> oicp_types::manifest::CorpusDescriptor
+pub fn oicp_types::manifest::CorpusDescriptor::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::CorpusDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::CorpusDescriptor::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::EmbedModelInfo::clone(&self) -> oicp_types::manifest::EmbedModelInfo
+pub fn oicp_types::manifest::EmbedModelInfo::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::EmbedModelInfo::eq(&self, &oicp_types::manifest::EmbedModelInfo) -> bool
+pub fn oicp_types::manifest::EmbedModelInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::EmbedModelInfo::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::manifest::EmbedModelInfo::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::FederationManifest::clone(&self) -> oicp_types::manifest::FederationManifest
+pub fn oicp_types::manifest::FederationManifest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::FederationManifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::FederationManifest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::KnowledgeManifest::clone(&self) -> oicp_types::manifest::KnowledgeManifest
+pub fn oicp_types::manifest::KnowledgeManifest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::KnowledgeManifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::KnowledgeManifest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::ModelStatus::clone(&self) -> oicp_types::manifest::ModelStatus
+pub fn oicp_types::manifest::ModelStatus::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::ModelStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::ModelStatus::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::NormalizationStrategy::clone(&self) -> oicp_types::manifest::NormalizationStrategy
+pub fn oicp_types::manifest::NormalizationStrategy::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::NormalizationStrategy::eq(&self, &oicp_types::manifest::NormalizationStrategy) -> bool
+pub fn oicp_types::manifest::NormalizationStrategy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::NormalizationStrategy::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::manifest::NormalizationStrategy::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::PeerDescriptor::clone(&self) -> oicp_types::manifest::PeerDescriptor
+pub fn oicp_types::manifest::PeerDescriptor::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::PeerDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::PeerDescriptor::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::PoolingStrategy::clone(&self) -> oicp_types::manifest::PoolingStrategy
+pub fn oicp_types::manifest::PoolingStrategy::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::PoolingStrategy::eq(&self, &oicp_types::manifest::PoolingStrategy) -> bool
+pub fn oicp_types::manifest::PoolingStrategy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::PoolingStrategy::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::manifest::PoolingStrategy::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::ProviderInfo::clone(&self) -> oicp_types::manifest::ProviderInfo
+pub fn oicp_types::manifest::ProviderInfo::default() -> oicp_types::manifest::ProviderInfo
+pub fn oicp_types::manifest::ProviderInfo::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::ProviderInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::ProviderInfo::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::ProviderManifest::clone(&self) -> oicp_types::manifest::ProviderManifest
+pub fn oicp_types::manifest::ProviderManifest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::ProviderManifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::ProviderManifest::has_feature(&self, &str) -> bool
+pub fn oicp_types::manifest::ProviderManifest::new(alloc::vec::Vec<oicp_types::manifest::ProviderModel>) -> Self
+pub fn oicp_types::manifest::ProviderManifest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::ProviderModel::clone(&self) -> oicp_types::manifest::ProviderModel
+pub fn oicp_types::manifest::ProviderModel::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::ProviderModel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::ProviderModel::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::ProviderType::clone(&self) -> oicp_types::manifest::ProviderType
+pub fn oicp_types::manifest::ProviderType::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::manifest::ProviderType::eq(&self, &oicp_types::manifest::ProviderType) -> bool
+pub fn oicp_types::manifest::ProviderType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::manifest::ProviderType::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::manifest::features::is_valid(&str) -> bool
+pub fn oicp_types::pick_better(oicp_types::scoring::ScoredClaim, oicp_types::scoring::ScoredClaim) -> oicp_types::scoring::ScoredClaim
+pub fn oicp_types::proficiency(&oicp_types::capability::CapabilityProfile, oicp_types::capability::Capability) -> oicp_types::capability::ProficiencyLevel
+pub fn oicp_types::registry::ExtensionRegistry::clone(&self) -> oicp_types::registry::ExtensionRegistry
+pub fn oicp_types::registry::ExtensionRegistry::default() -> oicp_types::registry::ExtensionRegistry
+pub fn oicp_types::registry::ExtensionRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::registry::ExtensionRegistry::get(&self, &str) -> core::option::Option<&oicp_types::registry::ExtensionStats>
+pub fn oicp_types::registry::ExtensionRegistry::is_empty(&self) -> bool
+pub fn oicp_types::registry::ExtensionRegistry::len(&self) -> usize
+pub fn oicp_types::registry::ExtensionRegistry::new() -> Self
+pub fn oicp_types::registry::ExtensionRegistry::observe_advertisement(&mut self, &oicp_types::capability::CapabilityHint, u64)
+pub fn oicp_types::registry::ExtensionRegistry::observe_request(&mut self, &oicp_types::capability::CapabilityHint, u64)
+pub fn oicp_types::registry::ExtensionRegistry::stats(&self) -> impl core::iter::traits::iterator::Iterator<Item = &oicp_types::registry::ExtensionStats>
+pub fn oicp_types::registry::ExtensionStats::clone(&self) -> oicp_types::registry::ExtensionStats
+pub fn oicp_types::registry::ExtensionStats::eq(&self, &oicp_types::registry::ExtensionStats) -> bool
+pub fn oicp_types::registry::ExtensionStats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::requirements::InferenceRequirements::clone(&self) -> oicp_types::requirements::InferenceRequirements
+pub fn oicp_types::requirements::InferenceRequirements::default() -> Self
+pub fn oicp_types::requirements::InferenceRequirements::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::requirements::InferenceRequirements::effective_hint(&self) -> oicp_types::capability::CapabilityHint
+pub fn oicp_types::requirements::InferenceRequirements::effective_latency_class(&self) -> oicp_types::capability::LatencyClass
+pub fn oicp_types::requirements::InferenceRequirements::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::requirements::InferenceRequirements::new() -> Self
+pub fn oicp_types::requirements::InferenceRequirements::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::requirements::InferenceRequirements::sharding(&self) -> oicp_types::requirements::ShardingPrivacy
+pub fn oicp_types::requirements::InferenceRequirements::with_context_tokens(self, u32) -> Self
+pub fn oicp_types::requirements::InferenceRequirements::with_hint(self, oicp_types::capability::CapabilityHint) -> Self
+pub fn oicp_types::requirements::InferenceRequirements::with_latency_class(self, oicp_types::capability::LatencyClass) -> Self
+pub fn oicp_types::requirements::InferenceRequirements::with_max_output_tokens(self, u32) -> Self
+pub fn oicp_types::requirements::InferenceRequirements::with_request_id(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn oicp_types::requirements::InferenceRequirements::with_sharding(self, oicp_types::requirements::ShardingPrivacy) -> Self
+pub fn oicp_types::requirements::PrivacyRequirements::clone(&self) -> oicp_types::requirements::PrivacyRequirements
+pub fn oicp_types::requirements::PrivacyRequirements::default() -> oicp_types::requirements::PrivacyRequirements
+pub fn oicp_types::requirements::PrivacyRequirements::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::requirements::PrivacyRequirements::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::requirements::PrivacyRequirements::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::requirements::ShardingPrivacy::clone(&self) -> oicp_types::requirements::ShardingPrivacy
+pub fn oicp_types::requirements::ShardingPrivacy::default() -> oicp_types::requirements::ShardingPrivacy
+pub fn oicp_types::requirements::ShardingPrivacy::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::requirements::ShardingPrivacy::eq(&self, &oicp_types::requirements::ShardingPrivacy) -> bool
+pub fn oicp_types::requirements::ShardingPrivacy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::requirements::ShardingPrivacy::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::response::MatchQuality::clone(&self) -> oicp_types::response::MatchQuality
+pub fn oicp_types::response::MatchQuality::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::response::MatchQuality::eq(&self, &oicp_types::response::MatchQuality) -> bool
+pub fn oicp_types::response::MatchQuality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::response::MatchQuality::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::response::OicpResponseMeta::clone(&self) -> oicp_types::response::OicpResponseMeta
+pub fn oicp_types::response::OicpResponseMeta::default() -> oicp_types::response::OicpResponseMeta
+pub fn oicp_types::response::OicpResponseMeta::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::response::OicpResponseMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::response::OicpResponseMeta::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::score_claim_for_request(&oicp_types::capability::CapabilityClaim, &oicp_types::requirements::InferenceRequirements) -> core::option::Option<f32>
+pub fn oicp_types::score_with_adjustments(f32, f32, &oicp_types::scoring::NodeObservations, oicp_types::scoring::NodeLocality, f32, core::option::Option<&oicp_types::scoring::BenchmarkResult>, core::option::Option<f32>) -> oicp_types::scoring::ScoreBreakdown
+pub fn oicp_types::scoring::BenchmarkResult::clone(&self) -> oicp_types::scoring::BenchmarkResult
+pub fn oicp_types::scoring::BenchmarkResult::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn oicp_types::scoring::BenchmarkResult::eq(&self, &oicp_types::scoring::BenchmarkResult) -> bool
+pub fn oicp_types::scoring::BenchmarkResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::scoring::BenchmarkResult::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn oicp_types::scoring::NodeLocality::clone(&self) -> oicp_types::scoring::NodeLocality
+pub fn oicp_types::scoring::NodeLocality::default() -> oicp_types::scoring::NodeLocality
+pub fn oicp_types::scoring::NodeLocality::eq(&self, &oicp_types::scoring::NodeLocality) -> bool
+pub fn oicp_types::scoring::NodeLocality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::scoring::NodeLocality::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn oicp_types::scoring::NodeObservations::clone(&self) -> oicp_types::scoring::NodeObservations
+pub fn oicp_types::scoring::NodeObservations::default() -> oicp_types::scoring::NodeObservations
+pub fn oicp_types::scoring::NodeObservations::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::scoring::ScoreBreakdown::clone(&self) -> oicp_types::scoring::ScoreBreakdown
+pub fn oicp_types::scoring::ScoreBreakdown::eq(&self, &oicp_types::scoring::ScoreBreakdown) -> bool
+pub fn oicp_types::scoring::ScoreBreakdown::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::scoring::ScoredClaim::clone(&self) -> oicp_types::scoring::ScoredClaim
+pub fn oicp_types::scoring::ScoredClaim::eq(&self, &oicp_types::scoring::ScoredClaim) -> bool
+pub fn oicp_types::scoring::ScoredClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn oicp_types::scoring::best_claim_for_request(&oicp_types::manifest::ProviderManifest, &oicp_types::requirements::InferenceRequirements) -> core::option::Option<oicp_types::scoring::ScoredClaim>
+pub fn oicp_types::scoring::cold_start_weight(u32) -> f32
+pub fn oicp_types::scoring::effective_affinity(f32, &oicp_types::scoring::NodeObservations) -> f32
+pub fn oicp_types::scoring::hint_match_score(&oicp_types::capability::CapabilityHint, &oicp_types::capability::CapabilityHint) -> f32
+pub fn oicp_types::scoring::latency_match_score(oicp_types::capability::LatencyClass, oicp_types::capability::LatencyClass) -> f32
+pub fn oicp_types::scoring::load_penalty(&oicp_types::scoring::NodeObservations) -> f32
+pub fn oicp_types::scoring::locality_bonus(oicp_types::scoring::NodeLocality) -> f32
+pub fn oicp_types::scoring::pick_better(oicp_types::scoring::ScoredClaim, oicp_types::scoring::ScoredClaim) -> oicp_types::scoring::ScoredClaim
+pub fn oicp_types::scoring::score_claim_for_request(&oicp_types::capability::CapabilityClaim, &oicp_types::requirements::InferenceRequirements) -> core::option::Option<f32>
+pub fn oicp_types::scoring::score_with_adjustments(f32, f32, &oicp_types::scoring::NodeObservations, oicp_types::scoring::NodeLocality, f32, core::option::Option<&oicp_types::scoring::BenchmarkResult>, core::option::Option<f32>) -> oicp_types::scoring::ScoreBreakdown
+pub fn oicp_types::scoring::throughput_factor(&oicp_types::scoring::NodeObservations, f32, core::option::Option<&oicp_types::scoring::BenchmarkResult>) -> f32
+pub fn oicp_types::scoring::throughput_factor_source(&oicp_types::scoring::NodeObservations, core::option::Option<&oicp_types::scoring::BenchmarkResult>) -> &'static str
+pub fn oicp_types::throughput_factor(&oicp_types::scoring::NodeObservations, f32, core::option::Option<&oicp_types::scoring::BenchmarkResult>) -> f32
+pub fn oicp_types::throughput_factor_source(&oicp_types::scoring::NodeObservations, core::option::Option<&oicp_types::scoring::BenchmarkResult>) -> &'static str
+pub mod oicp_types
+pub mod oicp_types::capability
+pub mod oicp_types::features
+pub mod oicp_types::ingest
+pub mod oicp_types::knowledge
+pub mod oicp_types::manifest
+pub mod oicp_types::manifest::features
+pub mod oicp_types::registry
+pub mod oicp_types::requirements
+pub mod oicp_types::response
+pub mod oicp_types::scoring
+pub mod oicp_types::version
+pub oicp_types::BenchmarkResult::baseline_model_id: alloc::string::String
+pub oicp_types::BenchmarkResult::baseline_size_gb: f32
+pub oicp_types::BenchmarkResult::measured_at: u64
+pub oicp_types::BenchmarkResult::pp_tok_s: f32
+pub oicp_types::BenchmarkResult::tg_tok_s: f32
+pub oicp_types::Capability::Analysis
+pub oicp_types::Capability::Code
+pub oicp_types::Capability::Creative
+pub oicp_types::Capability::General
+pub oicp_types::Capability::Instruction
+pub oicp_types::Capability::LongContext
+pub oicp_types::Capability::Math
+pub oicp_types::Capability::Multilingual
+pub oicp_types::Capability::Unknown
+pub oicp_types::Capability::Vision
+pub oicp_types::CapabilityClaim::affinity: f32
+pub oicp_types::CapabilityClaim::hint: oicp_types::capability::CapabilityHint
+pub oicp_types::CapabilityClaim::latency_class: oicp_types::capability::LatencyClass
+pub oicp_types::CapabilityClaim::max_context: u32
+pub oicp_types::CapabilityClaim::max_output: u32
+pub oicp_types::CorpusDescriptor::fully_available: bool
+pub oicp_types::CorpusDescriptor::id: alloc::string::String
+pub oicp_types::CorpusDescriptor::last_updated: core::option::Option<alloc::string::String>
+pub oicp_types::CorpusDescriptor::name: core::option::Option<alloc::string::String>
+pub oicp_types::CorpusDescriptor::replicas: core::option::Option<u32>
+pub oicp_types::CorpusDescriptor::shards: core::option::Option<u32>
+pub oicp_types::CorpusDescriptor::total_chunks: u64
+pub oicp_types::CorpusIngestProgress::detail: core::option::Option<alloc::string::String>
+pub oicp_types::CorpusIngestProgress::fraction: core::option::Option<f32>
+pub oicp_types::CorpusIngestProgress::phase: oicp_types::ingest::IngestPhase
+pub oicp_types::CorpusInstallRequest::corpus_id: alloc::string::String
+pub oicp_types::CorpusInstallRequest::parameters: alloc::collections::btree::map::BTreeMap<alloc::string::String, serde_json::value::Value>
+pub oicp_types::CorpusInstallResponse::corpus_id: alloc::string::String
+pub oicp_types::CorpusInstallResponse::spawned: bool
+pub oicp_types::CorpusProgressResponse::progress: alloc::collections::btree::map::BTreeMap<alloc::string::String, oicp_types::ingest::CorpusIngestProgress>
+pub oicp_types::EmbedModelInfo::dimensions: usize
+pub oicp_types::EmbedModelInfo::model_id: alloc::string::String
+pub oicp_types::EmbedModelInfo::normalization: oicp_types::manifest::NormalizationStrategy
+pub oicp_types::EmbedModelInfo::pooling: oicp_types::manifest::PoolingStrategy
+pub oicp_types::EmbedModelInfo::query_instruction_prefix: alloc::string::String
+pub oicp_types::ExtensionStats::advertisements_seen: u64
+pub oicp_types::ExtensionStats::first_seen_unix: u64
+pub oicp_types::ExtensionStats::hint: alloc::string::String
+pub oicp_types::ExtensionStats::last_seen_unix: u64
+pub oicp_types::ExtensionStats::requests_seen: u64
+pub oicp_types::FederationManifest::peers: alloc::vec::Vec<oicp_types::manifest::PeerDescriptor>
+pub oicp_types::InferenceRequirements::capability_hint: core::option::Option<oicp_types::capability::CapabilityHint>
+pub oicp_types::InferenceRequirements::context_tokens: core::option::Option<u32>
+pub oicp_types::InferenceRequirements::latency_class: core::option::Option<oicp_types::capability::LatencyClass>
+pub oicp_types::InferenceRequirements::max_output_tokens: core::option::Option<u32>
+pub oicp_types::InferenceRequirements::oicp_version: alloc::string::String
+pub oicp_types::InferenceRequirements::privacy: core::option::Option<oicp_types::requirements::PrivacyRequirements>
+pub oicp_types::InferenceRequirements::request_id: core::option::Option<alloc::string::String>
+pub oicp_types::IngestEndpoints::install_endpoint: alloc::string::String
+pub oicp_types::IngestEndpoints::progress_endpoint: alloc::string::String
+pub oicp_types::IngestEndpoints::test_endpoint: core::option::Option<alloc::string::String>
+pub oicp_types::IngestPhase::Complete
+pub oicp_types::IngestPhase::Downloading
+pub oicp_types::IngestPhase::Embedding
+pub oicp_types::IngestPhase::Enriching
+pub oicp_types::IngestPhase::Failed
+pub oicp_types::IngestPhase::Indexing
+pub oicp_types::IngestPhase::Optimizing
+pub oicp_types::IngestPhase::Pending
+pub oicp_types::InvalidCapabilityHint::AlreadyPrefixed
+pub oicp_types::InvalidCapabilityHint::CollidesWithStandardized
+pub oicp_types::InvalidCapabilityHint::Empty
+pub oicp_types::InvalidCapabilityHint::Whitespace
+pub oicp_types::KnowledgeManifest::corpora: alloc::vec::Vec<oicp_types::manifest::CorpusDescriptor>
+pub oicp_types::KnowledgeManifest::embed_model: core::option::Option<oicp_types::manifest::EmbedModelInfo>
+pub oicp_types::KnowledgeManifest::ingest: core::option::Option<oicp_types::ingest::IngestEndpoints>
+pub oicp_types::KnowledgeManifest::search_endpoint: alloc::string::String
+pub oicp_types::KnowledgeResult::chunk_id: core::option::Option<u64>
+pub oicp_types::KnowledgeResult::content: alloc::string::String
+pub oicp_types::KnowledgeResult::corpus_id: alloc::string::String
+pub oicp_types::KnowledgeResult::metadata: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub oicp_types::KnowledgeResult::score: f32
+pub oicp_types::KnowledgeResult::source_doc_id: core::option::Option<alloc::string::String>
+pub oicp_types::KnowledgeResult::title: core::option::Option<alloc::string::String>
+pub oicp_types::KnowledgeResult::url: core::option::Option<alloc::string::String>
+pub oicp_types::KnowledgeSearchRequest::corpora: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub oicp_types::KnowledgeSearchRequest::limit: core::option::Option<u32>
+pub oicp_types::KnowledgeSearchRequest::query_embedding: alloc::vec::Vec<f32>
+pub oicp_types::KnowledgeSearchRequest::query_text: alloc::string::String
+pub oicp_types::KnowledgeSearchResponse::corpora_searched: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::KnowledgeSearchResponse::corpora_unavailable: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::KnowledgeSearchResponse::results: alloc::vec::Vec<oicp_types::knowledge::KnowledgeResult>
+pub oicp_types::KnowledgeSearchResponse::total_chunks_searched: core::option::Option<u64>
+pub oicp_types::LandscapeDigestEntry::body: alloc::string::String
+pub oicp_types::LandscapeDigestEntry::view_id: alloc::string::String
+pub oicp_types::LandscapeDigestRequest::active_is_local_only: bool
+pub oicp_types::LandscapeDigestRequest::active_skill: core::option::Option<alloc::string::String>
+pub oicp_types::LandscapeDigestRequest::conversation_messages: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::LandscapeDigestResponse::digests: alloc::vec::Vec<oicp_types::knowledge::LandscapeDigestEntry>
+pub oicp_types::LatencyClass::Extended
+pub oicp_types::LatencyClass::Fast
+pub oicp_types::LatencyClass::Normal
+pub oicp_types::MatchQuality::Degraded
+pub oicp_types::MatchQuality::Full
+pub oicp_types::MatchQuality::Partial
+pub oicp_types::MatchQuality::Unmatched
+pub oicp_types::ModelStatus::available: bool
+pub oicp_types::ModelStatus::estimated_load_time_sec: core::option::Option<u32>
+pub oicp_types::ModelStatus::estimated_tokens_per_sec: core::option::Option<f32>
+pub oicp_types::ModelStatus::estimated_ttft_ms: core::option::Option<u32>
+pub oicp_types::ModelStatus::loaded: bool
+pub oicp_types::NodeLocality::Far
+pub oicp_types::NodeLocality::Local
+pub oicp_types::NodeLocality::Near
+pub oicp_types::NodeObservations::in_flight: u32
+pub oicp_types::NodeObservations::p50_latency_ms: u32
+pub oicp_types::NodeObservations::p95_latency_ms: u32
+pub oicp_types::NodeObservations::recent_failure_rate: f32
+pub oicp_types::NodeObservations::samples: u32
+pub oicp_types::NodeObservations::tg_tok_s_ewma: f64
+pub oicp_types::NodeObservations::ttft_ewma_ms: f64
+pub oicp_types::NormalizationStrategy::Application
+pub oicp_types::NormalizationStrategy::Server
+pub oicp_types::OicpResponseMeta::match_quality: core::option::Option<oicp_types::response::MatchQuality>
+pub oicp_types::OicpResponseMeta::model_fingerprint: core::option::Option<alloc::string::String>
+pub oicp_types::OicpResponseMeta::quantization: core::option::Option<alloc::string::String>
+pub oicp_types::OicpResponseMeta::request_id: core::option::Option<alloc::string::String>
+pub oicp_types::PeerDescriptor::capabilities_url: alloc::string::String
+pub oicp_types::PeerDescriptor::name: alloc::string::String
+pub oicp_types::PeerDescriptor::trust_level: core::option::Option<alloc::string::String>
+pub oicp_types::PoolingStrategy::Cls
+pub oicp_types::PoolingStrategy::Last
+pub oicp_types::PoolingStrategy::Mean
+pub oicp_types::PrivacyRequirements::sharding: oicp_types::requirements::ShardingPrivacy
+pub oicp_types::ProviderInfo::name: core::option::Option<alloc::string::String>
+pub oicp_types::ProviderInfo::provider_type: core::option::Option<oicp_types::manifest::ProviderType>
+pub oicp_types::ProviderManifest::features: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::ProviderManifest::federation: core::option::Option<oicp_types::manifest::FederationManifest>
+pub oicp_types::ProviderManifest::knowledge: core::option::Option<oicp_types::manifest::KnowledgeManifest>
+pub oicp_types::ProviderManifest::models: alloc::vec::Vec<oicp_types::manifest::ProviderModel>
+pub oicp_types::ProviderManifest::oicp_version: alloc::string::String
+pub oicp_types::ProviderManifest::provider: core::option::Option<oicp_types::manifest::ProviderInfo>
+pub oicp_types::ProviderModel::base_model: core::option::Option<alloc::string::String>
+pub oicp_types::ProviderModel::claims: alloc::vec::Vec<oicp_types::capability::CapabilityClaim>
+pub oicp_types::ProviderModel::context_tokens: u32
+pub oicp_types::ProviderModel::fingerprint: core::option::Option<alloc::string::String>
+pub oicp_types::ProviderModel::id: alloc::string::String
+pub oicp_types::ProviderModel::quantization: core::option::Option<alloc::string::String>
+pub oicp_types::ProviderModel::size_gb: core::option::Option<f32>
+pub oicp_types::ProviderModel::status: oicp_types::manifest::ModelStatus
+pub oicp_types::ProviderType::Cloud
+pub oicp_types::ProviderType::Hybrid
+pub oicp_types::ProviderType::Local
+pub oicp_types::ProviderType::Mesh
+pub oicp_types::RecipeStageReport::docs_in: u32
+pub oicp_types::RecipeStageReport::docs_out: u32
+pub oicp_types::RecipeStageReport::misses: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::RecipeStageReport::name: alloc::string::String
+pub oicp_types::RecipeStageReport::sample: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::RecipeTestOptions::offline: bool
+pub oicp_types::RecipeTestOptions::sample_limit: core::option::Option<u32>
+pub oicp_types::RecipeTestReport::ok: bool
+pub oicp_types::RecipeTestReport::stages: alloc::vec::Vec<oicp_types::ingest::RecipeStageReport>
+pub oicp_types::RecipeTestRequest::options: oicp_types::ingest::RecipeTestOptions
+pub oicp_types::RecipeTestRequest::recipe_toml: alloc::string::String
+pub oicp_types::ScoreBreakdown::availability: f32
+pub oicp_types::ScoreBreakdown::claim_score: f32
+pub oicp_types::ScoreBreakdown::cold_start_weight: f32
+pub oicp_types::ScoreBreakdown::final_score: f32
+pub oicp_types::ScoreBreakdown::load_penalty: f32
+pub oicp_types::ScoreBreakdown::locality_bonus: f32
+pub oicp_types::ScoreBreakdown::observation_mult: f32
+pub oicp_types::ScoreBreakdown::throughput_factor: f32
+pub oicp_types::ScoreBreakdown::throughput_source: &'static str
+pub oicp_types::ScoredClaim::claim_affinity: f32
+pub oicp_types::ScoredClaim::model_id: alloc::string::String
+pub oicp_types::ScoredClaim::score: f32
+pub oicp_types::ScoredClaim::size_gb: core::option::Option<f32>
+pub oicp_types::ShardingPrivacy::LocalOnly
+pub oicp_types::ShardingPrivacy::MeshAllowed
+pub oicp_types::capability::Capability::Analysis
+pub oicp_types::capability::Capability::Code
+pub oicp_types::capability::Capability::Creative
+pub oicp_types::capability::Capability::General
+pub oicp_types::capability::Capability::Instruction
+pub oicp_types::capability::Capability::LongContext
+pub oicp_types::capability::Capability::Math
+pub oicp_types::capability::Capability::Multilingual
+pub oicp_types::capability::Capability::Unknown
+pub oicp_types::capability::Capability::Vision
+pub oicp_types::capability::CapabilityClaim::affinity: f32
+pub oicp_types::capability::CapabilityClaim::hint: oicp_types::capability::CapabilityHint
+pub oicp_types::capability::CapabilityClaim::latency_class: oicp_types::capability::LatencyClass
+pub oicp_types::capability::CapabilityClaim::max_context: u32
+pub oicp_types::capability::CapabilityClaim::max_output: u32
+pub oicp_types::capability::InvalidCapabilityHint::AlreadyPrefixed
+pub oicp_types::capability::InvalidCapabilityHint::CollidesWithStandardized
+pub oicp_types::capability::InvalidCapabilityHint::Empty
+pub oicp_types::capability::InvalidCapabilityHint::Whitespace
+pub oicp_types::capability::LatencyClass::Extended
+pub oicp_types::capability::LatencyClass::Fast
+pub oicp_types::capability::LatencyClass::Normal
+pub oicp_types::ingest::CorpusIngestProgress::detail: core::option::Option<alloc::string::String>
+pub oicp_types::ingest::CorpusIngestProgress::fraction: core::option::Option<f32>
+pub oicp_types::ingest::CorpusIngestProgress::phase: oicp_types::ingest::IngestPhase
+pub oicp_types::ingest::CorpusInstallRequest::corpus_id: alloc::string::String
+pub oicp_types::ingest::CorpusInstallRequest::parameters: alloc::collections::btree::map::BTreeMap<alloc::string::String, serde_json::value::Value>
+pub oicp_types::ingest::CorpusInstallResponse::corpus_id: alloc::string::String
+pub oicp_types::ingest::CorpusInstallResponse::spawned: bool
+pub oicp_types::ingest::CorpusProgressResponse::progress: alloc::collections::btree::map::BTreeMap<alloc::string::String, oicp_types::ingest::CorpusIngestProgress>
+pub oicp_types::ingest::IngestEndpoints::install_endpoint: alloc::string::String
+pub oicp_types::ingest::IngestEndpoints::progress_endpoint: alloc::string::String
+pub oicp_types::ingest::IngestEndpoints::test_endpoint: core::option::Option<alloc::string::String>
+pub oicp_types::ingest::IngestPhase::Complete
+pub oicp_types::ingest::IngestPhase::Downloading
+pub oicp_types::ingest::IngestPhase::Embedding
+pub oicp_types::ingest::IngestPhase::Enriching
+pub oicp_types::ingest::IngestPhase::Failed
+pub oicp_types::ingest::IngestPhase::Indexing
+pub oicp_types::ingest::IngestPhase::Optimizing
+pub oicp_types::ingest::IngestPhase::Pending
+pub oicp_types::ingest::RecipeStageReport::docs_in: u32
+pub oicp_types::ingest::RecipeStageReport::docs_out: u32
+pub oicp_types::ingest::RecipeStageReport::misses: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::ingest::RecipeStageReport::name: alloc::string::String
+pub oicp_types::ingest::RecipeStageReport::sample: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::ingest::RecipeTestOptions::offline: bool
+pub oicp_types::ingest::RecipeTestOptions::sample_limit: core::option::Option<u32>
+pub oicp_types::ingest::RecipeTestReport::ok: bool
+pub oicp_types::ingest::RecipeTestReport::stages: alloc::vec::Vec<oicp_types::ingest::RecipeStageReport>
+pub oicp_types::ingest::RecipeTestRequest::options: oicp_types::ingest::RecipeTestOptions
+pub oicp_types::ingest::RecipeTestRequest::recipe_toml: alloc::string::String
+pub oicp_types::knowledge::KnowledgeResult::chunk_id: core::option::Option<u64>
+pub oicp_types::knowledge::KnowledgeResult::content: alloc::string::String
+pub oicp_types::knowledge::KnowledgeResult::corpus_id: alloc::string::String
+pub oicp_types::knowledge::KnowledgeResult::metadata: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub oicp_types::knowledge::KnowledgeResult::score: f32
+pub oicp_types::knowledge::KnowledgeResult::source_doc_id: core::option::Option<alloc::string::String>
+pub oicp_types::knowledge::KnowledgeResult::title: core::option::Option<alloc::string::String>
+pub oicp_types::knowledge::KnowledgeResult::url: core::option::Option<alloc::string::String>
+pub oicp_types::knowledge::KnowledgeSearchRequest::corpora: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub oicp_types::knowledge::KnowledgeSearchRequest::limit: core::option::Option<u32>
+pub oicp_types::knowledge::KnowledgeSearchRequest::query_embedding: alloc::vec::Vec<f32>
+pub oicp_types::knowledge::KnowledgeSearchRequest::query_text: alloc::string::String
+pub oicp_types::knowledge::KnowledgeSearchResponse::corpora_searched: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::knowledge::KnowledgeSearchResponse::corpora_unavailable: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::knowledge::KnowledgeSearchResponse::results: alloc::vec::Vec<oicp_types::knowledge::KnowledgeResult>
+pub oicp_types::knowledge::KnowledgeSearchResponse::total_chunks_searched: core::option::Option<u64>
+pub oicp_types::knowledge::LandscapeDigestEntry::body: alloc::string::String
+pub oicp_types::knowledge::LandscapeDigestEntry::view_id: alloc::string::String
+pub oicp_types::knowledge::LandscapeDigestRequest::active_is_local_only: bool
+pub oicp_types::knowledge::LandscapeDigestRequest::active_skill: core::option::Option<alloc::string::String>
+pub oicp_types::knowledge::LandscapeDigestRequest::conversation_messages: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::knowledge::LandscapeDigestResponse::digests: alloc::vec::Vec<oicp_types::knowledge::LandscapeDigestEntry>
+pub oicp_types::manifest::CorpusDescriptor::fully_available: bool
+pub oicp_types::manifest::CorpusDescriptor::id: alloc::string::String
+pub oicp_types::manifest::CorpusDescriptor::last_updated: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::CorpusDescriptor::name: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::CorpusDescriptor::replicas: core::option::Option<u32>
+pub oicp_types::manifest::CorpusDescriptor::shards: core::option::Option<u32>
+pub oicp_types::manifest::CorpusDescriptor::total_chunks: u64
+pub oicp_types::manifest::EmbedModelInfo::dimensions: usize
+pub oicp_types::manifest::EmbedModelInfo::model_id: alloc::string::String
+pub oicp_types::manifest::EmbedModelInfo::normalization: oicp_types::manifest::NormalizationStrategy
+pub oicp_types::manifest::EmbedModelInfo::pooling: oicp_types::manifest::PoolingStrategy
+pub oicp_types::manifest::EmbedModelInfo::query_instruction_prefix: alloc::string::String
+pub oicp_types::manifest::FederationManifest::peers: alloc::vec::Vec<oicp_types::manifest::PeerDescriptor>
+pub oicp_types::manifest::KnowledgeManifest::corpora: alloc::vec::Vec<oicp_types::manifest::CorpusDescriptor>
+pub oicp_types::manifest::KnowledgeManifest::embed_model: core::option::Option<oicp_types::manifest::EmbedModelInfo>
+pub oicp_types::manifest::KnowledgeManifest::ingest: core::option::Option<oicp_types::ingest::IngestEndpoints>
+pub oicp_types::manifest::KnowledgeManifest::search_endpoint: alloc::string::String
+pub oicp_types::manifest::ModelStatus::available: bool
+pub oicp_types::manifest::ModelStatus::estimated_load_time_sec: core::option::Option<u32>
+pub oicp_types::manifest::ModelStatus::estimated_tokens_per_sec: core::option::Option<f32>
+pub oicp_types::manifest::ModelStatus::estimated_ttft_ms: core::option::Option<u32>
+pub oicp_types::manifest::ModelStatus::loaded: bool
+pub oicp_types::manifest::NormalizationStrategy::Application
+pub oicp_types::manifest::NormalizationStrategy::Server
+pub oicp_types::manifest::PeerDescriptor::capabilities_url: alloc::string::String
+pub oicp_types::manifest::PeerDescriptor::name: alloc::string::String
+pub oicp_types::manifest::PeerDescriptor::trust_level: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::PoolingStrategy::Cls
+pub oicp_types::manifest::PoolingStrategy::Last
+pub oicp_types::manifest::PoolingStrategy::Mean
+pub oicp_types::manifest::ProviderInfo::name: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::ProviderInfo::provider_type: core::option::Option<oicp_types::manifest::ProviderType>
+pub oicp_types::manifest::ProviderManifest::features: alloc::vec::Vec<alloc::string::String>
+pub oicp_types::manifest::ProviderManifest::federation: core::option::Option<oicp_types::manifest::FederationManifest>
+pub oicp_types::manifest::ProviderManifest::knowledge: core::option::Option<oicp_types::manifest::KnowledgeManifest>
+pub oicp_types::manifest::ProviderManifest::models: alloc::vec::Vec<oicp_types::manifest::ProviderModel>
+pub oicp_types::manifest::ProviderManifest::oicp_version: alloc::string::String
+pub oicp_types::manifest::ProviderManifest::provider: core::option::Option<oicp_types::manifest::ProviderInfo>
+pub oicp_types::manifest::ProviderModel::base_model: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::ProviderModel::claims: alloc::vec::Vec<oicp_types::capability::CapabilityClaim>
+pub oicp_types::manifest::ProviderModel::context_tokens: u32
+pub oicp_types::manifest::ProviderModel::fingerprint: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::ProviderModel::id: alloc::string::String
+pub oicp_types::manifest::ProviderModel::quantization: core::option::Option<alloc::string::String>
+pub oicp_types::manifest::ProviderModel::size_gb: core::option::Option<f32>
+pub oicp_types::manifest::ProviderModel::status: oicp_types::manifest::ModelStatus
+pub oicp_types::manifest::ProviderType::Cloud
+pub oicp_types::manifest::ProviderType::Hybrid
+pub oicp_types::manifest::ProviderType::Local
+pub oicp_types::manifest::ProviderType::Mesh
+pub oicp_types::registry::ExtensionStats::advertisements_seen: u64
+pub oicp_types::registry::ExtensionStats::first_seen_unix: u64
+pub oicp_types::registry::ExtensionStats::hint: alloc::string::String
+pub oicp_types::registry::ExtensionStats::last_seen_unix: u64
+pub oicp_types::registry::ExtensionStats::requests_seen: u64
+pub oicp_types::requirements::InferenceRequirements::capability_hint: core::option::Option<oicp_types::capability::CapabilityHint>
+pub oicp_types::requirements::InferenceRequirements::context_tokens: core::option::Option<u32>
+pub oicp_types::requirements::InferenceRequirements::latency_class: core::option::Option<oicp_types::capability::LatencyClass>
+pub oicp_types::requirements::InferenceRequirements::max_output_tokens: core::option::Option<u32>
+pub oicp_types::requirements::InferenceRequirements::oicp_version: alloc::string::String
+pub oicp_types::requirements::InferenceRequirements::privacy: core::option::Option<oicp_types::requirements::PrivacyRequirements>
+pub oicp_types::requirements::InferenceRequirements::request_id: core::option::Option<alloc::string::String>
+pub oicp_types::requirements::PrivacyRequirements::sharding: oicp_types::requirements::ShardingPrivacy
+pub oicp_types::requirements::ShardingPrivacy::LocalOnly
+pub oicp_types::requirements::ShardingPrivacy::MeshAllowed
+pub oicp_types::response::MatchQuality::Degraded
+pub oicp_types::response::MatchQuality::Full
+pub oicp_types::response::MatchQuality::Partial
+pub oicp_types::response::MatchQuality::Unmatched
+pub oicp_types::response::OicpResponseMeta::match_quality: core::option::Option<oicp_types::response::MatchQuality>
+pub oicp_types::response::OicpResponseMeta::model_fingerprint: core::option::Option<alloc::string::String>
+pub oicp_types::response::OicpResponseMeta::quantization: core::option::Option<alloc::string::String>
+pub oicp_types::response::OicpResponseMeta::request_id: core::option::Option<alloc::string::String>
+pub oicp_types::scoring::BenchmarkResult::baseline_model_id: alloc::string::String
+pub oicp_types::scoring::BenchmarkResult::baseline_size_gb: f32
+pub oicp_types::scoring::BenchmarkResult::measured_at: u64
+pub oicp_types::scoring::BenchmarkResult::pp_tok_s: f32
+pub oicp_types::scoring::BenchmarkResult::tg_tok_s: f32
+pub oicp_types::scoring::NodeLocality::Far
+pub oicp_types::scoring::NodeLocality::Local
+pub oicp_types::scoring::NodeLocality::Near
+pub oicp_types::scoring::NodeObservations::in_flight: u32
+pub oicp_types::scoring::NodeObservations::p50_latency_ms: u32
+pub oicp_types::scoring::NodeObservations::p95_latency_ms: u32
+pub oicp_types::scoring::NodeObservations::recent_failure_rate: f32
+pub oicp_types::scoring::NodeObservations::samples: u32
+pub oicp_types::scoring::NodeObservations::tg_tok_s_ewma: f64
+pub oicp_types::scoring::NodeObservations::ttft_ewma_ms: f64
+pub oicp_types::scoring::ScoreBreakdown::availability: f32
+pub oicp_types::scoring::ScoreBreakdown::claim_score: f32
+pub oicp_types::scoring::ScoreBreakdown::cold_start_weight: f32
+pub oicp_types::scoring::ScoreBreakdown::final_score: f32
+pub oicp_types::scoring::ScoreBreakdown::load_penalty: f32
+pub oicp_types::scoring::ScoreBreakdown::locality_bonus: f32
+pub oicp_types::scoring::ScoreBreakdown::observation_mult: f32
+pub oicp_types::scoring::ScoreBreakdown::throughput_factor: f32
+pub oicp_types::scoring::ScoreBreakdown::throughput_source: &'static str
+pub oicp_types::scoring::ScoredClaim::claim_affinity: f32
+pub oicp_types::scoring::ScoredClaim::model_id: alloc::string::String
+pub oicp_types::scoring::ScoredClaim::score: f32
+pub oicp_types::scoring::ScoredClaim::size_gb: core::option::Option<f32>
+pub struct oicp_types::BenchmarkResult
+pub struct oicp_types::CapabilityClaim
+pub struct oicp_types::CapabilityHint(_)
+pub struct oicp_types::CorpusDescriptor
+pub struct oicp_types::CorpusIngestProgress
+pub struct oicp_types::CorpusInstallRequest
+pub struct oicp_types::CorpusInstallResponse
+pub struct oicp_types::CorpusProgressResponse
+pub struct oicp_types::EmbedModelInfo
+pub struct oicp_types::ExtensionRegistry
+pub struct oicp_types::ExtensionStats
+pub struct oicp_types::FederationManifest
+pub struct oicp_types::InferenceRequirements
+pub struct oicp_types::IngestEndpoints
+pub struct oicp_types::KnowledgeManifest
+pub struct oicp_types::KnowledgeResult
+pub struct oicp_types::KnowledgeSearchRequest
+pub struct oicp_types::KnowledgeSearchResponse
+pub struct oicp_types::LandscapeDigestEntry
+pub struct oicp_types::LandscapeDigestRequest
+pub struct oicp_types::LandscapeDigestResponse
+pub struct oicp_types::ModelStatus
+pub struct oicp_types::NodeObservations
+pub struct oicp_types::OicpResponseMeta
+pub struct oicp_types::PeerDescriptor
+pub struct oicp_types::PrivacyRequirements
+pub struct oicp_types::ProviderInfo
+pub struct oicp_types::ProviderManifest
+pub struct oicp_types::ProviderModel
+pub struct oicp_types::RecipeStageReport
+pub struct oicp_types::RecipeTestOptions
+pub struct oicp_types::RecipeTestReport
+pub struct oicp_types::RecipeTestRequest
+pub struct oicp_types::ScoreBreakdown
+pub struct oicp_types::ScoredClaim
+pub struct oicp_types::capability::CapabilityClaim
+pub struct oicp_types::capability::CapabilityHint(_)
+pub struct oicp_types::ingest::CorpusIngestProgress
+pub struct oicp_types::ingest::CorpusInstallRequest
+pub struct oicp_types::ingest::CorpusInstallResponse
+pub struct oicp_types::ingest::CorpusProgressResponse
+pub struct oicp_types::ingest::IngestEndpoints
+pub struct oicp_types::ingest::RecipeStageReport
+pub struct oicp_types::ingest::RecipeTestOptions
+pub struct oicp_types::ingest::RecipeTestReport
+pub struct oicp_types::ingest::RecipeTestRequest
+pub struct oicp_types::knowledge::KnowledgeResult
+pub struct oicp_types::knowledge::KnowledgeSearchRequest
+pub struct oicp_types::knowledge::KnowledgeSearchResponse
+pub struct oicp_types::knowledge::LandscapeDigestEntry
+pub struct oicp_types::knowledge::LandscapeDigestRequest
+pub struct oicp_types::knowledge::LandscapeDigestResponse
+pub struct oicp_types::manifest::CorpusDescriptor
+pub struct oicp_types::manifest::EmbedModelInfo
+pub struct oicp_types::manifest::FederationManifest
+pub struct oicp_types::manifest::KnowledgeManifest
+pub struct oicp_types::manifest::ModelStatus
+pub struct oicp_types::manifest::PeerDescriptor
+pub struct oicp_types::manifest::ProviderInfo
+pub struct oicp_types::manifest::ProviderManifest
+pub struct oicp_types::manifest::ProviderModel
+pub struct oicp_types::registry::ExtensionRegistry
+pub struct oicp_types::registry::ExtensionStats
+pub struct oicp_types::requirements::InferenceRequirements
+pub struct oicp_types::requirements::PrivacyRequirements
+pub struct oicp_types::response::OicpResponseMeta
+pub struct oicp_types::scoring::BenchmarkResult
+pub struct oicp_types::scoring::NodeObservations
+pub struct oicp_types::scoring::ScoreBreakdown
+pub struct oicp_types::scoring::ScoredClaim
+pub type oicp_types::CapabilityProfile = std::collections::hash::map::HashMap<oicp_types::capability::Capability, oicp_types::capability::ProficiencyLevel>
+pub type oicp_types::ProficiencyLevel = u8
+pub type oicp_types::capability::CapabilityProfile = std::collections::hash::map::HashMap<oicp_types::capability::Capability, oicp_types::capability::ProficiencyLevel>
+pub type oicp_types::capability::ProficiencyLevel = u8

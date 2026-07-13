@@ -54,8 +54,11 @@ pub const DEFAULT_MAX_AGE_TURNS: usize = 5;
 /// per-conversation cache slices.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheKey {
+    /// Tool the result came from.
     pub tool_id: String,
+    /// SHA-256 hex of the canonical JSON args (see `CacheKey::new`).
     pub args_hash: String,
+    /// Walls cache slices per conversation.
     pub conversation_id: String,
 }
 
@@ -79,10 +82,14 @@ impl CacheKey {
     }
 }
 
+/// A cached tool result plus when it was stored (turn and wall clock).
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
+    /// The tool's JSON result, verbatim.
     pub result: serde_json::Value,
+    /// Turn index at storage time — the TTL is measured in turns from here.
     pub stored_at_turn: usize,
+    /// Wall-clock storage time (Unix seconds), for diagnostics.
     pub stored_at_unix: i64,
 }
 
@@ -103,6 +110,7 @@ impl Default for ToolResultCache {
 }
 
 impl ToolResultCache {
+    /// Cache with the `DEFAULT_MAX_AGE_TURNS` TTL.
     pub fn new() -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),

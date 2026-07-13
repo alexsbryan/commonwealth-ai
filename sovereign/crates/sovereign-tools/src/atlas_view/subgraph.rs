@@ -149,7 +149,7 @@ pub fn build_subgraph(nodes: &[NodeIn], edges: &[EdgeIn], max_nodes: usize) -> A
         .map(|e| AtlasEdge {
             source: e.source.clone(),
             target: e.target.clone(),
-            edge_type: e.edge_type.clone(),
+            edge_type: e.edge_type,
             crux: e.crux.clone(),
         })
         .collect();
@@ -226,7 +226,7 @@ impl FileAtlasReader {
             .map(|e: &Edge| EdgeIn {
                 source: e.source.clone(),
                 target: e.target.clone(),
-                edge_type: e.edge_type.clone(),
+                edge_type: e.edge_type,
                 crux: if matches!(e.edge_type, EdgeType::Tension) {
                     e.sub_question.clone()
                 } else {
@@ -463,7 +463,7 @@ pub fn synthesize_spine_edges(atoms: &[SpineAtom]) -> Vec<EdgeIn> {
                     out.push(EdgeIn {
                         source: a.id.clone(),
                         target: t.clone(),
-                        edge_type: auth_edge.clone(),
+                        edge_type: auth_edge,
                         crux: None,
                     });
                 }

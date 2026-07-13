@@ -566,7 +566,11 @@ mod tests {
             select_cache_source([(Some(poisoned), "disk"), (Some(baked), "baked")], &live)
                 .expect("baked fallback must validate when disk is poisoned");
         assert_eq!(source, "baked");
-        assert_eq!(entries.len(), 303, "baked entries, not the poisoned disk set");
+        assert_eq!(
+            entries.len(),
+            303,
+            "baked entries, not the poisoned disk set"
+        );
     }
 
     #[test]

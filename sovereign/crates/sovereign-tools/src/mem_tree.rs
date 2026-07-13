@@ -836,7 +836,7 @@ async fn split_leaf(
         cb = mean(1);
     }
     // Degenerate split (all one side) → keep as attach.
-    if !assign.iter().any(|a| *a == 0) || !assign.iter().any(|a| *a == 1) {
+    if !assign.contains(&0) || !assign.contains(&1) {
         store.upsert_mem_raptor_node(&leaf).await?;
         return Ok(0);
     }

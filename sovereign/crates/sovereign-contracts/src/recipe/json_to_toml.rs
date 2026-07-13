@@ -30,9 +30,12 @@
 
 use std::fmt;
 
+/// A JSON→TOML conversion failure, located by a JSON-Pointer-style path (see module doc).
 #[derive(Debug, Clone)]
 pub struct ConvertError {
+    /// JSON-Pointer-style location of the offending value (e.g. `/enrichment/patterns/0/threshold`).
     pub path: String,
+    /// What was wrong with the value there.
     pub message: String,
 }
 
@@ -154,7 +157,7 @@ pub fn sanitize_for_toml(v: &serde_json::Value) -> serde_json::Value {
 /// Recover the identifier prefix of a possibly-malformed key: cut at the
 /// first quote/backslash/control char, then trim trailing `:`/whitespace.
 fn clean_key(k: &str) -> String {
-    let cut = match k.find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '\t')) {
+    let cut = match k.find(['"', '\\', '\n', '\r', '\t']) {
         Some(i) => &k[..i],
         None => k,
     };

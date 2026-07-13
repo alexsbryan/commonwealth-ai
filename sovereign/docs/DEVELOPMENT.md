@@ -141,13 +141,18 @@ trigger_phrases = ["relevant", "trigger", "phrases"]
 default_intent = "ComplexTask"
 min_confidence = 0.75
 
+# `steps` is prose guidance the planner LLM sees verbatim — there is no
+# annotation syntax parsed out of it. Sampling/evaluation are TYPED fields
+# on Step (`Step.sampling` / `Step.evaluation`); the `{N.key}` placeholder
+# grammar (sovereign-core/src/plan_grammar.rs) is the only textual
+# convention the executor parses.
 [[planner.templates]]
 name = "my_template"
 trigger = "When the user wants X"
 steps = """
-1. Search for information. [no_eval]
-2. Analyze findings. [sample:3:llm_judge]
-3. Synthesize answer. [eval:synthesis, max_retries:1]
+1. Search for information.
+2. Analyze findings.
+3. Synthesize answer.
 """
 
 [tools]

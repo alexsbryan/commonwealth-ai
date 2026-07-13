@@ -3,8 +3,6 @@
 //! `maybe_collaborate`, `apply_post_stream_refinement`) and tool-narrowing
 //! that the dispatch path consults before invoking inference.
 
-use crate::traits::*;
-
 use super::*;
 
 impl Runtime {

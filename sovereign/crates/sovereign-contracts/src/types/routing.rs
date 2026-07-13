@@ -10,10 +10,16 @@ use serde::{Deserialize, Serialize};
 
 // ─── Routing Types ─────────────────────────────────────────────
 
+/// The router's turn classification — selects the dispatch path. The
+/// referential variants are re-cut by `Operation` × `Effort` (see
+/// `QUERY_TAXONOMY_MECE.md`); the speech-act variants carry their own handlers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Intent {
+    /// Quick, self-contained ask — answered directly on the fast conversational path.
     SimpleQuery,
+    /// Open-ended reasoning or essay-shaped ask — deep synthesis on the primary slot.
     DeepQuery,
+    /// A question the installed corpora should answer: retrieval + grounded, cited synthesis.
     KnowledgeQuery,
     /// Two or more named things contrasted along shared axes. Bounded
     /// shape (a small set of contrast points), so it's served by the
@@ -84,11 +90,16 @@ pub enum Intent {
     /// the handler detects that and falls back to the knowledge path, so a
     /// non-code deployment behaves exactly as before.
     CodeQuery,
+    /// One direct tool invocation, no plan.
     SimpleAction {
+        /// The tool to invoke.
         tool: ToolId,
     },
+    /// Multi-step goal: plan first, then execute as a `Task`.
     ComplexTask,
+    /// Follow-up that resumes an existing task.
     Continuation {
+        /// The task being resumed.
         task_id: TaskId,
     },
 }
@@ -202,11 +213,17 @@ pub enum Scope {
     External,
 }
 
+/// Everything the router/planner/executor needs to know about a tool without
+/// running it: identity, parameter schema, examples, and behavioural properties.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDescriptor {
+    /// Registry id — the `ToolRegistry` key.
     pub id: ToolId,
+    /// Human-readable name shown in prompts and UI.
     pub name: String,
+    /// What the tool does, phrased for the model choosing among tools.
     pub description: String,
+    /// JSON schema of accepted arguments, injected into planner prompts.
     pub parameters: serde_json::Value,
     /// Concrete examples of correct tool invocations. Small models copy
     /// examples more reliably than they follow descriptions. Injected
@@ -218,8 +235,11 @@ pub struct ToolDescriptor {
     /// annotations so the agent can reason about a tool mechanically
     /// rather than by parsing prose.
     pub effect: Effect,
+    /// Whether a duplicate call duplicates the effect — drives the retry gate.
     pub idempotency: Idempotency,
+    /// Expected cost class — drives plan parallelisation and timeouts.
     pub latency: Latency,
+    /// Where the tool's effect lives (session / persistent / external).
     pub scope: Scope,
     /// Shape of the tool's output (composition piece).
     ///
@@ -253,10 +273,14 @@ pub struct ToolExample {
     pub call: serde_json::Value,
 }
 
+/// Ambient state handed to every `Tool::execute` call: who is asking (conversation/task) and per-call flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolContext {
+    /// Conversation the call belongs to.
     pub conversation_id: ConversationId,
+    /// Owning task when called from a plan step; `None` for direct invocations.
     pub task_id: Option<TaskId>,
+    /// Working directory for filesystem-affecting tools, when one applies.
     pub working_directory: Option<String>,
     /// True when this tool is being called inside a ReasonWithTools loop.
     /// Tools may format results differently for reasoning vs. synthesis.
@@ -284,15 +308,26 @@ pub struct ToolContext {
     pub turn_index: usize,
 }
 
+/// Capability grants the consent layer manages, declared per tool via
+/// `Tool::required_permissions`. Coarse by design — one gate per
+/// user-meaningful capability.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Permission {
+    /// Reach outside the machine over the network.
     Network,
+    /// Read from the local filesystem.
     FileRead,
+    /// Write to the local filesystem.
     FileWrite,
+    /// Run shell commands.
     Shell,
+    /// Read the user's email.
     EmailRead,
+    /// Send or modify email.
     EmailWrite,
+    /// Read calendar data.
     CalendarRead,
+    /// Create or modify calendar entries.
     CalendarWrite,
     /// Author / publish recipes — distinct from generic FileWrite
     /// because the recipe-author tools are allowlisted to
@@ -318,12 +353,16 @@ pub enum Permission {
 
 // ─── Trust ────────────────────────────────────────────────────
 
+/// Provenance tier of a signed artifact (skill, recipe). Derived from the signature fields by `compute_trust_level`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum TrustLevel {
+    /// Signed by the `sovereign-community` identity — reviewed and vouched.
     CommunityReviewed,
+    /// Signed by an individual author identity.
     AuthorSigned,
+    /// No signature. The default, and what unknown ids resolve to.
     #[default]
     Unsigned,
 }

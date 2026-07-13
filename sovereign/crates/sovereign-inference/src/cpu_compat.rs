@@ -173,11 +173,24 @@ mod tests {
 
     #[test]
     fn classifier_flags_recurrent_but_not_dense() {
-        for unsafe_arch in ["qwen35", "qwen35moe", "mamba2", "rwkv6", "deltanet", "ssm-hybrid"] {
-            assert!(is_cpu_incompatible_arch(unsafe_arch), "{unsafe_arch} must be flagged");
+        for unsafe_arch in [
+            "qwen35",
+            "qwen35moe",
+            "mamba2",
+            "rwkv6",
+            "deltanet",
+            "ssm-hybrid",
+        ] {
+            assert!(
+                is_cpu_incompatible_arch(unsafe_arch),
+                "{unsafe_arch} must be flagged"
+            );
         }
         for safe_arch in ["qwen3", "qwen2", "llama", "gemma3", "phi4", "qwen3moe", ""] {
-            assert!(!is_cpu_incompatible_arch(safe_arch), "{safe_arch} must NOT be flagged");
+            assert!(
+                !is_cpu_incompatible_arch(safe_arch),
+                "{safe_arch} must NOT be flagged"
+            );
         }
     }
 
@@ -234,7 +247,11 @@ mod tests {
         let _unsafe2 = write_gguf(d.path(), "Qwen3.5-9B.gguf", "qwen35", 99999);
 
         match choose_cpu_safe_chat_model(&configured, true, d.path()) {
-            ChatModelChoice::Substitute { path, unsafe_arch, safe_arch } => {
+            ChatModelChoice::Substitute {
+                path,
+                unsafe_arch,
+                safe_arch,
+            } => {
                 assert_eq!(path, big, "should pick the largest dense chat model");
                 assert_eq!(unsafe_arch, "qwen35");
                 assert_eq!(safe_arch, "qwen3");
@@ -251,7 +268,9 @@ mod tests {
         let _embed = write_gguf(d.path(), "embed.gguf", "qwen3", 100);
         assert_eq!(
             choose_cpu_safe_chat_model(&configured, true, d.path()),
-            ChatModelChoice::NoSafeModel { unsafe_arch: "qwen35".to_string() }
+            ChatModelChoice::NoSafeModel {
+                unsafe_arch: "qwen35".to_string()
+            }
         );
     }
 }

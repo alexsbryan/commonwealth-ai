@@ -84,8 +84,7 @@ fn fstem(path: &str) -> &str {
 fn qstem(q: &str) -> String {
     let path = q.split('#').next().unwrap_or(q).trim();
     path.split('/')
-        .filter(|s| !s.is_empty() && *s != "impl" && *s != "mod")
-        .last()
+        .rfind(|s| !s.is_empty() && *s != "impl" && *s != "mod")
         .unwrap_or("")
         .to_string()
 }
