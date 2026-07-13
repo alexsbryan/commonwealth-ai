@@ -665,6 +665,25 @@ fn judge_title(title: &str, hay: &str, labels: &[(String, String)]) -> TitleVerd
     }
     // 5. Word floor.
     if sig.len() < MIN_TITLE_WORDS {
+        // A one-word title is normally too coarse to judge — a bare
+        // `[Source: Wikipedia]` should not be stripped on a weak body match. BUT
+        // when a source-LABEL set is present (the authoritative list of what this
+        // turn actually retrieved), a one-word citation that appears in NEITHER
+        // the body NOR any label is a fabricated source, not a coarse-but-real
+        // one. Observed gen-ceiling step 126: `[Source: lighthouse]` cited over
+        // labels {folder-df-fix-drive-…, finch array}, with "lighthouse" absent
+        // from the 353-char body — an invented citation that laundered an
+        // invented fact ("trained by Elias Warde"). Strip ONLY in that
+        // fully-absent-with-known-labels case; the body-only / empty-label path
+        // keeps its conservative Keep (a partial snapshot can legitimately omit
+        // the word).
+        if !labels.is_empty() {
+            if let Some(w) = sig.first() {
+                if !hay.contains(w.as_str()) {
+                    return TitleVerdict::Strip;
+                }
+            }
+        }
         return TitleVerdict::Keep; // too coarse to judge — keep
     }
     let present = sig.iter().filter(|w| hay.contains(w.as_str())).count();
@@ -917,10 +936,36 @@ mod tests {
 
     #[test]
     fn single_word_title_is_kept_conservatively() {
-        // Below MIN_TITLE_WORDS — too coarse to judge, so keep even if absent.
+        // Below MIN_TITLE_WORDS with NO label set — too coarse to judge against a
+        // partial body snapshot, so keep even if absent.
         let answer = "general [Source: Wikipedia].";
         let r = attribute_citations(answer, &enron(), &[]);
         assert_eq!(r.citations_stripped(), 0);
+    }
+
+    #[test]
+    fn single_word_title_absent_with_known_labels_is_stripped() {
+        // gen-ceiling step 126: a one-word `[Source: lighthouse]` cited over a
+        // KNOWN label set that does not contain it, absent from the body — a
+        // fabricated citation that laundered an invented fact. With the
+        // authoritative label list in hand, "coarse" is no excuse: strip it.
+        let body = vec![
+            "Cora Finch's 1889 Fresnel design replaced the fixed lens at Sable \
+             Point with a rotating array driven by a falling-weight clockwork."
+                .to_string(),
+        ];
+        let labels = vec![
+            "folder-df-fix-drive-4769b5117dd2".to_string(),
+            "finch array".to_string(),
+        ];
+        let answer = "trained by Elias Warde [Source: lighthouse].";
+        let r = attribute_citations(answer, &body, &labels);
+        assert_eq!(r.citations_stripped(), 1, "invented one-word cite must strip");
+        assert!(!r.cleaned.contains("lighthouse"));
+        // A one-word cite whose word IS present (in the body) still survives —
+        // the new strip fires only on FULL absence, exercising the Keep branch.
+        let ok = "the design [Source: Finch].";
+        assert_eq!(attribute_citations(ok, &body, &labels).citations_stripped(), 0);
     }
 
     #[test]

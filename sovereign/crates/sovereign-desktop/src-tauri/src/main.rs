@@ -120,7 +120,14 @@ fn main() -> ExitCode {
                  synth.lifecycle=info,\
                  synth.continue=info,\
                  synth.truncation=info,\
-                 gate.call=info"
+                 synth.refusal_retry=info,\
+                 synth.citation=info,\
+                 synth.budget=info,\
+                 gate.call=info,\
+                 gate.lifecycle=info,\
+                 grounding_gate=info,\
+                 agentic_kq=info,\
+                 retrieval_audit=info"
                     .into()
             }),
         )

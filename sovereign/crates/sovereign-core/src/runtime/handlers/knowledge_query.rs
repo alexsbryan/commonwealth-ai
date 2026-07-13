@@ -1170,14 +1170,47 @@ impl Runtime {
         // Entity-anchoring is a property of the question + corpus, independent of
         // the loop's success; deictic questions close the exemption the same way.
         // Computed before the struct so the `&chunks` borrow ends before the move.
+        // Catalog-only retrieval closes the GK-caveat exemption the same way an
+        // entity anchor does: with only metadata behind the answer, a confident
+        // specific is a fabrication the gate must verify (and abstain on) rather
+        // than release under an honest "from general knowledge:" caveat.
+        let catalog_only =
+            crate::runtime::evidence_loop::retrieval_is_catalog_only(&chunks, &kinds);
+        // Retrieval-derived anchor: the question names a specific entity that a
+        // retrieved TITLE identifies, but no ingested body may ground the
+        // specific. Catches the MIXED/full-text-miss case `catalog_only` misses
+        // (one tangential body chunk disables the strict all-catalog rule).
+        let title_anchored =
+            crate::runtime::evidence_loop::question_anchors_retrieved_title(message, &chunks);
+        // Break each contributing signal out (rather than fold them into the `||`)
+        // so the glassbox decision line below can attribute WHICH one anchored.
+        let atlas_anchored = crate::runtime::evidence_loop::compute_entity_anchored(
+            message,
+            context.conversation.enabled_corpora.as_deref(),
+            &chunks,
+        );
+        let corpus_deictic = crate::runtime::evidence_loop::question_is_corpus_deictic(message);
         let gate_entity_anchored =
-            crate::runtime::evidence_loop::compute_entity_anchored(
-                message,
-                context.conversation.enabled_corpora.as_deref(),
-                &chunks,
-            ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message);
+            atlas_anchored || corpus_deictic || catalog_only || title_anchored;
+        // Glassbox: the entity-anchor decision strips the GK-caveat exemption and
+        // forces specific-claim verification — a load-bearing trust decision, one
+        // per turn. Emit it for EVERY knowledge query (not only when it flips), each
+        // contributing signal broken out, so an operator tailing the daemon can see
+        // why a turn did or did not verify its specifics. The `grounding_gate` target
+        // is allowlisted in the daemon's tracing filter (sovereign-cli-daemon/main.rs).
+        tracing::info!(
+            target: "grounding_gate",
+            chunks = chunks.len(),
+            gate_entity_anchored,
+            atlas_anchored,
+            corpus_deictic,
+            catalog_only,
+            title_anchored,
+            agentic_loop = agentic_entity_anchored,
+            "entity-anchor decision (GK-caveat exemption closed when true)"
+        );
         crate::runtime::grounding::dbg(&format!(
-            "[KQDIAG] gate_entity_anchored(deterministic)={gate_entity_anchored} loop_value={agentic_entity_anchored}"
+            "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
         ));
         KnowledgeQueryPlan {
             request,
