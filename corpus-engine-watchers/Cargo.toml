@@ -1,0 +1,47 @@
+[package]
+name = "corpus-engine-watchers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Background reactive layer: lint/test/project-index watchers + their SQLite result stores + the coordinator. Carved out of corpus-engine for blast-radius control (R4 Step 1)."
+
+# Step 1 of the corpus-engine decomposition (see
+# corpus-engine/DECOMPOSITION.md). These watchers spawn `cargo`
+# subprocesses and persist their results to SQLite; the `lint_status`
+# / `test_status` tools read those stores. Pre-carve-out they lived in
+# corpus-engine, so editing a watcher rebuilt ~18 crates. corpus-engine
+# has NO internal consumer of any watcher symbol, so the arrow is
+# one-way (this crate depends on corpus-engine-notes + -yield, never
+# the reverse) and no `From<Error> for corpus_engine::Error` bridge is
+# needed.
+#
+# The old `treesitter` feature gate on these modules was vestigial —
+# none of them touch tree-sitter/SCIP (that's the CodeWatcher, which
+# stays in corpus-engine). This crate compiles unconditionally.
+
+[dependencies]
+# ProjectDocsStore (project_index_watcher re-indexes the docs corpus).
+corpus-engine-notes = { workspace = true }
+# YieldHook — the shared cooperative-yield trait the lint/test watchers
+# poll during subprocess runs. Same trait identity the daemon installs
+# on the CorpusEngine.
+corpus-engine-yield = { workspace = true }
+
+# SQLite-backed result stores (bundled — no system dep).
+rusqlite = { version = "0.35", features = ["bundled"] }
+# Filesystem change notifications for the watchers.
+notify = "8"
+
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"
+
+[lints]
+workspace = true

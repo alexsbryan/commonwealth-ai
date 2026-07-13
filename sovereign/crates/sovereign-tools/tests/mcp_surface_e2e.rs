@@ -171,7 +171,7 @@ fn new_tools_advertise_canonical_ids() {
 
     // build → ALWAYS tier (exposed unconditionally).
     let dir = tempfile::tempdir().unwrap();
-    let lint = Arc::new(corpus_engine::LintResultStore::open(&dir.path().join("lint.db")).unwrap());
+    let lint = Arc::new(corpus_engine_watchers::LintResultStore::open(&dir.path().join("lint.db")).unwrap());
     let build = sovereign_tools::BuildTool::new(Arc::clone(&lint));
     assert_eq!(build.descriptor().id, "build");
     assert!(MCP_TOOLS_ALWAYS.contains(&"build"));

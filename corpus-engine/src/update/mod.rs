@@ -6,19 +6,6 @@ pub mod newsworthy_watcher;
 #[cfg(feature = "treesitter")]
 pub mod watch;
 
-// `watcher_coordinator` only needs `notify` (lives in `stores`).
-// The watcher *implementations* (test/lint/project_index) still
-// require treesitter, but the BackgroundWatcher trait + coordinator
-// types are available to anyone with `stores` so external observers
-// (work-atlas) can implement the trait without dragging tree-sitter.
-#[cfg(feature = "stores")]
-pub mod watcher_coordinator;
-
-#[cfg(feature = "treesitter")]
-pub mod test_watcher;
-
-#[cfg(feature = "treesitter")]
-pub mod lint_watcher;
-
-#[cfg(feature = "treesitter")]
-pub mod project_index_watcher;
+// watcher_coordinator + lint/test/project-index watchers moved to
+// `corpus-engine-watchers` (R4 Step 1, DECOMPOSITION.md). Only the
+// SCIP `watch::CodeWatcher` (genuinely tree-sitter-coupled) stays.

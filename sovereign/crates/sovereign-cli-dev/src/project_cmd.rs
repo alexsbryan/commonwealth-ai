@@ -2731,7 +2731,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!();
     eprintln!("  Stores:");
 
-    let test_store = match corpus_engine::TestResultStore::open(&data_dir.join("test_results.db")) {
+    let test_store = match corpus_engine_watchers::TestResultStore::open(&data_dir.join("test_results.db")) {
         Ok(s) => {
             eprintln!("  test_results.db  ✓");
             Arc::new(s)
@@ -2739,13 +2739,13 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("  warning: could not open test results DB: {e}");
             Arc::new(
-                corpus_engine::TestResultStore::open(std::path::Path::new(":memory:"))
+                corpus_engine_watchers::TestResultStore::open(std::path::Path::new(":memory:"))
                     .expect("in-memory test store"),
             )
         }
     };
 
-    let lint_store = match corpus_engine::LintResultStore::open(&data_dir.join("lint_results.db")) {
+    let lint_store = match corpus_engine_watchers::LintResultStore::open(&data_dir.join("lint_results.db")) {
         Ok(s) => {
             eprintln!("  lint_results.db  ✓");
             Arc::new(s)
@@ -2753,7 +2753,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("  warning: could not open lint results DB: {e}");
             Arc::new(
-                corpus_engine::LintResultStore::open(std::path::Path::new(":memory:"))
+                corpus_engine_watchers::LintResultStore::open(std::path::Path::new(":memory:"))
                     .expect("in-memory lint store"),
             )
         }
@@ -2860,7 +2860,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // instead of double-spawning on every debounced edit flush.
     let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
 
-    let test_watcher: Option<Arc<corpus_engine::TestWatcher>> =
+    let test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>> =
         sovereign_cfg.test_runner.as_ref().map(|cfg| {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
@@ -2875,7 +2875,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 cfg.command.chars().take(60).collect::<String>()
             );
             Arc::new(
-                corpus_engine::TestWatcher::new(
+                corpus_engine_watchers::TestWatcher::new(
                     &cfg.command,
                     working_dir,
                     cfg.timeout_secs.unwrap_or(300),
@@ -2885,7 +2885,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             )
         });
 
-    let lint_watcher: Option<Arc<corpus_engine::LintWatcher>> =
+    let lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>> =
         sovereign_cfg.lint_runner.as_ref().map(|cfg| {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
@@ -2900,7 +2900,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 cfg.command.chars().take(60).collect::<String>()
             );
             Arc::new(
-                corpus_engine::LintWatcher::new(
+                corpus_engine_watchers::LintWatcher::new(
                     &cfg.command,
                     working_dir,
                     cfg.timeout_secs.unwrap_or(120),
@@ -3155,16 +3155,16 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         })
         .unwrap_or(500);
 
-    let mut coordinator = corpus_engine::WatcherCoordinator::new(debounce_ms);
+    let mut coordinator = corpus_engine_watchers::WatcherCoordinator::new(debounce_ms);
     if let Some(ref w) = test_watcher {
-        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
     }
     if let Some(ref w) = lint_watcher {
-        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
     }
     if let Some(ref ds) = docs_store {
-        let pw = corpus_engine::ProjectIndexWatcher::new(Arc::clone(ds), repo_root.clone());
-        coordinator.register(Arc::new(pw) as Arc<dyn corpus_engine::BackgroundWatcher>);
+        let pw = corpus_engine_watchers::ProjectIndexWatcher::new(Arc::clone(ds), repo_root.clone());
+        coordinator.register(Arc::new(pw) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
     }
 
     let _coordinator_handle = if !coordinator.registered_ids().is_empty() {

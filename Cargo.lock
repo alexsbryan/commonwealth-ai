@@ -2335,6 +2335,7 @@ dependencies = [
  "chrono",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-yield",
  "csv",
  "flate2",
  "futures",
@@ -2452,6 +2453,27 @@ dependencies = [
  "tracing",
  "which",
 ]
+
+[[package]]
+name = "corpus-engine-watchers"
+version = "0.1.20"
+dependencies = [
+ "async-trait",
+ "corpus-engine-notes",
+ "corpus-engine-yield",
+ "futures",
+ "notify",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "corpus-engine-yield"
+version = "0.1.20"
 
 [[package]]
 name = "cpufeatures"
@@ -12037,6 +12059,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hostname",
@@ -12079,6 +12102,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hostname",
@@ -12442,6 +12466,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hex",
@@ -12519,6 +12544,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "csv",
  "dirs 5.0.1",
  "docx-lite",
@@ -12601,7 +12627,7 @@ dependencies = [
  "bytes",
  "commonwealth-core",
  "commonwealth-state",
- "corpus-engine",
+ "corpus-engine-watchers",
  "hex",
  "serde",
  "serde_json",

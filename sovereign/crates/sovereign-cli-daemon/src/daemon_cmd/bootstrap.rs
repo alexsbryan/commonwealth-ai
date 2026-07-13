@@ -1526,8 +1526,8 @@ pub(super) fn finalize_work_atlas(
 /// cargo subprocesses back off under chat-slot memory pressure.
 pub(super) fn install_foreground_yield_hook(
     daemon: Arc<EmbeddedDaemon>,
-    lint_watcher: Option<Arc<corpus_engine::LintWatcher>>,
-    test_watcher: Option<Arc<corpus_engine::TestWatcher>>,
+    lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
+    test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
 ) {
     // ── Foreground back-pressure for lint/test watchers ─────────────
     //
@@ -1613,9 +1613,9 @@ pub(super) fn write_pidfile() -> (std::path::PathBuf, u32) {
 /// produces. Destructured at the call site back into locals, so the rest of the
 /// bootstrap reads unchanged.
 pub(super) struct WatcherAtlasSetup {
-    pub(super) watcher_heartbeat: Arc<corpus_engine::WatcherHeartbeat>,
-    pub(super) lint_watcher: Option<Arc<corpus_engine::LintWatcher>>,
-    pub(super) test_watcher: Option<Arc<corpus_engine::TestWatcher>>,
+    pub(super) watcher_heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
+    pub(super) lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
+    pub(super) test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
     pub(super) watched_lint_scope: Option<String>,
     pub(super) watched_test_scope: Option<String>,
     pub(super) watcher_monitor: Option<tokio::task::JoinHandle<()>>,
@@ -1634,8 +1634,8 @@ pub(super) struct WatcherAtlasSetup {
 pub(super) fn setup_watchers_and_work_atlas(
     workspace_dir: &Option<PathBuf>,
     data_dir: &Path,
-    lint_store: Arc<corpus_engine::LintResultStore>,
-    test_store: Arc<corpus_engine::TestResultStore>,
+    lint_store: Arc<corpus_engine_watchers::LintResultStore>,
+    test_store: Arc<corpus_engine_watchers::TestResultStore>,
 ) -> WatcherAtlasSetup {
     // Shared liveness beacon: the coordinator loop stamps it, the
     // status tools read it. Replaces the old one-shot `watcher_active`
@@ -1644,9 +1644,9 @@ pub(super) fn setup_watchers_and_work_atlas(
     // (which reads the same SQLite stores) sees the same liveness — the
     // daemon's in-memory atomic alone is invisible cross-process.
     let watcher_heartbeat =
-        corpus_engine::WatcherHeartbeat::with_sidecar(data_dir.join("watcher-heartbeat"));
-    let mut lint_watcher: Option<Arc<corpus_engine::LintWatcher>> = None;
-    let mut test_watcher: Option<Arc<corpus_engine::TestWatcher>> = None;
+        corpus_engine_watchers::WatcherHeartbeat::with_sidecar(data_dir.join("watcher-heartbeat"));
+    let mut lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>> = None;
+    let mut test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>> = None;
     let mut watched_lint_scope: Option<String> = None;
     let mut watched_test_scope: Option<String> = None;
     // Held for the lifetime of `start_daemon`. This is the
@@ -1720,7 +1720,7 @@ pub(super) fn setup_watchers_and_work_atlas(
             });
             watched_lint_scope = Some(cfg.command.clone());
             lint_watcher = Some(Arc::new(
-                corpus_engine::LintWatcher::new(
+                corpus_engine_watchers::LintWatcher::new(
                     &cfg.command,
                     working_dir,
                     cfg.timeout_secs.unwrap_or(120),
@@ -1745,7 +1745,7 @@ pub(super) fn setup_watchers_and_work_atlas(
             });
             watched_test_scope = Some(cfg.command.clone());
             test_watcher = Some(Arc::new(
-                corpus_engine::TestWatcher::new(
+                corpus_engine_watchers::TestWatcher::new(
                     &cfg.command,
                     working_dir,
                     cfg.timeout_secs.unwrap_or(300),
@@ -1803,15 +1803,15 @@ pub(super) fn setup_watchers_and_work_atlas(
             // Collect the registered watchers once; the supervisor holds
             // them so it can rebuild the coordinator on restart without
             // re-deriving anything.
-            let mut watchers: Vec<Arc<dyn corpus_engine::BackgroundWatcher>> = Vec::new();
+            let mut watchers: Vec<Arc<dyn corpus_engine_watchers::BackgroundWatcher>> = Vec::new();
             if let Some(ref w) = lint_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
             }
             if let Some(ref w) = test_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
+                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
             }
             if let Some(ref obs) = work_atlas_observer {
-                watchers.push(Arc::clone(obs) as Arc<dyn corpus_engine::BackgroundWatcher>);
+                watchers.push(Arc::clone(obs) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
             }
 
             // The supervisor performs the initial start AND self-heals:

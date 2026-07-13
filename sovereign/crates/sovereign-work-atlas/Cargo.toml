@@ -14,10 +14,14 @@ commonwealth-core  = { workspace = true }
 # Tool trait, ToolContext, StepOutput. The three MCP tools live in this crate.
 sovereign-core = { workspace = true }
 
-# repo_root discovery (reused from corpus-engine — ARCH §11.1).
-# `treesitter` dropped 2026-05-22 — work-atlas only uses the
-# corpus_engine Error type + repo helpers, no SCIP.
-corpus-engine = { workspace = true }
+# AtlasObserver implements `BackgroundWatcher` (+ reads `WatcherStatus`)
+# so it can register with the watcher coordinator. That trait moved to
+# corpus-engine-watchers (R4 Step 1, 2026-07-13), and it was work-atlas's
+# ONLY *direct* corpus-engine use — so the direct dep is now the small
+# watchers leaf, not the god-crate. (corpus-engine is still reached
+# transitively via `sovereign-core`, so this trims the declared/observed
+# coupling, not the rebuild set.)
+corpus-engine-watchers = { workspace = true }
 
 # Origin URL → repo_id hash.
 sha2 = { workspace = true }
