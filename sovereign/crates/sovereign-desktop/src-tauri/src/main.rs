@@ -67,6 +67,19 @@ fn main() -> ExitCode {
         return code;
     }
 
+    // The grounding gate's verification note (the failed-claim caveat) rides
+    // `metadata.grounding_gate.failed_claims` on THIS surface, rendered as a
+    // collapsible disclosure by AssistantMessage.svelte — not appended to the
+    // answer text. The in-text note is the safe default for surfaces with no
+    // UI to carry the caveat (API/CLI: never-silent invariant), but on desktop
+    // it owned the answer's final words and zeroed the grace gate's
+    // agency/clean components (persona-QA receipts, 2026-07). Set the metadata
+    // default only when unset so `SOVEREIGN_NOTE_AS_METADATA=0` can still force
+    // the legacy in-text note for debugging.
+    if std::env::var_os("SOVEREIGN_NOTE_AS_METADATA").is_none() {
+        std::env::set_var("SOVEREIGN_NOTE_AS_METADATA", "1");
+    }
+
     // Default filter gives glass-box visibility into every inference path.
     // Set RUST_LOG to override (e.g. RUST_LOG=sovereign_core=debug for more detail).
     //
@@ -86,6 +99,14 @@ fn main() -> ExitCode {
                 // (not module paths) used by the Attach/Local decision
                 // and the mesh-state read — surfaced at info so the
                 // "why is Members empty?" trace shows without RUST_LOG.
+                // synth.lifecycle / synth.continue / synth.truncation / gate.call
+                // are CUSTOM string targets (not module paths), so `sovereign_core=debug`
+                // does NOT enable them — they must be named explicitly. Kept at info in
+                // the default filter so the answer-truncation lifecycle (draft finish vs
+                // effective cap, soft-landing continuation rounds, gate rewrite cap) is
+                // visible in EVERY run's log — a mid-`[Source:` or mid-word tail becomes
+                // diagnosable without a contrived repro (glassbox: instrument the real
+                // pipeline, don't hypothesize). Low volume: ~one line per grounded turn.
                 "sovereign_desktop=info,\
                  sovereign_core=debug,\
                  sovereign_tools=debug,\
@@ -95,7 +116,11 @@ fn main() -> ExitCode {
                  commonwealth_api=info,\
                  corpus_engine=debug,\
                  bootstrap=info,\
-                 mesh_state=info"
+                 mesh_state=info,\
+                 synth.lifecycle=info,\
+                 synth.continue=info,\
+                 synth.truncation=info,\
+                 gate.call=info"
                     .into()
             }),
         )

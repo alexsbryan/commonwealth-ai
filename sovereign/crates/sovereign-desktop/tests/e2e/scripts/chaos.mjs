@@ -203,8 +203,13 @@ async function discoverBrainModel() {
     const res = await fetch(`${DAEMON}/v1/models`, { signal: AbortSignal.timeout(5000) });
     const body = await res.json();
     const ids = (body.data ?? []).map((m) => m.id);
-    // Prefer a chat slot (not the embedder).
+    // Prefer a chat slot (not the embedder). SOVEREIGN_BRAIN_MODEL pins it
+    // explicitly — needed now that the daemon may list a SLOW big model (122B)
+    // first: the default first-non-embed pick would make the user-sim brain
+    // crawl and starve a timed run of turns. Pin the brain to the same tier as
+    // the SUT answerer so the daemon holds one model (no per-turn eviction).
     BRAIN_MODEL =
+      process.env.SOVEREIGN_BRAIN_MODEL ??
       ids.find((id) => !/embed/i.test(id)) ?? ids[0] ?? null;
   } catch {
     BRAIN_MODEL = null;

@@ -33,6 +33,12 @@ if (!journalF || !outF) {
 
 let MODEL = null;
 async function discoverModel() {
+  // Explicit override wins — SOVEREIGN_JUDGE_MODEL selects the AUTHORITATIVE judge
+  // (the 122B passes calibrate-judge.mjs at 100/100; the 35B fails specificity at
+  // 6/8 = 75%, i.e. it counts ~1 in 4 good answers as broke). Use the 122B for
+  // plateau/authoritative numbers, the default 35B for fast iteration.
+  const override = process.env.SOVEREIGN_JUDGE_MODEL;
+  if (override) { MODEL = override; return MODEL; }
   const r = await fetch(`${DAEMON}/v1/models`, { signal: AbortSignal.timeout(5000) });
   const body = await r.json();
   const ids = (body.data ?? []).map((m) => m.id);
