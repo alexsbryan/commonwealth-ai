@@ -23,6 +23,7 @@ use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
 use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
+use super::prefix_state::{PrefixPlan, PrefixStateCache};
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
@@ -163,6 +164,13 @@ pub(crate) struct SlotContext {
     /// built via `from_existing_model` (FastShort) — those start in
     /// SingleToken and never transition.
     pub(crate) mtp_rebuild: Option<MtpRebuildParams>,
+    /// **Pinned-prefix full-state cache** (`prefix_state.rs`) — prefix
+    /// reuse for the recurrent/hybrid architectures where the
+    /// partial-keep path above is vetoed, via whole-context
+    /// save/restore (proven arch-safe by `state_cartridge_spike.rs`).
+    /// Boot-scoped; survives demote (state files embed model identity,
+    /// not context identity — `llama_load_session_file` validates).
+    pub(crate) prefix_state: PrefixStateCache,
 }
 
 unsafe impl Send for SlotContext {}
@@ -1171,6 +1179,7 @@ impl ModelSlot {
                 } else {
                     None
                 },
+                prefix_state: PrefixStateCache::new(&model_id),
             }),
             model_id,
             size_bytes,
@@ -1287,6 +1296,7 @@ impl ModelSlot {
                 cached_tokens: Vec::new(),
                 arch,
                 mtp_rebuild: None,
+                prefix_state: PrefixStateCache::new(&model_id),
             }),
             model_id,
             size_bytes,
@@ -1519,6 +1529,7 @@ impl ModelSlot {
         let SlotContext {
             mode,
             cached_tokens,
+            prefix_state,
             ..
         } = slot_ctx;
         let ctx = match mode {
@@ -1567,28 +1578,127 @@ impl ModelSlot {
         // hybrid recurrent models force full prefill).
         let PrefixLcp {
             raw: raw_lcp,
-            effective: lcp,
+            effective: mut lcp,
         } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
         // Clear cached_tokens before any cache mutation — restored on
         // success path below. If we crash between here and the
         // post-decode update, next call sees cached_tokens=[] and
         // does a defensive full clear.
         cached_tokens.clear();
-        if lcp == 0 {
-            ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
-        } else {
-            // Partial keep: drop positions [lcp, end) from the
-            // single sequence we use (seq_id=0). Positions [0, lcp)
-            // stay resident; the new tail decode below starts at
-            // position lcp.
-            if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
-                tracing::warn!(
-                    error = ?e,
-                    lcp,
-                    new_prompt_len = tokens.len(),
-                    "prefix_cache: partial clear failed — falling back to full clear"
-                );
+
+        // **Pinned-prefix full-state cache** (prefix_state.rs): the
+        // prefix-reuse path that works where partial keep cannot —
+        // whole-context restore is recurrent-state-faithful (spike
+        // 2026-07-12). Restore/Learn override the LCP machinery for
+        // this request (full clear either way); Pass leaves the
+        // pre-existing behavior byte-identical.
+        let plan = prefix_state.plan(&tokens);
+        let mut state_prefix_ready = false;
+        match plan {
+            PrefixPlan::Restore { key, prefix_len } => {
+                ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
+                let path = prefix_state.entry_path(key);
+                let t0 = Instant::now();
+                let loaded = path.as_ref().and_then(|p| {
+                    ctx.load_session_file(p, ctx.n_ctx() as usize).ok()
+                });
+                match loaded {
+                    Some(restored) if restored.len() == prefix_len => {
+                        lcp = prefix_len;
+                        state_prefix_ready = true;
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            restored_tokens = prefix_len,
+                            suffix_tokens = tokens.len() - prefix_len,
+                            restore_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: HIT — restored pinned prefix (single-token path)"
+                        );
+                    }
+                    _ => {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            "prefix_state: restore failed — invalidating pin, full prefill"
+                        );
+                        prefix_state.invalidate(key);
+                        lcp = 0;
+                        state_prefix_ready = true; // cache already cleared
+                    }
+                }
+            }
+            PrefixPlan::Learn { key, pin_len } => {
+                ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                // Stage-1: prefill the pin prefix with NO outputs (a
+                // logits-bearing save balloons the state file by
+                // n_outputs × n_vocab), save the state, then let the
+                // ordinary tail code below prefill the rest from
+                // position pin_len.
+                let mut stage1 = LlamaBatch::new(n_batch, 1);
+                let mut stage1_ok = true;
+                for (i, &tok) in tokens[..pin_len].iter().enumerate() {
+                    if stage1.add(tok, i as i32, &[0], false).is_err() {
+                        stage1_ok = false;
+                        break;
+                    }
+                }
+                if stage1_ok && ctx.decode(&mut stage1).is_ok() {
+                    let t0 = Instant::now();
+                    let path = prefix_state.state_path(key);
+                    let saved = prefix_state.ensure_dir().is_ok()
+                        && ctx.save_session_file(&path, &tokens[..pin_len]).is_ok();
+                    if saved {
+                        prefix_state.commit(key, tokens[..pin_len].to_vec(), path);
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            pinned_tokens = pin_len,
+                            save_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: LEARNED — pinned stable prefix (single-token path)"
+                        );
+                    } else {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            "prefix_state: save failed — continuing unpinned"
+                        );
+                    }
+                    lcp = pin_len;
+                    state_prefix_ready = true;
+                } else {
+                    tracing::warn!(
+                        target: "prefix_state",
+                        model = %model_id,
+                        "prefix_state: stage-1 prefill failed — full clear + full prefill"
+                    );
+                    ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                    lcp = 0;
+                    state_prefix_ready = true;
+                }
+            }
+            PrefixPlan::Pass => {}
+        }
+
+        if !state_prefix_ready {
+            if lcp == 0 {
                 ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
+            } else {
+                // Partial keep: drop positions [lcp, end) from the
+                // single sequence we use (seq_id=0). Positions [0, lcp)
+                // stay resident; the new tail decode below starts at
+                // position lcp.
+                if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+                    tracing::warn!(
+                        error = ?e,
+                        lcp,
+                        new_prompt_len = tokens.len(),
+                        "prefix_cache: partial clear failed — falling back to full clear"
+                    );
+                    ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
+                }
             }
         }
 
@@ -2308,6 +2418,7 @@ impl ModelSlot {
         let SlotContext {
             mode,
             cached_tokens,
+            prefix_state,
             ..
         } = slot_ctx;
         let (target_ctx, draft_ctx, session, n_draft_max) = match mode {
@@ -2325,11 +2436,10 @@ impl ModelSlot {
             }
         };
 
-        // Phase A clears both KVs and starts fresh — no prefix cache
-        // integration on this path yet. The non-MTP path keeps
-        // cached_tokens for itself; we clear it here so a return to
-        // the non-MTP path doesn't reuse a stale fingerprint.
-        target_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
+        // The draft side always starts fresh (its state is rebuilt per
+        // request via `rebuild_session_in_place` above); cached_tokens
+        // is the non-MTP path's fingerprint and is cleared so a return
+        // to that path doesn't reuse a stale one.
         draft_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
         cached_tokens.clear();
 
@@ -2339,6 +2449,113 @@ impl ModelSlot {
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
         if tokens.is_empty() {
             return Err(Error::Inference("MTP: empty prompt".into()));
+        }
+
+        // **Pinned-prefix full-state cache on the MTP path.** The
+        // partial-keep prefix cache is permanently vetoed here (the
+        // recurrent-layer hazard is why MTP models exist on this
+        // gate), but whole-state restore is recurrent-faithful, so
+        // the target context can resume a pinned stable prefix and
+        // prefill only the suffix. Two deliberate consequences:
+        //
+        //  - The draft side (`session.process`) sees pre-norm h for
+        //    the SUFFIX positions only — on hit runs the prefix was
+        //    never live-decoded, and on learn runs stage-1 decodes
+        //    with no outputs (a logits-bearing save would balloon the
+        //    state file by n_outputs × n_vocab ≈ GBs). Draft
+        //    calibration is therefore identical between learn and hit
+        //    runs. Worst case is a LOWER DRAFT ACCEPTANCE RATE on
+        //    cached requests — never wrong output: every draft is
+        //    verify-gated by the target. Decomposable via the
+        //    end-of-generation acceptance log.
+        //
+        //  - `session.begin(0, &tokens)` still receives the FULL
+        //    token list, so per-seq position bookkeeping is unchanged.
+        let plan = prefix_state.plan(&tokens);
+        let mut prefix_base: usize = 0;
+        match plan {
+            PrefixPlan::Restore { key, prefix_len } => {
+                target_ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
+                let path = prefix_state.entry_path(key);
+                let t0 = Instant::now();
+                let loaded = path.as_ref().and_then(|p| {
+                    target_ctx
+                        .load_session_file(p, target_ctx.n_ctx() as usize)
+                        .ok()
+                });
+                match loaded {
+                    Some(restored) if restored.len() == prefix_len => {
+                        prefix_base = prefix_len;
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            restored_tokens = prefix_len,
+                            suffix_tokens = tokens.len() - prefix_len,
+                            restore_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: HIT — restored pinned prefix (MTP path)"
+                        );
+                    }
+                    _ => {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            "prefix_state: restore failed — invalidating pin, full prefill"
+                        );
+                        prefix_state.invalidate(key);
+                        target_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
+                    }
+                }
+            }
+            PrefixPlan::Learn { key, pin_len } => {
+                target_ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                let n_batch_for_stage = target_ctx.n_batch() as usize;
+                let mut stage1 = LlamaBatch::new(pin_len.max(n_batch_for_stage), 1);
+                let mut stage1_ok = true;
+                for (i, &tok) in tokens[..pin_len].iter().enumerate() {
+                    if stage1.add(tok, i as i32, &[0], false).is_err() {
+                        stage1_ok = false;
+                        break;
+                    }
+                }
+                if stage1_ok && target_ctx.decode(&mut stage1).is_ok() {
+                    let t0 = Instant::now();
+                    let path = prefix_state.state_path(key);
+                    let saved = prefix_state.ensure_dir().is_ok()
+                        && target_ctx
+                            .save_session_file(&path, &tokens[..pin_len])
+                            .is_ok();
+                    if saved {
+                        prefix_state.commit(key, tokens[..pin_len].to_vec(), path);
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            pinned_tokens = pin_len,
+                            save_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: LEARNED — pinned stable prefix (MTP path)"
+                        );
+                    } else {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            "prefix_state: save failed — continuing unpinned"
+                        );
+                    }
+                    prefix_base = pin_len;
+                } else {
+                    tracing::warn!(
+                        target: "prefix_state",
+                        model = %model_id,
+                        "prefix_state: stage-1 prefill failed — full clear + full prefill"
+                    );
+                    target_ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                }
+            }
+            PrefixPlan::Pass => {
+                target_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
+            }
         }
 
         let n_ctx = target_ctx.n_ctx() as usize;
@@ -2369,11 +2586,14 @@ impl ModelSlot {
             .saturating_sub(n_draft_max as usize + 1);
         let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), mtp_ctx)?;
 
-        // Prefill: decode the entire prompt as one batch with
-        // logits=true on every position. MTP needs that flag set
-        // throughout so pre-norm embeddings can be extracted for the
-        // draft context (`get_embeddings_pre_norm_ith` errors with
-        // `batch.logits[N] != true` otherwise — upstream invariant).
+        // Prefill: decode the prompt SUFFIX (`tokens[prefix_base..]`,
+        // the whole prompt when no pinned prefix restored) as one
+        // batch with logits=true on every position. MTP needs that
+        // flag set throughout so pre-norm embeddings can be extracted
+        // for the draft context (`get_embeddings_pre_norm_ith` errors
+        // with `batch.logits[N] != true` otherwise — upstream
+        // invariant). See the prefix_state block above for why the
+        // pinned prefix carries no pre-norm h.
         //
         // The MTP session's `set_embeddings_pre_norm(true)` hook was
         // installed on both contexts at slot-load time (see
@@ -2382,9 +2602,9 @@ impl ModelSlot {
         // back below.
         let prefill_capacity = tokens.len().max(n_batch_max);
         let mut prefill = LlamaBatch::new(prefill_capacity, 1);
-        for (i, &tok) in tokens.iter().enumerate() {
+        for (i, &tok) in tokens[prefix_base..].iter().enumerate() {
             prefill
-                .add(tok, i as i32, &[0], true)
+                .add(tok, (prefix_base + i) as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
         }
         target_ctx

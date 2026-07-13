@@ -179,6 +179,12 @@ pub struct Runtime {
     /// persisted — a fresh process re-learns within one turn.
     pub(crate) assembly_memo:
         std::sync::RwLock<std::collections::HashMap<String, prompt_budget::MeasuredAssembly>>,
+    /// Per-conversation preemption for post-stream housekeeping: a new
+    /// user turn cancels the prior turn's gap-check/refinement token
+    /// so fresh turns never queue behind stale background work (the
+    /// coach-A/B dead-turn class, 2026-07-11). See
+    /// `collaboration::PostStreamPreemption`.
+    pub(crate) post_stream_preemption: collaboration::PostStreamPreemption,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
     /// Optional structural link graph for a corpus that exposes one
     /// (today: Wikipedia, via metadata `outgoing_links` /
@@ -439,6 +445,7 @@ impl Runtime {
             wikipedia_graph: None,
             note_store: None,
             assembly_memo: std::sync::RwLock::new(std::collections::HashMap::new()),
+            post_stream_preemption: collaboration::PostStreamPreemption::default(),
             compaction: None,
             conv_tiered_reader: None,
             mesh_knowledge: None,

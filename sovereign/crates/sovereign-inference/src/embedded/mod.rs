@@ -12,6 +12,7 @@ pub mod ffi_trace;
 mod gates;
 mod grammar;
 mod model_slot;
+mod prefix_state;
 mod prompt_helpers;
 mod rerank_slot;
 mod rpc_distribution;

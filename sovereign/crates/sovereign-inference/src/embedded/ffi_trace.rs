@@ -72,6 +72,17 @@ pub enum ClearKvPhase {
     ErrorAbort,
     /// Diagnostic / capability probe outside the request path.
     Probe,
+    /// Immediately before `load_session_file` on a pinned-prefix
+    /// restore (`prefix_state.rs`). Legal because the load REPLACES
+    /// the whole context state and the plan arm overrides `lcp` to the
+    /// restored prefix length in the same scope — `cached_tokens`
+    /// bookkeeping cannot desync.
+    PrefixStateRestore,
+    /// Immediately before the stage-1 pin prefill on a pinned-prefix
+    /// learn (`prefix_state.rs`). The context is rebuilt from position
+    /// 0 (pin, save, then tail) and `lcp` is set to the pin length in
+    /// the same scope.
+    PrefixStateLearn,
 }
 
 /// One load-bearing FFI call, as recorded by the slot code.
@@ -333,6 +344,8 @@ mod tests {
             "EndOfGenerationNoPrefixCache",
             "ErrorAbort",
             "Probe",
+            "PrefixStateRestore",
+            "PrefixStateLearn",
         ];
         let mut undeclared = Vec::new();
         let mut unknown_phase = Vec::new();
