@@ -1011,6 +1011,9 @@ impl Runtime {
         let collab_routing_events: Option<Arc<dyn RoutingEventSink>> =
             Some(Arc::clone(&self.routing_events));
         let collab_session_id: Option<String> = Some(_session_id.clone());
+        // Post-stream preemption token for THIS turn's housekeeping —
+        // cancelled by the next user turn on the conversation.
+        let preempt_for_spawn = self.post_stream_preemption.current(conversation_id);
         let conversation_id_owned = conversation_id.to_string();
         let message_id_owned = message_id.clone();
         let question = message.to_string();
@@ -1668,6 +1671,7 @@ impl Runtime {
                 // prompt too (today-anchor precedent) — a style lesson
                 // must survive a gap-check rewrite of the answer.
                 let collab_lesson_prompt = lesson_prompt_form.clone();
+                let collab_preempt = preempt_for_spawn.clone();
                 tokio::spawn(async move {
                     tracing::info!(
                         conversation_id = %collab_cid,
@@ -1689,6 +1693,7 @@ impl Runtime {
                         collab_events,
                         collab_sid,
                         collab_lesson_prompt,
+                        collab_preempt,
                         collab_guard,
                     )
                     .await;
@@ -1959,6 +1964,9 @@ impl Runtime {
         // Cloned into the spawn so the post-stream gap-check chips
         // can reach the desktop UI. See the matching block in the
         // KnowledgeQuery streaming branch above for the rationale.
+        // Post-stream preemption token for THIS turn's housekeeping —
+        // cancelled by the next user turn on the conversation.
+        let preempt_for_spawn = self.post_stream_preemption.current(conversation_id);
         let routing_events_for_spawn: Option<Arc<dyn RoutingEventSink>> =
             Some(Arc::clone(&self.routing_events));
         let session_id_for_spawn: Option<String> = Some(_session_id.clone());
@@ -2343,6 +2351,7 @@ impl Runtime {
                 // TEACHABLE: the K=1 prompt lesson rides the
                 // refinement prompt (today-anchor precedent).
                 let collab_lesson_prompt = lesson_prompt_form.clone();
+                let collab_preempt = preempt_for_spawn.clone();
                 tokio::spawn(async move {
                     run_post_stream_refinement(
                         collab_inference.as_ref(),
@@ -2358,6 +2367,7 @@ impl Runtime {
                         collab_events,
                         collab_sid,
                         collab_lesson_prompt,
+                        collab_preempt,
                         collab_guard,
                     )
                     .await;
@@ -2428,6 +2438,12 @@ impl Runtime {
         // hit only the previous (stale) session and this turn ran to
         // completion (2026-07-07 slow-model race).
         let _ = self.sessions.reserve_cancel(conversation_id);
+        // Preempt the PRIOR turn's post-stream housekeeping (gap check /
+        // refinement) the moment a real new turn starts: user-facing work
+        // must never queue behind stale background steps on a shared slot
+        // (the coach-A/B dead-turn class, 2026-07-11). The fresh token is
+        // fetched by this turn's own post-stream spawns via `current()`.
+        let _ = self.post_stream_preemption.begin_turn(conversation_id);
         // 1. Build context.
         let principal = self
             .corpus_principal

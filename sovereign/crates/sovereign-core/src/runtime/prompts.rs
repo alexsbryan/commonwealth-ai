@@ -834,3 +834,49 @@ and cite it [Source: Call-graph trace for `X`]. A `dyn-dispatch` marker is a \
 trait / dynamic boundary the call graph followed where a text search could not. \
 If the summaries and traces don't cover part of the question, say so in one line \
 instead of inventing a call edge or a symbol name.";
+
+#[cfg(test)]
+mod prefill_audit {
+    //! Cartridge Step-0 spike — exact rendered sizes of the STABLE
+    //! prompt layers, for the prefill-economics table (which context
+    //! is amortizable into a precomputed/trained KV artifact vs
+    //! per-turn dynamic). Run manually:
+    //!   cargo test -p sovereign-core --lib prefill_audit -- --ignored --nocapture
+    use super::*;
+
+    fn row(name: &str, s: &str) {
+        eprintln!(
+            "  {name:<44} {:>6} chars  ~{:>5} tok",
+            s.len(),
+            s.len() / 4
+        );
+    }
+
+    #[test]
+    #[ignore = "manual audit: prints stable-layer prefill sizes"]
+    fn stable_layer_sizes() {
+        eprintln!("── stable prompt layers (rendered) ─────────────────");
+        let budget = build_response_length_directive(2000);
+        row("response_length_directive(2000)", &budget);
+        row("THINKING_DIRECTIVE", THINKING_DIRECTIVE);
+        row("PROVENANCE_DIRECTIVE", PROVENANCE_DIRECTIVE);
+        row("CODE_SYNTHESIS_DIRECTIVE", CODE_SYNTHESIS_DIRECTIVE);
+        row("GK_CAVEAT_PREFIX", GK_CAVEAT_PREFIX);
+        row(
+            "today_anchor_block",
+            &super::super::text_utils::today_anchor_block("2026-07-12"),
+        );
+        row(
+            "lesson block (K=1, sample prompt_form)",
+            &crate::lessons::render_lesson_block("Explain like I'm five."),
+        );
+        let base_primary = build_synthesis_system_prompt(false, "", true, &budget);
+        row("synthesis system (PRIMARY, thinking on)", &base_primary);
+        let base_fast = build_synthesis_system_prompt_with_provenance(
+            false, "", false, &budget, true,
+        );
+        row("synthesis system (FAST, provenance)", &base_fast);
+        eprintln!("  (dynamic layers — evidence chunks, history, question —");
+        eprintln!("   come from live-run journals; see the audit table)");
+    }
+}

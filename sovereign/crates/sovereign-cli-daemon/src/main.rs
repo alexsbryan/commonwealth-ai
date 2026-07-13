@@ -50,13 +50,21 @@ async fn async_main() {
     // pre-split.
     if cmd == "daemon" {
         init_tracing(
+            // The list is an allowlist with no default level: an event
+            // whose target matches nothing is dropped. Custom-target
+            // events (tracing::info!(target: "...")) therefore need
+            // their target listed here explicitly — prefix_state and
+            // post_stream went silent for a whole A/B session before
+            // this was understood (2026-07-12).
             "sovereign_cli_daemon=info,\
              sovereign_core=info,\
              sovereign_mesh=info,\
              sovereign_inference=info,\
              corpus_engine=info,\
              commonwealth_discovery=info,\
-             commonwealth_api=info",
+             commonwealth_api=info,\
+             prefix_state=info,\
+             post_stream=info",
         );
     } else if cmd == "setup" {
         init_tracing("sovereign_cli_daemon=info");

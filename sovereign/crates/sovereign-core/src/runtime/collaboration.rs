@@ -24,6 +24,8 @@
 
 use std::sync::Arc;
 
+use tokio_util::sync::CancellationToken;
+
 use crate::traits::{ApprovalChannel, InferenceProvider, RoutingEventSink, StateStore};
 use crate::types::*;
 
@@ -124,8 +126,31 @@ pub(crate) async fn run_collaboration(
     // style lesson survives a gap-check rewrite. `None` = no lesson /
     // legacy callers — byte-identical behavior.
     lesson_prompt: Option<String>,
+    // Post-stream preemption: cancelled by the NEXT user turn on the
+    // same conversation (`Runtime::post_stream_preemption`). Checked
+    // at STEP BOUNDARIES only — an in-flight inference call can't be
+    // interrupted (v1), but the remaining steps are skipped so user
+    // turns never queue behind stale housekeeping. Observed failure
+    // this fixes: coach A/B 2026-07-11, session-B turn 3 died with a
+    // 150s dispatch AbortError queued behind turn 2's refinement on
+    // the fast slot. `None` = legacy callers, never preempted.
+    preempt: Option<CancellationToken>,
 ) -> RefinementOutcome {
     if !inference_config.auto_collaborate {
+        return RefinementOutcome::NotAttempted;
+    }
+    let preempted = |stage: &str| {
+        let hit = preempt.as_ref().is_some_and(|t| t.is_cancelled());
+        if hit {
+            tracing::info!(
+                target: "post_stream",
+                stage,
+                "post_stream: preempted by a newer turn — skipping remaining refinement steps"
+            );
+        }
+        hit
+    };
+    if preempted("entry") {
         return RefinementOutcome::NotAttempted;
     }
 
@@ -212,6 +237,13 @@ pub(crate) async fn run_collaboration(
             .await;
     }
 
+    // Boundary check: identify_gap can run tens of seconds on the
+    // fast slot; if a newer turn arrived meanwhile, don't surface a
+    // stale card.
+    if preempted("post_gap_check") {
+        return RefinementOutcome::NotAttempted;
+    }
+
     // 3. Surface the card and wait for the user.
     let user_content = approval.request_information(&req).await;
     let content = match user_content {
@@ -224,6 +256,12 @@ pub(crate) async fn run_collaboration(
             return RefinementOutcome::NotAttempted;
         }
     };
+    // Boundary check: the card can pend indefinitely; if the user has
+    // already moved the conversation on, a refinement of the OLD
+    // answer is stale work occupying the primary slot.
+    if preempted("post_user_content") {
+        return RefinementOutcome::NotAttempted;
+    }
 
     // 4. Refinement synthesis — integrate the user's source. The prompt
     //    asks the model to distinguish corpus-derived content from
@@ -395,6 +433,8 @@ pub(crate) async fn run_post_stream_refinement(
     session_id: Option<String>,
     // TEACHABLE P0: forwarded to `run_collaboration` — see its doc.
     lesson_prompt: Option<String>,
+    // Post-stream preemption — forwarded; see `run_collaboration`.
+    preempt: Option<CancellationToken>,
     grounding_guard: Option<RefinementGuard>,
 ) -> Option<String> {
     let outcome = run_collaboration(
@@ -408,6 +448,7 @@ pub(crate) async fn run_post_stream_refinement(
         routing_events,
         session_id,
         lesson_prompt,
+        preempt,
     )
     .await;
 
@@ -644,4 +685,105 @@ pub(crate) async fn emit_ask_deliberation_chip(
             event,
         })
         .await;
+}
+
+/// Preemption registry for post-stream housekeeping (gap check /
+/// refinement). A NEW user turn cancels the tokens of ALL outstanding
+/// post-stream spawns — every conversation, not just its own — so
+/// housekeeping never occupies a slot a fresh turn is waiting on
+/// beyond the one inference call that may already be in flight
+/// (cancellation is observed at step boundaries — see
+/// `run_collaboration`).
+///
+/// Global scope is deliberate: this daemon serves one human, and
+/// housekeeping is strictly lower priority than any user-facing turn.
+/// The 2026-07-12 prefill A/B run showed every live dispatch collision
+/// was CROSS-conversation (the desktop "new chat per question"
+/// pattern); per-conversation scoping missed all of them. The map
+/// stays keyed by conversation so `current()` hands each spawn the
+/// token of its own turn.
+///
+/// Bounded like `Runtime::assembly_memo`: past
+/// [`Self::MAX_CONVERSATIONS`] tracked conversations the map is
+/// cleared wholesale (tokens dropped un-cancelled — their spawns just
+/// run to completion once; a fresh process re-learns within a turn).
+#[derive(Default)]
+pub(crate) struct PostStreamPreemption {
+    tokens: std::sync::Mutex<std::collections::HashMap<String, CancellationToken>>,
+}
+
+impl PostStreamPreemption {
+    const MAX_CONVERSATIONS: usize = 512;
+
+    /// Called at the top of every streaming turn: cancels ALL
+    /// outstanding post-stream tokens (any conversation — see the
+    /// struct doc for why global) and mints the token the NEW turn's
+    /// post-stream spawns will carry.
+    pub(crate) fn begin_turn(&self, conversation_id: &str) -> CancellationToken {
+        let mut map = self.tokens.lock().expect("post-stream preemption lock");
+        let preempted = map.values().filter(|t| !t.is_cancelled()).count();
+        for token in map.values() {
+            token.cancel();
+        }
+        if preempted > 0 {
+            tracing::info!(
+                target: "post_stream",
+                conversation_id,
+                preempted,
+                "post_stream: new turn — preempting all outstanding housekeeping"
+            );
+        }
+        if map.len() >= Self::MAX_CONVERSATIONS && !map.contains_key(conversation_id) {
+            map.clear();
+        }
+        let fresh = CancellationToken::new();
+        map.insert(conversation_id.to_string(), fresh.clone());
+        fresh
+    }
+
+    /// The live token for this conversation's current turn — fetched
+    /// at post-stream spawn setup (same turn as the `begin_turn` that
+    /// minted it). `None` when the map was cleared by the bound; the
+    /// spawn then runs unpreemptable once, which is the pre-feature
+    /// behavior.
+    pub(crate) fn current(&self, conversation_id: &str) -> Option<CancellationToken> {
+        self.tokens
+            .lock()
+            .expect("post-stream preemption lock")
+            .get(conversation_id)
+            .cloned()
+    }
+}
+
+#[cfg(test)]
+mod preemption_tests {
+    use super::PostStreamPreemption;
+
+    #[test]
+    fn new_turn_cancels_all_outstanding_tokens_globally() {
+        let reg = PostStreamPreemption::default();
+        let t1 = reg.begin_turn("c1");
+        assert!(!t1.is_cancelled(), "first turn's token starts live");
+
+        // A turn on a DIFFERENT conversation preempts c1's housekeeping
+        // too — the cross-conversation collision class from the
+        // 2026-07-12 prefill A/B run (new chat per question).
+        let t2 = reg.begin_turn("c2");
+        assert!(t1.is_cancelled(), "cross-conversation token must be preempted");
+        assert!(!t2.is_cancelled(), "the new turn's token starts live");
+
+        let t3 = reg.begin_turn("c2");
+        assert!(t2.is_cancelled(), "same-conversation preemption still holds");
+        assert!(!t3.is_cancelled());
+    }
+
+    #[test]
+    fn map_is_bounded() {
+        let reg = PostStreamPreemption::default();
+        for i in 0..(PostStreamPreemption::MAX_CONVERSATIONS + 8) {
+            let _ = reg.begin_turn(&format!("c{i}"));
+        }
+        let len = reg.tokens.lock().unwrap().len();
+        assert!(len <= PostStreamPreemption::MAX_CONVERSATIONS + 1);
+    }
 }
