@@ -1499,16 +1499,15 @@ pub async fn bootstrap_with_progress(
         let t_gliner = std::time::Instant::now();
         let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
         if sovereign_tools::gliner_ner::probe_model_available(model_id) {
-            match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
-                Ok(g) => {
-                    let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
-                    runtime = runtime.with_gliner(arc);
-                    tracing::info!(model = model_id, "desktop: GLiNER entity extractor loaded");
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "desktop: GLiNER probe ok but load failed; entity-aware retrieval disabled");
-                }
-            }
+            // Deferred load: the ~950ms model load runs on a background
+            // thread (it was ~half the warm boot). The extractor installs
+            // immediately and soft-falls-through to cosine+MMR until warm —
+            // the same behaviour as an uninstalled model, and it's warm
+            // within ~1s, before the first query. See `LazyGlinerExtractor`.
+            let arc: Arc<dyn sovereign_core::traits::EntityExtractor> =
+                Arc::new(sovereign_tools::gliner_ner::LazyGlinerExtractor::new_default_deferred());
+            runtime = runtime.with_gliner(arc);
+            tracing::info!(model = model_id, "desktop: GLiNER entity extractor installed (background warm)");
         } else {
             tracing::debug!(
                 model = model_id,
@@ -1688,9 +1687,14 @@ pub async fn bootstrap_with_progress(
                     .set_vector_index_ready(&cs.corpus_id, ready)
                     .await;
                 if !ready {
-                    tracing::warn!(
+                    // Transient, self-resolving: a corpus whose vector index
+                    // is still building (common on fresh installs) is served
+                    // FTS-only until the build completes. This fires once per
+                    // not-ready corpus on every boot, so it's info, not a
+                    // warning — nothing is broken and no user action is needed.
+                    tracing::info!(
                         corpus = %cs.corpus_id,
-                        "Vector index not built — KnowledgeQuery will use FTS-only search"
+                        "Vector index not built yet — KnowledgeQuery will use FTS-only search until it finishes"
                     );
                 } else {
                     tracing::info!(corpus = %cs.corpus_id, "Vector index ready");
