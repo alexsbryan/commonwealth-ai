@@ -659,7 +659,7 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
                 )
                 .await;
                 if verdict.to_ascii_uppercase().starts_with("DRIFT") {
-                    let contradiction = verdict.splitn(2, ':').nth(1).unwrap_or(&verdict).trim().to_string();
+                    let contradiction = verdict.split_once(':').map(|x| x.1).unwrap_or(&verdict).trim().to_string();
                     Some((cap.label.clone(), contradiction, docs.clone()))
                 } else {
                     None
@@ -697,7 +697,7 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
                 n_core: cap.n_core,
                 evidence: format!(
                     "described in prose — {}",
-                    verdict.splitn(2, ':').nth(1).unwrap_or("").trim()
+                    verdict.split_once(':').map(|x| x.1).unwrap_or("").trim()
                 ),
                 docs: None,
             });
@@ -708,9 +708,9 @@ pub async fn cmd_capability_reconcile(args: &[String]) -> i32 {
                 n_entries: cap.n_entries,
                 n_core: cap.n_core,
                 evidence: verdict
-                    .splitn(2, ':')
-                    .nth(1)
-                    .unwrap_or(&verdict)
+                    .split_once(':')
+                    .map(|x| x.1)
+                    .unwrap_or(verdict)
                     .trim()
                     .to_string(),
                 docs: None,

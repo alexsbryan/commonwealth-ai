@@ -1385,7 +1385,7 @@ impl DocumentAssetManager {
         // source text alongside the snippet.
         let citations: Vec<CitedChunk> = citations
             .into_iter()
-            .zip(full_sources.into_iter())
+            .zip(full_sources)
             .map(|(mut c, full)| {
                 c.content = full;
                 c

@@ -45,7 +45,6 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
-corpus-engine-archaeology = { workspace = true }
 corpus-engine-notes = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }

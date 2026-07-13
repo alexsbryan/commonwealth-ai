@@ -206,7 +206,8 @@ mod tests {
             self.key(k);
             self.buf.extend_from_slice(&T_ARRAY.to_le_bytes());
             self.buf.extend_from_slice(&T_STRING.to_le_bytes());
-            self.buf.extend_from_slice(&(items.len() as u64).to_le_bytes());
+            self.buf
+                .extend_from_slice(&(items.len() as u64).to_le_bytes());
             for it in items {
                 self.buf.extend_from_slice(&(it.len() as u64).to_le_bytes());
                 self.buf.extend_from_slice(it.as_bytes());
@@ -229,7 +230,9 @@ mod tests {
 
     #[test]
     fn reads_architecture_when_first_key() {
-        let bytes = GgufBuilder::new().str_kv("general.architecture", "qwen35").finish();
+        let bytes = GgufBuilder::new()
+            .str_kv("general.architecture", "qwen35")
+            .finish();
         let (_d, p) = write_tmp(&bytes);
         assert_eq!(read_architecture(&p).unwrap().as_deref(), Some("qwen35"));
     }

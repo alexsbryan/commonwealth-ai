@@ -445,7 +445,7 @@ fn cmd_list() -> i32 {
         println!("No workflows or recipes found.");
         return 0;
     }
-    println!("{:<24} {:<9} {}", "NAME", "KIND", "DESCRIPTION");
+    println!("{:<24} {:<9} DESCRIPTION", "NAME", "KIND");
     for (name, kind, desc) in &rows {
         let d: String = desc.chars().take(64).collect();
         println!("{name:<24} {kind:<9} {d}");

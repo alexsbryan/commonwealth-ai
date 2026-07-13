@@ -45,7 +45,8 @@ mod tests {
         assert_eq!(v1_models_url(12345), "http://localhost:12345/v1/models");
     }
 
-    #[cfg(feature = "dev-tools")]
+    // (Was gated on `feature = "dev-tools"`, which this crate never
+    // declared — the test silently never ran. P0.2 cfg audit, 2026-07-12.)
     #[test]
     fn v1_url_strips_to_api_root() {
         assert_eq!(v1_url(9741), "http://localhost:9741/v1");

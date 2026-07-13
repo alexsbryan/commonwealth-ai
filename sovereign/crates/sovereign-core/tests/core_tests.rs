@@ -2019,7 +2019,10 @@ async fn conation_durative_captures_param_lesson_and_answers_normally() {
     assert_eq!(payload.enforcement, "param");
     assert_eq!(payload.conversation_id, "c1");
     assert_eq!(payload.params["soft_target_cap"], 300);
-    assert!(payload.prompt_form.is_empty(), "param rung never rides the prompt");
+    assert!(
+        payload.prompt_form.is_empty(),
+        "param rung never rides the prompt"
+    );
     assert!(payload.taught_from.contains("from now on"));
     assert_eq!(
         payload.message_id, "prior-1",
@@ -2032,7 +2035,10 @@ async fn conation_deictic_does_not_capture() {
     let (runtime, store, mut rx) = build_conation_runtime("shortened reply");
     seed_prior_assistant(&store, "c1").await;
 
-    let response = runtime.handle_message("make this shorter", "c1").await.unwrap();
+    let response = runtime
+        .handle_message("make this shorter", "c1")
+        .await
+        .unwrap();
     assert_eq!(response.message.content, "shortened reply");
 
     // Deictic adjustment: obey and forget — no card, nothing stored.
@@ -2225,8 +2231,7 @@ async fn lessons_shape_the_synthesis_request() {
     // system message outermost. Verified on the non-streaming
     // SimpleQuery path, which shares `prepare_knowledge_context` with
     // the streaming path by construction.
-    let (_dir, notes) =
-        lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
+    let (_dir, notes) = lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
     let recording = Arc::new(RecordingInference::new("a fine answer"));
     let runtime = Runtime::new(
         recording.clone(),
@@ -2307,7 +2312,10 @@ async fn streaming_turn_applies_term_avoid_and_whispers_once() {
             .expect("streamed turn must persist an assistant message");
         (
             assistant.content.clone(),
-            assistant.metadata.clone().expect("metadata must be stamped"),
+            assistant
+                .metadata
+                .clone()
+                .expect("metadata must be stamped"),
         )
     };
     assert!(
@@ -2315,7 +2323,9 @@ async fn streaming_turn_applies_term_avoid_and_whispers_once() {
         "citation span must survive the transform: {content}"
     );
     assert!(
-        !content.replace("[Source: Corpus Handbook]", "").contains("corpus"),
+        !content
+            .replace("[Source: Corpus Handbook]", "")
+            .contains("corpus"),
         "banned term must be stripped outside citations: {content}"
     );
     assert_eq!(

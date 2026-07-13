@@ -8,13 +8,22 @@ use crate::oicp;
 #[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 
+/// One inference call, provider-neutral: prompt + sampling knobs + the
+/// structural constraints (grammars, allowlists, tool schemas) the sampler
+/// enforces. Build via `new` / `for_workload` and the `with_*` builders.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompletionRequest {
+    /// The user-role content; the provider's chat template wraps it (see `system_message`).
     pub prompt: String,
+    /// System-role content; `None` = no system turn.
     pub system_message: Option<String>,
+    /// Derived slot shadow — see `Speed` (written via `slot_policy::latency_to_speed`, never free-hand).
     pub preferred_speed: Speed,
+    /// Generation cap; `None` = provider default. Prefer `with_output_budget`, which also sets the OICP gate.
     pub max_tokens: Option<usize>,
+    /// Sampling temperature override; `None` = model-family default.
     pub temperature: Option<f32>,
+    /// JSON schema for constrained decoding; when `lark_grammar` is also set, the grammar wins.
     pub structured_output: Option<serde_json::Value>,
     /// Overrides the default think-block token budget for this request.
     /// `None` falls back to the value in `InferenceConfig` (or the
@@ -216,13 +225,17 @@ pub enum SamplingMode {
 /// depend on the Commonwealth API crate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSchema {
+    /// Function name the model emits in a tool call.
     pub name: String,
+    /// What the function does — input to the model's tool choice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// JSON schema of the function's arguments.
     pub parameters: serde_json::Value,
 }
 
 impl CompletionRequest {
+    /// Minimal request: prompt only, primary-slot shadow (see inline comment), everything else default.
     pub fn new(prompt: &str) -> Self {
         Self {
             prompt: prompt.to_string(),
@@ -254,6 +267,7 @@ impl CompletionRequest {
         }
     }
 
+    /// Override the derived slot shadow. Prefer `for_workload` in new code (SLOT_POLICY §8).
     pub fn with_speed(mut self, speed: Speed) -> Self {
         self.preferred_speed = speed;
         self
@@ -290,11 +304,13 @@ impl CompletionRequest {
         }
     }
 
+    /// Attach a system message.
     pub fn with_system(mut self, system: &str) -> Self {
         self.system_message = Some(system.to_string());
         self
     }
 
+    /// Attach an OICP requirements envelope — what makes the request scheduler-visible.
     pub fn with_oicp(mut self, requirements: oicp::InferenceRequirements) -> Self {
         self.oicp = Some(requirements);
         self
@@ -369,6 +385,9 @@ impl CompletionRequest {
         self
     }
 
+    /// Forced yes/no check on the fast slot: 5-token budget, temperature 0, no
+    /// thinking. Read the verdict with `CompletionResponse::as_bool`. Used by
+    /// `Branch` steps and other binary gates.
     pub fn yes_no(condition: &str, context: &str) -> Self {
         Self {
             prompt: format!(
@@ -407,8 +426,10 @@ impl CompletionRequest {
     }
 }
 
+/// A completed (non-streaming) inference result plus its telemetry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionResponse {
+    /// The generated text.
     pub text: String,
     /// Total tokens (prompt + completion). Kept as the historical
     /// "single number" telemetry stat. For the OpenAI Usage split,
@@ -421,7 +442,9 @@ pub struct CompletionResponse {
     /// the legacy single-number form.
     #[serde(default)]
     pub prompt_tokens: usize,
+    /// Model that actually served the request — peer-attributed on mesh routes.
     pub model_id: String,
+    /// End-to-end call latency, milliseconds.
     pub latency_ms: u64,
     /// OICP metadata from the provider, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -444,17 +467,23 @@ pub struct CompletionResponse {
 }
 
 impl CompletionResponse {
+    /// Lenient verdict-read for `yes_no` requests: true when the trimmed text starts with "yes" or "true".
     pub fn as_bool(&self) -> bool {
         let lower = self.text.trim().to_lowercase();
         lower.starts_with("yes") || lower.starts_with("true")
     }
 }
 
+/// Static self-description an `InferenceProvider` advertises — display and coarse-routing metadata, not a live measurement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderCapabilities {
+    /// Largest context window this provider can serve.
     pub max_context_tokens: usize,
+    /// Whether `structured_output` schemas are actually enforced (vs ignored).
     pub supports_structured_output: bool,
+    /// Coarse speed tier relative to the fleet.
     pub relative_speed: Speed,
+    /// Coarse reasoning depth relative to the fleet.
     pub relative_reasoning: Depth,
 }
 
@@ -571,8 +600,11 @@ impl<'de> Deserialize<'de> for FinishReason {
 /// matching final chunk without a second source of truth.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StreamUsage {
+    /// Tokens in the rendered prompt.
     pub prompt_tokens: u32,
+    /// Tokens generated (excludes prompt).
     pub completion_tokens: u32,
+    /// Prompt + completion.
     pub total_tokens: u32,
 }
 
@@ -585,12 +617,17 @@ pub struct StreamUsage {
 /// `Cancelled`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamFrame {
+    /// A partial text delta.
     Token(String),
+    /// Terminal frame: why the stream stopped. Every stream must end with `Finish` or `Error`.
     Finish {
+        /// Why generation stopped.
         reason: FinishReason,
+        /// Token counters, when the provider tracks them.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<StreamUsage>,
     },
+    /// Provider-side abort mid-stream (the string is the cause). Also terminal.
     Error(String),
 }
 

@@ -808,19 +808,17 @@ vector = false
         IngestProgress::Indexing {
             chunks_indexed,
             total,
-        } => {
-            if total > 0 {
-                let pct = (chunks_indexed as f32 / total as f32 * 100.0).min(100.0);
-                let filled = (pct / 5.0) as usize;
-                let empty = 20usize.saturating_sub(filled);
-                eprint!(
-                    "\r    {}{} {:3.0}%  {} symbols indexed    ",
-                    "\u{2588}".repeat(filled),
-                    "\u{2591}".repeat(empty),
-                    pct,
-                    chunks_indexed,
-                );
-            }
+        } if total > 0 => {
+            let pct = (chunks_indexed as f32 / total as f32 * 100.0).min(100.0);
+            let filled = (pct / 5.0) as usize;
+            let empty = 20usize.saturating_sub(filled);
+            eprint!(
+                "\r    {}{} {:3.0}%  {} symbols indexed    ",
+                "\u{2588}".repeat(filled),
+                "\u{2591}".repeat(empty),
+                pct,
+                chunks_indexed,
+            );
         }
         IngestProgress::Complete {
             total_chunks,

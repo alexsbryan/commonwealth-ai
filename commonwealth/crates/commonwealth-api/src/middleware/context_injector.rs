@@ -32,8 +32,9 @@ use async_trait::async_trait;
 use corpus_engine_notes::{NoteStore, ScopeFilter};
 use sovereign_atos::approval;
 
+use super::shared::{notes_db_path, prepend_to_system};
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+use crate::openai_types::ChatCompletionRequest;
 
 /// Agent-facing preamble (the `<atos-instructions>` XML block). Kept as
 /// an external asset so the instructions — which are *data* the model
@@ -387,7 +388,7 @@ fn drift_tag_present(sovereign_dir: &Path) -> bool {
 /// shape as `read_note_digest`'s no-inference path), so the model
 /// always gets something even if the Fast slot hasn't run yet.
 async fn compose_notes_digest(repo_root: &Path, feature_id: &str) -> String {
-    let notes_path = repo_root.join(".sovereign").join("notes.db");
+    let notes_path = notes_db_path(repo_root);
     let Ok(store) = NoteStore::open(&notes_path) else {
         return String::new();
     };
@@ -530,63 +531,11 @@ fn render_artifact_delta(delta: &sovereign_atos::session::ArtifactDelta) -> Stri
     out
 }
 
-/// Prepend `text` to the first system message; or insert a fresh
-/// system message at position 0 when none exists.
-fn prepend_to_system(request: &mut ChatCompletionRequest, text: &str) {
-    for msg in &mut request.messages {
-        if msg.role == "system" {
-            msg.content = format!("{text}\n{}", msg.content);
-            return;
-        }
-    }
-    request
-        .messages
-        .insert(0, ChatMessage::new("system", text.to_string()));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
     use crate::openai_types::ChatMessage;
-    use std::path::PathBuf;
-
-    fn minimal_request() -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: None,
-            messages: vec![ChatMessage::new("user", "hi")],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        }
-    }
-
-    fn ctx_with(feature_id: Option<&str>, repo: PathBuf) -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: feature_id.map(String::from),
-            session_id: Some("sess-1".into()),
-            repo_root: repo,
-        }
-    }
 
     #[tokio::test]
     async fn no_feature_id_is_noop() {

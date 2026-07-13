@@ -827,7 +827,7 @@ fn display_name(qn: &str) -> String {
         .map(|(_pkg, desc)| desc)
         .unwrap_or(qn);
     let leaf = desc.rsplit('/').next().unwrap_or(desc);
-    let trimmed = leaf.trim_end_matches(|c| matches!(c, '.' | '(' | ')' | '#'));
+    let trimmed = leaf.trim_end_matches(['.', '(', ')', '#']);
     let token = trimmed
         .rsplit(|c: char| matches!(c, ']' | '#' | '.' | '/') || c.is_whitespace())
         .find(|s| !s.is_empty())

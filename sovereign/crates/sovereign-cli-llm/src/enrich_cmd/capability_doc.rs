@@ -142,7 +142,7 @@ pub fn method_name(qualified: &str) -> String {
         qualified.to_string()
     };
     let leaf = desc.rsplit('/').next().unwrap_or(&desc);
-    let after = leaf.rsplit(|c| c == ']' || c == '#').next().unwrap_or(leaf);
+    let after = leaf.rsplit([']', '#']).next().unwrap_or(leaf);
     after
         .split('(')
         .next()

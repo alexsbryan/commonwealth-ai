@@ -41,8 +41,9 @@ use async_trait::async_trait;
 
 use corpus_engine_atos::FeatureStore;
 
+use super::shared::{features_db_path, prepend_to_system};
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
-use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+use crate::openai_types::ChatCompletionRequest;
 
 /// Gap in seconds after which a session is considered "stale" and
 /// the briefing re-fires. 2 hours — short enough to catch a lunch
@@ -114,7 +115,7 @@ async fn compose_briefing(
 
     // Pull feature + milestone + run state. Failure is non-fatal —
     // a briefing with just the feature id is still useful.
-    let features_db = repo_root.join(".sovereign").join("features.db");
+    let features_db = features_db_path(repo_root);
     if let Ok(store) = FeatureStore::open(&features_db) {
         append_milestone_state(&mut out, &store, feature_id).await;
     }
@@ -239,61 +240,10 @@ fn derive_title(brief: &str) -> String {
     "(untitled)".into()
 }
 
-fn prepend_to_system(request: &mut ChatCompletionRequest, text: &str) {
-    for msg in &mut request.messages {
-        if msg.role == "system" {
-            msg.content = format!("{text}\n{}", msg.content);
-            return;
-        }
-    }
-    request
-        .messages
-        .insert(0, ChatMessage::new("system", text.to_string()));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openai_types::ChatMessage;
-    use std::path::PathBuf;
-
-    fn minimal_request() -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: None,
-            messages: vec![ChatMessage::new("user", "hi")],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        }
-    }
-
-    fn ctx_with(feature_id: Option<&str>, repo: PathBuf) -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: feature_id.map(String::from),
-            session_id: Some("sess-1".into()),
-            repo_root: repo,
-        }
-    }
+    use crate::middleware::shared::fixtures::{ctx_with, minimal_request};
 
     #[test]
     fn fresh_session_triggers_briefing() {

@@ -113,10 +113,8 @@ fn full_state_restore_is_faithful_on_this_arch() {
     };
 
     let backend = LlamaBackend::init().expect("backend");
-    let model_params =
-        std::pin::pin!(LlamaModelParams::default().with_n_gpu_layers(1_000_000));
-    let model =
-        LlamaModel::load_from_file(&backend, &gguf, &model_params).expect("model load");
+    let model_params = std::pin::pin!(LlamaModelParams::default().with_n_gpu_layers(1_000_000));
+    let model = LlamaModel::load_from_file(&backend, &gguf, &model_params).expect("model load");
 
     let arch = model
         .meta_val_str("general.architecture", 64)
@@ -162,16 +160,16 @@ fn full_state_restore_is_faithful_on_this_arch() {
     ctx_a.synchronize();
     let prefill_ms = t0.elapsed().as_millis();
 
-    let session_path = std::env::temp_dir().join(format!(
-        "cartridge-spike-{}.session",
-        std::process::id()
-    ));
+    let session_path =
+        std::env::temp_dir().join(format!("cartridge-spike-{}.session", std::process::id()));
     let t0 = Instant::now();
     ctx_a
         .save_session_file(&session_path, &tokens)
         .expect("save session");
     let save_ms = t0.elapsed().as_millis();
-    let file_bytes = std::fs::metadata(&session_path).map(|m| m.len()).unwrap_or(0);
+    let file_bytes = std::fs::metadata(&session_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
 
     // The serve-time "user question" appended after the cartridge
     // prefix — identical in both contexts.
@@ -206,8 +204,12 @@ fn full_state_restore_is_faithful_on_this_arch() {
         ask_and_continue(&mut ctx_b, &suffix, n_prefix as i32, CONTINUATION_TOKENS);
 
     // ── verdicts ───────────────────────────────────────────────────
-    let text_a = model.detokenize(&continuation_a, false, true).unwrap_or_default();
-    let text_b = model.detokenize(&continuation_b, false, true).unwrap_or_default();
+    let text_a = model
+        .detokenize(&continuation_a, false, true)
+        .unwrap_or_default();
+    let text_b = model
+        .detokenize(&continuation_b, false, true)
+        .unwrap_or_default();
     let match_len = continuation_a
         .iter()
         .zip(continuation_b.iter())
@@ -221,9 +223,7 @@ fn full_state_restore_is_faithful_on_this_arch() {
         file_bytes as f64 / 1e6,
         file_bytes as f64 / 1e3 / n_prefix as f64
     );
-    eprintln!(
-        "  continuation match: {match_len}/{CONTINUATION_TOKENS} tokens"
-    );
+    eprintln!("  continuation match: {match_len}/{CONTINUATION_TOKENS} tokens");
     eprintln!("  A: {text_a:?}");
     eprintln!("  B: {text_b:?}");
 

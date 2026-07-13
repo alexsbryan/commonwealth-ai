@@ -1957,10 +1957,8 @@ fn decl_name(line: &str) -> Option<&str> {
         r
     } else if let Some(r) = s.strip_prefix("function ") {
         r
-    } else if let Some(r) = s.strip_prefix("export class ") {
-        r
     } else {
-        return None;
+        s.strip_prefix("export class ")?
     };
     let end = after
         .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')

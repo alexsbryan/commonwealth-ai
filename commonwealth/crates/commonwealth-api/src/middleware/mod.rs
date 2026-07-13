@@ -55,6 +55,7 @@ pub mod context_injector;
 pub mod decision_extractor;
 #[cfg(feature = "atos")]
 pub mod session_briefing;
+pub(crate) mod shared;
 pub mod tool_injector;
 
 #[cfg(feature = "atos")]
@@ -356,45 +357,19 @@ impl MiddlewareRegistry {
 
 #[cfg(test)]
 mod tests {
+    use super::shared::fixtures::{ctx_with, request_with_messages};
     use super::*;
-    use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+    use crate::openai_types::ChatCompletionRequest;
 
     fn make_request() -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: Some("commonwealth/sovereign-coder".into()),
-            messages: vec![ChatMessage::new("user", "hello")],
-            temperature: None,
-            max_tokens: None,
-            stream: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            stop: None,
-            tools: None,
-            tool_choice: None,
-            oicp: None,
-            response_format: None,
-            chat_template_kwargs: None,
-            think_budget: None,
-            tool_profile: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+            ..request_with_messages(&[("user", "hello")])
         }
     }
 
     fn make_ctx() -> PipelineContext {
-        PipelineContext {
-            pipeline_name: "test".into(),
-            model_id: "qwen-27b-coder".into(),
-            context_config: Default::default(),
-            feature_id: Some("fx".into()),
-            session_id: Some("sess-1".into()),
-            repo_root: std::env::temp_dir(),
-        }
+        ctx_with(Some("fx"), std::env::temp_dir())
     }
 
     /// Minimal counting middleware — records how many times it ran.

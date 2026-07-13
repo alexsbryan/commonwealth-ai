@@ -1953,7 +1953,6 @@ name = "commonwealth-app"
 version = "0.1.20"
 dependencies = [
  "bytes",
- "commonwealth-core",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -1987,8 +1986,6 @@ dependencies = [
  "commonwealth-app",
  "commonwealth-core",
  "commonwealth-discovery",
- "commonwealth-inference",
- "commonwealth-knowledge",
  "commonwealth-state",
  "corpus-engine",
  "hostname",
@@ -2027,7 +2024,6 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
- "commonwealth-app",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
@@ -2047,7 +2043,6 @@ version = "0.1.20"
 dependencies = [
  "anyhow",
  "bytes",
- "commonwealth-app",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
@@ -11999,8 +11994,6 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "chrono",
- "commonwealth-core",
- "commonwealth-state",
  "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-atos",
@@ -12056,7 +12049,6 @@ dependencies = [
  "sovereign-core",
  "sovereign-inference",
  "sovereign-mesh",
- "sovereign-pipeline",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12127,7 +12119,6 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
- "corpus-engine-archaeology",
  "corpus-engine-notes",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
@@ -12171,7 +12162,6 @@ dependencies = [
 name = "sovereign-cli-shared"
 version = "0.1.20"
 dependencies = [
- "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "serde",

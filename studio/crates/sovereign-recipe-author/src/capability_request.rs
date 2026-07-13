@@ -398,6 +398,12 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
+    // The crate-wide HOME test lock intentionally spans awaits: the guard
+    // must cover the whole test body (HOME is process-global), and each
+    // #[tokio::test] owns its runtime, so a contending sibling parks a
+    // thread — serialization, never deadlock (P0.3 lock audit, 2026-07-12).
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use crate::test_support::InMemoryRecipeNotes;
     use sovereign_contracts::recipe::notes::ScopeFilter;

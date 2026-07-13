@@ -269,50 +269,32 @@ fn handle_control_word(
     }
 
     match word {
-        "par" | "line" | "sect" | "page" => {
-            if !current_skip(groups) {
-                out.push('\n');
-            }
+        "par" | "line" | "sect" | "page" if !current_skip(groups) => {
+            out.push('\n');
         }
-        "tab" => {
-            if !current_skip(groups) {
-                out.push('\t');
-            }
+        "tab" if !current_skip(groups) => {
+            out.push('\t');
         }
-        "emdash" => {
-            if !current_skip(groups) {
-                out.push('—');
-            }
+        "emdash" if !current_skip(groups) => {
+            out.push('—');
         }
-        "endash" => {
-            if !current_skip(groups) {
-                out.push('–');
-            }
+        "endash" if !current_skip(groups) => {
+            out.push('–');
         }
-        "lquote" => {
-            if !current_skip(groups) {
-                out.push('\u{2018}');
-            }
+        "lquote" if !current_skip(groups) => {
+            out.push('\u{2018}');
         }
-        "rquote" => {
-            if !current_skip(groups) {
-                out.push('\u{2019}');
-            }
+        "rquote" if !current_skip(groups) => {
+            out.push('\u{2019}');
         }
-        "ldblquote" => {
-            if !current_skip(groups) {
-                out.push('\u{201C}');
-            }
+        "ldblquote" if !current_skip(groups) => {
+            out.push('\u{201C}');
         }
-        "rdblquote" => {
-            if !current_skip(groups) {
-                out.push('\u{201D}');
-            }
+        "rdblquote" if !current_skip(groups) => {
+            out.push('\u{201D}');
         }
-        "bullet" => {
-            if !current_skip(groups) {
-                out.push('\u{2022}');
-            }
+        "bullet" if !current_skip(groups) => {
+            out.push('\u{2022}');
         }
         "uc" => {
             if let Some(n) = param {

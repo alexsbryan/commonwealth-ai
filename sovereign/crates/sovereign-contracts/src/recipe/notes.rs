@@ -21,12 +21,16 @@ use crate::error::Result;
 /// `Global` are repo-wide; `Session` are ephemeral scratch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoteScope {
+    /// Repo-wide; visible to every feature and session.
     Global,
+    /// Scoped to one ATOS feature.
     Feature,
+    /// Ephemeral scratch for a single session.
     Session,
 }
 
 impl NoteScope {
+    /// Canonical store string (`"global"` / `"feature"` / `"session"`).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Global => "global",
@@ -35,6 +39,7 @@ impl NoteScope {
         }
     }
 
+    /// Inverse of `as_str`; `None` for unknown strings.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "global" => Some(Self::Global),
@@ -50,14 +55,20 @@ impl NoteScope {
 /// audit assembly ranks lower.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoteSource {
+    /// The agent explicitly wrote the note — highest audit priority (4).
     Agent,
+    /// Sourced from commit history (priority 3).
     Committed,
+    /// Mechanically extracted from content (priority 2).
     Extracted,
+    /// Inferred by analysis, not directly evidenced (priority 1).
     Inferred,
+    /// Passively observed signal (priority 0, lowest).
     Observed,
 }
 
 impl NoteSource {
+    /// Canonical store string.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Agent => "agent",
@@ -68,6 +79,7 @@ impl NoteSource {
         }
     }
 
+    /// Inverse of `as_str`; `None` for unknown strings.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "agent" => Some(Self::Agent),
@@ -95,11 +107,17 @@ impl NoteSource {
 /// adapter copies field-for-field; `scope`/`source` are the string forms.
 #[derive(Debug, Clone)]
 pub struct NoteRow {
+    /// Note id (store primary key).
     pub id: String,
+    /// Note kind string (`decision`, `todo`, `attempt`, ...).
     pub kind: String,
+    /// The note body.
     pub content: String,
+    /// Code symbols the note is anchored to.
     pub symbols: Vec<String>,
+    /// File paths the note is anchored to.
     pub files: Vec<String>,
+    /// Authoring session that wrote the note.
     pub session_id: String,
     /// RFC 3339 timestamp string.
     pub created_at: String,

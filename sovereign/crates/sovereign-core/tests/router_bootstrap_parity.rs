@@ -85,8 +85,14 @@ async fn build_llm_router_wires_full_stack_from_baked() {
     let store: Arc<dyn StateStore> = Arc::new(SqliteStateStore::open_in_memory().unwrap());
     let skills = Arc::new(SkillRegistry::new());
     // `default()` forces the baked set (all overrides None), independent of CWD.
-    let (_router, report) =
-        build_llm_router(inference(), store, skills, &ExemplarOverrides::default(), || {}).await;
+    let (_router, report) = build_llm_router(
+        inference(),
+        store,
+        skills,
+        &ExemplarOverrides::default(),
+        || {},
+    )
+    .await;
     assert!(
         report.all_wired(),
         "classifier stack must be fully wired from baked exemplars; got {report:?}"

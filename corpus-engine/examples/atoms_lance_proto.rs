@@ -210,9 +210,7 @@ fn schema(embed_dims: Option<usize>) -> Arc<Schema> {
 fn batch(rows: &[Row], sch: &Arc<Schema>, embed_dims: Option<usize>, base: usize) -> RecordBatch {
     use arrow_array::{types::Float32Type, FixedSizeListArray};
     let col_str = |f: &dyn Fn(&Row) -> &str| {
-        Arc::new(StringArray::from(
-            rows.iter().map(|r| f(r)).collect::<Vec<_>>(),
-        )) as arrow_array::ArrayRef
+        Arc::new(StringArray::from(rows.iter().map(f).collect::<Vec<_>>())) as arrow_array::ArrayRef
     };
     let mut cols: Vec<arrow_array::ArrayRef> = vec![
         col_str(&|r| r.str_id.as_str()),

@@ -273,7 +273,7 @@ pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusE
             embedding_model: installed_info.map(|i| i.embedding_model.clone()),
             embedding_dimensions: installed_info.map(|i| i.embedding_dimensions),
             vector_index_ready,
-            needs_rebuild: installed_info.map_or(false, |i| !i.indexes_built),
+            needs_rebuild: installed_info.is_some_and(|i| !i.indexes_built),
             registry_url: registry_entry.map(|e| e.toml_url.clone()),
             schema_version: Some(1),
             parent_corpus_id: b.parent_corpus_id.clone(),

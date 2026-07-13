@@ -258,7 +258,7 @@ fn strip_gk_caveat(text: &str) -> String {
     // Robustness: the marker may not sit at the very start.
     let low = text.to_lowercase();
     if let Some(p) = low.find("from general knowledge:") {
-        if let Some(after) = text[p..].splitn(2, ':').nth(1) {
+        if let Some(after) = text[p..].split_once(':').map(|x| x.1) {
             return after.trim().to_string();
         }
     }

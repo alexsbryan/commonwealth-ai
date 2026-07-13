@@ -70,7 +70,7 @@ fn walk_rs(dir: &Path, out: &mut Vec<PathBuf>) {
             let p = e.path();
             if p.is_dir() {
                 walk_rs(&p, out);
-            } else if p.extension().map_or(false, |x| x == "rs") {
+            } else if p.extension().is_some_and(|x| x == "rs") {
                 out.push(p);
             }
         }

@@ -36,16 +36,23 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
 /// the TOML (`toml_url`, `sha256`, `prebuilt`, …) are ignored by serde.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RegistryEntryView {
+    /// Recipe id — the registry key, what `recipe:<id>` references.
     pub id: String,
+    /// Human-readable corpus name.
     pub name: String,
+    /// Short corpus description; empty when the TOML omits it.
     #[serde(default)]
     pub description: String,
+    /// Upstream data license string; empty when unspecified.
     #[serde(default)]
     pub license: String,
+    /// Download size, GB (0.0 when unspecified).
     #[serde(default)]
     pub size_compressed_gb: f64,
+    /// On-disk indexed size, GB (0.0 when unspecified).
     #[serde(default)]
     pub size_indexed_gb: f64,
+    /// Whether the recipe ships an enrichment phase.
     #[serde(default)]
     pub enrichment_enabled: bool,
 }
@@ -79,7 +86,9 @@ pub fn default_local_registry_path() -> Option<PathBuf> {
 /// local registry (vs the bundled snapshot).
 #[derive(Debug, Clone)]
 pub struct CatalogRow {
+    /// The registry entry.
     pub entry: RegistryEntryView,
+    /// True when the entry came from the user's local registry rather than the bundled snapshot.
     pub is_local: bool,
 }
 
@@ -99,7 +108,7 @@ pub fn merged_catalog() -> Vec<CatalogRow> {
 
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out: Vec<CatalogRow> = Vec::new();
-    for e in local.into_iter().chain(bundled.into_iter()) {
+    for e in local.into_iter().chain(bundled) {
         if !seen.insert(e.id.clone()) {
             continue;
         }

@@ -246,6 +246,12 @@ pub async fn render_envelope(project: &RecipeProject, partner_message: &str) -> 
 
 #[cfg(test)]
 mod tests {
+    // The crate-wide HOME test lock intentionally spans awaits: the guard
+    // must cover the whole test body (HOME is process-global), and each
+    // #[tokio::test] owns its runtime, so a contending sibling parks a
+    // thread — serialization, never deadlock (P0.3 lock audit, 2026-07-12).
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use std::sync::Arc;
 

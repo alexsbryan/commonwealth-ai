@@ -845,11 +845,7 @@ mod prefill_audit {
     use super::*;
 
     fn row(name: &str, s: &str) {
-        eprintln!(
-            "  {name:<44} {:>6} chars  ~{:>5} tok",
-            s.len(),
-            s.len() / 4
-        );
+        eprintln!("  {name:<44} {:>6} chars  ~{:>5} tok", s.len(), s.len() / 4);
     }
 
     #[test]
@@ -872,9 +868,8 @@ mod prefill_audit {
         );
         let base_primary = build_synthesis_system_prompt(false, "", true, &budget);
         row("synthesis system (PRIMARY, thinking on)", &base_primary);
-        let base_fast = build_synthesis_system_prompt_with_provenance(
-            false, "", false, &budget, true,
-        );
+        let base_fast =
+            build_synthesis_system_prompt_with_provenance(false, "", false, &budget, true);
         row("synthesis system (FAST, provenance)", &base_fast);
         eprintln!("  (dynamic layers — evidence chunks, history, question —");
         eprintln!("   come from live-run journals; see the audit table)");

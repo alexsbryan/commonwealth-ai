@@ -31,6 +31,7 @@ use crate::types::{Intent, ToolDescriptor};
 /// The two surviving named modes after skill retirement. These match
 /// the `id` field of the TOMLs at `sovereign/modes/<id>/skill.toml`.
 pub const MODE_INNER_WORK: &str = "inner-work";
+/// Recipe-author workspace mode id.
 pub const MODE_RECIPE_AUTHOR: &str = "recipe-author";
 /// Workflow-author workspace — the umbrella authoring mode. Same agent-loop
 /// treatment as recipe-author (force the tool loop, Primary slot), different tools.
@@ -54,6 +55,7 @@ pub enum ToolFilter {
 }
 
 impl ToolFilter {
+    /// Allowlist builder from any iterable of ids.
     pub fn allow<I, S>(ids: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -62,6 +64,7 @@ impl ToolFilter {
         Self::Allowlist(ids.into_iter().map(Into::into).collect())
     }
 
+    /// Denylist builder from any iterable of ids.
     pub fn deny<I, S>(ids: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -105,6 +108,7 @@ pub enum PolicySource {
 /// follow-up) by synthesis system-message assembly.
 #[derive(Debug, Clone)]
 pub struct IntentPolicy {
+    /// Which tools the model sees this turn.
     pub tool_filter: ToolFilter,
     /// Optional shape-level guidance appended to the synthesis
     /// system message for this intent. Forward-compatible: the
@@ -112,7 +116,9 @@ pub struct IntentPolicy {
     /// (skills' prompts.synthesis fields were never wired anyway —
     /// see runtime.rs comment block).
     pub synthesis_addendum: Option<&'static str>,
+    /// Effective voice register for the turn, mode override applied.
     pub register: SkillRegister,
+    /// Why the policy is what it is — glassbox provenance for the routing footer.
     pub source: PolicySource,
     /// The router-classified intent after the relational-register
     /// override is applied. `Some(intent)` when the policy was

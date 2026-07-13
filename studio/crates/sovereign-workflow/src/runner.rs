@@ -136,7 +136,7 @@ impl Runner {
         );
 
         let observer = self.observer.as_ref();
-        let reports: Vec<ItemReport> = stream::iter(items.into_iter())
+        let reports: Vec<ItemReport> = stream::iter(items)
             .map(|item| {
                 run_item(
                     wf,
@@ -276,7 +276,7 @@ async fn run_item_inner(
             // survives (each element keeps its own content-addressed key, so
             // editing one chunk still re-runs only it, batched with other misses).
             let elem_results: Vec<std::result::Result<(serde_json::Value, bool), String>> =
-                stream::iter(collection.into_iter())
+                stream::iter(collection)
                     .map(|elem| {
                         let mut elem_scope = scope.clone();
                         elem_scope.element = Some(elem);

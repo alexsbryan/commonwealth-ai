@@ -77,7 +77,7 @@ fn method_name(desc: &str) -> &str {
         Some(i) => &l[..i],
         None => l.trim_end_matches('.'),
     };
-    core.rsplit(|c| c == ']' || c == '#').next().unwrap_or(core)
+    core.rsplit([']', '#']).next().unwrap_or(core)
 }
 
 /// The top descriptor segment (a coarse module label), or `(root)` for an

@@ -216,17 +216,18 @@ impl StepSpec {
     /// `{ref.key}` to derive edges.
     fn templated_text(&self) -> String {
         let mut s = String::new();
-        for f in [
+        for t in [
             &self.prompt,
             &self.system,
             &self.system_file,
             &self.input,
             &self.grammar,
-        ] {
-            if let Some(t) = f {
-                s.push(' ');
-                s.push_str(t);
-            }
+        ]
+        .into_iter()
+        .flatten()
+        {
+            s.push(' ');
+            s.push_str(t);
         }
         for v in [&self.params, &self.structured_output, &self.stamp] {
             if let Some(p) = v {

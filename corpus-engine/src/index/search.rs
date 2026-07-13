@@ -548,7 +548,7 @@ impl CorpusIndex {
                 let rerank_span = (rerank_max - rerank_min).max(1e-6);
                 candidates
                     .into_iter()
-                    .zip(scores.into_iter())
+                    .zip(scores)
                     .map(|(mut chunk, logit)| {
                         let fusion_norm = (chunk.score - fusion_min) / fusion_span;
                         let rerank_norm = (logit - rerank_min) / rerank_span;

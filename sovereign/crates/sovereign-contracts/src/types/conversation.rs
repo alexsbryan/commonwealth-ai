@@ -10,27 +10,40 @@ use serde::{Deserialize, Serialize};
 
 // ─── Conversation Types ────────────────────────────────────────
 
+/// One turn in a conversation, as persisted in the `messages` table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+    /// Message id (store primary key).
     pub id: MessageId,
+    /// Owning conversation.
     pub conversation_id: ConversationId,
+    /// Who authored the turn.
     pub role: Role,
+    /// The message text, as rendered.
     pub content: String,
+    /// Creation time (Unix timestamp).
     pub created_at: i64,
+    /// Free-form JSON side-channel (provenance, routing policy, offer chips); `None` when nothing was attached.
     pub metadata: Option<serde_json::Value>,
+    /// Sync-readiness Lamport stamp: set to the write timestamp on every mutation; 0 on legacy rows.
     #[serde(default)]
     pub version: i64,
 }
 
+/// Message author. Serialized lowercase (OpenAI-style).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
+    /// The human user.
     User,
+    /// The model's reply.
     Assistant,
+    /// Injected system/context turn.
     System,
 }
 
 impl Message {
+    /// The lowercase wire string for the role, without a serde round-trip.
     pub fn role_str(&self) -> &'static str {
         match self.role {
             Role::User => "user",
@@ -40,15 +53,23 @@ impl Message {
     }
 }
 
+/// A conversation with its message history, as loaded from the store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Conversation {
+    /// Stable id for the conversation's whole life (the store key).
     pub id: ConversationId,
+    /// Display title; `None` until auto-title generation or a user rename sets it.
     pub title: Option<String>,
+    /// Full ordered message history.
     pub messages: Vec<Message>,
+    /// Creation time (Unix timestamp).
     pub created_at: i64,
+    /// Bumped on every append/rename (Unix timestamp).
     pub updated_at: i64,
+    /// Sync-readiness Lamport stamp: set to the write timestamp on every mutation; 0 on legacy rows.
     #[serde(default)]
     pub version: i64,
+    /// Soft-delete tombstone, kept for sync-readiness; `None` = live.
     #[serde(default)]
     pub deleted_at: Option<i64>,
     /// Skill active when this conversation started, if any.
@@ -119,10 +140,16 @@ pub struct SearchedSourceEntry {
     pub search_query: String,
 }
 
+/// Everything prompt assembly needs for one turn: the conversation, recalled
+/// memories, and the optional context blocks the Runtime splices in between
+/// routing and synthesis (each field documents its producer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationContext {
+    /// The conversation being served, with history.
     pub conversation: Conversation,
+    /// Memories recalled as relevant to the current message.
     pub memories: Vec<Memory>,
+    /// Compressed cross-turn task state; `None` when never built.
     pub working_memory: Option<WorkingMemory>,
     /// Corpus IDs of installed corpora at context-assembly time.
     /// Used by the router to inform classification and by prompts
@@ -299,7 +326,9 @@ pub struct ToolDossier {
 /// One row of `ToolDossier.tools_available`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDossierEntry {
+    /// Canonical tool id.
     pub tool_id: String,
+    /// The descriptor's description, verbatim — descriptors are the source of truth (ARCH §6.2).
     pub description: String,
 }
 
@@ -309,13 +338,16 @@ pub struct ToolDossierEntry {
 /// stored payload schema grows fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDossierOutcome {
+    /// Tool the outcome concerns.
     pub tool_id: String,
     /// Canonical wire-form: `"useful"` / `"stale"` / `"wrong-tool"`
     /// / `"no-results"`. String here (not the enum) so this type
     /// stays Serde-friendly without pulling the
     /// `ToolDecisionOutcome` enum into the public types module.
     pub outcome: String,
+    /// The model's recorded rationale for the tool decision.
     pub reasoning: String,
+    /// When the outcome was recorded (Unix seconds).
     pub applied_at_unix: i64,
     /// Tier 1 result memory — one-line summary of what the tool
     /// actually returned (top-1 evidence title for knowledge_lookup,
@@ -437,10 +469,15 @@ impl ConversationContext {
     }
 }
 
+/// Compressed cross-turn state — goal, durable facts, open documents —
+/// rebuilt each turn by `memory::compress_working_memory`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkingMemory {
+    /// What the user is currently working toward, when detectable.
     pub current_goal: Option<String>,
+    /// Short facts worth carrying across turns.
     pub facts: Vec<String>,
+    /// Documents currently in play in the conversation.
     pub active_documents: Vec<String>,
 }
 

@@ -116,7 +116,7 @@ fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
                     return (
                         true,
                         Some(dev.name.clone()),
-                        Some(dev.memory_total as u64),
+                        Some(dev.memory_total),
                         false, // discrete GPU — not unified memory
                     );
                 }

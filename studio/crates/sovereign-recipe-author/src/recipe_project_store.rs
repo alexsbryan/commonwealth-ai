@@ -166,7 +166,7 @@ impl RecipeProjectStore {
             .query_row(
                 &format!("SELECT {COLS} FROM recipe_projects WHERE id = ?1"),
                 params![id],
-                |r| row_from(r),
+                row_from,
             )
             .optional()?;
         Ok(row)
@@ -188,7 +188,7 @@ impl RecipeProjectStore {
         };
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
-            .query_map([], |r| row_from(r))?
+            .query_map([], row_from)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }

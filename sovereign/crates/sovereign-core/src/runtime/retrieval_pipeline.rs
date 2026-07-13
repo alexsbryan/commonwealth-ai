@@ -606,7 +606,7 @@ fn step_readiness_disclosure<'a, 'ctx>(
         // the question may have nothing to do with.
         let unready = engine.installed_indexes().await.ok().and_then(|idx| {
             idx.into_iter()
-                .filter(|info| scoped.map_or(false, |s| s.iter().any(|c| c == &info.corpus_id)))
+                .filter(|info| scoped.is_some_and(|s| s.iter().any(|c| c == &info.corpus_id)))
                 .find_map(|info| {
                     let issue = if !info.indexes_built {
                         ReadinessIssue::NotBuilt

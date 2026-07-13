@@ -252,25 +252,17 @@ impl<'a> Walker<'a> {
                     self.current.text.push_str(&text);
                 }
             }
-            Event::SoftBreak => {
-                if !self.current.in_heading {
-                    self.current.text.push('\n');
-                }
+            Event::SoftBreak if !self.current.in_heading => {
+                self.current.text.push('\n');
             }
-            Event::HardBreak => {
-                if !self.current.in_heading {
-                    self.current.text.push_str("\n\n");
-                }
+            Event::HardBreak if !self.current.in_heading => {
+                self.current.text.push_str("\n\n");
             }
-            Event::End(TagEnd::Paragraph) => {
-                if !self.current.in_heading {
-                    self.current.text.push_str("\n\n");
-                }
+            Event::End(TagEnd::Paragraph) if !self.current.in_heading => {
+                self.current.text.push_str("\n\n");
             }
-            Event::End(TagEnd::Item) => {
-                if !self.current.in_heading {
-                    self.current.text.push('\n');
-                }
+            Event::End(TagEnd::Item) if !self.current.in_heading => {
+                self.current.text.push('\n');
             }
             _ => {
                 // Ignore: list bullets, emphasis tags, html, footnote

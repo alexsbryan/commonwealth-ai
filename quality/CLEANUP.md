@@ -1,5 +1,10 @@
 # Prioritized cleanup list
 
+**Status 2026-07-12: P0 #1-5 and P1 #7-11 executed** (see the Execution
+record at the bottom). Remaining live: P1 #6 (fresh census — needs a
+committed tree for the SCIP re-index), P1 #12 first slice, api snapshots
+for the 4 hub crates (parked on a rustc ICE — see record), and all of P2.
+
 Generated 2026-07-11 from the quality-program instrumentation:
 `sovereign code arch-report` (SCIP census + declared↔observed deltas + git
 temporal coupling), `quality/baselines/clippy_counts.tsv` (lint-gate),
@@ -46,3 +51,23 @@ after the next re-index (commit + clean tree → daemon reindexes).
 | 16 | **Panic-ratchet burn-down** — unwrap_used 565 + expect_used 362, crate-by-crate starting with daemon/server-facing crates (corpus-engine 201, sovereign-mesh 95+, sovereign-tools 126). | clippy_counts trend ↓ |
 | 17 | **Complexity budget burn-down** — cognitive_complexity 240 + too_many_lines 128, opportunistic (only when touching the function anyway); never a dedicated sweep. | trend ↓ |
 | 18 | **Month-later blocking flips** (~2026-08, after 4 clean weeks): delete `continue-on-error` on gates/deny/clippy lanes; commit `.github/rulesets/main.json`; update CONTRIBUTING. | every red on main is a genuine regression |
+
+---
+
+## Execution record — 2026-07-12 (P0 + P1 batch)
+
+| Item | Outcome |
+|---|---|
+| P0 #1 dead edges | ✅ 10 of 13 removed (incl. `sovereign-cli-shared → corpus-engine` + its vestigial feature); internal edges 205 → 196. 3 KEPT — SCIP missed function-scoped `use`-only imports (`sovereign-cli-daemon → {commonwealth-tdd, sovereign-workflow}`, `sovereign-cli-llm → oicp-types`): treat `DeclaredNeverObserved` on single-handler crates with extra suspicion. |
+| P0 #2 unexpected_cfgs | ✅ rough_edges.rs treesitter blocks were dead-on-arrival since the carve-out — deleted (−322 lines incl. 4 orphaned helpers); `FindingKind::DocDrift` kept for serde/consumer compat. Bonus: urls.rs test un-gated (cfg on a feature the crate never declared — the test silently never ran). |
+| P0 #3 await_holding_lock | ✅ All 23 sites were TEST code. 6 test modules: documented `#![allow]` (intentional whole-test serialization locks — HOME/e2e/INGEST/SOVEREIGN_HOME; each `#[tokio::test]` owns its runtime → contention parks a thread, never deadlocks). 2 real fixes: block-scoped assertion guards in functional.rs + solve_http.rs. Zero production sites. |
+| P0 #4 mechanical sweep | ✅ `cargo clippy --fix` workspace pass + agent deletions; `-D warnings` flip with explicit `-A` for the ratcheted lints (see ci.yml). dead_code NOT mass-deleted — several flagged items sit in active test scaffolding (harness.rs scripts); left to the ratchet. |
+| P1 #7 sqlite.rs | ✅ 4,097 → 582-line parent + 14 concern modules (largest 1,098); pure move proven byte-for-byte; 72/72 tests. FOUND: `--features postgres` was ALREADY broken (13 contract-drift errors in postgres.rs: missing version/deleted_at, no DocumentAssetStore impl) — predates the split; the weekly cargo-hack lane will keep flagging it until fixed or the feature is retired. |
+| P1 #8 retrieval.rs | ✅ 5,032 → 11 modules under retrieval/ (largest 1,008); full sovereign-core suite green; tracing prefix-filters still match. |
+| P1 #9 hidden coupling (core) | ✅ plan_grammar.rs now owns the `{N.key}` placeholder grammar (emit+parse+prompt-sync test); synthesis_common.rs owns the handler trio's mirrored plumbing (CompletionRequest tails, ResponseProvenance telemetry, transcript EvidenceContext). FOUND: SYSTEM_OVERVIEW's `[sample:N:method]`/`[eval:name]` grammar NEVER existed in code — doc fiction corrected in SYSTEM_OVERVIEW + DEVELOPMENT.md. |
+| P1 #10 middleware cluster | ✅ middleware/shared.rs: single-sourced notes/features db paths + prepend_to_system + the shared test fixture (the coupling was mostly FIXTURE LOCKSTEP — every new ChatCompletionRequest field used to touch 6 files). −289 lines; 349 tests green. |
+| P1 #11 contracts docs | ✅ 798 → 0 missing_docs in sovereign-contracts (+971 researched doc lines; low-confidence items flagged in the agent report). oicp-types' 114 remain (separate crate, ratcheted). |
+| P1 #6 fresh census | ⏳ Blocked on a committed tree (SCIP reindexer gates on clean tree); run `sovereign code arch-report` after landing this batch, then freeze R3 carve lines. |
+| P1 #12 SCC first slice | ⏳ Deferred to the fresh census (error.rs out-edge analysis). |
+| P0 #5 api snapshots | ◐ 3 of 7 banked (oicp-types, oicp-client, sovereign-contracts — 7,217 surface lines committed; api-gate green). The 4 hub crates are PARKED: rustc nightly-2026-07-01 ICEs compiling `lance-index-4.0.0` (opaque-type trait-selection panic). Un-park: bump quality/nightly-pin.txt to a nightly that builds lance-index, uncomment the crates in xtask api_gate.rs, `api-gate --update-baseline`. |
+| Post-batch reconciliation | lint-gate: 60 pairs cleared + 3 lowered by the batch; final baseline 1,637 warnings across 153 pairs (was 2,555/211). Growth in sovereign-core/-inference (+17) was YOUR new code landed since the 07-11 snapshot (state_cartridge_spike, lessons.rs, core_tests/harness, cpu_compat) — accepted explicitly. fan-in caps: 3 lowered (dead-edge cuts). oversized: retrieval.rs + sqlite.rs + oicp-types lib.rs cleared; 6 entries grown by your recent commits re-accepted (notes.rs 6363, streaming.rs 3275, router.rs 2710, model_slot.rs 3712, core_tests.rs 2378, lessons.rs 1318 NEW — candidates for §10 rows). All 5 gates + api-gate green at batch close; fmt clean. |

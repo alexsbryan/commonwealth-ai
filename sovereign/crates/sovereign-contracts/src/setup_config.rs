@@ -30,9 +30,12 @@ use serde::{Deserialize, Serialize};
 /// Top-level structure of `~/.sovereign/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupConfig {
+    /// `[models]` — GGUF slot paths. The only required section.
     pub models: ModelsSection,
+    /// `[daemon]` — listener ports and service options.
     #[serde(default)]
     pub daemon: DaemonSection,
+    /// `[data]` — where mutable state lives on disk.
     #[serde(default)]
     pub data: DataSection,
     /// Operator-tunable defaults for the watched-folder reconciliation
@@ -167,16 +170,22 @@ pub struct IrohSection {
 /// data.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransportSection {
+    /// Transport for mesh gossip; `None` = default (see type doc).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gossip: Option<String>,
+    /// Transport for control-plane RPC; `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_plane: Option<String>,
+    /// Transport for knowledge-search fan-out; `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub knowledge_search: Option<String>,
+    /// Transport for model transfers; `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_transfer: Option<String>,
+    /// Transport for inference traffic — the latency-sensitive class and the documented escape hatch (`"ip"`); `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inference: Option<String>,
+    /// Transport for status probes; `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_probe: Option<String>,
 }
@@ -278,6 +287,7 @@ fn default_quorum_anchors() -> u32 {
 /// decay tuning, scope-wall overrides) belong here too.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemorySection {
+    /// `[memory.compaction]` — rolling-summary compaction knobs.
     #[serde(default)]
     pub compaction: crate::memory_config::CompactionConfig,
 }
@@ -311,6 +321,7 @@ pub struct ModelsSection {
     /// (~30 GB Q6) leaves no room for a second model.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fast: Option<PathBuf>,
+    /// Embedding model — required; a chat slot cannot substitute (different model class, see type doc).
     pub embed: PathBuf,
     /// Optional code-specialist model. When present, `code`-hinted
     /// inference requests route here instead of the primary. Lazy-
@@ -483,8 +494,10 @@ impl ModelsSection {
 /// :9741 serves /v1 + /mcp, :9742 carries internal mesh gossip.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonSection {
+    /// Port serving `/v1` + `/mcp` for clients (default 9741).
     #[serde(default = "default_client_port")]
     pub client_port: u16,
+    /// Port carrying internal mesh gossip (default 9742).
     #[serde(default = "default_internal_port")]
     pub internal_port: u16,
     /// When true, `sovereign setup` registers a launchd/systemd service
@@ -734,12 +747,16 @@ fn default_mdns_enabled() -> bool {
 /// `paused_at_boot`, which is an operator/host-level decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchedFoldersSection {
+    /// Default seconds between reconciliation sweeps (fallback when `corpus watch` omits the flag).
     #[serde(default = "default_wf_sweep_interval_secs")]
     pub default_sweep_interval_secs: u64,
+    /// Default grace period before a vanished file's chunks are hard-deleted, seconds (default 7 days).
     #[serde(default = "default_wf_grace_secs")]
     pub default_soft_delete_grace_secs: u64,
+    /// Deletion-guard default: a sweep removing at least this many files pauses the corpus for confirmation.
     #[serde(default = "default_wf_absolute_threshold")]
     pub default_absolute_threshold: usize,
+    /// Deletion-guard default: a sweep removing at least this fraction of live files pauses the corpus (ORed with the absolute threshold).
     #[serde(default = "default_wf_fractional_threshold")]
     pub default_fractional_threshold: f32,
     /// When `true`, all watched-folder corpora start in
@@ -899,6 +916,7 @@ impl SetupConfig {
         Self::load_from(&path)
     }
 
+    /// Load and parse a specific config file, applying `~`-expansion to the model/data paths.
     pub fn load_from(path: &Path) -> Result<Self, String> {
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
@@ -916,6 +934,7 @@ impl SetupConfig {
         Ok(path)
     }
 
+    /// Write to an explicit path, creating parent directories (pretty TOML).
     pub fn save_to(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)

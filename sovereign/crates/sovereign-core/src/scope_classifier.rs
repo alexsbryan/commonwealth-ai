@@ -127,7 +127,7 @@ impl PersonalScopeClassifier {
         let centroid_personal =
             compute_centroid(&parsed.personal.examples, &*inference, cache.as_deref_mut()).await?;
         let centroid_external =
-            compute_centroid(&parsed.external.examples, &*inference, cache.as_deref_mut()).await?;
+            compute_centroid(&parsed.external.examples, &*inference, cache).await?;
 
         if centroid_personal.len() != centroid_external.len() {
             return Err(Error::InvalidInput(format!(

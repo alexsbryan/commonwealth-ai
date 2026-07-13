@@ -184,7 +184,7 @@ async fn resolve_embeddings(
                 texts.len()
             )));
         }
-        for (&i, emb) in missing_idx.iter().zip(fresh.into_iter()) {
+        for (&i, emb) in missing_idx.iter().zip(fresh) {
             if let Err(e) = store
                 .update_memory_embedding(&memories[i].id, &emb, embed_model)
                 .await

@@ -53,15 +53,22 @@ pub struct McpServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum McpTransportConfig {
+    /// Spawn a subprocess and speak MCP over stdio. Latent — parses and the client can drive it, but no UI creates it (see type doc).
     Stdio {
+        /// Executable to spawn.
         command: String,
+        /// Command-line arguments.
         #[serde(default)]
         args: Vec<String>,
+        /// Extra environment variables for the subprocess.
         #[serde(default)]
         env: HashMap<String, String>,
     },
+    /// Connect to a streamable-HTTP MCP endpoint — the only transport the CLI/desktop surfaces offer.
     Http {
+        /// Endpoint URL.
         url: String,
+        /// How to authenticate; the credential itself is resolved at connect time (see `McpAuthConfig`).
         #[serde(default)]
         auth: McpAuthConfig,
     },
@@ -72,12 +79,17 @@ pub enum McpTransportConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum McpAuthConfig {
+    /// No authentication.
     #[default]
     None,
+    /// `Authorization: Bearer <token>`; the token is resolved at connect time.
     Bearer,
+    /// Token sent in a custom header.
     ApiKey {
+        /// Header name carrying the key (e.g. `X-Api-Key`).
         header: String,
     },
+    /// HTTP Basic auth; credentials resolved at connect time.
     Basic,
 }
 

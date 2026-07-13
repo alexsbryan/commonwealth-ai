@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 /// primary plus up to a few alternatives.
 #[derive(Debug, Clone)]
 pub struct IntentCandidate {
+    /// The intent this candidate proposes routing to.
     pub intent: Intent,
     /// Confidence in [0.0, 1.0]. A pre-checked heuristic (topic
     /// continuity, content processing, temporal signal) pins this to
@@ -31,7 +32,9 @@ pub struct IntentCandidate {
 /// trait change.
 #[derive(Debug, Clone)]
 pub struct RouterClassification {
+    /// The classifier's top pick — what `decide_policy` acts on.
     pub primary: IntentCandidate,
+    /// Runner-up candidates. Empty today; reserved for clickable disambiguations (see type doc).
     pub alternatives: Vec<IntentCandidate>,
     /// One-clause justification from the classifier, when available.
     /// Surfaced in the UI for glassbox integrity (ARCH §0.1). `None`
@@ -95,8 +98,11 @@ pub struct RoutingTiming {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MoveKind {
+    /// Proceed directly — no banner, no prompt. The default move.
     Commit,
+    /// Stream the answer AND show the interpretation banner so redirecting stays cheap.
     Propose,
+    /// Suppress synthesis; surface a clarification card and wait for the user.
     Ask,
 }
 
@@ -107,8 +113,11 @@ pub enum MoveKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfidenceTier {
+    /// `confidence >= thresholds.high` — commit territory.
     High,
+    /// Between the two thresholds — propose territory.
     Moderate,
+    /// `confidence < thresholds.moderate` — ask territory.
     Low,
 }
 
@@ -139,7 +148,9 @@ impl Default for ConfidenceThresholds {
 /// `ConfidenceThresholds`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingPolicy {
+    /// The move the runtime will take.
     pub move_kind: MoveKind,
+    /// Confidence bucket the primary candidate landed in.
     pub tier: ConfidenceTier,
     /// Snapshot of the thresholds used to produce this decision.
     /// Surfaced in glassbox metadata so users and the operator log
@@ -197,8 +208,11 @@ pub enum NarrationPhase {
     /// Router classified the turn. Carries the verdict so the
     /// desktop can label the stage chip.
     RoutingComplete {
+        /// Classified intent label (wire form), for the stage chip.
         intent: String,
+        /// Detected communicative register label.
         register: String,
+        /// Classifier confidence, for glassbox display.
         confidence: f32,
     },
     /// Retriever began (vector + FTS + atlas).
@@ -208,7 +222,9 @@ pub enum NarrationPhase {
     /// from the legacy unit variant; on the wire this is a struct
     /// variant under `#[serde(rename_all = "snake_case")]`.
     RetrievalComplete {
+        /// Chunks entering curation (pre-filter).
         chunks_in: usize,
+        /// Corpora the chunks came from — rendered in the chip label.
         corpora: Vec<String>,
     },
     /// Curator began (Fast slot, structured output).
@@ -220,8 +236,11 @@ pub enum NarrationPhase {
     /// Drafter and routes the Presenter to an honest "I don't
     /// have grounding for this" message.
     CurationComplete {
+        /// Chunks that survived curation.
         chunks_kept: usize,
+        /// Ordered section labels the Drafter will fill.
         skeleton: Vec<String>,
+        /// Honesty signal; `false` short-circuits the Drafter (see variant doc).
         sufficient: bool,
     },
     /// Drafter began (Primary slot).
@@ -230,17 +249,31 @@ pub enum NarrationPhase {
     /// `finish_reason` is the OpenAI-style `stop` / `length` /
     /// `cancelled` / `error`, sourced from the typed
     /// `StreamFrame::Finish` introduced in the Phase 1.1 plumbing.
-    DraftingComplete { tokens: u32, finish_reason: String },
+    DraftingComplete {
+        /// `completion_tokens` from the drafter call.
+        tokens: u32,
+        /// OpenAI-style `stop` / `length` / `cancelled` / `error`.
+        finish_reason: String,
+    },
     /// Presenter began (Fast slot, voice-shaping pass).
     PresentationStart,
     /// Presenter finished. `judge_score` is the optional
     /// post-presentation voice-judge score (None when register
     /// is Factual or the judge is disabled). Arrives on a
     /// delayed narration frame from the async judge task.
-    PresentationComplete { judge_score: Option<u8> },
+    PresentationComplete {
+        /// Async voice-judge score; `None` when the register is Factual
+        /// or the judge is disabled.
+        judge_score: Option<u8>,
+    },
     /// Any stage emitted an error. The pipeline records this for
     /// telemetry; user-facing messaging is decided per stage.
-    StageError { stage: String, error: String },
+    StageError {
+        /// Which pipeline stage errored.
+        stage: String,
+        /// The error text, recorded for telemetry.
+        error: String,
+    },
 
     // ── Tool-invocation frames (table-stakes "Searching for X…" UX) ──
     //
@@ -262,8 +295,11 @@ pub enum NarrationPhase {
     /// web for *quantum entanglement*", "Reading docs.python.org") that
     /// the desktop chip can render without re-interpreting tool args.
     ToolInvocationStart {
+        /// Correlates this Start with its Complete (arrivals may be out of order).
         call_id: String,
+        /// Canonical tool id (`web_search`, `knowledge_search`, ...).
         tool_id: String,
+        /// One-line user-facing description of the call.
         summary: String,
     },
     /// A tool call has finished. `ok` distinguishes success (chip turns
@@ -272,9 +308,13 @@ pub enum NarrationPhase {
     /// user-facing outcome ("Retrieved 4 results", "No matches found",
     /// "404 Not Found") — never the raw tool output.
     ToolInvocationComplete {
+        /// Matches the corresponding `ToolInvocationStart`.
         call_id: String,
+        /// Canonical tool id, repeated so a consumer that missed the Start can still label the card.
         tool_id: String,
+        /// Success vs failure — drives chip colouring.
         ok: bool,
+        /// Short user-facing outcome; never the raw tool output.
         result_summary: String,
     },
 
@@ -288,7 +328,10 @@ pub enum NarrationPhase {
     /// directly — it bypasses the cap/suppression like the tool frames,
     /// and the desktop REPLACES rather than appends it (one live chip,
     /// not a log entry). Cleared when the turn's terminal arrives.
-    SynthesisProgress { tokens: u32 },
+    SynthesisProgress {
+        /// Running count of tokens drafted so far — never the content.
+        tokens: u32,
+    },
 
     /// EXPERIMENT (`SOVEREIGN_DRAFT_STREAM=1`): live DRAFT text preview.
     /// Streams the unverified draft's incremental text during the gated
@@ -302,7 +345,10 @@ pub enum NarrationPhase {
     /// is the text appended since the previous frame. TTFT-perceived
     /// (first draft glyphs) drops to draft latency while the official
     /// TTFT metric keeps measuring the gated stream honestly.
-    DraftDelta { delta: String },
+    DraftDelta {
+        /// Draft text appended since the previous frame.
+        delta: String,
+    },
 }
 
 /// One narration entry emitted in the model's voice during a long
@@ -312,7 +358,9 @@ pub enum NarrationPhase {
 /// 3-event cap keep the channel from polluting short turns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NarrationEvent {
+    /// Which phase boundary this entry marks (with its payload).
     pub phase: NarrationPhase,
+    /// Model-voice narration line shown in the chip.
     pub text: String,
     /// Milliseconds since turn start. Drives UI timeline rendering.
     pub elapsed_ms: u64,
@@ -328,7 +376,9 @@ pub struct NarrationEvent {
 /// (full session retained for 30s).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterpretationProposed {
+    /// Live `QuerySession` id — redirect chips resume against it.
     pub session_id: String,
+    /// Conversation the banner belongs to (event routing).
     pub conversation_id: String,
     /// One-sentence statement of how the router read the input, e.g.
     /// "I'm reading this as a quick overview of the scheduler."
@@ -358,23 +408,28 @@ pub struct ProposedAlternative {
 /// nothing streams until the user responds.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationRequest {
+    /// Live `QuerySession` id the chosen option resumes against.
     pub session_id: String,
+    /// Conversation the card belongs to (event routing).
     pub conversation_id: String,
     /// The question to show above the options, e.g. "I can approach
     /// this a few ways — are you trying to understand how it works,
     /// design changes to it, or debug it?"
     pub question: String,
+    /// Clickable disambiguations; a free-text fallback renders alongside.
     pub options: Vec<ClarificationOption>,
 }
 
 /// One clickable disambiguation on a `ClarificationRequest` card.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationOption {
+    /// UI chip text.
     pub label: String,
     /// The follow-up message that will be sent back as if the user
     /// had typed it. The runtime correlates to the session via a
     /// session_ref and skips routing.
     pub follow_up: String,
+    /// Wire-form `Intent` for the resume path (see `ResumeSession::intent_hint`).
     pub intent_hint: String,
 }
 
@@ -384,8 +439,11 @@ pub struct ClarificationOption {
 /// turn elapsed < 5s.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TurnNarration {
+    /// The emitting `QuerySession`.
     pub session_id: String,
+    /// Conversation the narration belongs to (event routing).
     pub conversation_id: String,
+    /// The narration entry itself.
     pub event: NarrationEvent,
 }
 
@@ -399,6 +457,7 @@ pub struct TurnNarration {
 ///     the cached retrieval from that session).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumeSession {
+    /// The prior `QuerySession` to resume (retained ~30s after completion).
     pub session_id: String,
     /// Wire-form `Intent` hint produced by `intent_hint()` in the
     /// runtime. Parsed back via `parse_intent_hint`. Unknown or

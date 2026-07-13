@@ -31,7 +31,6 @@ sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
-sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }

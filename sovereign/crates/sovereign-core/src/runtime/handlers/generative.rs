@@ -100,7 +100,7 @@ impl Runtime {
         let conversation_id_owned = conversation_id.to_string();
         let message_id_for_persist = message_id.clone();
         let context_window = self.inference.effective_context_size();
-        let max_tokens_budget = request.max_tokens.map(|t| t as usize);
+        let max_tokens_budget = request.max_tokens.map(|t| t);
         let started = std::time::Instant::now();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<String>>();
 

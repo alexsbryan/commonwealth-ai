@@ -205,15 +205,11 @@ fn parse_milestones(body: &str) -> Result<Vec<MilestoneSpec>> {
                     }
                 }
             }
-            Event::Text(text) => {
-                if cur_start.is_some() {
-                    cur_title_buf.push_str(&text);
-                }
+            Event::Text(text) if cur_start.is_some() => {
+                cur_title_buf.push_str(&text);
             }
-            Event::Code(code) => {
-                if cur_start.is_some() {
-                    cur_title_buf.push_str(&code);
-                }
+            Event::Code(code) if cur_start.is_some() => {
+                cur_title_buf.push_str(&code);
             }
             _ => {}
         }

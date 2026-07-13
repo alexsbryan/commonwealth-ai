@@ -128,12 +128,8 @@ impl CurrentInfoClassifier {
 
         let centroid_current =
             compute_centroid(&parsed.current.examples, &*inference, cache.as_deref_mut()).await?;
-        let centroid_evergreen = compute_centroid(
-            &parsed.evergreen.examples,
-            &*inference,
-            cache.as_deref_mut(),
-        )
-        .await?;
+        let centroid_evergreen =
+            compute_centroid(&parsed.evergreen.examples, &*inference, cache).await?;
 
         if centroid_current.len() != centroid_evergreen.len() {
             return Err(Error::InvalidInput(format!(

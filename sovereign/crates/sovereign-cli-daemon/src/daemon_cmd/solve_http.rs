@@ -840,11 +840,15 @@ mod tests {
 
         let job = jobs.get(&id).unwrap();
         assert_eq!(job.state.lock().unwrap().label(), "cancelled");
-        let ring = job.events.lock().unwrap();
-        assert!(
-            ring.iter().any(|e| e.is_done()),
-            "cancel must emit a done event"
-        );
+        // Block-scoped: the ring guard must not span the second-cancel
+        // await below (clippy::await_holding_lock is scope-based).
+        {
+            let ring = job.events.lock().unwrap();
+            assert!(
+                ring.iter().any(|e| e.is_done()),
+                "cancel must emit a done event"
+            );
+        }
 
         // Second cancel: already finished.
         let req = Request::builder()

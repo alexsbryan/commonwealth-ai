@@ -147,7 +147,11 @@ pub fn list_records() -> Vec<CrashRecord> {
         .filter_map(|e| std::fs::read(e.path()).ok())
         .filter_map(|b| serde_json::from_slice::<CrashRecord>(&b).ok())
         .collect();
-    out.sort_by(|a, b| b.captured_at_unix.cmp(&a.captured_at_unix).then(b.id.cmp(&a.id)));
+    out.sort_by(|a, b| {
+        b.captured_at_unix
+            .cmp(&a.captured_at_unix)
+            .then(b.id.cmp(&a.id))
+    });
     out
 }
 

@@ -92,10 +92,10 @@ fn skip_metadata_value<R: Read + Seek>(r: &mut R, value_type: u32) -> std::io::R
         2 | 3 => {
             r.seek(SeekFrom::Current(2))?;
         } // u16 / i16
-        4 | 5 | 6 => {
+        4..=6 => {
             r.seek(SeekFrom::Current(4))?;
         } // u32 / i32 / f32
-        10 | 11 | 12 => {
+        10..=12 => {
             r.seek(SeekFrom::Current(8))?;
         } // u64 / i64 / f64
         8 => {

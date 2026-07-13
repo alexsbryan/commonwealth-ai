@@ -179,27 +179,11 @@ impl Runtime {
         );
         let synthesis_system = self.build_primary_system_message(&synthesis_base, context);
 
+        // Shared synthesis-request core (`synthesis_common`) + the
+        // surface's own system message.
         let synthesis_request = CompletionRequest {
-            prompt: synthesis_prompt,
             system_message: Some(synthesis_system),
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(self.inference_config.max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
-            structured_output: None,
-            top_k: self.inference_config.top_k,
-            top_p: None,
-            oicp: self.build_oicp(&Intent::ComplexTask),
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+            ..self.synthesis_request(synthesis_prompt, self.build_oicp(&Intent::ComplexTask))
         };
         let synthesis = self.inference.complete(&synthesis_request).await?;
 
@@ -313,16 +297,14 @@ impl Runtime {
         let gate_surface = crate::runtime::grounding::GateSurface::ComplexTask;
         let mut grounding_gate_meta: Option<serde_json::Value> = None;
         let gated_text: String = if gate_surface.enabled() && !step_summaries.is_empty() {
-            let gate_evidence = crate::runtime::grounding::EvidenceContext {
-                chunks: step_summaries.clone(),
-                // Step summaries are synthesized prose, not retrieved chunks — no
-                // source labels to widen the citation check; it runs body-only.
-                source_labels: Vec::new(),
-                chunk_labels: Vec::new(),
-                searcher: None,
-                entity_anchored: false,
-                top_similarity: None,
-            };
+            // Step summaries are synthesized prose, not retrieved
+            // chunks — transcript-shaped evidence (body-only citation
+            // check), and the snapshot IS the universe (no searcher).
+            let gate_evidence = super::synthesis_common::transcript_gate_evidence(
+                step_summaries.clone(),
+                None,
+                false,
+            );
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,
                 message,
@@ -364,27 +346,14 @@ impl Runtime {
             }
         };
 
-        // Save and return assistant message.
+        // Save and return assistant message. Completion-telemetry
+        // tail comes from the shared helper (`synthesis_common`);
+        // only surface-varying fields here.
         let provenance = ResponseProvenance {
-            intent: "ComplexTask".to_string(),
             search_method,
             sources: all_sources,
-            inference_backend: synthesis.model_id.clone(),
-            oicp_match: synthesis
-                .oicp_meta
-                .as_ref()
-                .and_then(|m| m.match_quality.as_ref())
-                .map(|q| format!("{q:?}")),
-            total_latency_ms: synthesis.latency_ms,
-            tokens_used: synthesis.tokens_used,
-            coarse_intent: None,
             self_assessment: numeric_audit_note,
-            routing_trigger: None,
-            coverage: None,
-            finish_reason: synthesis.finish_reason.clone(),
-            max_tokens_budget: Some(self.inference_config.max_tokens),
-            completion_tokens: synthesis.completion_tokens,
-            context_window: self.inference.effective_context_size(),
+            ..self.synthesis_provenance("ComplexTask", &synthesis)
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).

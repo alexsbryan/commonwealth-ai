@@ -1,0 +1,50 @@
+# api-gate snapshot — public API surface of `oicp-client` (cargo public-api,
+# nightly-2026-07-01). MACHINE-WRITTEN; regenerate after an INTENTIONAL API change:
+#   cargo run -p xtask -- api-gate --update-baseline
+# The PR diff of this file IS the API review artifact.
+impl !core::panic::unwind_safe::RefUnwindSafe for oicp_client::RemoteApiProvider
+impl !core::panic::unwind_safe::RefUnwindSafe for oicp_client::SplitInferenceProvider
+impl !core::panic::unwind_safe::UnwindSafe for oicp_client::RemoteApiProvider
+impl !core::panic::unwind_safe::UnwindSafe for oicp_client::SplitInferenceProvider
+impl core::marker::Freeze for oicp_client::RemoteApiProvider
+impl core::marker::Freeze for oicp_client::SplitInferenceProvider
+impl core::marker::Send for oicp_client::RemoteApiProvider
+impl core::marker::Send for oicp_client::SplitInferenceProvider
+impl core::marker::Sync for oicp_client::RemoteApiProvider
+impl core::marker::Sync for oicp_client::SplitInferenceProvider
+impl core::marker::Unpin for oicp_client::RemoteApiProvider
+impl core::marker::Unpin for oicp_client::SplitInferenceProvider
+impl core::marker::UnsafeUnpin for oicp_client::RemoteApiProvider
+impl core::marker::UnsafeUnpin for oicp_client::SplitInferenceProvider
+impl oicp_client::RemoteApiProvider
+impl oicp_client::SplitInferenceProvider
+impl sovereign_contracts::traits::InferenceProvider for oicp_client::RemoteApiProvider
+impl sovereign_contracts::traits::InferenceProvider for oicp_client::SplitInferenceProvider
+pub async fn oicp_client::RemoteApiProvider::fetch_oicp_manifest(&self) -> core::option::Option<oicp_types::manifest::ProviderManifest>
+pub async fn oicp_client::fetch_manifest(&str, core::option::Option<alloc::string::String>) -> core::option::Option<oicp_types::manifest::ProviderManifest>
+pub fn oicp_client::RemoteApiProvider::capabilities(&self) -> sovereign_contracts::types::completion::ProviderCapabilities
+pub fn oicp_client::RemoteApiProvider::complete<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 sovereign_contracts::types::completion::CompletionRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<sovereign_contracts::types::completion::CompletionResponse>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::complete_batch<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 [sovereign_contracts::types::completion::CompletionRequest]) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<sovereign_contracts::types::completion::CompletionResponse>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::complete_stream<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 sovereign_contracts::types::completion::CompletionRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<core::pin::Pin<alloc::boxed::Box<(dyn futures_core::stream::Stream<Item = sovereign_contracts::error::Result<alloc::string::String>> + core::marker::Send)>>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::complete_stream_with_finish<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 sovereign_contracts::types::completion::CompletionRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<core::pin::Pin<alloc::boxed::Box<(dyn futures_core::stream::Stream<Item = sovereign_contracts::types::completion::StreamFrame> + core::marker::Send)>>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::embed<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<f32>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::embed_query<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<f32>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::RemoteApiProvider::new(&str, core::option::Option<alloc::string::String>, &str, u32) -> Self
+pub fn oicp_client::RemoteApiProvider::warmup_primary<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<()>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn oicp_client::RemoteApiProvider::with_client_and_bearer(&str, reqwest::async_impl::client::Client, alloc::string::String, &str, u32) -> Self
+pub fn oicp_client::RemoteApiProvider::with_query_instruction(self, alloc::string::String) -> Self
+pub fn oicp_client::RemoteApiProvider::with_timeout(&str, core::option::Option<alloc::string::String>, &str, u32, core::time::Duration) -> Self
+pub fn oicp_client::SplitInferenceProvider::capabilities(&self) -> sovereign_contracts::types::completion::ProviderCapabilities
+pub fn oicp_client::SplitInferenceProvider::complete<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 sovereign_contracts::types::completion::CompletionRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<sovereign_contracts::types::completion::CompletionResponse>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::SplitInferenceProvider::complete_batch<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 [sovereign_contracts::types::completion::CompletionRequest]) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<sovereign_contracts::types::completion::CompletionResponse>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::SplitInferenceProvider::complete_stream<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 sovereign_contracts::types::completion::CompletionRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<core::pin::Pin<alloc::boxed::Box<(dyn futures_core::stream::Stream<Item = sovereign_contracts::error::Result<alloc::string::String>> + core::marker::Send)>>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::SplitInferenceProvider::effective_context_size(&self) -> core::option::Option<u32>
+pub fn oicp_client::SplitInferenceProvider::embed<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<f32>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::SplitInferenceProvider::embed_model_id(&self) -> alloc::string::String
+pub fn oicp_client::SplitInferenceProvider::embed_query<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = sovereign_contracts::error::Result<alloc::vec::Vec<f32>>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn oicp_client::SplitInferenceProvider::from_manifest(&str, &oicp_types::manifest::ProviderManifest, alloc::string::String, alloc::string::String) -> Self
+pub fn oicp_client::SplitInferenceProvider::model_id_for(&self, sovereign_contracts::types::Speed) -> alloc::string::String
+pub fn oicp_client::SplitInferenceProvider::new(&str, alloc::string::String, alloc::string::String, u32, alloc::string::String) -> Self
+pub mod oicp_client
+pub struct oicp_client::RemoteApiProvider
+pub struct oicp_client::SplitInferenceProvider

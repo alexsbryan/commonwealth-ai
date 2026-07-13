@@ -769,11 +769,17 @@ mod preemption_tests {
         // too — the cross-conversation collision class from the
         // 2026-07-12 prefill A/B run (new chat per question).
         let t2 = reg.begin_turn("c2");
-        assert!(t1.is_cancelled(), "cross-conversation token must be preempted");
+        assert!(
+            t1.is_cancelled(),
+            "cross-conversation token must be preempted"
+        );
         assert!(!t2.is_cancelled(), "the new turn's token starts live");
 
         let t3 = reg.begin_turn("c2");
-        assert!(t2.is_cancelled(), "same-conversation preemption still holds");
+        assert!(
+            t2.is_cancelled(),
+            "same-conversation preemption still holds"
+        );
         assert!(!t3.is_cancelled());
     }
 
