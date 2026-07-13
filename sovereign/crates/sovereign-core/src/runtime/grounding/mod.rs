@@ -1356,13 +1356,22 @@ async fn gate_longform(
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
     rewrite_req.assistant_prefix = Some(LONGFORM_REWRITE_PREFIX.to_string());
     // A corrective rewrite prunes/replaces the failed claims — it must only be
-    // able to TIGHTEN the draft, never regrow it. Cap its token budget to the
-    // draft's size (observed 2026-06-30: the rewrite inherited the base
-    // "exhaustive/1500-word" budget and inflated the answer x2-x7.5 — once to
-    // 23.8k chars of gibberish — after which the re-audit released the enlarged
-    // fabrication). ~4 chars/token is the usual English ratio; floor keeps a
-    // short draft's rewrite from being starved.
-    let draft_token_budget = (draft_backup.chars().count() / 4).max(256);
+    // able to TIGHTEN the draft, never regrow it into runaway fabrication
+    // (observed 2026-06-30: the rewrite inherited the base "exhaustive/1500-word"
+    // budget and inflated the answer x2-x7.5 — once to 23.8k chars of gibberish —
+    // after which the re-audit released the enlarged fabrication). ~4 chars/token
+    // is the usual English ratio. Budget 1.5x the draft's token estimate, not
+    // 1.0x: a faithful rewrite REPLACES a short false claim with a LONGER cited
+    // correction ("do not merely delete… cite them"), so a 1.0x cap starves it
+    // and it ships truncated — the rewrite is non-streaming, so
+    // continue_truncated_synthesis never repairs it (observed 2026-07-12: a
+    // 2296-char draft's rewrite hit completion==max_tokens==574 and shipped cut
+    // off mid-sentence; two other rewrites the same run finished at ~50% of their
+    // caps, so 1.5x is a ceiling the rewrite won't pad to, not a target). 1.5x
+    // stays well under the 2x floor of the runaway pathology, and the re-audit
+    // still runs on the result — the extra headroom cannot smuggle a fabrication
+    // past the gate. Floor keeps a short draft's rewrite from being starved.
+    let draft_token_budget = (draft_backup.chars().count() * 3 / 8).max(256);
     rewrite_req.max_tokens = Some(
         rewrite_req
             .max_tokens

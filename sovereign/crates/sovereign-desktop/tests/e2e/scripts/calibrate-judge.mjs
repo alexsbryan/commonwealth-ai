@@ -36,6 +36,11 @@ const { SYSTEM } = await import(pathToFileURL(path.resolve(RUBRIC_MOD)).href);
 
 let MODEL = null;
 async function discoverModel() {
+  // Explicit override wins — lets us calibrate a DIFFERENT judge tier (e.g. the
+  // 122B) against the same receipt-verified bank to test whether the
+  // specificity ceiling is judge-bound. Default unchanged: auto-pick the 35B.
+  const override = process.env.SOVEREIGN_JUDGE_MODEL || argOf("--model", null);
+  if (override) { MODEL = override; return; }
   const r = await fetch(`${DAEMON}/v1/models`, { signal: AbortSignal.timeout(5000) });
   const ids = ((await r.json()).data ?? []).map((m) => m.id);
   MODEL = ids.find((id) => /35B/i.test(id)) ?? ids.find((id) => !/embed|alias/i.test(id)) ?? ids[0];

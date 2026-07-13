@@ -116,13 +116,14 @@ export function makeBridge(url = process.env.SOVEREIGN_BRIDGE_URL ?? "http://127
   // null on error/timeout (chaos.mjs contract, plus the seq so callers can
   // await FOLLOW-ON events — information-request, message-refined — from the
   // right cursor).
-  async function awaitChatAnswer(sinceSeq, messageId, timeoutMs) {
+  async function awaitChatAnswer(sinceSeq, messageId, timeoutMs, onRow = null) {
     const done = await awaitEvent(
       sinceSeq,
       (r) =>
         (r.event === "message-complete" && r.payload?.message_id === messageId) ||
         r.event === "message-error",
       timeoutMs,
+      onRow,
     );
     if (!done || done.event === "message-error") return null;
     const rc = done.payload?.metadata?.retrieved_chunks;

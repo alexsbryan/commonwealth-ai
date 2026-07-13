@@ -1298,10 +1298,15 @@ async function main() {
     tag: "persona",
     // grounding_gate is a CUSTOM tracing target (methodology §3.5) — without
     // naming it, refinement_rejected receipts never reach the app log and a
-    // reverted web-rescue is indistinguishable from a no-op refinement.
+    // reverted web-rescue is indistinguishable from a no-op refinement. Same for
+    // synth.lifecycle/synth.continue/synth.truncation (answer-truncation
+    // lifecycle: draft finish vs effective cap, soft-landing continuation
+    // rounds) and gate.call (gate rewrite cap) — custom targets that
+    // sovereign_core=info does NOT enable, so a mid-thought answer tail stays
+    // undiagnosable unless named here.
     rustLog:
       process.env.RUST_LOG ??
-      "sovereign_desktop=info,sovereign_core=info,grounding_gate=debug,sovereign_inference=info",
+      "sovereign_desktop=info,sovereign_core=info,grounding_gate=debug,sovereign_inference=info,synth.lifecycle=info,synth.continue=info,synth.truncation=info,gate.call=info",
   });
   const madeConvos = [];
   try {
