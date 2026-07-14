@@ -79,7 +79,7 @@ jobs:
           fi
           echo "authorized: ${{ github.actor }}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Dispatch is main-only in practice, but pin the branch explicitly so
           # the bump commit lands on a branch, never a detached SHA.
