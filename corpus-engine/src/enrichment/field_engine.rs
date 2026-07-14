@@ -982,19 +982,9 @@ enabled = true
         assert_eq!(engine.domain.id(), "philosophy");
     }
 
-    #[test]
-    fn from_recipe_all_known_domains() {
-        let domains = [
-            "philosophy",
-            "science",
-            "policy",
-            "legal",
-            "community",
-            "multi",
-        ];
-        for domain in &domains {
-            let toml = format!(
-                r#"
+    fn recipe_with_domain(domain: &str) -> crate::recipe::Recipe {
+        let toml = format!(
+            r#"
 [corpus]
 id = "test"
 name = "Test"
@@ -1013,18 +1003,58 @@ type = "paragraph"
 enabled = true
 domain = "{domain}"
 "#
-            );
-            let recipe = crate::recipe::Recipe::from_toml(&toml).unwrap();
-            let embed: EmbedFn =
-                Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
-            let inference: InferenceFn =
-                Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+        );
+        crate::recipe::Recipe::from_toml(&toml).unwrap()
+    }
+
+    fn test_embed_infer() -> (EmbedFn, InferenceFn) {
+        let embed: EmbedFn =
+            Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
+        let inference: InferenceFn =
+            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+        (embed, inference)
+    }
+
+    #[test]
+    fn from_recipe_all_known_domains() {
+        // Only fully-implemented, registered domains. Stub domains were deleted
+        // (2026-07-13); their construction is covered by the rejection test below.
+        let domains = [
+            "philosophy",
+            "personal",
+            "conversational",
+            "business_email",
+            "institutional",
+        ];
+        for domain in &domains {
+            let recipe = recipe_with_domain(domain);
+            let (embed, inference) = test_embed_infer();
             let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
             assert!(
                 engine.is_ok(),
                 "from_recipe should succeed for domain '{domain}'"
             );
             assert_eq!(engine.unwrap().domain.id(), *domain);
+        }
+    }
+
+    #[test]
+    fn from_recipe_rejects_deleted_stub_domains() {
+        // The deleted stubs must fail at selection with a clean error — never a
+        // `todo!()` panic mid-enrichment. This is the whole point of removing them.
+        for domain in ["science", "policy", "legal", "community", "multi", "engineering"] {
+            let recipe = recipe_with_domain(domain);
+            let (embed, inference) = test_embed_infer();
+            let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
+            match engine {
+                Err(crate::error::Error::UnknownEnrichmentDomain(d)) => {
+                    assert_eq!(d, domain, "wrong domain in error");
+                }
+                other => panic!(
+                    "domain '{domain}' should be rejected as unknown, got {:?}",
+                    other.map(|_| "Ok").map_err(|e| e.to_string())
+                ),
+            }
         }
     }
 }

@@ -2065,8 +2065,8 @@ Default ports:
   → align → fault lines → open questions) that analyses a corpus
   holistically rather than per-chunk.
 - **Domain (v1)** — Trait encoding the epistemic conventions of a
-  knowledge field (philosophy, science, …). The single extension
-  point for v1.
+  knowledge field (philosophy, personal, conversational, …). The single
+  extension point for v1; only fully-implemented domains are registered.
 - **Atlas (v2)** — Typed atom graph + `Pipeline` trait + registry +
   `ExemplarBank` + `PhaseCache`. See `ENRICHMENT_V2.md`. `PhaseCache`
   stamps each phase output with the producing model (`<phase>.model.json`

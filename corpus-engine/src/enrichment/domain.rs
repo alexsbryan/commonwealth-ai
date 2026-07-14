@@ -19,11 +19,11 @@ pub type Chunk = StoredChunk;
 /// Object-safe. All methods take &self. No associated types.
 /// The engine holds Arc<dyn Domain> and calls these methods directly.
 ///
-/// Implementations in this task:
-///   PhilosophyDomain — fully implemented
-///   MultiDomain      — constructor only, methods todo!()
-///   ScienceDomain, PolicyDomain, LegalDomain,
-///   CommunityKnowledgeDomain — empty structs, all methods todo!()
+/// Registered, fully-implemented domains: PhilosophyDomain, PersonalDomain,
+/// ConversationalDomain, BusinessEmailDomain, InstitutionalDomain. A domain
+/// belongs in the registry only once every method has a real body — stub
+/// domains were removed (2026-07-13) because a registered `todo!()` panics
+/// mid-enrichment rather than erroring at selection.
 pub trait Domain: Send + Sync + 'static {
     // ── Identity ──────────────────────────────────────────────────────────
     fn id(&self) -> &str;
@@ -99,7 +99,7 @@ pub trait Domain: Send + Sync + 'static {
 
     // ── Chunk role classification ─────────────────────────────────────────
     // Default covers the common case. Override for domain-specific
-    // role vocabularies (e.g. LegalDomain adds ChunkRole::Holding).
+    // role vocabularies.
     fn classify_chunk_role(&self, label: &ClusterLabel) -> ChunkRole {
         if !label.is_argumentative {
             return ChunkRole::NonArgumentative;
@@ -306,7 +306,7 @@ pub struct ClusterLabel {
     pub is_objection: bool,
     pub is_open_question: bool,
     pub is_coherent: bool,
-    /// Set by MultiDomain only. PhilosophyDomain always sets this to "philosophy".
+    /// The domain that produced this atom (e.g. "philosophy"); set by the domain.
     #[serde(default)]
     pub domain_id: Option<String>,
 }

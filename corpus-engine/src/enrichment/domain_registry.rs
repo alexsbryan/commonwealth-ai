@@ -24,25 +24,6 @@ impl DomainRegistry {
         registry.register("philosophy", || {
             Arc::new(super::domains::philosophy::PhilosophyDomain)
         });
-        registry.register("science", || {
-            Arc::new(super::domains::science::ScienceDomain)
-        });
-        registry.register("policy", || Arc::new(super::domains::policy::PolicyDomain));
-        registry.register("legal", || Arc::new(super::domains::legal::LegalDomain));
-        registry.register("community", || {
-            Arc::new(super::domains::community::CommunityKnowledgeDomain)
-        });
-        registry.register("multi", || {
-            Arc::new(super::domains::multi::MultiDomain::wikipedia_default())
-        });
-        // Stub for the Stack Exchange knowledge layer. Registered so
-        // recipes referencing it parse cleanly; prompt set is a
-        // follow-on. See `domains::engineering` for the planned
-        // epistemic vocabulary (Approach / Tradeoff / Context /
-        // Assumption).
-        registry.register("engineering", || {
-            Arc::new(super::domains::engineering::EngineeringDomain)
-        });
         // KnowledgeView domains — enrich SQLite-sourced corpora
         // (memories → personal, conversations → conversational).
         registry.register("personal", || {
@@ -83,20 +64,31 @@ mod tests {
     #[test]
     fn builtin_has_all_domains() {
         let reg = DomainRegistry::builtin();
+        // Every registered domain is fully implemented — no `todo!()` stubs.
         for id in [
             "philosophy",
-            "science",
-            "policy",
-            "legal",
-            "community",
-            "multi",
-            "engineering",
             "personal",
             "conversational",
             "business_email",
             "institutional",
         ] {
             assert!(reg.get(id).is_some(), "missing domain: {id}");
+        }
+    }
+
+    #[test]
+    fn stub_domains_are_not_registered() {
+        // These were empty structs whose `Domain` methods were all `todo!()`;
+        // registering them made `--domain science` (etc.) panic mid-enrichment
+        // instead of erroring. Deleted 2026-07-13 — a re-add must ship a real
+        // implementation, not a stub. `from_recipe` now returns
+        // `UnknownEnrichmentDomain` for these, which is the graceful path.
+        let reg = DomainRegistry::builtin();
+        for id in ["science", "policy", "legal", "community", "multi", "engineering"] {
+            assert!(
+                reg.get(id).is_none(),
+                "stub domain {id} is registered again — implement it or leave it out"
+            );
         }
     }
 
