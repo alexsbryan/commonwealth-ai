@@ -1,0 +1,1539 @@
+{
+  "bank_name": "skills-migration-smoke",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1784016654,
+  "results": [
+    {
+      "question_id": "nav_who_calls",
+      "category": "metalingual",
+      "question": "Who calls the SearchTool::execute method in our code?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I read this as a question about how *this system* uses the term, but I couldn't find a matching internal source. Could you tell me which source you meant — the codebase, a specific corpus, our notes?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1340,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nav_find_where",
+      "category": "metalingual",
+      "question": "Where in this codebase is the URL allowlist constraint implemented?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I read this as a question about *this codebase*, but I don't have a code corpus indexed locally. Run `sovereign code index <path>` against the relevant repo to enable in-system vocabulary lookups, then ask again.\n\nIf you meant something else by \"in this codebase\", let me know — I can re-route to general knowledge retrieval.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 976,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nav_what_changed",
+      "category": "metalingual",
+      "question": "What changed in the router classification pipeline recently?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I read this as a question about how *this system* uses the term, but I couldn't find a matching internal source. Could you tell me which source you meant — the codebase, a specific corpus, our notes?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 951,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "research_survey",
+      "category": "multi_article_synthesis",
+      "question": "Survey what's been published on situated agents for open-weight models — what are the major positions?",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "scientific-representation",
+          "url": "https://plato.stanford.edu/entries/scientific-representation/",
+          "score": 0.0,
+          "snippet": "scientific-representation\n\nAgents (1) intend; (2) to use model, \\(M\\); (3) to represent a part of the world \\(W\\); (4) for purposes, \\(P\\). So agents specify which similarities are intended and for..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "GlinerModelStatus",
+          "url": null,
+          "score": 0.0,
+          "snippet": "GlinerModelStatus\n\n\n/** GliNER model availability + path. Drives the Settings → Imports\n *  download UI + AtlasIndex's \"model not installed\" warning. */\nexport interface GlinerModelStatus {\n ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "GlinerModelStatus",
+          "url": null,
+          "score": 0.0,
+          "snippet": "GlinerModelStatus\n\n\n/** GliNER model availability + path. Drives the Settings → Imports\n *  download UI + AtlasIndex's \"model not installed\" warning. */\nexport interface GlinerModelStatus {\n ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "DiscourseModeDistribution",
+          "url": null,
+          "score": 0.0,
+          "snippet": "DiscourseModeDistribution\n\n    pub secondaries: Vec<(DiscourseMode, f32)>,\n}\n\nimpl DiscourseModeDistribution {\n    /// Single-mode-at-1.0 constructor — the shape v1 caches project\n    /// into.\n   ..."
+        },
+        {
+          "corpus_id": "drift-target-system-overview",
+          "title": "9. Glossary",
+          "url": "file://sovereign/SYSTEM_OVERVIEW.md",
+          "score": 0.0,
+          "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire\ntypes in `oicp-types`. A model publishes one `CapabilityClaim`\nper kind-of-work it does well; schedulers score requests..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "weights_sum_to_one",
+          "url": null,
+          "score": 0.0,
+          "snippet": "weights_sum_to_one\n\n\n    /// `true` when the weights sum to 1.0 within ±0.01. Used by the\n    /// classifier parser to reject malformed model output.\n    pub fn weights_sum_to_one(&self) -> bool {\n ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Open_source",
+          "score": 0.0,
+          "snippet": "Artificial intelligence\n\nActive organizations in the AI open-source community include Hugging Face, Google, EleutherAI and Meta. Various AI models, such as Llama 2, Mistral or Stable Diffusion, have..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "agents_md_includes_inference_section_when_commonwealth_configured",
+          "url": null,
+          "score": 0.0,
+          "snippet": "agents_md_includes_inference_section_when_commonwealth_configured\n\n    }\n\n    #[test]\n    fn agents_md_includes_inference_section_when_commonwealth_configured() {\n        let md =..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "weight",
+          "url": null,
+          "score": 0.0,
+          "snippet": "weight\n\n    }\n\n    /// Weight on a given axis.\n    pub fn weight(&self, axis: Articulation) -> f32 {\n        match axis {\n            Articulation::Inventory => self.inventory,\n           ..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "discoverBrainModel",
+          "url": null,
+          "score": 0.0,
+          "snippet": "discoverBrainModel\n\n\n// ── brain (the on-box local model proposes the next wild move) ─────\nlet BRAIN_MODEL = null;\nasync function discoverBrainModel() {\n  try {\n    const res = await..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "ctx",
+          "url": null,
+          "score": 0.0,
+          "snippet": "ctx\n\nmod tests {\n    use super::*;\n\n    fn ctx() -> ToolContext {\n        ToolContext {\n            conversation_id: Default::default(),\n            task_id: None,\n            working_directory:..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "ctx",
+          "url": null,
+          "score": 0.0,
+          "snippet": "ctx\n\nmod tests {\n    use super::*;\n\n    fn ctx() -> ToolContext {\n        ToolContext {\n            conversation_id: Default::default(),\n            task_id: None,\n            working_directory:..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-power-games",
+          "url": "https://plato.stanford.edu/entries/logic-power-games/",
+          "score": 0.0,
+          "snippet": "logic-power-games\n\nIn many situations agents have control over certain propositional variables (Hoek &amp; Wooldridge 2005), for instance they can be responsible for traffic flow or they can veto a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nA Turk would have more decency.”\n\n“You forget, Sir Ethelred, that strictly speaking we know nothing\n\npositively—as yet.”\n\n“No!  But how would you define it?..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "modelFileSize",
+          "url": null,
+          "score": 0.0,
+          "snippet": "modelFileSize\n\n *  when the path is empty or the file is missing — useful for the\n *  Settings → Models budget meter, which queries every slot whether or\n *  not the user has picked one. Genuine..."
+        },
+        {
+          "corpus_id": "drift-target-system-overview",
+          "title": "Agent-coding battery + canonical tools + TDD",
+          "url": "file://sovereign/SYSTEM_OVERVIEW.md",
+          "score": 0.0,
+          "snippet": "Agent-coding battery + canonical tools + TDD\n\n`sovereign/crates/sovereign-agent-bench/` — eleven-problem graded\nbattery measuring end-to-end coding agents (pi / opencode / codex /\naider,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Planning_and_decision-making",
+          "score": 0.0,
+          "snippet": "Artificial intelligence\n\nintractably large, so the agents must take actions and evaluate situations while being uncertain of what the outcome will be.\n\nA Markov decision process has a transition..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dynamic-epistemic",
+          "url": "https://plato.stanford.edu/entries/dynamic-epistemic/",
+          "score": 0.0,
+          "snippet": "dynamic-epistemic\n\nIn the DEL study of belief change, situations involving the beliefs of multiple agents are represented using a variation of basic Kripke models called plausibility models. Static..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nobviously, since, for instance,\n\nI am not impressed by them.  Therefore they are inferior.  They cannot be\n\notherwise.  Their character is built upon conventional..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Grok (chatbot)",
+          "url": "https://en.wikipedia.org/wiki/Grok_(chatbot)",
+          "score": 0.0,
+          "snippet": "It features advanced reasoning capabilities similar to OpenAI's o3, activated through \"Think\" mode for tackling complex issues.\n-\n! scope=\"row\" | 3&nbsp;mini\nReleased alongside Grok 3, a lighter,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.0,
+          "snippet": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems. It is a field of research in computer science that develops and studies..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.0,
+          "snippet": "Artificial intelligence\n\nThe traditional goals of AI research include reasoning, knowledge representation, planning, learning, natural language processing, perception, and support for robotics...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computational-complexity",
+          "url": "https://plato.stanford.edu/entries/computational-complexity/",
+          "score": 0.0,
+          "snippet": "The text argues that traditional models of fully rational agents are inadequate due to the computational infeasibility of finding optimal choices, leading to frameworks like bounded and minimal...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-locating-beliefs",
+          "url": "https://plato.stanford.edu/entries/self-locating-beliefs/",
+          "score": 0.0,
+          "snippet": "The text argues that the standard package-delivery model of communication fails to account for self-locating beliefs because such states cannot be directly transferred from speaker to addressee. To...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dynamic-epistemic",
+          "url": "https://plato.stanford.edu/entries/dynamic-epistemic/",
+          "score": 0.0,
+          "snippet": "Plausibility models utilize Grove's concentric spheres to represent an agent's nuanced beliefs by stratifying informationally equivalent worlds based on relative plausibility. This framework supports...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "situations-semantics",
+          "url": "https://plato.stanford.edu/entries/situations-semantics/",
+          "score": 0.0,
+          "snippet": "Situation semantics, developed by Jon Barwise and John Perry as an alternative to possible worlds semantics, utilizes partial situations to evaluate linguistic expressions and address issues like...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-deontic",
+          "url": "https://plato.stanford.edu/entries/logic-deontic/",
+          "score": 0.0,
+          "snippet": "The text introduces agency operators to model how agents bring about propositions, establishing a framework for analyzing normative positions. It employs the Meinong-Chisholm Reduction to define Jane...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computer-science",
+          "url": "https://plato.stanford.edu/entries/computer-science/",
+          "score": 0.0,
+          "snippet": "Turner argues that the distinction between models and specifications in computer science lies in their adherence to the intentional stance, where specifications aim to capture stakeholder intentions...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "games-abstraction",
+          "url": "https://plato.stanford.edu/entries/games-abstraction/",
+          "score": 0.0,
+          "snippet": "The text argues that observational equivalence serves as the largest congruence for program phrases by focusing exclusively on external interactions rather than internal structures. It posits that...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-action",
+          "url": "https://plato.stanford.edu/entries/logic-action/",
+          "score": 0.0,
+          "snippet": "The logic of action serves as a formal analytical tool across philosophy, linguistics, computer science, and artificial intelligence to model how agents perform actions and induce change. Key...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "drift-target",
+        "commonwealth-ai",
+        "drift-target-system-overview",
+        "wikipedia",
+        "chaos-secret-agent"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nThorough overview from available sources, not exhaustive. The installed knowledge base contains no dedicated survey of \"situated agents for open-weight models.\" It does contain general literature on situated agency and agent architectures (logic of action, dynamic epistemic logic, situation semantics) [Source: GlinerModelStatus] [Source: DiscourseModeDistribution] [Source: 9. Glossary] [Source: weights_sum_to_one] [Source: Artificial intelligence] [Source: agents_md_includes_inference_section_when_commonwealth_configured] [Source: weight] [Source: discoverBrainModel] [Source: ctx] [Source: ctx] [Source: logic-power-games] [Source: The Secret Agent: A Simple Tale] [Source: modelFileSize] [Source: Agent-coding battery + canonical tools + TDD] [Source: Artificial intelligence] [Source: dynamic-epistemic] [Source: The Secret Agent: A Simple Tale] and general information on open-weight models (e.g., Llama 2, Mistral) that can be fine-tuned for specific use cases [Source: Artificial intelligence].\n\nBased on the retrieved passages, here are some major positions related to situated agents in AI research. Note that these sources do not specifically address \"situated agents\" within the context of *open-weight* models; they discuss agent architectures more broadly.\n\n1. **Logic of Action and Agency**: Formal analytical tools like stit theory (for individual/group agency), dynamic logic, and situation calculus are used to model how agents perform actions and induce change [Source: Web: logic-action] [Source: GlinerModelStatus]. This includes frameworks where agents have control over certain propositional variables or share control through aggregation functions [Source: logic-power-games].\n2. **Dynamic Epistemic Logic (DEL)**: DEL utilizes plausibility models based on Grove's concentric spheres to represent an agent's nuanced beliefs by stratifying informationally equivalent worlds based on relative plausibility [Source: dynamic-epistemic]. Static belief change is interpreted as conditionalization in these models, while dynamic belief change involves transforming them with action models [Source: dynamic-epistemic].\n3. **Situation Semantics**: Developed by Jon Barwise and John Perry, this framework uses partial situations to evaluate linguistic expressions and address issues like implicit domain restrictions, arguing that assertions make precise claims about particular situations rather than complete possible worlds [Source: situations-semantics] [Source: GlinerModelStatus].\n4. **BDI Architectures and Game Theory**: Philosophical analyses by figures such as Michael Bratman underpin modern multi-agent systems through BDI (Belief-Desire-Intention) architectures and game-theoretic approaches [Source: Web: logic-action].\n\nThe sources do not provide a specific survey of positions on \"situated agents\" tailored specifically for *open-weight* models. They cover general agent theories and the concept of open-weight models separately. I don't have reliable information on how these specific theoretical frameworks are currently being applied or debated in the context of situated agents built upon open-weight model architectures from these sources alone.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Stit theory, dynamic logic, and situation calculus model how agents perform actions and induce change.\n- Dynamic Epistemic Logic utilizes plausibility models based on Grove's concentric spheres to represent agent beliefs.\n- Jon Barwise and John Perry developed Situation Semantics using partial situations to evaluate linguistic expressions.\n- Michael Bratman’s philosophical analyses underpin modern multi-agent systems through BDI architectures and game-theoretic approaches.\n- situated agents for open-weight models.\n- Situation Semantics: Developed by Jon Barwise and John Perry,",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 201801,
+        "total_latency_ms": 189583,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "commonwealth-ai",
+          "drift-target",
+          "wikipedia",
+          "sep",
+          "chaos-secret-agent",
+          "drift-target-system-overview"
+        ],
+        "retrieved_chunk_count": 30,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "research_collab",
+      "category": "multi_article_synthesis",
+      "question": "Let's dig into how the M-series Apple Silicon roadmap has evolved — start with the original M1 announcement.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS",
+          "score": 0.0,
+          "snippet": "MacOS\n\nA prominent part of macOS's original brand identity was the use of Roman numeral X, pronounced \"ten\", as well as code naming each release after species of big cats, and later, places within..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#Abstract",
+          "score": 0.0,
+          "snippet": "MacOS\n\n11 in 2020, and every subsequent version has also incremented the major version number, similarly to classic Mac OS and iOS.\n\nmacOS has supported three major processor architectures, beginning..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Apple Inc.",
+          "url": "https://en.wikipedia.org/wiki/Apple_Inc.#2011–present:_Post-Jobs_era,_Tim_Cook",
+          "score": 0.0,
+          "snippet": "Apple Inc.\n\n2020, Apple's share price briefly topped $467.77, making it the first US company with a market capitalization of US$2 trillion.\n\nDuring its annual WWDC keynote speech on June 22, 2020,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Thunderbolt (interface)",
+          "url": "https://en.wikipedia.org/wiki/Thunderbolt_(interface)#USB4",
+          "score": 0.0,
+          "snippet": "Thunderbolt (interface)\n\nThe USB4 specification was released on 29 August 2019 by USB Implementers Forum, based on the Thunderbolt 3 protocol specification.\n\nIt supports 40 Gbit/s (5 GB/s)..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#Mac_OS_X",
+          "score": 0.0,
+          "snippet": "MacOS\n\ndescribed the early releases in retrospect as \"dog-slow, feature poor\" and Aqua as \"unbearably slow and a huge resource hog\".\n\nApple rapidly developed several new releases of Mac OS X...."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "apple_tflops_estimates",
+          "url": null,
+          "score": 0.0,
+          "snippet": "apple_tflops_estimates\n\n    }\n\n    #[test]\n    fn apple_tflops_estimates() {\n        assert!((estimate_apple_tflops(\"Apple M3 Ultra\") - 42.0).abs() < 0.1);\n       ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#Intel–Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "MacOS\n\nRumors of Apple shifting Macs from Intel to in-house ARM processors used by iOS devices began circulating as early as 2011, and ebbed and flowed throughout the 2010s. Rumors intensified in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\navailable in a series of vibrant colors, akin to the iPhone 5c, and was a lower-cost device compared to the iPhone X and XS.\n\nThe iPhone 11, 11 Pro, and 11 Pro Max were announced on September..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "estimate_apple_tflops",
+          "url": null,
+          "score": 0.0,
+          "snippet": "estimate_apple_tflops\n\n}\n\n/// Rough FP16 TFLOPS estimate for Apple Silicon chips.\nfn estimate_apple_tflops(chip_name: &str) -> f32 {\n    let name_lower = chip_name.to_lowercase();\n    if..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nIn April 2018, Bloomberg reported Apple's plan to replace Intel chips with ARM processors similar to those in its phones, causing Intel's shares to drop by 9.2%. The Verge commented..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Swift (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Swift_(programming_language)",
+          "score": 0.0,
+          "snippet": "Swift (programming language)\n\nSwift is a high-level general-purpose, multi-paradigm, compiled programming language created by Chris Lattner in 2010 for Apple Inc. and maintained by the open-source..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Apple Inc.",
+          "url": "https://en.wikipedia.org/wiki/Apple_Inc.#Senior_management",
+          "score": 0.0,
+          "snippet": "Apple Inc.\n\nAs of March 16, 2021, the management of Apple Inc. includes:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ultimate Fighting Championship",
+          "url": "https://en.wikipedia.org/wiki/Ultimate_Fighting_Championship",
+          "score": 0.0,
+          "snippet": "+ Becomes Exclusive PPV Provider|website=Sports Business Daily|language=en|access-date=March 18, 2019}}\n\nOn July 18, 2018, it was announced that UFC had entered into a partnership with Russian MMA..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "AirPort",
+          "url": "https://en.wikipedia.org/wiki/AirPort",
+          "score": 0.0,
+          "snippet": "AirPort is a discontinued line of wireless routers and network cards developed by Apple Inc. using Wi-Fi protocols. In Japan, the line of products was marketed under the brand AirMac due to previous..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "apple_tflops_estimates",
+          "url": null,
+          "score": 0.0,
+          "snippet": "apple_tflops_estimates\n\n    }\n\n    #[test]\n    fn apple_tflops_estimates() {\n        assert!((estimate_apple_tflops(\"Apple M3 Ultra\") - 42.0).abs() < 0.1);\n       ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "M1 Abrams",
+          "url": "https://en.wikipedia.org/wiki/M1_Abrams#Abstract",
+          "score": 0.0,
+          "snippet": "M1 Abrams\n\nM1 were armed with a 105 mm M68 gun, while later variants feature a license-produced Rheinmetall 120 mm L/44 designated M256.\n\nThe M1 Abrams was developed from the failed joint American-..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "estimate_nvidia_tflops",
+          "url": null,
+          "score": 0.0,
+          "snippet": "estimate_nvidia_tflops\n\n}\n\n/// Rough FP16 TFLOPS estimate for NVIDIA GPUs based on name/VRAM.\nfn estimate_nvidia_tflops(name: &str, vram_gb: u32) -> f32 {\n    let name_lower = name.to_lowercase();\n  ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Objective-C",
+          "url": "https://en.wikipedia.org/wiki/Objective-C#Apple_development_and_Swift",
+          "score": 0.0,
+          "snippet": "Objective-C\n\nAfter acquiring NeXT in 1996, Apple Computer used OpenStep in its then-new operating system, Mac OS X. This included Objective-C, NeXT's Objective-C-based developer tool, Project..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Steve Jobs",
+          "url": "https://en.wikipedia.org/wiki/Steve_Jobs#Apple_II",
+          "score": 0.0,
+          "snippet": "Steve Jobs\n\nThe Apple II is an 8-bit home computer, one of the world's first highly successful mass-produced microcomputer products, designed primarily by Wozniak. Jobs oversaw the development of the..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "HardwareInfo",
+          "url": null,
+          "score": 0.0,
+          "snippet": "HardwareInfo\n\n  metadata?: Record<string, unknown>;\n}\n\nexport interface HardwareInfo {\n  system_ram_gb: number;\n  gpu_available: boolean;\n  gpu_name: string | null;\n  /** Discrete GPU VRAM in GB...."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "HardwareInfo",
+          "url": null,
+          "score": 0.0,
+          "snippet": "HardwareInfo\n\n// ─── Hardware Detection ─────────────────────────────────────\n\n#[derive(Serialize)]\npub struct..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "commonwealth-ai",
+        "drift-target"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "On November 10, 2020\n\nGrounded in the source: [unverified excerpt: On November 10, 2020, Apple announced their first system-on-a-chip designed for the Mac, the Apple M1, and a series of Macs that would ship with the M1: the MacBook Air, Mac Mini, and the 13-inch MacBook Pro.]",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 42615,
+        "total_latency_ms": 27184,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "commonwealth-ai",
+          "drift-target"
+        ],
+        "retrieved_chunk_count": 21,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "epi_consensus",
+      "category": "multi_article_synthesis",
+      "question": "What's the scholarly consensus on whether large language models actually reason?",
+      "retrieved": [
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "SkippedLanguage",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This code defines a data structure to hold details about why a specific programming language was excluded from analysis, including the language name, the reason for skipping it, and an installation...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function searches a codebase by taking a text query and an optional language filter, then returns the top 8 unique code symbols found using either vector-based semantic matching or full-text...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Large language model",
+          "url": "https://en.wikipedia.org/wiki/Large_language_model#Task-specific_datasets_and_benchmarks",
+          "score": 0.0,
+          "snippet": "Large language model\n\nto evaluate a variety of capabilities, including general knowledge, commonsense reasoning, and mathematical problem-solving.\n\nOne broad category of evaluation dataset is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Grok (chatbot)",
+          "url": "https://en.wikipedia.org/wiki/Grok_(chatbot)",
+          "score": 0.0,
+          "snippet": "It features advanced reasoning capabilities similar to OpenAI's o3, activated through \"Think\" mode for tackling complex issues.\n-\n! scope=\"row\" | 3&nbsp;mini\nReleased alongside Grok 3, a lighter,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reason",
+          "url": "https://en.wikipedia.org/wiki/Reason#Automated_reasoning",
+          "score": 0.0,
+          "snippet": "Reason\n\nIn artificial intelligence and computer science, scientists study and use automated reasoning for diverse applications including automated theorem proving the formal semantics of programming..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Large language model",
+          "url": "https://en.wikipedia.org/wiki/Large_language_model#Tool_use",
+          "score": 0.0,
+          "snippet": "Large language model\n\nThere are certain tasks that, in principle, cannot be solved by any LLM, at least not without the use of external tools or additional software. An example of such a task is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reasoning-automated",
+          "url": "https://plato.stanford.edu/entries/reasoning-automated/",
+          "score": 0.0,
+          "snippet": "reasoning-automated\n\nartificial intelligence: logic and |  logic: classical |  logic: modal |  reasoning: defeasible"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "logic-ai\n\nIn particular, logical theories in AI are independent from implementations. They can be used to provide insights into the reasoning problem without directly informing the implementation...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sentience",
+          "url": "https://en.wikipedia.org/wiki/Sentience#Digital_sentience",
+          "score": 0.0,
+          "snippet": "Sentience\n\nthat are quite impressive and may show the rudiments of reasoning\". He thinks that \"sentience is a matter of degree\".\n\nIn 2022, philosopher David Chalmers made a speech on whether large..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-nonmonotonic",
+          "url": "https://plato.stanford.edu/entries/logic-nonmonotonic/",
+          "score": 0.0,
+          "snippet": "logic-nonmonotonic\n\nThe question of the descriptive adequacy of NMLs to human reasoning is also related to questions concerning the nature and limits of cognitive modules in view of which agents are..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "needs_deep_reasoning",
+          "url": null,
+          "score": 0.0,
+          "snippet": "needs_deep_reasoning\n\n    /// compatible with determinism?\" (DeepQuery) from \"what is free will?\" (SimpleQuery).\n    /// This function catches the obvious cases so the LLM only handles genuinely\n   ..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "needs_deep_reasoning",
+          "url": null,
+          "score": 0.0,
+          "snippet": "needs_deep_reasoning\n\n    /// compatible with determinism?\" (DeepQuery) from \"what is free will?\" (SimpleQuery).\n    /// This function catches the obvious cases so the LLM only handles genuinely\n   ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reason",
+          "url": "https://en.wikipedia.org/wiki/Reason",
+          "score": 0.0,
+          "snippet": "Reason\n\nFor example, when evaluating a moral decision, \"morality is, at the very least, the effort to guide one's conduct by reason—that is, doing what there are the best reasons for doing—while..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "artificial-intelligence",
+          "url": "https://plato.stanford.edu/entries/artificial-intelligence/",
+          "score": 0.0,
+          "snippet": "artificial-intelligence\n\nartificial intelligence: logic and |  causation: probabilistic |  Chinese room argument |  cognitive science |  computability and complexity |  computing: modern history of |..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Chatbot",
+          "url": "https://en.wikipedia.org/wiki/Chatbot",
+          "score": 0.0,
+          "snippet": "chatbots were particularly unhelpful for users who lacked a clear understanding of their problem or the service they needed.\n\nChatbots based on large language models are much more versatile, but..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute_reason_with_tools",
+          "url": null,
+          "score": 0.0,
+          "snippet": "execute_reason_with_tools\n\n\n    fn build_retrieval_reasoning_prompt(\n        &self,"
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "execute_reason_with_tools",
+          "url": null,
+          "score": 0.0,
+          "snippet": "execute_reason_with_tools\n\n\n    fn build_retrieval_reasoning_prompt(\n        &self,"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "qwen3_embedding_quirks",
+          "url": null,
+          "score": 0.0,
+          "snippet": "qwen3_embedding_quirks\n\n    }\n\n    #[test]\n    fn qwen3_embedding_quirks() {\n        let quirks = ModelFamily::Qwen3Embedding.default_quirks();\n        let eq = quirks.embed.expect(\"Qwen3Embedding..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "qwen3_embedding_quirks",
+          "url": null,
+          "score": 0.0,
+          "snippet": "qwen3_embedding_quirks\n\n    }\n\n    #[test]\n    fn qwen3_embedding_quirks() {\n        let quirks = ModelFamily::Qwen3Embedding.default_quirks();\n        let eq = quirks.embed.expect(\"Qwen3Embedding..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Grok (chatbot)",
+          "url": "https://en.wikipedia.org/wiki/Grok_(chatbot)",
+          "score": 0.0,
+          "snippet": "for complex problem-solving, which utilized more computing resources. The 'Big Brain' mode was never made publicly available.\n\nxAI claimed that Grok 3 Reasoning surpassed the best version of OpenAI's..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a feature ID and an optional reason from input parameters, calls the store to archive that specific feature, and returns JSON confirming the successful archival with those...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function reads a list of task steps from input parameters, enriches each with default metadata like \"pending\" state and zero attempts, generates a unique feature ID if one isn't provided...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function runs a specified verification command in a given directory, checks for hollow (empty) files among touched paths if any exist, and optionally verifies that no files have been untouched...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "SkippedLanguage",
+          "url": null,
+          "score": 0.0,
+          "snippet": "SkippedLanguage\n\n}\n\n#[derive(Debug)]\npub struct SkippedLanguage {\n    pub language: String,\n    pub reason: String,\n    pub install_hint: String,\n}\n\n/// Progress callback for the export process.\npub..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Large language model",
+          "url": "https://en.wikipedia.org/wiki/Large_language_model",
+          "score": 0.0,
+          "snippet": "Large language model\n\nA large language bekaar model (LLM) is a computational model capable of language generation or other natural language processing tasks. As language models, LLMs acquire these..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Large language model",
+          "url": "https://en.wikipedia.org/wiki/Large_language_model",
+          "score": 0.0,
+          "snippet": "Large language model\n\nSome notable LLMs are OpenAI's GPT series of models, Google's Gemini, Meta's LLaMA family of models, IBM's Granite models initially released with Watsonx, Anthropic's Claude..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sentience",
+          "url": "https://en.wikipedia.org/wiki/Sentience",
+          "score": 0.0,
+          "snippet": "Sentience is the ability to experience feelings and sensations. It may not necessarily imply higher cognitive functions such as awareness, reasoning, or complex thought processes. Sentience is an..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sentience",
+          "url": "https://en.wikipedia.org/wiki/Sentience#Abstract",
+          "score": 0.0,
+          "snippet": "Sentience is the ability to experience feelings and sensations. It may not necessarily imply higher cognitive functions such as awareness, reasoning, or complex thought processes. Sentience is an..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sentience",
+          "url": "https://en.wikipedia.org/wiki/Sentience#Sentience_in_philosophy",
+          "score": 0.0,
+          "snippet": "Sentience\n\n\"Sentience\" was first coined by philosophers in the 1630s for the concept of an ability to feel, derived from Latin sentiens (feeling). In philosophy, different authors draw different..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-connexive",
+          "url": "https://plato.stanford.edu/entries/logic-connexive/",
+          "score": 0.0,
+          "snippet": "Several empirical studies investigate human endorsement of logical principles, such as connexive logic and Aristotle's theses, using natural language conditionals. These experiments involve diverse...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "Artificial Intelligence utilizes logical theories to model and test idealized reasoning, particularly in practical settings like automated planning. This combination of logic and AI applications...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "generics",
+          "url": "https://plato.stanford.edu/entries/generics/",
+          "score": 0.0,
+          "snippet": "Greg Carlson argues that theoretical models of generics have shifted toward dyadic or situation-based frameworks, reflecting their nature as cognitively fundamental default generalizations rather...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "generics",
+          "url": "https://plato.stanford.edu/entries/generics/",
+          "score": 0.0,
+          "snippet": "Theoretical accounts of generics have evolved from one-place operators to dyadic or situation-based frameworks, while empirical research suggests they represent cognitively fundamental default...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "turing-test",
+          "url": "https://plato.stanford.edu/entries/turing-test/",
+          "score": 0.0,
+          "snippet": "The document analyzes Alan Turing's 1950 proposal that digital computers can think, examining his arguments against various objections such as those from Lady Lovelace and John Searle. It evaluates...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reasoning-defeasible",
+          "url": "https://plato.stanford.edu/entries/reasoning-defeasible/",
+          "score": 0.0,
+          "snippet": "The passages argue that standard nonmonotonic and defeasible logic systems fail to adequately model real-world reasoning because they lack explicit causal structures, leading to paradoxes like the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-massexpress",
+          "url": "https://plato.stanford.edu/entries/logic-massexpress/",
+          "score": 0.0,
+          "snippet": "The passages argue that the truth conditions of natural language sentences involving mass nouns can be rigorously modeled using Boolean algebra and subset relations. This logical framework explains...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-dialogical",
+          "url": "https://plato.stanford.edu/entries/logic-dialogical/",
+          "score": 0.0,
+          "snippet": "The Immanent Reasoning framework distinguishes between local and strategic reasons, utilizing synthesis rules to explicitly introduce local reasons based on statement forms. These explicit reasons...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "commonwealth-ai",
+        "wikipedia",
+        "sep",
+        "drift-target"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The scholarly consensus is that large language models (LLMs) do not \"reason\" in the traditional, logical sense. Instead, they simulate reasoning through statistical pattern matching and next-token prediction [Source: Large language model].\n\nHere’s a breakdown of the key points from the available sources:\n\n1. **Statistical Pattern Matching vs. Logical Reasoning:** LLMs are trained on vast amounts of text to learn statistical relationships between words and concepts [Source: Large language model]. They generate responses word-by-word based on these learned patterns rather than applying formal logic or deductive rules [Source: Chatbot].\n2. **Limitations in Pure Logic/Math:** In tasks that require strict logical deduction or mathematical calculation without relying on memorized examples from their training data, LLMs often fail unless they use external tools like code interpreters [Source: Large language model]. For example, an LLM might not know the answer to a novel multiplication problem but can solve it by running program code [Source: Large language model]. This suggests they lack inherent \"reasoning\" capabilities for such tasks and instead rely on retrieving similar past experiences or using auxiliary systems.\n3. **\"Reasoning\" as Simulation:** Some models now include features marketed as \"advanced reasoning capabilities,\" activated through specific modes (like xAI's Grok 3 \"Think\" mode) that attempt to simulate step-by-step thinking before generating an output [Source: Grok (chatbot)]. However, this is still fundamentally based on predicting likely sequences of tokens rather than true logical inference.\n4. **Hallucinations and Plausibility over Truth:** Because LLMs prioritize plausible-sounding continuations of text, they can produce confident but incorrect answers (\"hallucinations\") when faced with questions outside their training distribution or requiring novel logical steps [Source: Chatbot]. This behavior further underscores the difference between statistical generation and genuine reasoning.\n\nIn summary, while LLMs can perform tasks that *appear* to involve reasoning—such as answering complex questions or solving certain types of problems—the underlying mechanism is statistical prediction, not formal logical deduction. True \"reasoning\" in AI remains an active area of research, often involving hybrid approaches where symbolic logic systems are combined with neural networks [Source: logic-ai].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 66647,
+        "total_latency_ms": 55602,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "commonwealth-ai",
+          "sep",
+          "drift-target"
+        ],
+        "retrieved_chunk_count": 37,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "epi_contested",
+      "category": "multi_article_synthesis",
+      "question": "Where do philosophers disagree about consciousness and which positions have the strongest support?",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "consciousness: and intentionality |  consciousness: higher-order theories |  consciousness: representational theories of |  consciousness: unity of |  dualism |  epiphenomenalism |  free will | ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "consciousness-animal\n\nanimal: cognition |  animals, moral status of |  behaviorism |  Brentano, Franz |  consciousness |  consciousness: and intentionality |  consciousness: higher-order theories | ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "consciousness-unity\n\nMany philosophers have been sceptical about whether consciousness is unified. It is possible to be sceptical about whether all consciousness is unified, whether as many conscious..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-neuroscience",
+          "url": "https://plato.stanford.edu/entries/consciousness-neuroscience/",
+          "score": 0.0,
+          "snippet": "consciousness-neuroscience\n\nagency |  consciousness: higher-order theories |  consciousness: representational theories of |  consciousness: unity of |  grounding, metaphysical |  information | ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Philosophy of mind",
+          "url": "https://en.wikipedia.org/wiki/Philosophy_of_mind#Abstract",
+          "score": 0.0,
+          "snippet": "Philosophy of mind\n\nMost modern philosophers of mind adopt either a reductive physicalist or non-reductive physicalist position, maintaining in their different ways that the mind is not something..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Philosophy of artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Philosophy_of_artificial_intelligence#Can_a_machine_have_a_mind,_consciousness,_and_mental_states?",
+          "score": 0.0,
+          "snippet": "Philosophy of artificial intelligence\n\nthat acted exactly like a human mind, there would still be a difficult philosophical question that needed to be answered.\n\nNeither of Searle's two positions are..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sentience",
+          "url": "https://en.wikipedia.org/wiki/Sentience#Consciousness",
+          "score": 0.0,
+          "snippet": "Sentience\n\nAccording to Thomas Nagel in his paper \" What Is It Like to Be a Bat? \", consciousness can refer to the ability of any entity to have subjective perceptual experiences, or as some..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-consciousness-phenomenological",
+          "url": "https://plato.stanford.edu/entries/self-consciousness-phenomenological/",
+          "score": 0.0,
+          "snippet": "self-consciousness-phenomenological\n\nThere are also lines of argumentation in contemporary analytical philosophy of mind that are close to and consistent with the phenomenological conception of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consciousness",
+          "url": "https://en.wikipedia.org/wiki/Consciousness#Biological_function_and_evolution",
+          "score": 0.0,
+          "snippet": "Consciousness\n\nCambrian over 500 million years ago. Donald Griffin suggests in his book Animal Minds a gradual evolution of consciousness."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consciousness",
+          "url": "https://en.wikipedia.org/wiki/Consciousness#Etymology",
+          "score": 0.0,
+          "snippet": "Consciousness\n\n(translatable as \"conscience, or internal testimony\"). It might mean the knowledge of the value of one’s own thoughts.\n\nThe origin of the modern concept of consciousness is often..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Turing test",
+          "url": "https://en.wikipedia.org/wiki/Turing_test#Abstract",
+          "score": 0.0,
+          "snippet": "Turing test\n\nIn the remainder of the paper, he argued against all the major objections to the proposition that \"machines can think\".\n\nSince Turing introduced his test, it has been both highly..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arthur Eddington",
+          "url": "https://en.wikipedia.org/wiki/Arthur_Eddington#Idealism",
+          "score": 0.0,
+          "snippet": "Arthur Eddington\n\nno reason to doubt that the objective world too is \"mind-stuff\". Dualistic metaphysics, then, cannot be evidentially supported.\n\nBut, second, not only can we not know that the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "cognition-animal",
+          "url": "https://plato.stanford.edu/entries/cognition-animal/",
+          "score": 0.0,
+          "snippet": "cognition-animal\n\nSome philosophers and scientists also argue from a more pre-theoretical position that many species are conscious. In their plea for a new science of consciousness, Francis Crick and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "neutral-monism",
+          "url": "https://plato.stanford.edu/entries/neutral-monism/",
+          "score": 0.0,
+          "snippet": "neutral-monism\n\nconsciousness |  dualism |  Hume, David |  James, William |  logical atomism: Russell’s |  logical constructions |  mind/brain identity theory |  monism |  panpsychism | ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "PhilosophyDomain",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PhilosophyDomain\n\n\npub struct PhilosophyDomain;\n\nimpl Domain for PhilosophyDomain {\n    fn id(&self) -> &str {\n        \"philosophy\"\n    }\n\n    fn name(&self) -> &str {\n        \"Philosophy\"\n    }\n\n   ..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "PhilosophyDomain",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PhilosophyDomain\n\n\npub struct PhilosophyDomain;\n\nimpl Domain for PhilosophyDomain {\n    fn id(&self) -> &str {\n        \"philosophy\"\n    }\n\n    fn name(&self) -> &str {\n        \"Philosophy\"\n    }\n\n   ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "zombies",
+          "url": "https://plato.stanford.edu/entries/zombies/",
+          "score": 0.0,
+          "snippet": "zombies\n\nanimal: consciousness |  behaviorism |  -->conceivability--> |  consciousness |  dualism |  epiphenomenalism |  functionalism |  -->knowledge argument--> |  -->Kripke--> |  mental causation..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-nonconceptual",
+          "url": "https://plato.stanford.edu/entries/content-nonconceptual/",
+          "score": 0.0,
+          "snippet": "content-nonconceptual\n\n|  animal: consciousness |  belief |  concepts |  consciousness: representational theories of |  mental content: teleological theories of |  mental representation | ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consciousness",
+          "url": "https://en.wikipedia.org/wiki/Consciousness#In_artificial_intelligence",
+          "score": 0.0,
+          "snippet": "Consciousness\n\nfrom a real person. Turing-scale robotics is an empirical branch of research on embodied cognition and situated cognition.\n\nIn 2014, Victor Argonov has suggested a non-Turing test for..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-17th",
+          "url": "https://plato.stanford.edu/entries/consciousness-17th/",
+          "score": 0.0,
+          "snippet": "consciousness-17th\n\nThings aren’t any easier for philosophy written in English or German, both of which do have a linguistic means of distinguishing the two concepts. The English term..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "consciousness-unity\n\nHuman consciousness usually displays a striking unity. When one experiences a noise and, say, a pain, one is not conscious of the noise and then, separately, of the pain. One is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "consciousness-unity\n\nHistorically, the notion of the unity of consciousness has played a very large role in thought about the mind. Indeed, as we will see, it figured centrally in some of the most..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "consciousness-unity\n\nThe unity of consciousness was a main concern of most philosophers in what is often called the ‘classical modern era’ (roughly, 1600 to 1900), including Descartes, Leibniz,..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "PhilosophyDomain",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PhilosophyDomain\n\n    \"Background\",\n];\n\npub struct PhilosophyDomain;\n\nimpl Domain for PhilosophyDomain {\n    fn id(&self) -> &str {"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "PhilosophyDomain",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PhilosophyDomain\n\n\nPosition A: {position_a}\nPassages representing this position:\n{passages_a}\n\nPosition B: {position_b}\nPassages representing this position:\n{passages_b}\n\nIdentify:\n1. The specific..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "PhilosophyDomain",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PhilosophyDomain\n\n\n#[cfg(test)]\nmod tests {"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "consciousness\n\nPerhaps no aspect of mind is more familiar or more puzzling than consciousness and our conscious experience of self and world. The problem of consciousness is arguably the central..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "consciousness\n\nQuestions about the nature of conscious awareness have likely been asked for as long as there have been humans. Neolithic burial practices appear to express spiritual beliefs and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "consciousness\n\nNonetheless, some have argued that consciousness as we know it today is a relatively recent historical development that arose sometime after the Homeric era (Jaynes 1974). According to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "consciousness-animal\n\nQuestions about animal consciousness — in particular, which animals have consciousness and what (if anything) that consciousness might be like — are  both  scientific and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "consciousness-animal\n\nThere are many reasons for philosophical interest in nonhuman animal (hereafter “animal”) consciousness:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "consciousness-animal\n\nFirst, if philosophy often begins with questions about the place of humans in nature, one way humans have attempted to locate themselves is by comparison and contrast with those..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "The unity of consciousness has been a central philosophical concern from the classical modern era through contemporary analytic philosophy, with recent interest spurred by commentaries on Kant and...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "The passages collectively argue that attributing consciousness to animals is a complex issue involving philosophical, scientific, and ethical dimensions. Key debates center on whether consciousness...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "The passages argue that the unity of consciousness is a complex phenomenon best understood by analyzing its fragmentation in neurological and psychological disorders such as split-brain syndrome,...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-intentionality",
+          "url": "https://plato.stanford.edu/entries/consciousness-intentionality/",
+          "score": 0.0,
+          "snippet": "The text examines the complex relationship between consciousness and intentionality, contrasting reductive externalist intentionalism with separatist views that treat them as distinct domains. It...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "The text argues that consciousness is a complex and heterogeneous concept with multiple distinct definitions, ranging from basic sentience to higher-order awareness. It traces the historical...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness",
+          "url": "https://plato.stanford.edu/entries/consciousness/",
+          "score": 0.0,
+          "snippet": "The text examines the philosophical and empirical debate regarding whether consciousness possesses causal efficacy, contrasting arguments based on zombie thought experiments with scientific evidence...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-animal",
+          "url": "https://plato.stanford.edu/entries/consciousness-animal/",
+          "score": 0.0,
+          "snippet": "The text examines the evolutionary origins and distribution of consciousness across various animal taxa, contrasting views that limit it to amniotes with arguments for its presence in early...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consciousness-unity",
+          "url": "https://plato.stanford.edu/entries/consciousness-unity/",
+          "score": 0.0,
+          "snippet": "The text argues that the unity of consciousness is a complex phenomenon best understood by examining its breakdown in neurological disorders such as brain bisection and schizophrenia. It evaluates...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia",
+        "commonwealth-ai",
+        "drift-target"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nThe sources provided do not contain a substantive overview of the philosophical disagreements about consciousness, nor do they identify which positions have the strongest support. The retrieved passages consist almost entirely of index tags (e.g., `dualism`, `physicalism`, `panpsychism`), metadata for software tools (`PhilosophyDomain`, `B3Outcome`), and brief historical notes on the term \"consciousness\" or its unity [Source: Philosophy of mind] [Source: consciousness-unity].\n\nWhile one passage states that \"Most modern philosophers of mind adopt either a reductive physicalist or non-reductive physicalist position,\" it does not elaborate on the specific points of disagreement between these camps, nor does it evaluate their relative strength against other positions like dualism or panpsychism [Source: Philosophy of mind]. Another source mentions skepticism regarding whether consciousness is unified but provides no further detail on the arguments involved [Source: consciousness-unity]. \n\nI don't have reliable information from your sources to answer where exactly philosophers disagree about consciousness and which positions are strongest. Want me to search for more detailed philosophical overviews?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The retrieved passages consist almost entirely of index tags... metadata for software tools (`PhilosophyDomain`, `B3Outcome`), and brief historical notes\n- The answer claims the sources do not contain a substantive overview, yet evidence explicitly details disagreements on unity, animal consciousness, and physicali…",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 184016,
+        "total_latency_ms": 174355,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia",
+          "commonwealth-ai",
+          "drift-target"
+        ],
+        "retrieved_chunk_count": 40,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "stub"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": true,
+            "evidence": "\"index tags (e.g., `dualism`, `physicalism`, `panpsychism`)\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "pa_remind",
+      "category": "commissive",
+      "question": "Remind me to follow up with the design team on Thursday afternoon.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a todo under reminder. I'll surface it next time we touch that work.\n\n(Note id: c80c7bb5-5b83-42f2-a6cf-f87b7c7083fb)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 899,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "pa_schedule",
+      "category": "conation",
+      "question": "Schedule a focused work block for tomorrow morning.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 980,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "review_code",
+      "category": "multi_step",
+      "question": "Review this function for correctness and find bugs that aren't obvious from the diff.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nI cannot review a function for correctness or find bugs because **no source code was provided** in your request. Step 1 of the process results explicitly notes that the code context `{0.output}` was missing, and I do not have access to any specific function snippet to analyze.\n\nHowever, based on the \"Meridian Postmortem\" document (IR-2417) retrieved in Step 0, I can provide an analysis of the **systemic failures** described in that incident report, which serves as a case study in what *not* to do when deploying changes:\n\n### Incident Summary: Meridian RateGrid Outage (March 4)\n*   **Impact:** 50-minute outage (03:41–04:31 UTC), affecting ~38,000 quote requests for 214 enterprise tenants.\n*   **Root Cause:** A schema migration (**M-0288**) added a `NOT NULL` column (`fuel_surcharge_class`) without a default value to a table used by every quote request. This was applied to the primary database while older application code (which did not populate this new field) and replicas were still running.\n\n### Key Process Failures Identified in the Postmortem\nThe document highlights three layers of failure that allowed this bug to reach production:\n\n1. \n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Step 1 of the process results explicitly notes that the code context `{0.output}` was missing, and I do not have access to any specific function snippet to anal…\n- (IR-2417)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 66115,
+        "total_latency_ms": 9169,
+        "intent": "ComplexTask",
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    }
+  ]
+}
