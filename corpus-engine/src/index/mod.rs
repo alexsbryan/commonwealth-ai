@@ -13,7 +13,6 @@ pub use read::NeighborWindow;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_schema::SchemaRef;
@@ -1105,13 +1104,7 @@ impl CorpusIndex {
 
 // ─── Free helpers ──────────────────────────────────────────
 
-/// Current unix timestamp in seconds.
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
+use corpus_engine_yield::time::unix_now_u64 as now_unix;
 
 /// Calculate total size of a directory recursively.
 fn dir_size(path: &Path) -> u64 {

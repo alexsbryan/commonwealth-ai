@@ -13,6 +13,8 @@ name = "sovereign-eval"
 path = "src/bin/main.rs"
 
 [dependencies]
+# Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
+sovereign-time = { workspace = true }
 corpus-engine.workspace = true
 sovereign-authoring-harness.workspace = true
 serde.workspace = true

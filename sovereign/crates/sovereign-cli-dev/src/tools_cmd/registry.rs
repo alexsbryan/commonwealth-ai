@@ -40,9 +40,9 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
-use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
+use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_cli_shared::{
     dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
 };

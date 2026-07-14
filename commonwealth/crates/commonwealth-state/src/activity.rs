@@ -137,12 +137,7 @@ pub fn current_activity(store: &MeshStore, window_days: u32) -> Result<ActivityS
     Ok(aggregate_activity(&events, now, window_secs))
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 fn emit_tracing_event(kind: &ActivityEventKind) {
     match kind {

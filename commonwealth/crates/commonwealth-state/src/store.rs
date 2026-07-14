@@ -8,7 +8,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 
@@ -187,12 +186,7 @@ impl MeshStore {
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 fn node_id_from_bytes(bytes: &[u8]) -> Result<NodeId> {
     if bytes.len() != 16 {

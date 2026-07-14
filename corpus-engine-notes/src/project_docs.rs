@@ -26,7 +26,6 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
@@ -337,12 +336,7 @@ fn walk_for_markdown(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use corpus_engine_yield::time::unix_now;
 
 fn sqlite_err(e: rusqlite::Error) -> Error {
     Error::Io(std::io::Error::other(format!(

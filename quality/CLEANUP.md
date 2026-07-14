@@ -1,8 +1,14 @@
 # Prioritized cleanup list
 
-**Status 2026-07-13: P0 #1-5, P1 #6-11 executed** (see the two Execution
-records at the bottom). The fresh census (P1 #6) is done — it froze the R3
-carve line and re-scoped P1 #12 (see the 07-13 record). Remaining live: the
+**Status 2026-07-13: P0 #1-5, P1 #6-11 executed** (see the Execution records
+at the bottom). The fresh census (P1 #6) is done — it froze the R3 carve line
+and re-scoped P1 #12 (see the 07-13 record). **arch-gate is now GREEN**: its one
+violation (`evidence_loop.rs`, 1,323 lines) was honestly split, not baselined
+(see "God-file breakup #1"). The god-file breakup arc is underway: #1
+`evidence_loop.rs` and #2 `project_cmd.rs` (7,102 → a `project_cmd/` directory
+module, dispatcher `mod.rs` 645, every file <1,200) are DONE and gate-green;
+next 5,000+ targets are `notes.rs` 6,363, `frontdoor.rs` 5,774, `resolution.rs`
+5,173. Remaining live: the
 R3/R4 structural roadmap (P2 #13-14), api snapshots for the 4 hub crates
 (parked on a rustc ICE — see record), the exception-retirement + ratchet
 burn-downs (P2 #15-17), and the month-later blocking flips (P2 #18).
@@ -112,3 +118,73 @@ Fresh census: HEAD `bfe0aabd`, clean tree → 181,603 symbols / 1,002,549 refs
 | Consumers | ✅ 5 migrated (daemon, cli-dev, tools, server, work-atlas). work-atlas dropped its **direct** corpus-engine dep (still transitive via sovereign-core). Caught: brace-group splits + a `start_once` return-type identity break the symbol-grep missed. |
 | Verified | ✅ lint `pass 1/fail 0` (warn 176 = unchanged baseline); tests `pass 7647/fail 0` (new crate's moved test modules ran & passed). **Measured win: watcher-edit rebuild set 22→12 crates** (the 18→5 estimate was optimistic — sovereign-tools consumes the stores + is a hub; R3 shrinks it further). |
 | Receipt caveat | ⏳ After-census (arch_report) not re-run — the SCIP index tracks committed HEAD, and the reindexer gates on a clean tree. Re-run `sovereign project refresh && sovereign code arch-report` after this branch lands to capture the observed fan-in drop (work-atlas→corpus-engine now 0). |
+
+### God-file breakup #1 — `evidence_loop.rs` split (2026-07-13, branch `carve/corpus-engine-watchers`, NOT committed)
+
+Motivation: this was the one **arch-gate violation** — `evidence_loop.rs`
+had grown to **1,323 lines**, over the ARCH §3.1 1,200-line ceiling, and (this
+matters) it was NOT in `quality/baselines/oversized.txt` — it was a genuinely
+NEW oversized file, so the gate was red. The honest fix is to split it, not to
+baseline it (baselining would just hide the debt behind the ratchet).
+
+| Item | Outcome |
+|---|---|
+| Split | ✅ `evidence_loop.rs` (1,323) → `evidence_loop/mod.rs` (856) + `evidence_loop/anchoring.rs` (486). `git mv` preserved blame. The seam is a real one: `anchoring.rs` = the contiguous block of structural "does the evidence anchor the question?" helpers (keyword/stem extraction, entity/corpus-anchoring predicates, atlas-atom gazetteer matching, and the four grounding-gate predicates `compute_entity_anchored` / `retrieval_is_catalog_only` / `question_anchors_retrieved_title` / `question_is_corpus_deictic` that knowledge_query/streaming/handlers read). The loop, its config, and the tests stay in `mod.rs`. |
+| Wiring | ✅ `mod anchoring; pub(crate) use anchoring::*;` — external callers keep the exact `crate::runtime::evidence_loop::<fn>` path (the glob re-export preserves it; also keeps gate-#10's decision-note citation resolving). Six impl-called helpers bumped `fn`→`pub(crate) fn`; the three private helpers (`cached_atoms_json`, `stem`, `atlas_atom_records`) stay private. `anchoring.rs` reaches back to `super::dbg` only. |
+| Verified | ✅ lint `pass 1/fail 0`; tests **7651/0**; **all 5 quality gates green — arch-gate now GREEN**. Baseline UNTOUCHED — the gate passes because the oversized file no longer exists, not because it was added to an ignore list. Pure move, zero behaviour change. |
+
+**God-file breakup arc — next targets** (all in `oversized.txt`, frozen debt, so
+they don't block the gate; the lens is contributor QoL, not gate-clearing): the
+5,000+ tier is `project_cmd.rs` **7,102** (cleanest seams — a grab-bag of
+`sovereign project` subcommands: scaffold/config-gen, audit report, git hooks,
+watch, amend-design), `corpus-engine-notes/notes.rs` 6,363, `frontdoor.rs` 5,774
+(the mesh API front door — high contributor touch), `resolution.rs` 5,173.
+
+### God-file breakup #2 — `project_cmd.rs` decomposition (2026-07-13, branch `carve/corpus-engine-watchers`, NOT committed)
+
+The biggest file in the workspace (7,102 lines) → a `project_cmd/` **directory
+module**, one findable file per `sovereign project` command family. **Every file
+under the ARCH §3.1 1,200-line ceiling.** Method: a subagent produced the exact
+intra-file call graph first (which helpers are shared → stay in `mod.rs`, which
+are cluster-local → move), then extract-verify one cluster at a time
+(`cargo check -p sovereign-cli-dev`, ~3s incremental) — no whack-a-mole.
+
+| Submodule | Lines | Contents |
+|---|---|---|
+| `project_cmd/mod.rs` | **645** (was 7,102) | `run_project` dispatch + `HELP` consts + `cmd_status`/`cmd_found` + shared plumbing (`daemon_post`, `derive_corpus_id`, `git_committer_identity_for_amend`, `today_iso`, `remove_legacy_hook`, `check_mcp_server`, the `find_repo_root`/`default_data_dir` re-exports, …) |
+| `init/mod.rs` + `init/setup.rs` | 1,084 + 264 | `cmd_init` + harness detection + language detection; git-init (`resolve_git`/`GitOutcome`) + observation-report render in `setup` |
+| `serve.rs` | 804 | `cmd_serve` + `scip_graph_reloader` |
+| `scaffold.rs` | 820 | file generators (`generate_*`/`merge_*` for SOVEREIGN.md, AGENTS.md, opencode/Claude configs, .gitignore) |
+| `audit/mod.rs` + `audit/tests.rs` | 851 + 371 | `cmd_audit` rollup + multi-source note assembly |
+| `refresh.rs` | 541 | `cmd_refresh` + LanceDB rebuild decision + SCIP reset |
+| `charter_amend.rs` | 491 | `cmd_charter` / `cmd_amend` / `cmd_amend_design` |
+| `design_plan.rs` | 401 | `cmd_design` / `cmd_plan` |
+| `phase.rs` | 350 | `cmd_phase` progression |
+| `registry_watch.rs` | 347 | `cmd_register`/`unregister`/`list`/`watch` + daemon helpers |
+| `hooks.rs` | 305 | `cmd_install_hooks` + hook write/strip internals |
+
+**Mechanics that made it safe:** each submodule opens `use super::*` (inherits
+`mod.rs`'s imports + shared helpers — private items of an ancestor are visible to
+descendants via glob); entry points (`cmd_*` called by `run_project`/`main.rs`)
+re-exported `pub(crate) use <mod>::<fn>` so external `crate::project_cmd::cmd_*`
+paths and `main.rs`'s top-level `svrn <leaf>` shims keep working; cluster-local
+helpers made `pub(super)` only where a sibling/parent calls them; tests
+co-located with their code. `git mv` preserved blame on `mod.rs`.
+
+**Verified:** lint `pass 1/fail 0` (176 warns = unchanged baseline); full test
+suite green; **all 5 quality gates green** — arch-gate stays green because every
+new file is genuinely <1,200 (NOT re-baselined), and the phantom
+`project_cmd.rs 7102` entry was `--tighten`-cleared (the file is gone). docs-gate
+caught 3 stale narrative citations (ARCH §3.3 outliers list; SYSTEM_OVERVIEW §10.1
+deferral + the two "how do I…" pointers) — all updated: §3.3 drops the entry (no
+longer an outlier), §10.1 marks the split DONE with the new layout.
+
+**Lessons:** (1) sed line-range extraction is fast but the edge windows must be
+wide enough to catch multi-line doc comments — one over-capture (a `///` block's
+first two lines) tripped `expected item after doc comment`, caught immediately by
+the per-cluster `cargo check`. (2) A blanket `sed 's/^fn X/pub(super) fn X/'`-style
+visibility bump can collide with an identically-named *parameter* (`resolve_git`'s
+`design_exists` param matched the `ObservationReportContext.design_exists` field
+rule) — the per-cluster compile catches it. The discipline (map first, then
+extract-verify-repeat) turned a 40-function scattered refactor into a sequence of
+small, individually-proven moves.

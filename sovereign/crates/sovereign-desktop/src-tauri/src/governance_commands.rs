@@ -80,13 +80,7 @@ fn actor() -> String {
     format!("human:{who}")
 }
 
-/// Unix seconds now — stamped on appended ops.
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now as now_unix;
 
 /// Append ops to a corpus's oplog under the process-wide append lock.
 /// Returns the appended op ids (for the frontend's undo affordance).

@@ -35,6 +35,7 @@ members = [
     "sovereign/crates/sovereign-core",
     "sovereign/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
+    "sovereign/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
@@ -166,6 +167,7 @@ sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
+sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }

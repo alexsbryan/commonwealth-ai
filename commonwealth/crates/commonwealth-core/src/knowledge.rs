@@ -414,12 +414,7 @@ pub const MAX_UNIT_ATTEMPTS: u32 = 3;
 /// the lease every `LEASE_MS / 3` on the peer side.
 pub const LEASE_MS: u64 = 300_000;
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
+use crate::clock::unix_now_millis as now_ms;
 
 #[cfg(test)]
 mod tests {

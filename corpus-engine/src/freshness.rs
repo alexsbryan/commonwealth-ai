@@ -69,13 +69,7 @@ pub fn stamp_doc_indexed(corpus_dir: &Path, source_doc_id: &str, at_unix: i64) {
     }
 }
 
-/// Current wall-clock in unix seconds (the stamp value used by callers).
-pub fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub use corpus_engine_yield::time::unix_now as now_unix;
 
 #[cfg(test)]
 mod tests {

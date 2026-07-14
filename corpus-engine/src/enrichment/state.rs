@@ -44,7 +44,6 @@
 //! RAPTOR nodes, motifs, structural views.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -471,12 +470,7 @@ pub fn sweep_stalled_states(indexes_root: &Path) -> Result<Vec<String>> {
     Ok(transitioned)
 }
 
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use corpus_engine_yield::time::unix_now as now_secs;
 
 #[cfg(test)]
 mod tests {

@@ -419,10 +419,37 @@ impl CorpusIndex {
     ) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
         let safe_id = doc_id.replace('\'', "''");
         let predicate = format!("source_doc_id = '{safe_id}'");
-        let batches: Vec<RecordBatch> = self
-            .table
-            .query()
-            .only_if(predicate)
+        let mut out = self.select_chunks_with_embeddings(Some(predicate)).await?;
+        out.sort_by_key(|(r, _)| r.id);
+        Ok(out)
+    }
+
+    /// Every chunk in the corpus WITH its embedding, in ONE table scan.
+    ///
+    /// Callers that need all embeddings (e.g. the DRY / clone report) must NOT
+    /// fan out into a per-`source_doc_id` query each: `source_doc_id` is not
+    /// indexed, so each such query is a full table scan — thousands of them cost
+    /// tens of seconds. This is a single pass. Order is Lance's scan order.
+    pub async fn all_chunks_with_embeddings(
+        &self,
+    ) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
+        self.select_chunks_with_embeddings(None).await
+    }
+
+    /// Shared query + Arrow-parse for the two `*_with_embeddings` readers above.
+    /// `predicate` is an optional LanceDB `only_if` filter. Rows with a
+    /// missing/null embedding are dropped (defensive — a T1-complete index has
+    /// none). Returns rows in Lance's scan order; sort at the call site if the
+    /// consumer needs id order.
+    async fn select_chunks_with_embeddings(
+        &self,
+        predicate: Option<String>,
+    ) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
+        let mut query = self.table.query();
+        if let Some(predicate) = predicate {
+            query = query.only_if(predicate);
+        }
+        let batches: Vec<RecordBatch> = query
             .select(Select::Columns(vec![
                 "id".to_string(),
                 "content".to_string(),
@@ -434,16 +461,10 @@ impl CorpusIndex {
             ]))
             .execute()
             .await
-            .map_err(|e| {
-                Error::Database(format!("chunks_for_source_doc_with_embeddings query: {e}"))
-            })?
+            .map_err(|e| Error::Database(format!("chunks_with_embeddings query: {e}")))?
             .try_collect()
             .await
-            .map_err(|e| {
-                Error::Database(format!(
-                    "chunks_for_source_doc_with_embeddings collect: {e}"
-                ))
-            })?;
+            .map_err(|e| Error::Database(format!("chunks_with_embeddings collect: {e}")))?;
 
         let mut out: Vec<(EnrichmentChunkRow, Vec<f32>)> = Vec::new();
         for batch in &batches {
@@ -543,7 +564,6 @@ impl CorpusIndex {
                 out.push((row, embedding));
             }
         }
-        out.sort_by_key(|(r, _)| r.id);
         Ok(out)
     }
 

@@ -14,6 +14,8 @@ New to the codebase? [docs/ARCHITECTURE_TOUR.md](./docs/ARCHITECTURE_TOUR.md) is
 ten-minute map —
 diagrams, tables, and the vocabulary. The verifiable deep map is
 [sovereign/SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md).
+Building from source? [SETUP.md](./SETUP.md) gets you from a fresh clone to a
+green test suite on a Mac or Linux in about half an hour.
 
 ## What you get
 

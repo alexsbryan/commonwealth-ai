@@ -770,12 +770,7 @@ fn git_head_short() -> Option<String> {
     }
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now as now_secs;
 
 fn sample_first_n(v: &[String], n: usize) -> String {
     v.iter().take(n).cloned().collect::<Vec<_>>().join(", ")

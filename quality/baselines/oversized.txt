@@ -46,7 +46,6 @@
 1537	sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs
 2018	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 2794	sovereign/crates/sovereign-cli-dev/src/found.rs
-7102	sovereign/crates/sovereign-cli-dev/src/project_cmd.rs
 2289	sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs
 1400	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
 1345	sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs

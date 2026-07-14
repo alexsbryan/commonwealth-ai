@@ -49,6 +49,26 @@ impl Clock for SystemClock {
     }
 }
 
+/// Unskewed wall-clock seconds — the canonical replacement for the scattered
+/// context-free `now_secs()` helpers across the commonwealth crates. Equivalent
+/// to `SystemClock.now_unix_secs()`.
+///
+/// Use this ONLY where no `Clock` is injected and skew does not matter (logging,
+/// local timestamps). Skew-sensitive reads — membership `last_seen`, gossip LWW,
+/// offline-decay — must take a `&dyn Clock` so tests can drive per-node skew (see
+/// the module docs); this free helper is deliberately NOT skewable.
+pub fn unix_now_secs() -> u64 {
+    SystemClock.now_unix_secs()
+}
+
+/// Unskewed wall-clock milliseconds. Same skew caveat as [`unix_now_secs`].
+pub fn unix_now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// Test clock: a shared, settable base (the simulated *global* wall-clock) plus
 /// a per-instance signed `offset` (this node's skew, in seconds).
 ///

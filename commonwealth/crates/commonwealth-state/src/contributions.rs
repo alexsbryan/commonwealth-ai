@@ -211,12 +211,7 @@ pub async fn run_storage_snapshot_loop<F, Fut>(
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 fn emit_tracing_event(kind: &LedgerEventKind) {
     match kind {

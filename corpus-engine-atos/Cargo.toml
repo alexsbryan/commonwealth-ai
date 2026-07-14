@@ -21,6 +21,8 @@ description = "ATOS feature store + plan items + DESIGN.md design signals. Carve
 # See corpus-engine/DECOMPOSITION.md for the wider plan.
 
 [dependencies]
+# Shared corpus-engine-subtree leaf: canonical wall-clock helpers (time module).
+corpus-engine-yield = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

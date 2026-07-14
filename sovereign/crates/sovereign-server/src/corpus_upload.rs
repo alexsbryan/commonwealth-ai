@@ -26,7 +26,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::Extension;
 use axum::http::StatusCode;
@@ -166,12 +165,7 @@ vector = true
     )
 }
 
-fn unix_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as unix_secs;
 
 // ─── Core ingest (testable without a full Runtime) ───────────
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
@@ -177,12 +177,7 @@ impl LatencyProber {
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before unix epoch")
-        .as_secs()
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 /// Compute EWMA for a new sample given previous value.
 pub fn ewma(previous: f32, sample: f32, alpha: f32) -> f32 {

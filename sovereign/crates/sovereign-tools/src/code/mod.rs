@@ -127,6 +127,14 @@ pub mod capability_posture;
 pub mod arch_posture;
 #[cfg(feature = "treesitter")]
 pub mod arch_report;
+// Advisory god-file split proposals from the SCIP call graph — the "where are
+// the seams + which helpers stay behind" analysis, mechanized.
+#[cfg(feature = "treesitter")]
+pub mod suggest_seams;
+// Semantic-duplication ("DRY") report from the per-symbol code embeddings —
+// exact clones by content_hash + near clones by cosine similarity.
+#[cfg(feature = "treesitter")]
+pub mod dry_report;
 
 // Working notes tools.
 #[cfg(feature = "treesitter")]

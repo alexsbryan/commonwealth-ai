@@ -50,6 +50,8 @@ pub async fn run_code(args: &[String]) -> i32 {
         "reflect" => cmd_reflect(&args[1..]).await,
         "capability-map" => cmd_capability_map(&args[1..]).await,
         "arch-report" => crate::arch_report_cmd::run(&args[1..]).await,
+        "suggest-seams" => crate::suggest_seams_cmd::run(&args[1..]).await,
+        "dry-report" => crate::dry_report_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,

@@ -596,10 +596,7 @@ impl MeshInferenceProvider {
     /// mock and so the handful of registry-record sites all use
     /// the same clock source.
     fn now_unix_secs() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        sovereign_core::time::unix_now_u64()
     }
 
     /// Record that a request was dispatched to this peer (or local,

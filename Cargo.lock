@@ -2407,6 +2407,7 @@ name = "corpus-engine-atos"
 version = "0.1.20"
 dependencies = [
  "chrono",
+ "corpus-engine-yield",
  "pulldown-cmark",
  "rusqlite",
  "serde",
@@ -2424,6 +2425,7 @@ version = "0.1.20"
 dependencies = [
  "chrono",
  "clap",
+ "corpus-engine-yield",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -12310,6 +12312,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-authoring-harness",
+ "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12412,6 +12415,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-time",
  "tempfile",
  "tokio",
 ]
@@ -12427,6 +12431,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12524,6 +12529,10 @@ dependencies = [
  "sovereign-workflow-host",
  "tokio",
 ]
+
+[[package]]
+name = "sovereign-time"
+version = "0.1.20"
 
 [[package]]
 name = "sovereign-tools"

@@ -27,7 +27,6 @@
 //! racing on the same DB cannot double-claim a unit.
 
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -358,12 +357,7 @@ impl Worklist {
     }
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_time::unix_now;
 
 #[cfg(test)]
 mod tests {

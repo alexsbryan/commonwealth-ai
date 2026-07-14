@@ -43,7 +43,6 @@
 //!   load it directly and skip the entire LLM fan-out.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use blake3;
 use serde::{Deserialize, Serialize};
@@ -359,12 +358,7 @@ fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     Ok(())
 }
 
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now as now_secs;
 
 #[cfg(test)]
 mod tests {

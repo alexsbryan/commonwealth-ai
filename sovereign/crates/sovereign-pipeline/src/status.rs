@@ -6,7 +6,6 @@
 //! runs; `pipeline status` is for after-the-fact triage and for the
 //! daytime check-in when the night job has paused.
 
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::worklist::Worklist;
 
@@ -82,12 +81,7 @@ pub fn report(worklist: &Worklist, recipe_id: &str) -> crate::worklist::Result<S
     })
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_time::unix_now;
 
 #[cfg(test)]
 mod tests {

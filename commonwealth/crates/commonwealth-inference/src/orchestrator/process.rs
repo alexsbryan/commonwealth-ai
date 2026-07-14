@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::net::SocketAddr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
@@ -255,12 +255,7 @@ pub fn mock_process(kind: ProcessKind, addr: SocketAddr) -> ManagedProcess {
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before unix epoch")
-        .as_secs()
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 #[cfg(test)]
 mod tests {

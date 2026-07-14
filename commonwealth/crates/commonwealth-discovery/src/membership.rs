@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
@@ -50,12 +49,7 @@ pub fn validate_join_key_format(key: &str) -> Result<()> {
     Ok(())
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before unix epoch")
-        .as_secs()
-}
+use commonwealth_core::clock::unix_now_secs as now_secs;
 
 /// Initialize a new mesh. Returns the mesh state and the join key (to be shared out-of-band).
 pub fn init_mesh(name: &str, node_name: &str, addresses: Vec<SocketAddr>) -> (Mesh, String) {

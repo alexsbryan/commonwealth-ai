@@ -22,6 +22,8 @@ description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync.
 # longer depends on the NoteStore.
 
 [dependencies]
+# Shared corpus-engine-subtree leaf: canonical wall-clock helpers (time module).
+corpus-engine-yield = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
