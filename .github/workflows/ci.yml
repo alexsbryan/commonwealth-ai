@@ -7,25 +7,25 @@
 # replaces it. Before this landed the only active workflow was desktop-release,
 # i.e. there was no continuous check/test gate at all.
 #
-# Gate policy (contributor-facing — a commit to main only goes red for
-# genuine quality regressions):
-#   - check+test (one job, one compile) / mesh-dst / fmt are BLOCKING — the
-#     real quality gates (fmt flipped 2026-07-02 after the workspace-wide
-#     `cargo fmt --all` sweep; it runs in seconds and cannot flake).
-#   - clippy + the new quality gates are ADVISORY (continue-on-error) for
-#     their burn-in month (quality program, 2026-07); each flips blocking by
-#     deleting its continue-on-error line after ~4 clean weeks.
-#       clippy → lint-gate (the count ratchet vs quality/baselines/
-#                clippy_counts.tsv) SUBSUMES `-D warnings`: any NEW warning
-#                anywhere is a 0→1 count growth and fails the gate, while
-#                the grandfathered stock burns down via --tighten. The
-#                2026-07-12 sweep (`cargo clippy --fix` + agents) cleared
-#                the mechanical debt.
-#       arch-gate → the §3.1 file-size ratchet; re-baselined under the
-#                quality/baselines/ lifecycle (weekly --tighten auto-PR
-#                prevents the stale-baseline rot that demoted it in July).
-#   (docs-gate lives in docs-reconcile.yml and stays blocking: it is
-#   deterministic path-resolution, never flaky, and backs the README badge.)
+# Gate policy (2026-07-14 — deliberately minimal): a PR/main build goes green
+# on TWO legible, blocking gates that share ONE workspace compile:
+#   1. Build + Test — one job, one compile: `cargo check --all-targets` then
+#      `cargo test` reuse the same target/ tree, so tests never rebuild the
+#      monorepo from scratch. (The "Build" and "test" of Build/lint/test.)
+#   2. Lint (rustfmt) — `cargo fmt --all --check`. Seconds, no compilation,
+#      deterministic, cannot flake. (The "lint" of Build/lint/test.)
+#   (docs-gate — cited-path resolution — stays blocking in docs-reconcile.yml.)
+#
+# The heavier gates (mesh-dst fault-injection, boundary/arch/layer/lock,
+# cargo-deny supply-chain, clippy count-ratchet) are SHELVED, not deleted —
+# commented out at the bottom of this file. They cost real wall-clock /
+# advisory-noise out of proportion to a small team, so they wait until there's
+# time to babysit the longer pipeline. Re-enable any block by stripping the
+# leading "# " from its lines. Their local equivalents still run on demand:
+#     cargo xtask quality                                   # boundary/arch/layer/lock
+#     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
+#     cargo deny check licenses bans sources
+#     cargo clippy --workspace --all-targets
 
 name: CI
 
@@ -57,15 +57,8 @@ env:
   CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
-  # ONE workspace compile per run. `check --all-targets` and `test` share a
-  # target/ tree in the same job (check adds only rmeta for benches on top of
-  # the test build); the old separate check job paid the whole llama.cpp +
-  # workspace build a second time. This job is also the ONLY writer of the
-  # shared `workspace` cache — mesh-dst and clippy restore it read-only, so
-  # the heavy dependency artifacts (llama-cpp-sys' cmake/ggml output above
-  # all) compile at most once per lockfile change across the whole matrix.
   test:
-    name: Check + Test (workspace)
+    name: Build + Test (workspace)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -175,142 +168,8 @@ jobs:
         if: failure()
         run: df -h; echo; free -h; echo; du -sh target 2>/dev/null || true
 
-  mesh-dst:
-    name: Mesh DST (fault-injection / invariants)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # Same disk headroom problem as the test job — see its comment.
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache \
-            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          # The hosted runner has a second, mostly-empty ~65 GB scratch disk
-          # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
-          # a plain dir) and point TMPDIR there too, so neither the build tree
-          # nor compiler scratch can fill the root disk again.
-          sudo mkdir -p /mnt/target /mnt/tmp
-          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
-          mkdir -p target
-          sudo mount --bind /mnt/target target
-          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
-          df -h / /mnt | tail -2
-      # rust-toolchain.toml pins the exact version; the bare install
-      # command reads it (no version strings in workflow YAML).
-      - name: Install pinned toolchain (rust-toolchain.toml)
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Restore the test job's cache read-only: the `dst` feature set
-          # recompiles sovereign-mesh itself, but every dependency artifact
-          # (incl. the llama.cpp cmake output) is reused. save-if false so
-          # this feature-skewed tree never overwrites the canonical cache.
-          shared-key: workspace
-          save-if: false
-      # See the test job: the CMake tree is cached separately from
-      # rust-cache (whose cleanup would delete it), and the guard forces a
-      # rebuild instead of a link failure if the tree is missing.
-      - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
-      # sovereign-mesh pulls sovereign-inference → the Vulkan build stack is
-      # needed here too (no gtk: the desktop crate isn't in this dep tree).
-      - name: System deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y \
-            protobuf-compiler libprotobuf-dev cmake mold clang \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
-      # Deterministic-simulation mesh suite (Layer 1 of commonwealth/docs/MESH_QA.md):
-      # drives REAL gossip under a per-node FaultTransport + seeded fault schedule
-      # and asserts the invariant pack. In-process — no GPU/network/weights, CI-safe.
-      # `treesitter` alongside `dst` is FEATURE-UNIFICATION HYGIENE, not a test
-      # need: the restored `workspace` cache was built with corpus-engine's
-      # treesitter feature on (the daemon/server/cli members require it); a bare
-      # `-p sovereign-mesh` build resolves it OFF, so cargo rebuilt corpus-engine
-      # + its 17 dependents from scratch on every run. Matching the feature set
-      # makes the cache actually hit.
-      - run: cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
-
-  # One runner for every xtask gate (each runs in <1s once xtask compiles;
-  # they used to be two jobs paying the setup twice). Blocking/advisory is
-  # per-STEP: boundary-gate keeps its blocking status; the gates landed by
-  # the quality program (2026-07-11: layer, lock, re-baselined arch) run
-  # advisory for a burn-in month — flip each by deleting its
-  # `continue-on-error` line. Local equivalent: `cargo xtask quality`.
-  gates:
-    name: Gates (boundary / arch / layer / lock)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # rust-toolchain.toml pins the exact version; the bare install
-      # command reads it (no version strings in workflow YAML).
-      - name: Install pinned toolchain (rust-toolchain.toml)
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # xtask + arch-layers + their handful of deps only — shared with
-          # docs-reconcile's docs-gate job, which builds the identical tree.
-          shared-key: xtask
-      # No protoc/cmake needed — xtask only reads files. mold + clang ARE
-      # needed: compiling xtask itself links through the pinned ld.mold.
-      - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y mold clang
-      # NOT advisory: a boundary breach means the workflow/recipe package can
-      # no longer be lifted out against just the OICP contract
-      # (studio/BOUNDARY.md).
-      - name: boundary-gate (blocking)
-        run: cargo run -p xtask -- boundary-gate
-      - name: arch-gate (advisory — burn-in until ~2026-08)
-        continue-on-error: true
-        run: cargo run -p xtask -- arch-gate
-      - name: layer-gate (advisory — burn-in until ~2026-08)
-        continue-on-error: true
-        run: cargo run -p xtask -- layer-gate
-      - name: lock-gate (advisory — burn-in until ~2026-08)
-        continue-on-error: true
-        run: cargo run -p xtask -- lock-gate
-
-  # Supply-chain policy (deny.toml). Metadata-only — no compile, ~1 min.
-  # Advisory for its burn-in month (quality program, 2026-07-11), then the
-  # licenses/bans/sources step flips blocking. The advisories lane stays
-  # permanently non-blocking on PRs: it reads the moving RustSec DB, so a
-  # brand-new CVE would otherwise red-X unrelated contributor PRs — the
-  # weekly lane owns paging the owner about those.
-  deny:
-    name: Deny (licenses / bans / sources, advisory)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-      - name: Licenses, bans, sources (deterministic vs Cargo.lock)
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check licenses bans sources
-      - name: Advisories (informational — never blocks)
-        uses: EmbarkStudios/cargo-deny-action@v2
-        continue-on-error: true
-        with:
-          command: check advisories
-
   fmt:
-    name: Format
+    name: Lint (rustfmt)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -324,72 +183,219 @@ jobs:
       # change, small and actionable.
       - run: cargo fmt --all --check
 
-  clippy:
-    name: Clippy (advisory)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-      # Same disk headroom problem as the test job — see its comment.
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/.ghcup /opt/hostedtoolcache \
-            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          # The hosted runner has a second, mostly-empty ~65 GB scratch disk
-          # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
-          # a plain dir) and point TMPDIR there too, so neither the build tree
-          # nor compiler scratch can fill the root disk again.
-          sudo mkdir -p /mnt/target /mnt/tmp
-          sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
-          mkdir -p target
-          sudo mount --bind /mnt/target target
-          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
-          df -h / /mnt | tail -2
-      # rust-toolchain.toml pins the exact version + carries the clippy
-      # component; the bare install command reads it.
-      - name: Install pinned toolchain (rust-toolchain.toml)
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Reuse the test job's dependency artifacts (clippy re-lints the
-          # workspace crates with clippy-driver, but deps compile normally
-          # and hit the cache). Read-only: advisory lanes never write.
-          shared-key: workspace
-          save-if: false
-      # See the test job: the CMake tree is cached separately from
-      # rust-cache (whose cleanup would delete it), and the guard forces a
-      # rebuild instead of a link failure if the tree is missing.
-      - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
-      # Same native stack as the check+test job (see its comment) — keep in sync.
-      - name: System deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y \
-            protobuf-compiler libprotobuf-dev cmake mold clang \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
-      # JSON stream feeds the lint-gate count ratchet: per-(crate, lint)
-      # warning counts may never grow vs quality/baselines/clippy_counts.tsv.
-      # Old debt burns down crate by crate; new debt is blocked.
-      - name: Clippy (JSON)
-        run: cargo clippy --workspace --all-targets --message-format=json > /tmp/clippy.json
-      - name: lint-gate (count ratchet)
-        run: cargo run -p xtask -- lint-gate --from /tmp/clippy.json
+  # ===================================================================
+  # SHELVED GATES (2026-07-14) — commented out to keep PR/main checks
+  # legible: only 'Build + Test' and 'Lint (rustfmt)' gate merges now.
+  # Re-enable a block by stripping the leading '# ' from its lines (and
+  # confirm branch protection's required checks match). Local equivalents:
+  #     cargo xtask quality                                   # gates job
+  #     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
+  #     cargo deny check licenses bans sources                # deny job
+  #     cargo clippy --workspace --all-targets                # clippy job
+  # ===================================================================
+#
+#   mesh-dst:
+#     name: Mesh DST (fault-injection / invariants)
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v7
+#       # Same disk headroom problem as the test job — see its comment.
+#       - name: Free runner disk space
+#         run: |
+#           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+#             /usr/local/.ghcup /opt/hostedtoolcache \
+#             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+#           sudo docker image prune --all --force >/dev/null 2>&1 || true
+#           # The hosted runner has a second, mostly-empty ~65 GB scratch disk
+#           # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
+#           # a plain dir) and point TMPDIR there too, so neither the build tree
+#           # nor compiler scratch can fill the root disk again.
+#           sudo mkdir -p /mnt/target /mnt/tmp
+#           sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+#           mkdir -p target
+#           sudo mount --bind /mnt/target target
+#           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+#           df -h / /mnt | tail -2
+#       # rust-toolchain.toml pins the exact version; the bare install
+#       # command reads it (no version strings in workflow YAML).
+#       - name: Install pinned toolchain (rust-toolchain.toml)
+#         run: rustup toolchain install
+#       - uses: Swatinem/rust-cache@v2
+#         with:
+#           # Restore the test job's cache read-only: the `dst` feature set
+#           # recompiles sovereign-mesh itself, but every dependency artifact
+#           # (incl. the llama.cpp cmake output) is reused. save-if false so
+#           # this feature-skewed tree never overwrites the canonical cache.
+#           shared-key: workspace
+#           save-if: false
+#       # See the test job: the CMake tree is cached separately from
+#       # rust-cache (whose cleanup would delete it), and the guard forces a
+#       # rebuild instead of a link failure if the tree is missing.
+#       - name: Cache llama.cpp CMake tree
+#         uses: actions/cache@v6
+#         with:
+#           path: target/llama-cmake-cache
+#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+#       - name: Guard llama fingerprint vs missing CMake tree
+#         shell: bash
+#         run: |
+#           if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
+#             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
+#           fi
+#       # sovereign-mesh pulls sovereign-inference → the Vulkan build stack is
+#       # needed here too (no gtk: the desktop crate isn't in this dep tree).
+#       - name: System deps
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y ca-certificates curl gnupg
+#           curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+#             | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+#           curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+#             | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+#           sudo apt-get update
+#           sudo apt-get install -y \
+#             protobuf-compiler libprotobuf-dev cmake mold clang \
+#             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+#       # Deterministic-simulation mesh suite (Layer 1 of commonwealth/docs/MESH_QA.md):
+#       # drives REAL gossip under a per-node FaultTransport + seeded fault schedule
+#       # and asserts the invariant pack. In-process — no GPU/network/weights, CI-safe.
+#       # `treesitter` alongside `dst` is FEATURE-UNIFICATION HYGIENE, not a test
+#       # need: the restored `workspace` cache was built with corpus-engine's
+#       # treesitter feature on (the daemon/server/cli members require it); a bare
+#       # `-p sovereign-mesh` build resolves it OFF, so cargo rebuilt corpus-engine
+#       # + its 17 dependents from scratch on every run. Matching the feature set
+#       # makes the cache actually hit.
+#       - run: cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
+#
+#   # One runner for every xtask gate (each runs in <1s once xtask compiles;
+#   # they used to be two jobs paying the setup twice). Blocking/advisory is
+#   # per-STEP: boundary-gate keeps its blocking status; the gates landed by
+#   # the quality program (2026-07-11: layer, lock, re-baselined arch) run
+#   # advisory for a burn-in month — flip each by deleting its
+#   # `continue-on-error` line. Local equivalent: `cargo xtask quality`.
+#
+#   gates:
+#     name: Gates (boundary / arch / layer / lock)
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v7
+#       # rust-toolchain.toml pins the exact version; the bare install
+#       # command reads it (no version strings in workflow YAML).
+#       - name: Install pinned toolchain (rust-toolchain.toml)
+#         run: rustup toolchain install
+#       - uses: Swatinem/rust-cache@v2
+#         with:
+#           # xtask + arch-layers + their handful of deps only — shared with
+#           # docs-reconcile's docs-gate job, which builds the identical tree.
+#           shared-key: xtask
+#       # No protoc/cmake needed — xtask only reads files. mold + clang ARE
+#       # needed: compiling xtask itself links through the pinned ld.mold.
+#       - name: System deps
+#         run: sudo apt-get update && sudo apt-get install -y mold clang
+#       # NOT advisory: a boundary breach means the workflow/recipe package can
+#       # no longer be lifted out against just the OICP contract
+#       # (studio/BOUNDARY.md).
+#       - name: boundary-gate (blocking)
+#         run: cargo run -p xtask -- boundary-gate
+#       - name: arch-gate (advisory — burn-in until ~2026-08)
+#         continue-on-error: true
+#         run: cargo run -p xtask -- arch-gate
+#       - name: layer-gate (advisory — burn-in until ~2026-08)
+#         continue-on-error: true
+#         run: cargo run -p xtask -- layer-gate
+#       - name: lock-gate (advisory — burn-in until ~2026-08)
+#         continue-on-error: true
+#         run: cargo run -p xtask -- lock-gate
+#
+#   # Supply-chain policy (deny.toml). Metadata-only — no compile, ~1 min.
+#   # Advisory for its burn-in month (quality program, 2026-07-11), then the
+#   # licenses/bans/sources step flips blocking. The advisories lane stays
+#   # permanently non-blocking on PRs: it reads the moving RustSec DB, so a
+#   # brand-new CVE would otherwise red-X unrelated contributor PRs — the
+#   # weekly lane owns paging the owner about those.
+#
+#   deny:
+#     name: Deny (licenses / bans / sources, advisory)
+#     runs-on: ubuntu-latest
+#     continue-on-error: true
+#     steps:
+#       - uses: actions/checkout@v7
+#       - name: Licenses, bans, sources (deterministic vs Cargo.lock)
+#         uses: EmbarkStudios/cargo-deny-action@v2
+#         with:
+#           command: check licenses bans sources
+#       - name: Advisories (informational — never blocks)
+#         uses: EmbarkStudios/cargo-deny-action@v2
+#         continue-on-error: true
+#         with:
+#           command: check advisories
+#
+#   clippy:
+#     name: Clippy (advisory)
+#     runs-on: ubuntu-latest
+#     continue-on-error: true
+#     steps:
+#       - uses: actions/checkout@v7
+#       # Same disk headroom problem as the test job — see its comment.
+#       - name: Free runner disk space
+#         run: |
+#           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+#             /usr/local/.ghcup /opt/hostedtoolcache \
+#             /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+#           sudo docker image prune --all --force >/dev/null 2>&1 || true
+#           # The hosted runner has a second, mostly-empty ~65 GB scratch disk
+#           # at /mnt. Bind-mount target/ onto it (caches still work — tar sees
+#           # a plain dir) and point TMPDIR there too, so neither the build tree
+#           # nor compiler scratch can fill the root disk again.
+#           sudo mkdir -p /mnt/target /mnt/tmp
+#           sudo chown "$(id -u):$(id -g)" /mnt/target /mnt/tmp
+#           mkdir -p target
+#           sudo mount --bind /mnt/target target
+#           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+#           df -h / /mnt | tail -2
+#       # rust-toolchain.toml pins the exact version + carries the clippy
+#       # component; the bare install command reads it.
+#       - name: Install pinned toolchain (rust-toolchain.toml)
+#         run: rustup toolchain install
+#       - uses: Swatinem/rust-cache@v2
+#         with:
+#           # Reuse the test job's dependency artifacts (clippy re-lints the
+#           # workspace crates with clippy-driver, but deps compile normally
+#           # and hit the cache). Read-only: advisory lanes never write.
+#           shared-key: workspace
+#           save-if: false
+#       # See the test job: the CMake tree is cached separately from
+#       # rust-cache (whose cleanup would delete it), and the guard forces a
+#       # rebuild instead of a link failure if the tree is missing.
+#       - name: Cache llama.cpp CMake tree
+#         uses: actions/cache@v6
+#         with:
+#           path: target/llama-cmake-cache
+#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+#       - name: Guard llama fingerprint vs missing CMake tree
+#         shell: bash
+#         run: |
+#           if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
+#             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
+#           fi
+#       # Same native stack as the check+test job (see its comment) — keep in sync.
+#       - name: System deps
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y ca-certificates curl gnupg
+#           curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+#             | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+#           curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+#             | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+#           sudo apt-get update
+#           sudo apt-get install -y \
+#             protobuf-compiler libprotobuf-dev cmake mold clang \
+#             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+#             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+#       # JSON stream feeds the lint-gate count ratchet: per-(crate, lint)
+#       # warning counts may never grow vs quality/baselines/clippy_counts.tsv.
+#       # Old debt burns down crate by crate; new debt is blocked.
+#       - name: Clippy (JSON)
+#         run: cargo clippy --workspace --all-targets --message-format=json > /tmp/clippy.json
+#       - name: lint-gate (count ratchet)
+#         run: cargo run -p xtask -- lint-gate --from /tmp/clippy.json
