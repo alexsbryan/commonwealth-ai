@@ -8,6 +8,22 @@ use std::collections::HashMap;
 
 use super::super::*;
 
+// ─── EXPERIMENTAL corpus relevance pre-filter ────────────────────────────
+//
+// Behind `SOVEREIGN_CORPUS_PREFILTER_TOPK`. An unscoped DeepQuery fans out to
+// every installed corpus; this ranks corpora by relevance to the query and
+// keeps only the top-K (+ guardrails) before the fan-out.
+//
+// The relevance signal is `CorpusIndex::nearest_vector_distance` — the true
+// nearest-chunk cosine over the WHOLE index (threshold-free), which answers
+// "does this corpus have ANY region near the query". `vector_distance` is the
+// cross-corpus-comparable axis, so scores sort across corpora. Two cheaper
+// signals were tried and rejected against the real 30-corpus set (2026-07-13):
+// a mean-of-sample centroid and a max-of-sample — both biased, because
+// `sample_embeddings(n)` is first-N in scan order, not a random sample, so a
+// diffuse mega-corpus (wikipedia) mis-scored on its own questions. See
+// [[project_corpus_prefilter_signal_2026_07_13]].
+
 impl Runtime {
     /// Search every installed knowledge/catalog corpus with optional
     /// per-corpus K overrides (hot-corpora affinity pre-merge bias).
@@ -247,6 +263,17 @@ impl Runtime {
             );
         }
 
+        // EXPERIMENTAL corpus relevance pre-filter (unscoped turns only): prune
+        // to the top-K query-relevant corpora before the fan-out. No-op unless
+        // `SOVEREIGN_CORPUS_PREFILTER_TOPK` is set. A scoped turn already
+        // expressed intent via `enabled_corpora`, so we never second-guess it.
+        let eligible = if enabled_corpora.is_none() {
+            self.corpus_relevance_prefilter(engine, eligible, embedding, label)
+                .await
+        } else {
+            eligible
+        };
+
         // Per-corpus fan-out. Concurrency is env-gated
         // (`SOVEREIGN_KQ_FANOUT_CONCURRENCY`) and defaults to 4 (2026-06-26: was
         // the historical serial 1). This is BEHAVIOUR-IDENTICAL: every corpus
@@ -440,6 +467,121 @@ impl Runtime {
         }
         chunks
     }
+
+    /// EXPERIMENTAL (`SOVEREIGN_CORPUS_PREFILTER_TOPK`): prune an UNSCOPED
+    /// eligible corpus set to the top-K most query-relevant corpora before the
+    /// fan-out, ranked by query↔centroid cosine. Attacks the "unscoped
+    /// DeepQuery searches every installed corpus" cost on two axes — fewer
+    /// indexes opened/searched (wall-time) AND a smaller, more on-topic merge
+    /// pool (which shrinks the synthesis prefill downstream).
+    ///
+    /// Guardrails, all fail-safe:
+    /// - No-op unless the flag is set (`None`/`0` → return input unchanged).
+    /// - Caller only invokes this for UNSCOPED turns; a scoped turn already
+    ///   expressed intent via `enabled_corpora` and is never second-guessed.
+    /// - No-op when the query vector is empty (FTS-only) or the set already
+    ///   fits in K (nothing to prune).
+    /// - ALWAYS keeps `personal_scope` corpora regardless of score.
+    /// - Fails OPEN: a corpus whose sample can't be computed is KEPT, so a
+    ///   cold/degraded corpus is never silently dropped from retrieval.
+    /// Emits a `retrieval_audit` `corpus_prefilter` event with the kept/dropped
+    /// corpora and their scores so a run can prove what was pruned and why.
+    async fn corpus_relevance_prefilter(
+        &self,
+        engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
+        eligible: Vec<corpus_engine::IndexInfo>,
+        query_embedding: &[f32],
+        label: &str,
+    ) -> Vec<corpus_engine::IndexInfo> {
+        let top_k = match std::env::var("SOVEREIGN_CORPUS_PREFILTER_TOPK")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|k| *k >= 1)
+        {
+            Some(k) => k,
+            None => return eligible, // flag off — production default
+        };
+        if query_embedding.is_empty() || eligible.len() <= top_k {
+            return eligible;
+        }
+        let prefilter_t0 = std::time::Instant::now();
+
+        let eligible_total = eligible.len();
+        let mut n_personal = 0usize;
+        // Corpora the probe couldn't score, tagged with why: `open`
+        // (open_index failed), `probe_err` (search errored), `no_signal` (no
+        // vector path). Each is fail-OPEN (kept); a large set here means weak
+        // pruning from a probe gap, not genuine irrelevance, so we surface it.
+        let mut failed_ann: Vec<(String, &'static str)> = Vec::new();
+        let mut kept: Vec<corpus_engine::IndexInfo> = Vec::new();
+        let mut ranked: Vec<(corpus_engine::IndexInfo, f32)> = Vec::new();
+        for info in eligible {
+            if info.personal_scope {
+                n_personal += 1;
+                kept.push(info); // user vaults are always kept
+                continue;
+            }
+            // Nearest-chunk cosine over the WHOLE index — threshold-free, so a
+            // weak-but-present match ranks low instead of vanishing. `open_index`
+            // is handle-cached, sharing the handle the fan-out would open for a
+            // kept corpus. `Ok(None)`/`Err` = unscoreable → fail-OPEN.
+            let ann_sim = match engine.open_index(&info.path).await {
+                Ok(idx) => match idx.nearest_vector_distance(query_embedding, 8).await {
+                    Ok(Some(d)) => Some(1.0 - d),
+                    Ok(None) => {
+                        failed_ann.push((info.corpus_id.clone(), "no_signal"));
+                        None
+                    }
+                    Err(_) => {
+                        failed_ann.push((info.corpus_id.clone(), "probe_err"));
+                        None
+                    }
+                },
+                Err(_) => {
+                    failed_ann.push((info.corpus_id.clone(), "open"));
+                    None
+                }
+            };
+            match ann_sim {
+                Some(s) => ranked.push((info, s)),
+                None => kept.push(info), // fail-open
+            }
+        }
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let r3 = |x: f32| (x * 1000.0).round() / 1000.0;
+        let kept_ranked: Vec<(String, f32)> = ranked
+            .iter()
+            .take(top_k)
+            .map(|(i, s)| (i.corpus_id.clone(), r3(*s)))
+            .collect();
+        let dropped: Vec<(String, f32)> = ranked
+            .iter()
+            .skip(top_k)
+            .map(|(i, s)| (i.corpus_id.clone(), r3(*s)))
+            .collect();
+        for (info, _) in ranked.into_iter().take(top_k) {
+            kept.push(info);
+        }
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "corpus_prefilter",
+            label = %label,
+            top_k,
+            eligible_total,
+            n_ranked = kept_ranked.len() + dropped.len(),
+            n_personal,
+            n_failopen = failed_ann.len(),
+            kept = kept.len(),
+            dropped = dropped.len(),
+            failed_ann = ?failed_ann,
+            kept_ranked = ?kept_ranked,
+            dropped_corpora = ?dropped,
+            prefilter_ms = prefilter_t0.elapsed().as_millis() as u64,
+            "retrieval_audit: corpus_prefilter"
+        );
+        kept
+    }
+
     /// Search a *specific subset* of installed corpora — the
     /// metalingual companion to [`search_corpus_indexes`].
     ///
