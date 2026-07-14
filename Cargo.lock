@@ -2384,7 +2384,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "wiremock",
- "zip 2.4.2",
+ "zip 8.6.0",
  "zstd",
 ]
 
@@ -12323,7 +12323,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
- "zip 2.4.2",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -12634,7 +12634,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
- "zip 2.4.2",
+ "zip 8.6.0",
 ]
 
 [[package]]

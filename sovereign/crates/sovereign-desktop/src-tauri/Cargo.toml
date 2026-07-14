@@ -60,7 +60,7 @@ dirs = "6"
 # `conversations-anthropic` canonical landing path before triggering
 # install. Matches corpus-engine + sovereign-tools workspace pin —
 # deflate-only mirrors the shipping zip variant Anthropic produces.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # Provenance-preserving PDF export (`commands::export_answer`). Already in
 # the lockfile transitively (pdf-extract) — promoted to a direct dep so the
 # narrow answer+ledger PDF renderer can use it; no new crate, no system lib.
