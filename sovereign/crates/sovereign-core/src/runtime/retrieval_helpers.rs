@@ -309,6 +309,23 @@ pub(crate) fn reweight_by_query_relevance(chunks: &mut [ScoredChunk], query: &st
         // nothing relevant stays at 1x.
         let relevance = 2.0 * title_overlap + content_overlap;
         c.score *= 1.0 + relevance;
+        // Fold the SAME query-token-overlap signal into the CROSS-CORPUS SORT KEY.
+        // `cross_corpus_sort_cmp` orders the merged pool by `vector_distance`, NOT
+        // `score` (see its doc), so the score reweight above is invisible to the
+        // merged ranking. Without this, an off-topic chunk that matches only the
+        // query's TASK-FRAMING verbiage ("provide a comprehensive overview…",
+        // "summarize", "aim for breadth") can out-rank the actual subject article
+        // by raw cosine — observed 2026-07-14: `commonwealth-ai` code chunks
+        // (`summarize_via_fast_slot`, `render_notes`) beating the `Albert Einstein`
+        // article on an Einstein-overview DeepQuery, evicting wikipedia from the
+        // capped merge. Pulling a topically-overlapping chunk's distance toward the
+        // query generalizes the code-intel distance-factor precedent below to every
+        // chunk: a zero-overlap chunk is unchanged, a subject-matching chunk rises.
+        // Capped so it re-ranks near-ties without steamrolling genuine distance gaps.
+        if let Some(d) = c.vector_distance.as_mut() {
+            let pull = (RELEVANCE_DISTANCE_PULL * relevance).min(RELEVANCE_DISTANCE_PULL_CAP);
+            *d *= 1.0 - pull;
+        }
         // Code-intelligence-in-chat: a code-intel SUMMARY chunk is the curated
         // user-vocabulary bridge to a symbol (and the call-graph trace anchor),
         // worth far more for a "how does X work / what calls it" question than a
@@ -334,6 +351,19 @@ pub(crate) fn reweight_by_query_relevance(chunks: &mut [ScoredChunk], query: &st
         }
     }
 }
+
+/// Per-unit-of-relevance pull on a chunk's `vector_distance` (the axis
+/// `cross_corpus_sort_cmp` sorts by), applied in `reweight_by_query_relevance`.
+/// `relevance` = `2·title_overlap + content_overlap` ∈ [0, 3]; a chunk with
+/// meaningful subject overlap gets its distance reduced so it out-ranks an
+/// off-topic chunk that merely matches the query's task-framing. Tuned so a
+/// typical article-title match (relevance ≈ 0.3–0.5) earns a ~10–15% pull —
+/// enough to clear the observed code/fiction contamination without inverting
+/// large genuine distance gaps.
+const RELEVANCE_DISTANCE_PULL: f32 = 0.3;
+/// Hard cap on the relevance pull so even a full-overlap chunk (relevance = 3)
+/// can't collapse its distance to zero and jump a far-more-relevant neighbour.
+const RELEVANCE_DISTANCE_PULL_CAP: f32 = 0.5;
 
 /// Metadata marker `code_intel::store` stamps on every per-symbol summary chunk.
 const CODE_INTEL_SUMMARY_SOURCE: &str = "code_intel_summary";

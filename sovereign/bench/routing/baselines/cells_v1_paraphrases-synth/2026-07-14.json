@@ -1,0 +1,3814 @@
+{
+  "bank_name": "routing-cells-v1-paraphrases",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1784014651,
+  "results": [
+    {
+      "question_id": "conation_p_nevermind",
+      "category": "conation",
+      "question": "actually, never mind that",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1106,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "conation_p_redo",
+      "category": "conation",
+      "question": "give that another shot",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 867,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "conation_p_tighten",
+      "category": "conation",
+      "question": "could you tighten that up",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2930,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "conation_p_unpack",
+      "category": "conation",
+      "question": "unpack that a bit more",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2721,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "conation_p_slow_it_down",
+      "category": "conation",
+      "question": "slow it down for me",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't see a previous reply to act on — could you rephrase what you'd like?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 883,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "commissive_p_on_my_list",
+      "category": "commissive",
+      "question": "Fixing the migration is on my list for tomorrow morning.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a commitment under migration. I'll surface it next time we touch that work.\n\n(Note id: 2a23011f-d36a-4906-be17-c6203bee0a7e)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 816,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "commissive_p_up_next",
+      "category": "commissive",
+      "question": "Refactoring the auth middleware is up next this week.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a commitment under auth middleware. I'll surface it next time we touch that work.\n\n(Note id: fe1dff2b-5427-4bec-968a-2d40d6d459cf)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2738,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "commissive_p_flag_for_friday",
+      "category": "commissive",
+      "question": "I want to put a flag on reviewing this come Friday.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a commitment under reviewing. I'll surface it next time we touch that work.\n\n(Note id: 519079b5-669c-46ca-b3f9-00af31c376a5)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 867,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "commissive_p_mine_to_write",
+      "category": "commissive",
+      "question": "Before this merges, the integration test is mine to write.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a commitment under integration test. I'll surface it next time we touch that work.\n\n(Note id: d3a19791-d79e-4c62-a57b-e72c6f72e934)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2960,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "commissive_p_dont_let_me_forget",
+      "category": "commissive",
+      "question": "Don't let me forget the audit when we pick this back up.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Saved as a commitment under audit. I'll surface it next time we touch that work.\n\n(Note id: 681b161b-7591-4f9a-b626-1d3588e9702c)",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2744,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "expressive_p_not_moving",
+      "category": "expressive",
+      "question": "This bug just isn't moving.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "That sounds frustrating when progress stalls. Since we haven't tried anything yet, would you like to share the specific error message or behavior so I can help pinpoint where it's breaking?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 4977,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "expressive_p_no_starting_point",
+      "category": "expressive",
+      "question": "Honestly nothing about this looks like a starting point.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "That makes sense; if the current state doesn't align with your expectations, we can't build from it. Since I don't have context on what you're working toward yet, could you tell me what specific outcome or \"starting point\" you need to see?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3937,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "expressive_p_wearing_me_out",
+      "category": "expressive",
+      "question": "yeah this whole thing is wearing me out.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "That sounds incredibly draining. Since you haven't tried anything yet to shift this, would it help if we brainstormed one tiny, low-effort action to create immediate distance from the work? What's currently blocking your ability to step back even for a moment?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 5822,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "expressive_p_square_one",
+      "category": "expressive",
+      "question": "back to square one, and I'm running on fumes.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I hear that you're feeling stuck and drained. Since we haven't discussed your current project yet, I don't have the context to offer specific help right now—could you tell me what work you were trying to do?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 5580,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "expressive_p_writing_off",
+      "category": "expressive",
+      "question": "writing this approach off — it's not working.",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I hear that this approach isn't yielding the results you need. Since we haven't established a specific direction yet, could you share what part of the current strategy feels most misaligned with your goals?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3289,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "metalingual_p_defined_here",
+      "category": "metalingual",
+      "question": "Where is the term 'session_id' defined here, conceptually?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I read this as a question about how *this system* uses the term, but I couldn't find a matching internal source. Could you tell me which source you meant — the codebase, a specific corpus, our notes?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3014,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "metalingual_p_seps_framing",
+      "category": "metalingual",
+      "question": "In SEP's framing, where does eudaimonia point?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Virtue ethics",
+          "url": "https://en.wikipedia.org/wiki/Virtue_ethics#Phronesis_and_eudaimonia",
+          "score": 0.0,
+          "snippet": "Virtue ethics\n\nflourishing'. Eudaimonia in this sense is not a subjective, but an objective, state. It characterizes the well-lived life.\n\nAccording to Aristotle, the most prominent exponent of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.0,
+          "snippet": "aristotle-ethics\n\nAristotle thinks everyone will agree that the terms “eudaimonia” (“happiness”) and “eu zên” (“living well”) designate such an end. The Greek term “eudaimon” is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nWhat does satisfy them all is happiness eudaimonia. Scholars in fact dispute whether eudaimonia is best rendered as ‘happiness’ or ‘flourishing’ or ‘living well’ or simply..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "plato-ethics-politics\n\nThe ethical theory the Republic offers is best characterized as eudaimonist, according to which a person should act for the sake of his or her own success or happiness..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "find_repo_root",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function walks up a directory tree from a starting point to find the nearest folder containing a `.sovereign` subdirectory, returning that path or nothing if not found.\nDoes this specific file...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Positive psychology",
+          "url": "https://en.wikipedia.org/wiki/Positive_psychology#Influences_from_ancient_history",
+          "score": 0.0,
+          "snippet": "Positive psychology\n\nBefore the use of the term \"positive psychology\" there were researchers who focused on topics that would now be included under the umbrella of positive psychology. Some view..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Socrates",
+          "url": "https://en.wikipedia.org/wiki/Socrates#Socratic_eudaimonism_and_intellectualism",
+          "score": 0.0,
+          "snippet": "Socrates\n\nFor Socrates, the pursuit of eudaimonia motivates all human action, directly or indirectly. Virtue and knowledge are linked, in Socrates's view, to eudaimonia, but how closely he considered..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.0,
+          "snippet": "ethics-virtue\n\nThe distinctive feature of eudaimonist versions of virtue ethics is that they define virtues in terms of their relationship to eudaimonia. A virtue is a trait that contributes to or is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "stoicism",
+          "url": "https://plato.stanford.edu/entries/stoicism/",
+          "score": 0.0,
+          "snippet": "stoicism\n\nA bit of reflection tells us that the goal that we all have is happiness or flourishing (eudaimonia). But what is happiness? The Epicureans’ answer was deceptively straightforward: the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-indian-buddhism",
+          "url": "https://plato.stanford.edu/entries/ethics-indian-buddhism/",
+          "score": 0.0,
+          "snippet": "ethics-indian-buddhism\n\nHowever, hedonism is not our only interpretive option. Śāntideva claims in several passages that the Buddhist virtues work together and reinforce each other. This makes it..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Virtue ethics",
+          "url": "https://en.wikipedia.org/wiki/Virtue_ethics#Virtue_and_vice",
+          "score": 0.0,
+          "snippet": "Virtue ethics\n\nindependently of the virtues, thereby subsuming virtue ethics under (or somehow merging it with) consequentialist ethics.\n\nTo Aristotle, a virtue was not a skill that made you better..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nicomachean Ethics",
+          "url": "https://en.wikipedia.org/wiki/Nicomachean_Ethics#Synopsis",
+          "score": 0.0,
+          "snippet": "Nicomachean Ethics\n\nfinal cause of anything becomes identical with the good of that thing, so that the end and the good become synonymous terms\".\n\nTaking this approach, Aristotle proposes that the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Government of Iran",
+          "url": "https://en.wikipedia.org/wiki/Government_of_Iran",
+          "score": 0.0,
+          "snippet": "2025 |work=en.irna.ir |title=Archived copy |archive-date=26 June 2025 |archive-url=https://web.archive.org/web/20250626184200/https://en.irna.ir/news/85862208/General-Hatami-appointed-new-Army-Chief..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nicomachean Ethics",
+          "url": "https://en.wikipedia.org/wiki/Nicomachean_Ethics#Questions_that_might_be_raised_about_the_definition",
+          "score": 0.0,
+          "snippet": "Nicomachean Ethics\n\nmisfortunes will limit how blessed such a life can be, but \"even in these circumstances something beautiful shines through\".\n\nAristotle says that it \"seems too unfeeling and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-virtue",
+          "url": "https://plato.stanford.edu/entries/justice-virtue/",
+          "score": 0.0,
+          "snippet": "justice-virtue\n\nOne major complication, relative to the ancient accounts, is that what is ours by right is a recognition of a kind of status, as an effect of the order among people ordained by God..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nicomachean Ethics",
+          "url": "https://en.wikipedia.org/wiki/Nicomachean_Ethics#Questions_that_might_be_raised_about_the_definition",
+          "score": 0.0,
+          "snippet": "Nicomachean Ethics\n\nAristotle addresses some objections that might be raised against his proposed definition of eudaimonia.\n\nFirst, he considers a Socratic question (found for example in Plato's..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-conditionals",
+          "url": "https://plato.stanford.edu/entries/logic-conditionals/",
+          "score": 0.0,
+          "snippet": "logic-conditionals\n\nOne caveat is that in this entry we will try to keep a unified perspective on both indicative and subjunctive conditionals. Although some authors, notably David Lewis, have..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hyperintensionality",
+          "url": "https://plato.stanford.edu/entries/hyperintensionality/",
+          "score": 0.0,
+          "snippet": "hyperintensionality\n\nWorking out the intuitive interpretation of such points, of the ternary relation, and indeed of the Routley-Mayer semantics as a whole, has been a difficult task in the history..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nobviously, since, for instance,\n\nI am not impressed by them.  Therefore they are inferior.  They cannot be\n\notherwise.  Their character is built upon conventional..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-theaetetus",
+          "url": "https://plato.stanford.edu/entries/plato-theaetetus/",
+          "score": 0.0,
+          "snippet": "plato-theaetetus\n\nThe authors and SEP editors would like to thank Branden Kosch for noticing a point of Greek grammar in need of correction."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "find_repo_root",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function walks up the directory tree from a given starting path until it finds or confirms a folder named \".sovereign\", returning that folder's location if found, or nothing if the search...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "find_repo_root",
+          "url": null,
+          "score": 0.0,
+          "snippet": "find_repo_root\n\n    }\n}\n\nfn find_repo_root(from: &Path) -> Option<PathBuf> {\n    let mut current = from.to_path_buf();\n    loop {\n        if current.join(\".sovereign\").is_dir() {\n            return..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "find_repo_root",
+          "url": null,
+          "score": 0.0,
+          "snippet": "find_repo_root\n\n/// `.sovereign/` child. Returns that directory (the repo root) on\n/// the first hit, or `None` if we walk to the filesystem root\n/// without finding one.\nfn find_repo_root(from:..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nAristotle (384–322 B.C.E.) numbers among the greatest philosophers of all time. Judged solely in terms of his philosophical influence, only Plato is his peer: Aristotle’s works shaped..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nBecause of its wide range and its remoteness in time, Aristotle’s philosophy defies easy encapsulation. The long history of interpretation and appropriation of Aristotelian texts and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nBorn in 384 B.C.E. in the Macedonian region of northeastern Greece in the small city of Stagira (whence the moniker ‘the Stagirite’, which one still occasionally encounters in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.0,
+          "snippet": "ethics-virtue\n\nVirtue ethics is currently one of three major approaches in normative ethics. It may, initially, be identified as the one that emphasizes the virtues, or moral character, in contrast..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.0,
+          "snippet": "ethics-virtue\n\nThis is not to say that only virtue ethicists attend to virtues, any more than it is to say that only consequentialists attend to consequences or only deontologists to rules. Each of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.0,
+          "snippet": "ethics-virtue\n\nWe begin by discussing two concepts that are central to all forms of virtue ethics, namely, virtue and practical wisdom. Then we note some of the features that distinguish different..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "plato-ethics-politics\n\nPlato’s Republic centers on a simple question: is it always better to be just than unjust? The puzzles in Book One prepare for this question, and Glaucon and Adeimantus make..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "plato-ethics-politics\n\nAs this overview makes clear, the center of Plato’s Republic is a contribution to ethics: a discussion of what the virtue justice  is and why a person should be just. Yet..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "plato-ethics-politics\n\nThis article attempts to provide a constructive guide to the main  issues of ethics and politics in the Republic. Two  assumptions shape its organization. First, it assumes..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "stoicism",
+          "url": "https://plato.stanford.edu/entries/stoicism/",
+          "score": 0.0,
+          "snippet": "The Stoics argue that virtue, identified with rational knowledge and moral perfection, is the sole good and thus sufficient for achieving eudaimonia or happiness. This ethical framework distinguishes...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.0,
+          "snippet": "Aristotle posits that the highest human good is eudaimonia, achieved primarily through philosophical contemplation rather than political activity or mere ethical living. He supports this by...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "speusippus",
+          "url": "https://plato.stanford.edu/entries/speusippus/",
+          "score": 0.0,
+          "snippet": "Speusippus argues that the One is transcendent and not a being, while his epistemology combines scientific accounts for intelligible objects with 'scientific perception' for perceptibles. He posits...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-ancient",
+          "url": "https://plato.stanford.edu/entries/ethics-ancient/",
+          "score": 0.0,
+          "snippet": "Ancient philosophers generally advanced eudaimonism, the thesis that virtue is intrinsically linked to or constitutive of human happiness. While thinkers like Plato and Aristotle argued that virtuous...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "Socrates argues that justice is intrinsically preferable to injustice because it constitutes psychological harmony within the soul, which directly leads to true happiness. This claim is supported by...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "augustine",
+          "url": "https://plato.stanford.edu/entries/augustine/",
+          "score": 0.0,
+          "snippet": "Augustine adapts ancient eudaimonism by subordinating virtue and happiness to God's prevenient grace, defining the supreme good as loving and knowing God. He grounds ethics in intentional love,...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plato-ethics-politics",
+          "url": "https://plato.stanford.edu/entries/plato-ethics-politics/",
+          "score": 0.0,
+          "snippet": "Socrates addresses the challenge of proving that justice is always preferable to injustice by constructing a simultaneous account of both concepts, utilizing an analogy between civic and individual...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-bajja",
+          "url": "https://plato.stanford.edu/entries/ibn-bajja/",
+          "score": 0.0,
+          "snippet": "Avempace defines philosophy as a universal science yielding certain knowledge through apodictic syllogisms, encompassing metaphysics, physics, logic, and practical disciplines. He argues that human...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep",
+        "commonwealth-ai",
+        "chaos-secret-agent"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "‘happiness’, ‘flourishing’, ‘living well’, or simply transliterated\n\nGrounded in the source: \"Scholars in fact dispute whether eudaimonia is best rendered as ‘happiness’ or ‘flourishing’ or ‘living well’ or simply transliterated and left an untranslated  technical  term.\"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 50416,
+        "total_latency_ms": 30932,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia",
+          "commonwealth-ai",
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 40,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "metalingual_p_lookup_a_term",
+      "category": "metalingual",
+      "question": "In this repo, the identifier 'tenant_scope' — what's it standing for?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I read this as a question about *this codebase*, but I don't have a code corpus indexed locally. Run `sovereign code index <path>` against the relevant repo to enable in-system vocabulary lookups, then ask again.\n\nIf you meant something else by \"in this codebase\", let me know — I can re-route to general knowledge retrieval.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2993,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "comparative_p_stack_up",
+      "category": "comparative",
+      "question": "TCP's guarantees stack up against UDP's how, exactly?",
+      "retrieved": [
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "render_structural",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function reads a JSON archaeology file to map atom IDs to source paths, filters those atoms against a provided working set of files, sorts the results by path and ID, and returns a markdown...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Transmission Control Protocol",
+          "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Acceleration",
+          "score": 0.0,
+          "snippet": "Transmission Control Protocol\n\nThe idea of a TCP accelerator is to terminate TCP connections inside the network processor and then relay the data to a second connection toward the end system. The..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Internet protocol suite",
+          "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Comparison_of_TCP/IP_and_OSI_layering",
+          "score": 0.0,
+          "snippet": "Internet protocol suite\n\nThe three top layers in the OSI model, i.e. the application layer, the presentation layer and the session layer, are not distinguished separately in the TCP/IP model which..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Internet protocol suite",
+          "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite",
+          "score": 0.0,
+          "snippet": "Internet protocol suite\n\nThe Internet protocol suite, commonly known as TCP/IP, is a framework for organizing the set of communication protocols used in the Internet and similar computer networks..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "fault_line_catalog",
+          "url": null,
+          "score": 0.0,
+          "snippet": "fault_line_catalog\n\n                (\n                    \"At-most-once\",\n                    \"Simple; never duplicates. Can drop on failure; unacceptable for payments, counting, anything that must..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "fault_line_catalog",
+          "url": null,
+          "score": 0.0,
+          "snippet": "fault_line_catalog\n\n                (\n                    \"At-most-once\",\n                    \"Simple; never duplicates. Can drop on failure; unacceptable for payments, counting, anything that must..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "bind_iroh_endpoint",
+          "url": null,
+          "score": 0.0,
+          "snippet": "bind_iroh_endpoint\n\n};\nuse commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};\n\nasync fn bind_iroh_endpoint(seed: u8) -> Endpoint {\n    // Builder::empty(): no relays, no..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Internet protocol suite",
+          "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Adoption",
+          "score": 0.0,
+          "snippet": "Internet protocol suite\n\noffering TCP/IP stacks for DOS and Microsoft Windows. The first VM/CMS TCP/IP stack came from the University of Wisconsin.\n\nSome of the early TCP/IP stacks were written..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "HTML_TEMPLATE",
+          "url": null,
+          "score": 0.0,
+          "snippet": "HTML_TEMPLATE\n\n\n    const el = document.getElementById('graph');\n    const Graph = ForceGraph()(el)\n      .graphData(DATA)\n      .backgroundColor('#0f172a')\n      .nodeId('id')\n      .nodeLabel(n =>..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "bind_iroh_endpoint",
+          "url": null,
+          "score": 0.0,
+          "snippet": "bind_iroh_endpoint\n\n};\nuse commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};\n\nasync fn bind_iroh_endpoint(seed: u8) -> Endpoint {\n    // Builder::empty(): no relays, no..."
+        },
+        {
+          "corpus_id": "drift-target-system-overview",
+          "title": "Delta updates + safety",
+          "url": "file://sovereign/SYSTEM_OVERVIEW.md",
+          "score": 0.0,
+          "snippet": "Delta updates + safety\n\n`update/delta.rs` — `VersionManifest` per-document revision IDs;\n`ManifestDiff::compute` produces additions/updates/deletions;\nthree-phase apply (delete → update → add);..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "prisoner-dilemma",
+          "url": "https://plato.stanford.edu/entries/prisoner-dilemma/",
+          "score": 0.0,
+          "snippet": "prisoner-dilemma\n\nMany of the issues raised by the fixed-length IPD can be raised in even starker form by a somewhat simpler game. Consider a PD in which they punishment payoff is zero. Now iterate..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 13 February 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 13 February 2001\n\nstories at  http://www.powermarketers.com.   To \nput it all in context, join some of the tens of thousands of your fellow \nreaders at the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nrepellent in the least.\n\n“Good.  You’ve no idea how these great men dislike to be disappointed in\n\nsmall things.”\n\nAfter this profound observation the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dynamic-semantics",
+          "url": "https://plato.stanford.edu/entries/dynamic-semantics/",
+          "score": 0.0,
+          "snippet": "dynamic-semantics\n\nAn alternative treatment is given in Incremental Typed Logic (ITL), an extension to typed logic of a “stack semantics” that is based on variable free indexing and that avoids..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "formal-epistemology",
+          "url": "https://plato.stanford.edu/entries/formal-epistemology/",
+          "score": 0.0,
+          "snippet": "formal-epistemology\n\nExactly how much is gaining $19 worth to you? What is \\(u(+$19)=\\ldots\\), exactly? We can actually answer this question if we just set a scale first. For example, suppose we want..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dutch-book",
+          "url": "https://plato.stanford.edu/entries/dutch-book/",
+          "score": 0.0,
+          "snippet": "dutch-book\n\nIt is easy to show how it is possible to make book against someone with betting quotients that violate the probability axioms. Let \\(Q(H)\\) be the agent’s betting quotient for \\(H\\)...."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nraise himself in the social scale, had\n\nfilled him with such an exalted conviction of his merits that it was\n\nextremely difficult for the world to treat him with..."
+        },
+        {
+          "corpus_id": "drift-target-system-overview",
+          "title": "9. Glossary",
+          "url": "file://sovereign/SYSTEM_OVERVIEW.md",
+          "score": 0.0,
+          "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire\ntypes in `oicp-types`. A model publishes one `CapabilityClaim`\nper kind-of-work it does well; schedulers score requests..."
+        },
+        {
+          "corpus_id": "drift-target-arch-principles",
+          "title": "8.2 Cross-crate version skew is a correctness risk",
+          "url": "file://sovereign/ARCH_PRINCIPLES.md",
+          "score": 0.0,
+          "snippet": "8.2 Cross-crate version skew is a correctness risk\n\nHypothetical-sounding but real: `sovereign-tools/Cargo.toml` once carried\n`arrow = \"55\"` while `corpus-engine` was at `arrow = \"57\"`,..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "render_structural",
+          "url": null,
+          "score": 0.0,
+          "snippet": "render_structural\n\n    Ok(out)\n}\n\nfn render_structural(\n    atlas_dir: &Path,\n    working_set: &[PathBuf],\n    remaining: usize,\n) -> Result<String, BriefError> {\n    // Load the archaeology sidecar..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "game-theory",
+          "url": "https://plato.stanford.edu/entries/game-theory/",
+          "score": 0.0,
+          "snippet": "The text outlines a game-theoretic framework involving probabilistic constraints and decision outcomes across various scenarios. It compares the relative values of specific bundles, time horizons,...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "jury-theorems",
+          "url": "https://plato.stanford.edu/entries/jury-theorems/",
+          "score": 0.0,
+          "snippet": "The text advances the claim that jury theorems, including Condorcet’s, Conditional, and Competence-Sensitive variants, provide a probabilistic framework for aggregating group judgments to achieve...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "gassendi",
+          "url": "https://plato.stanford.edu/entries/gassendi/",
+          "score": 0.0,
+          "snippet": "Gassendi advances an empiricist epistemology that rejects Cartesian foundationalism and absolute certainty, arguing instead for probabilistic beliefs grounded in sensory experience. He critiques...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "jury-theorems",
+          "url": "https://plato.stanford.edu/entries/jury-theorems/",
+          "score": 0.0,
+          "snippet": "The text examines jury theorems and epistemic aggregation problems, noting that group optimality depends on specific model assumptions. It highlights challenges such as asymptotic infallibility...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "Nozick argues that a dominant protective association may enforce oversight over moderately risky agencies to provide security, provided it compensates those disadvantaged by such restrictions. This...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-moral",
+          "url": "https://plato.stanford.edu/entries/kant-moral/",
+          "score": 0.0,
+          "snippet": "The text argues that making a false promise to obtain money violates the categorical imperative because universalizing such deception would destroy the very institution of promising. This reasoning...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "promises",
+          "url": "https://plato.stanford.edu/entries/promises/",
+          "score": 0.0,
+          "snippet": "The text examines various philosophical justifications for promissory obligations, ranging from ancient virtue ethics and Roman law to modern contractarianism. It details John Rawls' rule-utilitarian...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computation-physicalsystems",
+          "url": "https://plato.stanford.edu/entries/computation-physicalsystems/",
+          "score": 0.0,
+          "snippet": "The text argues that Bold Physical Church-Turing Thesis is falsified by processes involving arbitrary real-valued quantities or nondeterministic randomness, which lack epistemological utility. In...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "commonwealth-ai",
+        "wikipedia",
+        "drift-target",
+        "drift-target-system-overview",
+        "sep",
+        "enron-sample-multi-wide",
+        "chaos-secret-agent",
+        "drift-target-arch-principles"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nNot in your sources — from general knowledge: TCP guarantees reliable, ordered delivery with flow and congestion control; UDP offers no such guarantees.\n\nThe provided passages do not contain a direct comparison of the reliability or guarantee mechanisms between TCP and UDP. However, they offer specific architectural details about how each protocol is utilized to solve different problems:\n\n**1. Reliability vs. Acceleration (TCP)**\nWhile the text does not explicitly list \"reliability\" as a feature, it describes a **TCP accelerator** designed specifically to optimize data transmission within that framework [Source: Transmission Control Protocol]. The architecture involves terminating connections inside a network processor to buffer packets and perform local retransmissions in case of packet loss. This mechanism shortens the feedback loop for losses, ensuring faster delivery by handling errors locally rather than waiting for end-to-end negotiation. This implies an underlying system where connection management and error recovery are active concerns managed at specific nodes.\n\n**2. Connectionless Operation (UDP/IP Suite Context)**\nThe passages identify UDP alongside TCP and IP as foundational protocols in the Internet protocol suite [Source: Internet protocol suite], but they do not describe its operational mode (e.g., \"connectionless\" or \"no teardown\"). In contrast, the text details how **iroh endpoints** bind using a `Builder::empty()` configuration that explicitly disables relays and address-lookup services to create a hermetic shape suitable for CI tests [Source: bind_iroh_endpoint]. While this describes a specific implementation constraint rather than the general nature of UDP, it highlights an environment where explicit connection setup is managed via code parameters (`crypto_provider`, `secret_key`) rather than implicit negotiation.\n\n**3. Data Integrity Guarantees in Distributed Systems**\nThe sources discuss data integrity guarantees extensively but apply them to distributed messaging patterns rather than transport protocols directly [Source: fault_line_catalog]. The catalog distinguishes between \"At-most-once\" (simple, can drop), \"At-least-once + idempotent consumers\" (safe, standard industry practice requiring discipline), and \"Effectively-exactly-once\" (strongest guarantee). These tiers describe how applications must handle potential message loss or duplication—a problem TCP solves automatically for the application layer—whereas UDP leaves this burden entirely on the consumer logic.\n\nIn summary, your sources illustrate *how* TCP reliability is leveraged in acceleration nodes via local retransmission buffers and define the ecosystem where UDP operates as a foundational suite protocol alongside IP, but they do not explicitly contrast their operational guarantees side-by-side.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The assistant's ANSWER:\n- Here's what I can say with confidence:\n- Not in your sources — from general knowledge: TCP guarantees reliable, ordered delivery with flow and congestion control; UDP offers no such guarantees.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 188666,
+        "total_latency_ms": 151033,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "commonwealth-ai",
+          "wikipedia",
+          "drift-target",
+          "chaos-secret-agent",
+          "drift-target-system-overview",
+          "drift-target-arch-principles",
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 29,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "SOAP-over-UDP",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "comparative_p_when_each_beats",
+      "category": "comparative",
+      "question": "List or tuple in Python — when does each beat the other?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Python (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Python_(programming_language)#Naming",
+          "score": 0.0,
+          "snippet": "Python (programming language)\n\nPython's name is derived from the British comedy group Monty Python, whom Python creator Guido van Rossum enjoyed while developing the language. Monty Python references..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Python (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Python_(programming_language)#Reference_implementation",
+          "score": 0.0,
+          "snippet": "Python (programming language)\n\nPython, since 3.7, only supports operating systems with multi-threading support."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Python (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Python_(programming_language)#Abstract",
+          "score": 0.0,
+          "snippet": "Python (programming language)\n\nPython is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation.\n\nPython is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn mathematics, a tuple is an ordered list of numbers, which are called the elements of the tuple. An n-tuple is a tuple of n elements, where n is a non-negative integer. There is only one..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn computer science, tuples come in many forms. Most typed functional programming languages implement tuples directly as product types, tightly associated with algebraic data types, pattern..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "dominant_label",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a list of symbol strings, counts how many times each unique package and module combination appears in that list, and returns the name (formatted as \"package/module\") of whichever...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "detect_untouched_files",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function checks if any files in a provided list were modified between two timestamps and returns an error message listing the unchanged filenames if none changed, or None otherwise.\nDid any of...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "Explicit",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This code defines a variant of an enum called `Strategy` that holds a list of file system paths.\nCan I store multiple file locations in this strategy?\nWhat specific type is used to represent the...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple#Abstract",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn mathematics, a tuple is an ordered list of numbers (or other objects), which are called the elements of the tuple. An n -tuple is a tuple of n elements, where n is a non-negative integer...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn mathematics, a tuple is a finite sequence or ordered list of numbers or, more generally, mathematical objects, which are called the elements of the tuple. An n-tuple is a tuple of n..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn mathematics, a tuple is an ordered list of numbers, which are called the elements of the tuple. An n-tuple is a tuple of n elements, where n is a non-negative integer. There is only one..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple#Abstract",
+          "score": 0.0,
+          "snippet": "Tuple\n\nIn mathematics, a tuple is a finite sequence or ordered list of numbers or, more generally, mathematical objects, which are called the elements of the tuple. An n -tuple is a tuple of n..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tuple",
+          "url": "https://en.wikipedia.org/wiki/Tuple#Abstract",
+          "score": 0.0,
+          "snippet": "Tuple\n\npairs; indeed, an n -tuple can be identified with the ordered pair of its (n − 1) first elements and its n th element.\n\nTuples are usually written by listing the elements within parentheses..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ball python",
+          "url": "https://en.wikipedia.org/wiki/Ball_python#Abstract",
+          "score": 0.0,
+          "snippet": "Ball python\n\nThe ball python (Python regius), also called the royal python, is a python species native to West and Central Africa, where it lives in grasslands, shrublands and open forests. This..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Linked list",
+          "url": "https://en.wikipedia.org/wiki/Linked_list#Doubly_linked_vs._singly_linked",
+          "score": 0.0,
+          "snippet": "Linked list\n\nDouble-linked lists require more space per node (unless one uses XOR-linking), and their elementary operations are more expensive; but they are often easier to manipulate because they..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "python_metadata_extractor",
+          "url": null,
+          "score": 0.0,
+          "snippet": "python_metadata_extractor\n\n/// Doc comment: Python docstrings are not comment nodes — they're a\n/// `string` expression statement at the top of the function/class\n/// body. We pull the first such..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "python_metadata_extractor",
+          "url": null,
+          "score": 0.0,
+          "snippet": "python_metadata_extractor\n\n/// Doc comment: Python docstrings are not comment nodes — they're a\n/// `string` expression statement at the top of the function/class\n/// body. We pull the first such..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "test_deep_merge_nested_dicts_recurse",
+          "url": null,
+          "score": 0.0,
+          "snippet": "test_deep_merge_nested_dicts_recurse\n\n    assert deep_merge(base, overlay) == {\"a\": 1, \"b\": 20, \"c\": 30}\n\n\ndef test_deep_merge_nested_dicts_recurse():\n    base = {\"db\": {\"host\": \"localhost\", \"port\":..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "list_returns_newest_first",
+          "url": null,
+          "score": 0.0,
+          "snippet": "list_returns_newest_first\n\n    }\n\n    #[tokio::test]\n    async fn list_returns_newest_first() {\n        let (s, _d) = store().await;\n        s.provision_recipe_project(\"a\", \"first\",..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "ListAccess",
+          "url": null,
+          "score": 0.0,
+          "snippet": "ListAccess\n\n\n/// Attempt to treat an array as either ListArray (i32 offsets) or\n/// LargeListArray (i64 offsets), returning a unified trait object.\nenum ListAccess<'a> {\n    Small(&'a ListArray),\n   ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Python (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+          "score": 0.0,
+          "snippet": "Python (programming language)\n\nPython is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation. Python is..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "dominant_label",
+          "url": null,
+          "score": 0.0,
+          "snippet": "dominant_label\n\n    let _ = writeln!(out);\n}\n\nfn dominant_label(syms: &[String]) -> Option<String> {\n    let mut tally: HashMap<(String, String), usize> = HashMap::new();\n    for s in syms {\n       ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "detect_untouched_files",
+          "url": null,
+          "score": 0.0,
+          "snippet": "detect_untouched_files\n\n        .collect()\n}\n\npub fn detect_untouched_files(\n    workdir: &Path,\n    files: &[String],\n    pre_snapshot: &[Option<SystemTime>],\n) -> Option<String> {\n    let..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "commonwealth-ai",
+        "drift-target"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nThe provided sources do not contain a direct comparison of when lists or tuples are preferable in Python. However, they offer distinct definitions and characteristics for each that allow us to infer their typical use cases based on general programming knowledge regarding these data structures.\n\n**Tuples (Fixed-Size, Immutable)**\nIn mathematics and computer science generally, a tuple is defined as an ordered list of numbers or objects [Source: Tuple]. In the context of Python specifically, while the text does not explicitly define the `tuple` type's mutability, it notes that \"metasyntactic variables often used in Python literature are spam and eggs\" alongside other language features [Source: Python (programming language)]. The sources indicate that tuples are formally identified with ordered pairs and n-tuples where order matters [Source: Tuple]. Because they represent fixed sequences (mathematically finite) rather than dynamic collections, they are typically chosen when data integrity must be preserved after creation.\n\n**Lists (Dynamic-Size, Mutable)**\nThe provided code snippets show lists being manipulated dynamically. For instance, a test case demonstrates deep merging of nested dictionaries containing list-like structures where values are replaced or updated (`overlay = {\"db\": {...}}`) [Source: test_deep_merge_nested_dicts_recurse]. Another snippet shows a function `list_returns_newest_first` which iterates over items in a collection to determine membership and order based on timestamps [Source: list_returns_newest_first]. This implies that Python lists support the insertion, deletion, and modification operations necessary for dynamic resizing, unlike fixed mathematical tuples. The sources also distinguish between different array representations (e.g., `ListArray`, `LargeListArray`) used in data processing contexts, suggesting flexibility in how these collections handle varying sizes efficiently depending on context [Source: ListAccess].\n\n**When Each Beats the Other**\nBased on the structural differences implied by the definitions above:\n*   **Use Tuples when:** You need an immutable sequence where elements cannot be changed after creation, ensuring safety against accidental mutation. They are ideal for returning multiple values from a function or representing fixed records like coordinates `(x, y)` or database rows identified as \"tuples\" in relational theory [Source: Tuple]. Their immutability often allows them to be hashed and used as dictionary keys (a common Python pattern not explicitly detailed but inferred from their mathematical definition as stable entities).\n*   **Use Lists when:** You require dynamic resizing and mutable operations such as appending, inserting, or deleting items at arbitrary positions. The code examples showing file modification checks (`detect_untouched_files`) and recursive merging of data structures suggest scenarios where the collection's content evolves over time during execution [Source: detect_untouched_files], a capability inherent to lists but absent in fixed tuples.\n\n**Thin Spots in Sources**\nThe retrieved passages define \"tuple\" mathematically and generally within computer science but do not provide an explicit section contrasting Python `list` vs. `tuple` performance (e.g., memory overhead) or specific API differences (like `.append()` for lists). They also lack a direct statement confirming that Python tuples are immutable, though this is standard knowledge inferred from their mathematical definition of finite sequences.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The function list_returns_newest_first iterates over items to determine membership based on timestamps.\n- Tuples can be hashed and used as dictionary keys due to their immutability.\n- finite sequence\n- More critically, the answer cites `test_deep_merge_nested_dicts_recurse` to show lists being manipulated dynamically with values replaced/updated. The evidence …\n- The answer states: \"Another snippet shows a function `list_returns_newest_first`... iterates over items in a collection to determine membership and order based …",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 176604,
+        "total_latency_ms": 155849,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia",
+          "commonwealth-ai",
+          "drift-target"
+        ],
+        "retrieved_chunk_count": 23,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "stub"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": true,
+            "evidence": "\"fixed mathematical tuples\""
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Ball python",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "comparative_p_next_to",
+      "category": "comparative",
+      "question": "Lincoln's leadership style next to FDR's — what's the contrast?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abraham Lincoln",
+          "url": "https://en.wikipedia.org/wiki/Abraham_Lincoln#Union_military_strategy",
+          "score": 0.0,
+          "snippet": "Abraham Lincoln\n\nLincoln took executive control of the war and shaped the Union military strategy. He responded to the unprecedented political and military crisis as commander-in-chief by exercising..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leadership",
+          "url": "https://en.wikipedia.org/wiki/Leadership#Situational_and_contingency_theories",
+          "score": 0.0,
+          "snippet": "Leadership\n\nactually does when acting as a leader is in large part dependent upon characteristics of the situation in which he functions.\"\n\nSome theorists synthesized the trait and situational..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "William H. Seward",
+          "url": "https://en.wikipedia.org/wiki/William_H._Seward#Legacy_and_historical_view",
+          "score": 0.0,
+          "snippet": "William H. Seward\n\n\"Each Seward was, of course, a caricature, and both tendencies, at once symbiotic and contradictory, existed in tandem.\"\n\nThe praise Seward has received extends to his work during..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Thomas Paine",
+          "url": "https://en.wikipedia.org/wiki/Thomas_Paine#Abraham_Lincoln",
+          "score": 0.0,
+          "snippet": "Thomas Paine\n\nIn 1835, when he was 26 years old, Abraham Lincoln wrote a defense of Paine's deism. A political associate, Samuel Hill, burned the manuscript to save Lincoln's political career...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Horace Greeley",
+          "url": "https://en.wikipedia.org/wiki/Horace_Greeley#\"The_Prayer_of_Twenty_Millions\"",
+          "score": 0.0,
+          "snippet": "Horace Greeley\n\nof the Confiscation Acts. Lincoln must \"fight slavery with liberty\", and not fight \"wolves with the devices of a sheep.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Union (American Civil War)",
+          "url": "https://en.wikipedia.org/wiki/Union_(American_Civil_War)#President_Lincoln",
+          "score": 0.0,
+          "snippet": "Union (American Civil War)\n\nChase at the Treasury, and (from 1862) Edwin Stanton at the War Department, Lincoln had a powerful cabinet of determined men. Except for monitoring major appointments and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "President of the United States",
+          "url": "https://en.wikipedia.org/wiki/President_of_the_United_States",
+          "score": 0.0,
+          "snippet": "given Lincoln high praise for his strategic sense and his ability to select and encourage commanders such as Ulysses S. Grant.\n\nThe present-day operational command of the Armed Forces is delegated to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "President of the United States",
+          "url": "https://en.wikipedia.org/wiki/President_of_the_United_States",
+          "score": 0.0,
+          "snippet": "Franklin&nbsp;Pierce, James&nbsp;K.&nbsp;Polk, Franklin&nbsp;D.&nbsp;Roosevelt, Harry&nbsp;S.&nbsp;Truman, Martin&nbsp;Van&nbsp;Buren, and Woodrow&nbsp;Wilson\n-\nstyle=\"background-color:\"..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "President of the United States",
+          "url": "https://en.wikipedia.org/wiki/President_of_the_United_States",
+          "score": 0.0,
+          "snippet": "in shaping national policy in the 1830s and 1840s, until debates over slavery began pulling the nation apart in the 1850s.\n\nAbraham Lincoln's leadership during the Civil War has led historians to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Bill Clinton",
+          "url": "https://en.wikipedia.org/wiki/Bill_Clinton",
+          "score": 0.0,
+          "snippet": ".com/news/monkey-cage/wp/2015/02/16/new-ranking-of-u-s-presidents-puts-lincoln-1-obama-18-kennedy-judged-most-over-rated/ | access-date=March 24, 2015}}"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abraham Lincoln",
+          "url": "https://en.wikipedia.org/wiki/Abraham_Lincoln#Abstract",
+          "score": 0.0,
+          "snippet": "Abraham Lincoln\n\nmajor role in the abolition of slavery, expanding the power of the federal government, and modernizing the U.S. economy.\n\nLincoln is remembered as a martyr and a national hero for..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reconstruction era",
+          "url": "https://en.wikipedia.org/wiki/Reconstruction_era#Johnson's_presidential_Reconstruction",
+          "score": 0.0,
+          "snippet": "Reconstruction era\n\nSouthern state legislatures implemented Black Codes that set the status of the freedmen much lower than that of white people.\n\nSmith argues that \"Johnson attempted to carry..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: Interview",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: Interview\n\nFrom: butler@enron.com\nTo: jeff.skilling@enron.com\nDate: Tue, 22 May 2001 12:17:27 -0700 (PDT)\nSubject: RE: Interview\n\nJoannie: Thank you very much. I appreciate Jeff giving me a few..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frederick-douglass",
+          "url": "https://plato.stanford.edu/entries/frederick-douglass/",
+          "score": 0.0,
+          "snippet": "frederick-douglass\n\nDu Bois’s claims over Douglass, however, also fall short. Despite Du Bois’s assumption that he has inherited the mantle of black political, social, and (he would add) cultural..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Management & Leadership",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Management & Leadership\n\nMark -\n\nThank you for your leadership over the last several weeks and this morning.  We appreciate it.\n\nFollowing are some additional thoughts and some more detail on my..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Carly Fiorina",
+          "url": "https://en.wikipedia.org/wiki/Carly_Fiorina#Business_leadership_image",
+          "score": 0.0,
+          "snippet": "Carly Fiorina\n\nJeffrey Sonnenfeld of Yale School of Management said in August 2015 that problems with Fiorina's leadership style were what caused HP to lose half its value during her tenure."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "New Course Offerings",
+          "url": null,
+          "score": 0.0,
+          "snippet": "New Course Offerings\n\nown interpersonal communication style, through the FIRO-B, and learn to leverage it for greatest effectiveness as a coach.\n\nParticipants will create coaching action plans for..."
+        },
+        {
+          "corpus_id": "uap-blue-book-index",
+          "title": "Lincoln, Illinois, [Illegible] [Illegible] ()",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Lincoln, Illinois, [Illegible] [Illegible] ()\n\nU.S. Air Force Project Blue Book UFO case file. Location: Lincoln, Illinois, [Illegible] [Illegible]. Reported: . Status: see case file for disposition...."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Management & Leadership",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Management & Leadership\n\nFrom: dan.leff@enron.com\nTo: kenneth.lay@enron.com, greg.whalley@enron.com, mark.frevert@enron.com\nDate: Mon, 22 Oct 2001 10:58:22 -0700 (PDT)\nSubject: Management &..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Communist Party of the Soviet Union",
+          "url": "https://en.wikipedia.org/wiki/Communist_Party_of_the_Soviet_Union#Governing_style",
+          "score": 0.0,
+          "snippet": "Communist Party of the Soviet Union\n\nThe style of governance in the party alternated between collective leadership and a cult of personality. Collective leadership split power between the Politburo,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: Interview",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: Interview\n\nbring you to Enron, what developmental process you knowingly (or unknowingly) went through in your early years and what challenges have you encountered that made a significant change..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "New Course Offerings",
+          "url": null,
+          "score": 0.0,
+          "snippet": "New Course Offerings\n\nFrom: 40enron@enron.com\nDate: Wed, 26 Sep 2001 17:55:33 -0700 (PDT)\nSubject: New Course Offerings\n\nCommunicating Across Differences - October 10, 2001 \nDoubleTree Hotel -..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leadership",
+          "url": "https://en.wikipedia.org/wiki/Leadership",
+          "score": 0.0,
+          "snippet": "Leadership, both as a research area and as a practical skill, encompasses the ability of an individual, group, or organization to \"lead\", influence, or guide other individuals, teams, or entire..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leadership",
+          "url": "https://en.wikipedia.org/wiki/Leadership",
+          "score": 0.0,
+          "snippet": "Leadership\n\nStudies of leadership have produced theories involving traits, situational interaction,"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leadership",
+          "url": "https://en.wikipedia.org/wiki/Leadership",
+          "score": 0.0,
+          "snippet": "Leadership\n\nfunction, behavior, power, vision\n\nand values, charisma, and intelligence,\n\namong others."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frederick-douglass",
+          "url": "https://plato.stanford.edu/entries/frederick-douglass/",
+          "score": 0.0,
+          "snippet": "Frederick Douglass advanced his abolitionist arguments through three autobiographies and extensive journalistic work, establishing a legacy that influenced subsequent Black leadership. His life's...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "friedrich-lange",
+          "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+          "score": 0.0,
+          "snippet": "Friedrich Lange advocated for an educational system aimed at producing rational, cultured citizens through a balance of natural talent and social environment. He argued that teachers must be...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hermann-lotze",
+          "url": "https://plato.stanford.edu/entries/hermann-lotze/",
+          "score": 0.0,
+          "snippet": "Rudolph Hermann Lotze mediated between German idealism and modern science by rejecting psychologism and Kantian bifurcations in favor of objective logical structures, while his association with...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "jefferson",
+          "url": "https://plato.stanford.edu/entries/jefferson/",
+          "score": 0.0,
+          "snippet": "Jefferson argues that a government becomes destructive when it engages in numerous, long-lasting abuses aimed at the same end, thereby revealing a deliberate plan to reduce people to slavery. He...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "wolff-christian",
+          "url": "https://plato.stanford.edu/entries/wolff-christian/",
+          "score": 0.0,
+          "snippet": "Christian Wolff is characterized as a central figure of the German Enlightenment who redefined philosophical discourse by blending Leibnizian concepts with empirical insights from Locke and Newton....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "lakatos",
+          "url": "https://plato.stanford.edu/entries/lakatos/",
+          "score": 0.0,
+          "snippet": "The passages argue that Imre Lakatos's intellectual persona was deeply shaped by his early Marxist-Leninist activism, which fostered a heroic, revolutionary mindset and an authoritarian tendency to...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "propositions-structured",
+          "url": "https://plato.stanford.edu/entries/propositions-structured/",
+          "score": 0.0,
+          "snippet": "The text establishes the identity equivalence between Mark Twain and Samuel Clemens. It further asserts a disjunctive proposition regarding political figures, stating that either Trump is a demagogue...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "friedrich-lange",
+          "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+          "score": 0.0,
+          "snippet": "Friedrich Albert Lange synthesized Kantian philosophy with scientific naturalism to propose a form of socialist Darwinism that bridged left liberalism and socialism. He advocated for an educational...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "enron-sample-multi-wide",
+        "sep",
+        "uap-blue-book-index"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided knowledge base, I cannot provide a direct contrast between Abraham Lincoln’s and Franklin D. Roosevelt’s leadership styles because **the sources contain no information regarding FDR's leadership style.**\n\nThe available texts offer specific details about Lincoln but lack corresponding data for Roosevelt:\n\n**Abraham Lincoln (Supported by Sources)**\n*   **Crisis Authority:** Lincoln exercised \"unprecedented authority\" as commander-in-chief during the Civil War [Source: Abraham Lincoln]. He expanded war powers, imposed blockades, disbursed funds before Congressional appropriation, suspended habeas corpus, and arrested thousands of suspected sympathizers [Source: Abraham Lincoln].\n*   **Delegation to Cabinet:** Despite his expansive executive control, Lincoln gave his powerful cabinet members (such as William H. Seward in State and Edwin Stanton in War) \"free rein\" to manage their departments, intervening only for major appointments or decisions [Source: Union (American Civil War)].\n*   **Strategic Selection:** Historians praise Lincoln’s strategic sense and his ability to select and encourage commanders like Ulysses S. Grant [Source: President of the United States].\n*   **Political Management:** He successfully gained support from Congress and the northern public for these extraordinary measures while managing border slave state sympathies [Source: Abraham Lincoln].\n\n**Franklin D. Roosevelt (Not Covered)**\n*   While FDR is mentioned as a Democratic president in a list alongside other historical figures [Source: President of the United States], there are no passages describing his leadership style, decision-making processes, or crisis management techniques.\n\nI don't have reliable information on FDR's specific leadership style within this knowledge base to complete the comparison you requested.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 68269,
+        "total_latency_ms": 55709,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "enron-sample-multi-wide",
+          "sep",
+          "uap-blue-book-index"
+        ],
+        "retrieved_chunk_count": 33,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "factual_p_came_down_year",
+      "category": "factual_recall",
+      "question": "The Berlin Wall came down in what year?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Germany",
+          "url": "https://en.wikipedia.org/wiki/Germany",
+          "score": 0.0,
+          "snippet": "Berlin Wall, built in 1961, prevented East German citizens from escaping to West Germany, becoming a symbol of the Cold War.\n\nTensions between East and West Germany were reduced in the late 1960s by..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall#Eastern_Bloc_and_the_Berlin_airlift",
+          "score": 0.0,
+          "snippet": "Berlin Wall\n\nfor post-war reconstruction but disproportionately of highly educated people, which came to be known as the \"Brain Drain\".\n\nIn 1948, in response to moves by the Western powers to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall#Fall",
+          "score": 0.0,
+          "snippet": "Berlin Wall\n\non 9 November, Harald Jäger, the commander of the Bornholmer Straße border crossing yielded, allowing for the guards to open the checkpoints and allowing people through with little or..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "berlin\n\nA complete list of Berlin’s works is available in  Isaiah Berlin Online  and in the  Isaiah Berlin Virtual Library."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Iron Curtain",
+          "url": "https://en.wikipedia.org/wiki/Iron_Curtain#Further_division_in_the_late_1940s",
+          "score": 0.0,
+          "snippet": "Iron Curtain\n\nmonth later, the Soviet Union published Falsifiers of History, a Stalin-edited and partially rewritten book attacking the West.\n\nAfter the Marshall Plan, the introduction of a new..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Berlin_Wall#20th_anniversary_celebrations",
+          "score": 0.0,
+          "snippet": "Fall of the Berlin Wall\n\nthrough a Berlin Wall mock up. The Trabant was the East German people's car that many used to leave DDR after the collapse.\n\nThe Allied Museum in the Dahlem district of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "East Germany",
+          "url": "https://en.wikipedia.org/wiki/East_Germany#Partition",
+          "score": 0.0,
+          "snippet": "East Germany\n\naid the police in ending the riot; some fifty people were killed and 10,000 were jailed (see Uprising of 1953 in East Germany).\n\nThe German war reparations owed to the Soviets..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall#David_Bowie,_1987",
+          "score": 0.0,
+          "snippet": "Berlin Wall\n\nOn 6 June 1987, David Bowie, who earlier for several years lived and recorded in West Berlin, played a concert close to the Wall. This was attended by thousands of Eastern concertgoers..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Berlin_Wall#Border_openings",
+          "score": 0.0,
+          "snippet": "Fall of the Berlin Wall\n\nFinally, at 22:45 (alternatively given as 23:30) on 9 November, Harald Jäger, commander of the Bornholmer Straße border crossing, yielded, allowing guards to open the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall#Eastern_Bloc_and_the_Berlin_airlift",
+          "score": 0.0,
+          "snippet": "Berlin Wall\n\nEven after legal sovereignty of the GDR was restored in 1955, the Soviet Union continued to maintain considerable influence over administration and lawmaking in the GDR through the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Berlin_Wall#Misinformed_public_announcements",
+          "score": 0.0,
+          "snippet": "Fall of the Berlin Wall\n\ntrips, and also allowed for permanent emigration between all border crossings—including those between East and West Berlin.\n\nAfter this exchange, Daniel Johnson of The..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Modern architecture",
+          "url": "https://en.wikipedia.org/wiki/Modern_architecture#Expressionist_architecture_(1918–1931)",
+          "score": 0.0,
+          "snippet": "Modern architecture\n\n(It was torn down in 1957, because it stood in the zone between East and West Berlin, where the Berlin Wall was constructed.) Following the rise of the Nazis to power, he moved..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II",
+          "score": 0.0,
+          "snippet": "The war in Europe concluded with the liberation of German-occupied territories and the invasion of Germany by the Allies, which culminated in the fall of Berlin to Soviet troops and Germany's..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Germany",
+          "url": "https://en.wikipedia.org/wiki/Germany",
+          "score": 0.0,
+          "snippet": "page=52 |url-status=live |archiveurl=https://web.archive.org/web/20161201215323/https://books.google.com/books?id=ySLyE6YJEn0C&pg=PA52 |archivedate=1 December 2016}}\n\nin 1989 was one of the first..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Berlin_Wall#20th_anniversary_celebrations",
+          "score": 0.0,
+          "snippet": "Fall of the Berlin Wall\n\nquickly shut down access to the Twitter Wall after internet users in China began using it to protest the Great Firewall.\n\nIn the United States, the German Embassy coordinated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cold War",
+          "url": "https://en.wikipedia.org/wiki/Cold_War#Eastern_Europe_breaks_away",
+          "score": 0.0,
+          "snippet": "Cold War\n\nWith the tearing down of the Berlin Wall and with East and West Germany pursuing re-unification, the Iron Curtain between the West and Soviet-occupied regions came down."
+        },
+        {
+          "corpus_id": "uap-blue-book-index",
+          "title": "Berlin, Germany, [ILLEGIBLE] ()",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Berlin, Germany, [ILLEGIBLE] ()\n\nU.S. Air Force Project Blue Book UFO case file. Location: Berlin, Germany, [ILLEGIBLE]. Reported: . Status: see case file for disposition. (15 scanned pages; NARA..."
+        },
+        {
+          "corpus_id": "uap-blue-book-index",
+          "title": "Berlin Germany (1954-01-01)",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Berlin Germany (1954-01-01)\n\nU.S. Air Force Project Blue Book UFO case file. Location: Berlin Germany. Reported: 1954-01-01. Status: see case file for disposition. (3 scanned pages; NARA fileUnit..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Revolutions of 1989",
+          "url": "https://en.wikipedia.org/wiki/Revolutions_of_1989#East_Germany",
+          "score": 0.0,
+          "snippet": "Revolutions of 1989\n\nplanned changes were in effect \"immediately, without delay,\" hundreds of thousands of people took advantage of the opportunity.\n\nThe guards were quickly overwhelmed by the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall#Bruce_Springsteen,_1988",
+          "score": 0.0,
+          "snippet": "Berlin Wall\n\nOn 19 July 1988, 16 months before the Wall came down, Bruce Springsteen and the E Street Band, played Rocking the Wall, a live concert in East Berlin, which was attended by 300,000 in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "berlin\n\nIsaiah Berlin, 19 July 1968: photo by  Helen Muspratt, Ramsey and Muspratt  (courtesy Bodleian Library, Oxford)"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "berlin\n\nIsaiah Berlin (1909–97) was a naturalised British philosopher, historian of ideas, political theorist, educator, public intellectual and moralist, and essayist. He was renowned for his..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "berlin\n\nIsaiah Berlin was born in 1909 in Riga (then capital of the Govenorate of Livonia in the Russian Empire, now capital of Latvia), the only surviving child (after a stillborn daughter) of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Germany",
+          "url": "https://en.wikipedia.org/wiki/Germany",
+          "score": 0.0,
+          "snippet": "Germany, officially the Federal Republic of Germany, is a country in Central Europe. It lies between the Baltic and North Sea to the north and the Alps to the south. Its sixteen constituent states..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Germany",
+          "url": "https://en.wikipedia.org/wiki/Germany",
+          "score": 0.0,
+          "snippet": "Germany\n\nIn 962, the Kingdom of Germany formed the bulk of the Holy Roman Empire. During the 16th century, northern German regions became the centre of the Protestant Reformation. Following the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "The passages outline the biographical origins of Isaiah Berlin, noting his birth in Riga to a Jewish timber merchant family. They further describe the extensive archival resources available for his...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "brouwer",
+          "url": "https://plato.stanford.edu/entries/brouwer/",
+          "score": 0.0,
+          "snippet": "L.E.J. Brouwer experienced significant personal and professional disruptions, including the theft of his mathematical notebook in 1929 and the destruction of his archives by fire in 1941 and 1944....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "The passages establish the biographical background of Isaiah Berlin, highlighting his birth in Riga to a Jewish timber merchant family. They also emphasize the availability of extensive archival...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "feigl",
+          "url": "https://plato.stanford.edu/entries/feigl/",
+          "score": 0.0,
+          "snippet": "Herbert Feigl, a logical empiricist and founding member of the Vienna Circle, emigrated to the United States in 1931 due to anti-Semitism and limited academic prospects in Europe. He established...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "This document outlines the biographical trajectory of Kurt Gödel, detailing his early life in Austria, personal crises that prompted his emigration to the United States in 1940, and his subsequent...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computational-linguistics",
+          "url": "https://plato.stanford.edu/entries/computational-linguistics/",
+          "score": 0.0,
+          "snippet": "Jimmy Carter is credited with restoring full diplomatic relations and officially recognizing China in 1978, actions that facilitated subsequent exchanges between the nuclear scientists of both...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "berlin",
+          "url": "https://plato.stanford.edu/entries/berlin/",
+          "score": 0.0,
+          "snippet": "Isaiah Berlin advocates for value pluralism and negative liberty, arguing that genuine values are numerous, incompatible, and incommensurable. He supports this by asserting that ethical conflicts...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "brouwer",
+          "url": "https://plato.stanford.edu/entries/brouwer/",
+          "score": 0.0,
+          "snippet": "L.E.J. Brouwer was a Dutch mathematician and philosopher whose career included studying under D.J. Korteweg at the University of Amsterdam and earning his doctorate in 1904. He held Hilbert in high...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep",
+        "uap-blue-book-index"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "1989\n\nGrounded in the source: [unverified excerpt: The fall of the Berlin Wall in 1989 became a symbol of the fall of Communism, the dissolution of the Soviet Union, German reunification and  (]the turning point\").\"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 38533,
+        "total_latency_ms": 20934,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep",
+          "uap-blue-book-index"
+        ],
+        "retrieved_chunk_count": 33,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Berlin Wall",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "factual_p_author_name",
+      "category": "factual_recall",
+      "question": "'The Selfish Gene' — author's name?",
+      "retrieved": [
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "summarize_via_fast_slot",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function sends a specific engineering note text to an AI provider configured for fast, low-temperature generation and returns the resulting markdown summary.\nCan you summarize these raw notes...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "descriptor",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function returns a static definition for the \"Write Note\" tool, specifying its unique ID, human-readable name, detailed description of how to use it, and the exact JSON schema required for...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function reads a set of engineering notes based on provided scopes, kinds, and limits, then generates a short text summary (digest) by either using an AI inference provider or falling back to...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Altruism",
+          "score": 0.0,
+          "snippet": "The Selfish Gene\n\nDawkins says that his \"purpose\" in writing The Selfish Gene is \"to examine the biology of selfishness and altruism.\" He does this by supporting the claim that \"gene selfishness will..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "replication",
+          "url": "https://plato.stanford.edu/entries/replication/",
+          "score": 0.0,
+          "snippet": "replication\n\nIn The Selfish Gene, although Dawkins wanted his definition of gene to be close to that of Williams’ (1966) “evolutionary gene”, it is not quite:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "altruism-biological",
+          "url": "https://plato.stanford.edu/entries/altruism-biological/",
+          "score": 0.0,
+          "snippet": "altruism-biological\n\nTo some extent, the idea that kin-directed altruism is not ‘real’ altruism has been fostered by the use of the ‘selfish gene’ terminology of Dawkins (1976). As we have..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Enactive_arguments",
+          "score": 0.0,
+          "snippet": "The Selfish Gene\n\nobjection to the \"selfish gene\" idea. Thompson takes issue with Dawkin's reduction of \"life\" to \"genes\" and \"information\":\n\nThompson objects that the gene cannot operate by itself,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Reception",
+          "score": 0.0,
+          "snippet": "The Selfish Gene\n\nargue that The Selfish Gene oversimplifies the relationship between genes and the organism. (As an example, see Thompson.)\n\nThe Selfish Gene further popularised sociobiology in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene",
+          "score": 0.0,
+          "snippet": "The Selfish Gene is a 1976 book on evolution by ethologist Richard Dawkins, in which the author builds upon the principal theory of George C. Williams's Adaptation and Natural Selection (1966)...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "paradox-simpson",
+          "url": "https://plato.stanford.edu/entries/paradox-simpson/",
+          "score": 0.0,
+          "snippet": "paradox-simpson\n\nBy now it should be clear what is wrong with this type of argument—it does not follow from the fact that altruistic individuals are less fit than selfish ones in every population..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Contents",
+          "score": 0.0,
+          "snippet": "The Selfish Gene\n\nDawkins begins by discussing the altruism that people display, indicating that he will argue it is explained by gene selfishness, and attacking group selection as an explanation. He..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Abstract",
+          "score": 0.0,
+          "snippet": "The Selfish Gene is a 1976 book on evolution by ethologist Richard Dawkins, in which the author builds upon the principal theory of George C. Williams 's Adaptation and Natural Selection (1966)...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Phenotype",
+          "url": "https://en.wikipedia.org/wiki/Phenotype#Abstract",
+          "score": 0.0,
+          "snippet": "Phenotype\n\nWilhelm Johannsen proposed the genotype–phenotype distinction in 1911 to make clear the difference between an organism's hereditary material and what that hereditary material produces...."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "well....",
+          "url": null,
+          "score": 0.0,
+          "snippet": "well....\n\nFrom: johnt@austinventures.com\nTo: jeff.skilling@enron.com\nDate: Mon, 20 Aug 2001 20:23:00 -0700 (PDT)\nSubject: well....\n\n\nI can't imagine the volume of fan mail on your exit, so I'll be..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Gene's title",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Gene's title\n\nFrom: sherri.sera@enron.com\nTo: bert.frazier@enron.com\nDate: Thu, 27 Jul 2000 07:31:00 -0700 (PDT)\nSubject: Gene's title\n\nBert, will you please e-mail me Gene's exact title.  Thanks, SRS"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Aggression",
+          "url": "https://en.wikipedia.org/wiki/Aggression#Genetics",
+          "score": 0.0,
+          "snippet": "Aggression\n\nIn general, differences in a continuous phenotype such as aggression are likely to result from the action of a large number of genes each of small effect, which interact with each other..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Eckhart Tolle",
+          "url": "https://en.wikipedia.org/wiki/Eckhart_Tolle",
+          "score": 0.0,
+          "snippet": "Eckhart Tolle is a German-born spiritual teacher and self-help author. His books include The Power of Now: A Guide to Spiritual Enlightenment (1997), A New Earth: Awakening to Your Life's Purpose..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Phyllis Schlafly",
+          "url": "https://en.wikipedia.org/wiki/Phyllis_Schlafly#Abstract",
+          "score": 0.0,
+          "snippet": "Phyllis Schlafly\n\nPhyllis Stewart Schlafly (/ ˈ ʃ l æ f l i /; born Phyllis McAlpin Stewart; August 15, 1924 – September 5, 2016) was an American attorney, conservative activist, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "The Selfish Gene",
+          "url": "https://en.wikipedia.org/wiki/The_Selfish_Gene#Moral_arguments",
+          "score": 0.0,
+          "snippet": "The Selfish Gene\n\nAnother criticism of the book is its treatment of morality, and more particularly altruism, as existing only as a form of selfishness:\n\nThe philosopher Mary Midgley has suggested..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nof the world.  It should be as careful as\n\nthe education given to kings.  He would have it advance its tenets\n\ncautiously, even timidly, in our ignorance of the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "feminism-self",
+          "url": "https://plato.stanford.edu/entries/feminism-self/",
+          "score": 0.0,
+          "snippet": "The text serves as an introductory and navigational guide for a bibliography concerning feminist perspectives on the self, noting that only representative works are cited within the main essay. It...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "egoism",
+          "url": "https://plato.stanford.edu/entries/egoism/",
+          "score": 0.0,
+          "snippet": "The text examines challenges to psychological and rational egoism, highlighting empirical critiques of self-interest motivations and philosophical objections based on personal identity. It analyzes...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "personal-autonomy",
+          "url": "https://plato.stanford.edu/entries/personal-autonomy/",
+          "score": 0.0,
+          "snippet": "The text argues that personal autonomy is grounded in the metaphysical fact that an agent alone possesses the power to initiate action, thereby establishing a fundamental authority over herself. It...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "butler-moral",
+          "url": "https://plato.stanford.edu/entries/butler-moral/",
+          "score": 0.0,
+          "snippet": "Butler argues that self-love, benevolence, and conscience are distinct yet harmonious constituents of human nature, asserting that long-term self-interest aligns with virtue rather than conflicting...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "libertarianism",
+          "url": "https://plato.stanford.edu/entries/libertarianism/",
+          "score": 0.0,
+          "snippet": "The passages argue that Robert Nozick should not be interpreted as a strict proponent of full self-ownership, challenging the conventional reading found in works by Cohen. This reinterpretation is...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-obligations",
+          "url": "https://plato.stanford.edu/entries/self-obligations/",
+          "score": 0.0,
+          "snippet": "The text argues that obligations to oneself are binding and relevant, countering skepticism by highlighting their practical applications in areas like digital privacy, self-care, and technology use....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-moral-psych",
+          "url": "https://plato.stanford.edu/entries/justice-moral-psych/",
+          "score": 0.0,
+          "snippet": "The text examines the moral psychology of individuals, specifically analyzing egoistic motivations for behavior in economic games such as self-image maintenance and social expectations. It further...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ayn-rand",
+          "url": "https://plato.stanford.edu/entries/ayn-rand/",
+          "score": 0.0,
+          "snippet": "Ayn Rand advanced Objectivism, a philosophy emphasizing rational self-interest and individualism, primarily through her novels. This framework draws upon Aristotelian logic while rejecting...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "commonwealth-ai",
+        "wikipedia",
+        "sep",
+        "enron-sample-multi-wide",
+        "chaos-secret-agent"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Richard Dawkins\n\nGrounded in the source: \"The Selfish Gene is a 1976 book on evolution by ethologist Richard Dawkins, in which the author builds upon the principal theory of George C. Williams's Adaptation and Natural Selection (1966).\"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 43793,
+        "total_latency_ms": 22113,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia",
+          "commonwealth-ai",
+          "enron-sample-multi-wide",
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 28,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "factual_p_planet_count",
+      "category": "factual_recall",
+      "question": "Our solar system has how many planets?",
+      "retrieved": [
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "signal",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function checks a database for open todo notes, limits the count to 50 if there are more, and returns a text string stating how many exist (adding a plus sign if fifty or more).\nHow many open...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IAU definition of planet",
+          "url": "https://en.wikipedia.org/wiki/IAU_definition_of_planet#First_draft_proposal",
+          "score": 0.0,
+          "snippet": "IAU definition of planet\n\nwould have led to three more celestial bodies being recognized as planets, in addition to the previously accepted nine:\n\nA further twelve bodies, pending refinements of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Extraterrestrial life",
+          "url": "https://en.wikipedia.org/wiki/Extraterrestrial_life#Likelihood_of_existence",
+          "score": 0.0,
+          "snippet": "Extraterrestrial life\n\nsciences and are not knowable by their very nature. This does not allow one to make noteworthy conclusions from the equation.\n\nBased on observations from the Hubble Space..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planetary system",
+          "url": "https://en.wikipedia.org/wiki/Planetary_system#Galactic_distribution_of_planets",
+          "score": 0.0,
+          "snippet": "Planetary system\n\nThe Milky Way is 100,000 light-years across, but 90% of planets with known distances are within about 2000 light years of Earth, as of July 2014. One method that can detect planets..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planetary system",
+          "url": "https://en.wikipedia.org/wiki/Planetary_system#Classification",
+          "score": 0.0,
+          "snippet": "Planetary system architectures may be partitioned into four classes based on how the mass of the planets is distributed around the host star:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planets beyond Neptune",
+          "url": "https://en.wikipedia.org/wiki/Planets_beyond_Neptune#Other_proposed_planets",
+          "score": 0.0,
+          "snippet": "Planets beyond Neptune\n\nScientists' reactions to the notice were largely sceptical; Mike Brown commented that, \"If it is true that ALMA accidentally discovered a massive outer Solar System object in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Exoplanet",
+          "url": "https://en.wikipedia.org/wiki/Exoplanet#Abstract",
+          "score": 0.0,
+          "snippet": "Exoplanet\n\nand to give more insight into their traits, such as their composition, environmental conditions, and potential for life.\n\nThere are many methods of detecting exoplanets. Transit photometry..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planet",
+          "url": "https://en.wikipedia.org/wiki/Planet#Attributes",
+          "score": 0.0,
+          "snippet": "Planet\n\nAlthough each planet has unique physical characteristics, a number of broad commonalities do exist among them. Some of these characteristics, such as rings or natural satellites, have only as..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Natural satellite",
+          "url": "https://en.wikipedia.org/wiki/Natural_satellite#Occurrence_in_the_Solar_System",
+          "score": 0.0,
+          "snippet": "Natural satellite\n\nlikely to have satellites as well, and although numerous candidates have been detected to date, none have yet been confirmed.\n\nOf the inner planets, Mercury and Venus have no..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "truthlikeness",
+          "url": "https://plato.stanford.edu/entries/truthlikeness/",
+          "score": 0.0,
+          "snippet": "truthlikeness\n\nSuppose we are interested in what is the number of planets in the solar system. With the demotion of Pluto to planetoid status, the truth of this matter is that there are precisely 8..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "export_age_hours",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes the number of seconds since a graph was last exported, divides that value by 3600 to convert it into hours, and returns the result as an Option containing either the hour count or...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar System",
+          "url": "https://en.wikipedia.org/wiki/Solar_System#Comparison_with_extrasolar_systems",
+          "score": 0.0,
+          "snippet": "Solar System\n\nCompared to many extrasolar systems, the Solar System stands out in lacking planets interior to the orbit of Mercury. The known Solar System lacks super-Earths, planets between one and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Discovery and exploration of the Solar System",
+          "url": "https://en.wikipedia.org/wiki/Discovery_and_exploration_of_the_Solar_System#Abstract",
+          "score": 0.0,
+          "snippet": "Discovery and exploration of the Solar System\n\nthe identification of the Solar System as an entity in itself, and the determination of the distances to some nearby stars.\n\nFor millennia, what today..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Formation and evolution of the Solar System",
+          "url": "https://en.wikipedia.org/wiki/Formation_and_evolution_of_the_Solar_System#Galactic_interaction",
+          "score": 0.0,
+          "snippet": "Formation and evolution of the Solar System\n\nThe Solar System travels alone through the Milky Way in a circular orbit approximately 30,000 light years from the Galactic Center. Its speed is about 220..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Astronomy",
+          "url": "https://en.wikipedia.org/wiki/Astronomy#Planetary_science",
+          "score": 0.0,
+          "snippet": "Astronomy\n\nPlanetary science is the study of the assemblage of planets, moons, dwarf planets, comets, asteroids, and other bodies orbiting the Sun, as well as extrasolar planets. The Solar System has..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nebular hypothesis",
+          "url": "https://en.wikipedia.org/wiki/Nebular_hypothesis#Exoplanets",
+          "score": 0.0,
+          "snippet": "Nebular hypothesis\n\nThousands of exoplanets have been identified in the last twenty years, with, at the very least, billions more, within our observable universe, yet to be discovered. The orbits of..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "delete_note",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function removes a specific working note from the system by its unique ID, ensuring it is deleted immediately without any automatic cleanup or expiration.\nHow do I permanently delete a single...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Orbital eccentricity",
+          "url": "https://en.wikipedia.org/wiki/Orbital_eccentricity#Exoplanets",
+          "score": 0.0,
+          "snippet": "Orbital eccentricity\n\nOf the many exoplanets discovered, most have a higher orbital eccentricity than planets in the Solar System. Exoplanets found with low orbital eccentricity (near-circular..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planetary mass",
+          "url": "https://en.wikipedia.org/wiki/Planetary_mass#Abstract",
+          "score": 0.0,
+          "snippet": "Planetary mass\n\nIn astronomy, planetary mass is a measure of the mass of a planet -like astronomical object. Within the Solar System, planets are usually measured in the astronomical system of units,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Planetary mass",
+          "url": "https://en.wikipedia.org/wiki/Planetary_mass",
+          "score": 0.0,
+          "snippet": "Planetary mass\n\nIn astronomy, planetary mass is a measure of the mass of a planet-like astronomical object. Within the Solar System, planets are usually measured in the astronomical system of units,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kepler",
+          "url": "https://plato.stanford.edu/entries/kepler/",
+          "score": 0.0,
+          "snippet": "Johannes Kepler advanced a cosmological model based on the geometric arrangement of five regular polyhedra to support the Copernican system, arguing that this structure better explained planetary...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "speusippus",
+          "url": "https://plato.stanford.edu/entries/speusippus/",
+          "score": 0.0,
+          "snippet": "Speusippus posits that the universe is constructed from two primary principles, the One and plurality, which generate a hierarchical structure of numbers, magnitudes, souls, and perceptible objects....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "plotinus",
+          "url": "https://plato.stanford.edu/entries/plotinus/",
+          "score": 0.0,
+          "snippet": "Plotinus advances a metaphysical system centered on three principles: the One, Intellect, and Soul. The One serves as the simple, self-caused source of all reality, generating Intellect which...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "diagrams",
+          "url": "https://plato.stanford.edu/entries/diagrams/",
+          "score": 0.0,
+          "snippet": "Diagrammatic systems function as formal representation frameworks with defined syntax and semantics, despite certain theoretical limitations. These tools are widely applied across diverse fields such...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philolaus",
+          "url": "https://plato.stanford.edu/entries/philolaus/",
+          "score": 0.0,
+          "snippet": "Philolaus advanced a rational and scientific cosmology that displaced the Earth from the center of the universe, marking a transition from mythical to empirical explanation while incorporating...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philolaus",
+          "url": "https://plato.stanford.edu/entries/philolaus/",
+          "score": 0.0,
+          "snippet": "Philolaus argues that the cosmos arises from the harmonization of limiters and unlimiteds, a principle he terms harmonia. He posits that neither element alone suffices to explain reality; rather,...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "copernicus",
+          "url": "https://plato.stanford.edu/entries/copernicus/",
+          "score": 0.0,
+          "snippet": "Nicolaus Copernicus proposed a heliocentric model to resolve the observational discrepancies in Aristotle's geocentric system, such as retrograde planetary motion. Although he retained certain...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-many-sorted",
+          "url": "https://plato.stanford.edu/entries/logic-many-sorted/",
+          "score": 0.0,
+          "snippet": "The text defines many-sorted logic as a formal system utilizing distinct domains for different sorts, contrasting it with one-sorted structures and second-order theories. It details the syntactic...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "commonwealth-ai",
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "8\n\nGrounded in the source: \"With the demotion of Pluto to planetoid status, the truth of this matter is that there are precisely 8 planets.\"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 46758,
+        "total_latency_ms": 30901,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep",
+          "commonwealth-ai"
+        ],
+        "retrieved_chunk_count": 28,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "stub"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": true,
+            "evidence": "\"there are precisely 8 planets\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "synth_p_crash_drivers",
+      "category": "multi_article_synthesis",
+      "question": "The 2008 crash — what set it off and how did it cascade?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Financial crisis",
+          "url": "https://en.wikipedia.org/wiki/Financial_crisis#Regulatory_failures",
+          "score": 0.0,
+          "snippet": "Financial crisis\n\nin 1994, the scams that led to the Albanian Lottery Uprising of 1997, and the collapse of Madoff Investment Securities in 2008.\n\nMany rogue traders that have caused large losses at..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Great Recession",
+          "url": "https://en.wikipedia.org/wiki/Great_Recession",
+          "score": 0.0,
+          "snippet": "Great Recession\n\nThe Great Recession was a period of market decline in economies around the world that occurred in the late 2000s. The scale and timing of the recession varied from country to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Economy of the United States",
+          "url": "https://en.wikipedia.org/wiki/Economy_of_the_United_States",
+          "score": 0.0,
+          "snippet": "Many mortgage companies and other non-depository banks (e.g., investment banks) faced a worsening crisis in 2007â2008, with the banking crisis peaking in September 2008, with the bankruptcy of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Great Recession",
+          "url": "https://en.wikipedia.org/wiki/Great_Recession#Abstract",
+          "score": 0.0,
+          "snippet": "Great Recession\n\nThe Great Recession was a period of market decline in economies around the world that occurred in the late 2000s. The scale and timing of the recession varied from country to country..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Price of oil",
+          "url": "https://en.wikipedia.org/wiki/Price_of_oil",
+          "score": 0.0,
+          "snippet": "lowest since the 2008 financial crisis began. The price sharply rebounded after the crisis and rose to US$82 a barrel in 2009.\n\nOn 31 January 2011, the Brent price hit $100 a barrel briefly for the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Price of oil",
+          "url": "https://en.wikipedia.org/wiki/Price_of_oil",
+          "score": 0.0,
+          "snippet": "in the 2000s including the 2010s oil glut with changes in the world oil market.\n(WTI) oil prices and gas prices, 1991 to 2017]]\n\nStarting in 1999, the price of oil rose significantly. It was..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Wall Street Crash of 1929",
+          "url": "https://en.wikipedia.org/wiki/Wall_Street_Crash_of_1929#United_States",
+          "score": 0.0,
+          "snippet": "Wall Street Crash of 1929\n\nbusiness closures, firing of workers, bank failures, decline of the money supply, and other economically depressing events.\n\nThe resultant rise of mass unemployment is seen..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Black Monday (1987)",
+          "url": "https://en.wikipedia.org/wiki/Black_Monday_(1987)#Abstract",
+          "score": 0.0,
+          "snippet": "Black Monday (1987)\n\nBlack Monday (also known as Black Tuesday in some parts of the world due to time zone differences) was the global, severe and largely unexpected stock market crash on Monday,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Greek government-debt crisis",
+          "url": "https://en.wikipedia.org/wiki/Greek_government-debt_crisis#Abstract",
+          "score": 0.0,
+          "snippet": "Greek government-debt crisis\n\nGreece faced a sovereign debt crisis in the aftermath of the 2007–2008 financial crisis. Widely known in the country as The Crisis (Greek: Η Κρίση, romanized: I..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Black Monday (1987)",
+          "url": "https://en.wikipedia.org/wiki/Black_Monday_(1987)#Causes",
+          "score": 0.0,
+          "snippet": "Black Monday (1987)\n\nDiscussions of the causes of the Black Monday crash focus on two theoretical models, which differ in whether they emphasise on variables that are exogenous or endogenous. The..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Irving Fisher",
+          "url": "https://en.wikipedia.org/wiki/Irving_Fisher#Stock_market_crash_of_1929",
+          "score": 0.0,
+          "snippet": "Irving Fisher\n\nThe stock market crash of 1929 and the subsequent Great Depression cost Fisher much of his personal wealth and academic reputation. He famously predicted, nine days before the crash,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Great Depression",
+          "url": "https://en.wikipedia.org/wiki/Great_Depression#Comparison_with_the_Great_Recession",
+          "score": 0.0,
+          "snippet": "Great Depression\n\nIf we contrast the 1930s with the Crash of 2008 where gold went through the roof, it is clear that the U.S. dollar on the gold standard was a completely different animal in..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "crash",
+          "url": null,
+          "score": 0.0,
+          "snippet": "crash\n\n    /// Crash node `idx`: stop its server and mark it unreachable from every\n    /// peer. Pairs the real `shutdown` with the policy reflection so other\n    /// nodes' transports stop dialing..."
+        },
+        {
+          "corpus_id": "wikipedia-catalog",
+          "title": "2008 Icelandic lorry driver protests",
+          "url": "https://en.wikipedia.org/wiki/2008_Icelandic_lorry_driver_protests",
+          "score": 0.0,
+          "snippet": "2008 Icelandic lorry driver protests\n\nTitle: 2008 Icelandic lorry driver protests\nURL: https://en.wikipedia.org/wiki/2008_Icelandic_lorry_driver_protests\nSections: Background, Violence, Aftermath\n"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "money-finance\n\nCompared to financial practitioners, one could think that financial economists should be at an epistemic advantage in matters of money and finance. Financial economics is a fairly..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Accounting Article From Fortune Magazine",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Accounting Article From Fortune Magazine\n\nKen,\r\n\r\nBeth suggested that I forward a copy of this article to you.  I've highlighted some relevant points for your..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "MAX_AUTO_RESTARTS",
+          "url": null,
+          "score": 0.0,
+          "snippet": "MAX_AUTO_RESTARTS\n\n/// Five gives room for the typical \"I just changed my script and\n/// it panics; next save will fix it\" iteration without pinning a\n/// tight crash loop for minutes.\npub const..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "MAX_AUTO_RESTARTS",
+          "url": null,
+          "score": 0.0,
+          "snippet": "MAX_AUTO_RESTARTS\n\n/// Five gives room for the typical \"I just changed my script and\n/// it panics; next save will fix it\" iteration without pinning a\n/// tight crash loop for minutes.\npub const..."
+        },
+        {
+          "corpus_id": "wikipedia-catalog",
+          "title": "2006 Huntsville bus crash",
+          "url": "https://en.wikipedia.org/wiki/2006_Huntsville_bus_crash",
+          "score": 0.0,
+          "snippet": "2006 Huntsville bus crash\n\nTitle: 2006 Huntsville bus crash\nURL: https://en.wikipedia.org/wiki/2006_Huntsville_bus_crash\nAbstract: School bus crash in Huntsville, Alabama, United States\nSections:..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "apply_schedule_round",
+          "url": null,
+          "score": 0.0,
+          "snippet": "apply_schedule_round\n\n    /// Apply every event a [`FaultSchedule`] has for `round` to the policy.\n    /// (Node crash/up events also need [`DstMesh::crash`] to stop the server;\n    /// partition /..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "money-finance\n\nFinance and philosophy may seem to be worlds apart. But they share at least one common ancestor: Thales of Miletus. Thales is typically regarded as the first philosopher, but he was..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "money-finance\n\nObviously, a lot has changed since Thales’ times, both in finance and in our ethical and political attitudes towards finance. Coins have largely been replaced by either paper or..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "money-finance\n\nOur ethical and political sensitivities have also changed in several respects. It seems fair to say that most traditional ethicists held a very negative attitude towards financial..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "The text argues that money and financial assets are social constructions defined as promises of future payments, which creates significant epistemic challenges regarding risk assessment and the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "japanese-philosophy",
+          "url": "https://plato.stanford.edu/entries/japanese-philosophy/",
+          "score": 0.0,
+          "snippet": "The Tokugawa shogunate's decline was driven by practical crises and the rise of three philosophical ideologies that ultimately supported the Imperial Restoration. These ideological shifts, including...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "The text argues that money is a social construct requiring epistemic virtue and ethical regulation to mitigate systemic risks and address distributive justice. It examines specific financial failures...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "gene",
+          "url": "https://plato.stanford.edu/entries/gene/",
+          "score": 0.0,
+          "snippet": "The argument identifies sequentialization as a central problem in understanding genes, drawing on Crick's 1958 work to frame the issue. It acknowledges contributions from various scholars and notes...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "gene",
+          "url": "https://plato.stanford.edu/entries/gene/",
+          "score": 0.0,
+          "snippet": "The text identifies the problem of sequentialization as a central issue in understanding genes, referencing Crick's 1958 work. It acknowledges contributions from various scholars and notes that the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "The text posits that finance and philosophy originate from the same source, specifically Thales of Miletus. It supports this by identifying his historical activities as an early form of options...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "The passage argues that finance and philosophy share a common origin in Thales of Miletus, who is recognized as both the first philosopher and an early financial innovator. Specifically, it...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "actualism-possibilism-ethics",
+          "url": "https://plato.stanford.edu/entries/actualism-possibilism-ethics/",
+          "score": 0.0,
+          "snippet": "The text illustrates the ranking of act-sets based on their resulting outcomes, identifying specific combinations as best, second best, or worst. It highlights a discrepancy where an action serving...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "drift-target",
+        "wikipedia-catalog",
+        "sep",
+        "enron-sample-multi-wide",
+        "commonwealth-ai"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nThe 2008 financial crisis was triggered by the bursting of asset bubbles within a financial system riddled with pre-existing vulnerabilities, leading to what the International Monetary Fund (IMF) described as \"the most severe economic and financial meltdown since the Great Depression\" [Source: Great Recession].\n\n**How it set off:**\n*   **Triggering Event:** The immediate catalyst for the cascade was the bursting of the United States housing bubble. This event acted as the primary trigger that exposed deep-seated systemic weaknesses in the global financial architecture [Source: Economy of the United States; Source: Great Recession].\n*   **Systemic Vulnerabilities:** These triggers did not occur in isolation but exploited structural flaws within the financial system itself. Fraudulent practices were also cited by government officials, including an FBI investigation into mortgage financing companies such as Fannie Mae and Freddie Mac, Lehman Brothers, and insurer American International Group (AIG) [Source: Financial crisis].\n\n**How it cascaded:**\nThe collapse rippled through the economy via a series of interconnected failures:\n1.  **Banking Crisis Peak:** The crisis rapidly escalated from subprime mortgages to the broader banking sector, peaking dramatically in September 2008 with high-profile institutional collapses [Source: Economy of the United States].\n2.  **Institutional Failures & Bailouts:** Major financial institutions faced insolvency or near-insolvency. This period was defined by the bankruptcy of investment bank Lehman Brothers and government bailouts of several other critical financial entities [Source: Economy of the United States].\n3.  **Global Economic Impact (Great Recession):** These financial shocks translated into a severe global market decline known as \"The Great Recession.\" It caused serious disruptions to normal international relations and resulted in widespread economic contraction across various countries, varying in scale but universally recognized for its severity [Source: Great Recession].\n\n**Epistemic Failure Context:**\nA notable aspect of the crisis's aftermath was the failure of mainstream economists to predict it. Queen Elizabeth II famously asked a room full of financial economists why they had not predicted the crisis months after it occurred, highlighting significant gaps in risk assessment and epistemic virtue within the field at that time [Source: money-finance; Source: Financial crisis].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 173853,
+        "total_latency_ms": 159758,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep",
+          "commonwealth-ai",
+          "drift-target",
+          "wikipedia-catalog",
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 31,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "synth_p_trade_lanes",
+      "category": "multi_article_synthesis",
+      "question": "Trace the way Roman trade lanes carried early Christianity outward.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christianity",
+          "url": "https://en.wikipedia.org/wiki/Christianity",
+          "score": 0.0,
+          "snippet": "Christianity is an Abrahamic monotheistic religion, professing that Jesus Christ was raised from the dead and is the Son of God, whose coming as the Messiah was prophesied in the Hebrew Bible and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Silk Road",
+          "url": "https://en.wikipedia.org/wiki/Silk_Road#Transmission_of_Christianity",
+          "score": 0.0,
+          "snippet": "Silk Road\n\nThe transmission of Christianity was primarily known as Nestorianism on the Silk Road. In 781, an inscribed stele shows Nestorian Christian missionaries arriving on the Silk Road...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christian culture",
+          "url": "https://en.wikipedia.org/wiki/Christian_culture#Literature_and_poetry",
+          "score": 0.0,
+          "snippet": "Christian culture\n\nany area that Christianity has taken hold. Christian poems often directly reference the Bible, while others provide allegory."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of the Balkans",
+          "url": "https://en.wikipedia.org/wiki/History_of_the_Balkans#Rise_of_Christianity",
+          "score": 0.0,
+          "snippet": "History of the Balkans\n\nChristianity first came to the area when Paul the Apostle and some of his followers traveled in the Balkans passing through Thracian, Illyrian and Greek populated areas. He..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "England",
+          "url": "https://en.wikipedia.org/wiki/England",
+          "score": 0.0,
+          "snippet": "There is debate about when Christianity was first introduced; it was no later than the 4th century, probably much earlier. According to Bede, missionaries were sent from Rome by Eleutherius at the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christianity",
+          "url": "https://en.wikipedia.org/wiki/Christianity",
+          "score": 0.0,
+          "snippet": "Christianity\n\nEmperor Constantine I decriminalized Christianity in the Roman Empire by the Edict of Milan (313), later convening the Council of Nicaea (325) where Early Christianity was consolidated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ethiopia",
+          "url": "https://en.wikipedia.org/wiki/Ethiopia",
+          "score": 0.0,
+          "snippet": "although in earlier times many suggested it was Sabaean-influenced because of the latter's hegemony of the Red Sea.\n\nAround 316 AD, Frumentius and his brother Edesius from Tyre accompanied their..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Pope",
+          "url": "https://en.wikipedia.org/wiki/Pope",
+          "score": 0.0,
+          "snippet": "especially Liberius, who was exiled to Berea by Constantius II for his Trinitarian faith, Damasus I, and several other bishops.\n\nIn 380, the Edict of Thessalonica declared Nicene Christianity to be..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Red Sea",
+          "url": "https://en.wikipedia.org/wiki/Red_Sea#Ancient_era",
+          "score": 0.0,
+          "snippet": "Red Sea\n\nports and sea routes. The Periplus also describes how Hippalus first discovered the direct route from the Red Sea to India.\n\nThe Red Sea was favored for Roman trade with India starting with..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lebanon",
+          "url": "https://en.wikipedia.org/wiki/Lebanon",
+          "score": 0.0,
+          "snippet": "Provinces under the Roman Empire, Coele-Syria and Phoenice, the latter which the land of present-day Lebanon was a part of.\n\nThe region that is now Lebanon, as with the rest of Syria and much of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Turkey",
+          "url": "https://en.wikipedia.org/wiki/Turkey",
+          "score": 0.0,
+          "snippet": "rest of Anatolian states into Roman satellites. Several conflicts with Parthians ensued, with peace and wars alternating.\n\nAccording to Acts of the Apostles, early Christian Church had significant..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spice trade",
+          "url": "https://en.wikipedia.org/wiki/Spice_trade#Abstract",
+          "score": 0.0,
+          "snippet": "Spice trade\n\nThe spice trade involved historical civilizations in Asia, Northeast Africa and Europe. Spices, such as cinnamon, cassia, cardamom, ginger, pepper, nutmeg, star anise, clove, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spain",
+          "url": "https://en.wikipedia.org/wiki/Spain",
+          "score": 0.0,
+          "snippet": "depending on what part of the peninsula they lived in, with local leaders being admitted into the Roman aristocratic class.\n\nHispania, the Roman name for the Iberian Peninsula, served as a granary..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "trace",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a SCIP call graph and a specific symbol to find all functions that directly call it, identify what those calling functions then execute next in the chain, and return a structured...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "render_trace",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a symbol trace record and converts it into a formatted text string that lists the entry points calling this symbol, followed by all symbols called directly by it.\nHow can I see...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spice trade",
+          "url": "https://en.wikipedia.org/wiki/Spice_trade",
+          "score": 0.0,
+          "snippet": "Spice trade\n\nThe spice trade involved historical civilizations in Asia, Northeast Africa and Europe. Spices, such as cinnamon, cassia, cardamom, ginger, pepper, nutmeg, star anise, clove, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Slavery in Africa",
+          "url": "https://en.wikipedia.org/wiki/Slavery_in_Africa#North_Africa",
+          "score": 0.0,
+          "snippet": "Slavery in Africa\n\nfor the Roman Empire and in the 5th century AD pirates would raid coastal North African villages and enslave those captured.\n\nChattel slavery persisted after the fall of the Roman..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Silver (color)",
+          "url": "https://en.wikipedia.org/wiki/Silver_(color)#Roman_silver",
+          "score": 0.0,
+          "snippet": "Silver (color)\n\nOn the right is displayed the color Roman silver.\n\nRoman silver, a blue-gray tone of silver, is one of the colors on the Resene Color List."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Syria",
+          "url": "https://en.wikipedia.org/wiki/Syria",
+          "score": 0.0,
+          "snippet": "ine Encyclopedia|access-date=25 October 2008|archive-date=19 December..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Chera dynasty",
+          "url": "https://en.wikipedia.org/wiki/Chera_dynasty#Spice_trade",
+          "score": 0.0,
+          "snippet": "Chera dynasty\n\nThe geographical advantages, like the favourable Monsoon winds which carried ships directly from the Arabia to south India as well as the abundance of exotic spices in the interior..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "render_trace",
+          "url": null,
+          "score": 0.0,
+          "snippet": "render_trace\n\n/// Render a trace as a compact evidence block for the synthesis prompt.\n/// Dynamic-dispatch boundaries (trait / dyn) are flagged — that is where the\n/// call-graph beats grep.\npub..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "trace",
+          "url": null,
+          "score": 0.0,
+          "snippet": "trace\n\nmod suggest;\nmod templates;\nmod timeline;\nmod trace;\n\npub async fn run_awareness(args: &[String]) -> i32 {\n    let Some(first) = args.first() else {"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "trace",
+          "url": null,
+          "score": 0.0,
+          "snippet": "trace\n\npub mod scip_export;\npub mod scip_graph;\nmod scip_proto;\npub mod trace;\n\npub use capability_map::{\n    build as build_capability_map, Capability, CapabilityMap, EntryPointProvider, MapOptions,"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christianity",
+          "url": "https://en.wikipedia.org/wiki/Christianity",
+          "score": 0.0,
+          "snippet": "Christianity\n\nThe four canonical gospels of Matthew, Mark, Luke and John describe Jesus's life and teachings as preserved in the early Christian tradition, with the Old Testament as the gospels'..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christianity",
+          "url": "https://en.wikipedia.org/wiki/Christianity",
+          "score": 0.0,
+          "snippet": "Christianity\n\nProtestantism split into numerous denominations from the Catholic Church in the Reformation era. Following the Age of Discovery, Christianity expanded throughout the world via..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spice trade",
+          "url": "https://en.wikipedia.org/wiki/Spice_trade",
+          "score": 0.0,
+          "snippet": "Spice trade\n\nWithin specific regions, the Kingdom of Axum had pioneered the Red Sea route before the 1st century AD. During the first millennium AD, Ethiopians became the maritime trading power of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spice trade",
+          "url": "https://en.wikipedia.org/wiki/Spice_trade",
+          "score": 0.0,
+          "snippet": "Spice trade\n\nThe trade was changed by the Crusades and later the European Age of Discovery, during which the spice trade, particularly in black pepper, became an influential activity for European..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "commonwealth-ai"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nBased on the provided sources, there is no evidence that Roman trade lanes carried early Christianity outward. The passages describe Christian expansion through missionary travel and military movement rather than commercial trade routes.\n\n**Missionary Travel and Apostolic Activity**\nThe primary mechanism for the spread of Christianity described in the texts was direct missionary work by apostles across land borders within the Empire:\n*   **The Balkans:** Paul the Apostle traveled through Thracian, Illyrian, and Greek populated areas (Beroia, Thessaloniki, Athens, Corinth), while Andrew preached among the Thracians, Dacians, Scythians, and in Dobruja [Source: History of the Balkans].\n*   **Anatolia:** The early Church grew significantly due to St. Paul's efforts; his letters from Anatolia comprise the oldest Christian literature [Source: Turkey].\n\n**Military Movement and Colonization**\nChristianity spread into new Roman territories via soldiers and colonists rather than merchants on trade lanes:\n*   **Dacia:** After Emperor Trajan invaded Dacia in 106 AD, \"Christian colonists, soldiers and slaves came to Dacia and spread Christianity\" [Source: History of the Balkans].\n*   **Hispania (Spain):** Christianity was introduced into Hispania in the 1st century CE and became popular in cities by the 2nd century [Source: Spain].\n\n**Trade Routes Carrying Other Forms of Christianity**\nWhile Roman trade did not carry early Christianity outward, later Christian movements utilized different commercial networks:\n*   **The Silk Road:** The transmission of *Nestorianism* occurred on the Silk Road. By 781 AD, inscribed steles showed Nestorian missionaries arriving via this route [Source: Silk Road].\n*   **Red Sea Trade:** Frumentius and his brother Edesius traveled to Ethiopia (Aksum) around 316 AD as part of a voyage that stopped at Red Sea ports; they were enslaved but eventually converted the royal court [Source: Ethiopia].\n\nI don't have information in these sources about Roman trade specifically transporting early Christianity westward or southward beyond what is described above.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The answer claims there is [unverified excerpt: no evidence that Roman trade lanes carried early Christianity outward,] but the evidence states Christianity expanded via \"extensive…",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 165061,
+        "total_latency_ms": 143433,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "commonwealth-ai"
+        ],
+        "retrieved_chunk_count": 27,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "synth_p_via_tectonics",
+      "category": "multi_article_synthesis",
+      "question": "Mountain ranges sit where they do — explain via plate tectonics.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Earth",
+          "url": "https://en.wikipedia.org/wiki/Earth#Tectonic_plates",
+          "score": 0.0,
+          "snippet": "Earth's mechanically rigid outer layer of Earth's crust and upper mantle, the lithosphere, is divided into tectonic plates. These plates are rigid segments that move relative to each other at one of..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "fmt",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function converts a specific error about git repository issues into human-readable text for display.\nHow do I explain this particular working set error to the user?\nWhat message should appear if...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "format_note",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a status object describing why a symbol graph might be outdated or unavailable and returns a formatted text string containing the specific warning message.\nWhat should I tell the...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Tectonic uplift",
+          "url": "https://en.wikipedia.org/wiki/Tectonic_uplift#Orogenic_uplift",
+          "score": 0.0,
+          "snippet": "Tectonic uplift\n\nOrogenic uplift is the result of tectonic-plate collisions and results in mountain ranges or a more modest uplift over a large region. Perhaps the most extreme form of orogenic..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "India",
+          "url": "https://en.wikipedia.org/wiki/India",
+          "score": 0.0,
+          "snippet": "Immediately south of the emerging Himalayas, plate movement created a vast crescent-shaped trough that rapidly filled with river-borne sediment and now constitutes the Indo-Gangetic Plain. The..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Chersky Range",
+          "url": "https://en.wikipedia.org/wiki/Chersky_Range#Tectonics",
+          "score": 0.0,
+          "snippet": "Chersky Range\n\nThe range lies on the boundary between the Eurasian and North American tectonic plates."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arakan Mountains",
+          "url": "https://en.wikipedia.org/wiki/Arakan_Mountains",
+          "score": 0.0,
+          "snippet": "Arakan Mountains\n\nThe Arakan Mountains, natively referred as Rakhine Yoma and technically known as the Southern Indo-Burman Range, are a mountain range in western Myanmar, between the coast of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Black Sea",
+          "url": "https://en.wikipedia.org/wiki/Black_Sea",
+          "score": 0.0,
+          "snippet": "Since its initiation, compressional tectonic environments led to subsidence in the basin, interspersed with extensional phases resulting in large-scale volcanism and numerous orogenies, causing the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Australia",
+          "url": "https://en.wikipedia.org/wiki/Western_Australia",
+          "score": 0.0,
+          "snippet": "geyserite and other related mineral deposits (often found around hot springs and geysers) uncovered in the Pilbara craton.\n\nBecause the only mountain-building since then has been of the Stirling..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yunnan–Guizhou Plateau",
+          "url": "https://en.wikipedia.org/wiki/Yunnan%E2%80%93Guizhou_Plateau",
+          "score": 0.0,
+          "snippet": "Yunnan–Guizhou Plateau\n\nThe Yunnan–Guizhou Plateau or Yungui Plateau is a highland region located in southwest China. The region is primarily spread over the provinces of Yunnan and Guizhou. In..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kunlun Mountains",
+          "url": "https://en.wikipedia.org/wiki/Kunlun_Mountains",
+          "score": 0.0,
+          "snippet": "Kunlun Mountains\n\nThe Kunlun Mountains constitute one of the longest mountain chains in Asia, extending for more than 3,000 kilometres (1,900 mi). In the broadest sense, the chain forms the northern..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ganges Delta",
+          "url": "https://en.wikipedia.org/wiki/Ganges_Delta#Geology",
+          "score": 0.0,
+          "snippet": "Ganges Delta\n\nThe Ganges Delta lies at the junction of three tectonic plates: the Indian Plate, the Eurasian Plate, and the Burma Plate. The edge of the Eocene paleoshelf runs approximately from..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Earth science",
+          "url": "https://en.wikipedia.org/wiki/Earth_science#Earth's_interior",
+          "score": 0.0,
+          "snippet": "Earth science\n\nPlate tectonics, mountain ranges, volcanoes, and earthquakes are geological phenomena that can be explained in terms of physical and chemical processes in the Earth's crust. Beneath..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arabian Plate",
+          "url": "https://en.wikipedia.org/wiki/Arabian_Plate#Abstract",
+          "score": 0.0,
+          "snippet": "Arabian Plate\n\nThe Arabian Plate is a minor tectonic plate in the Northern and Eastern Hemispheres.\n\nIt is one of the three continental plates (along with the African and Indian plates) that have..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arabian Plate",
+          "url": "https://en.wikipedia.org/wiki/Arabian_Plate",
+          "score": 0.0,
+          "snippet": "Arabian Plate\n\nThe Arabian Plate is a minor tectonic plate in the Northern and Eastern Hemispheres. It is one of the three continental plates that have been moving northward in geological history and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Plate tectonics",
+          "url": "https://en.wikipedia.org/wiki/Plate_tectonics",
+          "score": 0.0,
+          "snippet": "Plate tectonics is the scientific theory that Earth's lithosphere comprises a number of large tectonic plates, which have been slowly moving since 3–4 billion years ago. The model builds on the..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "f",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function converts a specific error variant into human-readable text by matching the error type and writing an appropriate message to a formatter.\nHow do I explain this particular git-related...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Plate tectonics",
+          "url": "https://en.wikipedia.org/wiki/Plate_tectonics#Key_principles",
+          "score": 0.0,
+          "snippet": "Plate tectonics\n\n(120 mi) thick, though this varies considerably between basins, mountain ranges, and stable cratonic interiors of continents.\n\nThe location where two plates meet is called a plate..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "North American Plate",
+          "url": "https://en.wikipedia.org/wiki/North_American_Plate#Abstract",
+          "score": 0.0,
+          "snippet": "North American Plate\n\nThe North American Plate is a tectonic plate containing most of North America, Cuba, the Bahamas, extreme northeastern Asia, and parts of Iceland and the Azores. With an area of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "North American Plate",
+          "url": "https://en.wikipedia.org/wiki/North_American_Plate",
+          "score": 0.0,
+          "snippet": "North American Plate\n\nThe North American Plate is a tectonic plate containing most of North America, Cuba, the Bahamas, extreme northeastern Asia, and parts of Iceland and the Azores. With an area of..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "fmt",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function formats a `BriefError` by matching its specific variant (Io, Note, or Json) and writing the associated error message with a descriptive prefix to an output stream.\nHow do I display a...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "fmt",
+          "url": null,
+          "score": 0.0,
+          "snippet": "fmt\n\n}\n\nimpl std::fmt::Debug for Pipeline {\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        f.debug_struct(\"Pipeline\")\n            .field(\n               ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "fmt",
+          "url": null,
+          "score": 0.0,
+          "snippet": "fmt\n\n}\n\nimpl std::fmt::Debug for PeerInflightGuard {\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        let in_flight = self.inner.peer_sched.lock().map_or(0, |s|..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "format_note",
+          "url": null,
+          "score": 0.0,
+          "snippet": "format_note\n\nimpl StalenessCaution {\n    /// Format for inclusion in tool output.\n    /// Returns empty string when caution is None — no noise for fresh results.\n    pub fn format_note(&self) ->..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Plate tectonics",
+          "url": "https://en.wikipedia.org/wiki/Plate_tectonics",
+          "score": 0.0,
+          "snippet": "Plate tectonics\n\nTectonic plates are composed of the oceanic lithosphere and the thicker continental lithosphere, each topped by its own kind of crust. Along convergent plate boundaries, the process..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Plate tectonics",
+          "url": "https://en.wikipedia.org/wiki/Plate_tectonics",
+          "score": 0.0,
+          "snippet": "Plate tectonics\n\nAt a subduction zone the relatively cold, dense oceanic crust sinks down into the mantle, forming the downward convecting limb of a mantle cell, which is the strongest driver of..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "commonwealth-ai"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nMountain ranges sit where they do because plate tectonics concentrates crustal deformation, melting, and uplift at specific plate boundaries. The rigid lithosphere rides on the ductile asthenosphere [Source: Earth], driven by mantle convection heated by radioactive decay in the underlying mantle [Source: Earth science]. Where plates interact—converge, diverge, or slide past one another—they generate earthquakes, volcanoes, oceanic trenches, and mountain-building (orogeny) [Source: Plate tectonics; Source: Earth].\n\n### Convergent Boundaries: Continental Collisions\nThe most dramatic mountain building occurs when two continental plates collide. Because neither is dense enough to subduct deeply, they crumple, thicken, and thrust upward into massive ranges. The collision of the Indian and Eurasian plates exemplifies this process: heavy thrust faulting and folding sutured the two continents together, producing the Himalayas—the extreme form of orogenic uplift [Source: Tectonic uplift]. This same northward-moving Arabian Plate colliding with Eurasia has mingled plate pieces across Southern Europe and Asia, forming the Pyrenees, Alborz Mountains, Zagros Mountains, and extending toward Southeast Asian ranges [Source: Arabian Plate].\n\n### Convergent Boundaries: Subduction Zones\nAt ocean-continent or ocean-ocean convergent boundaries, dense cold oceanic crust sinks into the mantle at subduction zones [Source: Plate tectonics; Source: Plate tectonics], driving downward convection that pulls plates. The sinking slab also generates magma that rises to form volcanic arcs (e.g., the Pacific Ring of Fire) and associated mountain chains along continental margins [Source: Plate tectonics]. These compressional environments can cause uplift of major ranges such as the Greater Caucasus, Pontides, southern Crimean Peninsula, and Balkanides in the Black Sea region through repeated orogenies interspersed with extensional phases [Source: Black Sea].\n\n### Divergent Boundaries\nAt divergent boundaries where plates are pulled apart, new crust forms at mid-ocean ridges via seafloor spreading [Source: Earth science; Source: Plate tectonics]. While these create underwater topographic highs rather than emergent mountain ranges on continents, rifting events like Antarctica's separation from Western Australia have produced localized uplift—such as the Stirling Range—in otherwise ancient eroded landscapes [Source: Western Australia].\n\n### Transform and Complex Interactions\nWhere plates slide past laterally along transform boundaries, deformation is primarily horizontal but can produce local relief. The Chersky Range in eastern Siberia lies on the boundary between the Eurasian and North American plates [Source: Chersky Range], illustrating how even non-collisional plate margins can host significant topography through complex stress regimes. Similarly, the Arakan Mountains (Southern Indo-Burman Range) form a series of parallel ridges across western Myanmar and northeastern India at the interacting edges of multiple plates including Indian, Burmese, and Eurasian influences [Source: Arakan Mountains; Source: Ganges Delta].\n\n### Summary\nMountain ranges cluster where tectonic forces concentrate: continental collisions create towering thrust belts like the Himalayas [Source: Tectonic uplift]; subduction zones produce volcanic arcs and compressional ranges along oceanic margins [Source: Plate tectonics]; rifting events generate localized uplift such as Western Australia's Stirling Range [Source: Western Australia]; and complex multi-plate interactions build chains like the Chersky Range [Source: Chersky Range] or the Indo-Burman ridges [Source: Arakan Mountains]. The Arabian-Eurasian collision further demonstrates how a single plate movement can forge mountain systems stretching from the Pyrenees to Southeast Asia [Source: Arabian Plate].\n\nNot in your sources, but from general knowledge—continental interiors (cratons) lack active boundaries and thus have few mountains; intraplate hotspots (e.g., Hawaii) create volcanic peaks via mantle plumes rather than boundary processes. Want me to expand on any specific range or tectonic setting?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The sinking slab also generates magma that rises to form volcanic arcs (e.g., the Pacific Ring of Fire) and associated mountain chains along continental margins\n- The Chersky Range... lies on the boundary between the Eurasian and North American plates\" contradicts evidence which places it westward of the North American Pl…\n- Not in your sources, but from general knowledge—continental interiors (cratons) lack active boundaries and thus have few mountains; intraplate hotspots (e.g., H…",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 175449,
+        "total_latency_ms": 164953,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "commonwealth-ai"
+        ],
+        "retrieved_chunk_count": 26,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    }
+  ]
+}

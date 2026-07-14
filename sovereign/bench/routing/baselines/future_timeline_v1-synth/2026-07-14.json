@@ -1,0 +1,1702 @@
+{
+  "bank_name": "future-timeline-v1",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1784015949,
+  "results": [
+    {
+      "question_id": "future_mac_studio",
+      "category": "factual_recall",
+      "question": "When is the next generation of Mac Studio expected to come out?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nJobs's top priority was \"to ship a great new product\". The first is the iMac G3, an all-in-one computer that was meant to make the Internet intuitive and easy to access. While PCs..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nIt was an immediate commercial success and became the fastest-selling computer in Apple's history, with 800,000 units sold before the year ended. Vindicating Jobs on the Internet's..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nApple knew it had lost its chance to compete in the Windows-dominated enterprise market, so it prioritized design and ease of use to make the Mac more appealing to average consumers,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nteam was led by the product design group, and Ive's design studio was the dominant voice throughout the development process.\n\nThe next two Mac products in 1999, the Power Mac G3..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nin its class, and the first laptop with a wide-screen display; it also debuted a magnetic latch that secures the lid elegantly.\n\nThe design language of consumer Macs shifted again..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nyear. However, Ive considered it beneficial, because it helped Apple gain experience in complex machining and miniaturization.\n\nThe development of a successor to the old Mac OS was..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#1997–2011:_Steve_Jobs_era",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nwas renamed Cocoa. Following a public beta, the first version of Mac OS X, version 10.0 Cheetah, was released in March 2001.\n\nIn 1999, Apple launched its new \"digital lifestyle\"..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nIn April 2018, Bloomberg reported Apple's plan to replace Intel chips with ARM processors similar to those in its phones, causing Intel's shares to drop by 9.2%. The Verge commented..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nhighlighting significant improvements in battery life, performance, and heat management compared to previous generations.\n\nThe iMac Pro was quietly discontinued on March 6, 2021. On..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nM1 Max chips, a bezel-less mini-LED 120 Hz ProMotion display, and the return of MagSafe and HDMI ports, and the SD card slot.\n\nOn March 8, 2022, the Mac Studio was unveiled, also..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Post-Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nAt WWDC 2022, Apple announced an updated MacBook Air based on a new M2 chip. It incorporates several changes from the 14-inch MacBook Pro, such as a flat, slab-shaped design,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Post-Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\noptions. A 15-inch MacBook Air was also introduced, and is the largest display included on a consumer-level Apple laptop.\n\nThe MacBook Pro was updated on October 30, 2023 with updated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Adobe Creative Suite",
+          "url": "https://en.wikipedia.org/wiki/Adobe_Creative_Suite#Creative_Suite_Production_Studio",
+          "score": 0.0,
+          "snippet": "Adobe Creative Suite Production Studio (previously Adobe Video Collection) was a suite of programs for acquiring, editing, and distributing digital video and audio that was released during the same..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#Development",
+          "score": 0.0,
+          "snippet": "MacOS\n\nIts graphical user interface was built on top of an object-oriented GUI toolkit using the Objective-C programming language.\n\nThroughout the 1990s, Apple had tried to create a \"next-generation\"..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 98508,
+        "total_latency_ms": 55333,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Mac Studio",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "future_iphone_launch",
+      "category": "factual_recall",
+      "question": "When does the next iPhone launch?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nDevelopment of an Apple smartphone began in 2004, when Apple started to gather a team of 1,000 employees led by hardware engineer Tony Fadell, software engineer Scott Forstall, and design..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\n\"i\" word in \"iMac\" (and thereafter \"iPod\", \"iPhone\" and \"iPad\") stands for internet, individual, instruct, inform, and inspire.\n\nApple rejected the \" design by committee \" approach that had..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nfraction of its monthly service revenue (until the iPhone 3G), in exchange for four years of exclusive U.S. sales, until 2011.\n\nJobs unveiled the first-generation iPhone to the public on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nmonths. The resulting complaints forced Jobs to issue an apology and offer a partial rebate to early purchasers of the phone.\n\nOn July 11, 2008, at Apple's Worldwide Developers Conference..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\n2008. Its successor, the iPhone 3GS, was announced on June 8, 2009, at WWDC 2009, and introduced video recording functionality.\n\nThe iPhone 4 was announced on June 7, 2010, at WWDC 2010, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nsmartphone screen at release; a front-facing camera was also introduced, enabling video calling functionality via FaceTime.\n\nUsers of the iPhone 4 reported dropped/disconnected telephone..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nthat they would be carrying the iPhone 4, with a model compatible with Verizon's CDMA network releasing on February 10.\n\nThe iPhone 4s was announced on October 4, 2011, and introduced the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\n21, 2016, and was a low-cost device that incorporated newer hardware from the iPhone 6s, in the frame of the older iPhone 5s.\n\nThe iPhone 7 and 7 Plus were announced on September 7, 2016,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nlens was added on the 7 Plus, enabling two-times optical zoom, and \"Portrait\" photography mode which simulates bokeh in photos.\n\nThe iPhone 8, 8 Plus, and iPhone X were announced on September..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nit with a gesture-based navigation system. At its US$999 starting price, the iPhone X was the most expensive iPhone at launch.\n\nThe iPhone XR, iPhone XS, and XS Max were announced on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\navailable in a series of vibrant colors, akin to the iPhone 5c, and was a lower-cost device compared to the iPhone X and XS.\n\nThe iPhone 11, 11 Pro, and 11 Pro Max were announced on September..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\nnewer hardware from the iPhone 11, in the frame of the older iPhone 8, while retaining the home button and the Touch ID sensor.\n\nThe iPhone 12, 12 Mini, 12 Pro, and 12 Pro Max were announced..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Apple Inc.",
+          "url": "https://en.wikipedia.org/wiki/Apple_Inc.#2011–present:_Post-Jobs_era,_Tim_Cook",
+          "score": 0.0,
+          "snippet": "Apple Inc.\n\nX in New York City. Jobs stated in the biography \"Steve Jobs\" that he wanted to reinvent the textbook industry and education.\n\nFrom 2011 to 2012, Apple released the iPhone 4S and iPhone..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "GarageBand",
+          "url": "https://en.wikipedia.org/wiki/GarageBand#Updates",
+          "score": 0.0,
+          "snippet": "GarageBand\n\na feature that enables up to four iPhones, iPod Touches, and/or iPads with GarageBand installed to play simultaneously.\n\nOn May 1, 2012, GarageBand was updated to 1.2.1, providing minor..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Not in your sources — from general knowledge: The next iPhone launch is expected to be the **iPhone 16 series**, announced on September 9, 2025.\n\nThe provided passages detail Apple's history of annual or near-annual launches starting with the original iPhone in June 2007 through the iPhone 12/Mini/Pro/Max lineup announced via livestream on October 13, 2020. They establish a pattern where major new models (often including standard, Pro, and Max variants) are typically revealed in late summer or early autumn (e.g., September for most years post-iPhone X). However, none of the retrieved text contains information regarding events scheduled after October 2020 or specific dates for future releases beyond that point. The last launch mentioned is the iPhone SE (second generation) introduced on April 17, 2020, followed by the iPhone 12 family later that year.\n\nWant me to read [Apple Inc.] in depth? It would take about 5 minutes.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 42319,
+        "total_latency_ms": 25225,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "future_switch_release",
+      "category": "factual_recall",
+      "question": "When is the new Nintendo Switch coming out?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch",
+          "score": 0.0,
+          "snippet": "Nintendo Switch The Nintendo Switch is a video game console developed by Nintendo and released worldwide in most regions on March 3, 2017. Released in the middle of the eighth generation of home..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nThe Switch's software supports online gaming through internet connectivity, as well as local wireless ad hoc connectivity with other consoles. Switch games and software are available..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nNintendo opted to use standard electronic components, such as a chipset based on Nvidia's Tegra line, to make development for the console easier for programmers and more compatible..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nSwitch sales have been strongly tied to sales of Nintendo's first-party games, with nine having sold over twenty million copies each: The Legend of Zelda: Breath of the Wild, Mario..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Media_support",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nThe Switch did not launch with any multimedia-oriented features, such as a web browser, messaging system or support for video streaming services. Fils-Aimé said that because the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Media_support",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nNiconico, a popular Japanese video service, launched for the Switch in Japan on July 13, 2017, and was the Switch's first third-party media app in any market. Hulu was the first..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Media_support",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nThe app became available via eShop in the United States and Canada on December 15, 2020, and will launch in various other countries at a later date, such as the United Kingdom and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Media_support",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nfocused on achieving that goal first and foremost, and did not see media support as a differentiator from their competitors.\n\nKorg Gadget, a music production app, was released for..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Legal_issues",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nIn August 2017, Los Angeles-based tablet peripheral manufacturer Gamevice, Inc. filed a lawsuit against Nintendo in the United States District Court for the Central District of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Legal_issues",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nSwitch sales and banning further sales of the console. The lawsuit was voluntarily dismissed by Gamevice in October 2017.\n\nIn March 2018, Gamevice initiated a second patent..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Legal_issues",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nits claims to be unpatentable, a ruling in favor of Nintendo. Gamevice stated they would be challenging the Office's decision.\n\nWhile appealing the Patent Office's determination on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo Switch",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_Switch#Legal_issues",
+          "score": 0.0,
+          "snippet": "Nintendo Switch\n\nA class action lawsuit was filed in the United States District Court for the Western District of Washington in July 2019 concerning a joystick defect in the console's Joy-Con..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Super Mario 64",
+          "url": "https://en.wikipedia.org/wiki/Super_Mario_64#Other_re-releases",
+          "score": 0.0,
+          "snippet": "Super Mario 64\n\nIt made another Nintendo Switch appearance in October 2021 as part of the Nintendo 64 lineup for the Nintendo Switch Online + Expansion Pack."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nintendo 3DS",
+          "url": "https://en.wikipedia.org/wiki/Nintendo_3DS#New_Nintendo_3DS",
+          "score": 0.0,
+          "snippet": "Nintendo 3DS\n\nNew Nintendo 3DS also has slightly larger screens than the prior model, and a suite of interchangeable faceplates.\n\nAs with its predecessors, the New Nintendo 3DS is compatible with..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "by March 2025\n\nGrounded in the source: \"Nintendo anticipates announcing a successor console to the Switch by March 2025, the end of the Japanese fiscal year.\"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 41728,
+        "total_latency_ms": 20562,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Nintendo Switch",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "future_gpt5_release",
+      "category": "factual_recall",
+      "question": "When does GPT-5 come out?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Timescales",
+          "score": 0.0,
+          "snippet": "Artificial general intelligence\n\nadult comes to about 100 on average. Similar tests were carried out in 2014, with the IQ score reaching a maximum value of 27.\n\nIn 2020, OpenAI developed GPT-3, a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Feasibility",
+          "score": 0.0,
+          "snippet": "Artificial general intelligence\n\na 90% confidence instead. Further current AGI progress considerations can be found above Tests for confirming human-level AGI.\n\nA report by Stuart Armstrong and Kaj..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "PROVENANCE_DIRECTIVE",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PROVENANCE_DIRECTIVE\n\n/// slot (3/5 OOD caveat omissions on the 2026-06-11 holdout run).\npub(crate) const GK_CAVEAT_PREFIX: &str = \"Not in your sources — from general knowledge: \";\n\npub(crate)..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "PROVENANCE_DIRECTIVE",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PROVENANCE_DIRECTIVE\n\n/// slot (3/5 OOD caveat omissions on the 2026-06-11 holdout run).\npub(crate) const GK_CAVEAT_PREFIX: &str = \"Not in your sources — from general knowledge: \";\n\npub(crate)..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "embed_compute_backend_label",
+          "url": null,
+          "score": 0.0,
+          "snippet": "embed_compute_backend_label\n\n/// Label emitted in slot-load logs when the GPU path wasn't taken\n/// (GPU context creation failed, or caller didn't request it).\n/// Tells the operator which CPU math..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: [smu-betas] SETI via eWooglin",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: [smu-betas] SETI via eWooglin\n\nFrom: jdent@mmcable.com\nTo: smu-betas@yahoogroups.com\nDate: Mon, 22 Oct 2001 15:30:56 -0700 (PDT)\nSubject: Re: [smu-betas] SETI via eWooglin\n\nLooks like this bugger..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: [smu-betas] SETI via eWooglin",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: [smu-betas] SETI via eWooglin\n\n> Looks like this bugger is working. And, yes, I will be there for at least\n> part of the weekend. Where does the party start?--Dent\n> ----- Original Message..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: [smu-betas] SETI via eWooglin",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: [smu-betas] SETI via eWooglin\n\n> Looks like this bugger is working. And, yes, I will be there for at least\n> part of the weekend. Where does the party start?--Dent\n> ----- Original Message..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: [smu-betas] SETI via eWooglin",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: [smu-betas] SETI via eWooglin\n\nLine:  713-705-8090\n\nOffice    (281) 440-7444 Ext. 142\n             or (800) 231-9986  Ext. 142\n\nFax       (281) 583-3524 or (281) 583-3528\n\nE-mail   ..."
+        },
+        {
+          "corpus_id": "uap-blue-book",
+          "title": "BB-5003",
+          "url": null,
+          "score": 0.0,
+          "snippet": "BB-5003\n\nPAGE TWO RJWPDM 62A\n(I) RAPID MOVEMENT\n2. (A) WATCHING COMET. NOTICED RAPID MOVEMENT\n(B) 15 DEG ELEVATION. HEADING 360 DEG NORTH\n15 DEG ELEVATION NW 315 DEG\n(C)\n(D)\nSTRAIGHT - EAST TO..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "schema_to_gbnf",
+          "url": null,
+          "score": 0.0,
+          "snippet": "schema_to_gbnf\n\n/// The grammar's root rule is named `\"root\"`. Every `$def` becomes a\n/// rule named `def_<sanitized-key>` so a debugging operator can read\n/// the grammar and find the schema element..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nalone, quite alone, absolutely alone.\n\nI’ve worked alone for years.”\n\nOssipon’s face had turned dusky red.\n\n“At the perfect detonator—eh?” he sneered,..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "Prerelease",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Prerelease\n\n///\n///..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hate-speech",
+          "url": "https://plato.stanford.edu/entries/hate-speech/",
+          "score": 0.0,
+          "snippet": "hate-speech\n\nso that when hearing a politician proclaim (3.5), the audience member comes to infer"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-reason",
+          "url": "https://plato.stanford.edu/entries/kant-reason/",
+          "score": 0.0,
+          "snippet": "kant-reason\n\nAs Kant also says, “the moral law, and with it practical reason, [have] come in and forced this concept [freedom] upon us” (5:30). In the next section, Kant introduces this idea in..."
+        },
+        {
+          "corpus_id": "wikipedia-catalog",
+          "title": "1985 Comes Alive",
+          "url": "https://en.wikipedia.org/wiki/1985_Comes_Alive",
+          "score": 0.0,
+          "snippet": "1985 Comes Alive\n\nTitle: 1985 Comes Alive\nURL: https://en.wikipedia.org/wiki/1985_Comes_Alive\nAbstract: 1985 compilation album by various artists\nSections: Track listing\n"
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nowner, any agent or employee of the Foundation, anyone\n\nproviding copies of Project Gutenberg™ electronic works in\n\naccordance with this agreement, and any..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "Op",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Op\n\n/// - &ensp;**`I.*`**&ensp;or&ensp;**`I.*.*`**&emsp;&mdash;&emsp;equivalent to `=I`\n#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]\n#[non_exhaustive]\npub enum Op {\n    Exact,\n    Greater,\n   ..."
+        },
+        {
+          "corpus_id": "uap-blue-book",
+          "title": "BB-3042",
+          "url": null,
+          "score": 0.0,
+          "snippet": "BB-3042\n\nPROJECT 10073 RECORD CARD\n1. DATE\n2 LOCATION\n12. CONCLUSIONS\n0\nWas Balloon\n10 June 1954\nProbobly Balloon\nEstacado, Texas\n0\nPossibly Bailoon\n3. DATE-TIME GROUP\n4 TYPE OF OBSERVATION\n2109CST..."
+        },
+        {
+          "corpus_id": "uap-blue-book",
+          "title": "BB-7754",
+          "url": null,
+          "score": 0.0,
+          "snippet": "BB-7754\n\n28 December 1961\nMajar Willian T. Colemen\nOrfice of the Secretary\nU. S. Air Forcs\nPertagon\nWashington 25, D. C.\nDear\nThings wore so rushed Last Tuesday in Washington that I singply\ndidn't..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "Prerelease",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Prerelease\n\n    }\n}\n\nimpl FromStr for Prerelease {\n    type Err = Error;\n\n    fn from_str(text: &str) -> Result<Self, Self::Err> {\n        let (pre, rest) = prerelease_identifier(text)?;\n        if..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "Prerelease",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Prerelease\n\n    }\n}\n\nimpl Prerelease {\n    pub const EMPTY: Self = Prerelease {\n        identifier: Identifier::empty(),\n    };\n\n    pub fn new(text: &str) -> Result<Self, Error> {\n       ..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "Prerelease",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Prerelease\n\n    }\n}\n\nimpl Deref for Prerelease {\n    type Target = str;\n\n    fn deref(&self) -> &Self::Target {\n        self.identifier.as_str()\n    }\n}\n\nimpl Deref for BuildMetadata {\n    type..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: [smu-betas] SETI via eWooglin",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: [smu-betas] SETI via eWooglin\n\nFrom: judgegyro@yahoo.com\nTo: smu-betas@yahoogroups.com\nDate: Tue, 30 Oct 2001 17:05:19 -0800 (PST)\nSubject: Re: [smu-betas] SETI via eWooglin\n\nAlive and well we..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+          "score": 0.0,
+          "snippet": "Artificial general intelligence (AGI) is a type of artificial intelligence (AI) that falls within the lower and upper limits of human cognitive capabilities across a wide range of cognitive tasks...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial general intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+          "score": 0.0,
+          "snippet": "Artificial general intelligence\n\nThe timeline for achieving AGI remains a subject of ongoing debate among researchers and experts. As of 2024, some argue that it may be possible in years or decades;..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "generics",
+          "url": "https://plato.stanford.edu/entries/generics/",
+          "score": 0.0,
+          "snippet": "Greg Carlson argues that theoretical models of generics have shifted toward dyadic or situation-based frameworks, reflecting their nature as cognitively fundamental default generalizations rather...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-epistemic",
+          "url": "https://plato.stanford.edu/entries/logic-epistemic/",
+          "score": 0.0,
+          "snippet": "The text establishes the formal semantics and axiomatic structure of epistemic logic, demonstrating that S5 corresponds to equivalence relations while weaker systems like K and S4 have distinct frame...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goodman",
+          "url": "https://plato.stanford.edu/entries/goodman/",
+          "score": 0.0,
+          "snippet": "Nelson Goodman is characterized as an art gallery director, private collector, and producer of multimedia-performance events during his graduate studies. The text also references specific logical...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "generics",
+          "url": "https://plato.stanford.edu/entries/generics/",
+          "score": 0.0,
+          "snippet": "Theoretical accounts of generics have evolved from one-place operators to dyadic or situation-based frameworks, while empirical research suggests they represent cognitively fundamental default...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemology-bayesian",
+          "url": "https://plato.stanford.edu/entries/epistemology-bayesian/",
+          "score": 0.0,
+          "snippet": "The provided text contains only metadata and acknowledgments, lacking any substantive argumentative content or specific claims to summarize. Consequently, no supporting reasoning can be identified...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-provability",
+          "url": "https://plato.stanford.edu/entries/logic-provability/",
+          "score": 0.0,
+          "snippet": "The text outlines the arithmetical soundness of Gödel-Löb logic (GL) with respect to Peano Arithmetic, supported by a sketch of its proof involving Löb's derivability conditions. It contrasts GL...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege-theorem",
+          "url": "https://plato.stanford.edu/entries/frege-theorem/",
+          "score": 0.0,
+          "snippet": "Frege's Theorem demonstrates that the five Dedekind/Peano axioms for number theory can be derived from Hume’s Principle within second-order logic, a result extracted independently of Frege's...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-action",
+          "url": "https://plato.stanford.edu/entries/logic-action/",
+          "score": 0.0,
+          "snippet": "The text asserts that specific logical formulas hold true across all indices. It further notes that the concept of an intelligent agent originated within the field of philosophy.",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "commonwealth-ai",
+        "drift-target",
+        "enron-sample-multi-wide",
+        "uap-blue-book",
+        "chaos-secret-agent",
+        "semver",
+        "sep",
+        "wikipedia-catalog"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 130890,
+        "total_latency_ms": 112166,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "enron-sample-multi-wide",
+          "semver",
+          "wikipedia",
+          "drift-target",
+          "uap-blue-book",
+          "chaos-secret-agent",
+          "commonwealth-ai",
+          "wikipedia-catalog"
+        ],
+        "retrieved_chunk_count": 34,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "future_wwdc_expected",
+      "category": "factual_recall",
+      "question": "What's expected at the upcoming WWDC?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Swift (programming language)",
+          "url": "https://en.wikipedia.org/wiki/Swift_(programming_language)#Abstract",
+          "score": 0.0,
+          "snippet": "Swift (programming language)\n\nas a real change in programming paradigms they term \"protocol-oriented programming\" (similar to traits and type classes).\n\nSwift was introduced at Apple's 2014 Worldwide..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Will Wright (game designer)",
+          "url": "https://en.wikipedia.org/wiki/Will_Wright_(game_designer)#Post-Maxis_career",
+          "score": 0.0,
+          "snippet": "Will Wright (game designer)\n\nThred.\n\nIn October 2011, Will Wright became a member of the board of directors of Linden Lab, the creators of Second Life.\n\nAt the Game Developers Conference in March..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Volkswagen",
+          "url": "https://en.wikipedia.org/wiki/Volkswagen#Plug-in_electric_vehicles",
+          "score": 0.0,
+          "snippet": "Volkswagen\n\nis expected to reach about 103,000 by the end of 2016. The Volkswagen ID.4 was launched in the U.S. in September 2020."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#macOS_12_Monterey",
+          "score": 0.0,
+          "snippet": "MacOS\n\nmacOS Monterey was announced during the WWDC keynote speech on June 7, 2021, and released on October 25, 2021, introducing Universal Control (which allows input devices to be used with..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Carbon (API)",
+          "url": "https://en.wikipedia.org/wiki/Carbon_(API)#Rhapsody",
+          "score": 0.0,
+          "snippet": "Carbon (API)\n\nWWDC in 1998, he stated that \"what developers really wanted was a modern version of the Mac OS, and Apple going to deliver it\".\n\nThe original Rhapsody concept, with only the Blue Box..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Dungeons & Dragons",
+          "url": "https://en.wikipedia.org/wiki/Dungeons_%26_Dragons#2024_revision",
+          "score": 0.0,
+          "snippet": "Dungeons & Dragons\n\nIn September 2021, it was announced that a backwards compatible \"evolution\" of 5th edition would be released in 2024 to mark the 50th anniversary of the game. In August 2022,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "UFC Freedom 250",
+          "url": "https://en.wikipedia.org/wiki/UFC_Freedom_250",
+          "score": 0.0,
+          "snippet": "In a September 2025 interview, White said the seating capacity would be under 5,000 due to security concerns, a significant reduction from Trump's earlier estimate of 20,000 to 25,000 attendees. In a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "DisplayPort",
+          "url": "https://en.wikipedia.org/wiki/DisplayPort#Micro_DisplayPort",
+          "score": 0.0,
+          "snippet": "DisplayPort\n\nMicro DisplayPort would have targeted systems that need ultra-compact connectors, such as phones, tablets and ultra-portable notebook computers. This standard would have been physically..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Michelle Obama",
+          "url": "https://en.wikipedia.org/wiki/Michelle_Obama",
+          "score": 0.0,
+          "snippet": "In May 2017, during an appearance at the Partnership for a Healthier America conference, Obama rebuked the Trump administration for its delay of a federal requirement designed to increase the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Carbon (API)",
+          "url": "https://en.wikipedia.org/wiki/Carbon_(API)#Rhapsody",
+          "score": 0.0,
+          "snippet": "Carbon (API)\n\nsystem (notably QuickTime and AppleSearch), and added an emulator known as the \"Blue Box\" that ran existing Mac OS software.\n\nWhen this plan was revealed at the Worldwide Developers..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: World Economic Forum, Melbourne, Australia",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: World Economic Forum, Melbourne, Australia\n\nFrom: rosalee.fleming@enron.com\nTo: michael.hicks@enron.com\nDate: Mon, 21 Aug 2000 05:18:00 -0700 (PDT)\nSubject: Re: World Economic Forum, Melbourne,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "IPhone",
+          "url": "https://en.wikipedia.org/wiki/IPhone#History",
+          "score": 0.0,
+          "snippet": "IPhone\n\n2008. Its successor, the iPhone 3GS, was announced on June 8, 2009, at WWDC 2009, and introduced video recording functionality.\n\nThe iPhone 4 was announced on June 7, 2010, at WWDC 2010, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS#Intel–Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "MacOS\n\nRumors of Apple shifting Macs from Intel to in-house ARM processors used by iOS devices began circulating as early as 2011, and ebbed and flowed throughout the 2010s. Rumors intensified in..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "HTC upcoming events",
+          "url": null,
+          "score": 0.0,
+          "snippet": "HTC upcoming events\n\nGeorge R. Brown\nConvention Center.  Houston Technology Center is pleased to be a supporting\nsponsor of the conference.  **Mention that HTC referred you to receive a\n$100 discount..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Upcoming wedding",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Upcoming wedding\n\nFrom: richard.rusk@enron.com\nTo: jeff.skilling@enron.com\nDate: Thu, 16 Aug 2001 10:25:53 -0700 (PDT)\nSubject: Upcoming wedding\n\nI saw in the Wall Street Journal interview that you..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "HTC upcoming events",
+          "url": null,
+          "score": 0.0,
+          "snippet": "HTC upcoming events\n\nFrom: lmoore@houstontech.org\nTo: dministrator@houstontech.org\nDate: Tue, 5 Jun 2001 14:58:44 -0700 (PDT)\nSubject: HTC upcoming events\n\nHTC would like to make you aware of the..."
+        },
+        {
+          "corpus_id": "semver",
+          "title": "test_prerelease",
+          "url": null,
+          "score": 0.0,
+          "snippet": "test_prerelease\n\n}\n\n#[test]\nfn test_prerelease() {\n    let err = prerelease_err(\"1.b\\0\");\n    assert_to_string(err, \"unexpected character in pre-release identifier\");\n}"
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwhisker on each side of a pair of wrinkled\n\nhands.  The person who had entered was holding a batch of papers before\n\nhis eyes and walked up to the table with a rather..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nChinese—”  Mr Vladimir let\n\nfall disdainfully a grey sheet of printed matter.  “What are all these\n\nleaflets headed F. P., with a hammer, pen, and torch..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nface and figure.  The fellow was\n\nunexpectedly vulgar, heavy, and impudently unintelligent.  He looked\n\nuncommonly like a master plumber come to present his bill. ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS",
+          "score": 0.0,
+          "snippet": "MacOS\n\nmacOS, originally Mac OS X, previously shortened as OS X, is an operating system developed and marketed by Apple since 2001. It is the primary operating system for Apple's Mac computers...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MacOS",
+          "url": "https://en.wikipedia.org/wiki/MacOS",
+          "score": 0.0,
+          "snippet": "MacOS\n\nA prominent part of macOS's original brand identity was the use of Roman numeral X, pronounced \"ten\", as well as code naming each release after species of big cats, and later, places within..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Carbon (API)",
+          "url": "https://en.wikipedia.org/wiki/Carbon_(API)",
+          "score": 0.0,
+          "snippet": "Carbon (API)\n\nCarbon was one of two primary C-based application programming interfaces (APIs) developed by Apple for the macOS operating system. Carbon provided a good degree of backward..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Carbon (API)",
+          "url": "https://en.wikipedia.org/wiki/Carbon_(API)",
+          "score": 0.0,
+          "snippet": "Carbon (API)\n\nAs the market has increasingly moved to the Cocoa-based frameworks, especially after the release of iOS, the need for a porting library was reduced. Apple did not create a 64-bit..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "enron-sample-multi-wide",
+        "semver",
+        "chaos-secret-agent"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I don't have reliable information on what is expected at the upcoming WWDC. The provided knowledge base contains historical details about past conferences (such as Swift's introduction in 2014, macOS Monterey in 2021, and the iPhone 3GS/4 announcements) but does not include any predictions or schedules for future events.\n\nWould you like me to search the web for the latest WWDC schedule and rumors?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 39506,
+        "total_latency_ms": 23344,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "enron-sample-multi-wide",
+          "chaos-secret-agent",
+          "semver"
+        ],
+        "retrieved_chunk_count": 24,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "future_spacex_launch",
+      "category": "factual_recall",
+      "question": "When is the next SpaceX launch scheduled?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Since_2019:_Starship,_first_crewed_launches,_Starlink_and_general",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nIn 2019 SpaceX raised $1.33 billion of capital across three funding rounds. By May 2019, the valuation of SpaceX had risen to $33.3 billion and reached $36 billion by March 2020.\n\nOn 19..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Since_2019:_Starship,_first_crewed_launches,_Starlink_and_general",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nround, one of the largest single fundraising pushes by any privately held company, SpaceX's valuation increased to $46 billion.\n\nIn February 2021, SpaceX raised an additional $1.61 billion in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Since_2019:_Starship,_first_crewed_launches,_Starlink_and_general",
+          "score": 0.0,
+          "snippet": "SpaceX\n\non-ground computer and networking services for Starlink. A new round of financing in 2022 valued SpaceX at $127 billion.\n\nIn July 2021, SpaceX unveiled another drone ship named A Shortfall of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Since_2019:_Starship,_first_crewed_launches,_Starlink_and_general",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nthe previous February to provide the monetary rewards to winners in a contest to develop the best carbon capture technology.\n\nIn August 2022, Reuters reported that the European Space Agency..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#2024_headquarters_move_from_California_to_Texas",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nOn 16 July 2024, Elon Musk posted on X that SpaceX would move its headquarters from Hawthorne, California, to SpaceX Starbase in Brownsville, Texas. Musk said this was because the recently..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Cargo_to_ISS",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nIn 2006, SpaceX won a NASA Commercial Orbital Transportation Services (COTS) Phase 1 contract to demonstrate cargo delivery to the ISS, with a possible contract option for crew transport...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Cargo_to_ISS",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nDragon successfully berthed with the ISS during SpaceX COTS Demo Flight 2 in May 2012, a first for a private spacecraft.\n\nCommercial Resupply Services (CRS) is a series of contracts awarded..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#Cargo_to_ISS",
+          "score": 0.0,
+          "snippet": "SpaceX\n\norbit, berthed, and remained on station for 20 days, before re-entering the atmosphere and splashing down in the Pacific Ocean.\n\nCRS missions have flown approximately twice a year to the ISS..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#National_defense",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nIn 2005, SpaceX announced that it had been awarded an Indefinite Delivery/Indefinite Quantity (IDIQ) contract, allowing the United States Air Force to purchase up to $100 million worth of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#National_defense",
+          "score": 0.0,
+          "snippet": "SpaceX\n\n(STP-2). DSCOVR was launched on a Falcon 9 launch vehicle in 2015, while STP-2 was launched on a Falcon Heavy on 25 June 2019.\n\nThe Falcon 9 v1.1 was certified for National Security Space..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#National_defense",
+          "score": 0.0,
+          "snippet": "SpaceX\n\n2018, SpaceX secured an additional $290 million contract from the U.S. Air Force to launch another three GPS III satellites.\n\nThe U.S. National Reconnaissance Office (NRO) also purchased..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "SpaceX",
+          "url": "https://en.wikipedia.org/wiki/SpaceX#National_defense",
+          "score": 0.0,
+          "snippet": "SpaceX\n\nfor one launch. In addition, SpaceX will handle 40% of the U.S. military's satellite launch requirements over the period.\n\nSpaceX also designs and launches custom military satellites for the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Maritime Launch Services",
+          "url": "https://en.wikipedia.org/wiki/Maritime_Launch_Services",
+          "score": 0.0,
+          "snippet": "completed the second rocket, and the launch was delayed to a 18-24 November 2025 launch window due to a European port strike.\n-\n\n! rowspan=\"2\" |3\n10 June 2026 8:51 ADT\nBarracuda\nT-Minus..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "NASA",
+          "url": "https://en.wikipedia.org/wiki/NASA#Commercial_Resupply_Services_(2008–present)",
+          "score": 0.0,
+          "snippet": "NASA\n\nin 2014 (Cygnus CRS Orb-1). In 2015, NASA extended CRS-1 to twenty flights for SpaceX and twelve flights for Orbital ATK.\n\nA second phase of contracts (known as CRS-2) was solicited in 2014;..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The provided sources do not contain information regarding the specific date or window for SpaceX's *next* scheduled launch. The retrieved passages detail historical launches, funding rounds up to 2024, and future plans for other companies (such as T-Minus Engineering's Barracuda rocket in June/October 2026), but they do not list an upcoming schedule for a Falcon 9, Starship, or any other vehicle operated by SpaceX itself.\n\nNot in your sources — from general knowledge: As of late July 2026, SpaceX typically operates on a rolling cadence with multiple launches per month; without access to their real-time manifest which changes daily based on weather and payload readiness, I cannot provide the specific next launch date.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 43540,
+        "total_latency_ms": 20625,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "SpaceX",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "future_fed_meeting",
+      "category": "factual_recall",
+      "question": "When is the next Fed meeting?",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "REMOVE FROM E-MAIL LIST!!! Re: BusinessWeek's International Alert: 2 April, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "REMOVE FROM E-MAIL LIST!!! Re: BusinessWeek's International Alert: 2 April, 2001\n\nThe pot: an \r\neconomic rebound in the second half.? At its second policy meeting of 2001, \r\nthe Fed lowered its..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: YPO Area conference dates",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: YPO Area conference dates\n\nFrom: sherri.sera@enron.com\nTo: bill.haack@haack.com\nDate: Fri, 28 Jul 2000 07:50:00 -0700 (PDT)\nSubject: Re: YPO Area conference dates\n\nThank you for the information,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "FW: FORUM II MEETING - OCTOBER 15TH",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FW: FORUM II MEETING - OCTOBER 15TH\n\nFrom: gailg@morgangroup.com\nTo: larryd@delpapabud.com, mduffey@brecoholdings.com, sfordham@netversant.com,  blake@hoganinvestment.com, wvlarkin@travisintl.com, ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "FORUM II MEETING - OCTOBER 15TH",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FORUM II MEETING - OCTOBER 15TH\n\nFrom: gailg@morgangroup.com\nCc: morgan.michael@enron.com\nDate: Thu, 13 Sep 2001 12:00:19 -0700 (PDT)\nSubject: FORUM II MEETING - OCTOBER 15TH\n\nTHE FORUM MEETING IS..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "meeting",
+          "url": null,
+          "score": 0.0,
+          "snippet": "meeting\n\nFrom: bpaddock@ghcf.org\nTo: white.william@enron.com, jr.paul@enron.com, kelly.michael@enron.com,  jr..harry@enron.com, savage.frank@enron.com, pipkin.daina@enron.com, ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "From: kdrouet@iexalt.net\nTo: sturgeon.james@enron.com, trulove.william@enron.com, jr..walter@enron.com,  mosley.w.@enron.com, martin.ted@enron.com,  diserens.stephen@enron.com, coffee.stan@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: Meeting with Arthur Levitt in September",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: Meeting with Arthur Levitt in September\n\nFrom: rosalee.fleming@enron.com\nTo: jeffrey.garten@yale.edu\nDate: Mon, 12 Jun 2000 23:51:00 -0700 (PDT)\nSubject: Re: Meeting with Arthur Levitt in..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Fw: Meeting",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Fw: Meeting\n\nFrom: jtompkins1@houston.rr.com\nDate: Mon, 4 Jun 2001 14:41:15 -0700 (PDT)\nSubject: Fw: Meeting\n\n\n \nGentlemen:\nI look forward to seeing you at our next meeting, which  is scheduled at..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Bank meetings in New York",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Bank meetings in New York\n\nFrom: h..boots@enron.com\nTo: kenneth.lay@enron.com\nCc: rosalee.fleming@enron.com, andrew.fastow@enron.com, ben.glisan@enron.com,  sarah.heineman@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "December 4 Forum II meeting",
+          "url": null,
+          "score": 0.0,
+          "snippet": "December 4 Forum II meeting\n\nFrom: sherri.sera@enron.com\nTo: sherri.sera@enron.com\nDate: Tue, 28 Nov 2000 09:04:00 -0800 (PST)\nSubject: December 4 Forum II meeting\n\nThe Forum II meeting will take..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sudanese civil war (2023–present)",
+          "url": "https://en.wikipedia.org/wiki/Sudanese_civil_war_(2023–present)",
+          "score": 0.0,
+          "snippet": "payments by 26 February, but Chief Justice John G. Roberts paused the order pending a Supreme Court ruling by 28 February.\n\nThe US announced a diplomatic meeting of the International Quartet on..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "KUDLOW'S TAKE -- National Review Online Financial -- September 7, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "KUDLOW'S TAKE -- National Review Online Financial -- September 7, 2001\n\nby reaching out to Democratic tax cutters like Zell Miller and John\nBreaux to create a bipartisan coalition that will go behind..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Monday September 24th, 2001.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Monday September 24th, 2001.\n\nour initiations on ACDO and\nGTIV, and our upgrade on PSSI.\nq We are providing a 10-K review of DKWD, highlighting a SCOR update, and\nnoting..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Wednesday September 26th, 2001.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Wednesday September 26th, 2001.\n\nare also assuming lower valuation for the stock market. Accordingly, we\nare cutting our forward\none-year S&P 500 price target from 1375 to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ultimate Fighting Championship",
+          "url": "https://en.wikipedia.org/wiki/Ultimate_Fighting_Championship",
+          "score": 0.0,
+          "snippet": "vs. Edwards, UFC on ESPN: Ngannou vs. Rozenstruik, and UFC Fight Night: Overeem vs. Harris, would be postponed to future dates.\n\nIn regards to its next pay-per-view, UFC 249 on April 18, UFC..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Goldman Sachs",
+          "url": "https://en.wikipedia.org/wiki/Goldman_Sachs#Possible_benefits_from_attendance_at_September_15,_2008,_meetings_at_the_New_York_Federal_Reserve",
+          "score": 0.0,
+          "snippet": "Goldman Sachs\n\nAlthough many have said there is no evidence to support the claim, some have argued that Goldman Sachs received preferential treatment from the government by participating in the..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Next BoD Meeting",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Next BoD Meeting\n\nFrom: paula.rieker@enron.com\nTo: kenneth.lay@enron.com\nDate: Mon, 15 Oct 2001 11:27:03 -0700 (PDT)\nSubject: Next BoD Meeting\n\nKen - As you know, we had several issues that needed to..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Note from Rick Gordon/Merrill Lynch",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Note from Rick Gordon/Merrill Lynch\n\nFrom: gordon@enron.com\nTo: jeff.skilling@enron.com\nDate: Fri, 4 May 2001 12:47:00 -0700 (PDT)\nSubject: Note from Rick Gordon/Merrill Lynch\n\nJeff:\n\nDave Komansky,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "KUDLOW'S TAKE -- National Review Online Financial -- September 7, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "KUDLOW'S TAKE -- National Review Online Financial -- September 7, 2001\n\nFrom: svarga@kudlow.com\nTo: svarga@kudlow.com\nDate: Fri, 7 Sep 2001 07:12:23 -0700 (PDT)\nSubject: KUDLOW'S TAKE -- National..."
+        },
+        {
+          "corpus_id": "drift-target",
+          "title": "NextStepOffer",
+          "url": null,
+          "score": 0.0,
+          "snippet": "NextStepOffer\n\n *  `metadata.next_steps` on KnowledgeQuery turns. Clicking reuses\n *  the parent session via `resume_session` when `session_ref` is\n *  still live (<30s); otherwise the UI falls back..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide",
+        "wikipedia",
+        "drift-target"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "October 2\n\nGrounded in the source: [unverified excerpt: With the Fed Funds rate at 3%, expect the Federal Reserve to cut rates to 2.5% at the next FOMC on October 2.]",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 57641,
+        "total_latency_ms": 39961,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide",
+          "wikipedia",
+          "drift-target"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Belt-fed",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "future_m5_mac_studio_bare_expected",
+      "category": "factual_recall",
+      "question": "When is the M5 Mac Studio expected?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nIn April 2018, Bloomberg reported Apple's plan to replace Intel chips with ARM processors similar to those in its phones, causing Intel's shares to drop by 9.2%. The Verge commented..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nhighlighting significant improvements in battery life, performance, and heat management compared to previous generations.\n\nThe iMac Pro was quietly discontinued on March 6, 2021. On..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nM1 Max chips, a bezel-less mini-LED 120 Hz ProMotion display, and the return of MagSafe and HDMI ports, and the SD card slot.\n\nOn March 8, 2022, the Mac Studio was unveiled, also..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Post-Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nAt WWDC 2022, Apple announced an updated MacBook Air based on a new M2 chip. It incorporates several changes from the 14-inch MacBook Pro, such as a flat, slab-shaped design,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Post-Apple_silicon_transition",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\noptions. A 15-inch MacBook Air was also introduced, and is the largest display included on a consumer-level Apple laptop.\n\nThe MacBook Pro was updated on October 30, 2023 with updated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Hardware",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\nApple outsources the production of its hardware to Asian manufacturers like Foxconn and Pegatron. As a highly vertically integrated company developing its own operating system and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mac (computer)",
+          "url": "https://en.wikipedia.org/wiki/Mac_(computer)#Hardware",
+          "score": 0.0,
+          "snippet": "Mac (computer)\n\ngraphics rather than graphics cards. MacBooks are recharged with either USB-C or MagSafe connectors, depending on the model.\n\nApple sells accessories for the Mac, including the Studio..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nvidia",
+          "url": "https://en.wikipedia.org/wiki/Nvidia#2019_acquisition_of_Mellanox_Technologies",
+          "score": 0.0,
+          "snippet": "Nvidia\n\nOn March 11, 2019, Nvidia announced a deal to buy Mellanox Technologies for $6.9 billion to substantially expand its footprint in the high-performance computing market. In May 2019, Nvidia..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hatsune Miku",
+          "url": "https://en.wikipedia.org/wiki/Hatsune_Miku#Additional_software",
+          "score": 0.0,
+          "snippet": "Hatsune Miku\n\nwas released on June 4, 2020. The full version of Piapro Studio and Hatsune Miku NT were released on November 27, 2020.\n\nOn August 1, 2024, Sonicwire posted that on August 30, 2024,..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I couldn't confirm an answer to this against the 9 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 86457,
+        "total_latency_ms": 65727,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 9,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "future_eclipse",
+      "category": "factual_recall",
+      "question": "When is the next solar eclipse visible from the US?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#Total_eclipse",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nA total eclipse occurs on average every 18 months when the dark silhouette of the Moon completely obscures the bright light of the Sun, allowing the much fainter solar corona to be..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#Totality",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nWhen the shrinking visible part of the photosphere becomes very small, Baily's beads will occur. These are caused by the sunlight still being able to reach Earth through lunar valleys...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#Particular_observations,_phenomena_and_impact",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nA total solar eclipse provides a rare opportunity to observe the corona (the outer layer of the Sun's atmosphere). Normally this is not visible because the photosphere is much brighter..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#Eclipses_and_transits",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nIn principle, the simultaneous occurrence of a solar eclipse and a transit of a planet is possible. But these events are extremely rare because of their short durations. The next..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#Eclipses_and_transits",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nand a transit of Mercury will be on July 5, 6757, and a solar eclipse and a transit of Venus is expected on April 5, 15 232.\n\nMore common, but still infrequent, is a conjunction of a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#2008–2011",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nThis eclipse is a member of a semester series. An eclipse in a semester series of solar eclipses repeats approximately every 177 days and 4 hours (a semester) at alternating nodes of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#2015–2018",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nThis eclipse is a member of a semester series. An eclipse in a semester series of solar eclipses repeats approximately every 177 days and 4 hours (a semester) at alternating nodes of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Solar eclipse",
+          "url": "https://en.wikipedia.org/wiki/Solar_eclipse#2026–2029",
+          "score": 0.0,
+          "snippet": "Solar eclipse\n\nThis eclipse is a member of a semester series. An eclipse in a semester series of solar eclipses repeats approximately every 177 days and 4 hours (a semester) at alternating nodes of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hipparchus",
+          "url": "https://en.wikipedia.org/wiki/Hipparchus#Eclipses",
+          "score": 0.0,
+          "snippet": "Hipparchus\n\nPliny (Naturalis Historia II.X) tells us that Hipparchus demonstrated that lunar eclipses can occur five months apart, and solar eclipses seven months (instead of the usual six months);..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Eclipse",
+          "url": "https://en.wikipedia.org/wiki/Eclipse#Mars",
+          "score": 0.0,
+          "snippet": "Eclipse\n\nOn Mars, only partial solar eclipses (transits) are possible, because neither of its moons is large enough, at their respective orbital radii, to cover the Sun's disc as seen from the..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "stub"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I couldn't confirm an answer to this against the 10 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 70614,
+        "total_latency_ms": 42814,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 10,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "stub"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "stub",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "The Last of Us",
+          "corpus_id": "wiki-l5-tier2-full",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    }
+  ]
+}

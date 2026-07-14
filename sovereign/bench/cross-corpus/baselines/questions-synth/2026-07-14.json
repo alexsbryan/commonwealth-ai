@@ -1,0 +1,3189 @@
+{
+  "bank_name": "cross-corpus-v1",
+  "corpus": "sep",
+  "limit": 0,
+  "started_at_unix": 1784008898,
+  "results": [
+    {
+      "question_id": "consequence_argument_van_inwagen",
+      "category": "cross_corpus",
+      "question": "Reconstruct van Inwagen's consequence argument against compatibilism, and\nstate who Peter van Inwagen is and when the argument was formulated.\n",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "incompatibilism-arguments\n\nIncompatibilists think that this, and any compatibilist account of the ‘can’ of freedom of choice, is, and must be, mistaken. The Consequence Argument (Ginet 1966,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy#Free_will_and_determinism",
+          "score": 0.0,
+          "snippet": "Analytic philosophy\n\nPeter van Inwagen's 1983 monograph An Essay on Free Will played an important role in rehabilitating libertarianism with respect to free will, in mainstream analytical philosophy...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "abilities",
+          "url": "https://plato.stanford.edu/entries/abilities/",
+          "score": 0.0,
+          "snippet": "abilities\n\nvan Inwagen’s point is that, provided the incompatibilist has offered arguments for the claim that such abilities are incompatible with determinism—as, in van Inwagen’s presentation,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "compatibilism\n\nThree major contributions in the 1960s profoundly altered the face of compatibilism: the incompatibilists’ Consequence Argument, Frankfurt’s attack on the Principle of Alternative..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-theories",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-theories/",
+          "score": 0.0,
+          "snippet": "incompatibilism-theories\n\naction |  agency |  causation: probabilistic |  causation: the metaphysics of |  compatibilism |  determinism: causal |  free will |  incompatibilism: arguments for |  moral..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Free will",
+          "url": "https://en.wikipedia.org/wiki/Free_will#Incompatibilism",
+          "score": 0.0,
+          "snippet": "Free will\n\nactions. Therefore, they cannot have free will. This argument has also been challenged by various compatibilist philosophers.\n\nA third argument for incompatibilism was formulated by Carl..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Determinism",
+          "url": "https://en.wikipedia.org/wiki/Determinism#With_ethics_and_morality",
+          "score": 0.0,
+          "snippet": "Determinism\n\nAnother topic of debate is the implication that determinism has on morality.\n\nPhilosopher and incompatibilist Peter van Inwagen introduced this thesis, when arguments that free will is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "skepticism-moral-responsibility",
+          "url": "https://plato.stanford.edu/entries/skepticism-moral-responsibility/",
+          "score": 0.0,
+          "snippet": "skepticism-moral-responsibility\n\nCritics of hard incompatibilism include both compatibilists and libertarians. See, for example, the entries on  compatibilism,  incompatibilist (nondeterministic)..."
+        },
+        {
+          "corpus_id": "uap-blue-book-index",
+          "title": "PETERSON, MINNESOTA, [Illegible] [Illegible] ()",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PETERSON, MINNESOTA, [Illegible] [Illegible] ()\n\nU.S. Air Force Project Blue Book UFO case file. Location: PETERSON, MINNESOTA, [Illegible] [Illegible]. Reported: . Status: see case file for..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "peter-spain",
+          "url": "https://plato.stanford.edu/entries/peter-spain/",
+          "score": 0.0,
+          "snippet": "peter-spain\n\n[Please contact the author with suggestions.]"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Russia",
+          "url": "https://en.wikipedia.org/wiki/Russia",
+          "score": 0.0,
+          "snippet": "Under Peter the Great, Russia was proclaimed an empire in 1721, and established itself as one of the European great powers. Ruling from 1682 to 1725, Peter defeated Sweden in the Great Northern War..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Free will",
+          "url": "https://en.wikipedia.org/wiki/Free_will#Incompatibilism",
+          "score": 0.0,
+          "snippet": "Free will\n\nThe difficulty of this argument for some compatibilists lies in the fact that it entails the impossibility that one could have chosen other than one has. For example, if Jane is a..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-responsibility",
+          "url": "https://plato.stanford.edu/entries/moral-responsibility/",
+          "score": 0.0,
+          "snippet": "moral-responsibility\n\nIf possession of free will requires an ability to act otherwise than one in fact does, then it is fairly easy to see why free will has often been regarded as incompatible with..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "freewill",
+          "url": "https://plato.stanford.edu/entries/freewill/",
+          "score": 0.0,
+          "snippet": "freewill\n\nThis argument, carefully articulated in the late 1960s and early 1970s by Carl Ginet (1966, 1990) and Peter van Inwagen (1975, 1983) and refined in important ways by John Martin Fischer..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "peter-damian",
+          "url": "https://plato.stanford.edu/entries/peter-damian/",
+          "score": 0.0,
+          "snippet": "peter-damian\n\nView this site from another server:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "material-constitution",
+          "url": "https://plato.stanford.edu/entries/material-constitution/",
+          "score": 0.0,
+          "snippet": "material-constitution\n\nA second version of eliminativism is associated with Peter van Inwagen (1990), who defends the view that living objects are the only composite objects. This view is closely..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Deductive reasoning",
+          "url": "https://en.wikipedia.org/wiki/Deductive_reasoning#Deductivism",
+          "score": 0.0,
+          "snippet": "Deductive reasoning\n\nDeductivism is a philosophical position that gives primacy to deductive reasoning or arguments over their non-deductive counterparts. It is often understood as the evaluative..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Free will",
+          "url": "https://en.wikipedia.org/wiki/Free_will#Incompatibilism",
+          "score": 0.0,
+          "snippet": "Free will\n\nargument. Peter van Inwagen remarks that C.D. Broad had a version of the consequence argument as early as the 1930s.\n\nUsing T, F for \"true\" and \"false\" and ? for undecided, there are..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "alternative-possibilities",
+          "url": "https://plato.stanford.edu/entries/alternative-possibilities/",
+          "score": 0.0,
+          "snippet": "alternative-possibilities\n\nOne response to this challenge was in the previous section. Another modifies the Consequence Argument so that it doesn’t rely on PAP. This is the “Direct Argument”,..."
+        },
+        {
+          "corpus_id": "wikipedia-catalog",
+          "title": "2003 Peterborough municipal election",
+          "url": "https://en.wikipedia.org/wiki/2003_Peterborough_municipal_election",
+          "score": 0.0,
+          "snippet": "2003 Peterborough municipal election\n\nTitle: 2003 Peterborough municipal election\nURL: https://en.wikipedia.org/wiki/2003_Peterborough_municipal_election\nSections: Results, Peterborough County\n"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "incompatibilism-arguments\n\nWe believe that we have free will and this belief is so firmly entrenched in our daily lives that it is almost impossible to take seriously the thought that it might be..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "incompatibilism-arguments\n\nDeterminism is a highly general claim about the universe: very roughly, that everything that happens, including everything you choose and do, is determined by facts about..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "incompatibilism-arguments\n\nMuch of the philosophical interest in the free will/determinism problem is motivated by concerns about moral responsibility because, it is generally agreed, having free..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "compatibilism\n\nCompatibilism offers a solution to the free will problem, which concerns a disputed incompatibility between free will and determinism. Compatibilism is the thesis that free will is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "compatibilism\n\nCompatibilism emerges as a response to a problem posed by causal determinism. But what problem is that? Well, suppose, as the thesis of causal determinism tells us, that everything..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "compatibilism\n\nThese lines of argument, which have been regimented in the work of Ginet (1966), van Inwagen (1975, 1983), Wisdom (1934), Mele (1995), and Pereboom (1995, 2001), among many others,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "peter-spain",
+          "url": "https://plato.stanford.edu/entries/peter-spain/",
+          "score": 0.0,
+          "snippet": "peter-spain\n\nPeter of Spain (thirteenth century), exact identity unknown, was the author of a standard textbook on logic, the Tractatus  (Tracts),[1]  which enjoyed a high renown in Europe for many..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "peter-spain",
+          "url": "https://plato.stanford.edu/entries/peter-spain/",
+          "score": 0.0,
+          "snippet": "peter-spain\n\nPeter of Spain has been established as the medieval author of a work that became widely known as Summule logicales magistri Petri Hispani (Collection of Logic Matters of Master Peter of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "peter-spain",
+          "url": "https://plato.stanford.edu/entries/peter-spain/",
+          "score": 0.0,
+          "snippet": "peter-spain\n\nThe ‘Dominican-thesis’ can be divided into three traditions:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Free will",
+          "url": "https://en.wikipedia.org/wiki/Free_will",
+          "score": 0.0,
+          "snippet": "Free will is the capacity or ability to choose between different possible courses of action. Free will is closely linked to the concepts of moral responsibility, praise, culpability, and other..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "The passages analyze Peter van Inwagen's Consequence Argument and its associated modal logic rules, such as Rule Beta, to explore the logical relationship between determinism and free will. The text...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "The passages analyze the philosophical debate between compatibilism and incompatibilism regarding free will, determinism, and moral responsibility. Key arguments include van Inwagen's Consequence...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "The text examines arguments asserting that free will is incompatible with determinism, distinguishing between compatibilist and incompatibilist positions while introducing the concept of...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "incompatibilism-arguments",
+          "url": "https://plato.stanford.edu/entries/incompatibilism-arguments/",
+          "score": 0.0,
+          "snippet": "The passages outline the ongoing philosophical debate between compatibilists and incompatibilists regarding free will, determinism, and moral responsibility. Key arguments include van Inwagen's...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "Compatibilism argues that free will is compatible with determinism by challenging incompatibilist arguments, particularly the Consequence Argument and claims regarding alternative possibilities. Key...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "alternative-possibilities",
+          "url": "https://plato.stanford.edu/entries/alternative-possibilities/",
+          "score": 0.0,
+          "snippet": "The text examines counterexamples to the Principle of Alternative Possibilities (PAP), arguing that moral responsibility can exist even when an agent's actions are inevitable due to factors like...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "The text outlines the historical and conceptual evolution of compatibilism, tracing its development from classical empiricist accounts to modern revisions. It highlights key philosophical shifts...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "compatibilism",
+          "url": "https://plato.stanford.edu/entries/compatibilism/",
+          "score": 0.0,
+          "snippet": "Compatibilism asserts that free will and moral responsibility are compatible with determinism by redefining control through mechanisms such as reasons-responsiveness, hierarchical models of desire,...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "incompatibilism-arguments",
+          "compatibilism",
+          "freewill",
+          "Compatibilism",
+          "Free will"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "consequence argument",
+          "no choice about",
+          "van Inwagen",
+          "incompatibilism",
+          "1983"
+        ],
+        "missing": [
+          "rule beta"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia",
+        "uap-blue-book-index",
+        "wikipedia-catalog"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nPeter van Inwagen is a philosopher whose 1983 monograph, *An Essay on Free Will*, played an important role in rehabilitating libertarianism within mainstream analytical philosophy [Source: Analytic philosophy]. He introduced the term \"incompatibilism\" to describe the view that free will and determinism are incompatible with one another [Source: Analytic philosophy].\n\nThe Consequence Argument was formulated by Peter van Inwagen (with earlier citations from 1975) as well as Carl Ginet (who articulated it in the late 1960s/early 1970s) [Source: incompatibilism-arguments; Source: freewill]. Van Inwagen's version is widely regarded as the best argument for the conclusion of incompatibilism [Source: incompatibilism-arguments]. The argument runs along these lines: if determinism is true, then our present choices and actions are a consequence of facts about the past together with the laws of nature. Since we have no control over the events of the past that determined our present state, nor do we have any control over the laws of nature, we consequently have no control over their consequences—meaning we cannot have free will or moral responsibility under determinism [Source: Free will; Source: compatibilism].\n\nThe difficulty this argument presents for some compatibilists lies in its entailment regarding \"incredible abilities\": it suggests that to choose otherwise would require either generating a contradiction, violating the laws of nature, or changing the past (e.g., if Jane sat on the sofa, she could not have remained standing without altering these necessary truths) [Source: Free will]. Van Inwagen also remarks that C.D. Broad had a version of the consequence argument as early as the 1930s [Source: Free will].\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The Consequence Argument was formulated by Peter van Inwagen (with earlier citations from 1975) as well as Carl Ginet\n- Van Inwagen's version is widely regarded as the best argument for the conclusion of incompatibilism",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 179552,
+        "total_latency_ms": 157896,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia",
+          "uap-blue-book-index",
+          "wikipedia-catalog"
+        ],
+        "retrieved_chunk_count": 38,
+        "chunks_fact_score": {
+          "matched": [
+            "consequence argument",
+            "no choice about",
+            "rule beta",
+            "van Inwagen",
+            "incompatibilism",
+            "1983"
+          ],
+          "missing": [],
+          "total_expected": 6,
+          "ratio": 1.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "consequence argument",
+            "no choice about",
+            "van Inwagen",
+            "incompatibilism",
+            "1983"
+          ],
+          "missing": [
+            "rule beta"
+          ],
+          "total_expected": 6,
+          "ratio": 0.8333333
+        },
+        "judge_evidence": [
+          {
+            "fact": "consequence argument",
+            "present": true,
+            "evidence": "The Consequence Argument was formulated by Peter van Inwagen... The argument runs along these lines: if determinism is true, then our present choices and actions are a consequence of facts about the past..."
+          },
+          {
+            "fact": "no choice about",
+            "present": true,
+            "evidence": "Since we have no control over the events of the past that determined our present state, nor do we have any control over the laws of nature"
+          },
+          {
+            "fact": "rule beta",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "van Inwagen",
+            "present": true,
+            "evidence": "\"Peter van Inwagen is a philosopher whose 1983 monograph, *An Essay on Free Will*...\""
+          },
+          {
+            "fact": "incompatibilism",
+            "present": true,
+            "evidence": "\"He introduced the term 'incompatibilism' to describe the view that free will and determinism are incompatible with one another\""
+          },
+          {
+            "fact": "1983",
+            "present": true,
+            "evidence": "Peter van Inwagen is a philosopher whose 1983 monograph, *An Essay on Free Will*, played an important role in rehabilitating libertarianism within mainstream analytical philosophy"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "twin_earth_content_externalism",
+      "category": "cross_corpus",
+      "question": "Explain Putnam's Twin Earth thought experiment as an argument for content\nexternalism, and identify the philosophers credited with developing semantic\nexternalism.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Rejection_of_functionalism",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nIan Hacking called Representation and Reality (1988) a book that \"will mostly be read as Putnam’s denunciation of his former philosophical psychology, to which he gave the name..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Epistemology",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nhave a \"God's-eye\" view of reality. One is limited to one's conceptual schemes, and metaphysical realism is therefore false.\n\nPutnam's brain in a vat argument has been criticized...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Epistemology",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nThis is a form of epistemological externalism: knowledge or justification depends on factors outside the mind and is not solely determined internally."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy#Semantics",
+          "score": 0.0,
+          "snippet": "Analytic philosophy\n\nSaul Kripke provided a semantics for modal logic. In his book Naming and Necessity (1980), Kripke challenges the descriptivist theory with a causal theory of reference. In it he..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "skepticism-content-externalism",
+          "url": "https://plato.stanford.edu/entries/skepticism-content-externalism/",
+          "score": 0.0,
+          "snippet": "skepticism-content-externalism\n\nHilary Putnam (1981) proposed an interesting and much discussed attempt to refute a skeptical argument that is based on one form of the brain-and-a-vat scenario. In..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Abstract",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nalgorithm for the Boolean satisfiability problem and he helped demonstrate the unsolvability of Hilbert's tenth problem.\n\nPutnam applied equal scrutiny to his own philosophical..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Semantic_externalism",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nOne of Putnam's contributions to philosophy of language is his semantic externalism, the claim that terms' meanings are determined by factors outside the mind, encapsulated in his..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Semantic_externalism",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nTwin Earth shows this, according to Putnam, since on Twin Earth everything is identical to Earth, except that its lakes, rivers and oceans are filled with XYZ rather than H O...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "content-externalism\n\nThere are two more recent developments in semantic theory that can been used to identify and defend a concept of narrow content. One of these is two-dimensional semantics and its..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "perception-contents",
+          "url": "https://plato.stanford.edu/entries/perception-contents/",
+          "score": 0.0,
+          "snippet": "perception-contents\n\nExternalism and internalism about contents are distinct theses from externalism and internalism about phenomenology. Internalism about phenomenology is the thesis that intrinsic..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nIn philosophy of mind, Putnam argued against the type-identity of mental and physical states based on his hypothesis of the multiple realizability of the mental, and for the concept of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.0,
+          "snippet": "content-narrow\n\nAmong the earliest and most influential arguments for broad content were Hilary Putnam’s arguments in such essays as “The Meaning of ‘Meaning’” (1975). Putnam’s arguments..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "analytic-synthetic",
+          "url": "https://plato.stanford.edu/entries/analytic-synthetic/",
+          "score": 0.0,
+          "snippet": "analytic-synthetic\n\nDeveloping the strategy of §3.3C above, Externalist theories of meaning (or “content”) try to meet at least part of Quine’s challenge by considering how matters of meaning..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Rejection_of_functionalism",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\ncertain intuitions with respect to the externalism of mental content. This is illustrated by his Twin Earth thought experiment.\n\nIn 1988 Putnam also developed a separate argument..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "word-meaning",
+          "url": "https://plato.stanford.edu/entries/word-meaning/",
+          "score": 0.0,
+          "snippet": "word-meaning\n\nLet it be noted that in Putnam’s original proposal, reference determination is utterly independent of speakers’ cognition: ‘water’ on Twin Earth refers to XYZ (not to H2O) even..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "self-knowledge-externalism\n\nPredictably, such theories face various difficulties—so none provide a decisive case for EXT. Yet the foremost arguments for the view are not so parochial. These..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Multiple_realizability",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nand wheels can be functionally isomorphic but constitutionally diverse. Functional isomorphism implies multiple realizability.\n\nPutnam, Jerry Fodor, and others argued that along with..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computational-mind",
+          "url": "https://plato.stanford.edu/entries/computational-mind/",
+          "score": 0.0,
+          "snippet": "computational-mind\n\nPutnam’s landmark article “The Meaning of ‘Meaning’” (1975: 215–271) introduced the Twin Earth thought experiment, which postulates a world just like our own except..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilary Putnam",
+          "url": "https://en.wikipedia.org/wiki/Hilary_Putnam#Abstract",
+          "score": 0.0,
+          "snippet": "Hilary Putnam\n\nan original theory of meaning, introducing the notion of semantic externalism based on a thought experiment called Twin Earth.\n\nIn philosophy of mathematics, Putnam and W. V. O. Quine..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epiphenomenalism",
+          "url": "https://plato.stanford.edu/entries/epiphenomenalism/",
+          "score": 0.0,
+          "snippet": "epiphenomenalism\n\n(1) Many philosophers hold an externalist view of intentionality, according to which intentionality requires representation, and representation depends on circumstances external to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "content-externalism\n\n[Editor’s Note: The following new entry replaces the  former entry on this topic.]"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "content-externalism\n\nIn the philosophy of mind, externalism is the view that what is going on in an individual’s mind is not (entirely) determined by what is going on inside her body, including her..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "content-externalism\n\nIn the philosophy of mind, externalism is the view that what is going on inside an individual’s body does not always, on its own, fix what is going on inside that..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "skepticism-content-externalism",
+          "url": "https://plato.stanford.edu/entries/skepticism-content-externalism/",
+          "score": 0.0,
+          "snippet": "skepticism-content-externalism\n\nA number of skeptical hypotheses or scenarios have been proposed which can be used as the basis for arguments to the effect that we lack knowledge of various..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "skepticism-content-externalism",
+          "url": "https://plato.stanford.edu/entries/skepticism-content-externalism/",
+          "score": 0.0,
+          "snippet": "skepticism-content-externalism\n\nThe Cartesian Skeptic describes an alleged logically possible scenario in which our mental lives and their histories are precisely the same as what they actually are,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "skepticism-content-externalism",
+          "url": "https://plato.stanford.edu/entries/skepticism-content-externalism/",
+          "score": 0.0,
+          "snippet": "skepticism-content-externalism\n\nGiven such an hypothesis as that of the brain-in-a-vat, the skeptic can go on to argue that there are many commonsense beliefs that we think we know, but that we do..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "self-knowledge-externalism\n\nExternalism in the philosophy of mind contends that the meaning or content of a  thought[1]  is partly determined by the environment. The view has garnered attention since..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "self-knowledge-externalism\n\nOfficially, we can put the issue in terms of an apparent tension between the following:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "self-knowledge-externalism\n\nThe issue is that EXT seemingly implies that knowing about content requires knowing about the environment. And since the latter is empirical, so too would be the former,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "Content externalism posits that mental content depends on individuation factors outside the individual, a view historically contextualized by figures like Sartre and Wittgenstein but most famously...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "The passages analyze the philosophical debate concerning whether externalism about mental content is compatible with self-knowledge, focusing on arguments derived from thought experiments like Twin...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.0,
+          "snippet": "The passages explore the philosophical concept of narrow content, contrasting it with broad content through thought experiments like Putnam's Twin Earth and Fodor's mapping conception. Narrow content...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.0,
+          "snippet": "The passages examine the philosophical debate between narrow mental content, defined by intrinsic properties independent of environment, and broad externalist views advanced by Hilary Putnam and...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-externalism",
+          "url": "https://plato.stanford.edu/entries/content-externalism/",
+          "score": 0.0,
+          "snippet": "Content externalism is a philosophical position whose significance is considered potentially far-reaching, although its implications remain unclear and subject to dispute. The current entry replaces...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "content-narrow",
+          "url": "https://plato.stanford.edu/entries/content-narrow/",
+          "score": 0.0,
+          "snippet": "The text argues that narrow mental content is determined solely by an individual's intrinsic properties, distinct from broad content which depends on external factors like the environment. Using...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "realism-sem-challenge",
+          "url": "https://plato.stanford.edu/entries/realism-sem-challenge/",
+          "score": 0.0,
+          "snippet": "The text examines semantic externalism and Putnam's argument against the brain-in-a-vat hypothesis, contrasting it with deflationist views that treat reference as internal to language. It further...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "self-knowledge-externalism",
+          "url": "https://plato.stanford.edu/entries/self-knowledge-externalism/",
+          "score": 0.0,
+          "snippet": "Content externalism challenges the traditional Cartesian view of privileged self-knowledge by demonstrating that environmental factors determine mental content, which prevents individuals from...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "content-externalism",
+          "Hilary Putnam"
+        ],
+        "missing": [
+          "externalism",
+          "Semantic externalism",
+          "Twin Earth thought experiment"
+        ],
+        "total_expected": 5,
+        "ratio": 0.4
+      },
+      "fact_score": {
+        "matched": [
+          "Twin Earth",
+          "meanings just ain't in the head",
+          "XYZ",
+          "Hilary Putnam",
+          "Tyler Burge"
+        ],
+        "missing": [
+          "natural kind"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\nHilary Putnam’s Twin Earth thought experiment is an argument for semantic externalism, the view that \"the meanings of words are not psychological\" and that terms' meanings are determined by factors outside the mind [Source: Analytic philosophy] [Source: Hilary Putnam]. This position is encapsulated in Putnam's slogan that \"meaning just ain't in the head\" [Source: Hilary Putnam].\n\n**The Argument from Twin Earth**\nPutnam introduced this concept to challenge computational theories of mind and functionalism, which struggle to explain intuitions regarding the externalism of mental content [Source: Hilary Putnam]. The thought experiment postulates a world exactly like our own except for one crucial difference: on \"Twin Earth,\" lakes, rivers, and oceans are filled with a substance chemically identical in appearance but different in composition—specifically XYZ rather than H2O [Source: Hilary Putnam] [Source: computational-mind]. \n\nWhen an earthling named Fredrick uses the word \"water\" on Earth, it refers to H2O. When his physically indistinguishable twin, Frodrick, uses the word \"water\" on Twin Earth, he is referring to XYZ [Source: Hilary Putnam]. Because Fredrick and Frodrick are physically identical when they utter their respective words yet those words have different meanings (one refers to water/H2O, the other to the look-alike substance/XYZ), meaning cannot be determined solely by what is inside their heads or their internal physical states [Source: Hilary Putnam].\n\n**Development of Semantic Externalism**\nWhile Putnam formulated semantic externalism based on this thought experiment in essays such as *Meaning and Reference* (1973) and *The Meaning of 'Meaning'* (1975), he did not develop it alone. The causal theory of reference was developed alongside him by **Saul Kripke**, who challenged descriptivist theories with his work in *Naming and Necessity* (1980) [Source: Analytic philosophy] [Source: Hilary Putnam]. \n\nOther philosophers credited with developing these views include **Ruth Barcan Marcus** and **Keith Donnellan**, who also challenged descriptivism, and **Tyler Burge**. Burge extended the conclusion from linguistic reference to mental content, arguing that internally identical subjects can host different thought contents solely because of environmental differences [Source: analytic-synthetic] [Source: computational-mind] [Source: self-knowledge-externalism].\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- specifically XYZ rather than H2O\n- The causal theory of reference was developed alongside him by Saul Kripke... Other philosophers credited with developing these views include Ruth Barcan Marcus …",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 164481,
+        "total_latency_ms": 150813,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 37,
+        "chunks_fact_score": {
+          "matched": [
+            "Twin Earth",
+            "XYZ",
+            "Hilary Putnam"
+          ],
+          "missing": [
+            "meanings just ain't in the head",
+            "Tyler Burge",
+            "natural kind"
+          ],
+          "total_expected": 6,
+          "ratio": 0.5
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Twin Earth",
+            "meanings just ain't in the head",
+            "XYZ",
+            "Hilary Putnam",
+            "Tyler Burge",
+            "natural kind"
+          ],
+          "missing": [],
+          "total_expected": 6,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "Twin Earth",
+            "present": true,
+            "evidence": "\"Hilary Putnam's Twin Earth thought experiment is an argument for semantic externalism... The thought experiment postulates a world exactly like our own except for one crucial difference: on 'Twin Earth,' lakes, rivers, and oceans are filled with a substance chemically identical in appearance but different in composition\""
+          },
+          {
+            "fact": "meanings just ain't in the head",
+            "present": true,
+            "evidence": "\"the meanings of words are not psychological\" and that terms' meanings are determined by factors outside the mind... Putnam's slogan that \"meaning just ain't in the head\""
+          },
+          {
+            "fact": "XYZ",
+            "present": true,
+            "evidence": "\"specifically XYZ rather than H2O\""
+          },
+          {
+            "fact": "Hilary Putnam",
+            "present": true,
+            "evidence": "\"Hilary Putnam's Twin Earth thought experiment is an argument for semantic externalism... This position is encapsulated in Putnam's slogan that 'meaning just ain't in the head'\""
+          },
+          {
+            "fact": "Tyler Burge",
+            "present": true,
+            "evidence": "**Tyler Burge**. Burge extended the conclusion from linguistic reference to mental content, arguing that internally identical subjects can host different thought contents solely because of environmental differences"
+          },
+          {
+            "fact": "natural kind",
+            "present": true,
+            "evidence": "lakes, rivers, and oceans are filled with a substance chemically identical in appearance but different in composition—specifically XYZ rather than H2O"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "locke_memory_personal_identity",
+      "category": "cross_corpus",
+      "question": "Reconstruct Locke's memory criterion of personal identity and the standard\nobjections to it, and situate Locke's Essay historically.\n",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "locke-personal-identity\n\nThose who see a tension between Locke’s discussion of personal identity and the rest of the Essay contend that the way in which Locke proceeds in L-N 2.27 not only includes..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke",
+          "url": "https://plato.stanford.edu/entries/locke/",
+          "score": 0.0,
+          "snippet": "locke\n\nLocke is often classified as the first of the great English empiricists (ignoring the claims of Bacon and Hobbes). This reputation rests on Locke’s greatest work, the monumental An Essay..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "locke-personal-identity\n\nNevertheless, within the interpretive camp that takes Locke to dabble in metaphysics, there is widespread debate, both at the macro and the micro level. To start with the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-time",
+          "url": "https://plato.stanford.edu/entries/identity-time/",
+          "score": 0.0,
+          "snippet": "identity-time\n\nWhat then, according to Locke, is it to have the same consciousness as some past person? He is customarily interpreted as holding that person A is the same person as earlier person B..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.0,
+          "snippet": "reid-memory-identity\n\nReid’s main criticism of Locke’s theory of personal identity is that Locke moves from these truisms concerning the conceptual and evidential relations among the notions of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid",
+          "url": "https://plato.stanford.edu/entries/reid/",
+          "score": 0.0,
+          "snippet": "reid\n\nReid's theory of memory informs his theory of personal identity, as does his three criticisms of Locke's theory of personal identity. First, Reid argues that Locke's account is misleading due..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-ethics",
+          "url": "https://plato.stanford.edu/entries/identity-ethics/",
+          "score": 0.0,
+          "snippet": "identity-ethics\n\nNevertheless, even if this objection to Locke is thwarted, the others remain in force. For one thing, memory does seem to presuppose  personal identity, and so cannot constitute a..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "memory",
+          "url": "https://plato.stanford.edu/entries/memory/",
+          "score": 0.0,
+          "snippet": "memory\n\nLocke ([1689] 1998)—who was perhaps anticipated in this by Spinoza (Lin 2005)—discussed the idea that what makes a person at a given time count as the same person as a person at an..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "collins",
+          "url": "https://plato.stanford.edu/entries/collins/",
+          "score": 0.0,
+          "snippet": "collins\n\nCollins accepts Locke’s revolutionary view that consciousness and not the substantial soul is the bearer of personal identity. Again agreeing with Locke, he regards memory as crucial to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "alexander",
+          "url": "https://plato.stanford.edu/entries/alexander/",
+          "score": 0.0,
+          "snippet": "alexander\n\nAlexander’s early monograph Locke (1908) discusses John Locke’s Essay on ethics, politics, and religion. This short book reveals Alexander’s admiration for Locke, and Lockean..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-political",
+          "url": "https://plato.stanford.edu/entries/locke-political/",
+          "score": 0.0,
+          "snippet": "locke-political\n\nFor a more general introduction to Locke’s history and background, the argument of the Two Treatises, and the Letter Concerning Toleration, see  Section 1,  Section 4, and  Section..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke",
+          "url": "https://plato.stanford.edu/entries/locke/",
+          "score": 0.0,
+          "snippet": "locke\n\nFinally, for an account of the influence of Locke’s works, see the supplementary document:  Supplement on the Influence of Locke’s Works"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "animalism",
+          "url": "https://plato.stanford.edu/entries/animalism/",
+          "score": 0.0,
+          "snippet": "animalism\n\nIt is in the context of his solution to this problem that Locke introduces the famous thought experiment involving the prince and the cobbler—not as a puzzle in need of explanation, but..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "real-essence",
+          "url": "https://plato.stanford.edu/entries/real-essence/",
+          "score": 0.0,
+          "snippet": "real-essence\n\nLocke died before Leibniz’s New Essays on Human Understanding were published (they were not published until 1765, sixty-one years after Locke’s death and nearly fifty years after..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "John Locke",
+          "url": "https://en.wikipedia.org/wiki/John_Locke#Dream_argument",
+          "score": 0.0,
+          "snippet": "John Locke\n\nLocke was critical of Descartes's version of the dream argument, with Locke making the counter-argument that people cannot have physical pain in dreams as they do in waking life."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "alain-locke",
+          "url": "https://plato.stanford.edu/entries/alain-locke/",
+          "score": 0.0,
+          "snippet": "alain-locke\n\nOn Locke's estimation,"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Personality",
+          "url": "https://en.wikipedia.org/wiki/Personality#Empiricists_and_rationalists",
+          "score": 0.0,
+          "snippet": "Personality\n\nmind, for whom perfection is far off. Rationalism is regarded as pretension, and a temperament most inclined to abstraction.\n\nEmpiricists, on the other hand, stick with the external..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "real-essence",
+          "url": "https://plato.stanford.edu/entries/real-essence/",
+          "score": 0.0,
+          "snippet": "real-essence\n\nLocke, John |  Locke, John: moral philosophy |  Locke, John: philosophy of science"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-personal",
+          "url": "https://plato.stanford.edu/entries/identity-personal/",
+          "score": 0.0,
+          "snippet": "identity-personal\n\nThat is, a past or future person is you just if you (who are now a person) can now remember an experience she had then, or she can then remember an experience you are having now...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "real-essence",
+          "url": "https://plato.stanford.edu/entries/real-essence/",
+          "score": 0.0,
+          "snippet": "real-essence\n\nThe technical term ‘real essence’ is introduced into the philosophical lexicon by the English philosopher John Locke (1632–1704) in his An Essay Concerning Human  Understanding[1]..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "locke-personal-identity\n\nJohn Locke (1632–1704) added the chapter in which he treats persons and their persistence conditions (Book 2, Chapter 27) to the second edition of An Essay Concerning Human..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "locke-personal-identity\n\nLocke’s most thorough discussion of the persistence (or diachronic identity) of persons can be found in Book 2, Chapter 27 of the Essay (“Of Identity and Diversity”),..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.0,
+          "snippet": "reid-memory-identity\n\nThomas Reid held a direct realist theory of memory. Like his direct realism about perception, Reid developed his account as an alternative to the model of the mind that he..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.0,
+          "snippet": "reid-memory-identity\n\nReid is interested in the notion of memory not only for its own sake but also because of its conceptual connection to the notion of personal identity. Reid criticizes Locke’s..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.0,
+          "snippet": "reid-memory-identity\n\nReid traces the target of his criticisms back to the Ancients, whom he depicts as holding that the mind is a sensorium—a repository of past ideas and impressions (Essays, ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-time",
+          "url": "https://plato.stanford.edu/entries/identity-time/",
+          "score": 0.0,
+          "snippet": "identity-time\n\nIrving Copi once defined the problem of identity through time by noting that the following two statements both seem true but, on the assumption that there is change, appear to be..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-time",
+          "url": "https://plato.stanford.edu/entries/identity-time/",
+          "score": 0.0,
+          "snippet": "identity-time\n\nTraditionally, this puzzle has been solved in various ways. Aristotle, for example, distinguished between “accidental” and “essential” changes. Accidental changes are ones that..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-time",
+          "url": "https://plato.stanford.edu/entries/identity-time/",
+          "score": 0.0,
+          "snippet": "identity-time\n\nOf course, this solution to the puzzle depends on there being a coherent distinction between accidental and essential changes, and between accidental and essential properties. Some..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke",
+          "url": "https://plato.stanford.edu/entries/locke/",
+          "score": 0.0,
+          "snippet": "locke\n\nJohn Locke (b. 1632, d. 1704) was a British philosopher, Oxford academic and medical researcher. Locke’s monumental An Essay Concerning Human Understanding (1689) is one of the first great..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke",
+          "url": "https://plato.stanford.edu/entries/locke/",
+          "score": 0.0,
+          "snippet": "locke\n\nThis in turn, amounts to following natural law and the fulfillment of the divine purpose for humanity."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "John Locke argues that personal identity is defined by the continuity of consciousness and self-reflection rather than material or immaterial substance, establishing individuals as forensic entities...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "Locke argues that personal identity is constituted by consciousness rather than the substance of the soul or the continuity of the physical body, as illustrated through thought experiments involving...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "John Locke argues that personal identity is grounded in the continuity of consciousness rather than the persistence of an immaterial soul or material substance. This psychological criterion for...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "identity-ethics",
+          "url": "https://plato.stanford.edu/entries/identity-ethics/",
+          "score": 0.0,
+          "snippet": "The text examines critiques of Locke's psychological criterion for personal identity, specifically addressing objections from Butler and Reid regarding transitivity and the presupposition of memory....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "The passages examine various interpretations of John Locke's theory of personal identity, contrasting strict memory views with Shelley Weinberg’s metaphysical account and Marya Schechtman’s...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reid-memory-identity",
+          "url": "https://plato.stanford.edu/entries/reid-memory-identity/",
+          "score": 0.0,
+          "snippet": "Thomas Reid argues against the 'theory of ideas' and Locke's Memory Theory by positing that memory is a direct, immediate faculty involving a conception of a past event accompanied by a belief in its...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "John Locke's theory of personal identity, which distinguishes persons from biological humans through consciousness and memory, remains a central subject of metaphysical debate. Scholars dispute the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "locke-personal-identity",
+          "url": "https://plato.stanford.edu/entries/locke-personal-identity/",
+          "score": 0.0,
+          "snippet": "The passages argue that personal identity consists in consciousness and self-reflection rather than substance, establishing the person as a forensic entity accountable for actions. While Locke posits...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "locke-personal-identity",
+          "identity-personal",
+          "John Locke"
+        ],
+        "missing": [
+          "Personal identity"
+        ],
+        "total_expected": 4,
+        "ratio": 0.75
+      },
+      "fact_score": {
+        "matched": [
+          "memory criterion",
+          "consciousness",
+          "Reid",
+          "brave officer",
+          "transitivity",
+          "John Locke",
+          "Essay Concerning Human Understanding"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\n**Historical Context and the Addition of Chapter 27**\nJohn Locke (1632–1704) is widely classified as the first great English empiricist, a reputation resting on his monumental *An Essay Concerning Human Understanding* (first published in London in December 1689), which sought to determine the limits of human understanding [Source: locke]. However, the specific chapter treating personal identity—Book 2, Chapter 27 (\"Of Identity and Diversity\")—was not part of this original edition. Locke added it only for the second edition in 1694 after being encouraged by William Molyneux following an exchange between them regarding the problem in 1692–1693 [Source: locke-personal-identity]. This discussion was further developed in a lengthy exchange with Edward Stillingfleet, Bishop of Worcester (1697–1699) [Source: locke-personal-identity], though we do not have Locke's direct response to Leibniz because he died before *New Essays on Human Understanding* were published in 1765 [Source: real-essence].\n\n**Reconstruction of the Memory Criterion**\nLocke argues that what makes a person at one time the same as a person at an earlier time is the continuity of consciousness. He defines this via the \"memory criterion\": a past or future person is you if and only if you can now remember an experience they had, or they could then remember an experience you are having now [Source: identity-personal; Source: memory]. This view establishes individuals primarily as forensic entities accountable for their actions rather than merely as substances (material or immaterial) or bodies [Source: locke-personal-identity]. Locke illustrates this with thought experiments, such as the famous case of a prince whose soul enters a cobbler's body; in this scenario, everyone would see that he would be the same *person* as the cobbler but not the same *man*, thereby vindicating the distinction between person and human being [Source: animalism].\n\n**Standard Objections to the Memory Criterion**\nThe primary substantive objection is that the criterion appears uninformative because one can by definition remember only what they have previously experienced, making it tautological rather than explanatory [Source: memory]. More critically, critics argue that identity must be transitive (if A=B and B=C, then A=C), whereas memory is not necessarily transitive. If I remember an event from your perspective, and you remember a third party's experience of me, there may be no direct memory link between us, yet we might all claim shared identity; this breaks the logical requirement for identity relations [Source: identity-ethics]. Furthermore, if consciousness just *is* memory, it becomes difficult to account for forgetfulness or amnesia without implying that personal identity ceases entirely when memories are lost, which seems counterintuitive (\"hard to believe that I would cease to exist were I to undergo amnesia\") [Source: identity-ethics].\n\n**Critiques by Butler and Reid**\nJoseph Butler and Thomas Reid mounted specific attacks on Locke's position. Butler argued that memory presupposes personal identity rather than constituting it, creating a circularity where one must already be identical with oneself in the past to remember those events [Source: reid-memory-identity; Source: identity-ethics]. Thomas Reid criticized Locke for confusing concepts of consciousness, memory, and personal identity. Reid argued that we are only conscious *of our remembrance* of past events, not directly of the events themselves, making \"consciousness\" a misnomer when applied to awareness of the past [Source: reid]. Additionally, Reid offered his own thought experiment involving a brave officer who remembers being a private but cannot recall being an officer later in life, suggesting that Locke's theory fails to account for gaps in memory while still maintaining moral responsibility or identity across time [Source: reid].\n\n**Methodological Debates within Interpretation**\nThere is ongoing scholarly debate regarding whether Locke's approach in Chapter 27 represents a break from his usual methodology. Some scholars contend that unlike other parts of the *Essay* where he employs a historical and plain method surveying instances, Locke here relies heavily on metaphysics and imaginary cases (thought experiments) like the prince/cobbler scenario [Source: locke-personal-identity]. Conversely, others see this chapter as consistent with moves made elsewhere in the text, viewing it not as an isolated metaphysical excursion but integrated into his broader project [Source: locke-personal-identity].\n\nNot in your sources — from general knowledge: While the provided texts detail the objections regarding transitivity, circularity, and amnesia, they do not explicitly reconstruct the full logical derivation of how Locke attempts to resolve these paradoxes beyond stating his reliance on consciousness; contemporary theorists have had to modify or abandon strict memory theories due to these unresolved issues.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Thomas Reid proposed a thought experiment involving a brave officer who remembers being a private but cannot recall being an officer later.\n- Locke illustrates this with thought experiments, such as the famous case of a prince whose soul enters a cobbler's body; in this scenario, everyone would see th…\n- The evidence states Locke uses the example to vindicate the human/person distinction and his solution to resurrection, noting \"who would say it was the same Man…",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 292196,
+        "total_latency_ms": 251239,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 38,
+        "chunks_fact_score": {
+          "matched": [
+            "memory criterion",
+            "consciousness",
+            "Reid",
+            "transitivity",
+            "John Locke",
+            "Essay Concerning Human Understanding"
+          ],
+          "missing": [
+            "brave officer"
+          ],
+          "total_expected": 7,
+          "ratio": 0.85714287
+        },
+        "judge_fact_score": {
+          "matched": [
+            "memory criterion",
+            "consciousness",
+            "Reid",
+            "brave officer",
+            "transitivity",
+            "John Locke",
+            "Essay Concerning Human Understanding"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "memory criterion",
+            "present": true,
+            "evidence": "\"He defines this via the 'memory criterion': a past or future person is you if and only if you can now remember an experience they had, or they could then remember an experience you are having now\""
+          },
+          {
+            "fact": "consciousness",
+            "present": true,
+            "evidence": "Locke argues that what makes a person at one time the same as a person at an earlier time is the continuity of consciousness."
+          },
+          {
+            "fact": "Reid",
+            "present": true,
+            "evidence": "Joseph Butler and Thomas Reid mounted specific attacks on Locke's position. ... Additionally, Reid offered his own thought experiment involving a brave officer who remembers being a private but cannot recall being an officer later in life..."
+          },
+          {
+            "fact": "brave officer",
+            "present": true,
+            "evidence": "Thomas Reid criticized Locke for confusing concepts of consciousness, memory, and personal identity. Reid argued that we are only conscious *of our remembrance* of past events... Additionally, Reid offered his own thought experiment involving a brave officer who remembers being a private but cannot recall being an officer later in life..."
+          },
+          {
+            "fact": "transitivity",
+            "present": true,
+            "evidence": "More critically, critics argue that identity must be transitive (if A=B and B=C, then A=C), whereas memory is not necessarily transitive."
+          },
+          {
+            "fact": "John Locke",
+            "present": true,
+            "evidence": "\"John Locke (1632–1704) is widely classified as the first great English empiricist\""
+          },
+          {
+            "fact": "Essay Concerning Human Understanding",
+            "present": true,
+            "evidence": "\"John Locke (1632–1704) is widely classified as the first great English empiricist, a reputation resting on his monumental *An Essay Concerning Human Understanding*\""
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Locke",
+          "corpus_id": "sep-legal-obligation",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "aristotle_function_argument_eudaimonia",
+      "category": "cross_corpus",
+      "question": "Explain Aristotle's function (ergon) argument for eudaimonia and the role of\npractical wisdom, and identify the work in which it appears.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Aristotelian ethics",
+          "url": "https://en.wikipedia.org/wiki/Aristotelian_ethics",
+          "score": 0.0,
+          "snippet": "Aristotelian ethics\n\nBravery, and the correct regulation of one's bodily appetites, are examples of character excellence or virtue. So acting bravely and acting temperately are examples of excellent..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nArabic and Islamic Philosophy, historical and methodological topics in: influence of Arabic and Islamic Philosophy on the Latin West |  Aristotle, commentators on |  Aristotle, General..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nicomachean Ethics",
+          "url": "https://en.wikipedia.org/wiki/Nicomachean_Ethics#Practical_judgement_(phronesis)",
+          "score": 0.0,
+          "snippet": "Nicomachean Ethics\n\nlives are considered meddlesome. Aristotle believes that such busybodies are nonetheless important to the health of the polis.\n\nPhronesis seems to require experience; it is unlike..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nIn determining what eudaimonia consists in, Aristotle makes a crucial appeal to the human function (ergon), and thus to his overarching teleological framework."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-rhetoric",
+          "url": "https://plato.stanford.edu/entries/aristotle-rhetoric/",
+          "score": 0.0,
+          "snippet": "aristotle-rhetoric\n\nAristotle |  Aristotle, General Topics: aesthetics |  Aristotle, General Topics: logic |  Cicero |  Plato: rhetoric and poetry"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-logic",
+          "url": "https://plato.stanford.edu/entries/aristotle-logic/",
+          "score": 0.0,
+          "snippet": "aristotle-logic\n\nAristotle, General Topics: aesthetics |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: rhetoric |  Aristotle, Special Topics: mathematics |  Aristotle, Special..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "summarize_via_fast_slot",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function sends a specific engineering note text to an AI provider configured for fast, low-temperature generation and returns the resulting markdown summary.\nCan you summarize these raw notes...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nicomachean Ethics",
+          "url": "https://en.wikipedia.org/wiki/Nicomachean_Ethics#Abstract",
+          "score": 0.0,
+          "snippet": "Nicomachean Ethics\n\nThe Nicomachean Ethics (/ ˌ n aɪ k ɒ m ə ˈ k i ə n, ˌ n ɪ -/; Ancient Greek: Ἠθικὰ Νικομάχεια, Ēthika Nikomacheia) is Aristotle 's best-known works on..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "execute",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function reads a set of engineering notes based on provided scopes, kinds, and limits, then generates a short text summary (digest) by either using an AI inference provider or falling back to...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theory",
+          "url": "https://en.wikipedia.org/wiki/Theory#Ancient_usage",
+          "score": 0.0,
+          "snippet": "Theory\n\nthat led to the classical and modern concept of a distinction between theory (as uninvolved, neutral thinking) and practice.\n\nAristotle's terminology, as already mentioned, contrasts theory..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "wisdom",
+          "url": "https://plato.stanford.edu/entries/wisdom/",
+          "score": 0.0,
+          "snippet": "wisdom\n\nAristotle has a concept of practical wisdom that makes up for what is missing in theoretical wisdom. In Book VI of the Nicomachean Ethics, he claims, “This is why we say Anaxagoras, Thales,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "practical-reason-med",
+          "url": "https://plato.stanford.edu/entries/practical-reason-med/",
+          "score": 0.0,
+          "snippet": "practical-reason-med\n\nThe earliest thirteenth-century interpretations of Aristotle’s notion practical wisdom emphasized the intellectual nature of moral virtue. The pre-1250 commentators on the NE..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-logic",
+          "url": "https://plato.stanford.edu/entries/aristotle-logic/",
+          "score": 0.0,
+          "snippet": "aristotle-logic\n\nAristotle’s study of sophistical arguments is contained in On Sophistical Refutations, which is actually a sort of appendix to the Topics."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.0,
+          "snippet": "aristotle-ethics\n\nHe says that theoretical wisdom produces happiness by being a part of virtue (1144a3–6), and that practical wisdom looks to the development of theoretical wisdom, and issues..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "FindCalleesTool",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This struct defines a tool that uses an internal graph and corpus engine to identify which functions call other specific code locations.\nWhich functions invoke the target function?\nWhat is the list...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Aristotle",
+          "url": "https://en.wikipedia.org/wiki/Aristotle#Ethics",
+          "score": 0.0,
+          "snippet": "Aristotle considered ethics to be a practical rather than theoretical study, i.e., one aimed at becoming good and doing good rather than knowing for its own sake. He wrote several treatises on..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "archive_feature",
+          "url": null,
+          "score": 0.0,
+          "snippet": "This function takes a feature identifier and an optional reason, then updates the database to mark that specific ATOS feature as archived so it is hidden from default listings while keeping its data...",
+          "source": "code_intel_summary"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Aristotle",
+          "url": "https://en.wikipedia.org/wiki/Aristotle#Ethics",
+          "score": 0.0,
+          "snippet": "Aristotle\n\ngood rather than knowing for its own sake. He wrote several treatises on ethics, most notably including the Nicomachean Ethics.\n\nAristotle taught that virtue has to do with the proper..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "human-nature",
+          "url": "https://plato.stanford.edu/entries/human-nature/",
+          "score": 0.0,
+          "snippet": "human-nature\n\nThe paradigmatic strategy for deriving ethical consequences from claims about structural features of the human life form is the Platonic and Aristotelian ergon or function argument. The..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-causality",
+          "url": "https://plato.stanford.edu/entries/aristotle-causality/",
+          "score": 0.0,
+          "snippet": "aristotle-causality\n\nAristotle, General Topics: logic |  Aristotle, General Topics: metaphysics |  Aristotle, General Topics: psychology |  causation: medieval theories of |  episteme and techne [=..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "archive_feature",
+          "url": null,
+          "score": 0.0,
+          "snippet": "archive_feature\n\n        Ok(feature)\n    }\n\n    async fn archive_feature(&self, feature_id: &str, reason: &str) -> Result<bool> {\n        Ok(self.features.archive(feature_id, reason).await?)\n    }\n\n ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "archive_feature",
+          "url": null,
+          "score": 0.0,
+          "snippet": "archive_feature\n\n\n// ATOS feature management.\n#[cfg(all(feature = \"treesitter\", feature = \"atos\"))]\npub mod archive_feature;\npub mod atos_plan_emit;\npub mod atos_utils;\npub mod atos_verify;"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nAristotle (384–322 B.C.E.) numbers among the greatest philosophers of all time. Judged solely in terms of his philosophical influence, only Plato is his peer: Aristotle’s works shaped..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "aristotle\n\nBecause of its wide range and its remoteness in time, Aristotle’s philosophy defies easy encapsulation. The long history of interpretation and appropriation of Aristotelian texts and..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "FindCalleesTool",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FindCalleesTool\n\n/// does `load_full()` to grab the current graph atomically.\npub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;\n\npub struct FindCalleesTool {\n    #[allow(dead_code)]\n    engine:..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "FindCalleesTool",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FindCalleesTool\n\n    checker: Option<Arc<IndexHealthChecker>>,\n}\n\nimpl FindCalleesTool {\n    pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {\n        Self {\n           ..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "FindCalleesTool",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FindCalleesTool\n\n}\n\n#[async_trait]\nimpl Tool for FindCalleesTool {\n    fn descriptor(&self) -> ToolDescriptor {\n        ToolDescriptor {\n            id: \"callees\".to_string(),\n            name: \"Find..."
+        },
+        {
+          "corpus_id": "commonwealth-ai",
+          "title": "summarize_via_fast_slot",
+          "url": null,
+          "score": 0.0,
+          "snippet": "summarize_via_fast_slot\n\n    out\n}\n\nasync fn summarize_via_fast_slot(provider: &dyn InferenceProvider, raw: &str) -> Result<String> {\n    let system = \"You are a summarizer. Given a list of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.0,
+          "snippet": "Aristotle posits that the highest human good is eudaimonia, achieved primarily through philosophical contemplation rather than political activity or mere ethical living. He supports this by...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "Aristotle argues that the ultimate human good is eudaimonia, defined as excellent rational activity in accordance with virtue. He extends this ethical framework to political theory by asserting that...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "Aristotle advocates for a philosophical method that begins with phainomena and endoxa to resolve aporiai, relying on the intuition that appearances generally track truth. He applies this approach...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-logic",
+          "url": "https://plato.stanford.edu/entries/aristotle-logic/",
+          "score": 0.0,
+          "snippet": "The text argues that Aristotle's dialectic is a structured art comprising methods for discovering and evaluating premises, centered on the concept of topoi. This discipline serves three primary...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "cicero",
+          "url": "https://plato.stanford.edu/entries/cicero/",
+          "score": 0.0,
+          "snippet": "Cicero advances the claim that political philosophy must be practically oriented and integrated with public life, rather than remaining abstract or purely theoretical. He supports this by critiquing...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle",
+          "url": "https://plato.stanford.edu/entries/aristotle/",
+          "score": 0.0,
+          "snippet": "Aristotle is portrayed as a foundational philosopher whose enduring legacy encompasses logic, ethics, and political theory, significantly influencing later thinkers like Thomas Aquinas. He...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "lefevre-etaples",
+          "url": "https://plato.stanford.edu/entries/lefevre-etaples/",
+          "score": 0.0,
+          "snippet": "Jacques Lefèvre d'Étaples advocates for a concise and methodical approach to studying Aristotle, utilizing analogies and exercises to efficiently master the disciplines. He emphasizes that...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "aristotle-ethics",
+          "url": "https://plato.stanford.edu/entries/aristotle-ethics/",
+          "score": 0.0,
+          "snippet": "Aristotle distinguishes between intellectual and ethical virtues, defining the latter as a golden mean determined by practical reason rather than rigid rules. He argues that while ethics lacks...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "aristotle-ethics",
+          "Nicomachean Ethics"
+        ],
+        "missing": [
+          "eudaimonia",
+          "ergon",
+          "ethics-virtue",
+          "Eudaimonia"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "ergon",
+          "function argument",
+          "eudaimonia",
+          "rational activity",
+          "phronesis",
+          "Nicomachean Ethics",
+          "Aristotle"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep",
+        "commonwealth-ai"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Aristotle's function (ergon) argument for eudaimonia and the role of practical wisdom appear in his **Nicomachean Ethics** [Source: Nicomachean Ethics].\n\n### The Function Argument\nIn determining what *eudaimonia* consists in, Aristotle makes a crucial appeal to the human function (*ergon*) within his overarching teleological framework [Source: aristotle]. He argues that just as an eye is only a \"good\" eye if it performs its characteristic function—sight—well, humans must also have a specific activity or function that defines their excellence [Source: Aristotle]. \n\nThe first premise of this version (found at 1097b–1098a) connects function and goodness: if the characteristic function of an entity of type X is to φ, then a good entity of type X is one that φs well [Source: human-nature]. For humans, this unique function is identified as an **activity of the soul (*psuchē*) in accordance with reason (*logos*)** [Source: Aristotle]. Therefore, *eudaimonia* is defined as excellent rational activity; it is not merely possessing virtue, but actively engaging in virtuous action guided by reason [Source: aristotle-ethics][Source: Web: aristotle].\n\n### The Role of Practical Wisdom (Phronesis)\nWhile theoretical wisdom involves contemplating unchanging truths like nature or mathematics, practical wisdom (*phronesis*) deals with contingent facts and real-life particulars necessary for living well [Source: Theory][Source: wisdom]. \n\nAristotle distinguishes between the two types of intellectual virtues. He notes that while some individuals may possess \"philosophic\" or theoretical wisdom—knowing remarkable and divine things—they lack *practical* wisdom if they are ignorant of what is to their own advantage because such knowledge does not seek human goods [Source: wisdom]. \n\nPractical wisdom requires experience; it cannot be learned by a talented child in the way abstract mathematical universals can, because expertise in practical matters depends on encountering real-life examples [Source: Nicomachean Ethics]. It looks toward the development of virtue and issues commands for the sake of living well, serving as the bridge between knowing what is good and actually doing it [Source: aristotle-ethics].\n\n### The Work\nThis argument is presented in Aristotle's best-known work on ethics, the **Nicomachean Ethics** (*thika Nikomacheia*), which consists of ten books (sections) and serves as an essential text for interpreting Aristotelian ethics [Source: Nicomachean Ethics][Source: Aristotle].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 77364,
+        "total_latency_ms": 63441,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "commonwealth-ai",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 36,
+        "chunks_fact_score": {
+          "matched": [
+            "ergon",
+            "function argument",
+            "eudaimonia",
+            "rational activity",
+            "phronesis",
+            "Nicomachean Ethics",
+            "Aristotle"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "ergon",
+            "function argument",
+            "eudaimonia",
+            "rational activity",
+            "phronesis",
+            "Nicomachean Ethics",
+            "Aristotle"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "ergon",
+            "present": true,
+            "evidence": "Aristotle's function (ergon) argument for eudaimonia and the role of practical wisdom appear in his Nicomachean Ethics"
+          },
+          {
+            "fact": "function argument",
+            "present": true,
+            "evidence": "The first premise of this version connects function and goodness: if the characteristic function of an entity..."
+          },
+          {
+            "fact": "eudaimonia",
+            "present": true,
+            "evidence": "\"Aristotle's function (ergon) argument for eudaimonia and the role of practical wisdom appear in his Nicomachean Ethics\""
+          },
+          {
+            "fact": "rational activity",
+            "present": true,
+            "evidence": "*eudaimonia* is defined as excellent rational activity; it is not merely possessing virtue, but actively engaging in virtuous action guided by reason"
+          },
+          {
+            "fact": "phronesis",
+            "present": true,
+            "evidence": "The Role of Practical Wisdom (Phronesis)\nWhile theoretical wisdom involves contemplating unchanging truths like nature or mathematics, practical wisdom (*phronesis*) deals with contingent facts and real-life particulars necessary for living well"
+          },
+          {
+            "fact": "Nicomachean Ethics",
+            "present": true,
+            "evidence": "Aristotle's function (ergon) argument for eudaimonia and the role of practical wisdom appear in his **Nicomachean Ethics**"
+          },
+          {
+            "fact": "Aristotle",
+            "present": true,
+            "evidence": "Aristotle's function (ergon) argument for eudaimonia and the role of practical wisdom appear in his **Nicomachean Ethics**"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "kant_hume_causality",
+      "category": "cross_corpus",
+      "question": "Reconstruct Kant's response to Hume's skepticism about causality, and give the\ndates and major works of each philosopher.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "David Hume",
+          "url": "https://en.wikipedia.org/wiki/David_Hume",
+          "score": 0.0,
+          "snippet": "David Hume was a Scottish philosopher, historian, economist, and essayist who was best known for his highly influential system of empiricism, philosophical skepticism and metaphysical naturalism...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "kant-hume-causality\n\nIt is only in the second edition of the Critique that Kant gives such a prominent place to Hume and his “objection” to causality, serving to introduce what Kant now calls..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant",
+          "score": 0.0,
+          "snippet": "Immanuel Kant\n\nKant drew a parallel to the Copernican Revolution in his proposal to think of the objects of experience as conforming to our spatial and temporal forms of intuition and the categories..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Publication_of_The_Critique_of_Pure_Reason",
+          "score": 0.0,
+          "snippet": "Immanuel Kant\n\nKant felt that reason could remove this skepticism, and he set himself to solving these problems. Although fond of company and conversation with others, Kant isolated himself, and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.0,
+          "snippet": "kant-hume-morality\n\nHume exerted a profound influence on Kant’s theoretical philosophy. (See, e.g., Guyer 2008, Kuehn 2017, Kuehn 1987b, and Kuehn 1983.) Kant reports that his “labor” in the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "David Hume",
+          "url": "https://en.wikipedia.org/wiki/David_Hume#1730s",
+          "score": 0.0,
+          "snippet": "David Hume\n\nHume worked for four years on his first major work, A Treatise of Human Nature, subtitled \"Being an Attempt to Introduce the Experimental Method of Reasoning into Moral Subjects\",..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arthur Schopenhauer",
+          "url": "https://en.wikipedia.org/wiki/Arthur_Schopenhauer#Theory_of_perception",
+          "score": 0.0,
+          "snippet": "Arthur Schopenhauer\n\nIn November 1813 Goethe invited Schopenhauer to help him on his Theory of Colours. Although Schopenhauer considered colour theory a minor matter, he accepted the invitation out..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-science",
+          "url": "https://plato.stanford.edu/entries/kant-science/",
+          "score": 0.0,
+          "snippet": "kant-science\n\nKant, Immanuel |  Kant, Immanuel: aesthetics and teleology |  Kant, Immanuel: philosophical development |  Kant, Immanuel: view of mind and consciousness of self |  laws of nature"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Inductivism",
+          "url": "https://en.wikipedia.org/wiki/Inductivism#Inductivist_endorsement",
+          "score": 0.0,
+          "snippet": "Inductivism\n\ntheory of universal gravitation—modeling motion as an effect of a force —resembled inductivism's paramount triumph.\n\nNear 1740, David Hume, in Scotland, identified multiple obstacles..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
+          "score": 0.0,
+          "snippet": "kant-transcendental\n\nKant, Immanuel |  Kant, Immanuel: account of reason |  Kant, Immanuel: aesthetics and teleology |  Kant, Immanuel: and Hume on causality |  Kant, Immanuel: and Hume on morality |..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Immanuel Kant",
+          "url": "https://en.wikipedia.org/wiki/Immanuel_Kant#Principles_of_pure_understanding",
+          "score": 0.0,
+          "snippet": "Immanuel Kant\n\nAgainst this, Kant reasserts his own insistence upon the necessity of a sensible component in all genuine knowledge."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-conceptualism",
+          "url": "https://plato.stanford.edu/entries/kant-conceptualism/",
+          "score": 0.0,
+          "snippet": "kant-conceptualism\n\nKant, Immanuel |  Kant, Immanuel: philosophy of mathematics |  Kant, Immanuel: transcendental idealism |  Kant, Immanuel: view of mind and consciousness of self |  Kant, Immanuel:..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-aesthetics",
+          "url": "https://plato.stanford.edu/entries/kant-aesthetics/",
+          "score": 0.0,
+          "snippet": "kant-aesthetics\n\naesthetics: aesthetic judgment |  Kant, Immanuel |  Kant, Immanuel: critique of metaphysics |  Kant, Immanuel: philosophical development |  Kant, Immanuel: philosophy of science | ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental-idealism",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental-idealism/",
+          "score": 0.0,
+          "snippet": "kant-transcendental-idealism\n\nKant, Immanuel |  Kant, Immanuel: view of mind and consciousness of self |  Kant, Immanuel: views on space and time"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "induction-problem",
+          "url": "https://plato.stanford.edu/entries/induction-problem/",
+          "score": 0.0,
+          "snippet": "induction-problem\n\nOne possible response to Hume’s problem is to deny  premise P3,  by allowing the possibility that a priori reasoning could give rise to synthetic propositions. Kant famously..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-mathematics",
+          "url": "https://plato.stanford.edu/entries/kant-mathematics/",
+          "score": 0.0,
+          "snippet": "kant-mathematics\n\nanalysis |  analytic/synthetic distinction |  a priori justification and knowledge |  Kant, Immanuel: critique of metaphysics |  Kant, Immanuel: philosophical development |  Kant,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hume-freewill",
+          "url": "https://plato.stanford.edu/entries/hume-freewill/",
+          "score": 0.0,
+          "snippet": "hume-freewill\n\nHume considers the following objection:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Anti-war movement",
+          "url": "https://en.wikipedia.org/wiki/Anti-war_movement",
+          "score": 0.0,
+          "snippet": "es to warn against or fight against wars.\n\nImmanuel Kant: In (1795) \"Perpetual Peace\" (\"Zum ewigen Frieden\"). Immanuel Kant booklet on \"Perpetual Peace\" in 1795. Politically, Kant was one of the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hume-moral",
+          "url": "https://plato.stanford.edu/entries/hume-moral/",
+          "score": 0.0,
+          "snippet": "hume-moral\n\nHume, David |  property and ownership"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hegel-dialectics",
+          "url": "https://plato.stanford.edu/entries/hegel-dialectics/",
+          "score": 0.0,
+          "snippet": "hegel-dialectics\n\nKant thought Hume’s argument led to an unacceptable, skeptical conclusion, and he rejected Hume’s own solution to the skepticism (see Kant’s Critique of Pure Reason, B5,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "kant-hume-causality\n\nKant famously attempted to “answer” what he took to be Hume’s skeptical view of causality, most explicitly in the Prolegomena to Any Future Metaphysics (1783); and, because..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "kant-hume-causality\n\nIn the Preface to the Prolegomena Kant considers the supposed science of metaphysics. He states that “no event has occurred that could have been more decisive for the fate of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "kant-hume-causality\n\nI freely admit that it was the remembrance of David Hume which, many years ago, first interrupted my dogmatic slumber and gave my investigations in the field of speculative..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
+          "score": 0.0,
+          "snippet": "kant-transcendental\n\nAmong Immanuel Kant’s (1724–1804) most influential contributions to philosophy is his development of the transcendental argument. In Kant’s conception, an argument of this..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
+          "score": 0.0,
+          "snippet": "kant-transcendental\n\nThe Transcendental Deduction (A84–130, B116–169) is Kant’s attempt to demonstrate against empiricist psychological theory that certain a priori concepts correctly apply to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-transcendental",
+          "url": "https://plato.stanford.edu/entries/kant-transcendental/",
+          "score": 0.0,
+          "snippet": "kant-transcendental\n\nDavid Hume in effect denies that a deduction can be provided for a number of metaphysical concepts – ideas, in his terminology – including the ideas of personal identity, of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.0,
+          "snippet": "kant-hume-morality\n\nThe relationship between Immanuel Kant (1724–1804) and David Hume (1711–1776) is a source of longstanding fascination. Kant credited Hume with waking him from his “dogmatic..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.0,
+          "snippet": "kant-hume-morality\n\nFor the sake of brevity, this article assumes familiarity with Hume’s and Kant’s main contributions to moral philosophy. The aim here is not to summarize their views or..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.0,
+          "snippet": "kant-hume-morality\n\nHume and Kant operate with two somewhat different conceptions of morality itself, which helps explain some of the differences between their respective approaches to moral..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-science",
+          "url": "https://plato.stanford.edu/entries/kant-science/",
+          "score": 0.0,
+          "snippet": "kant-science\n\nKant's philosophy of science has received attention from several different audiences and for a variety of reasons. It is of interest to contemporary philosophers of science primarily..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-science",
+          "url": "https://plato.stanford.edu/entries/kant-science/",
+          "score": 0.0,
+          "snippet": "kant-science\n\nKant's scientific writings are also of interest to historians of modern philosophy, historians of science, and historians of philosophy of science. Historians of modern philosophy are..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-science",
+          "url": "https://plato.stanford.edu/entries/kant-science/",
+          "score": 0.0,
+          "snippet": "kant-science\n\nBecause physics was Kant's primary (though not exclusive) focus over the course of his lengthy career, his views on physics during his pre-Critical (1746-1770), Critical (1781-1790),..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "Kant advances the claim that he has provided a complete solution to Hume's problem regarding causality by distinguishing between strict and comparative universality. He supports this assertion...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "Immanuel Kant argues that causality and other fundamental scientific principles are a priori categories of the understanding rather than empirical generalizations derived from Humean custom. By...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "David Hume's skepticism regarding causality disrupted Immanuel Kant’s dogmatic slumber, prompting him to develop a revolutionary theory of experience grounded in a priori concepts. Although Kant...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "Kant argues that while Hume correctly identifies the lack of empirical basis for causal necessity, he erroneously reduces it to subjective custom; Kant contends instead that causality and necessary...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "David Hume argues that causal knowledge is derived entirely from experience and custom rather than a priori reason, asserting that the connection between cause and effect cannot be logically deduced....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "Immanuel Kant developed his theory of synthetic a priori judgments to resolve the skepticism regarding causality and inductive reasoning raised by David Hume. While Hume viewed Newtonian laws as mere...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-causality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-causality/",
+          "score": 0.0,
+          "snippet": "Kant argues that the concept of causality involves a necessary connection and strict universality, which cannot be derived empirically from repeated observations or constant conjunctions as Hume...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "kant-hume-morality",
+          "url": "https://plato.stanford.edu/entries/kant-hume-morality/",
+          "score": 0.0,
+          "snippet": "Hume and Kant both argue that freedom is essential to morality but employ distinct frameworks to reconcile it with causal determinism. Hume defends compatibilism by analyzing the logical concepts of...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "kant-hume-causality",
+          "Immanuel Kant",
+          "David Hume"
+        ],
+        "missing": [
+          "kant",
+          "hume",
+          "Causality"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "category of causality",
+          "David Hume",
+          "Immanuel Kant",
+          "Critique of Pure Reason"
+        ],
+        "missing": [
+          "constant conjunction",
+          "synthetic a priori",
+          "wakened from dogmatic slumber"
+        ],
+        "total_expected": 7,
+        "ratio": 0.5714286
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "**Dates and Major Works:**\n*   **David Hume (1711–1776):** His first major work, *A Treatise of Human Nature*, was completed in 1738 at age 28 but published between 1739–40 [Source: David Hume]. This work introduced the experimental method to moral subjects and contained his skeptical arguments regarding causality. Kant later referred to this period as when he \"interrupted my dogmatic slumber\" with Hume's influence [Source: kant-hume-causality].\n*   **Immanuel Kant (1724–1804):** He responded to Hume primarily through two key texts: the *Critique of Pure Reason* (first edition A, 1781; second edition B) and the *Prolegomena to Any Future Metaphysics* (1783). In these works, Kant explicitly states that no event was more decisive for metaphysics than Hume's attack on it, specifically regarding the connection of cause and effect [Source: kant-hume-causality].\n\n**Reconstruction of Kant's Response:**\nKant accepted Hume's empirical observation that we never perceive \"necessary connection\" or causal power directly in sensory experience. However, he rejected Hume's conclusion that causality is merely a product of custom, habit, or imagination generated by repeated observations. Instead, Kant argued via his **transcendental argument** that while our *experience* of objects conforms to our mind (a Copernican Revolution), certain concepts—specifically the categories like causality—are necessary conditions for having any coherent experience at all [Source: induction-problem; Source: Immanuel Kant]. He posited that causality is not derived from outside but exists inherently in the human understanding as an *a priori* category required to synthesize sensations into unified events. Thus, science and knowledge must be grounded in reason's structural framework rather than solely in contingent sensory data [Source: hegel-dialectics; Source: kant-hume-causality].\n\nNotable thin spot: The passages do not detail the specific logical steps of the \"Transcendental Deduction\" (A84–B169) regarding how exactly categories apply to objects, only stating its aim to justify their use against empiricist psychological theory [Source: kant-transcendental].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 89920,
+        "total_latency_ms": 66809,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 40,
+        "chunks_fact_score": {
+          "matched": [
+            "constant conjunction",
+            "synthetic a priori",
+            "David Hume",
+            "Immanuel Kant",
+            "Critique of Pure Reason"
+          ],
+          "missing": [
+            "category of causality",
+            "wakened from dogmatic slumber"
+          ],
+          "total_expected": 7,
+          "ratio": 0.71428573
+        },
+        "judge_fact_score": {
+          "matched": [
+            "constant conjunction",
+            "synthetic a priori",
+            "category of causality",
+            "wakened from dogmatic slumber",
+            "David Hume",
+            "Immanuel Kant",
+            "Critique of Pure Reason"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "constant conjunction",
+            "present": true,
+            "evidence": "Kant accepted Hume's empirical observation that we never perceive 'necessary connection' or causal power directly in sensory experience. However, he rejected Hume's conclusion that causality is merely a product of custom, habit, or imagination generated by repeated observations."
+          },
+          {
+            "fact": "synthetic a priori",
+            "present": true,
+            "evidence": "certain concepts—specifically the categories like causality—are necessary conditions for having any coherent experience at all... He posited that causality is not derived from outside but exists inherently in the human understanding as an a priori category"
+          },
+          {
+            "fact": "category of causality",
+            "present": true,
+            "evidence": "certain concepts—specifically the categories like causality—are necessary conditions for having any coherent experience at all"
+          },
+          {
+            "fact": "wakened from dogmatic slumber",
+            "present": true,
+            "evidence": "\"interrupted my dogmatic slumber\" with Hume's influence"
+          },
+          {
+            "fact": "David Hume",
+            "present": true,
+            "evidence": "David Hume (1711–1776): His first major work, A Treatise of Human Nature..."
+          },
+          {
+            "fact": "Immanuel Kant",
+            "present": true,
+            "evidence": "Immanuel Kant (1724–1804): He responded to Hume primarily through two key texts: the Critique of Pure Reason..."
+          },
+          {
+            "fact": "Critique of Pure Reason",
+            "present": true,
+            "evidence": "*Immanuel Kant (1724–1804): He responded to Hume primarily through two key texts: the Critique of Pure Reason (first edition A, 1781; second edition B) and the Prolegomena to Any Future Metaphysics* (1783)."
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Kant",
+          "corpus_id": "sep-aesthetics-19th-romantic",
+          "articulation": "inventory",
+          "chunks_added": 0
+        },
+        {
+          "entity": "Hume",
+          "corpus_id": "sep-teleological-arguments",
+          "articulation": "inventory",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "godel_hilbert_program",
+      "category": "cross_corpus",
+      "question": "Explain how Gödel's incompleteness theorems bear on Hilbert's program, and\nstate when the theorems were proved and by whom.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hilbert's problems",
+          "url": "https://en.wikipedia.org/wiki/Hilbert%27s_problems#Knowability",
+          "score": 0.0,
+          "snippet": "Hilbert's problems\n\nFollowing Gottlob Frege and Bertrand Russell, Hilbert sought to define mathematics logically using the method of formal systems, i.e., finitistic proofs from an agreed-upon set of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "David Hilbert",
+          "url": "https://en.wikipedia.org/wiki/David_Hilbert#Gödel's_work",
+          "score": 0.0,
+          "snippet": "David Hilbert\n\nHilbert and the mathematicians who worked with him in his enterprise were committed to the project. His attempt to support axiomatized mathematics with definitive principles, which..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Generalization_and_acceptance",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nGödel's theorem had already shown) it cannot be formalized within the system of arithmetic that is being proved consistent.\n\nThe impact of the incompleteness..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kurt Gödel",
+          "url": "https://en.wikipedia.org/wiki/Kurt_G%C3%B6del#Abstract",
+          "score": 0.0,
+          "snippet": "Kurt Gödel\n\nThe second incompleteness theorem, which follows from the first, states that the system cannot prove its own consistency.\n\nGödel also showed that neither the axiom of choice nor the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Extensions_of_Gödel's_original_result",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nCompared to the theorems stated in Gödel's 1931 paper, many contemporary statements of the incompleteness theorems are more general in two ways. These generalized..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical logic",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_logic#Symbolic_logic",
+          "score": 0.0,
+          "snippet": "Mathematical logic\n\nfirst-order logical consequence. These results helped establish first-order logic as the dominant logic used by mathematicians.\n\nIn 1931, Gödel published On Formally Undecidable..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.0,
+          "snippet": "hilbert-program\n\nGödel’s incompleteness theorems showed that Hilbert’s optimism was undue. In September 1930, Kurt Gödel announced his first incompleteness theorem at a conference in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "goedel-incompleteness\n\nBe that as it may, it seems that Gödel actually arrived at the first exact observations about incompleteness via a different route, during his attempts to contribute to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "John von Neumann",
+          "url": "https://en.wikipedia.org/wiki/John_von_Neumann#Proof_theory",
+          "score": 0.0,
+          "snippet": "John von Neumann\n\nHe continued looking for a more general proof of the consistency of classical mathematics using methods from proof theory.\n\nA strongly negative answer to whether it was definitive..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Logic",
+          "url": "https://en.wikipedia.org/wiki/Logic#Mathematical_logic",
+          "score": 0.0,
+          "snippet": "Logic\n\nMany attempts to realize this program failed, from the crippling of Frege's project in his Grundgesetze by Russell's paradox, to the defeat of Hilbert's program by Gödel's incompleteness..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Examples_of_undecidable_statements",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nshowed that the Whitehead problem in group theory is undecidable, in the first sense of the term, in standard set theory.\n\nGregory Chaitin produced undecidable..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philosophy-mathematics",
+          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "score": 0.0,
+          "snippet": "philosophy-mathematics\n\nThen Kurt Gödel proved that there exist arithmetical statements that are undecidable in Peano Arithmetic (Gödel 1931). This has become known as his Gödel’s first..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Generalization_and_acceptance",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nGödel gave a series of lectures on his theorems at Princeton in 1933–1934 to an audience that included Church, Kleene, and Rosser. By this time, Gödel had..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "David Hilbert",
+          "url": "https://en.wikipedia.org/wiki/David_Hilbert#Functional_analysis",
+          "score": 0.0,
+          "snippet": "David Hilbert\n\nAround 1909, Hilbert dedicated himself to the study of differential and integral equations; his work had direct consequences for important parts of modern functional analysis. In order..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "goedel\n\nThe First Incompleteness Theorem provides a counterexample to completeness by exhibiting an arithmetic statement which is neither provable nor refutable in Peano arithmetic, though true in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "intuitionistic-logic-development",
+          "url": "https://plato.stanford.edu/entries/intuitionistic-logic-development/",
+          "score": 0.0,
+          "snippet": "intuitionistic-logic-development\n\nGödel’s incompleteness theorems showed that Hilbert’s Program, in its most ambitious form, cannot succeed. Brouwer’s assistant Hurewicz discussed the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Truth_of_the_Gödel_sentence",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nwhere Con (F) is a canonical sentence asserting the consistency of F (Smoryński 1977, p. 840, Kikuchi & Tanaka 1994, p. 403)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems are two theorems of mathematical logic that are concerned with the limits of provability in formal axiomatic theories. These results, published by Kurt Gödel in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computability",
+          "url": "https://plato.stanford.edu/entries/computability/",
+          "score": 0.0,
+          "snippet": "computability\n\nIn his 1930 Ph.D. thesis, Gödel presented a complete axiomatization of first-order logic, based on the Principia Mathematica by Whitehead and Russell (Gödel 1930). Gödel proved his..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Undecidable_statements_provable_in_larger_systems",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nsequences of natural numbers somewhat simpler than the Paris – Harrington principle, is also undecidable in Peano arithmetic.\n\nKruskal's tree theorem, which has..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.0,
+          "snippet": "hilbert-program\n\nIn the early 1920s, the German mathematician David Hilbert (1862–1943) put forward a new proposal for the foundation of classical mathematics which has come to be known as..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.0,
+          "snippet": "hilbert-program\n\nHilbert’s work on the foundations of mathematics has its roots in his work on geometry of the 1890s, culminating in his influential textbook Foundations of Geometry  (1899)  (see ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.0,
+          "snippet": "hilbert-program\n\nHilbert thus realized that a direct consistency proof of analysis, i.e., one not based on reduction to another theory, was needed. He proposed the problem of finding such a proof as..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philosophy-mathematics",
+          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "score": 0.0,
+          "snippet": "philosophy-mathematics\n\nIf mathematics is regarded as a science, then the philosophy of mathematics can be regarded as a branch of the philosophy of science, next to disciplines such as the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philosophy-mathematics",
+          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "score": 0.0,
+          "snippet": "philosophy-mathematics\n\nOn the one hand, philosophy of mathematics is concerned with problems that are closely related to central problems of metaphysics and epistemology. At first blush, mathematics..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philosophy-mathematics",
+          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "score": 0.0,
+          "snippet": "philosophy-mathematics\n\nOn the other hand, it has turned out that to some extent it is possible to bring mathematical methods to bear on philosophical questions concerning mathematics. The setting in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "goedel\n\nKurt Friedrich Gödel (b. 1906, d. 1978) was one of the principal founders of the modern, metamathematical era in mathematical logic. He is widely known for his Incompleteness Theorems, which..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "goedel\n\nKurt Gödel was born on April 28, 1906 in what was then the Austro-Hungarian city of Brünn, and what is now Brno in the Czech Republic."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "goedel\n\nGödel’s father Rudolf August was a businessman, and his mother Marianne was a well-educated and cultured woman to whom Gödel remained close throughout his life, as witnessed by the long..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems establish fundamental limits on provability in formal axiomatic systems, demonstrating that sufficiently complex theories cannot be both complete and consistent. This...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "hilbert-program",
+          "url": "https://plato.stanford.edu/entries/hilbert-program/",
+          "score": 0.0,
+          "snippet": "Hilbert's Program sought to secure mathematics by providing finitary consistency proofs for formal systems, but Gödel’s incompleteness theorems demonstrated that such a proof is impossible within...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel",
+          "url": "https://plato.stanford.edu/entries/goedel/",
+          "score": 0.0,
+          "snippet": "Kurt Gödel established the Completeness Theorem for first-order logic, demonstrating that valid formulas are provable, while his Incompleteness Theorems revealed inherent limitations in formal...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems demonstrate that sufficiently strong formal systems, such as those containing Robinson arithmetic or Peano Arithmetic, contain sentences that are undecidable within...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems demonstrate that any sufficiently strong, consistent axiomatic system like P contains undecidable sentences constructed via arithmetization of syntax and the Diagonal...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems, which demonstrate that truth is undefinable within formal systems and challenge Hilbert’s program, were met with mixed reception ranging from quick assimilation to...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems demonstrate fundamental limits on provability within formal axiomatic theories, significantly impacting modern logic and the philosophy of mathematics. These results...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "goedel-incompleteness",
+          "url": "https://plato.stanford.edu/entries/goedel-incompleteness/",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems demonstrate that any consistent formal system capable of expressing elementary arithmetic is inherently incomplete, meaning it cannot prove all true statements within...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "goedel-incompleteness",
+          "hilbert-program",
+          "Gödel's incompleteness theorems"
+        ],
+        "missing": [
+          "logicism",
+          "Hilbert's program"
+        ],
+        "total_expected": 5,
+        "ratio": 0.6
+      },
+      "fact_score": {
+        "matched": [
+          "incompleteness",
+          "consistency",
+          "second theorem",
+          "Hilbert's program",
+          "formal system",
+          "Kurt Gödel",
+          "1931"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "**Who proved the theorems and when?**\nKurt Gödel proved his incompleteness theorems, publishing them in 1931 [Source: David Hilbert]. He first announced his first incompleteness theorem at a conference in Königsberg in September 1930 [Source: hilbert-program], where John von Neumann immediately recognized its significance for Hilbert's program [Source: hilbert-program; Source: John von Neumann].\n\n**How they bear on Hilbert’s Program:**\nHilbert’s program sought to formalize all of mathematics using axiomatic systems and provide finitistic proofs that these systems were both complete (able to prove every true statement) and consistent (free from contradictions), with consistency being the focus of his second problem [Source: Hilbert's problems; Source: hilbert-program]. \n\nGödel's first incompleteness theorem demonstrated that any sufficiently strong, effective system capable of expressing arithmetic is incomplete—meaning there are true statements within the language of the system that cannot be proven by its own axioms [Source: Mathematical logic; Source: goedel]. This directly contradicted the goal of finding a single set of axioms for all mathematics.\n\nMore devastatingly, Gödel’s second incompleteness theorem showed that such a system cannot demonstrate its own consistency using only finitistic methods internal to the system itself [Source: David Hilbert; Source: hilbert-program]. Because Hilbert required a finitistic proof of consistency to justify classical mathematics, this result proved his \"grand plan was impossible as stated\" and struck a \"strong blow\" to the program's feasibility [Source: David Hilbert; Source: Mathematical logic]. While some mathematicians like Bernays continued exploring related areas (such as Gentzen's later consistency proofs), the core optimism of Hilbert's original proposal was shown to be undue by Gödel’s findings [Source: hilbert-program].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 78890,
+        "total_latency_ms": 59346,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 37,
+        "chunks_fact_score": {
+          "matched": [
+            "incompleteness",
+            "consistency",
+            "second theorem",
+            "Hilbert's program",
+            "formal system",
+            "Kurt Gödel",
+            "1931"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "incompleteness",
+            "consistency",
+            "second theorem",
+            "Hilbert's program",
+            "formal system",
+            "Kurt Gödel",
+            "1931"
+          ],
+          "missing": [],
+          "total_expected": 7,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "incompleteness",
+            "present": true,
+            "evidence": "Gödel's first incompleteness theorem demonstrated that any sufficiently strong, effective system capable of expressing arithmetic is incomplete"
+          },
+          {
+            "fact": "consistency",
+            "present": true,
+            "evidence": "Hilbert's program sought to formalize all of mathematics using axiomatic systems and provide finitistic proofs that these systems were both complete ... and consistent (free from contradictions), with consistency being the focus of his second problem"
+          },
+          {
+            "fact": "second theorem",
+            "present": true,
+            "evidence": "Gödel's second incompleteness theorem showed that such a system cannot demonstrate its own consistency using only finitistic methods internal to the system itself"
+          },
+          {
+            "fact": "Hilbert's program",
+            "present": true,
+            "evidence": "\"Hilbert's program sought to formalize all of mathematics using axiomatic systems and provide finitistic proofs that these systems were both complete...\""
+          },
+          {
+            "fact": "formal system",
+            "present": true,
+            "evidence": "Hilbert's program sought to formalize all of mathematics using axiomatic systems... Gödel's first incompleteness theorem demonstrated that any sufficiently strong, effective system capable of expressing arithmetic is incomplete..."
+          },
+          {
+            "fact": "Kurt Gödel",
+            "present": true,
+            "evidence": "\"Kurt Gödel proved his incompleteness theorems, publishing them in 1931\""
+          },
+          {
+            "fact": "1931",
+            "present": true,
+            "evidence": "Kurt Gödel proved his incompleteness theorems, publishing them in 1931"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "rawls_original_position_nozick",
+      "category": "cross_corpus",
+      "question": "Reconstruct Rawls's original-position argument for the difference principle\nand Nozick's entitlement-theory objection, citing the major works.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Robert Nozick",
+          "url": "https://en.wikipedia.org/wiki/Robert_Nozick#Philosophical_method",
+          "score": 0.0,
+          "snippet": "Robert Nozick\n\ninto a discursive footnote...Yet it is worth the effort – certainly for regular readers of philosophy, and often for others.\"\n\nJason Brennan has related this point to Nozick's..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Robert Nozick",
+          "url": "https://en.wikipedia.org/wiki/Robert_Nozick#Personal_life",
+          "score": 0.0,
+          "snippet": "Robert Nozick\n\nNozick was born in Brooklyn to a family of Jewish descent. His mother was born Sophie Cohen, and his father was a Jew from a Russian shtetl who had been born with the name Cohen and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rawls",
+          "url": "https://plato.stanford.edu/entries/rawls/",
+          "score": 0.0,
+          "snippet": "rawls\n\nRawls describes the fundamental interests of a people as follows:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "original-position\n\nRawls makes four arguments in Theory, Part I for the principles of justice. The main argument for the difference principle is made later in section 49, and is substantially amended..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "nozick-political\n\nThis account of the political philosophy of Robert Nozick is fundamentally an account of the rights-oriented libertarian doctrine that Nozick presents in Anarchy, State, and Utopia...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "nozick-political\n\nStill, by far the most philosophically important chapter of Part II is chapter 7, “Distributive Justice” in which Nozick seeks to counter the view that a more extensive state is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Political philosophy",
+          "url": "https://en.wikipedia.org/wiki/Political_philosophy#Contemporary",
+          "score": 0.0,
+          "snippet": "Political philosophy\n\nand Carole Pateman in her book The Sexual Contract that the social contract excluded persons of colour and women respectively.\n\nIn Anglo-American academic political philosophy,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "egalitarianism",
+          "url": "https://plato.stanford.edu/entries/egalitarianism/",
+          "score": 0.0,
+          "snippet": "egalitarianism\n\nCohen then holds that Rawls, and we, should believe that justice requires equality, even if pragmatic nonjustice grounds favor the difference principle, which does not incorporate the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-distributive",
+          "url": "https://plato.stanford.edu/entries/justice-distributive/",
+          "score": 0.0,
+          "snippet": "justice-distributive\n\nIn 1988, Brian Barry gave an interesting reconstruction of the reasoning which led John Rawls to his Equal Opportunity and Difference Principles. Barry’s reconstruction and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rights-human",
+          "url": "https://plato.stanford.edu/entries/rights-human/",
+          "score": 0.0,
+          "snippet": "rights-human\n\nJohn Rawls introduced the idea of a political conception of human rights in his book,  The Law of Peoples (Rawls 1999). The basic idea is that we can understand what human rights are..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "John Rawls",
+          "url": "https://en.wikipedia.org/wiki/John_Rawls#Abstract",
+          "score": 0.0,
+          "snippet": "John Rawls\n\nmodern liberal tradition. Rawls has been described as one of the most influential political philosophers of the 20th century.\n\nIn 1990, Will Kymlicka wrote in his introduction to the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "liberalism",
+          "url": "https://plato.stanford.edu/entries/liberalism/",
+          "score": 0.0,
+          "snippet": "liberalism\n\nThus, Robert Nozick (1974: 160ff) famously classifies Rawls’s difference principle as patterned but not historical: prescribing a distribution while putting no moral weight on who..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "John Rawls",
+          "url": "https://en.wikipedia.org/wiki/John_Rawls#Principles_of_justice",
+          "score": 0.0,
+          "snippet": "John Rawls\n\nRawls derives two principles of justice from the original position. The first of these is the Liberty Principle, which establishes equal basic liberties for all citizens. 'Basic' liberty..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "reflective-equilibrium",
+          "url": "https://plato.stanford.edu/entries/reflective-equilibrium/",
+          "score": 0.0,
+          "snippet": "reflective-equilibrium\n\nRawls insists that the principles that emerge from the Original Position must fit with our considered judgments about justice in wide reflective equilibrium. This constraint..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "international-justice",
+          "url": "https://plato.stanford.edu/entries/international-justice/",
+          "score": 0.0,
+          "snippet": "international-justice\n\nThe debate between libertarian and liberal theories of distributive justice is a long-standing one within analytic political philosophy; Robert Nozick’s Anarchy, State, and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-distributive",
+          "url": "https://plato.stanford.edu/entries/justice-distributive/",
+          "score": 0.0,
+          "snippet": "justice-distributive\n\nThe most widely discussed theory of distributive justice in the past four decades has been that proposed by John Rawls in A Theory of Justice, (Rawls 1971), and Political..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Robert Nozick",
+          "url": "https://en.wikipedia.org/wiki/Robert_Nozick#Political_philosophy",
+          "score": 0.0,
+          "snippet": "Robert Nozick\n\nplay), the resulting distributions are just so long as all consenting parties have freely consented to such exchanges.\n\nAnarchy, State, and Utopia is often contrasted to John Rawls 's..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "libertarianism",
+          "url": "https://plato.stanford.edu/entries/libertarianism/",
+          "score": 0.0,
+          "snippet": "libertarianism\n\nNozick also invoked ideas that contradict reading him as a proponent of full self-ownership as a foundational principle. He argued that self-ownership is an expression of the Kantian..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Civil and political rights",
+          "url": "https://en.wikipedia.org/wiki/Civil_and_political_rights",
+          "score": 0.0,
+          "snippet": "hieve their objectives.\n\nQuestions about civil and political rights have frequently emerged. For example, to what extent should the government intervene to protect individuals from infringement on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Relativism",
+          "url": "https://en.wikipedia.org/wiki/Relativism#Robert_Nozick",
+          "score": 0.0,
+          "snippet": "Relativism\n\nIn his book Invariances, Robert Nozick expresses a complex set of theories about the absolute and the relative. He thinks the absolute/relative distinction should be recast in terms of an..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "original-position\n\nThe original position is a central feature of John Rawls’s social contract account of justice, “justice as fairness,” set forth in A Theory of Justice (TJ). The original..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "original-position\n\nThe idea of the moral point of view can be traced back to David Hume’s account of the “judicious spectator.” Hume sought to explain how moral judgments of approval and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "original-position\n\nSubsequently, philosophers posited similar perspectives for moral reasoning designed to yield impartial judgments once individuals abstract from their particular aims and interests..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "nozick-political\n\nRobert Nozick (1938–2002) was a renowned American philosopher who first came to be widely known through his 1974 book, Anarchy, State, and Utopia  (1974),[1]  which won the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "nozick-political\n\nRobert Nozick was born in Brooklyn in 1938 to a Russian Jewish immigrant family. He earned an undergraduate Philosophy degree from Columbia University in 1959 and a Ph.D. in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Civil and political rights",
+          "url": "https://en.wikipedia.org/wiki/Civil_and_political_rights",
+          "score": 0.0,
+          "snippet": "Civil and political rights are a class of rights that protect individuals' freedom from infringement by governments, social organizations, and private individuals. They ensure one's entitlement to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Civil and political rights",
+          "url": "https://en.wikipedia.org/wiki/Civil_and_political_rights",
+          "score": 0.0,
+          "snippet": "Civil and political rights\n\nThey comprise the first portion of the 1948 Universal Declaration of Human Rights. The theory of three generations of human rights considers this group of rights to be..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Civil and political rights",
+          "url": "https://en.wikipedia.org/wiki/Civil_and_political_rights#Abstract",
+          "score": 0.0,
+          "snippet": "Civil and political rights are a class of rights that protect individuals ' freedom from infringement by governments, social organizations, and private individuals. They ensure one's entitlement to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rawls",
+          "url": "https://plato.stanford.edu/entries/rawls/",
+          "score": 0.0,
+          "snippet": "rawls\n\nJohn Rawls (b. 1921, d. 2002) was an American political philosopher in the liberal tradition. His theory of justice as fairness describes a society of free citizens holding equal basic rights..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rawls",
+          "url": "https://plato.stanford.edu/entries/rawls/",
+          "score": 0.0,
+          "snippet": "rawls\n\nRawls was born and raised in Baltimore, Maryland. His father was a prominent lawyer, his mother was a chapter president of the League of Women Voters. Rawls studied at Princeton and Cornell,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rawls",
+          "url": "https://plato.stanford.edu/entries/rawls/",
+          "score": 0.0,
+          "snippet": "rawls\n\nRawls’s adult life was a scholarly one: its major events occurred within his writings. The exceptions were two wars. As a college student, Rawls wrote an intensely religious senior thesis..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "Rawls argues that parties in the original position should rationally adopt the maximin decision rule to select principles of justice, as this strategy secures their primary goods under conditions of...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-distributive",
+          "url": "https://plato.stanford.edu/entries/justice-distributive/",
+          "score": 0.0,
+          "snippet": "The passages contrast John Rawls's widely discussed theory of distributive justice with Robert Nozick’s Entitlement Theory, which asserts that a distribution is just if individuals are entitled to...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "John Rawls develops the original position as a hypothetical device to establish impartial principles of justice, grounding his theory in Kantian constructivism where objectivity arises from a...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "Robert Nozick advances a rights-oriented libertarian doctrine in Anarchy, State, and Utopia by asserting that individuals possess inviolable moral rights that prohibit their use as means for the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "nozick-political",
+          "url": "https://plato.stanford.edu/entries/nozick-political/",
+          "score": 0.0,
+          "snippet": "Nozick argues that historical entitlement principles, grounded in property rights and self-ownership, are superior to end-state or patterned theories of distributive justice. He contends that...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rawls",
+          "url": "https://plato.stanford.edu/entries/rawls/",
+          "score": 0.0,
+          "snippet": "John Rawls developed a comprehensive political philosophy centered on justice as fairness, which he initially articulated in A Theory of Justice and later expanded to include political liberalism and...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "authority",
+          "url": "https://plato.stanford.edu/entries/authority/",
+          "score": 0.0,
+          "snippet": "The text critiques John Rawls's legitimacy theory, arguing that his reliance on an overlapping consensus is insufficient to protect individuals with idiosyncratic views and fails to achieve the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "original-position",
+          "url": "https://plato.stanford.edu/entries/original-position/",
+          "score": 0.0,
+          "snippet": "John Rawls posits that rational agents in the original position prioritize right over good and employ the maximin rule to secure primary goods, thereby establishing principles like the difference...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "original-position",
+          "justice-distributive",
+          "nozick-political",
+          "John Rawls"
+        ],
+        "missing": [
+          "Original position",
+          "A Theory of Justice"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "original position",
+          "veil of ignorance",
+          "difference principle",
+          "entitlement theory",
+          "John Rawls",
+          "A Theory of Justice",
+          "Anarchy, State, and Utopia"
+        ],
+        "missing": [
+          "Wilt Chamberlain"
+        ],
+        "total_expected": 8,
+        "ratio": 0.875
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Thorough overview from available sources, not exhaustive\n\n### Rawls’s Original-Position Argument for the Difference Principle\n\nJohn Rawls developed his theory of \"justice as fairness\" in *A Theory of Justice* (1971), a work that marked a milestone in Anglo-American political philosophy [Source: Political philosophy]. The central device of this theory is the **original position**, described as a fair and impartial point of view where free and equal persons jointly agree upon principles of justice [Source: original-position]. This setup requires parties to reason behind a **\"veil of ignorance,\"** which abstracts them from their particular interests, social status, and natural endowments [Source: original-position; Source: liberalism].\n\nRawls argues that rational parties in this position would choose two primary principles. First, they would secure equal basic liberties for all citizens (the Liberty Principle) [Source: John Rawls]. Second, regarding social and economic inequalities, they would adopt what is known as the **difference principle**. This principle dictates that [unverified excerpt: social and economic inequalities are to be arranged so that they are to be of greatest benefit to the least-advantaged members of society] [Source: Robert Nozick]. \n\nThe argument for the difference principle relies on the idea that it is more rational for these impartial parties to prioritize the worst-off scenario than to gamble on utilitarian or perfectionist outcomes [Source: original-position]. While *A Theory of Justice* presents this in Part I, the main argument was substantially amended and clarified later in Rawls's work *Justice as Fairness: A Restatement* (1988) [Source: original-position; Source: justice-distributive].\n\n### Nozick’s Entitlement-Theory Objection\n\nRobert Nozick challenged Rawlsian distributive justice in his 1974 book *Anarchy, State, and Utopia*, which won the National Book Award for Philosophy and Religion [Source: nozick-political]. In this text, Nozick presented a rights-oriented libertarian doctrine arguing that respect for individual property rights makes it impossible—and potentially totalitarian—for a state to pursue \"patterned\" principles of distribution like Rawls's difference principle [Source: international-justice].\n\nNozick’s objection centers on his **\"historical entitlement\"** conception of justice. He argues that justice depends not on how resources are distributed at any given moment (the pattern), but on whether they were acquired and transferred justly through history—specifically via original acquisition and voluntary exchange [Source: nozick-political; Source: Robert Nozick]. \n\nA key distinction in this debate is the classification of principles as **historical** versus **non-historical**. Nozick famously classified Rawls’s difference principle as a \"patterned\" but non-historical theory because it prescribes a specific distribution outcome without regard to who produced the goods or how they came by them [Source: liberalism]. In contrast, Nozick argued that justice requires respecting individual rights and self-ownership (derived from Kantian requirements to treat people as ends) rather than enforcing an egalitarian pattern [Source: libertarianism]. Consequently, he concluded that only a minimal state—restricted to protecting life, liberty, property, and contract—is legitimate [Source: nozick-political].\n\n### Summary of the Conflict\nThe debate represents a fundamental clash between liberal theories focused on distributive outcomes (Rawls) and libertarian theories focused on procedural history and rights (Nozick). While Rawls seeks to ensure inequalities benefit the least advantaged through institutional design, Nozick argues that such interference violates the entitlements individuals hold over their justly acquired holdings.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 93313,
+        "total_latency_ms": 76017,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 39,
+        "chunks_fact_score": {
+          "matched": [
+            "original position",
+            "difference principle",
+            "entitlement theory",
+            "John Rawls",
+            "A Theory of Justice",
+            "Anarchy, State, and Utopia"
+          ],
+          "missing": [
+            "veil of ignorance",
+            "Wilt Chamberlain"
+          ],
+          "total_expected": 8,
+          "ratio": 0.75
+        },
+        "judge_fact_score": {
+          "matched": [
+            "original position",
+            "veil of ignorance",
+            "difference principle",
+            "entitlement theory",
+            "John Rawls",
+            "A Theory of Justice",
+            "Anarchy, State, and Utopia"
+          ],
+          "missing": [
+            "Wilt Chamberlain"
+          ],
+          "total_expected": 8,
+          "ratio": 0.875
+        },
+        "judge_evidence": [
+          {
+            "fact": "original position",
+            "present": true,
+            "evidence": "The central device of this theory is the **original position**, described as a fair and impartial point of view where free and equal persons jointly agree upon principles of justice"
+          },
+          {
+            "fact": "veil of ignorance",
+            "present": true,
+            "evidence": "\"This setup requires parties to reason behind a 'veil of ignorance,' which abstracts them from their particular interests, social status, and natural endowments\""
+          },
+          {
+            "fact": "difference principle",
+            "present": true,
+            "evidence": "Second, regarding social and economic inequalities, they would adopt what is known as the difference principle. This principle dictates that [unverified excerpt: social and economic inequalities are to be arranged so that they are to be of greatest benefit to the least-advantaged members of society]"
+          },
+          {
+            "fact": "entitlement theory",
+            "present": true,
+            "evidence": "\"Nozick's objection centers on his 'historical entitlement' conception of justice.\""
+          },
+          {
+            "fact": "Wilt Chamberlain",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "John Rawls",
+            "present": true,
+            "evidence": "John Rawls developed his theory of 'justice as fairness' in A Theory of Justice (1971)"
+          },
+          {
+            "fact": "A Theory of Justice",
+            "present": true,
+            "evidence": "\"John Rawls developed his theory of 'justice as fairness' in A Theory of Justice (1971), a work that marked a milestone in Anglo-American political philosophy\""
+          },
+          {
+            "fact": "Anarchy, State, and Utopia",
+            "present": true,
+            "evidence": "\"Robert Nozick challenged Rawlsian distributive justice in his 1974 book Anarchy, State, and Utopia\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "consequentialism_vs_deontology",
+      "category": "cross_corpus",
+      "question": "Contrast consequentialist and deontological ethics on what makes an act right,\nand give the encyclopedic definitions and a key proponent of each.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consequentialism",
+          "url": "https://en.wikipedia.org/wiki/Consequentialism#Abstract",
+          "score": 0.0,
+          "snippet": "Consequentialism is usually contrasted with deontological ethics (or deontology): deontology, in which rules and moral duty are central, derives the rightness or wrongness of one's conduct from the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consequentialism",
+          "url": "https://en.wikipedia.org/wiki/Consequentialism",
+          "score": 0.0,
+          "snippet": "Consequentialism is usually contrasted with deontological ethics: deontology, in which rules and moral duty are central, derives the rightness or wrongness of one's conduct from the character of the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "morality-definition",
+          "url": "https://plato.stanford.edu/entries/morality-definition/",
+          "score": 0.0,
+          "snippet": "morality-definition\n\nconsequentialism |  ethics: natural law tradition |  Hobbes, Thomas: moral and political philosophy |  Kant, Immanuel |  Mill, John Stuart |  moral realism |  moral relativism | ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consequentialism",
+          "url": "https://en.wikipedia.org/wiki/Consequentialism#Abstract",
+          "score": 0.0,
+          "snippet": "Consequentialism\n\nadvancing collectively as a society over the course of many lifetimes, such that any moral criterion is subject to revision.\n\nSome argue that consequentialist theories (such as..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-theory",
+          "url": "https://plato.stanford.edu/entries/moral-theory/",
+          "score": 0.0,
+          "snippet": "moral-theory\n\nconsequentialism |  ethics: deontological |  ethics: virtue |  morality, definition of |  value theory"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Environmental ethics",
+          "url": "https://en.wikipedia.org/wiki/Environmental_ethics#Consequentialism",
+          "score": 0.0,
+          "snippet": "Environmental ethics\n\nConsequentialist theories focus on the consequences of actions, this emphasizes not what is 'right', but rather what is of 'value' and 'good'. Act Utilitarianism, for example,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-phenomenology",
+          "url": "https://plato.stanford.edu/entries/moral-phenomenology/",
+          "score": 0.0,
+          "snippet": "moral-phenomenology\n\nEach of these basic notions corresponds to a branch of any complete ethical theory: theory of right conduct (or obligation), theory of value, and theory of moral worth (or..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-deontological",
+          "url": "https://plato.stanford.edu/entries/ethics-deontological/",
+          "score": 0.0,
+          "snippet": "ethics-deontological\n\nHaving now briefly taken a look at deontologists’ foil, consequentialist theories of right action, we turn now to examine deontological theories. In contrast to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "money-finance",
+          "url": "https://plato.stanford.edu/entries/money-finance/",
+          "score": 0.0,
+          "snippet": "money-finance\n\nbelief, ethics of |  consequentialism |  consequentialism: rule |  decision theory |  economics: philosophy of |  ethics: virtue |  justice: global |  Kant, Immanuel: moral philosophy..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Virtue ethics",
+          "url": "https://en.wikipedia.org/wiki/Virtue_ethics#Virtue_ethics_as_a_category",
+          "score": 0.0,
+          "snippet": "Virtue ethics\n\nVirtue contrasts with deontological and consequentialist ethics (the three being together the most predominant contemporary normative ethical theories).\n\nDeontological ethics,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "integrity",
+          "url": "https://plato.stanford.edu/entries/integrity/",
+          "score": 0.0,
+          "snippet": "integrity\n\nconsequentialism |  ethics: virtue |  impartiality |  moral psychology: empirical approaches"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Normative ethics",
+          "url": "https://en.wikipedia.org/wiki/Normative_ethics",
+          "score": 0.0,
+          "snippet": "Normative ethics\n\nMost traditional moral theories rest on principles that determine whether an action is right or wrong. Classical theories in this vein include utilitarianism, Kantianism, and some..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "consequentialism\n\nClassic utilitarianism is consequentialist as opposed to deontological because of what it denies. It denies that moral rightness depends directly on anything other than..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principle-beneficence",
+          "url": "https://plato.stanford.edu/entries/principle-beneficence/",
+          "score": 0.0,
+          "snippet": "principle-beneficence\n\ncapability approach |  consequentialism |  cosmopolitanism |  ethics, biomedical: justice and access to health care |  ethics, biomedical: theory |  ethics: business |  Hume,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kantian ethics",
+          "url": "https://en.wikipedia.org/wiki/Kantian_ethics#Virtue_ethics",
+          "score": 0.0,
+          "snippet": "Kantian ethics\n\nVirtue ethics is a form of ethical theory which emphasizes the character of an agent, rather than specific acts; many of its proponents have criticised Kant's deontological approach..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Consequentialism",
+          "url": "https://en.wikipedia.org/wiki/Consequentialism#Criticisms",
+          "score": 0.0,
+          "snippet": "Consequentialism\n\nabsolve the consequentalist of moral responsibility when the consequentalist fails to foresee the true consequences of an act.\n\nThe future amplification of the effects of small..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "altruism-empirical",
+          "url": "https://plato.stanford.edu/entries/altruism-empirical/",
+          "score": 0.0,
+          "snippet": "altruism-empirical\n\n[O]ne central assumption motivating ethical theory in the Analytic tradition is that the function of ethics is to combat the inherent egoism or selfishness of individuals. Indeed,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Normative ethics",
+          "url": "https://en.wikipedia.org/wiki/Normative_ethics#Normative_ethical_theories",
+          "score": 0.0,
+          "snippet": "Normative ethics\n\nThere are disagreements about what precisely gives an action, rule, or disposition its ethical force. There are three competing views on how moral questions should be answered,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Deontology",
+          "url": "https://en.wikipedia.org/wiki/Deontology#Divine_command_theory",
+          "score": 0.0,
+          "snippet": "Deontology\n\nholds that it would be immoral to do so, even if coveting provides the beneficial outcome of a drive to succeed or do well.\n\nOne thing that clearly distinguishes Kantian deontologism from..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-virtue",
+          "url": "https://plato.stanford.edu/entries/ethics-virtue/",
+          "score": 0.0,
+          "snippet": "ethics-virtue\n\nAristotle |  character, moral |  character, moral: empirical approaches |  consequentialism |  ethics: deontological |  moral dilemmas"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-deontological",
+          "url": "https://plato.stanford.edu/entries/ethics-deontological/",
+          "score": 0.0,
+          "snippet": "ethics-deontological\n\nThe word deontology derives from the Greek words for duty (deon) and science (or study) of (logos). In contemporary moral philosophy, deontology is one of those kinds of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-deontological",
+          "url": "https://plato.stanford.edu/entries/ethics-deontological/",
+          "score": 0.0,
+          "snippet": "ethics-deontological\n\nBecause deontological theories are best understood in contrast to consequentialist ones, a brief look at consequentialism and a survey of the problems with it that motivate its..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-deontological",
+          "url": "https://plato.stanford.edu/entries/ethics-deontological/",
+          "score": 0.0,
+          "snippet": "ethics-deontological\n\nConsequentialists can and do differ widely in terms of specifying the Good. Some consequentialists are monists about the Good. Utilitarians, for example, identify the Good with..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Environmental ethics",
+          "url": "https://en.wikipedia.org/wiki/Environmental_ethics",
+          "score": 0.0,
+          "snippet": "Environmental ethics\n\nTemplate:Multiple player\n\nIn environmental philosophy, environmental love is an established field of practical philosophy \"which reconstructs the essential types of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Environmental ethics",
+          "url": "https://en.wikipedia.org/wiki/Environmental_ethics",
+          "score": 0.0,
+          "snippet": "Environmental ethics\n\nto biodiversity and other extrinsic goods?\n\n- Why should humans continue to propagate its species, and life itself?\n\n- Should humans continue to make gasoline-powered..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Environmental ethics",
+          "url": "https://en.wikipedia.org/wiki/Environmental_ethics",
+          "score": 0.0,
+          "snippet": "Environmental ethics\n\n- What role can Planetary Boundaries play in reshaping the human-earth relationship? The academic field of environmental ethics grew up in response to the works of Rachel Carson..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-phenomenology",
+          "url": "https://plato.stanford.edu/entries/moral-phenomenology/",
+          "score": 0.0,
+          "snippet": "moral-phenomenology\n\nSometimes the term “phenomenology” is used to refer to the subjective character of one’s experiences or, as it is often glossed, their “what-it’s-likeness”. Used in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-phenomenology",
+          "url": "https://plato.stanford.edu/entries/moral-phenomenology/",
+          "score": 0.0,
+          "snippet": "moral-phenomenology\n\nThere are two dominant traditions within this field, one associated with the phenomenological tradition initiated by Edmund Husserl, the other closely allied with work in the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "moral-phenomenology",
+          "url": "https://plato.stanford.edu/entries/moral-phenomenology/",
+          "score": 0.0,
+          "snippet": "moral-phenomenology\n\nThere is a very narrow conception of the sorts of mental states and events that could be the subject matter of phenomenological inquiry, namely, “feeling” mental states and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "consequentialism\n\nConsequentialism, as its name suggests, is simply the view that normative properties depend only on consequences. This historically important and still popular theory embodies the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "consequentialism\n\nThe paradigm case of consequentialism is utilitarianism, whose classic proponents were Jeremy Bentham (1789), John Stuart Mill (1861), and Henry Sidgwick (1907). (For predecessors,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "consequentialism\n\nThese claims are often summarized in the slogan that an act is right if and only if it causes “the greatest happiness for the greatest number.” This slogan is misleading,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentializing",
+          "url": "https://plato.stanford.edu/entries/consequentializing/",
+          "score": 0.0,
+          "snippet": "Consequentializers employ evaluator-relative outcome rankings to reconcile their theory with commonsense moral intuitions, thereby justifying personal preferences that diverge from impartial...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "Consequentialism is characterized as a normative ethical theory where moral rightness depends exclusively on consequences, distinguishing it from deontological frameworks. Classic utilitarianism...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism",
+          "url": "https://plato.stanford.edu/entries/consequentialism/",
+          "score": 0.0,
+          "snippet": "Consequentialism is defined as the normative view that moral rightness depends exclusively on consequences, distinguishing it from deontological theories. The text outlines various specific forms of...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "naturalism-moral",
+          "url": "https://plato.stanford.edu/entries/naturalism-moral/",
+          "score": 0.0,
+          "snippet": "The text argues that moral concepts such as rightness and wrongness can be defined through natural properties and relations. It posits the existence of specific properties for actions and people,...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ethics-deontological",
+          "url": "https://plato.stanford.edu/entries/ethics-deontological/",
+          "score": 0.0,
+          "snippet": "The text contrasts consequentialism and deontology, noting that consequentialists often adopt defensive strategies to mimic deontological intuitions regarding rights and duties. Deontologists face...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism-rule",
+          "url": "https://plato.stanford.edu/entries/consequentialism-rule/",
+          "score": 0.0,
+          "snippet": "The text argues that rule-consequentialism is distinct from act-consequentialism by evaluating systems of rules based on their expected value for the majority, rather than individual acts. It...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "consequentialism-rule",
+          "url": "https://plato.stanford.edu/entries/consequentialism-rule/",
+          "score": 0.0,
+          "snippet": "Rule-consequentialism is defined by applying consequentialist criteria to rules rather than individual acts, distinguishing between full versions that address all moral aspects and partial versions....",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "actualism-possibilism-ethics",
+          "url": "https://plato.stanford.edu/entries/actualism-possibilism-ethics/",
+          "score": 0.0,
+          "snippet": "The text contrasts actualism and possibilism, two major ethical frameworks that offer different solutions to deontic dilemmas such as the Professor Procrastinate case. While possibilism is praised...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "consequentialism",
+          "ethics-deontological",
+          "Consequentialism",
+          "Deontology"
+        ],
+        "missing": [
+          "deontological"
+        ],
+        "total_expected": 5,
+        "ratio": 0.8
+      },
+      "fact_score": {
+        "matched": [
+          "consequences",
+          "maximize",
+          "duty",
+          "act vs rule",
+          "Bentham",
+          "Kant"
+        ],
+        "missing": [
+          "categorical imperative"
+        ],
+        "total_expected": 7,
+        "ratio": 0.85714287
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Here's what I can say with confidence:\n\n**Not in your sources — from general knowledge:** The key proponents for consequentialism are Jeremy Bentham, John Stuart Mill, and Henry Sidgwick; the key proponent for deontology is Immanuel Kant.\n\nBased on the provided passages, here is a contrast between consequentialist and deontological ethics regarding what makes an act right:\n\n### 1. Definition of Rightness\n*   **Consequentialism:** This view holds that normative properties depend *only* on consequences [Source: consequentialism]. Specifically, it embodies the intuition that \"what is best or right is whatever makes the world best in the future\" because we cannot change the past [Source: consequentialism]. Consequentialists assess choices solely by the states of affairs they bring about and must specify which states are intrinsically valuable (often called \"the Good\") to determine moral worth [Source: ethics-deontological]. The paradigm case identifies an act as morally right if and only if it maximizes the good for all minus the bad for all compared to any incompatible alternative available [Source: consequentialism].\n*   **Deontology:** In contrast, deontological theories judge morality by criteria *different* from the resulting states of affairs. Deontology derives the rightness or wrongness of conduct from the character of the behaviour itself rather than its outcomes [Source: Consequentialism]. It holds that some choices cannot be justified by their effects; no matter how morally good their consequences may be, certain actions are morally forbidden based on rules and moral duty [Source: ethics-deontological].\n\n### 2. Focus of Evaluation\n*   **Consequentialism:** The focus is entirely on the future amplification of an act's effects. Even if an agent promises to do something, breaking that promise might not be inherently wrong unless it causes negative future effects for others; conversely, keeping a promise is only obligatory if doing so maximizes well-being or reduces pain [Source: consequentialism]. In environmental contexts, this can lead to an \"instrumentalist\" position where nature is valued only insofar as it contributes to human well-being or value reduction of pain [Source: Environmental ethics].\n*   **Deontology:** The focus remains on adherence to ethical principles or duties regardless of outcome. For instance, deontologists hold that it would be immoral to covet even if the drive provided beneficial outcomes like success [Source: Deontology]. Unlike consequentialists who look at the aggregate good, deontologists often rely on meta-ethical realism postulating moral absolutes that make actions right or wrong independent of their results [Source: Virtue ethics].\n\n### 3. Structure and \"The Good\"\n*   **Consequentialism:** Consequentialist theories are value-based; they explain right conduct in terms of the value associated with consequences [Source: moral-phenomenology]. There is significant internal diversity regarding what constitutes \"the Good.\" Some are monists (e.g., Utilitarians identifying it with pleasure, happiness, or desire satisfaction), while others are pluralists who believe how the good is distributed among persons is partly constitutive of the good itself [Source: ethics-deontological].\n*   **Deontology:** Deontology places emphasis on adhering to principles rather than calculating outcomes. While specific rule schemes vary (such as divine command theory where God makes law universal vs. Kantianism where rational beings make law universal), the core distinction from consequentialism is that duties and rules define rightness, not the sum total of consequences produced [Source: Virtue ethics; Source: Deontology].\n\n### 4. Relationship with Other Theories\n*   **Consequentialism:** It is usually contrasted with virtue ethics, which focuses on the character of the agent rather than the nature or consequences of the act itself [Source: Consequentialism]. Some argue it can coexist with deontological concepts; for example, T.M. Scanlon suggests human rights (often seen as deontological) are justified by reference to their consequences [Source: Consequentialism].\n*   **Deontology:** It stands in sharp opposition to consequentialist theories and is often grouped alongside virtue ethics as one of the three predominant normative ethical theories. Virtue ethicists criticize Kant's deontological approach for its obsession with law and obligation, arguing that reliance on a universal moral law implies an irrelevant lawgiver in secular society [Source: Kantian ethics].\n\n**Thin spots in sources:** The passages do not explicitly name Immanuel Kant or Jeremy Bentham/Mill/Sidgwick within the main explanatory text regarding *what makes an act right*, though they list them under tags; nor do they provide detailed encyclopedic definitions beyond the structural contrasts provided above.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Virtue ethicists criticize Kant's approach for implying an irrelevant lawgiver in secular society.\n- The key proponents for consequentialism are Jeremy Bentham, John Stuart Mill, and Henry Sidgwick; the key proponent for deontology is Immanuel Kant.\n- Consequentialists assess choices solely by the states of affairs they bring about...\" (Supported by text)\n- In contrast, deontological theories judge morality by criteria *different* from the resulting states of affairs.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 211327,
+        "total_latency_ms": 193536,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 40,
+        "chunks_fact_score": {
+          "matched": [
+            "consequences",
+            "duty",
+            "act vs rule",
+            "Bentham",
+            "Kant"
+          ],
+          "missing": [
+            "maximize",
+            "categorical imperative"
+          ],
+          "total_expected": 7,
+          "ratio": 0.71428573
+        },
+        "judge_fact_score": {
+          "matched": [
+            "consequences",
+            "maximize",
+            "duty",
+            "act vs rule",
+            "Bentham",
+            "Kant"
+          ],
+          "missing": [
+            "categorical imperative"
+          ],
+          "total_expected": 7,
+          "ratio": 0.85714287
+        },
+        "judge_evidence": [
+          {
+            "fact": "consequences",
+            "present": true,
+            "evidence": "Consequentialism: This view holds that normative properties depend *only* on consequences. Deontology derives the rightness or wrongness of conduct from the character of the behaviour itself rather than its outcomes."
+          },
+          {
+            "fact": "maximize",
+            "present": true,
+            "evidence": "The paradigm case identifies an act as morally right if and only if it maximizes the good for all minus the bad for all compared to any incompatible alternative available"
+          },
+          {
+            "fact": "duty",
+            "present": true,
+            "evidence": "certain actions are morally forbidden based on rules and moral duty"
+          },
+          {
+            "fact": "categorical imperative",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "act vs rule",
+            "present": true,
+            "evidence": "Deontology derives the rightness or wrongness of conduct from the character of the behaviour itself rather than its outcomes... certain actions are morally forbidden based on rules and moral duty"
+          },
+          {
+            "fact": "Bentham",
+            "present": true,
+            "evidence": "The key proponents for consequentialism are Jeremy Bentham, John Stuart Mill, and Henry Sidgwick"
+          },
+          {
+            "fact": "Kant",
+            "present": true,
+            "evidence": "the key proponent for deontology is Immanuel Kant"
+          }
+        ]
+      }
+    }
+  ]
+}
