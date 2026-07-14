@@ -217,10 +217,36 @@ impl FastShortCoalescer {
             match result {
                 Ok(Ok(per_seq_results)) => {
                     let latency_ms = start.elapsed().as_millis() as u64;
-                    tracing::debug!(
+                    // Glassbox batch receipt (INFO — this is the only surface
+                    // that exposes batch cardinality + the head-of-line coupling
+                    // inherent to lockstep batched decode; promoted from debug
+                    // 2026-07-14 after a K=8 investigation had to reconstruct
+                    // `batch_size` from completion-line timestamps). `completion_*`
+                    // is per-sequence output length; when max ≫ min the short
+                    // members waited for the longest one to finish the batch, and
+                    // `aggregate_tok_per_s` is the whole batch's decode throughput
+                    // (all sequences) — compare against the MTP `fast` slot's
+                    // per-request `tok_per_s` to see when batching actually wins.
+                    let completions: Vec<usize> =
+                        per_seq_results.iter().map(|(_, _, c)| *c).collect();
+                    let total_completion: usize = completions.iter().sum();
+                    let completion_min = completions.iter().copied().min().unwrap_or(0);
+                    let completion_max = completions.iter().copied().max().unwrap_or(0);
+                    let aggregate_tok_per_s = if latency_ms > 0 {
+                        total_completion as f64 * 1000.0 / latency_ms as f64
+                    } else {
+                        0.0
+                    };
+                    tracing::info!(
                         slot = "fast_short",
                         batch_size,
                         latency_ms,
+                        total_completion_tokens = total_completion,
+                        aggregate_tok_per_s = format!("{aggregate_tok_per_s:.1}"),
+                        completion_min,
+                        completion_max,
+                        head_of_line_ratio =
+                            format!("{:.1}", completion_max as f64 / completion_min.max(1) as f64),
                         "FastShort batched inference complete"
                     );
                     for (job, (text, prompt_tokens, completion_tokens)) in
@@ -493,6 +519,43 @@ fn fits_fast_short(request: &CompletionRequest) -> bool {
     max_out <= 512
         && request.preferred_speed == Speed::Fast
         && prompt_chars <= FAST_SHORT_MAX_INPUT_CHARS
+}
+
+/// Whether a FastShort-eligible request should actually engage the
+/// continuous-batched companion. **FastShort is the batched OVERFLOW
+/// lane, not the default for Fast traffic.**
+///
+/// Single-token batching only pays off when there is concurrent demand
+/// to coalesce. A request arriving while the MTP-capable `fast` slot is
+/// IDLE is a latency-bound singleton: it has nothing to batch with, so
+/// routing it to FastShort forfeits speculative (MTP) decode, pays the
+/// coalesce-window tax, and exposes it to head-of-line blocking — all
+/// for zero batching benefit. Such a request belongs on `fast`.
+///
+/// Measured 2026-07-14 (Qwen3.5-9B-MTP, Strix Halo Vulkan, `scripts`-free
+/// A/B against the live daemon):
+/// - Solo (K=1): MTP `fast` decodes ~29% faster than single-token
+///   FastShort (29.3 vs 22.7 tok/s regressed; MTP self-reports 32.7 at
+///   0.57 draft-accept) — ~1.0s saved on a 100-token answer.
+/// - Concurrent (K≈8): FastShort's batch throughput is only ~1.4× over
+///   serial single-token here (the code's 2.1–2.8× claim was M2 Max /
+///   Metal; decode on unified LPDDR5 is bandwidth-bound), which roughly
+///   *ties* serialized MTP — while head-of-line-blocking a 73-token
+///   reply for 40s behind a 512-token batch member.
+///
+/// So: engage FastShort only under contention (`fast_slot_busy`) — a
+/// pipeline fan-out keeps the `fast` slot busy, which is exactly when
+/// batching the remaining arrivals is the right call. The streaming
+/// path already coerces FastShort→Fast unconditionally (FastShort has
+/// no streaming API); this generalises that demotion to solo
+/// non-streaming calls, for the latency reason rather than the API one.
+/// See [[project_fast_short_overflow_routing]].
+pub(crate) fn should_batch_fast_short(
+    has_fast_short: bool,
+    fast_slot_busy: bool,
+    request: &CompletionRequest,
+) -> bool {
+    has_fast_short && fast_slot_busy && fits_fast_short(request)
 }
 
 pub(crate) fn pick_slot(
@@ -1485,6 +1548,17 @@ impl EmbeddedLlamaCpp {
         self.code_path.is_some()
     }
 
+    /// The MTP-capable `fast` slot is currently serving a request — its
+    /// single inflight permit is taken (acquired for the whole decode,
+    /// see the fast-slot dispatch in `complete`). A taken permit is the
+    /// liveness signal that there is concurrent Fast demand a FastShort
+    /// batch could coalesce; an available permit means the incoming
+    /// request is a solo, latency-bound singleton. Drives
+    /// [`should_batch_fast_short`] — the FastShort-as-overflow-lane rule.
+    fn fast_slot_busy(&self) -> bool {
+        self.fast.inflight.available_permits() == 0
+    }
+
     /// Pick which slot should serve this request.
     ///
     /// Rules:
@@ -1521,13 +1595,26 @@ impl EmbeddedLlamaCpp {
                 .filter(|s| !s.is_empty())
             {
                 if mid == self.fast.model_id {
-                    // A short/Fast request addressed to the fast model by name must
-                    // still ride the FastShort continuous-batched companion when it's
-                    // built and the request fits — otherwise bulk callers (code-intel
-                    // enrich, atlas phase 1b/3/5/6) serialize on the single Fast slot.
-                    // Mirrors the FastShort gate in `pick_slot`.
-                    if self.fast_short.is_some() && fits_fast_short(request) {
+                    // A short/Fast request addressed to the fast model by name rides
+                    // the FastShort continuous-batched companion ONLY under contention
+                    // (`fast` slot busy) — that's when a bulk fan-out (code-intel
+                    // enrich, atlas phase 1b/3/5/6) has concurrent arrivals worth
+                    // batching. A solo call goes to `fast` for speculative (MTP)
+                    // decode instead: ~29% faster and no head-of-line stall (measured
+                    // 2026-07-14). See `should_batch_fast_short`.
+                    if should_batch_fast_short(
+                        self.fast_short.is_some(),
+                        self.fast_slot_busy(),
+                        request,
+                    ) {
                         return SlotTarget::FastShort;
+                    }
+                    if self.fast_short.is_some() && fits_fast_short(request) {
+                        tracing::debug!(
+                            "FastShort-eligible but `fast` slot idle — routing to Fast \
+                             (MTP) for lower solo latency; FastShort is the batched \
+                             overflow lane, engaged only under concurrent Fast demand"
+                        );
                     }
                     return SlotTarget::Fast;
                 }
@@ -1558,7 +1645,11 @@ impl EmbeddedLlamaCpp {
             request,
             self.primary_path.is_some(),
             self.code_path.is_some(),
-            self.fast_short.is_some(),
+            // FastShort is the batched overflow lane: only offer it to the
+            // picker when the `fast` slot is already busy (concurrent Fast
+            // demand). Idle → the request is a latency-bound singleton and
+            // pick_slot routes it to `fast` (MTP). See `should_batch_fast_short`.
+            self.fast_short.is_some() && self.fast_slot_busy(),
             extras_match,
         )
     }

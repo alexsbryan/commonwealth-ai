@@ -682,7 +682,7 @@ mod pick_slot_tests {
     //! with fast, GPU-free table tests so a regression in routing
     //! is caught by `cargo test` long before it reaches a live
     //! llama.cpp load.
-    use super::{pick_slot, SlotTarget, FAST_SHORT_MAX_INPUT_CHARS};
+    use super::{pick_slot, should_batch_fast_short, SlotTarget, FAST_SHORT_MAX_INPUT_CHARS};
     use sovereign_core::oicp::{CapabilityHint, InferenceRequirements};
     use sovereign_core::types::{CompletionRequest, Speed};
 
@@ -705,9 +705,11 @@ mod pick_slot_tests {
     #[test]
     fn fast_short_routing_picks_fast_short_for_small_max_tokens() {
         // Phase 1b/3/5/6 composers attach max_output_tokens ≤512.
-        // When the FastShort companion is built, those calls route to
-        // the continuous-batched path — that's where the 2.1× wall-
-        // clock speedup lives.
+        // `pick_slot` selects the continuous-batched path when the caller
+        // says FastShort is available (4th arg). NOTE: the caller only
+        // sets that under contention now — see `should_batch_fast_short`
+        // and `fast_short_engaged_only_under_contention`. This test pins
+        // pick_slot's pure branch given availability=true.
         let mut r = req(Speed::Fast, None);
         r.max_tokens = Some(512);
         assert_eq!(
@@ -776,6 +778,44 @@ mod pick_slot_tests {
             SlotTarget::Fast,
             "system+prompt combined must respect the FastShort input budget"
         );
+    }
+
+    #[test]
+    fn fast_short_engaged_only_under_contention() {
+        // FastShort is the batched OVERFLOW lane: a FastShort-eligible
+        // request engages it ONLY when the `fast` slot is already busy
+        // (concurrent Fast demand worth coalescing). Idle → the request
+        // is a latency-bound singleton that belongs on the MTP `fast`
+        // slot (~29% faster solo decode; no head-of-line stall). Measured
+        // 2026-07-14. This pins the caller-side gate that select_slot_for_request
+        // and the pick_slot call site both apply.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(256); // fits the FastShort envelope
+
+        // Busy `fast` slot → batch it.
+        assert!(
+            should_batch_fast_short(true, true, &r),
+            "eligible + companion present + fast busy → engage FastShort"
+        );
+        // Idle `fast` slot → do NOT batch; solo call goes to MTP fast.
+        assert!(
+            !should_batch_fast_short(true, false, &r),
+            "eligible but fast idle → singleton, keep on MTP fast slot"
+        );
+        // No companion built → never batch, regardless of contention.
+        assert!(!should_batch_fast_short(false, true, &r));
+
+        // Ineligible request (oversized output) never batches, even busy.
+        let mut big = req(Speed::Fast, None);
+        big.max_tokens = Some(8192);
+        assert!(
+            !should_batch_fast_short(true, true, &big),
+            "output budget over the FastShort cap → Fast slot even under load"
+        );
+        // Non-Fast speed never batches on FastShort.
+        let mut slow = req(Speed::Slow, None);
+        slow.max_tokens = Some(256);
+        assert!(!should_batch_fast_short(true, true, &slow));
     }
 
     #[test]
