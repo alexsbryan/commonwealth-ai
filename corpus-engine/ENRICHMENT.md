@@ -57,9 +57,11 @@ system by what the corpus is *for*, not by recency.
   extraction → alignment (questions ↔ cluster labels) → fault-lines
   (conceptual tensions between clusters) → open-questions (gaps in the
   skeleton).
-- **Registered domains:** `philosophy, science, policy, legal,
-  community, multi, engineering` (public) + `personal, conversational,
-  business_email, institutional` (KnowledgeView).
+- **Registered domains:** `philosophy` (public) + `personal,
+  conversational, business_email, institutional` (KnowledgeView). Only
+  fully-implemented domains are registered — `todo!()` stubs (science,
+  policy, legal, community, multi, engineering) were removed so a
+  `--domain` selection errors cleanly instead of panicking.
 - **Where it's live today:**
   - **KnowledgeView** landscape digests (personal / conversational /
     institutional domains), driven from
