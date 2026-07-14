@@ -370,6 +370,73 @@ impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
     }
 }
 
+/// Boot-critical-path-free wrapper around [`GlinerExtractor`].
+///
+/// Loading the GLiNER model (`GlinerExtractor::new_default`) costs ~950ms —
+/// on the desktop that was roughly half of the whole warm boot, all spent
+/// synchronously before `backend-ready` fires. This decorator moves that
+/// load onto a background thread at construction and installs immediately,
+/// so bootstrap pays only the (cheap) `probe_model_available` check.
+///
+/// Until the background load completes, `extract_entities` returns an empty
+/// `Vec` — the exact same soft-fallback the retrieval path already takes
+/// when GLiNER isn't installed at all (it degrades to cosine + MMR history
+/// retrieval, see `Runtime::maybe_retrieve_relevant_history`). In practice
+/// the model is warm within ~1s of boot — long before a user reads the
+/// freshly-loaded UI and types a first query — so entity-aware retrieval is
+/// effectively always available by the time it's exercised. A load failure
+/// is logged once and leaves the extractor permanently in fallback mode,
+/// identical to today's `new_default` error branch.
+pub struct LazyGlinerExtractor {
+    inner: std::sync::Arc<std::sync::OnceLock<GlinerExtractor>>,
+}
+
+impl LazyGlinerExtractor {
+    /// Install immediately and warm the default model on a background
+    /// thread. Callers should still gate construction on
+    /// [`probe_model_available`] so a machine without the model doesn't
+    /// spawn a thread only to fail.
+    pub fn new_default_deferred() -> Self {
+        let inner = std::sync::Arc::new(std::sync::OnceLock::new());
+        let slot = std::sync::Arc::clone(&inner);
+        let spawned = std::thread::Builder::new()
+            .name("gliner-warm".into())
+            .spawn(move || {
+                let t = std::time::Instant::now();
+                match GlinerExtractor::new_default() {
+                    Ok(g) => {
+                        let _ = slot.set(g);
+                        tracing::info!(
+                            elapsed_ms = t.elapsed().as_millis() as u64,
+                            "GLiNER entity extractor warmed (background)"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "GLiNER background load failed; entity-aware retrieval disabled (cosine+MMR fallback)"
+                        );
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::warn!(error = %e, "GLiNER background warm thread failed to spawn; entity-aware retrieval disabled");
+        }
+        Self { inner }
+    }
+}
+
+impl sovereign_core::traits::EntityExtractor for LazyGlinerExtractor {
+    fn extract_entities(&self, text: &str) -> Vec<String> {
+        match self.inner.get() {
+            Some(g) => g.extract_entities(text),
+            // Not warm yet (or load failed): same soft-fallback as an
+            // uninstalled model — the retrieval path degrades to cosine+MMR.
+            None => Vec::new(),
+        }
+    }
+}
+
 /// Collapse internal whitespace + trim. GliNER's span text
 /// occasionally crosses newlines in the source (e.g. multi-line
 /// "Jonathan\nSwift") because the model operates on the chunk

@@ -99,36 +99,51 @@ fn main() -> ExitCode {
                 // (not module paths) used by the Attach/Local decision
                 // and the mesh-state read — surfaced at info so the
                 // "why is Members empty?" trace shows without RUST_LOG.
+                //
+                // Glass-box level for the four inference crates
+                // (core/tools/inference/corpus_engine) is `debug` in dev
+                // builds and `info` in release. A shipped app should not
+                // firehose per-inference debug chatter (prompt sizes, chunk
+                // counts) at every end user by default — but the visibility
+                // stays one `RUST_LOG=sovereign_core=debug` away, so the
+                // glass-box contract holds as an opt-in rather than a
+                // default. Dev builds keep the firehose so day-to-day work
+                // is fully instrumented with no ceremony.
+                //
                 // synth.lifecycle / synth.continue / synth.truncation / gate.call
-                // are CUSTOM string targets (not module paths), so `sovereign_core=debug`
-                // does NOT enable them — they must be named explicitly. Kept at info in
-                // the default filter so the answer-truncation lifecycle (draft finish vs
-                // effective cap, soft-landing continuation rounds, gate rewrite cap) is
-                // visible in EVERY run's log — a mid-`[Source:` or mid-word tail becomes
-                // diagnosable without a contrived repro (glassbox: instrument the real
-                // pipeline, don't hypothesize). Low volume: ~one line per grounded turn.
-                "sovereign_desktop=info,\
-                 sovereign_core=debug,\
-                 sovereign_tools=debug,\
-                 sovereign_inference=debug,\
-                 sovereign_mesh=info,\
-                 commonwealth_discovery=info,\
-                 commonwealth_api=info,\
-                 corpus_engine=debug,\
-                 bootstrap=info,\
-                 mesh_state=info,\
-                 synth.lifecycle=info,\
-                 synth.continue=info,\
-                 synth.truncation=info,\
-                 synth.refusal_retry=info,\
-                 synth.citation=info,\
-                 synth.budget=info,\
-                 gate.call=info,\
-                 gate.lifecycle=info,\
-                 grounding_gate=info,\
-                 agentic_kq=info,\
-                 retrieval_audit=info"
-                    .into()
+                // are CUSTOM string targets (not module paths), so `sovereign_core`
+                // does NOT enable them — they must be named explicitly. Kept at info
+                // REGARDLESS of build so the answer-truncation lifecycle (draft finish
+                // vs effective cap, soft-landing continuation rounds, gate rewrite cap)
+                // is visible in EVERY run's log — a mid-`[Source:` or mid-word tail
+                // becomes diagnosable without a contrived repro (glassbox: instrument
+                // the real pipeline, don't hypothesize). Low volume: ~one line per
+                // grounded turn, so they stay on even in release.
+                let glassbox = if cfg!(debug_assertions) { "debug" } else { "info" };
+                format!(
+                    "sovereign_desktop=info,\
+                     sovereign_core={glassbox},\
+                     sovereign_tools={glassbox},\
+                     sovereign_inference={glassbox},\
+                     sovereign_mesh=info,\
+                     commonwealth_discovery=info,\
+                     commonwealth_api=info,\
+                     corpus_engine={glassbox},\
+                     bootstrap=info,\
+                     mesh_state=info,\
+                     synth.lifecycle=info,\
+                     synth.continue=info,\
+                     synth.truncation=info,\
+                     synth.refusal_retry=info,\
+                     synth.citation=info,\
+                     synth.budget=info,\
+                     gate.call=info,\
+                     gate.lifecycle=info,\
+                     grounding_gate=info,\
+                     agentic_kq=info,\
+                     retrieval_audit=info"
+                )
+                .into()
             }),
         )
         .init();

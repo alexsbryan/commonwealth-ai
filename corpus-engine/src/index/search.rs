@@ -96,6 +96,69 @@ impl CorpusIndex {
         )
     }
 
+    /// Cheap corpus-relevance probe: the smallest cosine distance (`1 -
+    /// cos_sim`; LOWER = nearer) between `query_embedding` and this corpus's
+    /// `k` nearest chunk vectors. Vector-only, and deliberately WITHOUT the
+    /// relevance threshold that [`CorpusIndex::search`] applies in vector-only
+    /// mode — this is a *ranking* signal ("does this corpus have ANY region
+    /// near the query"), not a retrieval, so every corpus with a usable vector
+    /// index returns a real number: a weak-but-present match ranks low instead
+    /// of vanishing to empty (which is what made the naive `search(q,"",1)`
+    /// probe fail open on unrelated corpora).
+    ///
+    /// `vector_distance` is the cross-corpus-comparable axis (see
+    /// [`ScoredChunk::vector_distance`]); this returns it directly for the
+    /// nearest chunk, so results are sortable ACROSS corpora. `None` only on
+    /// genuine non-signal: empty query, no vector path (no IVF index and the
+    /// table is above the flat-scan threshold), or no scoreable rows — callers
+    /// should treat `None` as fail-OPEN (keep the corpus).
+    pub async fn nearest_vector_distance(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+    ) -> Result<Option<f32>> {
+        if query_embedding.is_empty() {
+            return Ok(None);
+        }
+        const FLAT_SCAN_THRESHOLD: usize = 10_000;
+        let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
+        let indices = self.table.list_indices().await.unwrap_or_default();
+        let ivf_built = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        if !(ivf_built || row_count < FLAT_SCAN_THRESHOLD) {
+            return Ok(None); // no vector path available for this corpus
+        }
+        let batches = self
+            .table
+            .query()
+            .nearest_to(query_embedding.to_vec())
+            .map_err(|e| Error::Database(format!("nearest_vector_distance query: {e}")))?
+            .nprobes(50)
+            .limit(k.max(1))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("nearest_vector_distance exec: {e}")))?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|e| Error::Database(format!("nearest_vector_distance collect: {e}")))?;
+        let mut best: Option<f32> = None;
+        for batch in &batches {
+            let Some(fl) = batch
+                .column_by_name("embedding")
+                .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>())
+            else {
+                continue;
+            };
+            for i in 0..batch.num_rows() {
+                if let Some(d) = cosine_distance_from_fixed_list(fl, i, query_embedding) {
+                    best = Some(best.map_or(d, |b| b.min(d)));
+                }
+            }
+        }
+        Ok(best)
+    }
+
     /// Hybrid search combining vector similarity and FTS keyword matching.
     pub async fn search(
         &self,
