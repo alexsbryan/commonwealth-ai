@@ -131,7 +131,38 @@ if (( SHELL_ONLY )); then
     exit $?
 fi
 
-$RUNTIME run "${RUN_ARGS[@]}" "$IMAGE"
+# ─── Shader-compile concurrency cap (qemu-x86 deadlock guard) ─────────
+# This leg runs --platform linux/amd64 = qemu-x86 emulation on the arm64
+# host. ggml-vulkan's build script parallel-spawns the glslc shader
+# compiler sized to the container's visible CPU count; under emulation the
+# parent misses a SIGCHLD and hangs in wait() reaping them (validated
+# 2026-07-14 cutting v0.2.0: two 8-CPU runs deadlocked at exactly
+# "Compiling llama-cpp-sys-4", zero progress for hours, glslc zombies + an
+# idle VM — NOT OOM). Serial (1 visible CPU) is the proven-safe fix.
+#
+# --cpuset-cpus is unavailable here (rootless podman: the cpuset controller
+# isn't delegated to the user slice — verified, it errors). --cpus caps CPU
+# *time*, not the visible count, so glslc still over-spawns. taskset sets
+# CPU affinity, which sched_getaffinity — and thus
+# std::thread::hardware_concurrency, which sizes the glslc pool — honours.
+# taskset -c 0 gives the shader gen exactly 1 visible CPU, identical to the
+# `podman machine set --cpus 1` that we proved clears the deadlock, but
+# scoped to this container with no VM reconfig or global state to restore.
+#
+# Default 1 (serial, safe). Warm caches skip the shader gen entirely, so a
+# future two-phase build (serial only when llama-cpp-sys rebuilds) could
+# lift this — but full concurrency on a COLD shader gen deadlocks, so the
+# safe default stays serial. Override only if you know the shaders are
+# cached: SOVEREIGN_LINUX_BUILD_CPUS=8 (or >= host nproc) disables the cap.
+LINUX_BUILD_CPUS="${SOVEREIGN_LINUX_BUILD_CPUS:-1}"
+if [[ "$LINUX_BUILD_CPUS" =~ ^[0-9]+$ ]] && (( LINUX_BUILD_CPUS >= 1 )); then
+    echo "[build-desktop-linux] Capping shader-compile concurrency to ${LINUX_BUILD_CPUS} CPU(s) via taskset (qemu glslc-reap deadlock guard; override with SOVEREIGN_LINUX_BUILD_CPUS)."
+    $RUNTIME run "${RUN_ARGS[@]}" --entrypoint taskset "$IMAGE" \
+        -c "0-$((LINUX_BUILD_CPUS - 1))" /usr/local/bin/build-entrypoint
+else
+    echo "[build-desktop-linux] WARNING: SOVEREIGN_LINUX_BUILD_CPUS='$LINUX_BUILD_CPUS' disables the concurrency cap — a COLD ggml-vulkan shader build may deadlock under qemu. Use only with warm shader caches."
+    $RUNTIME run "${RUN_ARGS[@]}" "$IMAGE"
+fi
 
 # ─── Surface results ──────────────────────────────────────────────────
 BUNDLE_DIR="target-container-linux/x86_64-unknown-linux-gnu/release/bundle"

@@ -18,6 +18,20 @@ cd /work
 TARGET="x86_64-pc-windows-msvc"
 log "Windows container build starting on $(uname -m) (cross → $TARGET)"
 
+# ─── Ensure the (pinned) toolchain has the Windows cross target ──────
+# rust-toolchain.toml pins the channel (e.g. 1.95.0). The image bakes the
+# $TARGET std into the image's DEFAULT `stable` toolchain, NOT the pin —
+# so the moment the pin differs from the image's stable, cargo (which
+# honours /work/rust-toolchain.toml) runs the pinned rustc, which lacks
+# $TARGET, and `cargo tauri build --target $TARGET` dies with
+# "target x86_64-pc-windows-msvc is not installed". Adding it to the
+# ACTIVE (pinned) toolchain here decouples the build from BOTH the pin
+# version and whatever the image happened to bake. Idempotent + offline
+# after the first fetch. (The Linux leg needs no equivalent: it runs as
+# linux/amd64, so its host target already IS the build target.)
+log "Ensuring rustup target $TARGET is installed for the active (pinned) toolchain..."
+rustup target add "$TARGET"
+
 # ─── Stage external binaries (PDFium dll + PaddleOCR models) ─────────
 # No tesseract sidecar: PaddleOCR replaced it (see RELEASING.md "Why
 # PaddleOCR replaced tesseract"); the models + pdfium.dll ship as
