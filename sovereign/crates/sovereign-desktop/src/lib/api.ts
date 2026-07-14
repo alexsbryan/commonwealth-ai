@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeError } from "./errors";
+import type { PrimarySource } from "./setup/setupTypes";
 import type {
   WorkflowCatalogEntry,
   WorkflowRunHandle,
@@ -516,11 +517,20 @@ export async function completeSetup(setup: SetupConfig): Promise<void> {
  *  three model slots, opens the database, loads the model. The
  *  `setup-progress` Tauri event channel narrates progress; this
  *  promise resolves when the backend is ready to serve chat. */
-export async function completeSetupAuto(primaryFile?: string): Promise<void> {
+export async function completeSetupAuto(
+  primaryFile?: string,
+  primarySource?: PrimarySource,
+): Promise<void> {
   // `primaryFile` is the user's "Customize" choice from the Setup Plan
   // screen (a catalog GGUF filename); omitted = the hardware-recommended
-  // primary. Either way, the download only happens here, post-consent.
-  return invoke("complete_setup_auto", { primaryFile: primaryFile ?? null });
+  // primary. `primarySource` is the "Advanced — bring your own" override
+  // (a local GGUF path or a pasted .gguf URL) and takes precedence over
+  // `primaryFile` in the backend. Either way, the download only happens
+  // here, post-consent.
+  return invoke("complete_setup_auto", {
+    primaryFile: primaryFile ?? null,
+    primarySource: primarySource ?? null,
+  });
 }
 
 /** The machine-readable setup report (`~/.svrnmesh/setup-report.json`) as a

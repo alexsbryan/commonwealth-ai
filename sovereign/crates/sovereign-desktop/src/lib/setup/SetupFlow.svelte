@@ -23,16 +23,24 @@
     getConfig,
   } from "../api";
   import SetupScreen from "./SetupScreen.svelte";
-  import type { Progress, Provenance, SlotProvenance } from "./setupTypes";
+  import type {
+    Progress,
+    Provenance,
+    SlotProvenance,
+    PrimarySource,
+  } from "./setupTypes";
 
   interface Props {
     onComplete: () => void;
     /// The user's "Customize" primary-model choice from the Setup Plan
     /// screen (a catalog GGUF filename). Undefined = hardware-recommended.
     primaryFile?: string;
+    /// The "Advanced — bring your own" override (local GGUF path or pasted
+    /// .gguf URL). Takes precedence over `primaryFile` in the backend.
+    primarySource?: PrimarySource;
   }
 
-  let { onComplete, primaryFile }: Props = $props();
+  let { onComplete, primaryFile, primarySource }: Props = $props();
 
   const initialProgress: Progress = {
     phase: { kind: "detecting_hardware" },
@@ -108,7 +116,7 @@
     });
     void loadProvenance();
     try {
-      await completeSetupAuto(primaryFile);
+      await completeSetupAuto(primaryFile, primarySource);
       onComplete();
     } catch (e) {
       // Backend will already have emitted Failed; this catch handles
@@ -127,7 +135,7 @@
     failed = null;
     progress = { ...initialProgress };
     try {
-      await completeSetupAuto(primaryFile);
+      await completeSetupAuto(primaryFile, primarySource);
       onComplete();
     } catch (e) {
       if (!failed) {

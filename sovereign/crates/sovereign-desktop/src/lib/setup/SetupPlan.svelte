@@ -20,9 +20,14 @@
     getConfig,
   } from "../api";
   import type { RecommendedProfile, PrimaryOption, SlotConfig } from "../types";
+  import type { PrimarySource } from "./setupTypes";
 
   interface Props {
-    onConfirm: (opts: { installStarterCorpus: boolean; primaryFile?: string }) => void;
+    onConfirm: (opts: {
+      installStarterCorpus: boolean;
+      primaryFile?: string;
+      primarySource?: PrimarySource;
+    }) => void;
     onBack: () => void;
   }
   let { onConfirm, onBack }: Props = $props();

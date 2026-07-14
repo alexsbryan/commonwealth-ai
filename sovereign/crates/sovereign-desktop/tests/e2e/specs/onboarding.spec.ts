@@ -873,3 +873,120 @@ test.describe("onboarding · motion + resilience", () => {
     await expect(page.locator(".loading-screen")).toBeVisible();
   });
 });
+
+// ── 8. Bring your own model (Advanced) ───────────────────────
+//
+// The Setup Plan's "Customize the main model" panel gains an "Advanced —
+// bring your own" affordance: a local .gguf path or a pasted .gguf URL that
+// overrides the catalog pick. These specs assert the UI → `complete_setup_auto`
+// contract — the exact `primaryFile` / `primarySource` payload the backend
+// receives — without touching the (16 GB) real download path.
+
+test.describe("onboarding · bring your own model", () => {
+  // Capture the `complete_setup_auto` args and hold the promise pending so
+  // the setup-flow stays mounted (we only care about the payload it sent).
+  async function captureSetupArgs(page: Page) {
+    await page.evaluate(() => {
+      (window as unknown as { __lastSetupArgs: unknown }).__lastSetupArgs = null;
+      window.__sovereign_test__.setHandler("complete_setup_auto", (args) => {
+        (window as unknown as { __lastSetupArgs: unknown }).__lastSetupArgs = args;
+        return new Promise(() => {}); // never resolves — keep .setup-flow mounted
+      });
+    });
+  }
+  const readArgs = (page: Page) =>
+    page.evaluate(
+      () => (window as unknown as { __lastSetupArgs: unknown }).__lastSetupArgs,
+    );
+
+  // Welcome → plan → open the "Customize" panel.
+  async function openCustomize(page: Page) {
+    await page.locator(".begin-btn").click();
+    await page.locator(".plan").waitFor();
+    await page
+      .locator(".link-btn", { hasText: "Customize the main model" })
+      .click();
+  }
+
+  test("pasted .gguf URL sends primarySource {kind:url}", async ({
+    sovereignPage: page,
+  }) => {
+    await bootToWelcome(page);
+    await captureSetupArgs(page);
+    await openCustomize(page);
+
+    // The exact HF quant-page URL form a power user pastes.
+    const url =
+      "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF?show_file_info=gemma-4-31B-it-UD-Q4_K_XL.gguf";
+    await page.locator("label.choice", { hasText: "Bring your own model" }).click();
+    await page.locator(".byom-input").fill(url);
+
+    const go = page.locator(".btn-go");
+    await expect(go).toBeEnabled();
+    await go.click();
+
+    await page.locator(".setup-flow").waitFor();
+    await expect.poll(() => readArgs(page)).toEqual({
+      primaryFile: null,
+      primarySource: { kind: "url", url },
+    });
+  });
+
+  test("local .gguf path sends primarySource {kind:local_path}", async ({
+    sovereignPage: page,
+  }) => {
+    await bootToWelcome(page);
+    await captureSetupArgs(page);
+    await openCustomize(page);
+
+    const path = "/Users/me/models/my-finetune-Q5_K_M.gguf";
+    await page.locator("label.choice", { hasText: "Bring your own model" }).click();
+    await page.locator(".byom-input").fill(path);
+
+    await expect(page.locator(".btn-go")).toBeEnabled();
+    await page.locator(".btn-go").click();
+
+    await page.locator(".setup-flow").waitFor();
+    await expect.poll(() => readArgs(page)).toEqual({
+      primaryFile: null,
+      primarySource: { kind: "local_path", path },
+    });
+  });
+
+  test("a repo-root URL (no .gguf) is rejected — go disabled, hint shown", async ({
+    sovereignPage: page,
+  }) => {
+    await bootToWelcome(page);
+    await captureSetupArgs(page);
+    await openCustomize(page);
+
+    await page.locator("label.choice", { hasText: "Bring your own model" }).click();
+    // A repo page, not a file — must not be accepted.
+    await page
+      .locator(".byom-input")
+      .fill("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF");
+
+    await expect(page.locator(".byom-hint.warn")).toBeVisible();
+    await expect(page.locator(".btn-go")).toBeDisabled();
+    // Nothing was sent.
+    expect(await readArgs(page)).toBeNull();
+  });
+
+  test("selecting a catalog entry still sends primaryFile, no override", async ({
+    sovereignPage: page,
+  }) => {
+    await bootToWelcome(page);
+    await captureSetupArgs(page);
+    await openCustomize(page);
+
+    // The non-recommended smaller option from the shim catalog.
+    await page.locator("label.choice", { hasText: "Qwen3 4B" }).click();
+    await page.locator(".btn-go").click();
+
+    await page.locator(".setup-flow").waitFor();
+    await expect.poll(() => readArgs(page)).toEqual({
+      primaryFile: "qwen3-4b-q4_k_m.gguf",
+      primarySource: null,
+    });
+  });
+});
