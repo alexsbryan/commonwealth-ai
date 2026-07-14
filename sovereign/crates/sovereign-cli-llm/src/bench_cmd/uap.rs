@@ -200,12 +200,7 @@ fn default_bench_dir() -> PathBuf {
     PathBuf::from("sovereign/bench/uap")
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now as now_secs;
 
 fn git_head_short() -> Option<String> {
     std::process::Command::new("git")

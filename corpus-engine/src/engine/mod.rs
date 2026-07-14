@@ -251,7 +251,7 @@ pub struct CorpusEngine {
     /// the hook needs to read from those atomics. Read-cost on the
     /// hot path is one rwlock acquisition per embed-batch start,
     /// which is on the order of seconds — negligible.
-    yield_hook: std::sync::RwLock<Option<Arc<dyn crate::yield_hook::YieldHook>>>,
+    yield_hook: std::sync::RwLock<Option<Arc<dyn crate::YieldHook>>>,
     /// Per-partition exclusion locks. Each entry serializes (well —
     /// rejects, see below) concurrent `ingest` / `ingest_with_overrides`
     /// calls that would write into the same `<corpus>-partition-<node>/`
@@ -395,7 +395,7 @@ impl CorpusEngine {
     /// The daemon's `start_daemon` builds AppState first (the hook's
     /// backing atomics live there) and then calls
     /// [`Self::set_yield_hook`] on the already-Arc-wrapped engine.
-    pub fn with_yield_hook(self, hook: Arc<dyn crate::yield_hook::YieldHook>) -> Self {
+    pub fn with_yield_hook(self, hook: Arc<dyn crate::YieldHook>) -> Self {
         self.set_yield_hook(hook);
         self
     }
@@ -406,7 +406,7 @@ impl CorpusEngine {
     /// rebuilding the engine just to swap a hook would require
     /// reconstructing the LanceDB connections it caches internally,
     /// which is needlessly expensive.
-    pub fn set_yield_hook(&self, hook: Arc<dyn crate::yield_hook::YieldHook>) {
+    pub fn set_yield_hook(&self, hook: Arc<dyn crate::YieldHook>) {
         let mut guard = self.yield_hook.write().expect("yield_hook RwLock poisoned");
         *guard = Some(hook);
     }
@@ -417,7 +417,7 @@ impl CorpusEngine {
     /// reads through this at every embed-batch / enrichment-phase
     /// boundary and skips the yield loop entirely when no hook is
     /// present.
-    pub fn yield_hook(&self) -> Option<Arc<dyn crate::yield_hook::YieldHook>> {
+    pub fn yield_hook(&self) -> Option<Arc<dyn crate::YieldHook>> {
         self.yield_hook
             .read()
             .expect("yield_hook RwLock poisoned")

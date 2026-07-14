@@ -18,7 +18,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
@@ -962,12 +961,7 @@ const SCHEMA: &str = include_str!("../assets/atos_features_schema.sql");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use corpus_engine_yield::time::unix_now;
 
 fn sqlite_err(e: rusqlite::Error) -> Error {
     Error::Io(std::io::Error::other(format!("FeatureStore sqlite: {e}")))

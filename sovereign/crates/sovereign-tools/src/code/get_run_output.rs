@@ -14,7 +14,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::test_results::TestResultStore;
+use corpus_engine_watchers::TestResultStore;
 
 pub struct GetRunOutputTool {
     store: Arc<TestResultStore>,

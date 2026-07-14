@@ -28,6 +28,8 @@ commonwealth-ai/
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
+├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)
+├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
@@ -46,11 +48,13 @@ weights (created by `sovereign setup`, gitignored).
 | Project              | Role                                          | Depends on                                            |
 |----------------------|-----------------------------------------------|-------------------------------------------------------|
 | `oicp-types`         | OICP v0.3 wire types + scoring helpers        | —                                                     |
-| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
+| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
+| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both | — |
+| `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
 | `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`                         |
@@ -1914,7 +1918,7 @@ contends with the watcher for the file lock and idles.
 
 **Watcher liveness is heartbeat-driven and self-healing.** The
 `WatcherCoordinator` loop stamps a shared `WatcherHeartbeat`
-(`corpus-engine/src/update/watcher_coordinator.rs`) every iteration;
+(`corpus-engine-watchers/src/watcher_coordinator.rs`) every iteration;
 the status tools read it through `code/watcher_health.rs`. Every
 `lint_status`/`test_status`/`build` response carries a `watcher`
 object — `{live, reason, configured, heartbeat_age_secs, hint}`. When
@@ -2009,7 +2013,7 @@ Default ports:
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
-| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
+| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md`                          |
 | Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-mesh/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
@@ -2022,7 +2026,7 @@ Default ports:
 | Understand KnowledgeView digest assembly         | `sovereign-tools/src/knowledge_view/` and [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
 | See where KnowledgeView is injected              | `traits.rs::LandscapeDigestProvider::splice_landscape_digests`; call sites in `runtime/streaming.rs` + `runtime/turn.rs` |
 | Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `sovereign-atos/src/{charter,approval}.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
-| See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
+| See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd/` (`cmd_found` in `mod.rs`, `cmd_amend` in `charter_amend.rs`, `cmd_phase` in `phase.rs`, `cmd_audit` in `audit/`) |
 | Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
@@ -2061,8 +2065,8 @@ Default ports:
   → align → fault lines → open questions) that analyses a corpus
   holistically rather than per-chunk.
 - **Domain (v1)** — Trait encoding the epistemic conventions of a
-  knowledge field (philosophy, science, …). The single extension
-  point for v1.
+  knowledge field (philosophy, personal, conversational, …). The single
+  extension point for v1; only fully-implemented domains are registered.
 - **Atlas (v2)** — Typed atom graph + `Pipeline` trait + registry +
   `ExemplarBank` + `PhaseCache`. See `ENRICHMENT_V2.md`. `PhaseCache`
   stamps each phase output with the producing model (`<phase>.model.json`
@@ -2136,7 +2140,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** `sovereign-cli-dev` is feature-gated out of the default/public build — the dispatcher gates its verbs behind `--features dev-tools` — so this developer-toolchain file is not part of the end-user product. Subcommand-per-file remains the eventual split shape; still gated on post-found project-lifecycle settling. |
+| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `init/`, `serve.rs`, `refresh.rs`, `scaffold.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |

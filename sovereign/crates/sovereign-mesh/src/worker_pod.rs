@@ -37,7 +37,6 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
@@ -415,12 +414,7 @@ pub fn mint_bootstrap(inputs: BootstrapInputs<'_>) -> Result<(BootstrapBlob, Sha
     Ok((blob, pod_thumbprint))
 }
 
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_unix;
 
 // ───── WorkerHandle ─────────────────────────────────────────────────
 

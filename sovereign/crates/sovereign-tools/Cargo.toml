@@ -36,6 +36,7 @@ sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
+corpus-engine-watchers = { workspace = true }
 # SCIP call graph types — carved out of corpus-engine 2026-05-23.
 # Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
 corpus-engine-scip = { workspace = true }

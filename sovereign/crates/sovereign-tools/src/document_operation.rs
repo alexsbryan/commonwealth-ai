@@ -11,7 +11,6 @@
 //! to arbitrary operations described in natural language.
 
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
@@ -32,12 +31,7 @@ const N_PARALLEL: usize = 4;
 const REDUCE_BATCH_SIZE: usize = 8;
 const MAX_REDUCE_DEPTH: usize = 5;
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as now;
 
 // ─── Progress reporting ──────────────────────────────────────
 

@@ -185,7 +185,7 @@ Five phases:
 4. **Fault line detection** — identifies substantive disagreements between aligned positions
 5. **Open question detection** — surfaces questions where the corpus has gaps
 
-The `Domain` trait (`src/enrichment/domain.rs`) is the single extension point. It defines epistemic vocabulary, overview filters, all LLM prompts, and configuration parameters. Six domain implementations exist in `src/enrichment/domains/`: `philosophy` (fully implemented), `multi` (Wikipedia), and `science`, `policy`, `legal`, `community` (stubs).
+The `Domain` trait (`src/enrichment/domain.rs`) is the single extension point. It defines epistemic vocabulary, overview filters, all LLM prompts, and configuration parameters. Five fully-implemented domains live in `src/enrichment/domains/`: `philosophy`, `personal`, `conversational`, `business_email`, and `institutional`. (A domain is registered only when every method has a real body — earlier `todo!()` stubs were removed so a `--domain` selection can't panic mid-enrichment.)
 
 `FieldModelEngine` orchestrates all phases with checkpoint-based resumability. Without an `InferenceFn`, enrichment is skipped with a warning — ingestion still succeeds.
 

@@ -7,6 +7,8 @@ license.workspace = true
 [lib]
 
 [dependencies]
+# Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
+sovereign-time = { workspace = true }
 # Atoms, atlas readers, investigation graph, the corpus chunk index — the
 # meshapp ops are projections over corpus-engine reads. No `treesitter`: these
 # ops touch atoms/prose, never the SCIP code graph.

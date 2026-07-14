@@ -50,7 +50,9 @@ pub mod stream_axes;
 pub mod testing;
 pub mod types;
 pub mod update;
-pub mod yield_hook;
+// yield_hook extracted to the corpus-engine-yield leaf crate (watchers
+// carve-out, R4 Step 1). Re-exported below as part of corpus-engine's
+// own configuration API (CorpusEngine::set_yield_hook).
 
 // SCIP call graph + per-language exporter dispatch live in their
 // own crate now (`corpus-engine-scip`, carved out 2026-05-23). The
@@ -74,11 +76,11 @@ pub mod wikipedia_graph;
 #[cfg(feature = "stores")]
 pub mod wikipedia_columnar;
 
-// Test / lint result stores (rusqlite). Gated by `stores`.
-#[cfg(feature = "stores")]
-pub mod lint_results;
-#[cfg(feature = "stores")]
-pub mod test_results;
+// Lint/test result stores + the lint/test/project-index watchers were
+// carved out to `corpus-engine-watchers` (R4 Step 1, see
+// DECOMPOSITION.md). corpus-engine has no internal consumer of them, so
+// no shim is left here — consumers depend on `corpus-engine-watchers`
+// directly. (The SCIP `update::watch::CodeWatcher` stays here.)
 
 // NoteStore + project_docs live in `corpus-engine-notes` (carved out
 // 2026-05-23, step 3 of the decomposition plan). `notes_sync` (the
@@ -154,7 +156,7 @@ pub use types::{
     IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
     ShardInfo, DEFAULT_EMBED_DIM,
 };
-pub use yield_hook::YieldHook;
+pub use corpus_engine_yield::YieldHook;
 
 // SCIP call graph + exporter dispatch live in `corpus-engine-scip`
 // (carved out 2026-05-23). corpus-engine itself still uses scip via
@@ -174,26 +176,9 @@ pub use wikipedia_graph::{
     WikipediaGraphApi,
 };
 
-// `watcher_coordinator` re-exports — gated on `stores` since the
-// coordinator depends only on `notify` (and notify lives in
-// `stores`). The actual watcher implementations (lint/test/project
-// index) are still treesitter-gated.
-#[cfg(feature = "stores")]
-pub use update::watcher_coordinator::{
-    ActivityCallback, BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat,
-    WatcherStatus,
-};
-
-#[cfg(feature = "stores")]
-pub use lint_results::LintResultStore;
-#[cfg(feature = "stores")]
-pub use test_results::TestResultStore;
-#[cfg(feature = "treesitter")]
-pub use update::lint_watcher::LintWatcher;
-#[cfg(feature = "treesitter")]
-pub use update::project_index_watcher::ProjectIndexWatcher;
-#[cfg(feature = "treesitter")]
-pub use update::test_watcher::TestWatcher;
+// The watcher_coordinator, lint/test result stores, and the
+// lint/test/project-index watchers now live in `corpus-engine-watchers`
+// (R4 Step 1). No re-export shim — consumers import from that crate.
 
 // notes / project_docs moved to corpus-engine-notes (step 3 of the
 // decomposition plan, 2026-05-23). No shim left here — external

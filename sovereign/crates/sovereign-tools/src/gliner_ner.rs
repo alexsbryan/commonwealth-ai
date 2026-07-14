@@ -36,7 +36,6 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use chrono::Utc;
 use gliner::model::input::text::TextInput;
 use gliner::model::params::Parameters;
 use gliner::model::pipeline::span::SpanMode;
@@ -380,12 +379,7 @@ fn normalize_mention_text(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Current unix timestamp — convenience for stamping
-/// `extracted_at` across a batch of rows so consumers can see "this
-/// whole corpus was extracted at T".
-pub fn now_unix() -> i64 {
-    Utc::now().timestamp()
-}
+pub use sovereign_core::time::unix_now as now_unix;
 
 /// Probe-style helper: returns true if the configured model is
 /// installed and the extractor can be loaded. Useful for CLI

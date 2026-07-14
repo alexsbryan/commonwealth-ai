@@ -38,7 +38,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use crate::design_onboarding::{self, OnboardOutcome};
 use corpus_engine_atos::design_signals::{self, GapMarker, GapReason};
@@ -765,12 +765,7 @@ fn open_questions_header() -> &'static str {
 
 // ─── Small helpers ─────────────────────────────────────────────────
 
-fn unix_now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now as unix_now_secs;
 
 fn iso_date_utc(secs: i64) -> String {
     // Same civil-from-days algorithm used elsewhere in project_cmd.rs.

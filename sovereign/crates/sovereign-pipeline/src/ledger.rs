@@ -14,7 +14,6 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -168,12 +167,7 @@ pub fn accrued_cost(rec: &PodRecord) -> f64 {
     elapsed_hours(rec) * rec.cost_per_hour
 }
 
-pub fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub use sovereign_time::unix_now;
 
 /// Default ledger path: `~/.sovereign/pipeline-pods.json`.
 pub fn default_path() -> PathBuf {

@@ -25,7 +25,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -128,10 +128,7 @@ impl WatcherHeartbeat {
     }
 
     fn now_unix() -> u64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        corpus_engine_yield::time::unix_now_u64()
     }
 
     /// Record that the coordinator loop is alive *now*. Called once per

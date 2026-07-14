@@ -1682,7 +1682,7 @@ mod tests {
     struct StubYieldHook {
         yield_now: bool,
     }
-    impl crate::yield_hook::YieldHook for StubYieldHook {
+    impl crate::YieldHook for StubYieldHook {
         fn should_yield(&self) -> bool {
             self.yield_now
         }

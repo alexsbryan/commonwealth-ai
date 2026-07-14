@@ -10,7 +10,6 @@
 //! incident (see `truncate_does_not_panic_inside_multibyte_char`) is
 //! the pinned regression.
 
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::types::{Message, Role};
 
@@ -20,16 +19,7 @@ use crate::types::{Message, Role};
 /// chunks at the merged top-K. Used by [`truncate_chunk_content`].
 pub(crate) const MAX_CHUNK_CHARS: usize = 600;
 
-/// Epoch seconds. Centralised here so every persisted `created_at` /
-/// `version` field uses the same clock and unit — the rest of the
-/// runtime imports `now()` rather than reaching for `SystemTime`
-/// directly.
-pub(crate) fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+pub(crate) use crate::time::unix_now as now;
 
 /// UTF-8-safe truncate by character count. Used by the atlas-navigate
 /// dedupe key in `prepare_knowledge_query_plan` — slicing by byte

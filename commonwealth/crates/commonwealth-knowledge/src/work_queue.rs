@@ -481,12 +481,7 @@ pub struct LeasedUnit {
     pub lease_expires_at_ms: u64,
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
+use commonwealth_core::clock::unix_now_millis as now_ms;
 
 // -----------------------------------------------------------------
 // Tests

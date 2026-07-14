@@ -5,8 +5,8 @@
 #   cargo run -p xtask -- layer-gate --tighten
 17	commonwealth-core
 12	commonwealth-state
-16	corpus-engine
-12	corpus-engine-notes
+15	corpus-engine
+13	corpus-engine-notes
 9	corpus-engine-scip
 12	sovereign-contracts
 13	sovereign-core

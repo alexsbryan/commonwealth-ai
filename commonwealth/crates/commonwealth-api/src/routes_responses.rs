@@ -1542,12 +1542,7 @@ fn mk_response_id() -> String {
     )
 }
 
-fn now_unix_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_unix_secs;
 
 #[derive(Serialize)]
 struct AdapterError {

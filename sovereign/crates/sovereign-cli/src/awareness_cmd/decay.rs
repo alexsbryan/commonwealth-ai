@@ -260,12 +260,7 @@ fn preview_one_line(s: &str, max_chars: usize) -> String {
     }
 }
 
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now;
 
 fn print_report(r: &DecayReport, months: i64, rate: f64, threshold: f64, show_entity_linked: bool) {
     println!(

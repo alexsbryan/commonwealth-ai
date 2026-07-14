@@ -660,13 +660,7 @@ async fn wait_for_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunner
     }
 }
 
-fn now_unix() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_unix;
 
 // ───── Tests ────────────────────────────────────────────────────────
 

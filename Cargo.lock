@@ -2335,6 +2335,7 @@ dependencies = [
  "chrono",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-yield",
  "csv",
  "flate2",
  "futures",
@@ -2406,6 +2407,7 @@ name = "corpus-engine-atos"
 version = "0.1.20"
 dependencies = [
  "chrono",
+ "corpus-engine-yield",
  "pulldown-cmark",
  "rusqlite",
  "serde",
@@ -2423,6 +2425,7 @@ version = "0.1.20"
 dependencies = [
  "chrono",
  "clap",
+ "corpus-engine-yield",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -2452,6 +2455,27 @@ dependencies = [
  "tracing",
  "which",
 ]
+
+[[package]]
+name = "corpus-engine-watchers"
+version = "0.1.20"
+dependencies = [
+ "async-trait",
+ "corpus-engine-notes",
+ "corpus-engine-yield",
+ "futures",
+ "notify",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "corpus-engine-yield"
+version = "0.1.20"
 
 [[package]]
 name = "cpufeatures"
@@ -12037,6 +12061,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hostname",
@@ -12079,6 +12104,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hostname",
@@ -12286,6 +12312,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-authoring-harness",
+ "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12388,6 +12415,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-time",
  "tempfile",
  "tokio",
 ]
@@ -12403,6 +12431,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12442,6 +12471,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "dirs 5.0.1",
  "futures",
  "hex",
@@ -12501,6 +12531,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-time"
+version = "0.1.20"
+
+[[package]]
 name = "sovereign-tools"
 version = "0.1.20"
 dependencies = [
@@ -12519,6 +12553,7 @@ dependencies = [
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-watchers",
  "csv",
  "dirs 5.0.1",
  "docx-lite",
@@ -12601,7 +12636,7 @@ dependencies = [
  "bytes",
  "commonwealth-core",
  "commonwealth-state",
- "corpus-engine",
+ "corpus-engine-watchers",
  "hex",
  "serde",
  "serde_json",

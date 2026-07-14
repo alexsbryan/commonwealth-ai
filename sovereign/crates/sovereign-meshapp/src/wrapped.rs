@@ -525,12 +525,7 @@ fn write_cached_artifact(index_path: &Path, artifact: &WrappedArtifact) -> Resul
     std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_time::unix_now as now_unix;
 
 // ─── Chunk rows → ConvDocs ───────────────────────────────────────────
 

@@ -165,12 +165,7 @@ impl Scheduler {
     }
 }
 
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_unix;
 
 #[cfg(test)]
 mod tests {

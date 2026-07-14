@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! SQLite-backed store for test runner results.
+//! SQLite-backed store for lint runner results.
 //!
-//! Records are written by [`crate::update::test_watcher::TestWatcher`] as
-//! subprocess output arrives, and read by the `test_status` / `get_run_output`
-//! MCP tools.
+//! Mirrors [`crate::test_results`] but adds `line`/`col` columns for
+//! precise error location, a `warn` kind alongside `pass`/`fail`, and a
+//! tighter truncation limit (500 chars vs 4096 for tests — lint errors are
+//! much shorter).
 //!
-//! ## Schema
-//!
-//! Three tables:
-//! - **`test_runs`** — one row per subprocess invocation (started → finished).
-//! - **`test_results`** — one row per Tier 2 `pass`/`fail` event in a run.
-//! - **`test_stale_files`** — paths that changed since the last completed run.
-//!
-//! The stale-files table is the source of truth for `WatcherStatus::Stale`.
+//! Written by [`crate::lint_watcher::LintWatcher`]; read by the
+//! `lint_status` and `get_lint_output` MCP tools.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,74 +20,85 @@ use crate::error::{Error, Result};
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
-/// Summary of a single completed test run.
+/// Summary of a single completed lint run.
 #[derive(Debug, Clone)]
-pub struct RunSummary {
+pub struct LintRunSummary {
     pub run_id: i64,
     pub pass_count: u32,
     pub fail_count: u32,
+    pub warn_count: u32,
     pub exit_code: i32,
+    pub elapsed_ms: Option<u64>,
     pub finished_at: SystemTime,
 }
 
-impl RunSummary {
+impl LintRunSummary {
     pub fn passed(&self) -> bool {
         self.exit_code == 0 && self.fail_count == 0
     }
 }
 
-/// A single test result from a run.
+/// A single lint result from a run.
 #[derive(Debug, Clone)]
-pub struct TestResult {
+pub struct LintResult {
     pub run_id: i64,
-    pub kind: TestResultKind,
-    pub name: String,
-    /// Output truncated to [`OUTPUT_TRUNCATE_CHARS`] if `output_truncated` is true.
+    pub kind: LintResultKind,
+    pub file: String,
+    /// Output truncated to [`OUTPUT_TRUNCATE_CHARS`] if `output_truncated`.
     pub output: Option<String>,
     pub output_truncated: bool,
+    /// Source line (1-indexed) if provided by the linter.
+    pub line: Option<u32>,
+    /// Source column (1-indexed) if provided by the linter.
+    pub col: Option<u32>,
 }
 
-/// Whether the result was a pass or failure.
+/// Result kind for a lint event.
 #[derive(Debug, Clone, PartialEq)]
-pub enum TestResultKind {
+pub enum LintResultKind {
     Pass,
     Fail,
+    Warn,
 }
 
-impl TestResultKind {
+impl LintResultKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pass => "pass",
             Self::Fail => "fail",
+            Self::Warn => "warn",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "pass" => Self::Pass,
+            "warn" => Self::Warn,
+            _ => Self::Fail,
         }
     }
 }
 
-/// Maximum characters stored per test failure output. Full output is stored in
-/// `test_runs.raw_output` and retrievable via `get_run_output`.
-pub const OUTPUT_TRUNCATE_CHARS: usize = 4096;
+/// Maximum characters stored per lint error output.
+/// Lint errors are compact (one-liners + context), so 500 is generous.
+pub const OUTPUT_TRUNCATE_CHARS: usize = 500;
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-/// SQLite store for test runner results.
-///
-/// Thread-safe: wraps the `rusqlite::Connection` in a `tokio::sync::Mutex`.
-/// Individual operations are fast (microseconds) so we do not need
-/// `spawn_blocking`.
-pub struct TestResultStore {
+/// SQLite store for lint runner results.
+pub struct LintResultStore {
     conn: Arc<Mutex<Connection>>,
 }
 
-impl TestResultStore {
-    /// Open or create the database at `db_path`. Runs schema migrations on
-    /// every open — idempotent, cheap.
+impl LintResultStore {
+    /// Open or create the database at `db_path`.
     pub fn open(db_path: &Path) -> Result<Self> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::Io)?;
         }
         let conn = Connection::open(db_path).map_err(|e| {
             Error::Io(std::io::Error::other(format!(
-                "TestResultStore::open {}: {e}",
+                "LintResultStore::open {}: {e}",
                 db_path.display()
             )))
         })?;
@@ -103,26 +109,27 @@ impl TestResultStore {
         })
     }
 
-    /// Insert a new run row and return its generated id.
+    /// Start a new run and return its id.
     pub async fn begin_run(&self) -> Result<i64> {
         let now = unix_now();
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO test_runs (started_at, pass_count, fail_count) VALUES (?1, 0, 0)",
+            "INSERT INTO lint_runs (started_at, pass_count, fail_count, warn_count) VALUES (?1, 0, 0, 0)",
             params![now],
         )
         .map_err(sqlite_err)?;
         Ok(conn.last_insert_rowid())
     }
 
-    /// Record a single pass/fail result for `run_id`. Truncates `output` at
-    /// [`OUTPUT_TRUNCATE_CHARS`] characters and sets `output_truncated`.
+    /// Record a single lint result for `run_id`.
     pub async fn record_result(
         &self,
         run_id: i64,
-        kind: TestResultKind,
-        name: &str,
+        kind: LintResultKind,
+        file: &str,
         output: Option<&str>,
+        line: Option<u32>,
+        col: Option<u32>,
     ) -> Result<()> {
         let (stored_output, truncated) = match output {
             None => (None, false),
@@ -130,85 +137,101 @@ impl TestResultStore {
             Some(s) => (Some(s[..OUTPUT_TRUNCATE_CHARS].to_string()), true),
         };
 
-        // Increment the appropriate counter atomically.
         let counter_col = match kind {
-            TestResultKind::Pass => "pass_count",
-            TestResultKind::Fail => "fail_count",
+            LintResultKind::Pass => "pass_count",
+            LintResultKind::Fail => "fail_count",
+            LintResultKind::Warn => "warn_count",
         };
 
         let conn = self.conn.lock().await;
         conn.execute(
-            &format!("UPDATE test_runs SET {counter_col} = {counter_col} + 1 WHERE id = ?1"),
+            &format!("UPDATE lint_runs SET {counter_col} = {counter_col} + 1 WHERE id = ?1"),
             params![run_id],
         )
         .map_err(sqlite_err)?;
 
         conn.execute(
-            "INSERT INTO test_results (run_id, kind, name, output, output_truncated) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![run_id, kind.as_str(), name, stored_output, truncated as i32],
+            "INSERT INTO lint_results (run_id, kind, file, output, output_truncated, line, col) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                run_id,
+                kind.as_str(),
+                file,
+                stored_output,
+                truncated as i32,
+                line.map(|v| v as i64),
+                col.map(|v| v as i64),
+            ],
         )
         .map_err(sqlite_err)?;
         Ok(())
     }
 
-    /// Mark a run as finished. Updates `finished_at` and `exit_code`.
-    pub async fn finish_run(&self, run_id: i64, exit_code: i32) -> Result<()> {
+    /// Mark a run as finished.
+    pub async fn finish_run(&self, run_id: i64, exit_code: i32, elapsed_ms: u64) -> Result<()> {
         let now = unix_now();
         let conn = self.conn.lock().await;
         conn.execute(
-            "UPDATE test_runs SET finished_at = ?1, exit_code = ?2 WHERE id = ?3",
-            params![now, exit_code, run_id],
+            "UPDATE lint_runs SET finished_at = ?1, exit_code = ?2, elapsed_ms = ?3 WHERE id = ?4",
+            params![now, exit_code, elapsed_ms as i64, run_id],
         )
         .map_err(sqlite_err)?;
         Ok(())
     }
 
-    /// Store the full raw output for the run (Tier 1 output, unstructured).
+    /// Store full raw output for `get_lint_output`.
     pub async fn store_raw_output(&self, run_id: i64, raw: &str) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
-            "UPDATE test_runs SET raw_output = ?1 WHERE id = ?2",
+            "UPDATE lint_runs SET raw_output = ?1 WHERE id = ?2",
             params![raw, run_id],
         )
         .map_err(sqlite_err)?;
         Ok(())
     }
 
-    /// Return the summary of the most recently *finished* run, if any.
-    pub async fn latest_run(&self) -> Result<Option<RunSummary>> {
+    /// Return the most recently finished run summary.
+    pub async fn latest_run(&self) -> Result<Option<LintRunSummary>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT id, pass_count, fail_count, exit_code, finished_at \
-                 FROM test_runs \
-                 WHERE finished_at IS NOT NULL \
-                 ORDER BY id DESC LIMIT 1",
+                "SELECT id, pass_count, fail_count, warn_count, exit_code, elapsed_ms, finished_at \
+                 FROM lint_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
             )
             .map_err(sqlite_err)?;
-
         let row = stmt
             .query_row([], |row| {
-                Ok(RunSummary {
+                Ok(LintRunSummary {
                     run_id: row.get(0)?,
                     pass_count: row.get::<_, i64>(1)? as u32,
                     fail_count: row.get::<_, i64>(2)? as u32,
-                    exit_code: row.get(3)?,
-                    finished_at: unix_to_system_time(row.get::<_, i64>(4)?),
+                    warn_count: row.get::<_, i64>(3)? as u32,
+                    exit_code: row.get(4)?,
+                    elapsed_ms: row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
+                    finished_at: unix_to_system_time(row.get::<_, i64>(6)?),
                 })
             })
             .optional()
             .map_err(sqlite_err)?;
-
         Ok(row)
     }
 
-    /// Return the failures from the most recently finished run (up to `limit`).
-    pub async fn latest_failures(&self, limit: usize) -> Result<Vec<TestResult>> {
+    /// Return all failures from the most recent run (grouped by file for
+    /// the `lint_status` tool response).
+    pub async fn latest_failures(&self, limit: usize) -> Result<Vec<LintResult>> {
+        self.latest_by_kind("fail", limit).await
+    }
+
+    /// Return all warnings from the most recent run.
+    pub async fn latest_warnings(&self, limit: usize) -> Result<Vec<LintResult>> {
+        self.latest_by_kind("warn", limit).await
+    }
+
+    async fn latest_by_kind(&self, kind: &str, limit: usize) -> Result<Vec<LintResult>> {
         let conn = self.conn.lock().await;
         let run_id: Option<i64> = conn
             .query_row(
-                "SELECT id FROM test_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
+                "SELECT id FROM lint_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
                 [],
                 |r| r.get(0),
             )
@@ -221,26 +244,22 @@ impl TestResultStore {
 
         let mut stmt = conn
             .prepare(
-                "SELECT run_id, kind, name, output, output_truncated \
-                 FROM test_results \
-                 WHERE run_id = ?1 AND kind = 'fail' \
-                 LIMIT ?2",
+                "SELECT run_id, kind, file, output, output_truncated, line, col \
+                 FROM lint_results WHERE run_id = ?1 AND kind = ?2 LIMIT ?3",
             )
             .map_err(sqlite_err)?;
 
         let rows = stmt
-            .query_map(params![run_id, limit as i64], |row| {
+            .query_map(params![run_id, kind, limit as i64], |row| {
                 let kind_str: String = row.get(1)?;
-                Ok(TestResult {
+                Ok(LintResult {
                     run_id: row.get(0)?,
-                    kind: if kind_str == "pass" {
-                        TestResultKind::Pass
-                    } else {
-                        TestResultKind::Fail
-                    },
-                    name: row.get(2)?,
+                    kind: LintResultKind::from_str(&kind_str),
+                    file: row.get(2)?,
                     output: row.get(3)?,
                     output_truncated: row.get::<_, i32>(4)? != 0,
+                    line: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
+                    col: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
                 })
             })
             .map_err(sqlite_err)?;
@@ -252,11 +271,11 @@ impl TestResultStore {
         Ok(out)
     }
 
-    /// Return the full raw output for a run (for `get_run_output` tool).
+    /// Return full raw output for `get_lint_output`.
     pub async fn raw_output(&self, run_id: i64) -> Result<Option<String>> {
         let conn = self.conn.lock().await;
         conn.query_row(
-            "SELECT raw_output FROM test_runs WHERE id = ?1",
+            "SELECT raw_output FROM lint_runs WHERE id = ?1",
             params![run_id],
             |r| r.get(0),
         )
@@ -264,14 +283,13 @@ impl TestResultStore {
         .map_err(sqlite_err)
     }
 
-    /// Mark files as stale (changed since last completed run). Called by
-    /// `TestWatcher::on_files_changed`.
+    /// Mark files as stale.
     pub async fn mark_stale(&self, paths: &[PathBuf]) -> Result<()> {
         let now = unix_now();
         let conn = self.conn.lock().await;
         for path in paths {
             conn.execute(
-                "INSERT OR REPLACE INTO test_stale_files (path, marked_at) VALUES (?1, ?2)",
+                "INSERT OR REPLACE INTO lint_stale_files (path, marked_at) VALUES (?1, ?2)",
                 params![path.to_string_lossy().as_ref(), now],
             )
             .map_err(sqlite_err)?;
@@ -279,19 +297,19 @@ impl TestResultStore {
         Ok(())
     }
 
-    /// Clear the stale-files table. Called when a new run starts.
+    /// Clear the stale files table.
     pub async fn clear_stale(&self) -> Result<()> {
         let conn = self.conn.lock().await;
-        conn.execute("DELETE FROM test_stale_files", [])
+        conn.execute("DELETE FROM lint_stale_files", [])
             .map_err(sqlite_err)?;
         Ok(())
     }
 
-    /// Return all paths that have been marked stale (changed since last run).
+    /// Return all stale paths.
     pub async fn stale_files_since_last_run(&self) -> Result<Vec<PathBuf>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT path FROM test_stale_files ORDER BY marked_at ASC")
+            .prepare("SELECT path FROM lint_stale_files ORDER BY marked_at ASC")
             .map_err(sqlite_err)?;
         let paths = stmt
             .query_map([], |r| r.get::<_, String>(0))
@@ -303,11 +321,11 @@ impl TestResultStore {
         Ok(out)
     }
 
-    /// Returns true if there are any stale files (run results may be outdated).
+    /// Returns true if any stale files exist.
     pub async fn has_stale_files(&self) -> Result<bool> {
         let conn = self.conn.lock().await;
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM test_stale_files", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM lint_stale_files", [], |r| r.get(0))
             .map_err(sqlite_err)?;
         Ok(count > 0)
     }
@@ -316,15 +334,15 @@ impl TestResultStore {
     /// left when a watcher process was killed mid-run (SIGKILL, panic,
     /// machine sleep with the daemon's tokio task aborted before
     /// `finish_run` could fire). Without this, [`run_in_progress`]
-    /// returns `true` indefinitely against a stale row, and
-    /// `test_status` reports `running` forever.
+    /// returns `true` indefinitely against a stale row, and the agent-
+    /// facing `lint_status` tool reports `running` forever.
     ///
     /// Idempotent. Returns the number of orphans purged. Safe to call
     /// at watcher startup before any new runs begin.
     pub async fn clear_orphan_runs(&self) -> Result<usize> {
         let conn = self.conn.lock().await;
         let n = conn
-            .execute("DELETE FROM test_runs WHERE finished_at IS NULL", [])
+            .execute("DELETE FROM lint_runs WHERE finished_at IS NULL", [])
             .map_err(sqlite_err)?;
         Ok(n)
     }
@@ -340,7 +358,7 @@ impl TestResultStore {
         // None → no runs at all; Some(None) → latest run not finished; Some(Some(_)) → finished.
         let finished_at: Option<Option<i64>> = conn
             .query_row(
-                "SELECT finished_at FROM test_runs ORDER BY id DESC LIMIT 1",
+                "SELECT finished_at FROM lint_runs ORDER BY id DESC LIMIT 1",
                 [],
                 |r| r.get(0),
             )
@@ -355,27 +373,31 @@ impl TestResultStore {
 const SCHEMA: &str = "
 PRAGMA journal_mode=WAL;
 
-CREATE TABLE IF NOT EXISTS test_runs (
+CREATE TABLE IF NOT EXISTS lint_runs (
     id          INTEGER PRIMARY KEY,
     started_at  INTEGER NOT NULL,
     finished_at INTEGER,
     exit_code   INTEGER,
+    elapsed_ms  INTEGER,
     pass_count  INTEGER NOT NULL DEFAULT 0,
     fail_count  INTEGER NOT NULL DEFAULT 0,
+    warn_count  INTEGER NOT NULL DEFAULT 0,
     raw_output  TEXT
 );
 
-CREATE TABLE IF NOT EXISTS test_results (
+CREATE TABLE IF NOT EXISTS lint_results (
     id               INTEGER PRIMARY KEY,
-    run_id           INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
-    kind             TEXT    NOT NULL CHECK(kind IN ('pass','fail')),
-    name             TEXT    NOT NULL,
+    run_id           INTEGER NOT NULL REFERENCES lint_runs(id) ON DELETE CASCADE,
+    kind             TEXT    NOT NULL CHECK(kind IN ('pass','fail','warn')),
+    file             TEXT    NOT NULL,
     output           TEXT,
-    output_truncated INTEGER NOT NULL DEFAULT 0
+    output_truncated INTEGER NOT NULL DEFAULT 0,
+    line             INTEGER,
+    col              INTEGER
 );
-CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_lint_results_run ON lint_results(run_id);
 
-CREATE TABLE IF NOT EXISTS test_stale_files (
+CREATE TABLE IF NOT EXISTS lint_stale_files (
     path       TEXT    PRIMARY KEY,
     marked_at  INTEGER NOT NULL
 );
@@ -383,12 +405,7 @@ CREATE TABLE IF NOT EXISTS test_stale_files (
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use corpus_engine_yield::time::unix_now;
 
 fn unix_to_system_time(secs: i64) -> SystemTime {
     UNIX_EPOCH + std::time::Duration::from_secs(secs as u64)
@@ -418,82 +435,94 @@ impl<T> OptionalExt<T> for rusqlite::Result<T> {
 mod tests {
     use super::*;
 
-    async fn make_store() -> TestResultStore {
+    async fn make_store() -> LintResultStore {
         let dir = tempfile::tempdir().unwrap();
-        TestResultStore::open(&dir.path().join("test_results.db")).unwrap()
+        LintResultStore::open(&dir.path().join("lint.db")).unwrap()
     }
 
     #[tokio::test]
-    async fn begin_and_finish_run() {
+    async fn lint_tier2_warn_not_failure() {
+        // Warnings should NOT affect exit_code == 0 → passed() == true.
         let store = make_store().await;
         let run_id = store.begin_run().await.unwrap();
-        assert!(run_id > 0);
-        store.finish_run(run_id, 0).await.unwrap();
-        let summary = store.latest_run().await.unwrap().unwrap();
-        assert_eq!(summary.run_id, run_id);
-        assert_eq!(summary.exit_code, 0);
-    }
-
-    #[tokio::test]
-    async fn record_pass_and_fail() {
-        let store = make_store().await;
-        let run_id = store.begin_run().await.unwrap();
-        store
-            .record_result(run_id, TestResultKind::Pass, "test_a", None)
-            .await
-            .unwrap();
         store
             .record_result(
                 run_id,
-                TestResultKind::Fail,
-                "test_b",
-                Some("assertion failed"),
+                LintResultKind::Warn,
+                "src/foo.rs",
+                Some("unused var"),
+                Some(12),
+                Some(9),
             )
             .await
             .unwrap();
-        store.finish_run(run_id, 1).await.unwrap();
+        store.finish_run(run_id, 0, 100).await.unwrap();
 
         let summary = store.latest_run().await.unwrap().unwrap();
-        assert_eq!(summary.pass_count, 1);
-        assert_eq!(summary.fail_count, 1);
-        assert!(!summary.passed());
-
-        let failures = store.latest_failures(10).await.unwrap();
-        assert_eq!(failures.len(), 1);
-        assert_eq!(failures[0].name, "test_b");
+        assert_eq!(summary.warn_count, 1);
+        assert_eq!(summary.fail_count, 0);
+        assert!(
+            summary.passed(),
+            "exit_code=0 with only warnings should be passing"
+        );
     }
 
     #[tokio::test]
-    async fn output_truncated_at_limit() {
+    async fn lint_line_col_stored() {
         let store = make_store().await;
         let run_id = store.begin_run().await.unwrap();
-        let long_output = "x".repeat(OUTPUT_TRUNCATE_CHARS + 100);
         store
-            .record_result(run_id, TestResultKind::Fail, "heavy", Some(&long_output))
+            .record_result(
+                run_id,
+                LintResultKind::Fail,
+                "src/bar.rs",
+                Some("type error"),
+                Some(34),
+                Some(5),
+            )
             .await
             .unwrap();
-        store.finish_run(run_id, 1).await.unwrap();
+        store.finish_run(run_id, 1, 200).await.unwrap();
 
         let failures = store.latest_failures(1).await.unwrap();
-        let f = &failures[0];
-        assert!(f.output_truncated);
-        assert_eq!(f.output.as_ref().unwrap().len(), OUTPUT_TRUNCATE_CHARS);
+        assert_eq!(failures[0].line, Some(34));
+        assert_eq!(failures[0].col, Some(5));
     }
 
     #[tokio::test]
-    async fn stale_files_roundtrip() {
+    async fn lint_output_truncated_at_500() {
         let store = make_store().await;
-        assert!(!store.has_stale_files().await.unwrap());
-
+        let run_id = store.begin_run().await.unwrap();
+        let long = "e".repeat(OUTPUT_TRUNCATE_CHARS + 200);
         store
-            .mark_stale(&[PathBuf::from("src/foo.rs"), PathBuf::from("src/bar.rs")])
+            .record_result(
+                run_id,
+                LintResultKind::Fail,
+                "src/baz.rs",
+                Some(&long),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        store.finish_run(run_id, 1, 50).await.unwrap();
+
+        let failures = store.latest_failures(1).await.unwrap();
+        assert!(failures[0].output_truncated);
+        assert_eq!(
+            failures[0].output.as_ref().unwrap().len(),
+            OUTPUT_TRUNCATE_CHARS
+        );
+    }
+
+    #[tokio::test]
+    async fn lint_stale_roundtrip() {
+        let store = make_store().await;
+        store
+            .mark_stale(&[PathBuf::from("src/a.rs")])
             .await
             .unwrap();
         assert!(store.has_stale_files().await.unwrap());
-
-        let stale = store.stale_files_since_last_run().await.unwrap();
-        assert_eq!(stale.len(), 2);
-
         store.clear_stale().await.unwrap();
         assert!(!store.has_stale_files().await.unwrap());
     }
@@ -501,26 +530,34 @@ mod tests {
     #[tokio::test]
     async fn clear_orphan_runs_purges_unfinished_rows() {
         let store = make_store().await;
+        // Two runs. The first finishes; the second is orphaned (the
+        // process running it died before `finish_run` could fire).
         let r1 = store.begin_run().await.unwrap();
-        store.finish_run(r1, 0).await.unwrap();
+        store.finish_run(r1, 0, 100).await.unwrap();
         let _r2 = store.begin_run().await.unwrap();
 
-        // Latest row is unfinished — run_in_progress would report
-        // true forever without cleanup.
+        // Without cleanup, run_in_progress reports true forever
+        // because the latest row has finished_at IS NULL.
         assert!(store.run_in_progress().await.unwrap());
 
+        // Cleanup wipes the orphan and reports the count purged.
         let purged = store.clear_orphan_runs().await.unwrap();
         assert_eq!(purged, 1);
 
+        // The completed run is preserved; run_in_progress is false.
         assert!(!store.run_in_progress().await.unwrap());
+        let summary = store.latest_run().await.unwrap();
+        assert!(summary.is_some(), "completed run should still be present");
     }
 
     #[tokio::test]
     async fn clear_orphan_runs_is_idempotent_and_safe_when_empty() {
         let store = make_store().await;
+        // No runs at all — cleanup is a 0-op.
         assert_eq!(store.clear_orphan_runs().await.unwrap(), 0);
+        // After a finished run, cleanup still purges nothing.
         let r1 = store.begin_run().await.unwrap();
-        store.finish_run(r1, 0).await.unwrap();
+        store.finish_run(r1, 0, 50).await.unwrap();
         assert_eq!(store.clear_orphan_runs().await.unwrap(), 0);
     }
 }

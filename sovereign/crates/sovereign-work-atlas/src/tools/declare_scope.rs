@@ -7,7 +7,6 @@
 //! so a re-declare is the way to refresh.
 
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -229,9 +228,4 @@ fn map_err(e: WorkAtlasError) -> Error {
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_secs;

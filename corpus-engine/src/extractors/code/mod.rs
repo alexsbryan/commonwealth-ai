@@ -36,7 +36,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Parser, Query, QueryCursor};
@@ -883,15 +883,10 @@ fn file_mtime_secs(path: &Path) -> Option<i64> {
     Some(secs as i64)
 }
 
-// Used by the watcher's file-missing branch; kept here so the whole
-// time helper surface lives alongside the extractor.
-#[allow(dead_code)]
-pub(crate) fn now_unix_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+// Crate-local alias onto the shared time helper; kept for the watcher's
+// file-missing branch (no in-crate callers yet, hence the allow).
+#[allow(unused_imports)]
+pub(crate) use corpus_engine_yield::time::unix_now as now_unix_secs;
 
 // ─── Tests ─────────────────────────────────────────────────────
 

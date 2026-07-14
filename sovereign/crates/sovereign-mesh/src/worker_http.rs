@@ -260,11 +260,7 @@ impl WorkerState {
     }
 
     fn now_unix() -> u64 {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        sovereign_core::time::unix_now_u64()
     }
 
     /// Spawn a background task that polls upload state and dumps

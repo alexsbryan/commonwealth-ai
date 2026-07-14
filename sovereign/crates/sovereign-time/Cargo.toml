@@ -1,0 +1,11 @@
+[package]
+name = "sovereign-time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wall-clock helpers (Unix-epoch seconds/millis). A Tier-0 leaf: three functions, zero dependencies. For sovereign-side crates that must not pull the heavier sovereign-core (which carries the identical sovereign_core::time twin)."
+
+[dependencies]
+
+[lints]
+workspace = true

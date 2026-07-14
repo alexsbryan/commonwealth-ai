@@ -31,6 +31,7 @@ pub mod router_embed_cache;
 pub mod runtime;
 pub mod scope_classifier;
 pub mod stubs;
+pub mod time;
 pub mod title;
 pub mod tool_loop;
 

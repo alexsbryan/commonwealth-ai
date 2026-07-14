@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod business_email;
-pub mod community;
 pub mod conversational;
-pub mod engineering;
 pub mod institutional;
-pub mod legal;
-pub mod multi;
 pub mod personal;
 pub mod philosophy;
-pub mod policy;
-pub mod science;

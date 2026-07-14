@@ -120,7 +120,7 @@ decoupled first," because those compound day after day.
 | Step | Carve-out                  | Status | Why this order |
 |------|----------------------------|--------|----------------|
 | 0    | scip                       | DONE   | Cleanest seam in the workspace + active edit zone |
-| 1    | **watchers**               | next   | Active edit zone this session. Asymmetric win: watcher-local edits stop rippling |
+| 1    | **watchers**               | DONE   | Active edit zone. Asymmetric win: watcher-edit rebuild set 22→12 crates (measured; the 18→5 estimate was optimistic — sovereign-tools consumes the result stores and is itself a hub, so R3 shrinks this further) |
 | 2    | **atos**                   |        | Smallest consumer set (3). Lets sovereign-atos stop depending on corpus-engine entirely |
 | 3    | **notes**                  |        | 11 consumers feels broad, but the API is narrow (NoteStore + a few enum kinds). Big LOC win: notes.rs is 2781 lines, a §3.1 violation |
 | 4    | **archaeology**            |        | Two consumers, small surface. Tidy-up |
@@ -265,7 +265,7 @@ an ingest concern. None of those should rebuild each other.
 ## Status
 
 - [x] **Step 0**: `corpus-engine-scip` (2026-05-23)
-- [ ] Step 1: `corpus-engine-watchers` — plan drafted; ready to execute
+- [x] **Step 1**: `corpus-engine-watchers` (2026-07-13) — 3,172 LOC out (6 files: lint/test result stores + watcher_coordinator + lint/test/project-index watchers). Two bonus wins: (a) the `treesitter` gate on the watcher impls was **vestigial** — none touch tree-sitter — so the new crate compiles unconditionally, which also fixed sovereign-tools' feature-unification wart; (b) `sovereign-work-atlas` dropped its **direct** `corpus-engine` dep (the watcher trait was its only direct use → now depends on the small watchers leaf; corpus-engine remains reached transitively via `sovereign-core`, so this trims declared/observed coupling, not work-atlas's rebuild set). Also extracted `corpus-engine-yield` (Tier-0 leaf, one trait) so the shared `YieldHook` has one trait identity across the data plane + watchers — see lesson #6.
 - [x] **Step 2**: `corpus-engine-atos` (2026-05-23) — 2,818 LOC out; features.rs §3.1 cleared
 - [x] **Step 3**: `corpus-engine-notes` (2026-05-23) — 4,379 LOC out (notes_sync stayed in corpus-engine to break the cycle on `ExtractedDoc`); notes.rs §3.1 cleared
 - [x] **Step 4**: `corpus-engine-archaeology` (2026-05-23) — 2,709 LOC out, three consumers
@@ -282,7 +282,9 @@ After the four executed carve-outs (scip, atos, notes, archaeology):
 2. **Helper `ce_err`-style functions** (`fn ce_err(e: corpus_engine::Error) -> Error`) need a parallel `ce_<crate>_err` per carved-out error type. Multiple may live in the same file when the file calls into multiple carved crates (e.g., recipe_author/project.rs has ce_err, ce_atos_err, ce_notes_err).
 3. **Cyclic-dep watch**: if the new crate would need to reach back into corpus-engine for a type (as notes_sync needed `ExtractedDoc`), the bridge file stays in corpus-engine, not the new crate. notes_sync is the worked example.
 4. **Feature gates at module-top** (`#![cfg(feature = "stores")]` in rough_edges.rs) leak in the move — drop them as soon as the new crate compiles unconditionally.
-5. **`Error::InvalidInput` is the most common missing variant** in the narrow-error pattern. The atos and notes Error enums both needed it.
+5. **`Error::InvalidInput` is the most common missing variant** in the narrow-error pattern. The atos and notes Error enums both needed it. (The watchers carve was the exception — only `Io` is constructed there, so a single-variant enum was the honest narrow error.)
+6. **A shared *trait* that both the carved crate and corpus-engine must implement/consume needs a Tier-0 leaf, not a re-export.** The watchers carve needed `YieldHook` on both sides with one trait *identity* (the daemon installs a single `Arc<dyn YieldHook>` on the CorpusEngine AND the watchers). Extract the trait to a dependency-free leaf crate (`corpus-engine-yield`) that both depend on; corpus-engine may keep a crate-root `pub use` of it (that is legitimate API surface, not a shim — it is a single-source type, so no oicp-types-style skew). This differs from the "no re-export shim" rule (#2 / ARCH §8.3), which is about *moved* types the origin no longer uses. Watch for this whenever a carved subsystem shares a callback/hook trait with the data plane.
+7. **Check for vestigial feature gates before copying them.** The watcher impls carried a `treesitter` gate inherited from when they were grouped with the SCIP `CodeWatcher`, but grep proved none of them touch tree-sitter. Dropping the gate let the new crate compile unconditionally — and *fixed* a latent feature-unification wart (sovereign-tools imported a `treesitter`-gated symbol without enabling the feature, compiling only by luck of sibling unification). `grep -L 'tree_sitter\|scip\|extractors::code' <moving files>` before you replicate a gate.
 
 Pick up by reading the next unchecked step and the pattern conventions
 above, then proceed in the scip-shaped PR sequence.

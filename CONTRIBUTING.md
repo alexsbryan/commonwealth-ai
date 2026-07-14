@@ -34,18 +34,18 @@ git clone https://github.com/alexsbryan/commonwealth-ai
 cd commonwealth-ai
 ```
 
-You'll need a current stable Rust toolchain and a few native libraries
-(protobuf and cmake at minimum; the desktop app needs more). The
-platform-specific package lists live in
-[`scripts/bootstrap.sh`](./scripts/bootstrap.sh) and, for Linux native deps,
-[`sovereign/scripts/bootstrap-linux.sh`](./sovereign/scripts/bootstrap-linux.sh).
-The build-from-source walkthrough is in the [Sovereign guide](./sovereign/README.md).
-
-Build the CLI:
+**[SETUP.md](./SETUP.md) is the full walkthrough** — Rust, the native libraries,
+the build, and code intelligence, for both Mac and Linux, in about half an hour.
+The short version: you'll need a current Rust toolchain and a few native
+libraries (protobuf and cmake at minimum; the desktop app needs more), then:
 
 ```sh
 cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
 ```
+
+On Linux, [`sovereign/scripts/bootstrap-linux.sh`](./sovereign/scripts/bootstrap-linux.sh)
+installs every native dep in one shot; `scripts/bootstrap.sh` then wires the
+daemon's lint/test watcher to the workspace.
 
 ## The development loop
 
