@@ -73,8 +73,11 @@ impl HardwareProfile {
 /// Select the model-size profile for this hardware.
 ///
 /// Thresholds match models.toml:
-/// - `high` requires ≥20 GB so Qwen3.5-27B (~16.5 GB) fits with headroom
-///   for the always-resident Fast (~2 GB) and Embed (~2.5 GB) slots.
+/// - `high` requires ≥20 GB: Qwen3.5-35B-A3B at UD-IQ4_XS (~16.3 GB, ≥4-bit)
+///   plus the always-resident Fast (~2 GB) + Embed (~2.5 GB) ≈ 20.8 GB — the
+///   same slight over-subscription the tier's MoE residency absorbed before
+///   (the old 30B-A3B Q4 pick was ~22 GB total). very_high runs the same
+///   model at Q4_K_M.
 pub fn select_profile(hw: &HardwareProfile) -> ProfileName {
     match hw.effective_vram_gb() as u32 {
         0 => ProfileName::CpuOnly,

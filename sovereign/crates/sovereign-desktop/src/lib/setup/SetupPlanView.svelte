@@ -7,8 +7,10 @@
   the data and feeds it here. See SetupPlan for the full rationale.
 -->
 <script lang="ts">
+  import { open } from "@tauri-apps/plugin-dialog";
   import BrandMark from "../components/BrandMark.svelte";
   import type { RecommendedProfile, PrimaryOption, SlotConfig } from "../types";
+  import type { PrimarySource } from "./setupTypes";
 
   interface Props {
     loading: boolean;
@@ -19,7 +21,11 @@
     embed: SlotConfig | null;
     modelsDir: string;
     dataDir: string;
-    onConfirm: (opts: { installStarterCorpus: boolean; primaryFile?: string }) => void;
+    onConfirm: (opts: {
+      installStarterCorpus: boolean;
+      primaryFile?: string;
+      primarySource?: PrimarySource;
+    }) => void;
     onBack: () => void;
   }
   let {
@@ -39,6 +45,43 @@
   let customizing = $state(false);
   let chosenPrimaryFile = $state<string | undefined>(undefined);
 
+  // "Advanced — bring your own": when `useByom` is on, `byomInput` (a local
+  // .gguf path or a pasted .gguf URL) overrides the catalog pick entirely.
+  let useByom = $state(false);
+  let byomInput = $state("");
+
+  const HTTP_RE = /^https?:\/\//i;
+  let byomSource = $derived.by((): PrimarySource | null => {
+    const v = byomInput.trim();
+    if (!useByom || !v) return null;
+    return HTTP_RE.test(v) ? { kind: "url", url: v } : { kind: "local_path", path: v };
+  });
+  // Non-blocking guidance; the backend does the authoritative GGUF check.
+  let byomHint = $derived.by((): string | null => {
+    if (!useByom) return null;
+    const v = byomInput.trim();
+    if (!v) return "Paste a .gguf link or pick a local file.";
+    if (HTTP_RE.test(v)) {
+      const ok = /\.gguf(\?|#|$)/i.test(v) || /show_file_info=[^&]*\.gguf/i.test(v);
+      return ok
+        ? null
+        : "That doesn't look like a .gguf file link — paste the file (or its HF quant page), not the repo root.";
+    }
+    return /\.gguf$/i.test(v) ? null : "A local model should be a .gguf file.";
+  });
+  let byomReady = $derived(!useByom || (byomSource !== null && byomHint === null));
+
+  async function browseLocal() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "GGUF Models", extensions: ["gguf"] }],
+    });
+    if (typeof selected === "string") {
+      byomInput = selected;
+      useByom = true;
+    }
+  }
+
   const PROFILE_LABEL: Record<string, string> = {
     cpu_only: "CPU-only",
     low_mem: "low-memory",
@@ -56,6 +99,35 @@
       : recommendedPrimary) ?? recommendedPrimary,
   );
 
+  // What the "Main responder" ledger row shows: the BYOM pick when active,
+  // else the catalog/recommended slot. BYOM has no known size up front, and
+  // an empty `hf_url` signals the row to drop the "from repo → dir" line.
+  let primaryDisplay = $derived.by(
+    (): { base_name: string; file: string; quant: string; size_gb: number; hf_url: string } | null => {
+      if (useByom && byomSource) {
+        const name =
+          byomSource.kind === "url"
+            ? byomSource.url.split(/[?#]/)[0].split("/").pop() || "your model"
+            : byomSource.path.split(/[/\\]/).pop() || "your model";
+        return {
+          base_name: name,
+          file: name,
+          quant: byomSource.kind === "url" ? "custom · link" : "custom · local",
+          size_gb: 0,
+          hf_url: "",
+        };
+      }
+      return effectivePrimary;
+    },
+  );
+  let primaryWhy = $derived(
+    useByom && byomSource
+      ? byomSource.kind === "url"
+        ? "your model · downloaded from the link you gave"
+        : "your model · used in place from your disk"
+      : "research, long writing, deep analysis",
+  );
+
   function fmtGb(n: number | undefined | null): string {
     if (!n || n <= 0) return "";
     return n < 1 ? `${Math.round(n * 1024)} MB` : `${n.toFixed(n < 10 ? 1 : 0)} GB`;
@@ -68,11 +140,17 @@
   }
 
   let modelTotalGb = $derived(
-    (effectivePrimary?.size_gb ?? 0) + (fast?.size_gb ?? 0) + (embed?.size_gb ?? 0),
+    (primaryDisplay?.size_gb ?? 0) + (fast?.size_gb ?? 0) + (embed?.size_gb ?? 0),
   );
 
   function confirm() {
-    onConfirm({ installStarterCorpus, primaryFile: chosenPrimaryFile });
+    // BYOM (Advanced) wins over the catalog radio; otherwise pass the
+    // "Customize" filename (or nothing, for the hardware recommendation).
+    onConfirm({
+      installStarterCorpus,
+      primaryFile: useByom ? undefined : chosenPrimaryFile,
+      primarySource: useByom ? (byomSource ?? undefined) : undefined,
+    });
   }
 </script>
 
@@ -118,7 +196,7 @@
           <div class="card-label">
             Models it will download <span class="chip">{fmtGb(modelTotalGb)}</span>
           </div>
-          {#each [{ role: "Main responder", slot: effectivePrimary, why: "research, long writing, deep analysis" }, { role: "Quick responder", slot: fast, why: "short turns, instant replies" }, { role: "Knowledge embedder", slot: embed, why: "makes your library searchable" }] as row (row.role)}
+          {#each [{ role: "Main responder", slot: primaryDisplay, why: primaryWhy }, { role: "Quick responder", slot: fast, why: "short turns, instant replies" }, { role: "Knowledge embedder", slot: embed, why: "makes your library searchable" }] as row (row.role)}
             {#if row.slot}
               <div class="model">
                 <div class="model-head">
@@ -128,13 +206,17 @@
                   <span class="model-size">{fmtGb(row.slot.size_gb)}</span>
                 </div>
                 <div class="model-meta">
-                  {row.why} · from <code>{repoOf(row.slot)}</code> → <code>{modelsDir}</code>
+                  {#if row.slot.hf_url}
+                    {row.why} · from <code>{repoOf(row.slot)}</code> → <code>{modelsDir}</code>
+                  {:else}
+                    {row.why}
+                  {/if}
                 </div>
               </div>
             {/if}
           {/each}
 
-          {#if catalog.length > 1}
+          {#if catalog.length >= 1}
             {#if !customizing}
               <button type="button" class="link-btn" onclick={() => (customizing = true)}>
                 Customize the main model →
@@ -147,8 +229,11 @@
                     <input
                       type="radio"
                       name="primary-model"
-                      checked={effectivePrimary?.file === opt.file}
-                      onchange={() => (chosenPrimaryFile = opt.file)}
+                      checked={!useByom && effectivePrimary?.file === opt.file}
+                      onchange={() => {
+                        chosenPrimaryFile = opt.file;
+                        useByom = false;
+                      }}
                     />
                     <span class="choice-name">{opt.base_name || opt.file}</span>
                     <span class="choice-quant">{opt.quant}</span>
@@ -156,6 +241,49 @@
                     {#if opt.recommended}<span class="choice-rec">recommended</span>{/if}
                   </label>
                 {/each}
+
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="primary-model"
+                    checked={useByom}
+                    onchange={() => (useByom = true)}
+                  />
+                  <span class="choice-name">Bring your own model</span>
+                  <span class="choice-quant">advanced</span>
+                </label>
+                {#if useByom}
+                  <div class="byom">
+                    <div class="byom-row">
+                      <input
+                        class="byom-input"
+                        type="text"
+                        placeholder="Paste a .gguf link, or a local file path"
+                        bind:value={byomInput}
+                        oninput={() => (useByom = true)}
+                        spellcheck="false"
+                        autocomplete="off"
+                      />
+                      <button type="button" class="byom-browse" onclick={browseLocal}>
+                        Browse…
+                      </button>
+                    </div>
+                    <div class="byom-hint" class:warn={byomHint !== null}>
+                      {#if byomHint}
+                        {byomHint}
+                      {:else if byomSource?.kind === "url"}
+                        Will download your model during setup.
+                      {:else if byomSource?.kind === "local_path"}
+                        Will use this file in place — no download, no copy.
+                      {:else}
+                        A HuggingFace resolve/blob link, an HF quant page URL, or a
+                        local .gguf path. Fast + embedder still auto-pick for your
+                        hardware.
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+
                 <button type="button" class="link-btn" onclick={() => (customizing = false)}>
                   Done
                 </button>
@@ -191,7 +319,12 @@
 
   <footer class="plan-actions">
     <button type="button" class="btn-back" onclick={onBack}>← Back</button>
-    <button type="button" class="btn-go" onclick={confirm} disabled={loading}>
+    <button
+      type="button"
+      class="btn-go"
+      onclick={confirm}
+      disabled={loading || !byomReady}
+    >
       Set up svrnmesh
     </button>
   </footer>
@@ -424,6 +557,54 @@
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     border-radius: 999px;
     padding: 0 6px;
+  }
+  .byom {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 2px 0 2px 22px;
+  }
+  .byom-row {
+    display: flex;
+    gap: 6px;
+  }
+  .byom-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    padding: 6px 8px;
+    color: var(--text-primary);
+    background: var(--bg, #15171c);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius, 6px);
+  }
+  .byom-input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  .byom-browse {
+    flex: 0 0 auto;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    padding: 6px 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius, 6px);
+    cursor: pointer;
+  }
+  .byom-browse:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+  .byom-hint {
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  .byom-hint.warn {
+    color: var(--warning, var(--accent-light, #dfc068));
   }
   .opt {
     display: flex;

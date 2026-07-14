@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use sovereign_core::models_manifest::SlotConfig;
@@ -60,6 +60,31 @@ pub enum SetupPhase {
 
 const EVENT: &str = "setup-progress";
 
+/// Where onboarding should source the **primary** (thoughtful) model when
+/// the user opts out of the recommended catalog pick — sent from the Setup
+/// Plan "Advanced — bring your own" affordance. `None` (the common path)
+/// keeps the hardware recommendation / catalog choice untouched.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PrimarySource {
+    /// An existing GGUF already on disk (Browse… or a typed path). It is
+    /// validated and used in place — never downloaded, never moved.
+    LocalPath { path: String },
+    /// A direct link to a `.gguf` file: a HuggingFace resolve/blob link, an
+    /// HF quant page's `?show_file_info=<file>.gguf` URL, or any raw host.
+    Url { url: String },
+}
+
+/// A resolved download instruction for the primary slot (internal to `run`).
+/// Unifies the manifest-slot path and the BYOM-URL path so the download
+/// site below has one shape to consume.
+struct PrimaryDownload {
+    url: String,
+    size_gb: f64,
+    mb_total: Option<u64>,
+    sentence: &'static str,
+}
+
 /// Run the full auto-setup flow. Returns Ok when the backend is
 /// fully bootstrapped and ready to serve chat; returns Err with a
 /// short diagnosis on any unrecoverable failure (the UI also
@@ -69,6 +94,7 @@ pub async fn run(
     app: AppHandle,
     state: Arc<AppState>,
     preferred_primary_file: Option<String>,
+    primary_source: Option<PrimarySource>,
 ) -> Result<(), String> {
     // ── 1. Hardware probe ────────────────────────────────────────
     emit_indet(
@@ -81,27 +107,13 @@ pub async fn run(
         .map_err(|e| failed(&app, false, format!("hardware detect panicked: {e}")))?;
     let profile = hardware::select_profile(&hw);
 
-    // ── 2. Resolve catalog ───────────────────────────────────────
-    // Honor an explicit choice from the Setup Plan "Customize" picker (a
-    // catalog file the user selected before consenting); otherwise use the
-    // hardware-recommended primary. The slot is only *resolved* here and
-    // downloaded below — nothing was fetched before the user consented.
-    let primary_slot = preferred_primary_file
-        .as_deref()
-        .and_then(|file| {
-            build_primary_catalog(&profile)
-                .into_iter()
-                .find(|opt| opt.slot.file == file)
-                .map(|opt| opt.slot)
-        })
-        .or_else(|| recommended_primary(&profile))
-        .ok_or_else(|| {
-            failed(
-                &app,
-                false,
-                "bundled manifest has no primary candidate for this hardware".into(),
-            )
-        })?;
+    // ── 2. Resolve slots ─────────────────────────────────────────
+    // Fast + embed come straight from the hardware profile. The primary
+    // (thoughtful) model is resolved in step 4 (BYOM-aware): the catalog
+    // pick / hardware recommendation by default, or the onboarding
+    // "Advanced" override (a local GGUF path, or a pasted .gguf URL).
+    // Nothing is fetched until the download phase — nothing was pulled
+    // before the user consented.
     let fast_slot = resolve_slot(&profile, SlotKind::Fast).ok_or_else(|| {
         failed(
             &app,
@@ -154,11 +166,96 @@ pub async fn run(
     // X" sentence flashing through to 100%. The user moves directly
     // to the next phase (preparing data dir → opening database).
     // Only slots that genuinely need bytes pulled get a frame.
-    let primary_path = pick_path(
-        existing_config.primary_model_path.as_deref(),
-        models_dir.join(&primary_slot.file),
-        primary_slot.size_gb,
-    );
+    // Resolve the primary (thoughtful) model. A BYOM override from the
+    // onboarding "Advanced" affordance wins: a local GGUF is used in place
+    // (never downloaded), a pasted URL is fetched to the canonical models
+    // dir. With no override we keep the catalog/recommendation pick + the
+    // pick_path reuse-existing-valid-GGUF behaviour exactly as before.
+    // Also yield a `SlotConfig` for the primary in every case — real from the
+    // manifest, or synthetic for a BYOM pick — so the setup report (step 7b)
+    // describes all three slots with one uniform shape.
+    let (primary_path, primary_download, primary_slot): (PathBuf, Option<PrimaryDownload>, SlotConfig) =
+        match &primary_source {
+            Some(PrimarySource::LocalPath { path }) => {
+                let p = PathBuf::from(path.trim());
+                if !is_valid_gguf_at(&p) {
+                    return Err(failed(
+                        &app,
+                        false,
+                        format!(
+                            "the model you chose isn't a readable GGUF file: {}",
+                            p.display()
+                        ),
+                    ));
+                }
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| "your model".to_string());
+                let slot = SlotConfig {
+                    file: name.clone(),
+                    base_name: name,
+                    quant: "custom (local)".to_string(),
+                    ..Default::default()
+                };
+                (p, None, slot)
+            }
+            Some(PrimarySource::Url { url }) => {
+                let (dl_url, file) =
+                    resolve_byom_url(url).map_err(|e| failed(&app, false, e))?;
+                let slot = SlotConfig {
+                    file: file.clone(),
+                    base_name: file.clone(),
+                    quant: "custom (url)".to_string(),
+                    hf_url: dl_url.clone(),
+                    ..Default::default()
+                };
+                (
+                    models_dir.join(&file),
+                    Some(PrimaryDownload {
+                        url: dl_url,
+                        // Unknown ahead of time for BYOM; the downloader still
+                        // enforces the GGUF magic + 1 MB sentinel floor.
+                        size_gb: 0.0,
+                        mb_total: None,
+                        sentence: "Downloading your model.",
+                    }),
+                    slot,
+                )
+            }
+            None => {
+                let primary_slot = preferred_primary_file
+                    .as_deref()
+                    .and_then(|file| {
+                        build_primary_catalog(&profile)
+                            .into_iter()
+                            .find(|opt| opt.slot.file == file)
+                            .map(|opt| opt.slot)
+                    })
+                    .or_else(|| recommended_primary(&profile))
+                    .ok_or_else(|| {
+                        failed(
+                            &app,
+                            false,
+                            "bundled manifest has no primary candidate for this hardware"
+                                .into(),
+                        )
+                    })?;
+                let path = pick_path(
+                    existing_config.primary_model_path.as_deref(),
+                    models_dir.join(&primary_slot.file),
+                    primary_slot.size_gb,
+                );
+                let dl = PrimaryDownload {
+                    url: hf_download_url(&primary_slot),
+                    size_gb: primary_slot.size_gb,
+                    mb_total: Some((primary_slot.size_gb * 1024.0).round() as u64),
+                    sentence: "Downloading the main responder.",
+                };
+                (path, Some(dl), primary_slot)
+            }
+        };
     let fast_path = pick_path(
         Some(&existing_config.model_path),
         models_dir.join(&fast_slot.file),
@@ -170,18 +267,23 @@ pub async fn run(
         embed_slot.size_gb,
     );
 
-    if !is_valid_gguf_at(&primary_path) {
-        download_with_progress_events(
-            &app,
-            &hf_download_url(&primary_slot),
-            &primary_path,
-            primary_slot.size_gb,
-            SetupPhase::DownloadingPrimary {
-                mb_total: Some((primary_slot.size_gb * 1024.0).round() as u64),
-            },
-            "Downloading the main responder.",
-        )
-        .await?;
+    // A local BYOM pick has `primary_download == None` (already validated,
+    // nothing to fetch); every other case downloads only if the resolved
+    // path isn't already a valid GGUF on disk.
+    if let Some(dl) = &primary_download {
+        if !is_valid_gguf_at(&primary_path) {
+            download_with_progress_events(
+                &app,
+                &dl.url,
+                &primary_path,
+                dl.size_gb,
+                SetupPhase::DownloadingPrimary {
+                    mb_total: dl.mb_total,
+                },
+                dl.sentence,
+            )
+            .await?;
+        }
     }
 
     if !is_valid_gguf_at(&fast_path) {
@@ -634,4 +736,109 @@ fn is_valid_gguf_at(path: &Path) -> bool {
         return false;
     }
     sovereign_inference::validate_gguf(path, &GgufExpectation::unknown()).is_ok()
+}
+
+/// Turn a user-pasted "bring your own model" URL into `(download_url,
+/// file_name)`, or an `Err` message the UI shows verbatim.
+///
+/// Accepts three shapes a "user who knows what they're doing" is likely
+/// to paste:
+///   1. a direct `…/resolve/main/<file>.gguf` raw link (used as-is);
+///   2. a `…/blob/main/<file>.gguf` browser link (HTML page — rewritten
+///      to the `/resolve/` raw path);
+///   3. a HuggingFace quant *page* URL of the form
+///      `…/<repo>?show_file_info=<file>.gguf` (what the HF file browser
+///      puts in the address bar) — rebuilt into the `/resolve/` link.
+/// Anything that doesn't resolve to a `.gguf` file (a repo root, a random
+/// page) is rejected with guidance rather than downloading an HTML stub.
+fn resolve_byom_url(raw: &str) -> Result<(String, String), String> {
+    let url = raw.trim();
+
+    // Shape 3: HF quant page `?show_file_info=<file>.gguf`.
+    if let Some((base, query)) = url.split_once('?') {
+        if let Some(file) = query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("show_file_info="))
+        {
+            let file = file.split(['&', '#']).next().unwrap_or(file);
+            if file.to_ascii_lowercase().ends_with(".gguf") {
+                let repo = base.trim_end_matches('/');
+                return Ok((format!("{repo}/resolve/main/{file}"), file.to_string()));
+            }
+        }
+    }
+
+    // Shapes 1 & 2: a direct file link. `/blob/` pages are HTML; the raw
+    // bytes live under `/resolve/`.
+    let dl = url.replace("/blob/", "/resolve/");
+    let file = dl
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(&dl)
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+    if file.to_ascii_lowercase().ends_with(".gguf") {
+        Ok((dl, file))
+    } else {
+        Err(format!(
+            "that link doesn't point at a .gguf file — paste the direct download \
+             link to the model file (or its HuggingFace quant page), not the repo \
+             root: {raw}"
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_byom_url;
+
+    #[test]
+    fn passes_through_resolve_link() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        )
+        .unwrap();
+        assert!(url.ends_with("/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"));
+        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn rewrites_blob_to_resolve() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/blob/main/Qwen3.5-9B-Q4_K_M.gguf",
+        )
+        .unwrap();
+        assert!(url.contains("/resolve/") && !url.contains("/blob/"));
+        assert_eq!(file, "Qwen3.5-9B-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn handles_hf_quant_page_show_file_info() {
+        let (url, file) = resolve_byom_url(
+            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF?show_file_info=gemma-4-31B-it-UD-Q4_K_XL.gguf",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-UD-Q4_K_XL.gguf"
+        );
+        assert_eq!(file, "gemma-4-31B-it-UD-Q4_K_XL.gguf");
+    }
+
+    #[test]
+    fn strips_query_and_fragment_from_direct_link() {
+        let (_, file) =
+            resolve_byom_url("https://example.com/models/foo.gguf?download=true#frag").unwrap();
+        assert_eq!(file, "foo.gguf");
+    }
+
+    #[test]
+    fn rejects_repo_page_and_non_gguf() {
+        assert!(resolve_byom_url("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF").is_err());
+        assert!(resolve_byom_url("not even a url").is_err());
+        assert!(resolve_byom_url("https://example.com/readme.md").is_err());
+    }
 }

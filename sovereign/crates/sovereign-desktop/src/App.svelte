@@ -37,6 +37,7 @@
   import SetupFlow from "./lib/setup/SetupFlow.svelte";
   import WelcomeThreshold from "./lib/setup/WelcomeThreshold.svelte";
   import SetupPlan from "./lib/setup/SetupPlan.svelte";
+  import type { PrimarySource } from "./lib/setup/setupTypes";
   import ConsentGate from "./lib/setup/ConsentGate.svelte";
   import ReconnectBanner from "./lib/components/ReconnectBanner.svelte";
   import ModelNoticeBanner from "./lib/components/ModelNoticeBanner.svelte";
@@ -94,6 +95,7 @@
   // The user's "Customize" primary-model choice from the Setup Plan screen
   // (a catalog GGUF filename); undefined = the hardware-recommended default.
   let chosenPrimaryFile = $state<string | undefined>(undefined);
+  let chosenPrimarySource = $state<PrimarySource | undefined>(undefined);
 
   let backendReady = $state(false);
   let backendError: string | null = $state(null);
@@ -460,15 +462,20 @@
   <WelcomeThreshold onBegin={() => (view = "setup_plan")} />
 {:else if view === "setup_plan"}
   <SetupPlan
-    onConfirm={({ installStarterCorpus: optIn, primaryFile }) => {
+    onConfirm={({ installStarterCorpus: optIn, primaryFile, primarySource }) => {
       installStarterCorpus = optIn;
       chosenPrimaryFile = primaryFile;
+      chosenPrimarySource = primarySource;
       view = "setup";
     }}
     onBack={() => (view = "welcome")}
   />
 {:else if view === "setup"}
-  <SetupFlow onComplete={handleSetupComplete} primaryFile={chosenPrimaryFile} />
+  <SetupFlow
+    onComplete={handleSetupComplete}
+    primaryFile={chosenPrimaryFile}
+    primarySource={chosenPrimarySource}
+  />
 {:else if view === "consent"}
   <ConsentGate onChoice={handleConsentRecorded} />
 {:else}

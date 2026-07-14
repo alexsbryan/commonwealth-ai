@@ -28,11 +28,10 @@
 # instruction, multilingual, vision, long_context (snake_case keys).
 #
 # Optional `base_name` field identifies the model across quantisation
-# and repo variants. A slot declaring `base_name = "Qwen3-30B-A3B"` will
-# be used for ANY GGUF whose filename contains that string — so the
-# same capability row covers Q4_K_M, Q5_K_M, Q8_0, unsloth's
-# `Qwen3-30B-A3B-Thinking-2507-Q4_K_M.gguf`, and a local re-quant.
-# Longest base_name match wins when multiple would apply.
+# and repo variants. A slot declaring `base_name = "Qwen3.5-35B-A3B"` will
+# be used for ANY GGUF whose filename contains that string — so the same
+# capability row covers Q4_K_M (very_high), Q3_K_M (high), and a local
+# re-quant of that model. Longest base_name match wins when multiple apply.
 #
 # ── Curation philosophy (2026-05) ────────────────────────────────────────────
 # Cross-platform speed reference informed this revision: Strix Halo 128GB
@@ -50,23 +49,33 @@
 # ── Fast slot notes ──────────────────────────────────────────────────────────
 # Fast does intent classification + JSON routing, not synthesis. We don't
 # scale it up with hardware — a larger router buys nothing for routing
-# quality and wastes always-resident VRAM. Stays on Qwen3 0.6B/1.7B
-# across all profiles. Qwen3-1.7B is the well-validated choice for
-# structured JSON output at this size.
+# quality and wastes always-resident VRAM. Sits on Qwen3.5 0.8B/2B across
+# all profiles (bumped from Qwen3 0.6B/1.7B in the 2026-07 3.5 refresh; the
+# 3.5 line has no 0.6B/1.7B, so 0.8B/2B are the nearest sizes).
+# TODO(router-validation): Qwen3-1.7B was the *validated* choice for
+# structured JSON output at this size; Qwen3.5-2B/0.8B is NOT yet re-verified
+# for grammar-constrained routing output. Re-validate the router's JSON
+# compliance (recipe eval + a routing-accuracy pass) before this ships.
 #
 # ── Thoughtful slot notes ────────────────────────────────────────────────────
-# `default` (8–19 GB VRAM): Qwen3-8B Q4_K_M (~5 GB). The universal
-# daily driver — fits fully in any 8GB+ GPU's VRAM, ~42 t/s on RTX 4060,
-# strong JSON grammar compliance under llama.cpp. /no_think mode
-# (`thinking = false`) eliminates wasted reasoning tokens for the
-# structured tasks that dominate routing-mediated chat.
+# `default` (8–19 GB VRAM): Qwen3.5-9B Q4_K_M (~5.9 GB, MTP build). The
+# universal daily driver — fits fully in any 8GB+ GPU's VRAM, strong JSON
+# grammar compliance under llama.cpp. /no_think mode (`thinking = false`)
+# eliminates wasted reasoning tokens for the structured tasks that dominate
+# routing-mediated chat. `low_mem` likewise uses the Qwen3.5-4B MTP build.
+# MTP = multi-token prediction: the chat slot speculative-decodes it for
+# faster generation; the FastShort router path ignores MTP, so only the
+# thoughtful slot benefits (cpu_only stays non-MTP — no speculative-decode
+# win without a GPU).
 #
-# `high`/`very_high` (≥20 GB VRAM, unified memory tier): Qwen3-30B-A3B
-# Thinking-2507. The MoE sweet spot for unified-memory systems — 3B
-# active params at ~86 t/s on Strix Halo, ~100 t/s on M2 Max. We
-# only select this profile when ≥20 GB free is detected, otherwise
-# fall through to default to avoid the PCIe-spill failure mode that
-# kills MoE perf on 8GB discrete GPUs.
+# `high`/`very_high` (≥20 GB VRAM, unified memory tier): Qwen3.5-35B-A3B,
+# the 3.5-generation MoE. very_high runs Q4_K_M (~20.5 GB); high runs the
+# SAME model at UD-IQ4_XS (~16.3 GB, still ≥4-bit) so it fits a 20 GB card
+# alongside the always-resident fast+embed slots. 3B active params →
+# ~30B-A3B-class generation speed on unified memory (the reason high holds
+# an i-quant MoE rather than a dense Q4). We only select these profiles when
+# ≥20 GB free is detected, otherwise fall through to default to avoid the
+# PCIe-spill failure mode that kills MoE perf on 8GB discrete GPUs.
 #
 # ── Embed slot notes ─────────────────────────────────────────────────────────
 # Qwen3-Embedding is purpose-built for retrieval. The 0.6B model is used
@@ -77,33 +86,35 @@
 [profiles.cpu_only]
 
 [profiles.cpu_only.fast]
-repo     = "unsloth/Qwen3-0.6B-GGUF"
-file     = "Qwen3-0.6B-Q4_K_M.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-0.8B-GGUF"
+file     = "Qwen3.5-0.8B-Q4_K_M.gguf"
+family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 0.4
+size_gb  = 0.5
 thinking = false
-hf_url   = "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF"
 # Fast slot only does intent classification + JSON routing. We don't
 # advertise it as a synthesis candidate; mesh routing filters it
 # out as a "no peer should ever prefer this" floor.
-base_name = "Qwen3-0.6B"
+# TODO(router-validation): 3.5-0.8B replaces the validated Qwen3-0.6B —
+# re-verify JSON grammar compliance before shipping (see fast-slot notes).
+base_name = "Qwen3.5-0.8B"
 [profiles.cpu_only.fast.capabilities]
 general     = 1
 instruction = 2
 
 [profiles.cpu_only.thoughtful]
-repo     = "unsloth/Qwen3-4B-GGUF"
-file     = "Qwen3-4B-Q4_K_M.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-4B-GGUF"
+file     = "Qwen3.5-4B-Q4_K_M.gguf"
+family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 2.5
+size_gb  = 2.6
 thinking = false  # thinking=false on CPU: latency renders it unusable
-hf_url   = "https://huggingface.co/unsloth/Qwen3-4B-GGUF"
-# 4B at Q4 on CPU — competent floor for general Q&A. /no_think
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF"
+# 3.5-gen 4B at Q4 on CPU — competent floor for general Q&A. /no_think
 # avoids the multi-second think-tag preamble that makes thinking
 # mode unusable without GPU acceleration.
-base_name = "Qwen3-4B"
+base_name = "Qwen3.5-4B"
 [profiles.cpu_only.thoughtful.capabilities]
 general     = 2
 analysis    = 1
@@ -135,31 +146,35 @@ hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
 [profiles.low_mem]
 
 [profiles.low_mem.fast]
-repo     = "unsloth/Qwen3-0.6B-GGUF"
-file     = "Qwen3-0.6B-Q8_0.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-0.8B-GGUF"
+file     = "Qwen3.5-0.8B-Q8_0.gguf"
+family   = "Qwen35"
 quant    = "Q8_0"
-size_gb  = 0.6
+size_gb  = 0.8
 thinking = false
-hf_url   = "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF"
-base_name = "Qwen3-0.6B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF"
+base_name = "Qwen3.5-0.8B"
 [profiles.low_mem.fast.capabilities]
 general     = 1
 instruction = 2
 
 [profiles.low_mem.thoughtful]
-repo     = "unsloth/Qwen3-4B-GGUF"
-file     = "Qwen3-4B-Q4_K_M.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-4B-MTP-GGUF"
+file     = "Qwen3.5-4B-Q4_K_M.gguf"
+family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 2.5
+size_gb  = 2.83
 thinking = true
-hf_url   = "https://huggingface.co/unsloth/Qwen3-4B-GGUF"
-# 4B at Q4 with thinking enabled — fits comfortably in 1–7 GB VRAM
-# tiers (RTX 3050, GTX 1660, low-end laptop dGPUs). Reasoning
-# stays usable with GPU offload; expect ~90 t/s on entry-level
-# discrete GPUs, faster on integrated unified memory.
-base_name = "Qwen3-4B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-4B-MTP-GGUF"
+# 3.5-gen 4B (MTP build) at Q4 with thinking enabled — fits comfortably
+# in 1–7 GB VRAM tiers (RTX 3050, GTX 1660, low-end laptop dGPUs).
+# Reasoning stays usable with GPU offload. MTP = the multi-token-
+# prediction build: the chat slot's MtpSession speculative-decodes it
+# for faster generation (the FastShort router path ignores MTP, so only
+# the thoughtful slot benefits). NOTE: the MTP repo names the file
+# identically to the non-MTP repo (`Qwen3.5-4B-Q4_K_M.gguf`, just
+# ~0.2 GB larger) — the repo/hf_url is what selects the MTP build.
+base_name = "Qwen3.5-4B"
 [profiles.low_mem.thoughtful.capabilities]
 general     = 2
 analysis    = 2
@@ -186,34 +201,37 @@ hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
                      # spill weights into system RAM and tank perf.
 
 [profiles.default.fast]
-repo     = "unsloth/Qwen3-1.7B-GGUF"
-file     = "Qwen3-1.7B-Q4_K_M.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-2B-GGUF"
+file     = "Qwen3.5-2B-Q4_K_M.gguf"
+family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 1.1
+size_gb  = 1.2
 thinking = false
-hf_url   = "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF"
-base_name = "Qwen3-1.7B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF"
+base_name = "Qwen3.5-2B"
 [profiles.default.fast.capabilities]
 general     = 1
 instruction = 2
 
 [profiles.default.thoughtful]
-repo     = "unsloth/Qwen3-8B-GGUF"
-file     = "Qwen3-8B-Q4_K_M.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-9B-MTP-GGUF"
+file     = "Qwen3.5-9B-Q4_K_M.gguf"
+family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 5.0
+size_gb  = 5.9
 thinking = false  # /no_think — best for the structured tasks
                   # that dominate the chat surface. Users who want
                   # thinking on this profile can enable per-turn.
-hf_url   = "https://huggingface.co/unsloth/Qwen3-8B-GGUF"
-# Qwen3-8B at Q4_K_M (~5 GB): the universal daily driver. Fits
-# fully in any 8GB+ GPU's VRAM (~42 t/s on RTX 4060), runs at
-# similar speed on Apple Silicon, and dodges the MoE-on-discrete-
-# GPU spill problem that kills 30B-A3B on 8GB cards. Strong
-# JSON grammar compliance under llama.cpp. Apache 2.0.
-base_name = "Qwen3-8B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF"
+# Qwen3.5-9B (MTP build) at Q4_K_M (~5.9 GB): the universal daily
+# driver, bumped from Qwen3-8B to the 3.5 generation. Fits fully in any
+# 8GB+ GPU's VRAM, and (being dense, not MoE) dodges the spill problem
+# that kills 30B-A3B on 8GB cards. Strong JSON grammar compliance under
+# llama.cpp. MTP build: the chat slot speculative-decodes it for faster
+# generation (the FastShort router path ignores MTP). The MTP repo names
+# the file identically to the non-MTP repo (~0.2 GB larger) — the
+# repo/hf_url selects it. Apache 2.0.
+base_name = "Qwen3.5-9B"
 [profiles.default.thoughtful.capabilities]
 general     = 3
 analysis    = 3
@@ -239,40 +257,47 @@ hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
                   # hardware detector must fall through to profiles.default.
 
 [profiles.high.fast]
-repo     = "unsloth/Qwen3-1.7B-GGUF"
-file     = "Qwen3-1.7B-Q8_0.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-2B-GGUF"
+file     = "Qwen3.5-2B-Q8_0.gguf"
+family   = "Qwen35"
 quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
-hf_url   = "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF"
-base_name = "Qwen3-1.7B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF"
+base_name = "Qwen3.5-2B"
 [profiles.high.fast.capabilities]
 general     = 1
 instruction = 2
 
 [profiles.high.thoughtful]
-repo     = "unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
-file     = "Qwen3-30B-A3B-Thinking-2507-Q4_K_M.gguf"
-family   = "Qwen3"
-quant    = "Q4_K_M"
-size_gb  = 17.5
+repo     = "unsloth/Qwen3.5-35B-A3B-GGUF"
+file     = "Qwen3.5-35B-A3B-UD-IQ4_XS.gguf"
+family   = "Qwen35"
+quant    = "UD-IQ4_XS"
+size_gb  = 16.3
 thinking = true
-hf_url   = "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
-# Qwen3-30B-A3B Thinking-2507 at Q4_K_M (~17.5 GB): the MoE sweet
-# spot for unified-memory and ≥20 GB discrete cards. 3B active
-# params at ~86 t/s on Strix Halo and ~100 t/s on M2 Max — the
-# 30B knowledge surface at Qwen3-8B-class generation speed. This
-# is the tier where mesh routing starts paying off; a Joiner
-# should route here for DeepQuery / Analysis ≥ 3.
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF"
+# Qwen3.5-35B-A3B at UD-IQ4_XS (~16.3 GB): the 3.5-generation MoE — the
+# SAME model very_high runs at Q4_K_M, one quant tier down so this tier
+# stays ≥4-bit (IQ4_XS ≈ 4.25 bpw — an i-quant, NOT a sub-4-bit quant)
+# while fitting a 20 GB card. Budget: thoughtful 16.3 + always-resident
+# fast (~2) + embed (~2.5) ≈ 20.8 GB — the same slight over-subscription
+# the old 30B-A3B Q4 pick relied on (17.5 → ~22 GB total), and less than
+# it, which is why the tier targets 20–23 GB and leans on MoE residency
+# tolerance. 3B active params keeps generation fast on unified memory —
+# the reason high holds an i-quant MoE here rather than a dense Q4. This
+# is where mesh routing starts paying off; a Joiner routes here for
+# Analysis ≥ 3.
 #
-# Base_name covers all Qwen3-30B-A3B variants (Instruct-2507,
-# Thinking-2507, future re-quants). Capability inheritance is
-# the same across variants; the runtime picks thinking-mode
-# behaviour from the `thinking` flag here, not from the file name.
-base_name = "Qwen3-30B-A3B"
+# Shares base_name "Qwen3.5-35B-A3B" with very_high (Q4). Safe: the
+# catalog dedups by base_name walking very_high→high (so a very_high
+# user keeps the Q4 row), and high-tier users never see very_high, so
+# each tier still surfaces its own quant. The capability row below
+# MUST equal very_high's (same model) so `capabilities_for_file`
+# resolves unambiguously across the two quant variants.
+base_name = "Qwen3.5-35B-A3B"
 [profiles.high.thoughtful.capabilities]
-general     = 3
+general     = 4
 analysis    = 4
 code        = 3
 instruction = 4
@@ -298,14 +323,14 @@ hf_url  = "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF"
                        # over for context, KV cache, and the embed slot.
 
 [profiles.very_high.fast]
-repo     = "unsloth/Qwen3-1.7B-GGUF"
-file     = "Qwen3-1.7B-Q8_0.gguf"
-family   = "Qwen3"
+repo     = "unsloth/Qwen3.5-2B-GGUF"
+file     = "Qwen3.5-2B-Q8_0.gguf"
+family   = "Qwen35"
 quant    = "Q8_0"
 size_gb  = 1.9
 thinking = false
-hf_url   = "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF"
-base_name = "Qwen3-1.7B"
+hf_url   = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF"
+base_name = "Qwen3.5-2B"
 [profiles.very_high.fast.capabilities]
 general     = 1
 instruction = 2
@@ -315,18 +340,17 @@ repo     = "unsloth/Qwen3.5-35B-A3B-GGUF"
 file     = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
 family   = "Qwen35"
 quant    = "Q4_K_M"
-size_gb  = 22.0
+size_gb  = 20.5
 thinking = true
 hf_url   = "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF"
-# Qwen3.5-35B-A3B at Q4_K_M (~22 GB): the ≥24 GB tier steps up from the
-# `high` profile's 30B-A3B to the larger 3.5-generation MoE. `qwen35moe`
-# arch — loads on the bundled llama.cpp, same family as the
-# cluster 122B-A10B. Still ~3B active params, so generation speed stays
-# in the 30B-A3B range while total knowledge grows. Q4_K_M (not Q5) keeps
-# it inside the 24 GB floor with KV headroom; higher-memory users can
-# step up a quant via Settings. The `high` profile (20–23 GB) stays on
-# 30B-A3B, which at Q4 (~17.5 GB) still fits a 20 GB card — the 35B at
-# Q4 (~22 GB) would not.
+# Qwen3.5-35B-A3B at Q4_K_M (~20.5 GB): the ≥24 GB tier runs the
+# 3.5-generation MoE at full Q4. `qwen35moe` arch — loads on the bundled
+# llama.cpp, same family as the cluster 122B-A10B. ~3B active params, so
+# generation speed stays in the 30B-A3B range while total knowledge grows.
+# Q4_K_M (not Q5) keeps it inside the 24 GB floor with KV headroom;
+# higher-memory users can step up a quant via Settings. The `high` profile
+# (20–23 GB) runs the SAME model at UD-IQ4_XS (~16.3 GB, still ≥4-bit) so it
+# fits a 20 GB card alongside the fast+embed slots — Q4 (~20.5 GB) would not.
 base_name = "Qwen3.5-35B-A3B"
 [profiles.very_high.thoughtful.capabilities]
 general     = 4

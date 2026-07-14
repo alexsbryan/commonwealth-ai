@@ -350,11 +350,14 @@ mod tests {
             "very_high should be the 35B-A3B bump, got {}",
             vh.base_name
         );
-        // ...while high stays on 30B-A3B so it still fits a 20 GB card.
+        // ...and high moves to the SAME 3.5-gen 35B-A3B at a smaller quant
+        // (Q3_K_M) so it still fits a 20 GB card. It shares base_name with
+        // very_high; the tier filter in build_primary_catalog keeps each
+        // tier surfacing its own quant.
         let high = recommended_primary(&ProfileName::High).expect("high primary");
         assert!(
-            high.base_name.contains("Qwen3-30B-A3B"),
-            "high must stay on 30B-A3B (fits 20 GB), got {}",
+            high.base_name.contains("Qwen3.5-35B-A3B"),
+            "high must be the 3.5-gen 35B-A3B (Q3_K_M, fits 20 GB), got {}",
             high.base_name
         );
     }

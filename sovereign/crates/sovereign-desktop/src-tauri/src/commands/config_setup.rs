@@ -538,8 +538,18 @@ pub async fn complete_setup_auto(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     primary_file: Option<String>,
+    // Optional BYOM override from the Setup Plan "Advanced" affordance. An
+    // omitted arg deserializes to `None` (Tauri maps missing Option args),
+    // so the existing frontend call stays valid until the UI is wired.
+    primary_source: Option<crate::setup_flow::PrimarySource>,
 ) -> Result<(), String> {
-    crate::setup_flow::run(app_handle, state.inner().clone(), primary_file).await
+    crate::setup_flow::run(
+        app_handle,
+        state.inner().clone(),
+        primary_file,
+        primary_source,
+    )
+    .await
 }
 
 /// Read the machine-readable setup report written at the end of setup

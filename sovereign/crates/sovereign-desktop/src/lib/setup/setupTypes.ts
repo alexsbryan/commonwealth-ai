@@ -42,3 +42,13 @@ export type Provenance = {
   fast: SlotProvenance | null;
   embed: SlotProvenance | null;
 };
+
+/// "Bring your own model" override for the primary (thoughtful) slot, sent
+/// from the Setup Plan "Advanced" affordance to `complete_setup_auto`.
+/// Mirrors the Rust `setup_flow::PrimarySource` (serde `tag = "kind"`,
+/// snake_case). `local_path` is validated + used in place (never
+/// downloaded); `url` is a direct `.gguf` link (resolve/blob or an HF
+/// quant page's `?show_file_info=` URL) fetched during setup.
+export type PrimarySource =
+  | { kind: "local_path"; path: string }
+  | { kind: "url"; url: string };

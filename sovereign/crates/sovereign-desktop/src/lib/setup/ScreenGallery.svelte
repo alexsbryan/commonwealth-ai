@@ -47,11 +47,11 @@
     is_unified_memory: true,
   };
   const PLAN_CATALOG: PrimaryOption[] = [
-    { profile: "very_high", recommended: true, file: "Qwen3.5-35B-A3B-Q4_K_M.gguf", base_name: "Qwen3.5-35B-A3B", family: "Qwen35", quant: "Q4_K_M", size_gb: 22, hf_url: "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF", download_url: "" },
+    { profile: "very_high", recommended: true, file: "Qwen3.5-35B-A3B-Q4_K_M.gguf", base_name: "Qwen3.5-35B-A3B", family: "Qwen35", quant: "Q4_K_M", size_gb: 20.5, hf_url: "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF", download_url: "" },
     { profile: "default", recommended: false, file: "gemma-4-12B-it-Q4_K_M.gguf", base_name: "gemma-4-12B", family: "Gemma4", quant: "Q4_K_M", size_gb: 7.38, hf_url: "https://huggingface.co/ggml-org/gemma-4-12B-it-GGUF", download_url: "" },
-    { profile: "default", recommended: false, file: "Qwen3-8B-Q4_K_M.gguf", base_name: "Qwen3-8B", family: "Qwen3", quant: "Q4_K_M", size_gb: 5, hf_url: "https://huggingface.co/unsloth/Qwen3-8B-GGUF", download_url: "" },
+    { profile: "default", recommended: false, file: "Qwen3.5-9B-Q4_K_M.gguf", base_name: "Qwen3.5-9B", family: "Qwen35", quant: "Q4_K_M", size_gb: 5.9, hf_url: "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF", download_url: "" },
   ];
-  const PLAN_FAST: SlotConfig = { file: "Qwen3-1.7B-Q8_0.gguf", base_name: "Qwen3-1.7B", family: "Qwen3", quant: "Q8_0", size_gb: 1.9, hf_url: "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF", download_url: "" };
+  const PLAN_FAST: SlotConfig = { file: "Qwen3.5-2B-Q8_0.gguf", base_name: "Qwen3.5-2B", family: "Qwen35", quant: "Q8_0", size_gb: 1.9, hf_url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF", download_url: "" };
   const PLAN_EMBED: SlotConfig = { file: "Qwen3-Embedding-4B-Q8_0.gguf", base_name: "Qwen3-Embedding-4B", family: "Qwen3Embedding", quant: "Q8_0", size_gb: 4.3, hf_url: "https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF", download_url: "" };
 
   // Setup phases — message strings copied verbatim from setup_flow.rs so
