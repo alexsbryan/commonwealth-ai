@@ -45,7 +45,6 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Outcome we feed into the adaptive controller. The classifier
 /// bucket determines which one — see `from_bucket`.
@@ -159,12 +158,7 @@ impl AdaptiveConcurrency {
     }
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_time::unix_now;
 
 #[cfg(test)]
 mod tests {

@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use commonwealth_core::ids::NodeId;
@@ -260,12 +259,7 @@ impl SessionHandle {
     }
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now;
 
 #[cfg(test)]
 mod tests {

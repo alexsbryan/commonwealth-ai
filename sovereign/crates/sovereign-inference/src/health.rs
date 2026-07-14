@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct HealthTracker {
     latency_ewma_ms: AtomicU64,
@@ -93,9 +92,4 @@ impl Default for HealthTracker {
     }
 }
 
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
+use sovereign_core::time::unix_now_u64 as now_unix;

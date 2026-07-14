@@ -383,12 +383,7 @@ CREATE TABLE IF NOT EXISTS test_stale_files (
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use corpus_engine_yield::time::unix_now;
 
 fn unix_to_system_time(secs: i64) -> SystemTime {
     UNIX_EPOCH + std::time::Duration::from_secs(secs as u64)

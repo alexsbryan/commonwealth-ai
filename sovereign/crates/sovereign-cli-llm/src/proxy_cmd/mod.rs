@@ -35,10 +35,4 @@ pub async fn run_proxy(args: &[String]) -> i32 {
     }
 }
 
-pub(crate) fn now_unix() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub(crate) use sovereign_core::time::unix_now as now_unix;

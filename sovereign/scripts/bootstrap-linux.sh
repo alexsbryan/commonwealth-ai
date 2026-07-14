@@ -209,6 +209,19 @@ ensure_rust() {
         echo "== Installing rustfmt component =="
         rustup component add rustfmt
     fi
+    # rust-analyzer: the code-intelligence daemon shells out to
+    # `rust-analyzer scip` to build the SCIP call graph that powers
+    # `symbols` / `callers` / `sovereign project refresh`. `rust-analyzer`
+    # on PATH is a rustup proxy shim — if the component isn't installed for
+    # the pinned toolchain (rust-toolchain.toml), the export fails, AND a
+    # failed export WIPES the existing graph to zero (it is destructive, not
+    # a no-op). Install it up front so a fresh checkout's first `refresh`
+    # doesn't silently break code intel. Run from the workspace so rustup
+    # targets the pinned toolchain, not `stable`.
+    if ! rustup component list --installed 2>/dev/null | grep -q '^rust-analyzer'; then
+        echo "== Installing rust-analyzer component =="
+        rustup component add rust-analyzer
+    fi
 }
 
 install_fedora_common() {

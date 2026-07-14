@@ -10,7 +10,6 @@ pub mod wikipedia;
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::Result;
 use sovereign_core::traits::InferenceProvider;
@@ -141,12 +140,7 @@ pub trait CorpusParser: Send + Sync {
 
 // ─── Shared Utilities ─────────────────────────────────────────
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as now;
 
 /// Build a DocumentChunk for a corpus entry.
 fn make_chunk(corpus_id: &str, source: &str, content: &str, chunk_index: usize) -> DocumentChunk {

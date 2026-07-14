@@ -8,7 +8,7 @@
 //! of records per node.
 
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use uuid::Uuid;
 
@@ -137,12 +137,7 @@ pub struct SweepReport {
     pub sessions_evicted: usize,
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_secs;
 
 #[cfg(test)]
 mod tests {

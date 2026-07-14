@@ -287,12 +287,7 @@ pub fn derive_stability(
 /// fresh [`StreamAxes`] block. Mirrors the timestamp shape
 /// `IndexMeta::created_at` / `last_updated` use elsewhere in the
 /// crate.
-pub fn timestamp_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+pub use corpus_engine_yield::time::unix_now_u64 as timestamp_now;
 
 /// Best-effort derivation from an [`crate::types::IndexInfo`] alone,
 /// without needing to parse the recipe file. Used by

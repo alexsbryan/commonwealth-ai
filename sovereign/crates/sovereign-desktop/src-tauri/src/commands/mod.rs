@@ -2,7 +2,6 @@
 // Façade-level imports: only what the retained Response Types / helpers /
 // test module use. Each concern submodule carries its own import block
 // (over-import is fine there — see the submodule preambles).
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -270,12 +269,7 @@ fn tiers_for(corpus_id: &str) -> Vec<String> {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-fn now_epoch() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as now_epoch;
 
 macro_rules! require_runtime {
     ($state:expr) => {{

@@ -18,6 +18,8 @@
 
 mod amend;
 mod arch_report_cmd;
+mod suggest_seams_cmd;
+mod dry_report_cmd;
 mod atos_cmd;
 mod atos_plugin;
 mod audit_extract;

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
@@ -13,12 +12,7 @@ use sovereign_core::traits::{
 };
 use sovereign_core::types::*;
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as now;
 
 struct RoutingLogEntry {
     message_hash: String,

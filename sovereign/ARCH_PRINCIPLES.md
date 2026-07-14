@@ -183,7 +183,6 @@ Current outliers (the largest; `SYSTEM_OVERVIEW.md` §10 carries the
 full set with per-file deferral rationale):
 
 - `sovereign-inference/src/embedded/model_slot.rs` (~3475 lines) — slot state machine + decode loops + MTP; the residual of the former 9,669-line `embedded.rs` after its per-concern split (engine / rpc_distribution / grammar / prompt_helpers / sampler / embed_slot / rerank_slot / rpc_warm_cache). One tight unsafe-FFI concern; further seam = an alternate backend at the `InferenceProvider` trait.
-- `sovereign-cli-dev/src/project_cmd.rs` (~7040 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
 - `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, down from 2347) — desktop `AppState` + `bootstrap_with_progress`. **Decomposition in progress:** config / built-in skills and four bootstrap sub-phases (`health`, `store`, `inference`, `knowledge_view`) are extracted to `state/` + `state/builders/` with mock-backed tests; `embedded_daemon` remains, `tools` stays inline (mutated across the whole bootstrap). (The former `commands.rs` monolith was already split into `commands/*.rs`.)
 - `commonwealth-api/src/frontdoor.rs` (~5758 lines) — harness-protocol → model-native normalizer.
 - `corpus-engine-notes/src/notes.rs` (~5634 lines) — NoteStore (carved-out crate; still wants an in-file split).

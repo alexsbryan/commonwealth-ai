@@ -8,7 +8,6 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use commonwealth_state::MeshStore;
 use uuid::Uuid;
@@ -480,9 +479,4 @@ fn git_current_branch(repo_root: &Path) -> Option<String> {
     }
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now_u64 as now_secs;

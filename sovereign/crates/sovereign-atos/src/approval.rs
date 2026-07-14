@@ -32,7 +32,6 @@
 //! acknowledges it or reverts.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use commonwealth_core::ids::NodeId;
@@ -354,12 +353,7 @@ fn hash_sha256(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now;
 
 #[cfg(test)]
 mod tests {

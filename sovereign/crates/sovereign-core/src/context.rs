@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Error, Result};
 use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, StateStore};
 use crate::types::*;
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use crate::time::unix_now as now;
 
 /// Build a ConversationContext from the store, creating the conversation if it doesn't exist.
 /// The `query` parameter is used for memory retrieval (FTS5 matching).

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::error::Result;
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -9,12 +8,7 @@ use sovereign_core::types::{DocumentChunk, SourceType};
 use super::chunk::chunk_text;
 use super::parse::{list_parseable_files, parse_file};
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use sovereign_core::time::unix_now as now;
 
 /// Ingest results summary.
 pub struct IngestResult {

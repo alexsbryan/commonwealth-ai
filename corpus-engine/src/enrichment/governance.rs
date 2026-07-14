@@ -511,14 +511,7 @@ fn short_hash(input: &str) -> String {
     blake3::hash(input.as_bytes()).to_hex().to_string()[..16].to_string()
 }
 
-/// Unix seconds now, for the live append path (tests pass explicit ts so
-/// their op ids are deterministic).
-pub fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub use corpus_engine_yield::time::unix_now as now_secs;
 
 #[cfg(test)]
 mod tests {

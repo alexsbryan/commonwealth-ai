@@ -205,12 +205,7 @@ fn parse_role(s: &str) -> Role {
     }
 }
 
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now;
 
 fn print_plan(t: &Template, plan: &SeedPlan) {
     let total_msgs: usize = plan.conversations.iter().map(|c| c.messages.len()).sum();

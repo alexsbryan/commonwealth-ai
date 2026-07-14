@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
@@ -11,12 +10,7 @@ use crate::skills::SkillRegistry;
 use crate::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use crate::types::*;
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use crate::time::unix_now as now;
 
 // ─── LlmJudge Rubrics ─────────────────────────────────────────
 

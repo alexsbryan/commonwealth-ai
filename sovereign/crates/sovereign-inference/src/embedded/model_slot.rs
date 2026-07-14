@@ -680,12 +680,7 @@ pub(crate) fn finish_reason_from_counts(
     }
 }
 
-pub(crate) fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+pub(crate) use sovereign_core::time::unix_millis as now_millis;
 
 /// Hard wall-clock deadline for any single chat inference, in
 /// seconds. Defends against pathological JSON-Schema mask states

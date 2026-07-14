@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use serde::{Deserialize, Serialize};
@@ -10,12 +9,7 @@ use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, MemoryScope, StateStore};
 use crate::types::*;
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+use crate::time::unix_now as now;
 
 /// Cosine similarity between two equally-sized embedding vectors.
 /// Returns 0.0 when either norm is zero or lengths mismatch — the

@@ -179,12 +179,7 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
     0
 }
 
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+use sovereign_core::time::unix_now;
 
 fn load_chunk_text(db_path: &Path, ids: Vec<&str>) -> HashMap<String, String> {
     let mut out = HashMap::new();

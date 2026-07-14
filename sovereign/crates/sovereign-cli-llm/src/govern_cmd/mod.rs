@@ -108,10 +108,4 @@ pub(crate) fn load_view(corpus_id: &str) -> Result<GovernanceView, String> {
     GovernanceView::from_atlas_dir(&dir).map_err(|e| format!("reading governance view: {e}"))
 }
 
-/// Unix seconds now — the timestamp stamped on appended oplog ops.
-pub(crate) fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
+pub(crate) use sovereign_core::time::unix_now as now_unix;

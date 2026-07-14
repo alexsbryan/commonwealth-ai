@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::Memory;
@@ -482,16 +482,6 @@ fn push(journal: &mut Journal, records: &mut Vec<TurnRecord>, record: TurnRecord
     records.push(record);
 }
 
-pub(super) fn unix_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
+pub(super) use sovereign_core::time::unix_now_u64 as unix_seconds;
 
-pub(super) fn unix_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+pub(super) use sovereign_core::time::unix_millis;

@@ -26,6 +26,13 @@
 //! layer — mid-call preemption isn't possible — so checkpointing on
 //! these boundaries is the finest granularity that actually frees the
 //! device for the primary slot.
+//!
+//! Besides the yield seam, this leaf also carries [`time`] — the canonical
+//! wall-clock helpers shared across the corpus-engine subtree — for the same
+//! reason it holds `YieldHook`: it is the lowest crate every corpus-engine-*
+//! member can depend on, so a trivial shared primitive lives here exactly once.
+
+pub mod time;
 
 /// Hook the ingest pipeline polls before starting the next embed
 /// batch / enrichment phase. Implementations are expected to be
