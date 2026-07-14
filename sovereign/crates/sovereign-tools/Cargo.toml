@@ -225,7 +225,7 @@ paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc", "dep:i_overlay"]
 # it activates the `encoding` feature on quick-xml 0.36, which
 # breaks corpus-engine's `Attribute::unescape_value()` call via
 # workspace feature unification.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
