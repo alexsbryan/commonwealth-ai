@@ -73,10 +73,8 @@ Skip to [Build it](#build-it).
 
 ## Build it
 
-The CLI trio is the quickest thing to build and run:
-
 ```sh
-cargo build --release -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
+cargo build
 ```
 
 **The first build is long.** It compiles llama.cpp from source and a large
@@ -129,7 +127,7 @@ answer precisely instead of by grep — worth setting up, it makes navigating an
 unfamiliar codebase far easier:
 
 ```sh
-sovereign project refresh                # (re)build the call graph — runs rust-analyzer, a few minutes
+svrn project refresh                # (re)build the call graph — runs rust-analyzer, a few minutes
 ```
 
 One gotcha worth knowing up front: that step shells out to `rust-analyzer`, and
@@ -153,7 +151,7 @@ bites if you set Rust up entirely by hand.)
 - **`dyld: Library not loaded: @rpath/libggml-*.dylib` (macOS)** — the rpath
   args in `.cargo/config.toml` got stripped. Don't remove them; they tell the
   loader where the bundled `.dylib`s live.
-- **The daemon won't stay up, or code-intel looks wrong** — `sovereign doctor`
+- **The daemon won't stay up, or code-intel looks wrong** — `svrn doctor`
   is the first stop. It checks the daemon, the watcher, the indexes, and the
   mesh in one pass and tells you what to do next.
 

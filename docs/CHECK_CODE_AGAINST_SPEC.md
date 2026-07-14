@@ -124,14 +124,25 @@ behavioral and conceptual claims the first layer can't pin down; add
 gaps, clearly marked as the softer, review-me answers. Trust the deterministic ones;
 scrutinize the fuzzy ones.
 
-## What it doesn't do yet
+## Languages, and what's still uneven
 
-The deterministic layer reads Rust today — other languages are a matter of adding a
-per-language pack, not new machinery, but they aren't there yet. Which claims get a
-hard, cited answer depends on how cleanly each one names a checkable fact; the rest
-fall to the fuzzy layer or to you. And it will never tell you whether a divergence is
-a bug or an improvement — that call is yours, and the whole point is to make it cheap
-to make.
+The deterministic layer reads **Rust and Python** today. Adding a language really is
+just adding a per-language pack, not new machinery: fact extraction is driven by a
+small table (`lang_packs` in `corpus_engine::facts`) where each entry is a grammar
+plus a few tree-sitter queries, and the call-graph side already ingests any standard
+SCIP indexer (`rust-analyzer`, `scip-python`, `scip-typescript`, `scip-go`, …). So a
+new language is a well-scoped afternoon, not a rewrite — the one judgment call is how
+that language spells "a typed value built with named fields," the data-flow fact
+behind config claims (Rust struct literals vs. Python constructor keywords, say).
+
+Fidelity isn't identical across languages, and the report won't pretend otherwise.
+The deterministic call-graph checks are only as precise as the underlying indexer:
+`rust-analyzer` resolves calls the way the compiler does, while a dynamically-typed
+language leaves more edges unknowable, so proportionally more of the work shifts to
+the fuzzy layer. Which claims get a hard, cited answer also depends on how cleanly
+each one names a checkable fact; the rest fall to the fuzzy layer or to you. And it
+will never tell you whether a divergence is a bug or an improvement — that call is
+yours, and the whole point is to make it cheap to make.
 
 ---
 
