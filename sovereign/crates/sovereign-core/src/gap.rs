@@ -27,9 +27,28 @@ use crate::types::{CompletionRequest, InformationRequest, InformationRequestKind
 /// original 3000+3000 because the prompt-fill on a Fast-slot 9B
 /// running grammar-constrained decoding turned the post-answer
 /// audit into a 55s wait that the user noticed.
-const MAX_ANSWER_CHARS: usize = 1500;
-const MAX_EVIDENCE_CHARS: usize = 1500;
+///
+/// The budget is spent as a HEAD+TAIL window, not a head-only cut
+/// (2026-07-15, the Einstein four-papers false positive): a head-only
+/// cut on an enumerated answer eats the LAST item — the judge saw a
+/// four-papers question, three papers of answer, and dutifully filed
+/// an information request for the fourth paper the user could already
+/// read on screen (answer 2,884 bytes; "Mass–energy equivalence"
+/// started at byte 1,942, past the old 1,500 cut). Gaps live at tails
+/// — missing items, trailing hedges — so the tail is the
+/// highest-signal region a head-only cut throws away. Same total
+/// budget, zero added decode time.
+const ANSWER_HEAD_CHARS: usize = 900;
+const ANSWER_TAIL_CHARS: usize = 600;
+const EVIDENCE_HEAD_CHARS: usize = 900;
+const EVIDENCE_TAIL_CHARS: usize = 600;
 const MAX_QUESTION_CHARS: usize = 600;
+
+/// Seam marker for the head+tail window. Tells the judge the middle
+/// was elided FOR LENGTH — without it, the cut itself reads as the
+/// answer trailing off, which is exactly the shape that invites a
+/// false "incomplete answer" gap.
+const ELISION_MARKER: &str = "\n[… middle elided for length — the text continues without a gap …]\n";
 
 /// Token budget for the gap response. With the schema relaxed to
 /// require only `has_gap` + `gap`, a useful response fits in ~120
@@ -81,8 +100,8 @@ pub async fn identify_gap(
     }
 
     let q = truncate_to_char_boundary(question, MAX_QUESTION_CHARS);
-    let a = truncate_to_char_boundary(answer_so_far, MAX_ANSWER_CHARS);
-    let e = truncate_to_char_boundary(retrieved_evidence, MAX_EVIDENCE_CHARS);
+    let a = window_head_tail(answer_so_far, ANSWER_HEAD_CHARS, ANSWER_TAIL_CHARS);
+    let e = window_head_tail(retrieved_evidence, EVIDENCE_HEAD_CHARS, EVIDENCE_TAIL_CHARS);
 
     // Terse prompt: the model audits the answer for a missing
     // piece of external evidence, returns a short JSON object.
@@ -231,6 +250,24 @@ fn extract_json_object(s: &str) -> Option<&str> {
     Some(&s[start..=end])
 }
 
+/// Head+tail window over `s`: the first `head_max` and last `tail_max`
+/// bytes (char-boundary-safe) joined by [`ELISION_MARKER`]. Returns the
+/// input untouched when it already fits the combined budget — the
+/// marker only ever appears when something was actually elided.
+fn window_head_tail(s: &str, head_max: usize, tail_max: usize) -> std::borrow::Cow<'_, str> {
+    if s.len() <= head_max + tail_max + ELISION_MARKER.len() {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let head = truncate_to_char_boundary(s, head_max);
+    // Tail: nearest char boundary at or AFTER len - tail_max, so the
+    // tail never exceeds its budget and never splits a code point.
+    let mut start = s.len() - tail_max;
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    std::borrow::Cow::Owned(format!("{head}{ELISION_MARKER}{}", &s[start..]))
+}
+
 /// Walk `s` back to the nearest valid UTF-8 char boundary at or before
 /// `max` bytes. Avoids panicking on multi-byte characters when truncating.
 fn truncate_to_char_boundary(s: &str, max: usize) -> &str {
@@ -320,5 +357,58 @@ mod tests {
         assert!(s.starts_with(t));
         // Valid UTF-8: doesn't panic on .chars().
         let _ = t.chars().count();
+    }
+
+    #[test]
+    fn window_passes_short_input_through_unmarked() {
+        let s = "A short answer that fits the whole budget.";
+        let w = window_head_tail(s, 900, 600);
+        assert_eq!(w.as_ref(), s);
+        assert!(!w.contains("elided"), "no elision marker on a passthrough");
+    }
+
+    /// The Einstein four-papers regression (2026-07-15): an enumerated
+    /// answer longer than the head budget must keep its TAIL — the old
+    /// head-only cut fed the judge papers 1–3 of a four-paper answer
+    /// and produced an information request for the fourth paper the
+    /// user could already read on screen.
+    #[test]
+    fn window_keeps_the_enumerations_last_item() {
+        let filler = "The paper reshaped the field in ways contemporaries took years to absorb. "
+            .repeat(9);
+        let answer = format!(
+            "Einstein's 1905 papers were four groundbreaking works.\n\n\
+             **1. Photoelectric Effect**\n{filler}\n\
+             **2. Brownian Motion**\n{filler}\n\
+             **3. Special Relativity**\n{filler}\n\
+             **4. Mass–Energy Equivalence (E = mc²)**\nThe fourth paper established that \
+             mass and energy are interchangeable."
+        );
+        // The regression shape: past the head budget, under saturation.
+        assert!(answer.len() > ANSWER_HEAD_CHARS + ANSWER_TAIL_CHARS);
+        assert!(answer.len() < ANSWER_SATURATION_CHARS);
+        let w = window_head_tail(&answer, ANSWER_HEAD_CHARS, ANSWER_TAIL_CHARS);
+        assert!(
+            w.contains("Mass–Energy Equivalence"),
+            "the fourth paper must survive the window: {w}"
+        );
+        assert!(
+            w.contains("Photoelectric Effect"),
+            "the head must survive too"
+        );
+        assert!(
+            w.contains("elided for length"),
+            "the seam must be labeled so the cut can't read as the answer trailing off"
+        );
+    }
+
+    #[test]
+    fn window_is_char_boundary_safe_on_multibyte_seams() {
+        // Multibyte chars positioned to straddle both the head cut and
+        // the tail start. Must not panic and must stay valid UTF-8.
+        let s = "é".repeat(2_000);
+        let w = window_head_tail(&s, 899, 601); // odd budgets land mid-char
+        let _ = w.chars().count();
+        assert!(w.contains("elided for length"));
     }
 }
