@@ -32,10 +32,13 @@ pub struct UpdateInfo {
 
 /// Check the configured updater endpoint for a newer version.
 ///
-/// Returns `Ok(Some(info))` if an update is available, `Ok(None)` if the
-/// app is up to date OR the endpoint is unreachable (the latter is soft-
-/// failed deliberately — see module docs). The frontend should render
-/// a "you're up to date" toast on `None` and an upgrade banner on `Some`.
+/// Three distinct outcomes, deliberately NOT conflated (see the `Err` arm):
+///   - `Ok(Some(info))` — an update is available; frontend shows the banner.
+///   - `Ok(None)`       — genuinely up to date (endpoint returned 204);
+///                        frontend shows a "you're up to date" toast.
+///   - `Err(msg)`       — the check FAILED (offline, endpoint 4xx/5xx, bad
+///                        manifest); frontend shows a calm, retryable notice.
+///                        This is NOT the same as being current.
 #[tauri::command]
 pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<Option<UpdateInfo>, String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
@@ -49,7 +52,16 @@ pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<Option<Up
             Ok(Some(UpdateInfo {
                 version: update.version.clone(),
                 current_version: update.current_version.clone(),
-                date: update.date.map(|d| d.to_string()),
+                // Emit RFC3339 (JS `new Date()` parses it). `update.date` is a
+                // time::OffsetDateTime whose Display (`to_string()`) is
+                // `2026-07-15 10:45:13.0 +00:00:00` — space-separated, NOT
+                // ISO-8601 — which the frontend rendered as "Invalid Date".
+                // Convert via unix timestamp using chrono (already a dep) so we
+                // don't pull time's `formatting` feature.
+                date: update.date.and_then(|d| {
+                    chrono::DateTime::from_timestamp(d.unix_timestamp(), d.nanosecond())
+                        .map(|dt| dt.to_rfc3339())
+                }),
                 body: update.body.clone(),
             }))
         }
@@ -58,12 +70,26 @@ pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<Option<Up
             Ok(None)
         }
         Err(e) => {
-            // Soft-fail. Network blips, GitHub rate limits, and the
-            // "you've cut zero releases yet" 404 from svrnme.sh all
-            // surface here; none of them should produce a scary
-            // "Update check failed" dialog. The user can retry.
-            tracing::warn!(error = %e, "updater: check failed (soft-failed to None)");
-            Ok(None)
+            // Surface the failure — do NOT collapse it into `Ok(None)`.
+            //
+            // This command previously soft-failed every error to "up to date"
+            // to avoid scary dialogs. That masking hid THREE real updater bugs
+            // for weeks (2026-07-15): an OS-only-target 400, a wrong-version
+            // pick, and a bad date — all invisible because a broken check was
+            // indistinguishable from being current. A failed check is NOT the
+            // same as being up to date, and the glassbox principle says the
+            // user (and our logs) must be able to tell them apart.
+            //
+            // We keep it non-scary at the UI layer (a calm, retryable notice —
+            // see UpdatesSection.svelte), and log the technical detail here
+            // while returning a plain-language message. `check` is only ever
+            // triggered by an explicit "Check for updates" click (no silent
+            // auto-poll), so surfacing the failure is exactly what the user
+            // asked for.
+            tracing::warn!(error = %e, "updater: check failed");
+            Err(format!(
+                "Couldn't reach the update service. Check your connection and try again. ({e})"
+            ))
         }
     }
 }
