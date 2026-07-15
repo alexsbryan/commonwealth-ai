@@ -33,6 +33,14 @@ pub struct DocumentAskResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation: Option<sovereign_core::types::DocumentAssetOperation>,
     pub sources: Vec<String>,
+    /// The PERSISTED assistant-message metadata, returned verbatim so the
+    /// live bubble renders identically to a reload from the store —
+    /// provenance + retrieved_chunks on the document-op path, and (via the
+    /// runtime fallback) `grounding_gate` for the verification receipt.
+    /// Dropping this at the Tauri boundary was why live attached-doc
+    /// bubbles lacked the routing-meta bar their reloaded twins had.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Upload and ingest a document. The command returns immediately with
@@ -419,6 +427,7 @@ pub async fn ask_document(
         response: final_content,
         operation: Some(operation),
         sources: sources_content,
+        metadata: assistant_msg.metadata.clone(),
     })
 }
 
@@ -519,6 +528,10 @@ async fn run_turn_via_runtime(
         response: response.message.content,
         operation: None,
         sources: Vec::new(),
+        // Carries the runtime's full message metadata — provenance,
+        // retrieved_chunks, and `grounding_gate` (the verification
+        // receipt) — to the live bubble.
+        metadata: response.message.metadata,
     })
 }
 

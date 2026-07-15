@@ -457,6 +457,7 @@ impl Runtime {
                     &retrieved_tool_results,
                     &request,
                     gate_entity_anchored,
+                    turn_start,
                 )
                 .await;
             let verified = crate::quote_verification::verify_quotes(
@@ -524,6 +525,7 @@ impl Runtime {
                 &retrieved_tool_results,
                 &final_request,
                 gate_entity_anchored,
+                turn_start,
             )
             .await;
         let verified = crate::quote_verification::verify_quotes(
@@ -559,6 +561,7 @@ impl Runtime {
     /// when the gate is off or no passages were retrieved (the
     /// zero-retrieval structural refusal upstream owns that path).
     /// Returns the (possibly rewritten) text + gate metadata.
+    #[allow(clippy::too_many_arguments)]
     async fn gate_attached_doc_answer(
         &self,
         conversation_id: &str,
@@ -568,6 +571,7 @@ impl Runtime {
         retrieved_tool_results: &[String],
         base_request: &CompletionRequest,
         entity_anchored: bool,
+        turn_start: std::time::Instant,
     ) -> (String, Option<serde_json::Value>) {
         let surface = crate::runtime::grounding::GateSurface::AttachedDoc;
         if !surface.enabled() || retrieved_tool_results.is_empty() {
@@ -624,15 +628,28 @@ impl Runtime {
             searcher,
             entity_anchored,
         );
-        let outcome = crate::runtime::grounding::gate_answer(
+        // Live gate progress (the verification counter): the same
+        // claim-check frames the streaming spawns forward — the
+        // attached-doc wait gets the identical Check-station UX.
+        // `spawn_reader` also emits the audit-open frame.
+        let progress_tx = crate::runtime::streaming::GateProgressWiring {
+            events: std::sync::Arc::clone(&self.routing_events),
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            started: turn_start,
+        }
+        .spawn_reader();
+        let outcome = crate::runtime::grounding::gate_answer_with_progress(
             &self.inference,
             question,
             draft,
             &evidence,
             base_request,
             &surface.profile(),
+            Some(&progress_tx),
         )
         .await;
+        drop(progress_tx); // close the channel → the reader task ends
         (outcome.text, Some(outcome.meta))
     }
 

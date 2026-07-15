@@ -876,9 +876,15 @@ progress, and retrieval-only signal is provisional — the moment tokens stream
 with no gate signal (an ungated turn) the card yields to the legacy
 indicators. On serve, a quiet **verification receipt** persists on the bubble
 (`AssistantMessage` `verification-receipt`, from `grounding_gate` meta —
-release actions only, never fail-open verdicts). Non-streaming surfaces pass
-`None` and are byte-identical; attached-doc + complex-task waits keep their
-existing indicators (tracked follow-up). Gated surfaces today (all env-gated;
+release actions only, never fail-open verdicts). The **attached-doc surface is
+wired too**: `gate_attached_doc_answer` opens the same progress channel
+(`GateProgressWiring::spawn_reader`), the counter outranks the
+`document:operation` progress line once claim frames arrive, and
+`DocumentAskResponse.metadata` now returns the persisted message metadata
+verbatim so live attached-doc bubbles carry provenance + the receipt exactly
+like a reload (previously dropped at the Tauri boundary). Complex-task keeps
+TaskProgress for the wait but its persisted `grounding_gate` meta feeds the
+same receipt. Other non-streaming surfaces pass `None` and are byte-identical. Gated surfaces today (all env-gated;
 `SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
 override): streaming/non-streaming KnowledgeQuery + streaming DeepQuery
 (dual-bank validated), attached-doc (dual-bank validated: Conrad dev bank +
