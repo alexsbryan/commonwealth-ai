@@ -858,6 +858,14 @@ path = "stop"
 binary = "dispatcher"
 hidden = true
 [[command]]
+# Self-update: resolves the newest published cli-v* by max semver and
+# re-runs the canonical installer pinned to it (update_cmd.rs, 2026-07-15).
+# Hidden until it graduates to the documented surface.
+path = "update"
+binary = "dispatcher"
+hidden = true
+flags = [{ name = "--check" }]
+[[command]]
 path = "meshapp"
 binary = "llm"
 hidden = true

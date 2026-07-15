@@ -307,6 +307,35 @@ pub(crate) struct GateOutcome {
     pub meta: serde_json::Value,
 }
 
+/// Live claim-check progress out of the gate ladder — the frames the
+/// desktop's verification panel renders (claims stamped one by one).
+/// The receiver (streaming's `gate_held_answer`) forwards each frame
+/// as a `turn-narration` event. Emission is `try_send` throughout:
+/// perception, never backpressure — a full channel drops the frame and
+/// the judge calls proceed untouched. `None` everywhere except the
+/// streaming spawns keeps every other gated surface byte-identical.
+pub(crate) type GateProgressSender = tokio::sync::mpsc::Sender<crate::types::NarrationPhase>;
+
+/// Fire-and-forget progress emit (see `GateProgressSender`).
+fn emit_gate_progress(progress: Option<&GateProgressSender>, frame: crate::types::NarrationPhase) {
+    if let Some(tx) = progress {
+        let _ = tx.try_send(frame);
+    }
+}
+
+/// Wire-safe claim text for progress frames: the UI stamps one row per
+/// claim, so a bounded prefix is enough (full texts stay in gate meta).
+fn wire_claim(claim: &str) -> String {
+    const CAP: usize = 160;
+    if claim.chars().count() <= CAP {
+        claim.to_string()
+    } else {
+        let mut s: String = claim.chars().take(CAP).collect();
+        s.push('…');
+        s
+    }
+}
+
 /// The complete gate ladder, shared by every gated surface (see
 /// `GateSurface`): short answers go through the single-claim
 /// verify → retry → abstain ladder; long-form answers (past the
@@ -333,6 +362,23 @@ pub(crate) async fn gate_answer(
     base_request: &CompletionRequest,
     profile: &GroundingProfile,
 ) -> GateOutcome {
+    gate_answer_with_progress(inference, question, draft, evidence, base_request, profile, None)
+        .await
+}
+
+/// `gate_answer` plus a live claim-check progress channel (see
+/// `GateProgressSender`). The streaming spawns call this form; all
+/// other surfaces keep the plain `gate_answer` signature.
+pub(crate) async fn gate_answer_with_progress(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    draft: String,
+    evidence: &EvidenceContext,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+    progress: Option<&GateProgressSender>,
+) -> GateOutcome {
+    use crate::types::NarrationPhase;
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let entity_anchored = evidence.entity_anchored;
@@ -349,7 +395,16 @@ pub(crate) async fn gate_answer(
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(profile.longform_chars);
     if draft.chars().count() > longform_pivot {
-        return gate_longform(inference, question, draft, evidence, base_request, profile).await;
+        return gate_longform(
+            inference,
+            question,
+            draft,
+            evidence,
+            base_request,
+            profile,
+            progress,
+        )
+        .await;
     }
     // Glassbox (debug-gated): record the pre-gate draft into the message meta so
     // the measurement layer can tell a gate-killed-CORRECT answer from a
@@ -438,6 +493,10 @@ pub(crate) async fn gate_answer(
     let mut action = "released";
     let mut retried = false;
     let mut final_vp: Option<f64> = None;
+    // Whether the short path actually extracted and judged a claim —
+    // gates the ClaimCheckComplete frame (a NO_CLAIM release audited
+    // nothing, so reporting "1 claim confirmed" would be a lie).
+    let mut claim_audited = false;
     dbg(&format!(
         "gate_answer entity_anchored={entity_anchored} chunks={} draft={:?}",
         chunks.len(),
@@ -483,6 +542,26 @@ pub(crate) async fn gate_answer(
                     .as_deref()
                     .map(|c| c.chars().take(70).collect::<String>())
             ));
+            // Short path audits one central claim — surface it and its
+            // verdict on the progress channel (extraction + judging is
+            // one verify call here, so the frames land together).
+            if let Some(c) = v.claim.as_deref() {
+                claim_audited = true;
+                emit_gate_progress(
+                    progress,
+                    NarrationPhase::ClaimCheckStart {
+                        claims: vec![wire_claim(c)],
+                        recheck: false,
+                    },
+                );
+                emit_gate_progress(
+                    progress,
+                    NarrationPhase::ClaimVerdict {
+                        index: 0,
+                        supported: v.violation_prob < tau,
+                    },
+                );
+            }
             if v.violation_prob >= tau {
                 if let Some(claim) = v.claim.clone() {
                     if !profile.retry {
@@ -492,6 +571,13 @@ pub(crate) async fn gate_answer(
                         // verified answer).
                         text = grounded_abstention(&claim, chunks.len().min(12));
                         action = "abstained_no_retry";
+                        emit_gate_progress(
+                            progress,
+                            NarrationPhase::ClaimCheckComplete {
+                                confirmed: 0,
+                                flagged: 1,
+                            },
+                        );
                         return GateOutcome {
                             text,
                             meta: serde_json::json!({
@@ -527,6 +613,13 @@ pub(crate) async fn gate_answer(
                             );
                             text = grounded_abstention(&claim, chunks.len().min(12));
                             action = "abstained_weak_evidence";
+                            emit_gate_progress(
+                                progress,
+                                NarrationPhase::ClaimCheckComplete {
+                                    confirmed: 0,
+                                    flagged: 1,
+                                },
+                            );
                             return GateOutcome {
                                 text,
                                 meta: serde_json::json!({
@@ -544,6 +637,10 @@ pub(crate) async fn gate_answer(
                         }
                     }
                     retried = true;
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimRevisionStart { failed: 1 },
+                    );
                     let mut retry_req = base_request.clone();
                     let base_sys = retry_req.system_message.clone().unwrap_or_default();
                     retry_req.system_message = Some(format!(
@@ -576,6 +673,13 @@ pub(crate) async fn gate_answer(
                             } else {
                                 second.clone()
                             };
+                            emit_gate_progress(
+                                progress,
+                                NarrationPhase::ClaimCheckStart {
+                                    claims: vec![wire_claim(&claim)],
+                                    recheck: true,
+                                },
+                            );
                             match verify_grounding(
                                 inference,
                                 question,
@@ -591,11 +695,25 @@ pub(crate) async fn gate_answer(
                                     final_vp = Some(v2.violation_prob);
                                     text = second;
                                     action = "retry_released";
+                                    emit_gate_progress(
+                                        progress,
+                                        NarrationPhase::ClaimVerdict {
+                                            index: 0,
+                                            supported: true,
+                                        },
+                                    );
                                 }
                                 Some(v2) => {
                                     final_vp = Some(v2.violation_prob);
                                     text = grounded_abstention(&claim, chunks.len().min(12));
                                     action = "abstained";
+                                    emit_gate_progress(
+                                        progress,
+                                        NarrationPhase::ClaimVerdict {
+                                            index: 0,
+                                            supported: false,
+                                        },
+                                    );
                                 }
                                 None => {
                                     // Retry verdict unavailable — fail open
@@ -622,6 +740,24 @@ pub(crate) async fn gate_answer(
         }
         None => {
             action = "judge_failed_open";
+        }
+    }
+    // Terminal progress frame for the short path. Only when a claim
+    // was actually audited (NO_CLAIM releases verified nothing) and
+    // only on the verdicts this fall-through exit owns — the abstain
+    // early-returns above emit their own completion frames.
+    if claim_audited {
+        let (confirmed, flagged) = match action {
+            "released" => (1, 0),
+            "retry_released" | "retry_released_unverified" => (1, 1),
+            a if a.starts_with("abstained") => (0, 1),
+            _ => (0, 0),
+        };
+        if confirmed + flagged > 0 {
+            emit_gate_progress(
+                progress,
+                NarrationPhase::ClaimCheckComplete { confirmed, flagged },
+            );
         }
     }
     dbg(&format!(
@@ -1101,6 +1237,7 @@ async fn short_specifics_guard(
 /// visible verification note appended to the answer — the reader sees
 /// exactly which assertions didn't verify, instead of either losing
 /// the whole essay or trusting it blind.
+#[allow(clippy::too_many_arguments)]
 async fn gate_longform(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
@@ -1108,7 +1245,9 @@ async fn gate_longform(
     evidence: &EvidenceContext,
     base_request: &CompletionRequest,
     profile: &GroundingProfile,
+    progress: Option<&GateProgressSender>,
 ) -> GateOutcome {
+    use crate::types::NarrationPhase;
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
     let per_claim_chunks = profile.max_chunks;
@@ -1116,7 +1255,7 @@ async fn gate_longform(
     // Session posture for the judge envelopes, resolved once from the
     // synthesis turn's request; the audit closure captures it by copy.
     let posture = crate::slot_policy::posture_of(base_request);
-    let audit = |text: String| {
+    let audit = |text: String, recheck: bool| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
         let evidence_labels = evidence.source_labels.clone();
@@ -1125,6 +1264,15 @@ async fn gate_longform(
             // draft and again for the (possibly different-length) rewrite.
             let budget = claim_budget(text.chars().count(), min_claims);
             let claims = extract_claim_list(&inference, question, &text, budget, posture).await?;
+            // Progress: the extracted claim list opens (or re-opens,
+            // on the rewrite's re-audit) the desktop's check panel.
+            emit_gate_progress(
+                progress,
+                NarrationPhase::ClaimCheckStart {
+                    claims: claims.iter().take(budget).map(|c| wire_claim(c)).collect(),
+                    recheck,
+                },
+            );
             let mut failed: Vec<FailedClaim> = Vec::new();
             // Evidence + labels, lowercased once, for the deterministic
             // in-world attribution veto below.
@@ -1136,7 +1284,7 @@ async fn gate_longform(
                 }
                 h
             };
-            for claim in claims.iter().take(budget) {
+            for (claim_idx, claim) in claims.iter().take(budget).enumerate() {
                 // Jurisdiction: honesty meta-language is not a world-claim —
                 // "the system does not have access to X" can never be stated
                 // by a passage, and auditing it prosecutes the answer's own
@@ -1147,6 +1295,15 @@ async fn gate_longform(
                     dbg(&format!(
                         "longform claim EXEMPT — self-referential decline: {claim:?}"
                     ));
+                    // Exempt = ships unflagged; stamp the row so the
+                    // panel never shows a permanently-pending claim.
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimVerdict {
+                            index: claim_idx,
+                            supported: true,
+                        },
+                    );
                     continue;
                 }
                 // Deterministic pre-check: an in-world attribution naming a
@@ -1164,6 +1321,13 @@ async fn gate_longform(
                     dbg(&format!(
                         "longform claim VETOED — in-world attribution names {kind} {name:?}, absent from evidence: {claim:?}"
                     ));
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimVerdict {
+                            index: claim_idx,
+                            supported: false,
+                        },
+                    );
                     let extra = match &searcher {
                         Some(s) => s.search(claim).await,
                         None => Vec::new(),
@@ -1208,6 +1372,13 @@ async fn gate_longform(
                 match claim_violation_joint(&inference, claim, &judged, cap, posture).await {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
+                        emit_gate_progress(
+                            progress,
+                            NarrationPhase::ClaimVerdict {
+                                index: claim_idx,
+                                supported: vp < tau,
+                            },
+                        );
                         if vp >= tau {
                             failed.push(FailedClaim {
                                 claim: claim.clone(),
@@ -1215,7 +1386,17 @@ async fn gate_longform(
                             });
                         }
                     }
-                    None => {} // unverifiable claim — fail open per claim
+                    None => {
+                        // Unverifiable claim — fail open per claim; the
+                        // row still resolves (it ships unflagged).
+                        emit_gate_progress(
+                            progress,
+                            NarrationPhase::ClaimVerdict {
+                                index: claim_idx,
+                                supported: true,
+                            },
+                        );
+                    }
                 }
             }
             // Holistic supporting-specifics scan: catches the fabricated
@@ -1307,7 +1488,7 @@ async fn gate_longform(
     };
 
     let draft_backup = draft.clone();
-    let Some((text, n_claims, failed)) = audit(draft).await else {
+    let Some((text, n_claims, failed)) = audit(draft, false).await else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             text: draft_backup,
@@ -1320,6 +1501,13 @@ async fn gate_longform(
     };
     if failed.is_empty() {
         dbg(&format!("longform released claims={n_claims} failed=0"));
+        emit_gate_progress(
+            progress,
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: n_claims,
+                flagged: 0,
+            },
+        );
         return GateOutcome {
             text,
             meta: serde_json::json!({
@@ -1335,6 +1523,13 @@ async fn gate_longform(
         // claims — no second synthesis. The caller decides whether
         // an annotated draft is acceptable (Refinement keeps the
         // prior verified answer instead).
+        emit_gate_progress(
+            progress,
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: n_claims.saturating_sub(failed.len()),
+                flagged: failed.len(),
+            },
+        );
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
@@ -1351,6 +1546,12 @@ async fn gate_longform(
         "longform rewrite: {} failed of {n_claims}",
         failed.len()
     ));
+    emit_gate_progress(
+        progress,
+        NarrationPhase::ClaimRevisionStart {
+            failed: failed.len(),
+        },
+    );
     let mut rewrite_req = base_request.clone();
     let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
@@ -1393,17 +1594,33 @@ async fn gate_longform(
             );
             let second = format!("{LONGFORM_REWRITE_PREFIX}{}", resp.text);
             let second_backup = second.clone();
-            match audit(second).await {
-                Some((text2, n2, failed2)) if failed2.is_empty() => GateOutcome {
-                    text: text2,
-                    meta: serde_json::json!({
-                        "surface": profile.surface.id(),
-                        "action": "rewrite_released", "retried": true,
-                        "claims_checked": n2, "failed_claims": [],
-                        "threshold": tau, "mode": "per_claim",
-                    }),
-                },
+            match audit(second, true).await {
+                Some((text2, n2, failed2)) if failed2.is_empty() => {
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimCheckComplete {
+                            confirmed: n2,
+                            flagged: 0,
+                        },
+                    );
+                    GateOutcome {
+                        text: text2,
+                        meta: serde_json::json!({
+                            "surface": profile.surface.id(),
+                            "action": "rewrite_released", "retried": true,
+                            "claims_checked": n2, "failed_claims": [],
+                            "threshold": tau, "mode": "per_claim",
+                        }),
+                    }
+                }
                 Some((text2, n2, failed2)) => {
+                    emit_gate_progress(
+                        progress,
+                        NarrationPhase::ClaimCheckComplete {
+                            confirmed: n2.saturating_sub(failed2.len()),
+                            flagged: failed2.len(),
+                        },
+                    );
                     let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
                     let note = verification_note(&failed_claims);
                     GateOutcome {
@@ -1430,6 +1647,13 @@ async fn gate_longform(
             // verification note (never silently release known-failed
             // claims; never destroy an essay over judge availability).
             tracing::warn!(target: "grounding_gate", error = %e, "longform rewrite failed — annotating draft");
+            emit_gate_progress(
+                progress,
+                NarrationPhase::ClaimCheckComplete {
+                    confirmed: n_claims.saturating_sub(failed.len()),
+                    flagged: failed.len(),
+                },
+            );
             let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
@@ -1500,6 +1724,13 @@ mod tests {
                 }
             } else if request.prompt.contains("single central factual claim") {
                 "The shop is located on Crescent Lane.".to_string()
+            } else if request.prompt.contains("List the SPECIFIC factual claims") {
+                // Longform per-claim extractor (gate_longform's audit).
+                "The shop is located on Crescent Lane.\nThe shop sells loose-leaf tea.".to_string()
+            } else if request.prompt.contains("Compare the ANSWER against the EVIDENCE") {
+                // Specifics scan: nothing unsupported — keeps the
+                // longform progress tests pinned to the claim loop.
+                "NONE".to_string()
             } else {
                 "unexpected synthesis call".to_string()
             };
@@ -1657,6 +1888,181 @@ mod tests {
             Some("released")
         );
         assert_eq!(outcome.text, draft);
+    }
+
+    /// Drain every frame the gate pushed onto a progress channel.
+    async fn drain_frames(
+        mut rx: tokio::sync::mpsc::Receiver<crate::types::NarrationPhase>,
+    ) -> Vec<crate::types::NarrationPhase> {
+        let mut frames = Vec::new();
+        while let Some(f) = rx.recv().await {
+            frames.push(f);
+        }
+        frames
+    }
+
+    /// Short path, supported claim: the progress channel carries the
+    /// desktop verification panel's contract — claim list opens, the
+    /// verdict stamps, the completion frame closes the pass.
+    #[tokio::test]
+    async fn short_path_progress_frames_on_release() {
+        use crate::types::NarrationPhase;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let outcome = gate_answer_with_progress(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Harbour Row.".to_string(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+            Some(&tx),
+        )
+        .await;
+        drop(tx);
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released")
+        );
+        let frames = drain_frames(rx).await;
+        assert!(
+            matches!(
+                &frames[0],
+                NarrationPhase::ClaimCheckStart { claims, recheck: false } if claims.len() == 1
+            ),
+            "first frame should open the one-claim check: {frames:?}"
+        );
+        assert!(matches!(
+            frames[1],
+            NarrationPhase::ClaimVerdict {
+                index: 0,
+                supported: true
+            }
+        ));
+        assert!(matches!(
+            frames[2],
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: 1,
+                flagged: 0
+            }
+        ));
+        assert_eq!(frames.len(), 3);
+    }
+
+    /// Short path, verify-only failure: verdict stamps unsupported and
+    /// the completion frame reports the flagged claim.
+    #[tokio::test]
+    async fn short_path_progress_frames_on_abstention() {
+        use crate::types::NarrationPhase;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: false });
+        let profile = GateSurface::Refinement.profile();
+        assert!(!profile.retry);
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let outcome = gate_answer_with_progress(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Crescent Lane.".to_string(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+            Some(&tx),
+        )
+        .await;
+        drop(tx);
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("abstained_no_retry")
+        );
+        let frames = drain_frames(rx).await;
+        assert!(matches!(
+            &frames[0],
+            NarrationPhase::ClaimCheckStart { recheck: false, .. }
+        ));
+        assert!(matches!(
+            frames[1],
+            NarrationPhase::ClaimVerdict {
+                index: 0,
+                supported: false
+            }
+        ));
+        assert!(matches!(
+            frames[2],
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: 0,
+                flagged: 1
+            }
+        ));
+    }
+
+    /// Longform path: the audit opens with the extracted claim LIST,
+    /// stamps every claim in order, and closes with the totals — the
+    /// full counter-card Check-station sequence.
+    #[tokio::test]
+    async fn longform_progress_frames_stamp_each_claim() {
+        use crate::types::NarrationPhase;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        // Force the per-claim ladder regardless of the profile's pivot
+        // (and of any SOVEREIGN_LONGFORM_CHARS ambient override — the
+        // draft is longer than both).
+        let pivot = std::env::var("SOVEREIGN_LONGFORM_CHARS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(profile.longform_chars)
+            .max(profile.longform_chars);
+        let draft = "The shop sits on Harbour Row, by the quay. ".repeat(pivot / 40 + 2);
+        assert!(draft.chars().count() > pivot);
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let outcome = gate_answer_with_progress(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+            Some(&tx),
+        )
+        .await;
+        drop(tx);
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released")
+        );
+        let frames = drain_frames(rx).await;
+        // Claim list (two mock claims), then one verdict per claim in
+        // index order, then the completion totals.
+        assert!(
+            matches!(
+                &frames[0],
+                NarrationPhase::ClaimCheckStart { claims, recheck: false } if claims.len() == 2
+            ),
+            "expected two-claim list first: {frames:?}"
+        );
+        assert!(matches!(
+            frames[1],
+            NarrationPhase::ClaimVerdict {
+                index: 0,
+                supported: true
+            }
+        ));
+        assert!(matches!(
+            frames[2],
+            NarrationPhase::ClaimVerdict {
+                index: 1,
+                supported: true
+            }
+        ));
+        assert!(matches!(
+            frames[3],
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: 2,
+                flagged: 0
+            }
+        ));
     }
 
     fn fc(claim: &str, evidence: &[&str]) -> FailedClaim {

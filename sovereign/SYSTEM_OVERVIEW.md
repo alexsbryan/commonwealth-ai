@@ -861,7 +861,24 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 (`SealedEvidenceSearch` trait — claim-conditioned widening that can never
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
 `EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
-`value_presence.rs` (citation forcing + numeric-presence checks). Gated surfaces today (all env-gated;
+`value_presence.rs` (citation forcing + numeric-presence checks).
+**Live gate progress (the verification counter, 2026-07-15).** On the two
+streaming surfaces the ladder also narrates itself: `gate_answer_with_progress`
+try_sends `NarrationPhase::{ClaimCheckStart, ClaimVerdict, ClaimRevisionStart,
+ClaimCheckComplete}` frames (never backpressure — drop-on-full) through a
+channel `gate_held_answer` forwards as `turn-narration` events, and
+`RetrievalComplete` now carries `top_titles`. The desktop renders these as
+`CounterCard.svelte` — a Gather → Draft → Check station card that replaces the
+chip stack + promoted narration line during a gated hold and stamps each claim
+as it verifies (reducer: `applyCounter` in `routing.machine.ts`; e2e:
+`counter-card.spec.ts`). Every element is frame-driven; the card never invents
+progress, and retrieval-only signal is provisional — the moment tokens stream
+with no gate signal (an ungated turn) the card yields to the legacy
+indicators. On serve, a quiet **verification receipt** persists on the bubble
+(`AssistantMessage` `verification-receipt`, from `grounding_gate` meta —
+release actions only, never fail-open verdicts). Non-streaming surfaces pass
+`None` and are byte-identical; attached-doc + complex-task waits keep their
+existing indicators (tracked follow-up). Gated surfaces today (all env-gated;
 `SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
 override): streaming/non-streaming KnowledgeQuery + streaming DeepQuery
 (dual-bank validated), attached-doc (dual-bank validated: Conrad dev bank +

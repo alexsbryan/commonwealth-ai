@@ -62,6 +62,12 @@ export function applyNarration(
     // the chip stack — they land in dedicated context fields instead.
     return log;
   }
+  if (isCounterFrame(phase)) {
+    // Claim-check frames drive the verification counter (`counter`
+    // field via `applyCounter`); mirrored chips would double-render
+    // the same progress.
+    return log;
+  }
   if (
     typeof phase === "object" &&
     phase !== null &&
@@ -158,6 +164,195 @@ export function applySynthesisProgress(
   return null;
 }
 
+/** One claim row on the verification counter. */
+export interface ClaimRow {
+  text: string;
+  verdict: "pending" | "supported" | "unsupported";
+}
+
+/** The verification-counter state a grounded turn accumulates —
+ *  everything CounterCard needs to render the Gather → Draft → Check
+ *  stations. Built exclusively from live narration frames (glassbox:
+ *  the card can never claim progress the backend didn't report). */
+export interface CounterState {
+  /** Retrieval station. Set by `retrieval_start` (searching) and the
+   *  struct-form `retrieval_complete` (counts + titles). */
+  retrieval: {
+    complete: boolean;
+    chunksIn: number;
+    corpora: string[];
+    topTitles: string[];
+  } | null;
+  /** Claim-check station. Opens on `claim_check_start` (possibly with
+   *  an empty list — the audit-open frame precedes extraction), rows
+   *  stamp via `claim_verdict`, `claim_revision_start` marks the
+   *  corrective rewrite, `claim_check_complete` closes the pass. */
+  check: {
+    recheck: boolean;
+    claims: ClaimRow[];
+    revising: number | null;
+    complete: { confirmed: number; flagged: number } | null;
+  } | null;
+  /** elapsed_ms of the most recent counter-relevant frame. */
+  elapsedMs: number;
+}
+
+/** Narrowing guards for the counter frames. */
+function isClaimCheckStart(
+  phase: NarrationEvent["phase"],
+): phase is { claim_check_start: { claims: string[]; recheck: boolean } } {
+  return (
+    typeof phase === "object" && phase !== null && "claim_check_start" in phase
+  );
+}
+function isClaimVerdict(
+  phase: NarrationEvent["phase"],
+): phase is { claim_verdict: { index: number; supported: boolean } } {
+  return typeof phase === "object" && phase !== null && "claim_verdict" in phase;
+}
+function isClaimRevisionStart(
+  phase: NarrationEvent["phase"],
+): phase is { claim_revision_start: { failed: number } } {
+  return (
+    typeof phase === "object" &&
+    phase !== null &&
+    "claim_revision_start" in phase
+  );
+}
+function isClaimCheckComplete(
+  phase: NarrationEvent["phase"],
+): phase is { claim_check_complete: { confirmed: number; flagged: number } } {
+  return (
+    typeof phase === "object" &&
+    phase !== null &&
+    "claim_check_complete" in phase
+  );
+}
+function isRetrievalComplete(phase: NarrationEvent["phase"]): phase is {
+  retrieval_complete: {
+    chunks_in: number;
+    corpora: string[];
+    top_titles?: string[];
+  };
+} {
+  return (
+    typeof phase === "object" && phase !== null && "retrieval_complete" in phase
+  );
+}
+
+/** True when the frame belongs to the verification counter (routed to
+ *  `counter`, kept out of `narrationLog` — same contract as the
+ *  synthesis heartbeat). */
+export function isCounterFrame(phase: NarrationEvent["phase"]): boolean {
+  return (
+    isClaimCheckStart(phase) ||
+    isClaimVerdict(phase) ||
+    isClaimRevisionStart(phase) ||
+    isClaimCheckComplete(phase)
+  );
+}
+
+/**
+ * Pure reducer for the `counter` field. Only counter-relevant frames
+ * mutate it; everything else passes through. Reset on CLEAR_NARRATION
+ * (new user turn), like the rest of the narrating region.
+ *
+ * Exported for unit tests; the FSM consumes it through the
+ * `TURN_NARRATION_EMITTED` assign action.
+ */
+export function applyCounter(
+  prev: CounterState | null,
+  incoming: NarrationEvent,
+): CounterState | null {
+  const phase = incoming.phase;
+  const base: CounterState = prev ?? {
+    retrieval: null,
+    check: null,
+    elapsedMs: 0,
+  };
+  if (phase === "retrieval_start") {
+    return {
+      ...base,
+      retrieval: base.retrieval ?? {
+        complete: false,
+        chunksIn: 0,
+        corpora: [],
+        topTitles: [],
+      },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  if (isRetrievalComplete(phase)) {
+    const p = phase.retrieval_complete;
+    return {
+      ...base,
+      retrieval: {
+        complete: true,
+        chunksIn: p.chunks_in,
+        corpora: p.corpora,
+        topTitles: p.top_titles ?? [],
+      },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  if (isClaimCheckStart(phase)) {
+    const p = phase.claim_check_start;
+    // The audit-open frame (empty claims) must not wipe an already
+    // extracted list — it only ensures the station is open.
+    const claims: ClaimRow[] =
+      p.claims.length > 0
+        ? p.claims.map((text) => ({ text, verdict: "pending" as const }))
+        : (base.check?.claims ?? []);
+    return {
+      ...base,
+      check: {
+        recheck: p.recheck,
+        claims,
+        revising: null,
+        complete: null,
+      },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  if (isClaimVerdict(phase)) {
+    if (!base.check) return prev;
+    const { index, supported } = phase.claim_verdict;
+    const claims = base.check.claims.slice();
+    if (index < claims.length) {
+      claims[index] = {
+        ...claims[index],
+        verdict: supported ? "supported" : "unsupported",
+      };
+    }
+    return {
+      ...base,
+      check: { ...base.check, claims },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  if (isClaimRevisionStart(phase)) {
+    if (!base.check) return prev;
+    return {
+      ...base,
+      check: { ...base.check, revising: phase.claim_revision_start.failed },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  if (isClaimCheckComplete(phase)) {
+    if (!base.check) return prev;
+    return {
+      ...base,
+      check: {
+        ...base.check,
+        revising: null,
+        complete: phase.claim_check_complete,
+      },
+      elapsedMs: incoming.elapsed_ms,
+    };
+  }
+  return prev;
+}
+
 export interface RoutingContext {
   proposed: InterpretationProposedPayload | null;
   clarification: ClarificationRequestPayload | null;
@@ -173,6 +368,10 @@ export interface RoutingContext {
    *  populated through the verify window; reset on CLEAR_NARRATION.
    *  `null` = experiment off or no draft in flight. */
   draftPreview: string | null;
+  /** Verification-counter state for the in-flight grounded turn (see
+   *  `CounterState`). `null` until a counter-relevant frame arrives;
+   *  reset on CLEAR_NARRATION. */
+  counter: CounterState | null;
   /** Set by submitRedirect's onDone to the `message_id` of the new
    *  assistant bubble the runtime just started streaming into.
    *  ChatView watches this and, on change, dispatches
@@ -276,6 +475,7 @@ export const routingMachine = setup({
     narrationLog: [],
     synthesisProgress: null,
     draftPreview: null,
+    counter: null,
     lastRedirectedMessageId: null,
     lastClarifiedMessageId: null,
   },
@@ -437,6 +637,8 @@ export const routingMachine = setup({
               ),
             draftPreview: ({ context, event }) =>
               applyDraftPreview(context.draftPreview, event.payload.event),
+            counter: ({ context, event }) =>
+              applyCounter(context.counter, event.payload.event),
           }),
         },
         CLEAR_NARRATION: {
@@ -444,6 +646,7 @@ export const routingMachine = setup({
             narrationLog: () => [],
             synthesisProgress: () => null,
             draftPreview: () => null,
+            counter: () => null,
           }),
         },
       },

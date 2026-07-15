@@ -227,6 +227,9 @@ pub async fn run_team_pipeline<'a>(
         NarrationPhase::RetrievalComplete {
             chunks_in: candidate_count,
             corpora: corpora.clone(),
+            // Team pipeline is default-off (experimentally rejected);
+            // the title surface ships on the production emitters only.
+            top_titles: Vec::new(),
         },
         if candidate_count == 0 {
             "No retrieval — answering from general knowledge.".to_string()
