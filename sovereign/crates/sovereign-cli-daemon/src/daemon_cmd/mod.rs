@@ -49,6 +49,7 @@ mod workspace;
 
 use lifecycle::{
     reload_daemon, restart_daemon, start_daemon, status_daemon, stop_daemon, wait_for_shutdown,
+    ShutdownTrigger,
 };
 use tool_registry::build_tool_registry;
 use worker::run_worker_daemon;
@@ -834,14 +835,26 @@ async fn shutdown_daemon(
     pid_path: &std::path::Path,
     self_pid: u32,
 ) -> i32 {
-    // ── Block until SIGINT/SIGTERM ────────────────────────────────
-    wait_for_shutdown().await;
+    // ── Block until SIGINT/SIGTERM or a user mesh-leave ───────────
+    let trigger = wait_for_shutdown(&daemon).await;
+
+    // On a LeaveRelaunch, `leave()` already ran inside the HTTP handler
+    // (it dropped the servers and cleared persistence), so give the
+    // in-flight `204 No Content` a beat to flush to the desktop before
+    // we exit — otherwise the client sees a connection reset instead of
+    // a clean confirmation. The daemon is about to be unavailable during
+    // the relaunch regardless, so a short grace costs nothing.
+    if matches!(trigger, ShutdownTrigger::LeaveRelaunch) {
+        tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+    }
 
     // Graceful shutdown — preserves mesh.json so the next launch
     // resumes into the same mesh. Critically NOT `leave()`, which
     // would clear persistence and force a fresh solo mesh on next
     // boot (the regression that left Machine A and Machine B in
-    // different meshes after every Ctrl-C).
+    // different meshes after every Ctrl-C). On the LeaveRelaunch path
+    // the daemon is already Stopped, so this is a no-op (returns
+    // NotRunning) — persistence stays cleared, which is what we want.
     let _ = daemon.shutdown().await;
 
     // Remove the pidfile only if it still points at us. If something
@@ -882,11 +895,20 @@ async fn shutdown_daemon(
     //
     // Linux + other targets keep the standard return path — Metal is
     // macOS-only, so the assertion only fires on darwin.
-    // Exit code contract: the memory watcher's hard-limit path needs a
-    // NON-ZERO exit so launchd (`KeepAlive.SuccessfulExit=false`) /
-    // systemd (`Restart=on-failure`) relaunch the daemon; every other
-    // shutdown is deliberate and must stay 0 (= stays down).
-    let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
+    // Exit code contract: a NON-ZERO exit tells launchd
+    // (`KeepAlive.SuccessfulExit=false`) / systemd (`Restart=on-failure`)
+    // to relaunch the daemon. Two paths want that relaunch:
+    //   103 — user left the mesh (`POST /v1/mesh/leave`): the fresh
+    //         process boots into a solo mesh (persistence was cleared).
+    //   102 — the memory watcher's RSS hard-limit self-exit.
+    // Every other shutdown is deliberate (SIGINT/SIGTERM) and must stay
+    // 0 (= service manager leaves us down).
+    let exit_code: i32 = if matches!(trigger, ShutdownTrigger::LeaveRelaunch) {
+        eprintln!(
+            "svrn daemon exiting non-zero: user left the mesh (service manager will relaunch into a fresh solo mesh)"
+        );
+        103
+    } else if crate::memory_watch::hard_exit_requested() {
         eprintln!("svrn daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
         102
     } else {

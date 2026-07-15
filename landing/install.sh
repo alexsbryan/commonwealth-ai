@@ -54,14 +54,24 @@ command -v tar  >/dev/null 2>&1 || err "tar is required"
 # ── Resolve the download base ────────────────────────────────────────────
 ver="${SVRNMESH_VERSION:-${SOVEREIGN_VERSION:-latest}}"
 if [ "$ver" = "latest" ]; then
-  # Resolve the newest cli-v* release explicitly. GitHub's
-  # /releases/latest is a single repo-global pointer shared with the
-  # desktop-v* release stream, so it can resolve to a desktop release that
-  # carries no CLI tarball. The unauthenticated /releases list excludes
-  # drafts, so this picks the latest *published* CLI release.
-  ver="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
-    | grep '"tag_name"' | grep -oE 'cli-v[0-9][^"]*' | head -n1)"
-  [ -n "$ver" ] || err "no published cli-v* release found for $REPO (set SOVEREIGN_VERSION=cli-vX.Y.Z to pin one)"
+  # Resolve the newest cli-v* release by MAX SEMVER — not by list order.
+  # GitHub's /releases/latest is a single repo-global pointer shared with the
+  # desktop-v* stream, so it can resolve to a desktop release that carries no
+  # CLI tarball. And the /releases list, while it excludes drafts, is NOT
+  # reliably ordered newest-first here: every release on this shelf shares an
+  # identical created_at (it derives from the tagged commit's date), so
+  # GitHub's ordering is an unstable tiebreak — `head -n1` handed installs an
+  # OLDER version during the post-publish replication window (the desktop
+  # updater hit the same bug, 2026-07-15). Sort the cli-v* tags by semver and
+  # take the highest. Numeric per-component sort (POSIX; no `sort -V`, which
+  # BSD/macOS sort lacks) so 0.1.20 > 0.1.9 correctly.
+  num="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
+    | grep -oE 'cli-v[0-9]+\.[0-9]+\.[0-9]+' \
+    | sed 's/^cli-v//' \
+    | sort -t. -k1,1n -k2,2n -k3,3n \
+    | tail -n1)"
+  [ -n "$num" ] || err "no published cli-v* release found for $REPO (set SOVEREIGN_VERSION=cli-vX.Y.Z to pin one)"
+  ver="cli-v$num"
 fi
 base="https://github.com/$REPO/releases/download/$ver"
 tarball="sovereign-$target.tar.gz"
