@@ -2600,13 +2600,20 @@ impl Runtime {
         self.maybe_retrieve_relevant_history(&mut context, message)
             .await;
 
-        // 2b. Tag the conversation with the skill that was active
-        // when it started. The store upsert is idempotent — only
-        // the first call with a non-NULL skill wins, later calls
-        // are no-ops. The KnowledgeView conversational acquirer
-        // reads this column to exclude `privacy = local_only`
-        // skills (e.g. `inner-work`) from the shared corpus.
-        if let Some(skill_id) = self.skills.primary_skill_id_for_conversation() {
+        // 2b. Tag the conversation with the ambient BACKGROUND skill
+        // that was active when it started. The store upsert is
+        // idempotent — only the first call with a non-NULL skill wins,
+        // later calls are no-ops. The KnowledgeView conversational
+        // acquirer reads this column to exclude `privacy = local_only`
+        // skills from the shared corpus.
+        //
+        // Deliberately `background_skill_id_for_conversation` (NOT
+        // `primary_…`): Workspace ownership (Recipe Author, Inner Work)
+        // is declared at conversation create-time by the surface, never
+        // inferred from global registry state here. Using `primary_…`
+        // let a globally-active Workspace skill capture every default
+        // chat — no retrieval, no provenance (regression 2026-07-15).
+        if let Some(skill_id) = self.skills.background_skill_id_for_conversation() {
             if let Err(e) = self
                 .store
                 .set_conversation_skill_if_unset(conversation_id, &skill_id)

@@ -543,6 +543,44 @@ impl SkillRegistry {
         }
     }
 
+    /// Activate an explicitly-configured set of skills at boot, applying
+    /// the **same Workspace-skip rule** as [`activate_all`]: Workspace
+    /// skills (Recipe Author, Inner Work) are user-chosen surfaces that
+    /// only become active when the user navigates into them — never from
+    /// persisted config at boot.
+    ///
+    /// Diagnosed 2026-07-15: the desktop boot path activated every id in
+    /// `active_skills` verbatim, so a persisted `["recipe-author"]`
+    /// (written when the user last opened that surface) re-activated the
+    /// workspace skill globally on every launch. It then became the
+    /// registry "primary" skill and leaked into every *default* chat —
+    /// tool-catalog narrowing, voice register, and the tool dossier all
+    /// fell back to it (`narrow_tools_pre_classification_for_mode`,
+    /// `maybe_compute_tool_dossier`), and the dispatch-time auto-tag even
+    /// stamped it onto the conversation row, routing default chats into
+    /// the recipe-author agent loop with no retrieval and no provenance.
+    /// Conversations that genuinely belong to a workspace carry the skill
+    /// id on their row (create-time surface declaration) and route
+    /// correctly WITHOUT global activation — verified live — so skipping
+    /// workspace skills here is safe and closes the leak at its source.
+    pub fn activate_configured(&mut self, ids: &[String]) {
+        for id in ids {
+            let is_workspace = self
+                .skill_by_id(id)
+                .map(|s| s.activation_kind == ActivationKind::Workspace)
+                .unwrap_or(false);
+            if is_workspace {
+                tracing::info!(
+                    skill_id = %id,
+                    "boot: workspace skill in active_skills is navigation-scoped; \
+                     not globally activating (keeps default chats unowned)"
+                );
+                continue;
+            }
+            self.activate(id);
+        }
+    }
+
     /// Remove a skill from the active set (no-op when it wasn't active).
     pub fn deactivate(&mut self, skill_id: &str) {
         self.active.retain(|id| id != skill_id);
@@ -632,6 +670,46 @@ impl SkillRegistry {
             .find(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
             .map(|s| s.id.clone())
             .or_else(|| active.first().map(|s| s.id.clone()))
+    }
+
+    /// The skill a conversation should inherit purely from **ambient
+    /// background** activation — never a Workspace surface.
+    ///
+    /// Unlike [`primary_skill_id_for_conversation`], this deliberately
+    /// omits the Workspace-precedence branch: it only ever returns a
+    /// background skill (LocalOnly preferred, else the first active
+    /// background skill), and `None` when the only active skills are
+    /// Workspace surfaces.
+    ///
+    /// Rationale (recipe-author provenance regression, 2026-07-15):
+    /// ownership of a conversation by a Workspace surface (Recipe
+    /// Author, Inner Work) is declared at **create time** — the surface
+    /// persists its `skill_id` on the conversation row. The dispatch-time
+    /// auto-tag must therefore never infer Workspace ownership from
+    /// global registry state, or a Workspace skill that happens to be
+    /// active (e.g. persisted in `active_skills` and re-activated at
+    /// boot) silently captures every *default-chat* conversation,
+    /// routing it into the workspace agent loop with no retrieval and no
+    /// provenance. Restricting the auto-tag to background skills keeps
+    /// the privacy-tagging purpose (LocalOnly exclusion from the shared
+    /// KnowledgeView) while leaving default chats `NULL` so they route
+    /// by intent. Workspace conversations are unaffected — their tag came
+    /// from the surface, not from here.
+    pub fn background_skill_id_for_conversation(&self) -> Option<String> {
+        let active = self.active_skills();
+        // LocalOnly background skill first (the privacy-tag purpose),
+        // else the first active background skill. Workspace surfaces are
+        // never inferred here — see the doc comment.
+        active
+            .iter()
+            .filter(|s| s.activation_kind != ActivationKind::Workspace)
+            .find(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
+            .or_else(|| {
+                active
+                    .iter()
+                    .find(|s| s.activation_kind != ActivationKind::Workspace)
+            })
+            .map(|s| s.id.clone())
     }
 
     /// Look up a registered skill by id. Returns `None` when no skill
@@ -1062,6 +1140,62 @@ privacy = "{}"
         );
     }
 
+    /// Pin the recipe-author provenance regression (2026-07-15): the
+    /// dispatch-time auto-tag resolves through
+    /// `background_skill_id_for_conversation`, which must NEVER return an
+    /// active Workspace skill. With only `recipe-author` (workspace)
+    /// active, a default chat must resolve to `None` so its `skill_id`
+    /// stays NULL and it routes by intent (retrieval + provenance) rather
+    /// than being captured into the recipe-author agent loop.
+    #[test]
+    fn background_skill_id_excludes_active_workspace() {
+        let mut reg = SkillRegistry::new();
+        reg.register(workspace_skill("recipe-author", ShardingPrivacy::LocalOnly));
+        reg.activate("recipe-author");
+
+        assert_eq!(
+            reg.background_skill_id_for_conversation(),
+            None,
+            "an active workspace skill must not be auto-tagged onto a default chat"
+        );
+        // Contrast: the workspace-aware resolver DOES surface it (that
+        // path is only consulted for conversations the surface tagged).
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("recipe-author"),
+        );
+    }
+
+    /// A workspace skill active alongside a real background skill: the
+    /// auto-tag picks the background one and ignores the workspace.
+    #[test]
+    fn background_skill_id_ignores_workspace_prefers_background_local_only() {
+        let mut reg = SkillRegistry::new();
+        reg.register(workspace_skill("recipe-author", ShardingPrivacy::MeshAllowed));
+        reg.register(skill_with_privacy("auto-memory", ShardingPrivacy::LocalOnly));
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.activate("recipe-author");
+        reg.activate("research-analyst");
+        reg.activate("auto-memory");
+
+        assert_eq!(
+            reg.background_skill_id_for_conversation().as_deref(),
+            Some("auto-memory"),
+            "LocalOnly background wins; the active workspace skill is ignored"
+        );
+    }
+
+    /// Nothing active → None, same as the workspace-aware resolver.
+    #[test]
+    fn background_skill_id_none_when_nothing_active() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy("x", ShardingPrivacy::MeshAllowed));
+        assert!(reg.background_skill_id_for_conversation().is_none());
+    }
+
     fn workspace_skill(id: &str, privacy: ShardingPrivacy) -> Skill {
         let mut s = skill_with_privacy(id, privacy);
         s.activation_kind = ActivationKind::Workspace;
@@ -1096,6 +1230,41 @@ privacy = "{}"
         assert_eq!(
             reg.primary_skill_id_for_conversation().as_deref(),
             Some("auto-memory")
+        );
+    }
+
+    /// Pin the recipe-author provenance regression at the boot layer
+    /// (2026-07-15): a persisted `active_skills` list that names a
+    /// Workspace skill must NOT globally activate it. Background skills
+    /// in the list still activate. With no workspace globally active, a
+    /// default chat has no owning skill and routes by intent (retrieval
+    /// + provenance).
+    #[test]
+    fn activate_configured_skips_workspace_skills() {
+        let mut reg = SkillRegistry::new();
+        reg.register(workspace_skill("recipe-author", ShardingPrivacy::LocalOnly));
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+
+        // Simulate a polluted persisted config that lists both.
+        reg.activate_configured(&[
+            "recipe-author".to_string(),
+            "research-analyst".to_string(),
+        ]);
+
+        let active_ids: Vec<&str> = reg.active_skills().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(
+            active_ids,
+            vec!["research-analyst"],
+            "the persisted workspace skill must not be globally activated"
+        );
+        // No workspace globally active → a default chat's mode fallback
+        // resolves to the background skill, never recipe-author.
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("research-analyst")
         );
     }
 
