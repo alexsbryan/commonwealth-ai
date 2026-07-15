@@ -2,18 +2,33 @@
 // Tauri updater manifest for the Sovereign desktop app.
 //
 // The desktop's `tauri-plugin-updater` polls this endpoint with the user's
-// target triple + currently-installed version. We query GitHub Releases for
-// the latest `desktop-v*` tag, compare versions, and either:
+// updater OS + currently-installed version. We query GitHub Releases for the
+// latest `desktop-v*` tag, compare versions, and either:
 //   - 204 No Content  -> the user is up to date
-//   - 200 JSON        -> manifest pointing at the right per-platform artifact
-//                         + its signature
+//   - 200 JSON        -> manifest listing EVERY per-arch artifact for that OS
+//                         + each one's signature
 //
-// The plugin's URL pattern is interpolated by Tauri at request time:
+// ─── The target contract (why this endpoint returns ALL arches) ─────────
+// tauri-plugin-updater interpolates `{{target}}` in the endpoint URL with
+// its `updater_os()` value, which is OS-ONLY — `darwin`, `linux`, or
+// `windows` (see updater.rs::updater_os; there is NO arch in it). Our
+// configured URL is
 //   https://svrnme.sh/api/desktop/updater/{{target}}/{{current_version}}
-// where {{target}} resolves to e.g. `darwin-aarch64` and {{current_version}}
-// to the running app's semver. Vercel's path-segment rewrite (see vercel.json)
-// turns those segments into the `target` + `current_version` query params
-// this handler reads.
+// so a real app requests `.../updater/darwin/0.1.20` — it never sends the
+// architecture. The plugin then picks the right artifact CLIENT-SIDE: its
+// `get_urls()` searches the returned manifest's `platforms` map for the
+// combined key `{os}-{arch}` (e.g. `darwin-x86_64` / `darwin-aarch64`).
+//
+// Therefore the manifest MUST contain a `platforms` entry per arch, keyed by
+// the combined `{os}-{arch}` string, and the endpoint must accept the OS-only
+// path segment. (A prior version keyed only by the combined string AND only
+// accepted a combined path segment — so every real poll came in as `darwin`,
+// matched nothing, and 400'd. The desktop app soft-fails a failed check to
+// "you're up to date", so the break was silent. Regression fixed 2026-07-15.)
+//
+// We still accept a combined `{os}-{arch}` segment too (defensive: manual
+// probes, and any future build whose URL template adds `{{arch}}`), in which
+// case the manifest carries just that one arch.
 //
 // Env vars (Vercel project settings; both have working defaults):
 //   GITHUB_OWNER   -- repo owner (default "alexsbryan")
@@ -22,38 +37,52 @@
 //                     the alpha and its assets aren't anonymously fetchable)
 //
 // Optional:
-//   GITHUB_TOKEN   -- raises the API rate limit from 60/h to 5000/h. Not
-//                     required for a public repo but worth setting once
-//                     the install base grows.
+//   GITHUB_TOKEN   -- raises the API rate limit from 60/h to 5000/h. STRONGLY
+//                     recommended: the anonymous 60/h is shared across Vercel's
+//                     egress IPs, so under any load GitHub 403s -> this endpoint
+//                     502s -> the app silently shows "up to date". Set it.
 
-const PLATFORM_TO_ASSET_PATTERN = {
-  // Tauri target triples on the LEFT, regex matching the bundle artifact
-  // name on the RIGHT. Patterns match against Vercel-side string regex,
-  // so escape carefully.
-  //
-  // Names track productName in tauri.conf.json ("svrnmesh" since the
-  // 2026-06-29 rename). Tauri emits the macOS updater archive as a bare
-  // `svrnmesh.app.tar.gz`; the release pipeline arch-qualifies it to
-  // `svrnmesh_<ver>_<aarch64|x64>.app.tar.gz` before upload so the two
-  // mac targets can coexist in one release and match here.
+// Combined Tauri targets -> regex matching the bundle artifact name.
+// Names track productName in tauri.conf.json ("svrnmesh" since the 2026-06-29
+// rename). Tauri emits the macOS updater archive as a bare `svrnmesh.app.tar.gz`;
+// the release pipeline arch-qualifies it to `svrnmesh_<ver>_<aarch64|x64>.app.tar.gz`
+// before upload so the two mac targets can coexist in one release and match here.
+const TARGET_TO_ASSET_PATTERN = {
   'darwin-aarch64': /svrnmesh[._].*aarch64.*\.app\.tar\.gz$/i,
   'darwin-x86_64':  /svrnmesh[._].*(x64|x86_64).*\.app\.tar\.gz$/i,
   'linux-x86_64':   /svrnmesh[._].*amd64.*\.AppImage$/i,
   'windows-x86_64': /svrnmesh[._].*x64.*-setup\.exe$/i,
 };
 
+// OS-only target (what the plugin actually sends) -> the combined targets to
+// include in that OS's manifest. The plugin's get_urls() selects the right one.
+const OS_TO_TARGETS = {
+  'darwin':  ['darwin-aarch64', 'darwin-x86_64'],
+  'linux':   ['linux-x86_64'],
+  'windows': ['windows-x86_64'],
+};
+
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
   const url = new URL(req.url);
-  const target = url.searchParams.get('target') ?? '';
+  const rawTarget = url.searchParams.get('target') ?? '';
   const currentVersion = url.searchParams.get('current_version') ?? '';
 
-  if (!target || !currentVersion) {
+  if (!rawTarget || !currentVersion) {
     return text('missing target or current_version', 400);
   }
-  if (!PLATFORM_TO_ASSET_PATTERN[target]) {
-    return text(`unsupported target: ${target}`, 400);
+
+  // Resolve the requested path segment to the set of combined targets whose
+  // artifacts belong in this manifest. Accept BOTH the OS-only form the plugin
+  // sends (`darwin`) and a combined form (`darwin-x86_64`) for defensiveness.
+  let wantedTargets;
+  if (OS_TO_TARGETS[rawTarget]) {
+    wantedTargets = OS_TO_TARGETS[rawTarget];
+  } else if (TARGET_TO_ASSET_PATTERN[rawTarget]) {
+    wantedTargets = [rawTarget];
+  } else {
+    return text(`unsupported target: ${rawTarget}`, 400);
   }
 
   const owner = process.env.GITHUB_OWNER || 'alexsbryan';
@@ -89,14 +118,29 @@ export default async function handler(req) {
     return text('github api unreachable', 502);
   }
 
-  const latest = releases.find(r =>
-    !r.draft && typeof r.tag_name === 'string' && r.tag_name.startsWith('desktop-v')
-  );
+  // Pick the highest SEMVER among non-draft `desktop-v*` releases — do NOT
+  // trust GitHub's list order. GitHub sorts `/releases` by `created_at` desc,
+  // but every release here shares an identical created_at (it's derived from
+  // the tagged commit's date, and our release tags cluster on one commit), so
+  // the order among them is an unstable internal tiebreak. Relying on
+  // `.find(first desktop-v*)` handed an app 0.2.0 instead of 0.2.1 during the
+  // replication window right after publish (2026-07-15). Max-by-semver is
+  // deterministic regardless of ordering or eventual-consistency lag.
+  let latest = null;
+  let latestVersion = null;
+  for (const r of releases) {
+    if (r.draft || typeof r.tag_name !== 'string' || !r.tag_name.startsWith('desktop-v')) {
+      continue;
+    }
+    const v = r.tag_name.replace(/^desktop-v/, '');
+    if (latestVersion === null || isNewer(v, latestVersion)) {
+      latest = r;
+      latestVersion = v;
+    }
+  }
   if (!latest) {
     return text('no desktop release found', 404);
   }
-
-  const latestVersion = latest.tag_name.replace(/^desktop-v/, '');
   if (!isNewer(latestVersion, currentVersion)) {
     // The plugin treats 204 as "you're up to date". This is the
     // happy-path response for every poll after the first install.
@@ -106,44 +150,50 @@ export default async function handler(req) {
     });
   }
 
-  // Find the artifact + its .sig sidecar for this target.
-  const pattern = PLATFORM_TO_ASSET_PATTERN[target];
-  const asset = latest.assets.find(a => pattern.test(a.name));
-  const sigAsset = asset && latest.assets.find(a => a.name === `${asset.name}.sig`);
-
-  if (!asset || !sigAsset) {
-    console.warn('[updater] missing asset or sig', {
-      target,
-      latestVersion,
-      assetFound: !!asset,
-      sigFound: !!sigAsset,
-    });
-    return text(`no signed artifact for ${target} at ${latestVersion}`, 404);
+  // Build a `platforms` entry for every arch of the requested OS that has a
+  // signed artifact in this release. Each `.sig` is a tiny base64 blob from
+  // `tauri-bundler`; we inline it so the plugin can verify against the
+  // embedded pubkey before applying the download.
+  const platforms = {};
+  const missing = [];
+  for (const t of wantedTargets) {
+    const pattern = TARGET_TO_ASSET_PATTERN[t];
+    const asset = latest.assets.find(a => pattern.test(a.name));
+    const sigAsset = asset && latest.assets.find(a => a.name === `${asset.name}.sig`);
+    if (!asset || !sigAsset) {
+      missing.push({ target: t, assetFound: !!asset, sigFound: !!sigAsset });
+      continue;
+    }
+    let signature;
+    try {
+      const sigRes = await fetch(sigAsset.browser_download_url);
+      if (!sigRes.ok) throw new Error(`sig fetch ${sigRes.status}`);
+      signature = (await sigRes.text()).trim();
+    } catch (e) {
+      console.error('[updater] sig fetch failed', { target: t, err: String(e) });
+      missing.push({ target: t, sigFetch: 'failed' });
+      continue;
+    }
+    platforms[t] = { signature, url: asset.browser_download_url };
   }
 
-  // The .sig is a tiny base64 blob produced by `tauri-bundler` at build
-  // time. We inline it into the manifest body — the plugin verifies it
-  // against the embedded pubkey before applying the downloaded artifact.
-  let signature;
-  try {
-    const sigRes = await fetch(sigAsset.browser_download_url);
-    if (!sigRes.ok) throw new Error(`sig fetch ${sigRes.status}`);
-    signature = (await sigRes.text()).trim();
-  } catch (e) {
-    console.error('[updater] sig fetch failed', e);
-    return text('signature unavailable', 502);
+  if (Object.keys(platforms).length === 0) {
+    console.warn('[updater] no signed artifacts for requested OS', {
+      rawTarget, latestVersion, missing,
+    });
+    return text(`no signed artifact for ${rawTarget} at ${latestVersion}`, 404);
+  }
+  if (missing.length > 0) {
+    // Partial coverage (e.g. one mac arch built, the other not yet). Still a
+    // valid manifest for the arches we DO have; log the gap for observability.
+    console.warn('[updater] partial arch coverage', { rawTarget, latestVersion, missing });
   }
 
   const manifest = {
     version: latestVersion,
     notes: stripMarkdown(latest.body ?? ''),
     pub_date: latest.published_at,
-    platforms: {
-      [target]: {
-        signature,
-        url: asset.browser_download_url,
-      },
-    },
+    platforms,
   };
 
   return new Response(JSON.stringify(manifest), {

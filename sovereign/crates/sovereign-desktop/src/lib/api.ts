@@ -2421,9 +2421,10 @@ export interface UpdateInfo {
   body: string | null;
 }
 
-/** Polls the updater endpoint. Returns `null` when up to date OR on
- *  any endpoint glitch (the backend soft-fails so transient network
- *  errors don't surface as scary dialogs). */
+/** Polls the updater endpoint. Resolves to `UpdateInfo` when an update is
+ *  available, `null` when genuinely up to date, and REJECTS when the check
+ *  fails (offline / endpoint down). The backend no longer masks failures as
+ *  "up to date" — callers must distinguish the rejection (see UpdatesSection). */
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
   return invoke("check_for_update");
 }

@@ -12,9 +12,13 @@
       module footer); for v0.1.0 the explicit-action model keeps things
       quiet for users on metered connections.
 
-    - If the endpoint returns `null` (up to date OR transient error), we
-      surface a passive toast. No modal. Users can re-click without
-      cognitive friction.
+    - `check_for_update` has three distinct outcomes and we render each
+      differently (they are NOT conflated — conflating "check failed" with
+      "up to date" hid three real updater bugs, 2026-07-15):
+        · UpdateInfo  → in-section banner (see below)
+        · null        → genuinely up to date; passive toast, no modal
+        · throws      → the check failed (offline / endpoint down); a calm,
+                        retryable "Couldn't check for updates" notice
 
     - If the endpoint returns `UpdateInfo`, we render an in-section banner
       with version + (truncated) release notes + Install button. Clicking
@@ -40,7 +44,7 @@
     | { kind: "checking" }
     | { kind: "available"; info: UpdateInfo }
     | { kind: "installing" }
-    | { kind: "error"; message: string };
+    | { kind: "error"; title: string; message: string };
 
   let phase = $state<Phase>({ kind: "idle" });
   let appVersion = $state<string | null>(null);
@@ -69,11 +73,12 @@
         });
       }
     } catch (e) {
-      // The backend soft-fails to `null` on most errors; reaching this
-      // branch means something unusual (e.g., plugin not configured).
-      // Show an actionable message rather than a stack trace.
+      // A failed check now surfaces here (the backend no longer masks errors
+      // as "up to date" — see update_commands.rs). Render a calm, retryable
+      // notice, NOT a scary "update failed" — the check just couldn't reach
+      // the service; nothing is broken on the user's machine.
       const message = e instanceof Error ? e.message : String(e);
-      phase = { kind: "error", message };
+      phase = { kind: "error", title: "Couldn't check for updates", message };
     }
   }
 
@@ -86,11 +91,12 @@
       // restart, which is a Tauri-version surprise; treat as error.
       phase = {
         kind: "error",
+        title: "Update failed",
         message: "Update installed but the app did not restart. Quit and reopen manually.",
       };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      phase = { kind: "error", message };
+      phase = { kind: "error", title: "Update failed", message };
     }
   }
 </script>
@@ -114,7 +120,10 @@
         <div class="banner-text">
           <p class="banner-title">svrnmesh {phase.info.version} is available</p>
           {#if phase.info.date}
-            <p class="banner-meta">Published {formatDate(phase.info.date)}</p>
+            {@const published = formatDate(phase.info.date)}
+            {#if published}
+              <p class="banner-meta">Published {published}</p>
+            {/if}
           {/if}
         </div>
       </div>
@@ -139,7 +148,7 @@
 
   {:else if phase.kind === "error"}
     <div class="install-error" role="alert">
-      <p class="error-title">Update failed</p>
+      <p class="error-title">{phase.title}</p>
       <p class="error-body">{phase.message}</p>
       <button class="btn-install" onclick={check}>Try again</button>
     </div>
@@ -163,18 +172,21 @@
 </div>
 
 <script module lang="ts">
-  function formatDate(iso: string): string {
-    try {
-      const d = new Date(iso);
-      // Long-form to feel chancery rather than ISO-stamped.
-      return d.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    } catch {
-      return iso;
-    }
+  // Returns null when the date can't be parsed. `new Date(bad)` yields an
+  // Invalid Date object rather than throwing, so a plain try/catch never
+  // fires and toLocaleDateString renders the literal "Invalid Date". Older
+  // backends serialized the publish date via time::OffsetDateTime's Display
+  // (`2026-07-15 10:45:13.0 +00:00:00`), which JS can't parse — for those we
+  // hide the line entirely instead of showing a broken date.
+  function formatDate(iso: string): string | null {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    // Long-form to feel chancery rather than ISO-stamped.
+    return d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
   }
 </script>
 
