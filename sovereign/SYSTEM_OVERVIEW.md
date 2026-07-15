@@ -1835,6 +1835,30 @@ Open polish: tray icon tint, HintCues nudge to Sharing tab, the W1
 PR-3 default-flip removing in-process EmbeddedDaemon, graceful
 SIGTERM-with-grace on daemon shutdown.
 
+**W7 — live-turn re-attach (streaming survives a conversation switch).**
+`chat.machine` owns exactly ONE conversation's `messages` +
+`streamingMessageId` and wipes the latter on every `HYDRATE`
+(conversation switch), so a turn the user navigated away from was
+orphaned: the `conversation_id`-tagged `message-chunk` /
+`message-complete` / `message-error` events were dropped by the
+`messageId` guard, and the backend persists the assistant row only
+AFTER the stream ends (`StreamHandle` contract) — so on return there
+was no row, no loading affordance, and the answer never landed. Most
+visible on a slow turn whose synthesis is offloaded to a mesh peer
+(minutes-long, long enough to switch away). Fix: a runed singleton
+registry `stores/liveTurns.svelte.ts`, fed by the global stream
+listeners keyed on `conversation_id` regardless of which conversation
+is on screen; `ChatView.loadConversation` re-attaches on return
+(`REATTACH_STREAM` restores the affordance + partial text for an
+in-flight turn; a terminal turn renders its answer/error). Scope: lives
+while ChatView is mounted (survives conversation switches, NOT app
+restart / Settings-Atlas unmount — that durability belongs to a
+persisted streaming placeholder row, deferred). `message-error` now
+carries `{conversation_id, message_id}` (`commands/chat.rs`
+`MessageErrorPayload`) so a failed backgrounded turn is attributable.
+Pinned by `tests/e2e/specs/chat-orphaned-turn.spec.ts` +
+`stores/liveTurns.test.ts`.
+
 ### Pinned worker pods as inference peers
 
 Ephemeral worker pods (Vast L40S rented via `pipeline pod up`)

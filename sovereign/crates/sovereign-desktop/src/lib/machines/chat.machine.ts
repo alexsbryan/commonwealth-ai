@@ -131,6 +131,14 @@ export type ChatEvent =
    *  redirected-away and installs a new placeholder for the
    *  replacement stream. */
   | { type: "REDIRECT_STARTED"; newAssistantMessageId: string }
+  /** Re-attach a turn that is STILL streaming for the conversation
+   *  we're loading — recovered from the live-turns registry after the
+   *  user navigated away and back. Restores (or updates in place) the
+   *  assistant bubble with everything streamed so far and moves the
+   *  turn region back into `streaming` so subsequent chunks (routed by
+   *  conversation_id) append and the loading affordance returns. Fired
+   *  by ChatView right after HYDRATE, so it runs from `idle`. */
+  | { type: "REATTACH_STREAM"; messageId: string; text: string }
 
   // ─── Non-streaming assistant responses ──────────────────────
   /** `askDocument` / `searchWeb` return fully-formed assistant
@@ -311,6 +319,37 @@ export const chatMachine = setup({
                   draft.push(event.userMessage);
                 }),
               })),
+            },
+            REATTACH_STREAM: {
+              // A turn recovered from the live-turns registry is still
+              // in flight for the conversation we just hydrated. Upsert
+              // the assistant bubble with the accumulated text and go
+              // back to `streaming` so later chunks/complete land. Upsert
+              // (not blind push) because a store row for this id may
+              // already have hydrated in.
+              target: "streaming",
+              actions: assign(({ context, event }) => {
+                const exists = context.messages.some(
+                  (m) => m.id === event.messageId,
+                );
+                const messages = exists
+                  ? updateMessageById(
+                      context.messages,
+                      event.messageId,
+                      (m) => {
+                        m.content = event.text;
+                      },
+                    )
+                  : produce(context.messages, (draft) => {
+                      draft.push({
+                        id: event.messageId,
+                        role: "assistant",
+                        content: event.text,
+                        created_at: Math.floor(Date.now() / 1000),
+                      });
+                    });
+                return { messages, streamingMessageId: event.messageId };
+              }),
             },
           },
         },

@@ -26,7 +26,7 @@
     UserInputRequestPayload,
     MessageChunkPayload,
     MessageCompletePayload,
-    ErrorPayload,
+    MessageErrorPayload,
     DocOpProgress,
     DocumentAsset,
     DocumentOperationPayload,
@@ -68,6 +68,7 @@
   import PassageContextChip from "./reading/PassageContextChip.svelte";
   import { readingSession } from "../stores/readingSession.svelte";
   import { documentIngestionStore } from "../stores/documentIngestion.svelte";
+  import { liveTurns } from "../stores/liveTurns.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -500,6 +501,18 @@
   let pendingLessonProposal = $derived($snapshot.context.pendingLessonProposal);
   let activeConversationId = $derived($snapshot.context.conversationId);
 
+  // Closure-safe mirror of the on-screen conversation id. The global
+  // stream listeners (registered once in onMount) are plain callbacks;
+  // they read this to decide whether an incoming event belongs to the
+  // VISIBLE conversation (→ drive the machine, smoothed) or a
+  // backgrounded one (→ record into the live-turns registry only). A
+  // plain `let` synced by an effect avoids reading reactive state
+  // inside a non-reactive callback.
+  let activeConvRef: string | null = null;
+  $effect(() => {
+    activeConvRef = activeConversationId;
+  });
+
   // ── Screen-reader completion announcement (a11y) ──────────────
   //
   // The streaming prose is NOT a live region (that would re-announce
@@ -649,6 +662,17 @@
       "message-chunk",
       (event) => {
         const p = event.payload;
+        // ALWAYS record into the live-turns registry, keyed by
+        // conversation_id, so a turn survives the user navigating to
+        // another conversation. This is the load-bearing line for the
+        // orphaned-turn fix: the event knows which conversation it
+        // belongs to; we must not throw that away.
+        liveTurns.chunk(p.conversation_id, p.message_id, p.chunk);
+        // Only the VISIBLE conversation drives the machine's smoothed
+        // render path. A chunk for a backgrounded conversation lives in
+        // the registry until the user returns (see reattachLiveTurn),
+        // and must NOT pollute the on-screen conversation's wordBuffer.
+        if (p.conversation_id !== activeConvRef) return;
         // Early-arrival capture: a fast handler (e.g. ConationQuery's
         // canned empty-state reply) can emit its chunks — even its
         // complete — while `send_message_stream`'s invoke response is
@@ -675,6 +699,16 @@
       "message-complete",
       (event) => {
         const p = event.payload;
+        // Record terminal state in the registry regardless of which
+        // conversation is on screen — a turn that finished while the
+        // user was away must be renderable on return.
+        liveTurns.complete(
+          p.conversation_id,
+          p.message_id,
+          p.full_text,
+          p.metadata,
+        );
+        if (p.conversation_id !== activeConvRef) return;
         if (earlyCapture) {
           earlyEvents.push({ kind: "complete", payload: p });
           return;
@@ -704,14 +738,27 @@
       },
     );
 
-    unlistenError = await listen<ErrorPayload>("message-error", (event) => {
-      // Flag the turn as errored BEFORE the send, so the falling-edge
-      // announcement effect (which runs after the snapshot updates)
-      // words it as an error rather than a clean completion.
-      lastTurnErrored = true;
-      send({ type: "MESSAGE_ERROR", error: event.payload.message });
-      docProgressText = null;
-    });
+    unlistenError = await listen<MessageErrorPayload>(
+      "message-error",
+      (event) => {
+        const p = event.payload;
+        // Record the failure in the registry so a turn that dies while
+        // the user is on another conversation (e.g. a mesh peer timing
+        // out) is still attributable and shown on return. conversation_id
+        // / message_id are present on the streaming send/redirect/resume
+        // paths; a payload lacking them is treated as the active turn.
+        if (p.conversation_id && p.message_id) {
+          liveTurns.error(p.conversation_id, p.message_id, p.message);
+        }
+        if (p.conversation_id && p.conversation_id !== activeConvRef) return;
+        // Flag the turn as errored BEFORE the send, so the falling-edge
+        // announcement effect (which runs after the snapshot updates)
+        // words it as an error rather than a clean completion.
+        lastTurnErrored = true;
+        send({ type: "MESSAGE_ERROR", error: p.message });
+        docProgressText = null;
+      },
+    );
 
     // Listen for DocumentOperationTool progress (map/reduce phases).
     unlistenDocProgress = await listen<DocOpProgress>(
@@ -922,8 +969,62 @@
       });
   }
 
+  /** Re-attach a turn recovered from the live-turns registry after the
+   *  user navigated back to `targetId`. For a STILL-streaming turn this
+   *  restores the loading affordance + everything streamed so far and
+   *  puts the machine back in `streaming` so later chunks land. For a
+   *  turn that finished (or errored) while the user was away, it renders
+   *  the answer — even though the store has no assistant row yet (the
+   *  backend persists it only after the stream ends). No-op when nothing
+   *  is in flight for this conversation.
+   *
+   *  `hydratedMessages` is the message list we just HYDRATE'd from, read
+   *  synchronously here so the terminal-turn dedup can't race the
+   *  machine snapshot's reactive flush. */
+  function reattachLiveTurn(targetId: string, hydratedMessages: MessageEntry[]) {
+    const turn = liveTurns.get(targetId);
+    if (!turn) return;
+    if (turn.status === "streaming") {
+      // The registry holds the full accumulated text; seed the bubble
+      // with it and start the smoothing buffer clean so subsequent
+      // chunks append without duplication.
+      wordBuffer.reset();
+      send({
+        type: "REATTACH_STREAM",
+        messageId: turn.messageId,
+        text: turn.text,
+      });
+      scrollToBottom();
+      return;
+    }
+    // Terminal turn (done / error). Skip if the store already carried
+    // the row (real backend, post-completion) so we never double it.
+    if (hydratedMessages.some((m) => m.id === turn.messageId)) return;
+    const content =
+      turn.status === "error"
+        ? `${turn.text}${turn.text ? "\n\n" : ""}Error: ${
+            turn.error ?? "unknown error"
+          }`
+        : turn.text;
+    send({
+      type: "ASSISTANT_MESSAGE_RECEIVED",
+      message: {
+        id: turn.messageId,
+        role: "assistant",
+        content,
+        created_at: Math.floor(Date.now() / 1000),
+        metadata: turn.metadata,
+      },
+    });
+    scrollToBottom();
+  }
+
   async function loadConversation(targetId: string | null) {
     onClearTask();
+    // A conversation switch means the on-screen turn (if any) is no
+    // longer the one the smoothing buffer was mid-word on. Reset it so
+    // a re-attached or freshly-loaded turn starts from a clean buffer.
+    wordBuffer.reset();
     if (!targetId) {
       send({ type: "RESET" });
       return;
@@ -984,13 +1085,20 @@
         messages: detail.messages,
       });
       enabledCorpora = detail.enabled_corpora ?? null;
+      // Re-attach any turn that streamed / finished while this
+      // conversation was off-screen (the store row lands only after the
+      // stream ends, so this is what restores the affordance + answer).
+      reattachLiveTurn(targetId, detail.messages);
       scrollToBottom();
     } catch {
       // Fetch failed (commonly: brand-new conversation that
       // create_conversation minted but didn't persist). The
       // eager HYDRATE above already left the chat empty +
-      // bound to `targetId`, so there's nothing to do.
+      // bound to `targetId`, so there's nothing to do — except
+      // re-attach a live turn if one exists (a conversation whose
+      // first turn is still streaming has no persisted row yet).
       enabledCorpora = null;
+      reattachLiveTurn(targetId, []);
     }
   }
 
@@ -1170,6 +1278,11 @@
         earlyEvents = [];
         throw e;
       }
+      // Track the turn in the live-turns registry so it survives a
+      // conversation switch (chunk() also upserts, so this only adds the
+      // pre-first-token window — but that's exactly the gap a fast
+      // navigate-away would otherwise miss).
+      liveTurns.begin(convoId, started.message_id);
       send({ type: "SEND_START", assistantMessageId: started.message_id });
       flushEarlyEvents(started.message_id);
       scrollToBottom();
@@ -1265,6 +1378,11 @@
         earlyEvents = [];
         throw e;
       }
+      // Track the turn in the live-turns registry so it survives a
+      // conversation switch (chunk() also upserts, so this only adds the
+      // pre-first-token window — but that's exactly the gap a fast
+      // navigate-away would otherwise miss).
+      liveTurns.begin(convoId, started.message_id);
       send({ type: "SEND_START", assistantMessageId: started.message_id });
       flushEarlyEvents(started.message_id);
       scrollToBottom();

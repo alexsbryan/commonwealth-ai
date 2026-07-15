@@ -230,6 +230,13 @@
         conversationId,
         messageId,
       };
+      // Map message → conversation so the streamTokens/completeMessage
+      // helpers can stamp the real `conversation_id` onto their events,
+      // exactly as commands/chat.rs does. The desktop routes stream
+      // events by conversation_id (orphaned-turn fix), so an event
+      // lacking it is dropped — the shim must be faithful to the wire.
+      (window.__sovereign_test__._streamConvByMsg ??= {})[messageId] =
+        conversationId;
       return { message_id: messageId };
     },
     cancel_stream: ({ conversationId }) => {
@@ -507,12 +514,26 @@
     signalBackendReady() {
       return emit("backend-ready", {});
     },
+    /** Resolve the conversation id for a message id (falls back to the
+     *  most recent stream start), so emitted events carry the same
+     *  `conversation_id` the real backend always sends. */
+    _convFor(messageId) {
+      return (
+        this._streamConvByMsg?.[messageId] ??
+        this._lastStreamStart?.conversationId
+      );
+    },
     /** Stream a list of tokens for a given assistant message id, then
      *  optionally complete. `gapMs` controls inter-token cadence — pass
      *  0 for a burst (no waits), 16 for ~60fps cadence, etc. */
     async streamTokens(messageId, tokens, gapMs = 0) {
+      const conversation_id = this._convFor(messageId);
       for (const tok of tokens) {
-        emit("message-chunk", { message_id: messageId, chunk: tok });
+        emit("message-chunk", {
+          conversation_id,
+          message_id: messageId,
+          chunk: tok,
+        });
         if (gapMs > 0) {
           await new Promise((r) => setTimeout(r, gapMs));
         } else {
@@ -523,14 +544,22 @@
     /** Emit message-complete for the given message id. */
     completeMessage(messageId, fullText, metadata) {
       return emit("message-complete", {
+        conversation_id: this._convFor(messageId),
         message_id: messageId,
         full_text: fullText,
         metadata: metadata ?? null,
       });
     },
-    /** Emit message-error to break the in-flight stream. */
+    /** Emit message-error to break the in-flight stream. Attributes to
+     *  the most recent stream start (conversation + message), matching
+     *  the backend's MessageErrorPayload. */
     errorMessage(message) {
-      return emit("message-error", { message });
+      const last = this._lastStreamStart;
+      return emit("message-error", {
+        conversation_id: last?.conversationId,
+        message_id: last?.messageId,
+        message,
+      });
     },
     /** Read-only peek at the most recent stream-start the shim recorded. */
     lastStreamStart() {
@@ -555,6 +584,7 @@
       nextCallbackId = 1;
       nextEventId = 1;
       this._lastStreamStart = null;
+      this._streamConvByMsg = {};
       this._lastCancel = null;
       this._lastConsent = null;
     },
