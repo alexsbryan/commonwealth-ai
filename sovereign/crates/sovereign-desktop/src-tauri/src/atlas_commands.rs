@@ -24,6 +24,25 @@ use tauri::State;
 
 use crate::state::AppState;
 
+/// Per-corpus `section_id → chunk_id` map for atom-detail evidence
+/// deep-linking, built once and cached. Building it is a full
+/// chunks.lance scan (2.8 GB / ~90s on Wikipedia's 1.9M rows), so the
+/// atom-detail command NEVER builds it on the click path — it resolves
+/// from the cache when ready and otherwise kicks off a one-time
+/// background build. See `atlas_get_atom_detail`.
+enum SectionMapState {
+    Building,
+    Ready(Arc<std::collections::HashMap<String, u64>>),
+}
+
+fn section_map_cache(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, SectionMapState>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, SectionMapState>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 /// List every installed corpus that has an atlas on disk. Drives the
 /// desktop's `/atlas` index route — one row per corpus, with
 /// per-atom-type counts so the type tabs can show badges before the
@@ -151,27 +170,53 @@ pub async fn atlas_get_atom_detail(
             .collect()
     };
     if !unique_sections.is_empty() {
-        match engine.open_index_for_corpus(&corpus_id).await {
-            Ok(index) => match index.resolve_sections_to_chunks(&unique_sections).await {
-                Ok(section_to_chunk) => {
-                    for excerpt in &mut detail.evidence_excerpts {
-                        excerpt.chunk_id = section_to_chunk.get(&excerpt.section_id).copied();
-                    }
+        // Non-blocking, cached resolution. Building the section→chunk map
+        // is a full chunks.lance scan (2.8 GB / ~90s on Wikipedia), so we
+        // NEVER do it on the click path. If the per-corpus map is cached,
+        // resolve every evidence row from memory; otherwise leave
+        // chunk_id=None (the frontend renders the row non-clickable) and
+        // kick off a ONE-TIME background build so later clicks resolve.
+        // (On Wikipedia the atom section_id space doesn't even match chunk
+        // metadata, so resolution finds nothing regardless — all the more
+        // reason not to stall the load on it.)
+        let cached: Option<Arc<std::collections::HashMap<String, u64>>> = {
+            let mut cache = section_map_cache().lock().unwrap();
+            match cache.get(&corpus_id) {
+                Some(SectionMapState::Ready(m)) => Some(Arc::clone(m)),
+                Some(SectionMapState::Building) => None,
+                None => {
+                    cache.insert(corpus_id.clone(), SectionMapState::Building);
+                    let engine = Arc::clone(&engine);
+                    let corpus_bg = corpus_id.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let built = match engine.open_index_for_corpus(&corpus_bg).await {
+                            Ok(index) => index.section_chunk_index().await.ok(),
+                            Err(_) => None,
+                        };
+                        let mut cache = section_map_cache().lock().unwrap();
+                        match built {
+                            Some(map) => {
+                                tracing::info!(
+                                    corpus_id = %corpus_bg,
+                                    sections = map.len(),
+                                    "atlas: section→chunk map built + cached (background)",
+                                );
+                                cache.insert(corpus_bg, SectionMapState::Ready(Arc::new(map)));
+                            }
+                            None => {
+                                // Build failed — drop the marker so a later
+                                // click retries instead of wedging on Building.
+                                cache.remove(&corpus_bg);
+                            }
+                        }
+                    });
+                    None
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        corpus_id = %corpus_id,
-                        error = %e,
-                        "atlas_get_atom_detail: resolve_sections_to_chunks failed; evidence rows non-clickable",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::warn!(
-                    corpus_id = %corpus_id,
-                    error = %e,
-                    "atlas_get_atom_detail: open_index_for_corpus failed; evidence rows non-clickable",
-                );
+            }
+        };
+        if let Some(map) = cached {
+            for excerpt in &mut detail.evidence_excerpts {
+                excerpt.chunk_id = map.get(&excerpt.section_id).copied();
             }
         }
     }

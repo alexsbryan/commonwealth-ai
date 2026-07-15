@@ -508,6 +508,16 @@ export async function isSetupComplete(): Promise<boolean> {
   return invoke("is_setup_complete");
 }
 
+/** Pull-based readiness probe — the race-safe complement to the
+ *  push-only `backend-ready` event. The native Tauri event system has
+ *  no replay, so a `backend-ready` emitted before this webview finished
+ *  subscribing is lost and the splash hangs forever. App.svelte calls
+ *  this on mount (after wiring listeners) to catch a missed event.
+ *  True once the backend Runtime is built. */
+export async function isBackendReady(): Promise<boolean> {
+  return invoke("is_backend_ready");
+}
+
 export async function completeSetup(setup: SetupConfig): Promise<void> {
   return invoke("complete_setup", { setup });
 }

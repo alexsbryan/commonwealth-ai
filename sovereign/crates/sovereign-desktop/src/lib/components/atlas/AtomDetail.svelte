@@ -79,14 +79,15 @@
   // atom inside the detail view).
   $effect(() => {
     const id = atomId;
+    const cid = corpusId;
     void (async () => {
       loading = true;
       error = null;
       detail = null;
       try {
-        const result = await atlasGetAtomDetail(corpusId, id);
+        const result = await atlasGetAtomDetail(cid, id);
         if (!result) {
-          error = `Atom ${id} not found in ${corpusId}. It may have been renumbered by a recent re-extraction.`;
+          error = `Atom ${id} not found in ${cid}. It may have been renumbered by a recent re-extraction.`;
         } else {
           detail = result;
         }
@@ -265,7 +266,13 @@
             <span class="section-count">{detail.related.length}</span>
           </h2>
           <ul class="related-list">
-            {#each detail.related as r (r.atom_id)}
+            <!-- Key by index, not r.atom_id: an atom can have MULTIPLE
+                 edges to the same neighbour (e.g. two edge_types), so
+                 atom_id is not unique across rows and Svelte 5 throws a
+                 fatal each_key_duplicate that aborts the whole render —
+                 leaving the view stuck on "Loading atom…". The list is
+                 fully rebuilt per atom load, so index keys are correct. -->
+            {#each detail.related as r, i (i)}
               <li class="related-row">
                 <button
                   class="related-button"
@@ -298,7 +305,7 @@
             <span class="section-count">{detail.cross_corpus.length}</span>
           </h2>
           <ul class="cross-corpus-list">
-            {#each detail.cross_corpus as c (c.peer_corpus_id + c.peer_atom_id)}
+            {#each detail.cross_corpus as c, i (i)}
               <li class="cross-row">
                 <span class="edge-type">{c.edge_type}</span>
                 <span class="peer-corpus mono">{c.peer_corpus_id}</span>

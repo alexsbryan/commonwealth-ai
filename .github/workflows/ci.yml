@@ -8,12 +8,18 @@
 # i.e. there was no continuous check/test gate at all.
 #
 # Gate policy (2026-07-14 — deliberately minimal): a PR/main build goes green
-# on TWO legible, blocking gates that share ONE workspace compile:
+# on THREE legible, blocking gates:
 #   1. Build + Test — one job, one compile: `cargo check --all-targets` then
 #      `cargo test` reuse the same target/ tree, so tests never rebuild the
 #      monorepo from scratch. (The "Build" and "test" of Build/lint/test.)
 #   2. Lint (rustfmt) — `cargo fmt --all --check`. Seconds, no compilation,
 #      deterministic, cannot flake. (The "lint" of Build/lint/test.)
+#   3. Desktop frontend — `npm run check` (svelte-check --fail-on-warnings)
+#      + `npm run test` (vitest). Node-only, ~1 min, no Rust compile. Guards
+#      the Svelte/TS surface the Rust gates can't see — including runtime
+#      render bugs like each_key_duplicate that no static checker catches
+#      (added 2026-07-14 after an atom_id-keyed {#each} aborted AtomDetail's
+#      render and looked like an infinite spinner).
 #   (docs-gate — cited-path resolution — stays blocking in docs-reconcile.yml.)
 #
 # The heavier gates (mesh-dst fault-injection, boundary/arch/layer/lock,
@@ -182,6 +188,32 @@ jobs:
       # seconds (no compilation); a failure diff is now one contributor's
       # change, small and actionable.
       - run: cargo fmt --all --check
+
+  # Node-only gate for the Svelte/TS desktop frontend. No Rust toolchain,
+  # no llama.cpp, no native stack — just the webview code the workspace
+  # `cargo check` is blind to. `npm run check` is svelte-check
+  # --fail-on-warnings (the tree is warning-clean as of 2026-07-14, so a
+  # failure is one PR's regression); `npm run test` is vitest, which renders
+  # components under jsdom and so catches runtime render faults — the class
+  # of bug (each_key_duplicate) that motivated this gate. The generated
+  # meshapp catalog is a runtime public/ asset fetched at load time, not a
+  # build-time import, so neither check nor test needs the predev hook.
+  desktop-frontend:
+    name: Desktop frontend (svelte-check + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sovereign/crates/sovereign-desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test
 
   # ===================================================================
   # SHELVED GATES (2026-07-14) — commented out to keep PR/main checks
